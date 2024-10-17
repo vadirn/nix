@@ -5,7 +5,6 @@
     mouse = true;
 
     plugins = with pkgs.tmuxPlugins; [
-      tpm
       sensible
       yank
     ];
