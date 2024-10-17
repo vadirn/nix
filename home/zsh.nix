@@ -18,7 +18,9 @@
       enable = true;
       theme = "robbyrussell";
       plugins = [
+        "fzf"
         "git"
+        "tmux"
       ];
     };
 

@@ -2,6 +2,8 @@
   programs.tmux = {
     enable = true;
     clock24 = true;
+    baseIndex = 1;
+    terminal = "xterm-256color";
     mouse = true;
 
     plugins = with pkgs.tmuxPlugins; [
