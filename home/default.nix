@@ -17,25 +17,23 @@
         home-manager = {
           enable = true;
         };
-        zsh = {
-          enable = true;
-          enableAutosuggestions = true;
-          oh-my-zsh = {
-            enable = true;
-            plugins = [
-              "git"
-            ];
-          };
-        };
         fzf = {
           enable = true;
           enableZshIntegration = true;
         };
         direnv = {
           enable = true;
+          enableZshIntegration = true;
           nix-direnv.enable = true;
         };
+        git = {
+          enable = true;
+        };
       };
+      imports = [
+        ./zsh.nix
+        ./tmux.nix
+      ];
     };
   };
 }
