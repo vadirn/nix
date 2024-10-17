@@ -1,7 +1,7 @@
 {...}: {
   programs.zsh = {
     enable = true;
-    autosuggestions.enable = true;
+    autosuggestion.enable = true;
     syntax-highlighting.enable = true;
 
     sessionVariables = {
