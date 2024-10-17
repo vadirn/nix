@@ -2,7 +2,7 @@
   programs.zsh = {
     enable = true;
     autosuggestion.enable = true;
-    syntax-highlighting.enable = true;
+    syntaxHighlighting.enable = true;
 
     sessionVariables = {
       LANG = "en_US.UTF-8";
