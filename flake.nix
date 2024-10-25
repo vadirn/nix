@@ -28,6 +28,7 @@
         pkgs.git
         pkgs.obsidian
         pkgs.iina
+        pkgs.ffmpeg
         pkgs.nil
         pkgs.alejandra
       ];
