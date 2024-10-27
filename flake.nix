@@ -28,20 +28,26 @@
         pkgs.git
         pkgs.obsidian
         pkgs.iina
-        pkgs.ffmpeg
         pkgs.nil
         pkgs.alejandra
       ];
 
       homebrew = {
         enable = true;
-        brews = ["mas"];
+        brews = [
+          "mas"
+          "ffmpeg"
+          "yt-dlp"
+          "gnupg"
+          "qmk/qmk/qmk"
+          "pinentry-mac"
+        ];
         casks = ["raycast" "imageoptim" "qmk-toolbox" "firefox"];
         masApps = {};
         onActivation = {
-          # cleanup = "zap";
-          # autoUpdate = true;
-          # upgrade = true;
+          cleanup = "zap";
+          autoUpdate = true;
+          upgrade = true;
         };
       };
 
@@ -73,7 +79,6 @@
             enable = true;
             enableRosetta = true;
             user = "vadim";
-            autoMigrate = true;
           };
         }
         home-manager.darwinModules.home-manager
