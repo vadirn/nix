@@ -41,6 +41,7 @@
           "gnupg"
           "qmk/qmk/qmk"
           "pinentry-mac"
+          "reattach-to-user-namespace"
         ];
         casks = ["raycast" "imageoptim" "qmk-toolbox" "firefox"];
         masApps = {};

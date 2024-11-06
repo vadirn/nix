@@ -12,6 +12,7 @@
 
     localVariables = {
       ZSH_AUTOSUGGEST_STRATEGY = ["history" "completion"];
+      DISABLE_AUTO_TITLE = "true";
     };
 
     oh-my-zsh = {

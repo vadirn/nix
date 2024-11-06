@@ -26,9 +26,6 @@
           enableZshIntegration = true;
           nix-direnv.enable = true;
         };
-        git = {
-          enable = true;
-        };
       };
       imports = [
         ./zsh.nix
