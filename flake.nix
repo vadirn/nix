@@ -5,6 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs";
     nix-darwin.url = "github:LnL7/nix-darwin";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
+    ghostty.url = "github:ghostty-org/ghostty";
     nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew";
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
@@ -19,6 +20,7 @@
     nix-homebrew,
     home-manager,
     alejandra,
+    ghostty,
   }: let
     system = "aarch64-darwin";
     configuration = {pkgs, ...}: {
@@ -30,6 +32,7 @@
         pkgs.iina
         pkgs.nil
         pkgs.alejandra
+        ghostty.packages.aarch64-darwin
       ];
 
       homebrew = {
