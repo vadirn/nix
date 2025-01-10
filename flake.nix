@@ -49,6 +49,7 @@
           "qmk-toolbox"
           "firefox"
           "ghostty"
+          "zed"
         ];
         masApps = {};
         onActivation = {
