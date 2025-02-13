@@ -50,6 +50,7 @@
           "firefox"
           "ghostty"
           "zed"
+          "pearcleaner"
         ];
         masApps = {};
         onActivation = {
