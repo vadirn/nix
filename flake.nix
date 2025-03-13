@@ -31,6 +31,7 @@
         pkgs.yazi
         pkgs.alejandra
         pkgs.nixd
+        pkgs.nodejs
       ];
 
       homebrew = {
@@ -74,6 +75,7 @@
       system.configurationRevision = self.rev or self.dirtyRev or null;
       system.stateVersion = 5;
     };
+
     homeConfiguration = import ./home {
       username = "vadim";
       homeDirectory = "/Users/vadim";
@@ -95,7 +97,6 @@
         homeConfiguration
       ];
     };
-
     darwinPackages = self.darwinConfigurations.studio.pkgs;
     formatter.aarch64-darwin = nixpkgs.legacyPackages.${system}.alejandra;
   };
