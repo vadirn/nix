@@ -26,6 +26,7 @@
 
       environment.systemPackages = [
         pkgs.git
+        pkgs.git-lfs
         pkgs.obsidian
         pkgs.iina
         pkgs.yazi
@@ -36,6 +37,9 @@
 
       homebrew = {
         enable = true;
+        taps = [
+          "raggi/ale"
+        ];
         brews = [
           "mas"
           "ffmpeg"
@@ -44,6 +48,7 @@
           "qmk/qmk/qmk"
           "pinentry-mac"
           "reattach-to-user-namespace"
+          "openssl-osx-ca"
         ];
         casks = [
           "raycast"
