@@ -33,6 +33,7 @@
         pkgs.alejandra
         pkgs.nixd
         pkgs.nodejs
+        pkgs.dockutil
       ];
 
       homebrew = {
@@ -70,6 +71,21 @@
 
       system.defaults = {
         dock.autohide = true;
+        dock.persistent-apps = [
+          "/Applications/Yandex Music.app"
+          "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"
+          "/System/Applications/Mail.app"
+          "/System/Applications/Calendar.app"
+          "/System/Applications/Reminders.app"
+          "/Applications/Claude.app"
+          "/Applications/Perplexity.app"
+          "/Applications/ChatGPT.app"
+          "${pkgs.obsidian}/Applications/Obsidian.app"
+          "/Applications/Cursor.app"
+          "/Applications/Ghostty.app"
+          "/Applications/OrbStack.app"
+        ];
+        dock.tilesize = 72;
         finder.FXPreferredViewStyle = "clmv";
         loginwindow.GuestEnabled = false;
         NSGlobalDomain.AppleICUForce24HourTime = true;
