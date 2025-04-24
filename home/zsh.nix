@@ -25,7 +25,7 @@
       ];
     };
 
-    initExtra = ''
+    initContent = ''
       ssh-add --apple-use-keychain ~/.ssh/github 2> /dev/null
       ssh-add --apple-use-keychain ~/.ssh/bitbucket 2> /dev/null
       ssh-add --apple-use-keychain ~/.ssh/vultr 2> /dev/null
