@@ -30,6 +30,7 @@
         pkgs.obsidian
         pkgs.iina
         pkgs.yazi
+        pkgs.aerospace
         pkgs.alejandra
         pkgs.nixd
         pkgs.nodejs
@@ -42,7 +43,6 @@
           "raggi/ale"
         ];
         brews = [
-          "mas"
           "ffmpeg"
           "yt-dlp"
           "gnupg"
@@ -61,7 +61,6 @@
           "pearcleaner"
           "orbstack"
         ];
-        masApps = {};
         onActivation = {
           cleanup = "zap";
           autoUpdate = true;
@@ -89,6 +88,8 @@
         finder.FXPreferredViewStyle = "clmv";
         loginwindow.GuestEnabled = false;
         NSGlobalDomain.AppleICUForce24HourTime = true;
+        dock.mru-spaces = false;
+        dock.expose-group-by-app = true;
       };
 
       nix.settings.experimental-features = "nix-command flakes";
