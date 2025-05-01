@@ -30,7 +30,6 @@
         pkgs.obsidian
         pkgs.iina
         pkgs.yazi
-        pkgs.aerospace
         pkgs.alejandra
         pkgs.nixd
         pkgs.nodejs
