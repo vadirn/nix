@@ -49,6 +49,7 @@
           "pinentry-mac"
           "reattach-to-user-namespace"
           "openssl-osx-ca"
+          "zoxide"
         ];
         casks = [
           "raycast"

@@ -22,6 +22,7 @@
         "fzf"
         "git"
         "tmux"
+        "zoxide"
       ];
     };
 
@@ -31,6 +32,8 @@
       ssh-add --apple-use-keychain ~/.ssh/vultr 2> /dev/null
 
       eval $(brew shellenv)
+
+      eval "$(zoxide init --cmd cd zsh)"
     '';
   };
 }
