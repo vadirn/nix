@@ -79,6 +79,7 @@
           "/Applications/Claude.app"
           "/Applications/Perplexity.app"
           "/Applications/ChatGPT.app"
+          "/Applications/MacWhisper.app"
           "${pkgs.obsidian}/Applications/Obsidian.app"
           "/Applications/Cursor.app"
           "/Applications/Ghostty.app"
