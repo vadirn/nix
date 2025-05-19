@@ -77,6 +77,7 @@
           "/System/Applications/Calendar.app"
           "/System/Applications/Reminders.app"
           "/Applications/Claude.app"
+          "/Applications/MacWhisper.app"
           "${pkgs.obsidian}/Applications/Obsidian.app"
           "/Applications/Cursor.app"
           "/Applications/Ghostty.app"
