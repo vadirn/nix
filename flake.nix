@@ -77,8 +77,6 @@
           "/System/Applications/Calendar.app"
           "/System/Applications/Reminders.app"
           "/Applications/Claude.app"
-          "/Applications/Perplexity.app"
-          "/Applications/ChatGPT.app"
           "${pkgs.obsidian}/Applications/Obsidian.app"
           "/Applications/Cursor.app"
           "/Applications/Ghostty.app"
