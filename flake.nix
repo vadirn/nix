@@ -33,7 +33,6 @@
         pkgs.alejandra
         pkgs.nixd
         pkgs.nodejs
-        pkgs.dockutil
       ];
 
       homebrew = {
