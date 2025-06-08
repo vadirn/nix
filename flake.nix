@@ -126,6 +126,7 @@
     darwinConfigurations = {
       default = mkDarwinConfig "default";
       vdrn-studio = mkDarwinConfig "vdrn-studio";
+      vdrn-mbp = mkDarwinConfig "vdrn-mbp";
     };
 
     darwinPackages = self.darwinConfigurations.default.pkgs;
