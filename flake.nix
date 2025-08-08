@@ -26,7 +26,7 @@
     mkDarwinConfig = hostname: nix-darwin.lib.darwinSystem {
       system = "aarch64-darwin";
       modules = [
-        ({pkgs, ...}: {
+        ({pkgs, lib, ...}: {
           nixpkgs.config.allowUnfree = true;
 
           environment.systemPackages = [
@@ -43,6 +43,10 @@
           environment.systemPath = [
             "/nix/var/nix/profiles/system/sw/bin"
           ];
+
+          # Minimal fix for nix-daemon service - just override the daemon path
+          # nix-daemon is managed automatically when nix.enable is true (default)
+          launchd.daemons.nix-daemon.command = lib.mkForce "/nix/var/nix/profiles/default/bin/nix-daemon";
 
           homebrew = {
             enable = true;
