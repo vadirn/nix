@@ -8,6 +8,8 @@
       LANG = "en_US.UTF-8";
       LC_ALL = "en_US.UTF-8";
       GPG_TTY = "(tty)";
+
+      NPM_CONFIG_PREFIX = "$HOME/.npm-global";
     };
 
     localVariables = {
@@ -34,6 +36,8 @@
       eval $(brew shellenv)
 
       eval "$(zoxide init --cmd cd zsh)"
+
+      export PATH="$HOME/.npm-global/bin:$PATH"
     '';
   };
 }
