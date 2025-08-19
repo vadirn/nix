@@ -8,10 +8,16 @@
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "beforeHomeManager";
-    users.vadim = {...}: {
+    users.vadim = {pkgs, ...}: {
       home = {
         username = username;
         stateVersion = "24.11";
+        packages = with pkgs; [
+          ripgrep
+          fd
+          pass
+          jq
+        ];
       };
       programs = {
         home-manager = {
@@ -20,6 +26,7 @@
         fzf = {
           enable = true;
           enableZshIntegration = true;
+          enableBashIntegration = true;
         };
         direnv = {
           enable = true;
