@@ -44,6 +44,8 @@
               nixd
               nodejs
               gh
+              curl
+              bun
             ];
 
             environment.systemPath = [
