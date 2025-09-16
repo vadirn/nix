@@ -35,7 +35,9 @@
 
       eval $(brew shellenv)
 
-      eval "$(zoxide init --cmd cd zsh)"
+      if [ -z "$CLAUDECODE"]; then
+        eval "$(zoxide init --cmd cd zsh)"
+      fi
 
       export PATH="$HOME/.npm-global/bin:$PATH"
     '';
