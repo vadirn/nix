@@ -17,6 +17,7 @@
           fd
           pass
           jq
+          tree
         ];
       };
       programs = {

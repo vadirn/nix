@@ -8,8 +8,6 @@
     nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew";
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
-    alejandra.url = "github:kamadorueda/alejandra/3.0.0";
-    alejandra.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = inputs @ {
@@ -18,7 +16,6 @@
     nix-darwin,
     nix-homebrew,
     home-manager,
-    alejandra,
   }: let
     system = "aarch64-darwin";
 
@@ -99,7 +96,7 @@
                 "/Applications/Claude.app"
                 "/Applications/MacWhisper.app"
                 "${pkgs.obsidian}/Applications/Obsidian.app"
-                "/Applications/Cursor.app"
+                "/Applications/Visual Studio Code.app"
                 "/Applications/Ghostty.app"
                 "/Applications/OrbStack.app"
               ];
