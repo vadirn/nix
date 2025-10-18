@@ -43,6 +43,7 @@
               gh
               curl
               bun
+              typst
             ];
 
             environment.systemPath = [
