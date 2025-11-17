@@ -44,7 +44,6 @@
               curl
               bun
               typst
-              syncthing
             ];
 
             environment.systemPath = [
@@ -80,6 +79,7 @@
                 "pearcleaner"
                 "orbstack"
                 "claude-code"
+                "syncthing"
               ];
               onActivation = {
                 cleanup = "zap";
