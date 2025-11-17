@@ -68,6 +68,7 @@
                 "reattach-to-user-namespace"
                 "openssl-osx-ca"
                 "zoxide"
+                "syncthing"
               ];
               casks = [
                 "raycast"
@@ -79,7 +80,6 @@
                 "pearcleaner"
                 "orbstack"
                 "claude-code"
-                "syncthing"
               ];
               onActivation = {
                 cleanup = "zap";
