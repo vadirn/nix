@@ -108,7 +108,7 @@
               loginwindow.GuestEnabled = false;
               NSGlobalDomain.AppleICUForce24HourTime = true;
               dock.mru-spaces = false;
-              dock.expose-group-apps = true;
+              dock.expose-group-apps = false;
             };
 
             nix.settings.experimental-features = "nix-command flakes";
