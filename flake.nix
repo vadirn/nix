@@ -2,11 +2,11 @@
   description = "Darwin system flake";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
-    nix-darwin.url = "github:LnL7/nix-darwin";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nix-darwin.url = "github:LnL7/nix-darwin/nix-darwin-25.05";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
     nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew";
-    home-manager.url = "github:nix-community/home-manager";
+    home-manager.url = "github:nix-community/home-manager/release-25.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -56,24 +56,18 @@
 
             homebrew = {
               enable = true;
-              taps = [
-                "raggi/ale"
-              ];
               brews = [
                 "ffmpeg"
                 "yt-dlp"
                 "gnupg"
-                "qmk/qmk/qmk"
                 "pinentry-mac"
                 "reattach-to-user-namespace"
                 "openssl-osx-ca"
-                "zoxide"
                 "syncthing"
               ];
               casks = [
                 "raycast"
                 "imageoptim"
-                "qmk-toolbox"
                 "firefox"
                 "ghostty"
                 "zed"
