@@ -18,6 +18,11 @@
           pass
           jq
           tree
+          bat
+          eza
+          btop
+          lazygit
+          delta
         ];
       };
       programs = {
@@ -34,10 +39,16 @@
           enableZshIntegration = true;
           nix-direnv.enable = true;
         };
+        zoxide = {
+          enable = true;
+          enableZshIntegration = false;
+        };
       };
       imports = [
         ./zsh.nix
         ./tmux.nix
+        ./git.nix
+        ./starship.nix
       ];
     };
   };

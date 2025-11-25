@@ -7,9 +7,10 @@
     sessionVariables = {
       LANG = "en_US.UTF-8";
       LC_ALL = "en_US.UTF-8";
-      GPG_TTY = "(tty)";
+      GPG_TTY = "$(tty)";
 
       NPM_CONFIG_PREFIX = "$HOME/.npm-global";
+      EDITOR = "code --wait";
     };
 
     localVariables = {
@@ -19,12 +20,9 @@
 
     oh-my-zsh = {
       enable = true;
-      theme = "robbyrussell";
       plugins = [
-        "fzf"
         "git"
         "tmux"
-        "zoxide"
       ];
     };
 
@@ -35,7 +33,7 @@
 
       eval $(brew shellenv)
 
-      if [ -z "$CLAUDECODE"]; then
+      if [ -z "$CLAUDECODE" ]; then
         eval "$(zoxide init --cmd cd zsh)"
       fi
 
