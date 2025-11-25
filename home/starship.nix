@@ -3,33 +3,25 @@
     enable = true;
     enableZshIntegration = true;
     settings = {
-      add_newline = false;
-      format = "$directory$git_branch$git_status$nix_shell$nodejs$character";
+      format = "$directory$git_branch$git_status$line_break$character";
       directory = {
         truncation_length = 3;
         truncate_to_repo = true;
       };
       git_branch = {
-        format = "[$branch]($style) ";
-        style = "bold purple";
+        format = "[$branch]($style)";
+        style = "purple";
       };
       git_status = {
-        format = "[$all_status$ahead_behind]($style) ";
-        style = "bold red";
-      };
-      nix_shell = {
-        format = "[$symbol]($style) ";
-        symbol = "nix";
-        style = "bold blue";
-      };
-      nodejs = {
-        format = "[$symbol($version)]($style) ";
-        symbol = "node ";
-        style = "bold green";
-      };
-      character = {
-        success_symbol = "[➜](bold green)";
-        error_symbol = "[➜](bold red)";
+        format = "[[(*$conflicted$untracked$modified$staged$renamed$deleted)](218) ($ahead_behind$stashed)]($style)";
+        style = "cyan";
+        conflicted = "​";
+        untracked = "​";
+        modified = "​";
+        staged = "​";
+        renamed = "​";
+        deleted = "​";
+        stashed = "≡";
       };
     };
   };
