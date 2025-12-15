@@ -19,7 +19,6 @@
           jq
           tree
           bat
-          eza
           btop
           lazygit
           delta
@@ -42,6 +41,10 @@
         zoxide = {
           enable = true;
           enableZshIntegration = false;
+        };
+        eza = {
+          enable = true;
+          enableZshIntegration = true;
         };
       };
       imports = [

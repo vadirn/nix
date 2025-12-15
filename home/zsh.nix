@@ -37,7 +37,12 @@
         eval "$(zoxide init --cmd cd zsh)"
       fi
 
-      export PATH="$HOME/.npm-global/bin:$PATH"
+      if [[ ! -x "$HOME/.local/bin/claude" ]]; then
+        echo "Installing Claude Code..."
+        curl -fsSL https://claude.ai/install.sh | bash
+      fi
+
+      export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
     '';
   };
 }
