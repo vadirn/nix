@@ -73,7 +73,6 @@
                 "zed"
                 "pearcleaner"
                 "orbstack"
-                "claude-code"
               ];
               onActivation = {
                 cleanup = "zap";
