@@ -64,6 +64,7 @@
                 "reattach-to-user-namespace"
                 "openssl-osx-ca"
                 "syncthing"
+                "tw93/tap/mole"
               ];
               casks = [
                 "raycast"
