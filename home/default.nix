@@ -22,6 +22,7 @@
           btop
           lazygit
           delta
+          ngrok
         ];
       };
       programs = {
