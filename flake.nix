@@ -65,6 +65,7 @@
                 "openssl-osx-ca"
                 "syncthing"
                 "tw93/tap/mole"
+                "dopplerhq/cli/doppler"
               ];
               casks = [
                 "raycast"
