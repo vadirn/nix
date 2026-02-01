@@ -18,7 +18,6 @@
     home-manager,
   }: let
     system = "aarch64-darwin";
-
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:
       nix-darwin.lib.darwinSystem {
@@ -32,15 +31,10 @@
             nixpkgs.config.allowUnfree = true;
 
             environment.systemPackages = with pkgs; [
-              git
-              git-lfs
-              obsidian
-              iina
               yazi
               alejandra
               nixd
               nodejs
-              gh
               curl
               bun
               typst
@@ -57,6 +51,9 @@
             homebrew = {
               enable = true;
               brews = [
+                "git"
+                "git-lfs"
+                "gh"
                 "ffmpeg"
                 "yt-dlp"
                 "gnupg"
@@ -68,6 +65,8 @@
                 "dopplerhq/cli/doppler"
               ];
               casks = [
+                "obsidian"
+                "iina"
                 "raycast"
                 "imageoptim"
                 "firefox"
@@ -93,7 +92,7 @@
                 "/System/Applications/Reminders.app"
                 "/Applications/Claude.app"
                 "/Applications/MacWhisper.app"
-                "${pkgs.obsidian}/Applications/Obsidian.app"
+                "/Applications/Obsidian.app"
                 "/Applications/Visual Studio Code.app"
                 "/Applications/Ghostty.app"
                 "/Applications/OrbStack.app"
