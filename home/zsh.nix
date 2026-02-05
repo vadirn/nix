@@ -11,6 +11,7 @@
 
       NPM_CONFIG_PREFIX = "$HOME/.npm-global";
       EDITOR = "code --wait";
+      DOCKER_HOST = "unix://$HOME/.orbstack/run/docker.sock";
     };
 
     localVariables = {
