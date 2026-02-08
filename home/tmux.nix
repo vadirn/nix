@@ -12,6 +12,7 @@
         extraConfig = ''
           set -g @catppuccin_flavor "latte"
           set -g @catppuccin_window_status_style "rounded"
+          set -g @catppuccin_session_icon "# "
           set -g @catppuccin_status_left_separator ""
           set -g @catppuccin_status_middle_separator ""
           set -g @catppuccin_status_right_separator "#[fg=#ccd0da,bg=#e6e9ef]#[none]"
