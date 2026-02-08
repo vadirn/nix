@@ -1,0 +1,9 @@
+theme = "Catppuccin Latte"
+font-family = "MonoLisa Variable"
+font-size = 12
+font-feature = zero
+font-variation = "wght=500"
+cursor-style = block
+cursor-style-blink = true
+keybind = shift+enter=text:\x1b\r
+confirm-close-surface = false

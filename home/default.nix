@@ -8,7 +8,7 @@
     useGlobalPkgs = true;
     useUserPackages = true;
     backupFileExtension = "beforeHomeManager";
-    users.vadim = {pkgs, ...}: {
+    users.vadim = {pkgs, config, ...}: {
       home = {
         username = username;
         stateVersion = "24.11";
@@ -48,6 +48,9 @@
           enableZshIntegration = true;
         };
       };
+      home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
+      home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/CLAUDE.md";
+      home.file.".config/ghostty/config".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/ghostty-config";
       imports = [
         ./zsh.nix
         ./tmux.nix
