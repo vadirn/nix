@@ -13,6 +13,8 @@
       "mcp__firecrawl__firecrawl_agent_status",
       "mcp__sequentialthinking__sequentialthinking",
       "mcp__markitdown__convert_to_markdown",
+      "WebSearch",
+      "WebFetch",
       "Bash(git status:*)",
       "Bash(git log:*)",
       "Bash(git diff:*)",
