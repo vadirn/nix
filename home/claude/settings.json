@@ -4,6 +4,7 @@
     "ENABLE_TOOL_SEARCH": "auto:5",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
+  "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
       "mcp__firecrawl__firecrawl_scrape",
@@ -43,6 +44,7 @@
       "Bash(rm -rf:*)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "statusLine": {
     "type": "command",
     "command": "bash ~/.claude/statusline.sh"
@@ -51,9 +53,8 @@
     "typescript-lsp@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": true
   },
-  "enableAllProjectMcpServers": true,
-  "includeCoAuthoredBy": false,
   "alwaysThinkingEnabled": true,
   "plansDirectory": "./plans",
-  "teammateMode": "tmux"
+  "teammateMode": "tmux",
+  "fastMode": true
 }
