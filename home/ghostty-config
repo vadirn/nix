@@ -7,3 +7,4 @@ cursor-style = block
 cursor-style-blink = true
 keybind = shift+enter=text:\x1b\r
 confirm-close-surface = false
+unfocused-split-opacity = 0.2

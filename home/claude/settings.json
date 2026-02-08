@@ -41,11 +41,16 @@
       "Bash(rm -rf:*)"
     ]
   },
-  "enableAllProjectMcpServers": true,
   "statusLine": {
     "type": "command",
     "command": "bash ~/.claude/statusline.sh"
   },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true
+  },
+  "enableAllProjectMcpServers": true,
+  "includeCoAuthoredBy": false,
   "alwaysThinkingEnabled": true,
   "plansDirectory": "./plans",
   "teammateMode": "tmux"
