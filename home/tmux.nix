@@ -25,6 +25,10 @@
       set -g status-left " "
       set -g status-right "#{E:@catppuccin_status_session} "
 
+      # dim inactive panes to match ghostty unfocused-split-opacity
+      set -g window-style dim
+      set -g window-active-style default
+
       bind | split-window -h
       bind _ split-window -v
       bind -T copy-mode MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
