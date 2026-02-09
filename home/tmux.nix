@@ -29,6 +29,12 @@
       set -g window-style dim
       set -g window-active-style default
 
+      set -g mode-keys vi
+
+      # alt+arrow to scroll in copy mode
+      bind -T copy-mode-vi M-Up send-keys -X scroll-up
+      bind -T copy-mode-vi M-Down send-keys -X scroll-down
+
       bind | split-window -h
       bind _ split-window -v
       bind -T copy-mode MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
