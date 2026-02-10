@@ -25,6 +25,16 @@
       set -g window-status-current-format "#[fg=magenta,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #W#[fg=colour15,bg=default]"
       set -g window-status-separator " "
 
+      # dim inactive panes to match ghostty unfocused-split-opacity
+      set -g window-style dim
+      set -g window-active-style default
+
+      set -g mode-keys vi
+
+      # alt+arrow to scroll in copy mode
+      bind -T copy-mode-vi M-Up send-keys -X scroll-up
+      bind -T copy-mode-vi M-Down send-keys -X scroll-down
+
       bind | split-window -h
       bind _ split-window -v
       bind -T copy-mode MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
