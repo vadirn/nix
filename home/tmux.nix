@@ -21,13 +21,9 @@
       set -g status-right "#[fg=green,bg=default]#[reverse]# #[noreverse,fg=colour0,bg=colour15] #S#[fg=colour15,bg=default] "
 
       # Window tabs (rounded)
-      set -g window-status-format "#[fg=colour8,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #W#[fg=colour15,bg=default]"
-      set -g window-status-current-format "#[fg=magenta,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #W#[fg=colour15,bg=default]"
+      set -g window-status-format "#[fg=colour8,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #T#[fg=colour15,bg=default]"
+      set -g window-status-current-format "#[fg=magenta,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #T#[fg=colour15,bg=default]"
       set -g window-status-separator " "
-
-      # dim inactive panes to match ghostty unfocused-split-opacity
-      set -g window-style dim
-      set -g window-active-style default
 
       set -g mode-keys vi
 

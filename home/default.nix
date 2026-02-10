@@ -56,6 +56,7 @@
         ./tmux.nix
         ./git.nix
         ./starship.nix
+        ./yazi.nix
       ];
     };
   };
