@@ -56,7 +56,6 @@
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "fastMode": true,
   "plansDirectory": "./plans",
   "teammateMode": "tmux"
 }
