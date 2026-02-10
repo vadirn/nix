@@ -7,23 +7,23 @@
 
     plugins = with pkgs.tmuxPlugins; [
       yank
-      {
-        plugin = catppuccin;
-        extraConfig = ''
-          set -g @catppuccin_flavor "latte"
-          set -g @catppuccin_window_status_style "rounded"
-          set -g @catppuccin_session_icon "# "
-          set -g @catppuccin_status_left_separator ""
-          set -g @catppuccin_status_middle_separator ""
-          set -g @catppuccin_status_right_separator "#[fg=#ccd0da,bg=#e6e9ef]#[none]"
-        '';
-      }
     ];
 
     extraConfig = ''
-      set -g status-right-length 100
+      # Message/command prompt
+      set -g message-style "bg=default,fg=default"
+      set -g message-command-style "bg=default,fg=default"
+
+      # Status bar
+      set -g status-style "bg=default,fg=default"
       set -g status-left " "
-      set -g status-right "#{E:@catppuccin_status_session} "
+      set -g status-right-length 100
+      set -g status-right "#[fg=green,bg=default]#[reverse]# #[noreverse,fg=colour0,bg=colour15] #S#[fg=colour15,bg=default] "
+
+      # Window tabs (rounded)
+      set -g window-status-format "#[fg=colour8,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #W#[fg=colour15,bg=default]"
+      set -g window-status-current-format "#[fg=magenta,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #W#[fg=colour15,bg=default]"
+      set -g window-status-separator " "
 
       bind | split-window -h
       bind _ split-window -v
