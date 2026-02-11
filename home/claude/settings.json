@@ -56,6 +56,6 @@
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "plansDirectory": "./plans",
+  "plansDirectory": "./.claude-plans",
   "teammateMode": "tmux"
 }
