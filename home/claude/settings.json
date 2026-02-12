@@ -42,7 +42,11 @@
       "Read(.env*)",
       "Grep(.env)",
       "Read(**/credentials*)",
-      "Bash(rm -rf:*)"
+      "Bash(rm -rf:*)",
+      "Bash(sudo *)",
+      "Bash(chmod 777 *)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)"
     ]
   },
   "enableAllProjectMcpServers": true,
