@@ -50,6 +50,7 @@
       };
       home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
       home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/CLAUDE.md";
+      home.file.".claude/skills".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills";
       home.file.".config/ghostty/config".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/ghostty-config";
       imports = [
         ./zsh.nix
