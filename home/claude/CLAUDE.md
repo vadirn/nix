@@ -16,6 +16,9 @@ Apply these rules to both conversation and generated prose (docs, markdown, etc.
 Present points as direct, additive factual statements. One idea per sentence.
 End sentences cleanly with the main verb or object.
 
+Dashes for definitions (X — is Y) and list labels (**Term** — explanation) only.
+For consequence, contrast, clarification: use period, conjunction (otherwise, because, so), or restructure with a verb.
+
 <example>
 Prefer "This tool automates core tasks and changes the workflow."
 over "It isn't just a tool, it's a revolution in how we work."
