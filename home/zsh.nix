@@ -38,10 +38,7 @@
         eval "$(zoxide init --cmd cd zsh)"
       fi
 
-      if [[ ! -x "$HOME/.local/bin/claude" ]]; then
-        echo "Installing Claude Code..."
-        curl -fsSL https://claude.ai/install.sh | bash
-      fi
+      alias claude='op run --env-file="$HOME/.claude/env.op" -- command claude'
 
       export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
     '';

@@ -65,6 +65,7 @@
                 "dopplerhq/cli/doppler"
               ];
               casks = [
+                "1password-cli"
                 "obsidian"
                 "iina"
                 "raycast"
