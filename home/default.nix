@@ -59,16 +59,6 @@
           echo "Installing Claude Code..."
           curl -fsSL https://claude.ai/install.sh | bash
         fi
-
-        echo ""
-        echo "=== Post-install steps ==="
-        echo "  claude plugins install typescript-lsp"
-        echo "  claude plugins install ralph-loop"
-        echo "  claude plugins marketplace add brave/brave-search-skills"
-        echo "  claude plugins install brave-search-skills@brave-search"
-        echo "  npm install -g @playwright/cli@latest"
-        echo "  playwright-cli install --skills"
-        echo ""
       '';
 
       home.file.".claude/env.op".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/env.op";

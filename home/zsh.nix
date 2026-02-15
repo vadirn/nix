@@ -38,7 +38,10 @@
         eval "$(zoxide init --cmd cd zsh)"
       fi
 
-      alias claude='op run --env-file="$HOME/.claude/env.op" -- command claude'
+      claude() {
+        eval "$(op inject -i "$HOME/.claude/env.op")"
+        command claude "$@"
+      }
 
       export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
     '';
