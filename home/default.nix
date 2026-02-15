@@ -61,7 +61,6 @@
         fi
       '';
 
-      home.file.".claude/env.op".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/env.op";
       home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
       home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/CLAUDE.md";
       home.file.".claude/skills".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills";

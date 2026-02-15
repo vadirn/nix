@@ -7,11 +7,6 @@
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
-      "mcp__firecrawl__firecrawl_scrape",
-      "mcp__firecrawl__firecrawl_map",
-      "mcp__firecrawl__firecrawl_search",
-      "mcp__firecrawl__firecrawl_check_crawl_status",
-      "mcp__firecrawl__firecrawl_agent_status",
       "mcp__sequentialthinking__sequentialthinking",
       "mcp__markitdown__convert_to_markdown",
       "WebSearch",
@@ -57,7 +52,7 @@
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
     "ralph-loop@claude-plugins-official": true,
-    "brave-search-skills@brave-search": true
+    "firecrawl@claude-plugins-official": true
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
