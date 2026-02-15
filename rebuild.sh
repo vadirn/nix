@@ -11,6 +11,5 @@ claude plugin install brave-search-skills@brave-search
 
 echo "Installing Playwright CLI..."
 npm install -g @playwright/cli@latest
-playwright-cli install --skills
 
 echo "Done."

@@ -56,7 +56,8 @@
   },
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true
+    "ralph-loop@claude-plugins-official": true,
+    "brave-search-skills@brave-search": true
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
