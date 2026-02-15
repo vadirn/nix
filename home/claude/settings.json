@@ -7,8 +7,13 @@
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
-      "mcp__sequentialthinking__sequentialthinking",
-      "mcp__markitdown__convert_to_markdown",
+      "Skill(writing-ru)",
+      "Skill(writing-en)",
+      "Skill(firecrawl)",
+      "Skill(playwright-cli)",
+      "Skill(playground)",
+      "Skill(reflect)",
+      "Skill(debate)",
       "WebSearch",
       "WebFetch",
       "Bash(git status:*)",
@@ -31,7 +36,9 @@
       "Bash(gh issue list:*)",
       "Bash(gh repo view:*)",
       "Bash(gh run view:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(firecrawl *)",
+      "Bash(playwright-cli *)"
     ],
     "deny": [
       "Read(.env*)",
