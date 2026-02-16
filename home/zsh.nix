@@ -39,6 +39,25 @@
       fi
 
       export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
+
+      tc() {
+        local name=''${PWD##*/}
+        name=''${name//./-}
+        if tmux has-session -t "$name" 2>/dev/null; then
+          if [ -n "$TMUX" ]; then
+            tmux switch-client -t "$name"
+          else
+            tmux attach-session -t "$name"
+          fi
+        else
+          local cmd="claude --continue; read '?Kill tmux session? [Y/n] ' r; [[ \$r != [nN] ]] && tmux kill-session || exec \$SHELL"
+          if [ -n "$TMUX" ]; then
+            tmux new-session -d -s "$name" "$cmd" && tmux switch-client -t "$name"
+          else
+            tmux new-session -d -s "$name" "$cmd" && tmux attach-session -t "$name"
+          fi
+        fi
+      }
     '';
   };
 }
