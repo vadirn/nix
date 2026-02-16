@@ -80,6 +80,20 @@ Use conventional commits: feat, fix, chore.
 
 Subject only. No body, footer, or co-created note.
 
+## Writing Prose
+
+Follow these when writing `.md` files (docs, notes, READMEs) in any language:
+
+1. Actor is the subject. Actions are verbs, not nominalizations.
+2. Active voice.
+3. Every word earns its place. Cut filler.
+4. One idea per sentence.
+5. Main point first in each paragraph.
+6. Replace abstractions with facts and numbers.
+7. No AI filler, no promotional adjectives.
+
+For a thorough edit, invoke `/writing-en` or `/writing-ru`.
+
 ## Web
 
 Prefer the `firecrawl` skill for web search and fetching. Fall back to WebFetch/WebSearch only if firecrawl fails.
