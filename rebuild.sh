@@ -12,4 +12,7 @@ echo "Installing global npm packages..."
 npm install -g @playwright/cli@latest
 npm install -g firecrawl-cli
 
+echo "Collecting garbage..."
+sudo nix-collect-garbage -d
+
 echo "Done."
