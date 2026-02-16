@@ -80,6 +80,10 @@ Use conventional commits: feat, fix, chore.
 
 Subject only. No body, footer, or co-created note.
 
+## Web
+
+Prefer the `firecrawl` skill for web search and fetching. Fall back to WebFetch/WebSearch only if firecrawl fails.
+
 ## GitHub
 
 `gh` CLI installed. Use it for GitHub interactions.
