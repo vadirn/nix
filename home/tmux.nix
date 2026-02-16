@@ -18,11 +18,11 @@
       set -g status-style "bg=default,fg=default"
       set -g status-left " "
       set -g status-right-length 100
-      set -g status-right "#[fg=green,bg=default]#[reverse]# #[noreverse,fg=colour0,bg=colour15] #S#[fg=colour15,bg=default] "
+      set -g status-right "#[fg=green,bg=default]#[reverse,bold] # #[noreverse,fg=green,bg=colour15]#[fg=colour0,nobold] #S #[fg=colour15,bg=default] "
 
-      # Window tabs (rounded)
-      set -g window-status-format "#[fg=colour8,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #T#[fg=colour15,bg=default]"
-      set -g window-status-current-format "#[fg=magenta,bg=default]#[reverse]#I #[noreverse,fg=colour0,bg=colour15] #T#[fg=colour15,bg=default]"
+      # Window tabs (rounded pill-in-pill)
+      set -g window-status-format "#[fg=colour8,bg=default]#[reverse] #I #[noreverse,fg=colour8,bg=colour15]#[fg=colour0] #T #[fg=colour15,bg=default]"
+      set -g window-status-current-format "#[fg=magenta,bg=default]#[reverse,bold] #I #[noreverse,fg=magenta,bg=colour15]#[fg=colour0,nobold] #T #[fg=colour15,bg=default]"
       set -g window-status-separator " "
 
       set -g mode-keys vi
