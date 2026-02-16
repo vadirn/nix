@@ -1,6 +1,12 @@
-{...}: {
+{pkgs, ...}: {
   programs.yazi = {
     enable = true;
+    plugins = {
+      "no-status" = pkgs.yaziPlugins.no-status;
+    };
+    initLua = ''
+      require("no-status"):setup()
+    '';
     settings.mgr.show_hidden = true;
     settings.opener.edit = [{
       run = ''micro "$@"'';
