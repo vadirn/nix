@@ -63,6 +63,7 @@
                 "syncthing"
                 "tw93/tap/mole"
                 "dopplerhq/cli/doppler"
+                "micro"
               ];
               casks = [
                 "1password-cli"
