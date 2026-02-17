@@ -16,7 +16,6 @@
 
     localVariables = {
       ZSH_AUTOSUGGEST_STRATEGY = ["history" "completion"];
-      ZSH_THEME_TERM_TAB_TITLE_IDLE = "%1~";
     };
 
     oh-my-zsh = {
