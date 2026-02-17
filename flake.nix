@@ -38,6 +38,8 @@
               curl
               bun
               typst
+              uv
+              poppler_utils
             ];
 
             environment.systemPath = [
