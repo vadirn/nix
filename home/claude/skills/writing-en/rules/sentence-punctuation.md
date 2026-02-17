@@ -17,8 +17,8 @@ Colon, dash, and parentheses interrupt a sentence at three levels of emphasis. P
 **Emphasis scale:**
 
 - **Colon** — formal announcement: "here is what I mean"
-- **Dash** — casual or dramatic aside
 - **Parentheses** — minimized aside, feels unimportant
+- **Dash** — last resort for dramatic aside when a conjunction or colon won't work
 
 **When the aside has internal commas, use dashes** instead of commas to avoid ambiguity.
 
