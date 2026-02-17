@@ -6,6 +6,18 @@ license: Proprietary. LICENSE.txt has complete terms
 
 # PDF Processing Guide
 
+## Running Python scripts
+
+Always run Python scripts with `uv run` instead of `python`/`python3`. This resolves dependencies automatically via inline metadata (PEP 723). Add a `# /// script` block at the top of every `.py` file you create:
+
+```python
+# /// script
+# dependencies = ["pypdf", "pdfplumber"]
+# ///
+```
+
+Then run with: `uv run script.py`
+
 ## Overview
 
 This guide covers essential PDF processing operations using Python libraries and command-line tools. For advanced features, JavaScript libraries, and detailed examples, see REFERENCE.md. If you need to fill out a PDF form, read FORMS.md and follow its instructions.
@@ -232,7 +244,7 @@ pdftk input.pdf rotate 1east output rotated.pdf
 
 ### Extract Text from Scanned PDFs
 ```python
-# Requires: pip install pytesseract pdf2image
+# Requires pytesseract and pdf2image (add to # /// script dependencies)
 import pytesseract
 from pdf2image import convert_from_path
 
