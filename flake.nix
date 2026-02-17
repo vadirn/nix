@@ -90,7 +90,6 @@
             system.defaults = {
               dock.autohide = true;
               dock.persistent-apps = [
-                "/Applications/Yandex Music.app"
                 "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"
                 "/System/Applications/Mail.app"
                 "/System/Applications/Calendar.app"
