@@ -48,7 +48,9 @@
       "Bash(sudo *)",
       "Bash(chmod 777 *)",
       "Bash(git push --force *)",
-      "Bash(git reset --hard *)"
+      "Bash(git reset --hard *)",
+      "Bash(git branch -D *)",
+      "Bash(git branch -D:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
