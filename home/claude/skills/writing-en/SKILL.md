@@ -20,30 +20,30 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 
 ## Quick Reference
 
-1. [Make the actor the subject](rules/action-actor-subject.md)
-2. [Express actions as verbs](rules/action-verbs.md)
-3. [Use active voice](rules/action-active-voice.md)
-4. [Choose the shortest word that carries your meaning](rules/word-short.md)
-5. [Cut every word you can](rules/word-cut.md)
-6. [Use affirmative form](rules/word-affirmative.md)
-7. [Use everyday English](rules/word-everyday.md)
-8. [Invent fresh comparisons](rules/word-fresh.md)
-9. [One idea per sentence](rules/sentence-one-idea.md)
-10. [After splitting, reconnect](rules/sentence-cohesion.md)
-11. [Get to the main verb within 7 words](rules/sentence-verb-early.md)
-12. [Open with familiar, close with new](rules/sentence-familiar-first.md)
-13. [Start with the main point](rules/passage-main-point.md)
-14. [One topic per paragraph](rules/passage-one-topic.md)
-15. [Use informative headings](rules/passage-headings.md)
-16. [Sort by information dependency](rules/passage-dependencies.md)
-17. [Write for your specific audience](rules/reader-audience.md)
-18. [Tell the reader why they should care](rules/reader-motivate.md)
-19. [Minimize what the reader holds in memory](rules/reader-cognitive-load.md)
-20. [Define terms when introduced](rules/reader-define-terms.md)
-21. [Start with the substance](rules/ai-filler.md)
-22. [Replace promotional adjectives with facts](rules/ai-promotional.md)
-23. [Vary sentence length and structure](rules/ai-rhythm.md)
-24. [Match punctuation to emphasis](rules/sentence-punctuation.md)
+1. Make the actor the subject
+2. Express actions as verbs
+3. Use active voice
+4. Choose the shortest word that carries your meaning
+5. Cut every word you can
+6. Use affirmative form
+7. Use everyday English
+8. Invent fresh comparisons
+9. One idea per sentence
+10. After splitting, reconnect
+11. Get to the main verb within 7 words
+12. Open with familiar, close with new
+13. Start with the main point
+14. One topic per paragraph
+15. Use informative headings
+16. Sort by information dependency
+17. Write for your specific audience
+18. Tell the reader why they should care
+19. Minimize what the reader holds in memory
+20. Define terms when introduced
+21. Start with the substance
+22. Replace promotional adjectives with facts
+23. Vary sentence length and structure
+24. Match punctuation to emphasis
 
 ## Checklist
 
@@ -64,6 +64,6 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 15. Free of AI filler and promotional adjectives
 16. Punctuation matches emphasis (colon announces, dash interrupts, parentheses minimize)
 
-## Full Reference
+## Rules
 
-All rules compiled: [AGENTS.md](AGENTS.md)
+Load [[ALL_RULES.md]] before editing. Apply only rules that improve the text.
