@@ -16,7 +16,7 @@ Structured exploration of a topic through opposing viewpoints.
 ## Process
 
 1. Parse parameters
-2. Load `workflows/en.md` or `workflows/ru.md` based on language
+2. Load [[workflows/en.md]] or [[workflows/ru.md]] based on language
 3. Follow loaded workflow template
 4. Use WebSearch and firecrawl to find evidence supporting arguments
 5. Output each round progressively (don't batch)
