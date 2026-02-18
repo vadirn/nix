@@ -15,4 +15,4 @@ files=("$dir"/*.wav)
 [[ ${#files[@]} -eq 0 ]] && exit 0
 
 pick="${files[RANDOM % ${#files[@]}]}"
-afplay -v 0.3 "$pick" &
+afplay -v 0.8 "$pick" &
