@@ -7,6 +7,12 @@
     initLua = ''
       require("no-status"):setup()
     '';
+    keymap.mgr.prepend_keymap = [
+      {
+        on = [":"];
+        run = "shell --interactive";
+      }
+    ];
     settings.mgr.show_hidden = true;
     settings.opener.edit = [{
       run = ''micro "$@"'';
