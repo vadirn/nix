@@ -38,7 +38,9 @@
       "Bash(gh run view:*)",
       "Bash(gh run list:*)",
       "Bash(firecrawl *)",
-      "Bash(playwright-cli *)"
+      "Bash(playwright-cli *)",
+      "Bash(obsidian *)",
+      "Skill(obsidian-cli)"
     ],
     "deny": [
       "Read(.env*)",
@@ -50,7 +52,14 @@
       "Bash(git push --force *)",
       "Bash(git reset --hard *)",
       "Bash(git branch -D *)",
-      "Bash(git branch -D:*)"
+      "Bash(git branch -D:*)",
+      "Bash(obsidian eval *)",
+      "Bash(obsidian delete * permanent*)",
+      "Bash(obsidian plugin:install *)",
+      "Bash(obsidian plugin:uninstall *)",
+      "Bash(obsidian dev:cdp *)",
+      "Bash(obsidian command *)",
+      "Bash(obsidian history:restore *)"
     ]
   },
   "enableAllProjectMcpServers": true,
