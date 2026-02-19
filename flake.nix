@@ -78,7 +78,7 @@
                 "zed"
                 "pearcleaner"
                 "orbstack"
-                "nimble-commander"
+
               ];
               onActivation = {
                 cleanup = "zap";
