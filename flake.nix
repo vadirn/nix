@@ -93,11 +93,11 @@
                 "/Applications/Ghostty.app"
                 "/Applications/Claude.app"
                 "/Applications/MacWhisper.app"
+                "/Applications/OrbStack.app"
                 "/Applications/Obsidian.app"
                 "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"
                 "/System/Applications/Calendar.app"
                 "/System/Applications/Mail.app"
-                "/Applications/OrbStack.app"
               ];
               dock.tilesize = 72;
               finder.FXPreferredViewStyle = "clmv";
