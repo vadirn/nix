@@ -40,7 +40,8 @@
       "Bash(firecrawl *)",
       "Bash(playwright-cli *)",
       "Bash(obsidian *)",
-      "Skill(obsidian-cli)"
+      "Skill(obsidian-cli)",
+      "Read(~/.claude/skills/**)"
     ],
     "deny": [
       "Read(.env*)",
