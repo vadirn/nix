@@ -42,7 +42,7 @@
       tc() {
         local dir=''${PWD##*/}
         dir=''${dir//./-}
-        local hash=$(echo -n "$PWD" | md5 -qs | cut -c1-6)
+        local hash=$(echo -n "$PWD" | md5 -q | cut -c1-6)
         local name="''${dir}-''${hash}"
         [[ -n "$1" ]] && name="''${name}-$1"
         if tmux has-session -t "$name" 2>/dev/null; then
