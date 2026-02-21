@@ -14,6 +14,10 @@
       }
     ];
     settings.mgr.show_hidden = true;
+    settings.plugin.prepend_previewers = [{
+      mime = "application/json";
+      run = "code";
+    }];
     settings.opener.edit = [{
       run = ''micro "$@"'';
       block = true;
