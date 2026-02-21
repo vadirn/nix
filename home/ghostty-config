@@ -1,10 +1,13 @@
 theme = dark:"Catppuccin Mocha",light:"Catppuccin Latte"
 font-family = "MonoLisa Variable"
-font-size = 12
+font-size = 13
 font-feature = zero
-font-variation = "wght=500"
+font-variation = "wght=560"
 cursor-style = block
 cursor-style-blink = true
+adjust-cursor-thickness = 200%
 keybind = shift+enter=text:\x1b\r
 confirm-close-surface = false
 unfocused-split-opacity = 0.4
+window-colorspace = display-p3
+copy-on-select = true
