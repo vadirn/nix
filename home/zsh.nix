@@ -40,8 +40,11 @@
       export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
       tc() {
-        local name=''${PWD##*/}
-        name=''${name//./-}
+        local dir=''${PWD##*/}
+        dir=''${dir//./-}
+        local hash=$(echo -n "$PWD" | md5 -qs | cut -c1-6)
+        local name="''${dir}-''${hash}"
+        [[ -n "$1" ]] && name="''${name}-$1"
         if tmux has-session -t "$name" 2>/dev/null; then
           if [ -n "$TMUX" ]; then
             tmux switch-client -t "$name"
@@ -49,7 +52,7 @@
             tmux attach-session -t "$name"
           fi
         else
-          local cmd="claude --continue; read '?Kill tmux session? [Y/n] ' r; [[ \$r != [nN] ]] && tmux kill-session || exec \$SHELL"
+          local cmd="claude --continue; read '?Kill tmux session? ([Y]/n) ' r; [[ \$r != [nN] ]] && tmux kill-session || exec \$SHELL"
           if [ -n "$TMUX" ]; then
             tmux new-session -d -s "$name" "$cmd" && tmux switch-client -t "$name"
           else
