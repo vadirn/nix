@@ -39,6 +39,9 @@
 
       export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
+      alias lg='lazygit'
+      alias y='yazi'
+
       tc() {
         local dir=''${PWD##*/}
         dir=''${dir//./-}
