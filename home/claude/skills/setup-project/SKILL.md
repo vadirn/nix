@@ -70,6 +70,8 @@ filters:
 properties:
   file.name:
     displayName: Checkpoint
+  note.description:
+    displayName: Description
   note.done:
     displayName: Done
   note.decisions:
@@ -81,6 +83,7 @@ views:
     name: All
     order:
       - file.name
+      - description
       - done
       - decisions
       - frictions
@@ -94,6 +97,7 @@ views:
         - done == false
     order:
       - file.name
+      - description
       - decisions
       - frictions
     sort:
@@ -107,6 +111,7 @@ views:
         - frictions.length > 0
     order:
       - file.name
+      - description
       - done
       - decisions
       - frictions
@@ -154,8 +159,9 @@ Resume or begin a session.
    Then Read each and check `done: false` in frontmatter.
 3. Report:
    - Zero checkpoints → "First session."
-   - Incomplete checkpoints → Read each. Show `## Progress` and `## Next`.
-   - All complete → Read the latest (filename sort DESC) for continuity.
+   - All complete → "All checkpoints done." Skip to step 4.
+   - Incomplete checkpoints → present via `AskUserQuestion` with `multiSelect: true`. Each option: description (fall back to filename if missing). Include an "All" option.
+     Read selected checkpoints. Show `## Progress` and `## Next` from each.
 4. Ask what to work on.
 
 ### `save`
@@ -172,6 +178,7 @@ Write a checkpoint. Interactive.
    - Template: `templates/Checkpoint.md`
    - Fill frontmatter:
      - `type: checkpoint`
+     - `description: "short summary of this checkpoint"` — generate from session context, ask user to confirm or edit
      - `done: false` (or `true` if complete)
      - `project: "[[41 projects/{name}/{title}]]"`
      - `decisions: ["chose X because Y"]` — key decisions this session
