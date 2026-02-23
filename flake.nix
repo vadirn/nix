@@ -39,6 +39,7 @@
               bun
               typst
               uv
+              coreutils
             ];
 
             environment.systemPath = [

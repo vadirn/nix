@@ -42,6 +42,8 @@
       alias lg='lazygit'
       alias y='yazi'
 
+      alias timeout='gtimeout'
+
       tc() {
         local dir=''${PWD##*/}
         dir=''${dir//./-}
