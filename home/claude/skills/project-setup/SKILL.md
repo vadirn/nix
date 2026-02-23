@@ -9,21 +9,26 @@ Creates the full project-as-a-skill structure for a new project.
 
 ## Process
 
-1. **Collect inputs** (ask the user):
+1. **Discover vault root**:
+   - Run `timeout 10 obsidian vaults verbose` (Bash timeout 10000).
+   - One vault → use its filesystem path. Multiple → ask user to pick via `AskUserQuestion`. Command fails or Obsidian offline → ask user for the absolute filesystem path.
+   - Store as `{vault_root}` (absolute path, e.g. `/Users/vadim/Documents/vault`).
+
+2. **Collect inputs** (ask the user):
    - Vault path — where the project lives in the vault (e.g. `41 projects/subarea/my-project`). No default. If not provided, stop.
    - Project name — kebab-case, used for skill name (e.g. `my-project`)
    - Project title — human-readable (e.g. `My Project`)
    - Description — 1-2 sentences, what this project is
    - Result — what "done" looks like (1 sentence)
 
-2. **Duplicate check** (before creating anything):
-   - Glob `{path}/`
+3. **Duplicate check** (before creating anything):
+   - Glob `{vault_root}/{path}/`
    - Glob `.claude/skills/{name}/`
    - If either exists, ask whether to proceed or edit the existing project
 
-3. **Create directory**: `mkdir -p "{path}"`
+4. **Create directory**: `mkdir -p "{vault_root}/{path}"`
 
-4. **Write project note**: `{path}/{Title}.md`
+5. **Write project note**: `{vault_root}/{path}/{Title}.md`
    Use the Project template frontmatter:
 
    ```yaml
@@ -38,26 +43,26 @@ Creates the full project-as-a-skill structure for a new project.
 
    Body: the description, plus any context the user provides.
 
-5. **Write Checkpoints.base**: `{path}/Checkpoints.base`
+6. **Write Checkpoints.base**: `{vault_root}/{path}/Checkpoints.base`
    Write via Bash `cat` to bypass oxfmt, which mangles YAML in `.base` files. Build the final YAML with the actual project name substituted. See template below.
 
-6. **Write command router**: `{path}/SKILL.md`
-   Use the generated SKILL.md template below. Substitute all `{path}`, `{name}`, `{title}`, `{description}` placeholders with actual values.
+7. **Write command router**: `{vault_root}/{path}/SKILL.md`
+   Use the generated SKILL.md template below. Substitute all `{vault_root}`, `{path}`, `{name}`, `{title}`, `{description}` placeholders with actual values.
 
-7. **Write checkpoint template**: `templates/Checkpoint.md`
+8. **Write checkpoint template**: `{vault_root}/templates/Checkpoint.md`
    Create only if missing (Glob first).
 
-8. **Create symlink**:
+9. **Create symlink**:
 
    ```bash
-   ln -s "../../{path}" ".claude/skills/{name}"
+   mkdir -p .claude/skills && ln -s "{vault_root}/{path}" ".claude/skills/{name}"
    ```
 
-   Relative path, portable across machines.
+   Absolute path so it works from any repo.
 
-9. **Register in settings**: add `Skill({name})` to the `allow` list in `.claude/settings.json`. Read the file first, insert alphabetically among existing `Skill(...)` entries.
+10. **Register in settings**: add `Skill({name})` to the `allow` list in `.claude/settings.json` or `.claude/settings.local.json`. Glob `.claude/settings*.json` first to find the right file. Read it, insert alphabetically among existing `Skill(...)` entries.
 
-10. **Report**: list all created files. Remind the user to `/clear` so the new skill loads.
+11. **Report**: list all created files. Remind the user to `/clear` so the new skill loads.
 
 ## Checkpoints.base template
 
@@ -123,7 +128,7 @@ views:
 
 ## Generated SKILL.md template
 
-Per-project command router. Substitute `{path}`, `{name}`, `{title}`, `{description}` with actual values.
+Per-project command router. Substitute `{vault_root}`, `{path}`, `{name}`, `{title}`, `{description}` with actual values.
 
 ````markdown
 ---
@@ -151,11 +156,11 @@ Resume or begin a session.
 1. Context loaded (you read this file).
 2. Query incomplete checkpoints:
    ```
-   obsidian base:query path="{path}/Checkpoints.base" view="Incomplete"
+   timeout 30 obsidian base:query path="{path}/Checkpoints.base" view="Incomplete"
    ```
    Bash timeout: 30000. Fallback when Obsidian is offline:
    ```
-   Glob: {path}/checkpoint-*.md
+   Glob: {vault_root}/{path}/checkpoint-*.md
    ```
    Then Read each and check `done: false` in frontmatter.
 3. Report:
@@ -174,9 +179,9 @@ Write a checkpoint. Interactive.
    - Yes → update in place (Read, then Write). Ask "mark done?"
    - No → move on.
 3. New work uncovered by existing checkpoints:
-   - Create `checkpoint-{UTC timestamp}.md` via Write tool
+   - Create `{vault_root}/{path}/checkpoint-{UTC timestamp}.md` via Write tool
    - UTC timestamp format: `YYYY-MM-DD-HH-mm-ss` (use `date -u +%Y-%m-%d-%H-%M-%S`)
-   - Template: `templates/Checkpoint.md`
+   - Template: `{vault_root}/templates/Checkpoint.md`
    - Fill frontmatter:
      - `type: checkpoint`
      - `description: "short summary of this checkpoint"` — generate from session context, ask user to confirm or edit
