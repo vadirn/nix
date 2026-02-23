@@ -1,5 +1,5 @@
 ---
-name: setup-project
+name: project-setup
 description: Sets up project-as-a-skill for any project. Creates project note, Checkpoints.base, command router SKILL.md, symlink, and settings registration.
 ---
 
@@ -10,19 +10,20 @@ Creates the full project-as-a-skill structure for a new project.
 ## Process
 
 1. **Collect inputs** (ask the user):
-   - Project name — kebab-case, used for directory and skill name (e.g. `my-project`)
+   - Vault path — where the project lives in the vault (e.g. `41 projects/subarea/my-project`). No default. If not provided, stop.
+   - Project name — kebab-case, used for skill name (e.g. `my-project`)
    - Project title — human-readable (e.g. `My Project`)
    - Description — 1-2 sentences, what this project is
    - Result — what "done" looks like (1 sentence)
 
 2. **Duplicate check** (before creating anything):
-   - Glob `41 projects/{name}/`
+   - Glob `{path}/`
    - Glob `.claude/skills/{name}/`
    - If either exists, ask whether to proceed or edit the existing project
 
-3. **Create directory**: `mkdir -p "41 projects/{name}"`
+3. **Create directory**: `mkdir -p "{path}"`
 
-4. **Write project note**: `41 projects/{name}/{Title}.md`
+4. **Write project note**: `{path}/{Title}.md`
    Use the Project template frontmatter:
 
    ```yaml
@@ -37,11 +38,11 @@ Creates the full project-as-a-skill structure for a new project.
 
    Body: the description, plus any context the user provides.
 
-5. **Write Checkpoints.base**: `41 projects/{name}/Checkpoints.base`
+5. **Write Checkpoints.base**: `{path}/Checkpoints.base`
    Write via Bash `cat` to bypass oxfmt, which mangles YAML in `.base` files. Build the final YAML with the actual project name substituted. See template below.
 
-6. **Write command router**: `41 projects/{name}/SKILL.md`
-   Use the generated SKILL.md template below. Substitute all `{name}`, `{title}`, `{description}` placeholders with actual values.
+6. **Write command router**: `{path}/SKILL.md`
+   Use the generated SKILL.md template below. Substitute all `{path}`, `{name}`, `{title}`, `{description}` placeholders with actual values.
 
 7. **Write checkpoint template**: `templates/Checkpoint.md`
    Create only if missing (Glob first).
@@ -49,7 +50,7 @@ Creates the full project-as-a-skill structure for a new project.
 8. **Create symlink**:
 
    ```bash
-   ln -s "../../41 projects/{name}" ".claude/skills/{name}"
+   ln -s "../../{path}" ".claude/skills/{name}"
    ```
 
    Relative path, portable across machines.
@@ -60,13 +61,13 @@ Creates the full project-as-a-skill structure for a new project.
 
 ## Checkpoints.base template
 
-Substitute `{name}` with the actual project name before writing. Write via Bash `cat`, because oxfmt mangles `.base` files.
+Substitute `{path}` with the actual vault path before writing. Write via Bash `cat`, because oxfmt mangles `.base` files.
 
 ```yaml
 filters:
   and:
     - type == "checkpoint"
-    - file.inFolder("41 projects/{name}")
+    - file.inFolder("{path}")
 properties:
   file.name:
     displayName: Checkpoint
@@ -122,7 +123,7 @@ views:
 
 ## Generated SKILL.md template
 
-Per-project command router. Substitute `{name}`, `{title}`, `{description}` with actual values.
+Per-project command router. Substitute `{path}`, `{name}`, `{title}`, `{description}` with actual values.
 
 ````markdown
 ---
@@ -136,8 +137,8 @@ description: { description }
 
 {description}
 
-- Project note: [[41 projects/{name}/{title}]]
-- Checkpoints: `41 projects/{name}/`
+- Project note: [[{path}/{title}]]
+- Checkpoints: `{path}/`
 
 <!-- Add context below: tech stack, related cards, conventions -->
 
@@ -150,11 +151,11 @@ Resume or begin a session.
 1. Context loaded (you read this file).
 2. Query incomplete checkpoints:
    ```
-   obsidian base:query path="41 projects/{name}/Checkpoints.base" view="Incomplete"
+   obsidian base:query path="{path}/Checkpoints.base" view="Incomplete"
    ```
    Bash timeout: 30000. Fallback when Obsidian is offline:
    ```
-   Glob: 41 projects/{name}/checkpoint-*.md
+   Glob: {path}/checkpoint-*.md
    ```
    Then Read each and check `done: false` in frontmatter.
 3. Report:
@@ -180,7 +181,7 @@ Write a checkpoint. Interactive.
      - `type: checkpoint`
      - `description: "short summary of this checkpoint"` — generate from session context, ask user to confirm or edit
      - `done: false` (or `true` if complete)
-     - `project: "[[41 projects/{name}/{title}]]"`
+     - `project: "[[{path}/{title}]]"`
      - `decisions: ["chose X because Y"]` — key decisions this session
      - `frictions: ["had to work around Z"]` — friction points encountered
    - Fill body:
