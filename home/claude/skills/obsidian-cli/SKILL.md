@@ -28,15 +28,13 @@ Rule of thumb: if Obsidian's index adds value, use CLI. If it's plain text manip
 
 ## Execution
 
-Always wrap CLI calls with `timeout` to prevent hanging (known Electron IPC bug):
+Wrap every CLI call with `timeout 30` to prevent Electron IPC hangs:
 
 ```sh
-timeout 10 obsidian <command> [param=value ...] [flag ...]
+timeout 30 obsidian <command> [param=value ...] [flag ...]
 ```
 
-Use 10s for simple commands, 30s for heavy queries (base:query on large vaults, search:context).
-
-For heavy output that may hit the stdout race condition, redirect to file:
+For commands with large output (base:query, search:context), redirect to avoid stdout truncation:
 
 ```sh
 timeout 30 obsidian base:query path=<path> format=json > /tmp/obs-out.txt 2>&1; cat /tmp/obs-out.txt
@@ -237,13 +235,13 @@ obsidian version                 # show CLI version (e.g. "1.12.2 (installer 1.1
 
 ## Error Handling
 
-| Symptom                        | Likely cause                     | Action                                          |
-| ------------------------------ | -------------------------------- | ----------------------------------------------- |
-| `obsidian version` fails       | CLI not installed or not on PATH | Fall back to file tools                         |
-| Command hangs or times out     | Obsidian app not running, or Electron IPC deadlock | Start Obsidian or use file tools. Always use `timeout` wrapper |
-| CLI ignores commands after relaunch (macOS) | IPC registration lost on quit+relaunch | Toggle CLI off/on in Settings → General → CLI → Register |
-| "Unknown command"              | CLI version too old              | Run `obsidian help` to check available commands |
-| "may require a plugin"         | Core plugin disabled             | Enable the plugin in Obsidian settings          |
-| Empty results from search/tags | Vault index not ready            | Wait a moment, retry, or use Grep as fallback   |
+| Symptom                                     | Likely cause                                       | Action                                                         |
+| ------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------- |
+| `obsidian version` fails                    | CLI not installed or not on PATH                   | Fall back to file tools                                        |
+| Command hangs or times out                  | Obsidian app not running, or Electron IPC deadlock | Start Obsidian or use file tools. Always use `timeout` wrapper |
+| CLI ignores commands after relaunch (macOS) | IPC registration lost on quit+relaunch             | Toggle CLI off/on in Settings → General → CLI → Register       |
+| "Unknown command"                           | CLI version too old                                | Run `obsidian help` to check available commands                |
+| "may require a plugin"                      | Core plugin disabled                               | Enable the plugin in Obsidian settings                         |
+| Empty results from search/tags              | Vault index not ready                              | Wait a moment, retry, or use Grep as fallback                  |
 
 **General fallback**: if CLI is unavailable, use Read/Write/Edit/Grep/Glob for file operations. The CLI requires the Obsidian desktop app to be running.

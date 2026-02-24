@@ -94,6 +94,12 @@ Follow these when writing `.md` files (docs, notes, READMEs) in any language:
 
 For a thorough edit, invoke `/writing-en` or `/writing-ru`.
 
+## Skills
+
+When a task matches an available skill, suggest it before starting work. Check the project's CLAUDE.md or skill list for what's available.
+
+Don't just silently use the skill. Say "this looks like a `/tdd` task" or "want me to use `/card` for this?" so the user can agree or skip.
+
 ## Web
 
 Prefer the `firecrawl` skill for web search and fetching. Fall back to WebFetch/WebSearch only if firecrawl fails.
