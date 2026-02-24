@@ -120,7 +120,6 @@
   },
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
     "firecrawl@claude-plugins-official": true
   },
   "syntaxHighlightingDisabled": false,
