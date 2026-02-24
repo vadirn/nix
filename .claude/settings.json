@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "tt"
+            "command": "eza --tree --group-directories-first --git-ignore"
           }
         ]
       }
