@@ -21,7 +21,7 @@ Use conventional commits prefixes (feat, fix, chore) and short commit message wi
 
 ## Skills
 
-When a task matches an available skill, suggest it before starting work. Check the project's CLAUDE.md or skill list for what's available.
+When a task matches an available skill, suggest it before starting work. Check the skill list for what's available.
 
 Don't just silently use the skill. Say "this looks like a `/tdd` task" or "want me to use `/card` for this?" so the user can agree or skip.
 
