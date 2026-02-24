@@ -44,6 +44,16 @@
 
       alias gtimeout='timeout'
 
+      tt() {
+        local depth="''${1:-3}"
+        shift 2>/dev/null
+        local args=(--tree --group-directories-first --git-ignore -L "$depth")
+        for p in "$@"; do
+          args+=(--ignore-glob "$p")
+        done
+        eza "''${args[@]}" | less -FRNX
+      }
+
       tc() {
         local dir=''${PWD##*/}
         dir=''${dir//./-}
