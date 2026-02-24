@@ -57,7 +57,7 @@
             tmux attach-session -t "$name"
           fi
         else
-          local cmd="claude --continue; read '?Kill tmux session? [Y]/n ' r; [[ \$r != [nN] ]] && tmux kill-session || exec \$SHELL"
+          local cmd="claude --continue || claude; read '?Kill tmux session? [Y]/n ' r; [[ \$r != [nN] ]] && tmux kill-session || exec \$SHELL"
           if [ -n "$TMUX" ]; then
             tmux new-session -d -s "$name" "$cmd" && tmux switch-client -t "$name"
           else
