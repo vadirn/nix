@@ -17,6 +17,7 @@ Post-conversation retrospective. Reviews this chat, identifies problems, propose
 ### 1. Chat Review
 
 Scan the full conversation. For each exchange, note:
+
 - **Mistakes**: wrong outputs, hallucinations, misunderstood intent
 - **Friction**: extra clarifications needed, slow convergence, verbose responses
 - **Unclear outputs**: ambiguous answers, missing context, format mismatches
@@ -26,6 +27,7 @@ Scan the full conversation. For each exchange, note:
 Produce a short numbered list of concrete improvements. Each item must be actionable — either a behavior change Claude can remember, or a skill/workflow fix.
 
 Format:
+
 ```
 1. [Category] Description — what to do differently
 ```
@@ -41,6 +43,7 @@ Ask: "Which of these should I remember for future chats?" Then save confirmed it
 If any skills were used in this chat, check each one:
 
 **Self-check injection** — if the skill lacks success criteria and a verification loop:
+
 - Add success criteria at the top of the skill (clear, measurable)
 - Add an instruction at the bottom: "Before presenting output, verify all success criteria are met. If not, iterate (max 5 times)."
 

@@ -9,6 +9,8 @@
 	show_process=true
 )
 
-+++OutputFormat(type=markdown, sections=["Round N", "Verdict"])
++++
+
+OutputFormat(type=markdown, sections=["Round N", "Verdict"])
 
 {{topic}}
