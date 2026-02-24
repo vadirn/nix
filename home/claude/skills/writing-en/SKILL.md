@@ -66,4 +66,4 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 
 ## Rules
 
-Load [[ALL_RULES.md]] before editing. Apply only rules that improve the text.
+Load [ALL_RULES.md](ALL_RULES.md) before editing. Apply only rules that improve the text.
