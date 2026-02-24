@@ -68,6 +68,7 @@
       home.file.".claude/statusline.sh".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/statusline.sh";
       home.file.".config/ghostty/config".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/ghostty-config";
       home.file.".config/micro/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/micro-settings.json";
+      home.file.".config/micro/bindings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/micro-bindings.json";
       imports = [
         ./zsh.nix
         ./tmux.nix

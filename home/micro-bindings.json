@@ -1,0 +1,6 @@
+{
+    "Alt-Left": "WordLeft",
+    "Alt-Right": "WordRight",
+    "Alt-ShiftLeft": "SelectWordLeft",
+    "Alt-ShiftRight": "SelectWordRight"
+}

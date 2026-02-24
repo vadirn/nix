@@ -7,6 +7,11 @@ cursor-style = block
 cursor-style-blink = true
 adjust-cursor-thickness = 200%
 keybind = shift+enter=text:\x1b\r
+keybind = super+s=text:\x13
+keybind = super+left=text:\x1b[1;5D
+keybind = super+right=text:\x1b[1;5C
+keybind = super+up=text:\x1b[1;5A
+keybind = super+down=text:\x1b[1;5B
 confirm-close-surface = false
 unfocused-split-opacity = 0.4
 window-colorspace = display-p3
