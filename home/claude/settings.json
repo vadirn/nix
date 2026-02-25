@@ -125,5 +125,6 @@
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
   "plansDirectory": "./.claude-plans",
-  "teammateMode": "tmux"
+  "teammateMode": "tmux",
+  "model": "sonnet"
 }
