@@ -28,8 +28,7 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 6. Use affirmative form
 7. Use everyday English
 8. Invent fresh comparisons
-9. One idea per sentence
-10. After splitting, reconnect
+9. Split and reconnect (loop)
 11. Get to the main verb within 7 words
 12. Open with familiar, close with new
 13. Start with the main point
@@ -54,8 +53,7 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 5. Every word earns its place
 6. Affirmative form ("forgot" not "didn't remember")
 7. Everyday English words
-8. One idea per sentence
-9. Split sentences reconnected (no orphan fragments)
+8. Split and reconnect: one idea per sentence, no orphan fragments
 10. Main verb within 7 words
 11. Main point first in every paragraph
 12. One topic per paragraph

@@ -6,7 +6,7 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 
 ### Make the actor the subject
 
-In every sentence, ask: who does what? Make "who" the subject. Readers understand sentences faster when a concrete character drives the action.
+Ask: who does what? Make "who" the subject. Readers parse faster when a concrete character drives the action.
 
 | Before                                           | After                                          |
 | ------------------------------------------------ | ---------------------------------------------- |
@@ -18,7 +18,7 @@ In every sentence, ask: who does what? Make "who" the subject. Readers understan
 
 ### Express actions as verbs
 
-Find the real action hidden in a nominalization and turn it back into a verb. Nominalizations (-tion, -ment, -ance) bury the action and bloat the sentence.
+Turn nominalizations back into verbs. Suffixes like -tion, -ment, -ance bury the action and bloat the sentence.
 
 | Before                                                                         | After                                   |
 | ------------------------------------------------------------------------------ | --------------------------------------- |
@@ -30,7 +30,7 @@ Find the real action hidden in a nominalization and turn it back into a verb. No
 
 ### Use active voice
 
-Active voice shows who does what. Make the actor the subject and the action the verb. Reserve passive for cases where the actor is unknown or irrelevant.
+Active voice shows who does what. Reserve passive for when the actor is unknown or irrelevant.
 
 | Before                                | After                          |
 | ------------------------------------- | ------------------------------ |
@@ -44,7 +44,7 @@ Active voice shows who does what. Make the actor the subject and the action the 
 
 ### Choose the shortest word that carries your meaning
 
-Short words are faster to read and harder to misunderstand. When a short word carries the same meaning as a long one, use the short one.
+Short words read faster and resist misunderstanding.
 
 | Before        | After |
 | ------------- | ----- |
@@ -56,7 +56,7 @@ Short words are faster to read and harder to misunderstand. When a short word ca
 
 ### Cut every word you can
 
-Read each sentence and remove words that add no meaning. If the sentence works without a word, the word was dead weight.
+Remove words that add no meaning. If the sentence works without a word, cut it.
 
 | Before                                         | After             |
 | ---------------------------------------------- | ----------------- |
@@ -84,7 +84,7 @@ Negatives force the reader to picture an action and then cancel it. Affirmatives
 
 ### Use everyday English
 
-Prefer familiar words your audience already knows. Save technical terms for when no everyday equivalent exists.
+Use words your audience already knows. Save technical terms for when no everyday equivalent exists.
 
 | Before     | After      |
 | ---------- | ---------- |
@@ -112,20 +112,33 @@ When you need a figure of speech, create one that produces a visual image. Dead 
 
 ## Sentence Shape
 
-### One idea per sentence
+### Split and reconnect
 
-If a sentence has more than one idea, split it. Target 15–25 words per sentence. Short sentences are easier to read, understand, and remember.
+A sentence should carry one idea. But splitting can produce disconnected fragments. So this is a loop:
+
+```
+loop:
+  for each sentence:
+    while sentence has more than one idea:
+      split → target 15–25 words per piece
+  for each adjacent pair:
+    if they describe the same thing but feel unrelated:
+      reconnect
+      if reconnected sentence overloaded:
+        rephrase with a different technique
+        if still overloaded after 2 attempts:
+          show both variants to user → stop
+      go to loop
+```
+
+**Split examples:**
 
 | Before                                                                                                                                                  | After                                                                                                          |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | These sections describe types of information that would satisfy the application requirements of Circular A-110 as it would apply to this grant program. | These sections tell you how to meet the requirements of Circular A-110 for this grant program.                 |
 | The system processes requests quickly and reliably, while also handling error cases and logging them to the monitoring service for later review.        | The system processes requests quickly and reliably. It logs errors to the monitoring service for later review. |
 
-### After splitting, reconnect
-
-"One idea per sentence" tells you to split. But splitting can produce fragments that sit next to each other without showing how they relate. The reader sees facts but not the flow.
-
-After splitting a long sentence, reconnect the pieces. Show the relationship between adjacent sentences.
+**Reconnect examples:**
 
 | Before                                                                           | After                                                                                     |
 | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -140,11 +153,7 @@ After splitting a long sentence, reconnect the pieces. Show the relationship bet
 - **Shared subject** — carry "it" or "the system" forward instead of starting fresh
 - **Reference back** — "the result is", "on top of that", "this" ties to the previous sentence
 - **Clause merge** — make one sentence a clause of the other ("a tracker with X and Y" instead of "a tracker. X. Y.")
-- **Dash or semicolon** — link two closely related statements without a conjunction
-
-**Vary the technique.** Too many dashes create their own rhythm problem.
-
-**Diagnostic:** read two adjacent sentences. If they describe the same thing but feel unrelated, reconnect them.
+- **Dash or semicolon** (last resort) — only when the above techniques don't fit. No two dashes within 3 sentences.
 
 Source: Williams principle 5 (cohesion)
 
@@ -161,7 +170,7 @@ Keep the subject short and place it early. Long openings before the main verb fo
 
 ### Open with familiar, close with new
 
-Start sentences with information the reader already knows. End with new, complex information. The end position carries emphasis and accommodates difficulty.
+Start with what the reader knows. End with new, complex information. The end position carries emphasis.
 
 | Before                                                                | After                                                               |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
@@ -174,7 +183,7 @@ Start sentences with information the reader already knows. End with new, complex
 
 ### Start with the main point
 
-Lead with the answer, then explain. The first sentence of every paragraph should tell the reader what the paragraph is about.
+Lead with the answer, then explain.
 
 | Before                                                                                                                                       | After                                                                           |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -183,7 +192,7 @@ Lead with the answer, then explain. The first sentence of every paragraph should
 
 ### One topic per paragraph
 
-Each paragraph develops one idea. Start with a topic sentence, add details, examples, or evidence. When you shift to a new idea, start a new paragraph.
+Each paragraph develops one idea. Start with a topic sentence, then add details, examples, or evidence.
 
 | Before                                                            | After                                                    |
 | ----------------------------------------------------------------- | -------------------------------------------------------- |
@@ -207,7 +216,7 @@ Make headers meaningful on their own. If someone only reads the headings, they s
 
 ### Sort by information dependency
 
-Explain prerequisites before the things that depend on them. Readers should encounter every concept after they have the context to understand it.
+Explain prerequisites before the things that depend on them.
 
 | Before                                                                                                                                           | After                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -273,7 +282,7 @@ Cut filler transitions that delay the real content. If something matters, explai
 
 ### Replace promotional adjectives with facts
 
-Promotional adjectives carry zero measurable information. Replace each one with a specific fact, number, or comparison.
+Promotional adjectives say nothing measurable. Replace each with a fact, number, or comparison.
 
 | Before                       | After                                                     |
 | ---------------------------- | --------------------------------------------------------- |
@@ -298,7 +307,7 @@ AI text is predictable: medium-length sentences, every paragraph opens with a ge
 
 ### Match punctuation to emphasis
 
-Colon, dash, and parentheses interrupt a sentence at three levels of emphasis. Pick the one that matches the weight of the interruption.
+Colon, dash, and parentheses interrupt at three levels of emphasis. Pick the one that fits.
 
 | Before                                                                | After                                                                   |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
