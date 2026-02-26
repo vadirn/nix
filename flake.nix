@@ -66,6 +66,7 @@
                 "tw93/tap/mole"
                 "dopplerhq/cli/doppler"
                 "micro"
+                "arimxyer/tap/models"
               ];
               casks = [
                 "1password-cli"
