@@ -1,12 +1,6 @@
 ---
 name: markitdown
 description: Converts files to Markdown using Microsoft's markitdown. Use when the user wants to read, extract, or analyze content from PDFs, DOCX, PPTX, XLSX, images, audio, HTML, CSV, JSON, XML, ZIP, YouTube URLs, or EPubs. Also use for PDF tasks like text/table extraction. For PDF manipulation (merge, split, rotate, fill forms, create), use pypdf/reportlab directly with uv run.
-triggers:
-  - convert to markdown
-  - read this file
-  - extract text from
-  - what's in this file
-  - markitdown
 ---
 
 # markitdown
