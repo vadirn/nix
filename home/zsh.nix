@@ -47,7 +47,7 @@
       tt() {
         local depth="''${1:-3}"
         shift 2>/dev/null
-        local args=(--tree --group-directories-first --git-ignore -L "$depth")
+        local args=(--tree --group-directories-first -L "$depth" --ignore-glob .git --ignore-glob node_modules --ignore-glob .direnv)
         for p in "$@"; do
           args+=(--ignore-glob "$p")
         done
