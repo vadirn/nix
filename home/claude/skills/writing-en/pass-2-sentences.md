@@ -102,6 +102,6 @@ A sentence should carry one idea. But splitting can produce disconnected fragmen
 - **Shared subject** — carry "it" or "the system" forward instead of starting fresh
 - **Reference back** — "the result is", "on top of that", "this" ties to the previous sentence
 - **Clause merge** — make one sentence a clause of the other ("a tracker with X and Y" instead of "a tracker. X. Y.")
-- **Dash or semicolon** (last resort) — only when the above techniques don't fit. No two dashes within 3 sentences.
+- **Semicolon** (last resort) — only when the above techniques don't fit and both clauses are short.
 
 Source: Williams principle 5 (cohesion)

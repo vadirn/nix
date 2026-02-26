@@ -67,21 +67,20 @@ AI text is predictable: medium-length sentences, every paragraph opens with a ge
 
 ### Match punctuation to emphasis
 
-Colon, dash, and parentheses interrupt at three levels of emphasis. Pick the one that fits.
+Avoid em-dashes. They are overused in AI-generated text and become a crutch for loose thinking. Restructure instead.
 
-| Before                                                                | After                                                                   |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| The system (built in just two weeks) handles 10k requests per second. | The system — built in just two weeks — handles 10k requests per second. |
-| The system has one flaw, it cannot recover from crashes.              | The system has one flaw: it cannot recover from crashes.                |
-| Three teams, backend, frontend, and SRE, reviewed the design.         | Three teams — backend, frontend, and SRE — reviewed the design.         |
-| The response time improved; however the error rate stayed the same.   | The response time improved. The error rate stayed the same.             |
+| Before                                                                | After                                                                  |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| The system (built in just two weeks) handles 10k requests per second. | The system handles 10k requests per second. It was built in two weeks. |
+| The system has one flaw, it cannot recover from crashes.              | The system has one flaw: it cannot recover from crashes.               |
+| Three teams, backend, frontend, and SRE, reviewed the design.         | Three teams (backend, frontend, and SRE) reviewed the design.          |
+| The response time improved; however the error rate stayed the same.   | The response time improved. The error rate stayed the same.            |
 
-**Emphasis scale:**
+**Alternatives to em-dashes:**
 
-- **Colon** — formal announcement: "here is what I mean"
-- **Dash** — casual or dramatic aside
-- **Parentheses** — minimized aside, feels unimportant
-
-**When the aside has internal commas, use dashes** instead of commas to avoid ambiguity.
+- **Split into two sentences** when the aside carries its own idea
+- **Colon** for announcements: "here is what I mean"
+- **Parentheses** for minor asides
+- **Commas** when the clause is short and unambiguous
 
 **Semicolons** link two closely related sentences when the first is short (under ~15 words). If you need a semicolon because the sentence is long, split it with a period instead.
