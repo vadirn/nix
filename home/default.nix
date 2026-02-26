@@ -24,7 +24,6 @@
           tree
           bat
           btop
-          lazygit
           delta
           ngrok
         ];
@@ -50,6 +49,10 @@
         eza = {
           enable = true;
           enableZshIntegration = true;
+        };
+        lazygit = {
+          enable = true;
+          settings.os.editCommand = "micro";
         };
       };
       home.activation.installClaude = config.lib.dag.entryAfter ["writeBoundary"] ''
