@@ -174,11 +174,16 @@ Resume or begin a session.
 
 Write a checkpoint. Interactive.
 
-1. Query incomplete checkpoints (same method as `start`).
-2. For each incomplete checkpoint: ask if this session resolves it.
+1. Collect session stats:
+   ```bash
+   python3 {vault_root}/.scripts/session-stats.py --latest
+   ```
+   Bash timeout: 10000. Parse the JSON output — you need `cost_usd`, `lines_written`, `turns_to_edit`.
+2. Query incomplete checkpoints (same method as `start`).
+3. For each incomplete checkpoint: ask if this session resolves it.
    - Yes → update in place (Read, then Write). Ask "mark done?"
    - No → move on.
-3. New work uncovered by existing checkpoints:
+4. New work uncovered by existing checkpoints:
    - Create `{vault_root}/{path}/checkpoint-{UTC timestamp}.md` via Write tool
    - UTC timestamp format: `YYYY-MM-DD-HH-mm-ss` (use `date -u +%Y-%m-%d-%H-%M-%S`)
    - Template: `{vault_root}/templates/Checkpoint.md`
@@ -189,13 +194,14 @@ Write a checkpoint. Interactive.
      - `project: "[[{path}/{title}]]"`
      - `decisions: ["chose X because Y"]` — key decisions this session
      - `frictions: ["had to work around Z"]` — friction points encountered
+     - `cost_usd`, `lines_written`, `turns_to_edit` — from step 1
    - Fill body:
      - `## Progress` — what happened (concrete changes, files, code state)
      - `## Next` — remaining work across full breadth (all parts, not just current area)
-4. Graduation candidates: review this session's decisions and frictions.
+5. Graduation candidates: review this session's decisions and frictions.
    - Propose which could graduate to CLAUDE.md, repo skills, or vault notes.
    - Present as suggestions. Let the user decide.
-5. Suggest `/clear` to free context.
+6. Suggest `/clear` to free context.
 ````
 
 ## Notes
