@@ -1,4 +1,9 @@
 {
+  "permissions": {
+    "allow": [
+      "Skill(nix)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
