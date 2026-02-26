@@ -10,7 +10,7 @@ for each word/phrase in text:
     replace with the shorter word  // Choose the shortest word
   if word adds no meaning (filler, doubled word, inferable word):
     cut it  // Cut every word you can
-  if negative construction:
+  if negative construction (negation or "X, not Y" contrast):
     replace with affirmative equivalent  // Use affirmative form
   if dead metaphor (cliché figure of speech):
     invent a concrete image or say what you mean  // Invent fresh comparisons
@@ -71,6 +71,15 @@ Negatives force the reader to picture an action and then cancel it. Affirmatives
 | not possible     | impossible        |
 
 **Double negatives:** "not uncommon" → "common". "not impossible" → "possible".
+
+**Contrast negation ("X, not Y"):** rephrase so "not" disappears.
+
+| Before            | After                        |
+| ----------------- | ---------------------------- |
+| X improved, not Y | Only X improved              |
+| We chose X, not Y | We chose X instead of Y      |
+| Use X, not Y      | Use X rather than Y          |
+| X changed, not Y  | Y stayed the same; X changed |
 
 ### Invent fresh comparisons
 

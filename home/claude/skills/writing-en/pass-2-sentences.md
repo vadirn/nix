@@ -12,6 +12,8 @@ for each sentence:
     shorten or front the subject  // Get to the main verb within 7 words
   if sentence opens with new/complex info:
     move familiar info to front, new info to end  // Open with familiar, close with new
+  if sentence has no main verb and uses contrast markers (but, not, yet) to imply meaning:
+    rewrite with a subject and verb that state the point  // Replace verbless fragments
 
 // Split and reconnect loop
 loop:
@@ -75,6 +77,19 @@ Start with what the reader knows. End with new, complex information. The end pos
 | Unexpected latency spikes are what the monitoring dashboard revealed. | The monitoring dashboard revealed unexpected latency spikes.        |
 
 **Cohesion:** end one sentence with info that begins the next. This creates flow between sentences.
+
+### Replace verbless fragments
+
+Fragments without a main verb that lean on contrast markers (but, not, yet) to carry meaning. The reader has to reconstruct the missing verb. Say what happened instead of gesturing at it.
+
+| Before                                                       | After                                 |
+| ------------------------------------------------------------ | ------------------------------------- |
+| Real progress, but in the prompt environment, not the model. | Only the prompt environment improved. |
+| Good results, but only locally.                              | Results improved locally.             |
+| More features, less stability.                               | Adding features reduced stability.    |
+| Fast, but fragile.                                           | It runs fast but breaks easily.       |
+
+**Diagnostic:** if the sentence has no conjugated verb, add one. Pick the verb that says what actually changed.
 
 ### Split and reconnect
 
