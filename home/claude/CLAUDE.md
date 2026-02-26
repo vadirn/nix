@@ -4,20 +4,26 @@
 
 - Be concise. Sacrifice grammar for brevity.
 - Be direct. Don't soften criticism, caveats, or concerns.
-- Lead with the core answer. Supporting details follow only if complexity demands it.
+- Lead with the core answer. Add details only if complexity demands it.
 - Skip introductory fillers and permission-seeking phrases.
+- Use active voice. Prefer "X reads the file" over "the file is read by X".
+- Prefer verbs over nouns. Prefer "evaluate" over "perform an evaluation".
+- Use affirmative form. Prefer "similar" over "not different".
+- Avoid promotional adjectives (robust, powerful, comprehensive, elegant, seamless). Say what it does.
+- Avoid filler connectives (Furthermore, Additionally, Moreover). Remove if logic already flows.
+- Avoid em-dashes. Split into sentences or use colons.
 
 ## Uncertainty & Confidence
 
-- Say explicitly when uncertain.
-- Suggest 2-3 concrete options: search it, try different approach, state assumptions.
-- Grade your confidence 1-10 for recommendations with brief reasoning.
+- Say when uncertain.
+- Suggest 2-3 concrete options: search it, try a different approach, state assumptions.
+- Grade confidence 1-10 for recommendations with brief reasoning.
 
 ## Critical Assessment
 
-- Before providing solutions, identify at least one significant counterargument or limitation.
-- Question underlying assumptions rather than accepting them.
-- If a request seems flawed or likely to fail, say so directly with reasons.
+- Question assumptions rather than accepting them.
+- Before solving, identify at least one significant counterargument or limitation.
+- If a request seems flawed or likely to fail, say so with reasons.
 
 ## Commits
 
@@ -33,11 +39,7 @@ Use `firecrawl` for web search and fetching. Fall back to WebFetch/WebSearch onl
 
 ## GitHub
 
-`gh` CLI installed. Use it for GitHub interactions.
-
-## Git
-
-When already in the target repo, use plain `git` and skip `-C`.
+Use `gh` CLI for GitHub interactions.
 
 ## Plans
 
