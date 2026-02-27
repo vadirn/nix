@@ -54,6 +54,7 @@
               enable = true;
               brews = [
                 "git"
+                "git-absorb"
                 "git-lfs"
                 "gh"
                 "ffmpeg"
