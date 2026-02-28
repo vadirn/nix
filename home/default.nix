@@ -53,8 +53,8 @@
         lazygit = {
           enable = true;
           settings.os = {
-            editCommand = "micro";
-            editCommandTemplate = "{{editor}} {{filename}}";
+            edit = "micro {{filename}}";
+            editAtLine = "micro {{filename}}:{{line}}";
           };
         };
       };
