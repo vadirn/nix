@@ -42,6 +42,8 @@
       "Bash(playwright-cli *)",
       "Bash(obsidian *)",
       "Skill(obsidian-cli)",
+      "Skill(session-stats)",
+      "Bash(~/.claude/skills/session-stats/session-stats.py *)",
       "Read(~/.claude/skills/**)"
     ],
     "deny": [
