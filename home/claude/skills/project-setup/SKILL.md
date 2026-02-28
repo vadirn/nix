@@ -1,6 +1,6 @@
 ---
 name: project-setup
-description: Sets up project-as-a-skill for any project. Creates project note, Checkpoints.base, Stats.base, skill files (SKILL.md, context.md, start.md, save.md), symlink, and settings registration.
+description: Sets up project-as-a-skill for any project. Creates project note, Checkpoints.base, skill files (SKILL.md, context.md, start.md, save.md), symlink, and settings registration.
 ---
 
 # Setup Project
@@ -17,7 +17,6 @@ check_duplicates(vault_root, inputs)
 mkdir "{vault_root}/{path}"
 write_project_note()        // from Project.md template
 write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
-write_stats_base()          // via Bash cat
 write_skill_files()         // SKILL.md, context.md, start.md, save.md
 write_checkpoint_template() // only if missing
 create_symlink()            // .claude/skills/{name} → {vault_root}/{path}
@@ -58,11 +57,6 @@ Template: `{vault_root}/templates/Project.md`. Fill frontmatter (`result`, `stat
 Path: `{vault_root}/{path}/Checkpoints.base`
 Write via Bash `cat` (oxfmt mangles YAML in `.base` files). See template below.
 
-### Writing Stats.base
-
-Path: `{vault_root}/{path}/Stats.base`
-Write via Bash `cat`. See template below.
-
 ### Writing skill files
 
 All in `{vault_root}/{path}/`:
@@ -98,6 +92,9 @@ filters:
   and:
     - type == "checkpoint"
     - file.inFolder("{path}")
+formulas:
+  cost_per_line: 'if(lines_written > 0, (cost_usd / lines_written).round(3), "")'
+  lines_per_turn: 'if(turns_to_edit > 0, (lines_written / turns_to_edit).round(1), "")'
 properties:
   file.name:
     displayName: Checkpoint
@@ -109,6 +106,16 @@ properties:
     displayName: Decisions
   note.frictions:
     displayName: Frictions
+  note.cost_usd:
+    displayName: Cost ($)
+  note.lines_written:
+    displayName: Lines
+  note.turns_to_edit:
+    displayName: Turns
+  formula.cost_per_line:
+    displayName: $/line
+  formula.lines_per_turn:
+    displayName: Lines/turn
 views:
   - type: table
     name: All
@@ -135,52 +142,20 @@ views:
       - property: file.name
         direction: DESC
   - type: table
-    name: Graduation queue
+    name: Done
     filters:
-      or:
-        - decisions.length > 0
-        - frictions.length > 0
+      and:
+        - done == true
     order:
       - file.name
       - description
-      - done
       - decisions
       - frictions
     sort:
       - property: file.name
         direction: DESC
-```
-
-## Stats.base template
-
-Substitute `{path}` with the actual vault path before writing. Write via Bash `cat`, because oxfmt mangles `.base` files.
-
-```yaml
-filters:
-  and:
-    - type == "checkpoint"
-    - file.inFolder("{path}")
-formulas:
-  cost_per_line: 'if(lines_written > 0, (cost_usd / lines_written).round(3), "")'
-  lines_per_turn: 'if(turns_to_edit > 0, (lines_written / turns_to_edit).round(1), "")'
-properties:
-  file.name:
-    displayName: Session
-  note.description:
-    displayName: Description
-  note.cost_usd:
-    displayName: Cost ($)
-  note.lines_written:
-    displayName: Lines
-  note.turns_to_edit:
-    displayName: Turns
-  formula.cost_per_line:
-    displayName: $/line
-  formula.lines_per_turn:
-    displayName: Lines/turn
-views:
   - type: table
-    name: All
+    name: Stats
     order:
       - file.name
       - description
@@ -198,6 +173,21 @@ views:
       turns_to_edit: Sum
       formula.cost_per_line: Average
       formula.lines_per_turn: Average
+  - type: table
+    name: Graduation queue
+    filters:
+      or:
+        - decisions.length > 0
+        - frictions.length > 0
+    order:
+      - file.name
+      - description
+      - done
+      - decisions
+      - frictions
+    sort:
+      - property: file.name
+        direction: DESC
 ```
 
 ## SKILL.md template
@@ -206,8 +196,8 @@ Per-project command router. Substitute `{name}`, `{title}`, `{description}`.
 
 ````markdown
 ---
-name: { name }
-description: { description }
+name: {name}
+description: {description}
 ---
 
 # {title}
@@ -253,23 +243,22 @@ Session start procedure. Substitute `{vault_root}`, `{path}`.
 ## Pseudocode
 
 ```
-checkpoints = query_incomplete_checkpoints()
+incomplete = query_incomplete_checkpoints()
 
-if checkpoints is empty:
-    print "First session."
-elif all done:
-    print "All checkpoints done."
-else:
-    selected = AskUserQuestion(checkpoints, multiSelect=true)  // include "All" option
+if incomplete is not empty:
+    selected = AskUserQuestion(incomplete, multiSelect=true)  // include "All" option
     for each in selected:
         show "## Progress" and "## Next"
+else:
+    done = query_done_checkpoints()
+    print "All checkpoints done." if done is not empty else "First session."
 
 ask "What to work on?"
 ```
 
 ## Reference
 
-### Querying incomplete checkpoints
+### Querying checkpoints
 
 Primary (Obsidian running):
 
@@ -277,6 +266,13 @@ Primary (Obsidian running):
 timeout 30 obsidian base:query path="{path}/Checkpoints.base" view="Incomplete"
 ```
 
+Empty result = no incomplete checkpoints. Then query Done view to distinguish all-done vs first-session:
+
+```
+timeout 30 obsidian base:query path="{path}/Checkpoints.base" view="Done"
+```
+
+Non-empty = all done. Empty = first session.
 
 Fallback (Obsidian offline):
 
@@ -284,7 +280,7 @@ Fallback (Obsidian offline):
 Glob: {vault_root}/{path}/checkpoint-*.md
 ```
 
-Read each, check `done: false` in frontmatter.
+Grep for `done: false` (incomplete) and `done: true` (done).
 
 ### Presenting checkpoints
 
