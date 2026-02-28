@@ -29,7 +29,7 @@ report created files, suggest /clear
 
 ### Discovering vault root
 
-Run `timeout 10 obsidian vaults verbose` (Bash timeout 10000).
+Run `timeout 30 obsidian vaults verbose`.
 One vault → use its path. Multiple → `AskUserQuestion`. Command fails → ask user for absolute path.
 Store as `{vault_root}`.
 
@@ -277,7 +277,6 @@ Primary (Obsidian running):
 timeout 30 obsidian base:query path="{path}/Checkpoints.base" view="Incomplete"
 ```
 
-Bash timeout: 30000.
 
 Fallback (Obsidian offline):
 
