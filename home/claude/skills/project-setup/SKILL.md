@@ -18,7 +18,6 @@ mkdir "{vault_root}/{path}"
 write_project_note()        // from Project.md template
 write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
 write_skill_files()         // SKILL.md, context.md, start.md, save.md
-write_checkpoint_template() // only if missing
 create_symlink()            // .claude/skills/{name} → {vault_root}/{path}
 register_in_settings()      // add Skill({name}) to allow list
 report created files, suggest /clear
@@ -65,11 +64,6 @@ All in `{vault_root}/{path}/`:
 - **context.md**: substitute `{path}`, `{title}`, `{description}`. See context.md template.
 - **start.md**: substitute `{vault_root}`, `{path}`. See start.md template.
 - **save.md**: substitute `{vault_root}`, `{path}`, `{title}`. See save.md template.
-
-### Writing checkpoint template
-
-Path: `{vault_root}/templates/Checkpoint.md`
-Create only if missing (Glob first).
 
 ### Creating symlink
 
