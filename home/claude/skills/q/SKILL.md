@@ -1,0 +1,121 @@
+---
+name: q
+description: >
+  Search Obsidian vault using qmd (hybrid local search with BM25 + vectors + reranking).
+  Use when searching vault for notes, docs, or meeting content by meaning or keywords.
+triggers:
+  - qmd
+  - vault search semantic
+  - find in vault
+  - search notes
+---
+
+# qmd — Vault Search Agent Reference
+
+## When to Use qmd vs obsidian-cli
+
+**Use qmd** for content discovery: semantic search, keyword search, hybrid queries.
+qmd indexes markdown files independently and works without Obsidian running.
+
+**Use obsidian-cli** for CRUD, graph traversal, tags, properties, tasks, bases, backlinks.
+
+Rule of thumb: finding content by meaning or keywords = qmd. Everything else = obsidian-cli or file tools.
+
+## Execution
+
+Always run via bunx. No global install needed:
+
+```sh
+bunx @tobilu/qmd <command> [options]
+```
+
+## Search Commands
+
+Three search modes, ordered by quality:
+
+### `search` — BM25 keyword search
+
+Fast lexical matching. Best for exact terms, names, specific phrases.
+
+```sh
+bunx @tobilu/qmd search "exact phrase or keyword" -c vault
+bunx @tobilu/qmd search "project standup notes" -c vault -n 10
+bunx @tobilu/qmd search "API integration" -c vault --json
+```
+
+### `vsearch` — vector (semantic) search
+
+Finds conceptually similar content even without keyword overlap.
+
+```sh
+bunx @tobilu/qmd vsearch "how to handle authentication" -c vault
+bunx @tobilu/qmd vsearch "meeting about Q4 planning" -c vault -n 5
+bunx @tobilu/qmd vsearch "anxiety management techniques" -c vault --json
+```
+
+### `query` — hybrid search with reranking (best quality)
+
+Combines BM25 + vector search, then reranks results. Use this as default when quality matters.
+
+```sh
+bunx @tobilu/qmd query "weekly review process" -c vault
+bunx @tobilu/qmd query "delegation framework" -c vault -n 10 --json
+```
+
+## Retrieval Commands
+
+### `get` — retrieve a single document
+
+```sh
+bunx @tobilu/qmd get "path/to/note.md" -c vault
+```
+
+### `multi-get` — retrieve multiple documents
+
+```sh
+bunx @tobilu/qmd multi-get "note1.md" "note2.md" -c vault
+```
+
+## Output Flags
+
+| Flag           | Effect                              |
+| -------------- | ----------------------------------- |
+| `--json`       | JSON output (for parsing)           |
+| `--files`      | File paths only (no content)        |
+| `--all`        | Return all results (no limit)       |
+| `-n <number>`  | Limit number of results             |
+| `--min-score`  | Filter by minimum relevance score   |
+
+## Index Maintenance
+
+### Check status
+
+```sh
+bunx @tobilu/qmd status -c vault
+```
+
+### Add files to collection
+
+```sh
+bunx @tobilu/qmd collection add <path-to-vault> -c vault
+```
+
+### Build/rebuild vector embeddings
+
+```sh
+bunx @tobilu/qmd embed -c vault
+```
+
+Typical workflow for reindexing: `collection add` then `embed`.
+
+## Collection
+
+The vault collection is named `vault`. Always scope commands with `-c vault`.
+
+## Tips
+
+- Default to `query` for general searches: it gives the best results.
+- Use `search` when you need exact keyword matching or speed.
+- Use `vsearch` when the user describes a concept but may not know the exact terms used in their notes.
+- Combine `--files` with search to get paths, then read files with file tools for full content.
+- Use `-n` to limit results and reduce noise. Default is usually 10.

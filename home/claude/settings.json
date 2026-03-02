@@ -43,9 +43,11 @@
       "Bash(obsidian *)",
       "Bash(timeout 30 obsidian *)",
       "Skill(obsidian-cli)",
+      "Skill(q)",
       "Skill(session-stats)",
       "Bash(python3 /Users/vadim/.claude/skills/session-stats/session-stats.py *)",
       "Bash(/Users/vadim/.claude/skills/session-stats/session-stats.py *)",
+      "Bash(bunx @tobilu/qmd *)",
       "Bash(ls *)",
       "Bash(date *)",
       "Read(/Users/vadim/.claude/skills/**)"
