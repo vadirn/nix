@@ -72,14 +72,16 @@ Negatives force the reader to picture an action and then cancel it. Affirmatives
 
 **Double negatives:** "not uncommon" → "common". "not impossible" → "possible".
 
-**Contrast negation ("X, not Y"):** rephrase so "not" disappears.
+**Contrast negation** ("X, not Y" and "Not X, but Y"): rephrase so "not" disappears.
 
-| Before            | After                        |
-| ----------------- | ---------------------------- |
-| X improved, not Y | Only X improved              |
-| We chose X, not Y | We chose X instead of Y      |
-| Use X, not Y      | Use X rather than Y          |
-| X changed, not Y  | Y stayed the same; X changed |
+| Before                       | After                        |
+| ---------------------------- | ---------------------------- |
+| X improved, not Y            | Only X improved              |
+| We chose X, not Y            | We chose X instead of Y      |
+| Use X, not Y                 | Use X rather than Y          |
+| X changed, not Y             | Y stayed the same; X changed |
+| Not a sprint, but a marathon | A marathon                   |
+| Not theory, but practice     | Practice                     |
 
 ### Invent fresh comparisons
 
