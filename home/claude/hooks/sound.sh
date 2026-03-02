@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
 
 SOUNDS_DIR="$HOME/.claude/hooks/sounds"
 
@@ -11,7 +12,7 @@ case "${1:-}" in
   *) exit 0 ;;
 esac
 
-files=("$dir"/*.wav)
+files=("$dir"/*.{wav,mp3,ogg})
 [[ ${#files[@]} -eq 0 ]] && exit 0
 
 pick="${files[RANDOM % ${#files[@]}]}"

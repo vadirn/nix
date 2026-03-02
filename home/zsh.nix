@@ -37,7 +37,7 @@
         eval "$(zoxide init --cmd cd zsh)"
       fi
 
-      export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
+      export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
       alias lg='lazygit'
       alias y='yazi'

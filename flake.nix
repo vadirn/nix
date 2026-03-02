@@ -36,7 +36,6 @@
               nixd
               nodejs
               curl
-              bun
               typst
               uv
               coreutils

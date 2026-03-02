@@ -59,11 +59,19 @@
         };
       };
       home.activation.installClaude = config.lib.dag.entryAfter ["writeBoundary"] ''
-        export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
+        export PATH="${pkgs.curl}/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
         if [[ ! -x "$HOME/.local/bin/claude" ]]; then
           echo "Installing Claude Code..."
           curl -fsSL https://claude.ai/install.sh | bash
+        fi
+      '';
+
+      home.activation.installBun = config.lib.dag.entryAfter ["writeBoundary"] ''
+        if [[ ! -x "$HOME/.bun/bin/bun" ]]; then
+          echo "Installing Bun..."
+          export PATH="${pkgs.curl}/bin:${pkgs.unzip}/bin:$PATH"
+          curl -fsSL https://bun.sh/install | bash
         fi
       '';
 
