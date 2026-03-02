@@ -44,11 +44,11 @@
       "Bash(timeout 30 obsidian *)",
       "Skill(obsidian-cli)",
       "Skill(session-stats)",
-      "Bash(python3 ~/.claude/skills/session-stats/session-stats.py *)",
-      "Bash(~/.claude/skills/session-stats/session-stats.py *)",
+      "Bash(python3 /Users/vadim/.claude/skills/session-stats/session-stats.py *)",
+      "Bash(/Users/vadim/.claude/skills/session-stats/session-stats.py *)",
       "Bash(ls *)",
       "Bash(date *)",
-      "Read(~/.claude/skills/**)"
+      "Read(/Users/vadim/.claude/skills/**)"
     ],
     "deny": [
       "Read(.env*)",
