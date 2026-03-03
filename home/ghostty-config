@@ -8,8 +8,10 @@ cursor-style-blink = true
 adjust-cursor-thickness = 200%
 keybind = shift+enter=text:\x1b\r
 keybind = super+s=text:\x13
-keybind = super+left=text:\x1b[1;5D
-keybind = super+right=text:\x1b[1;5C
+keybind = super+left=text:\x1b[H
+keybind = super+right=text:\x1b[F
+keybind = alt+left=text:\x1bb
+keybind = alt+right=text:\x1bf
 keybind = super+up=text:\x1b[1;5A
 keybind = super+down=text:\x1b[1;5B
 confirm-close-surface = false
