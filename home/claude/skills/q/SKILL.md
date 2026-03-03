@@ -78,13 +78,13 @@ bunx @tobilu/qmd multi-get "note1.md" "note2.md" -c vault
 
 ## Output Flags
 
-| Flag           | Effect                              |
-| -------------- | ----------------------------------- |
-| `--json`       | JSON output (for parsing)           |
-| `--files`      | File paths only (no content)        |
-| `--all`        | Return all results (no limit)       |
-| `-n <number>`  | Limit number of results             |
-| `--min-score`  | Filter by minimum relevance score   |
+| Flag          | Effect                            |
+| ------------- | --------------------------------- |
+| `--json`      | JSON output (for parsing)         |
+| `--files`     | File paths only (no content)      |
+| `--all`       | Return all results (no limit)     |
+| `-n <number>` | Limit number of results           |
+| `--min-score` | Filter by minimum relevance score |
 
 ## Index Maintenance
 
@@ -94,19 +94,18 @@ bunx @tobilu/qmd multi-get "note1.md" "note2.md" -c vault
 bunx @tobilu/qmd status -c vault
 ```
 
-### Add files to collection
+### Update index (re-index + rebuild embeddings)
 
 ```sh
-bunx @tobilu/qmd collection add <path-to-vault> -c vault
+bunx @tobilu/qmd update        # re-index all collections
+bunx @tobilu/qmd embed -c vault # rebuild vector embeddings
 ```
 
-### Build/rebuild vector embeddings
+### Add new collection
 
 ```sh
-bunx @tobilu/qmd embed -c vault
+bunx @tobilu/qmd collection add <path-to-vault> --name vault
 ```
-
-Typical workflow for reindexing: `collection add` then `embed`.
 
 ## Collection
 
