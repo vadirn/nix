@@ -1,6 +1,6 @@
 ---
 name: project-setup
-description: Sets up project-as-a-skill for any project. Creates project note, Checkpoints.base, skill files (SKILL.md, context.md, start.md, save.md), symlink, and settings registration.
+description: Sets up project-as-a-skill for any project. Creates project note, Checkpoints.base, skill files (SKILL.md, context.md, start.md, save.md), symlink, and settings registration. Can also link an existing skill folder (skips file creation).
 ---
 
 # Setup Project
@@ -14,11 +14,20 @@ vault_root = discover_vault_root()
 inputs = collect(path, name, title, description, result)
 check_duplicates(vault_root, inputs)
 
-mkdir "{vault_root}/{path}"
+target = "{vault_root}/{path}"
+if target/SKILL.md exists:
+    ask "Link existing skill folder?" (yes/no)
+    if yes:
+        create_symlink()        // .claude/skills/{name} → target
+        register_in_settings()  // add Skill({name}) to allow list
+        report linked, suggest /clear
+        return
+
+mkdir target
 write_project_note()        // from Project.md template
 write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
 write_skill_files()         // SKILL.md, context.md, start.md, save.md
-create_symlink()            // .claude/skills/{name} → {vault_root}/{path}
+create_symlink()            // .claude/skills/{name} → target
 register_in_settings()      // add Skill({name}) to allow list
 report created files, suggest /clear
 ```
