@@ -70,7 +70,6 @@
               ];
               casks = [
                 "1password-cli"
-                "obsidian"
                 "iina"
                 "raycast"
                 "imageoptim"

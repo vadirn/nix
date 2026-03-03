@@ -52,10 +52,7 @@
         };
         lazygit = {
           enable = true;
-          settings.os = {
-            edit = "micro {{filename}}";
-            editAtLine = "micro {{filename}}:{{line}}";
-          };
+          settings.os.editPreset = "micro";
         };
       };
       home.activation.installClaude = config.lib.dag.entryAfter ["writeBoundary"] ''

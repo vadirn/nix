@@ -12,6 +12,9 @@ keybind = super+left=text:\x1b[H
 keybind = super+right=text:\x1b[F
 keybind = alt+left=text:\x1bb
 keybind = alt+right=text:\x1bf
+keybind = super+backspace=text:\x15
+keybind = super+c=copy_to_clipboard
+keybind = super+v=paste_from_clipboard
 keybind = super+up=text:\x1b[1;5A
 keybind = super+down=text:\x1b[1;5B
 confirm-close-surface = false
