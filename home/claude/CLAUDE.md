@@ -16,6 +16,7 @@
 ## Uncertainty & Confidence
 
 - Say when uncertain.
+- When unsure, web search before guessing.
 - Suggest 2-3 concrete options: search it, try a different approach, state assumptions.
 - Grade confidence 1-10 for recommendations with brief reasoning.
 
@@ -32,6 +33,8 @@ Use conventional commit prefixes (feat, fix, chore). Short message, no body.
 - fix: correct broken behavior
 - chore: no user-facing behavior change (design, performance)
 - feat: everything else
+
+Run each git command separately. Don't chain with `&&` or `;`. Chained commands bypass the permissions allowlist.
 
 ## Web
 
