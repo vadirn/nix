@@ -9,7 +9,7 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 
 ## Passes
 
-Run each pass as a separate subagent (clean context per pass). Each pass file contains pseudocode at the top and full rule detail below.
+Run each pass as a separate subagent (clean context per pass), one at a time. Each pass edits the output of the previous one, so wait for one pass to finish before starting the next. Each pass file contains pseudocode at the top and full rule detail below.
 
 | Pass | File                                         | What it targets                                                                                          |
 | ---- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
