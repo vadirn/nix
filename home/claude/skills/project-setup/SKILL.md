@@ -121,7 +121,10 @@ Absolute path so it works from any repo.
 
 ### Registering in settings
 
-Add `Skill({name})` to the `allow` list in `.claude/settings.json` or `.claude/settings.local.json`. Glob `.claude/settings*.json` first. Read, insert alphabetically among existing `Skill(...)` entries.
+Glob `.claude/settings*.json` first. Read the file. Add these entries to the `allow` list:
+
+- `Skill({name})` — insert alphabetically among existing `Skill(...)` entries
+- `Read({vault_root}/{path}/**)` — allows reading project files and checkpoints from the vault
 
 ## Checkpoints.base template
 
