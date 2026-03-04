@@ -1,35 +1,72 @@
 ---
 name: project-setup
-description: Sets up project-as-a-skill for any project. Creates project note, Checkpoints.base, skill files (SKILL.md, context.md, start.md, save.md), symlink, and settings registration. Can also link an existing skill folder (skips file creation).
+description: Sets up project-as-a-skill for any project. Use "link" to connect an existing skill folder. Use without arguments (or "new") to create a full project from scratch.
 ---
 
 # Setup Project
 
-Creates the full project-as-a-skill structure for a new project.
+Creates or links a project-as-a-skill.
 
 ## Pseudocode
 
 ```
 vault_root = discover_vault_root()
-inputs = collect(path, name, title, description, result)
-check_duplicates(vault_root, inputs)
 
-target = "{vault_root}/{path}"
-if target/SKILL.md exists:
-    ask "Link existing skill folder?" (yes/no)
-    if yes:
-        create_symlink()        // .claude/skills/{name} → target
-        register_in_settings()  // add Skill({name}) to allow list
-        report linked, suggest /clear
+if command == "link":
+    link(vault_root)
+else:
+    setup(vault_root)
+```
+
+## Link command
+
+Links an existing skill folder (one that already has SKILL.md) to the current repo.
+
+### Pseudocode
+
+```
+link(vault_root):
+    path = ask "Vault path?" (e.g. "41 projects/visa-agent")
+    target = "{vault_root}/{path}"
+
+    if target/SKILL.md does not exist:
+        error "No SKILL.md found at {target}. Use /project-setup new to create one."
         return
 
-mkdir target
-write_project_note()        // from Project.md template
-write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
-write_skill_files()         // SKILL.md, context.md, start.md, save.md
-create_symlink()            // .claude/skills/{name} → target
-register_in_settings()      // add Skill({name}) to allow list
-report created files, suggest /clear
+    name = infer from SKILL.md frontmatter `name` field
+    if not name:
+        name = last segment of path  // e.g. "visa-agent" from "41 projects/visa-agent"
+
+    create_symlink()        // .claude/skills/{name} → target
+    register_in_settings()  // add Skill({name}) to allow list
+    report linked, suggest /clear
+```
+
+## Setup command (default)
+
+Creates the full project-as-a-skill structure for a new project.
+
+### Pseudocode
+
+```
+setup(vault_root):
+    inputs = collect(path, name, title, description, result)
+    check_duplicates(vault_root, inputs)
+
+    target = "{vault_root}/{path}"
+    if target/SKILL.md exists:
+        ask "Skill files already exist. Link instead?" (yes/no)
+        if yes:
+            link(vault_root)  // reuse link flow
+            return
+
+    mkdir target
+    write_project_note()        // from Project.md template
+    write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
+    write_skill_files()         // SKILL.md, context.md, start.md, save.md
+    create_symlink()            // .claude/skills/{name} → target
+    register_in_settings()      // add Skill({name}) to allow list
+    report created files, suggest /clear
 ```
 
 ## Reference
