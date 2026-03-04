@@ -27,18 +27,18 @@ Links an existing skill folder (one that already has SKILL.md) to the current re
 ```
 link(vault_root):
     path = ask "Vault path?" (e.g. "41 projects/visa-agent")
-    target = "{vault_root}/{path}"
+    target = "<vault_root>/<path>"
 
     if target/SKILL.md does not exist:
-        error "No SKILL.md found at {target}. Use /project-setup new to create one."
+        error "No SKILL.md found at <target>. Use /project-setup new to create one."
         return
 
     name = infer from SKILL.md frontmatter `name` field
     if not name:
         name = last segment of path  // e.g. "visa-agent" from "41 projects/visa-agent"
 
-    create_symlink()        // .claude/skills/{name} → target
-    register_in_settings()  // add Skill({name}) to allow list
+    create_symlink()        // .claude/skills/<name> → target
+    register_in_settings()  // add Skill(<name>) to allow list
     report linked, suggest /clear
 ```
 
@@ -53,7 +53,7 @@ setup(vault_root):
     inputs = collect(path, name, title, description, result)
     check_duplicates(vault_root, inputs)
 
-    target = "{vault_root}/{path}"
+    target = "<vault_root>/<path>"
     if target/SKILL.md exists:
         ask "Skill files already exist. Link instead?" (yes/no)
         if yes:
@@ -64,8 +64,8 @@ setup(vault_root):
     write_project_note()        // from Project.md template
     write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
     write_skill_files()         // SKILL.md, context.md, start.md, save.md
-    create_symlink()            // .claude/skills/{name} → target
-    register_in_settings()      // add Skill({name}) to allow list
+    create_symlink()            // .claude/skills/<name> → target
+    register_in_settings()      // add Skill(<name>) to allow list
     report created files, suggest /clear
 ```
 
@@ -75,7 +75,7 @@ setup(vault_root):
 
 Run `timeout 30 obsidian vaults verbose`.
 One vault → use its path. Multiple → `AskUserQuestion`. Command fails → ask user for absolute path.
-Store as `{vault_root}`.
+Store as `<vault_root>`.
 
 ### Collecting inputs
 
@@ -89,52 +89,52 @@ Ask the user:
 
 ### Duplicate check
 
-- Glob `{vault_root}/{path}/` and `.claude/skills/{name}/`
+- Glob `<vault_root>/<path>/` and `.claude/skills/<name>/`
 - If either exists, ask whether to proceed or edit existing
 
 ### Writing the project note
 
-Path: `{vault_root}/{path}/{Title}.md`
-Template: `{vault_root}/templates/Project.md`. Fill frontmatter (`result`, `status: in progress`). Replace `{path}` placeholders in body. Replace description comment with real description.
+Path: `<vault_root>/<path>/<Title>.md`
+Template: `<vault_root>/templates/Project.md`. Fill frontmatter (`result`, `status: in progress`). Replace `<path>` placeholders in body. Replace description comment with real description.
 
 ### Writing Checkpoints.base
 
-Path: `{vault_root}/{path}/Checkpoints.base`
+Path: `<vault_root>/<path>/Checkpoints.base`
 Write via Bash `cat` (oxfmt mangles YAML in `.base` files). See template below.
 
 ### Writing skill files
 
-All in `{vault_root}/{path}/`:
+All in `<vault_root>/<path>/`:
 
-- **SKILL.md** (command router): substitute `{name}`, `{title}`, `{description}`. See SKILL.md template.
-- **context.md**: substitute `{path}`, `{title}`, `{description}`. See context.md template.
-- **start.md**: substitute `{vault_root}`, `{path}`. See start.md template.
-- **save.md**: substitute `{vault_root}`, `{path}`, `{title}`. See save.md template.
+- **SKILL.md** (command router): substitute `<name>`, `<title>`, `<description>`. See SKILL.md template.
+- **context.md**: substitute `<path>`, `<title>`, `<description>`. See context.md template.
+- **start.md**: substitute `<vault_root>`, `<path>`. See start.md template.
+- **save.md**: substitute `<vault_root>`, `<path>`, `<title>`. See save.md template.
 
 ### Creating symlink
 
 ```bash
-mkdir -p .claude/skills && ln -s "{vault_root}/{path}" ".claude/skills/{name}"
+mkdir -p .claude/skills && ln -s "<vault_root>/<path>" ".claude/skills/<name>"
 ```
 
 Absolute path so it works from any repo.
 
 ### Registering in settings
 
-Glob `.claude/settings*.json` first. Read the file. Add these entries to the `allow` list:
+Read `.claude/settings.local.json` (user-specific, absolute paths don't belong in shared settings). Add these entries to the `allow` list:
 
-- `Skill({name})` — insert alphabetically among existing `Skill(...)` entries
-- `Read({vault_root}/{path}/**)` — allows reading project files and checkpoints from the vault
+- `Skill(<name>)` — insert alphabetically among existing `Skill(...)` entries
+- `Read(<vault_root>/<path>/**)` — allows reading project files and checkpoints from the vault
 
 ## Checkpoints.base template
 
-Substitute `{path}` with the actual vault path before writing. Write via Bash `cat`, because oxfmt mangles `.base` files.
+Substitute `<path>` with the actual vault path before writing. Write via Bash `cat`, because oxfmt mangles `.base` files.
 
 ```yaml
 filters:
   and:
     - type == "checkpoint"
-    - file.inFolder("{path}")
+    - file.inFolder("<path>")
 formulas:
   cost_per_line: 'if(lines_written > 0, (cost_usd / lines_written).round(3), "")'
   lines_per_turn: 'if(turns_to_edit > 0, (lines_written / turns_to_edit).round(1), "")'
@@ -235,15 +235,15 @@ views:
 
 ## SKILL.md template
 
-Per-project command router. Substitute `{name}`, `{title}`, `{description}`.
+Per-project command router. Substitute `<name>`, `<title>`, `<description>`.
 
 ````markdown
 ---
-name: {name}
-description: {description}
+name: <name>
+description: <description>
 ---
 
-# {title}
+# <title>
 
 ```
 dir = directory containing this file
@@ -256,6 +256,20 @@ if command == "start":
 elif command == "save":
     Read(dir/save.md)
     follow procedure
+elif command == "check-permissions":
+    real_dir = resolve symlinks of dir  // realpath
+    vault_root = discover_vault_root()  // timeout 30 obsidian vaults verbose
+    path = relative path of real_dir within vault_root
+    name = skill name from frontmatter
+    settings_file = .claude/settings.local.json  // user-specific, not shared
+    Read(settings_file)
+    expected_skill = "Skill(<name>)"
+    expected_read = "Read(<vault_root>/<path>/**)"
+    missing = items from [expected_skill, expected_read] not in allow list
+    if missing:
+        add missing to allow list, report added
+    else:
+        report all present
 else:
     use context to navigate the vault
 ```
@@ -263,22 +277,22 @@ else:
 
 ## context.md template
 
-Per-project context. Substitute `{path}`, `{title}`, `{description}`.
+Per-project context. Substitute `<path>`, `<title>`, `<description>`.
 
 ```markdown
-# {title} Context
+# <title> Context
 
-{description}
+<description>
 
-- Project note: [[{path}/{title}]]
-- Checkpoints: `{path}/`
+- Project note: [[<path>/<title>]]
+- Checkpoints: `<path>/`
 
 <!-- Add context below: tech stack, related cards, conventions -->
 ```
 
 ## start.md template
 
-Session start procedure. Substitute `{vault_root}`, `{path}`.
+Session start procedure. Substitute `<vault_root>`, `<path>`.
 
 ````markdown
 # Start — resume or begin a session
@@ -306,13 +320,13 @@ ask "What to work on?"
 Primary (Obsidian running):
 
 ```
-timeout 30 obsidian base:query path="{path}/Checkpoints.base" view="Incomplete"
+timeout 30 obsidian base:query path="<path>/Checkpoints.base" view="Incomplete"
 ```
 
 Empty result = no incomplete checkpoints. Then query Done view to distinguish all-done vs first-session:
 
 ```
-timeout 30 obsidian base:query path="{path}/Checkpoints.base" view="Done"
+timeout 30 obsidian base:query path="<path>/Checkpoints.base" view="Done"
 ```
 
 Non-empty = all done. Empty = first session.
@@ -320,7 +334,7 @@ Non-empty = all done. Empty = first session.
 Fallback (Obsidian offline):
 
 ```
-Glob: {vault_root}/{path}/checkpoint-*.md
+Glob: <vault_root>/<path>/checkpoint-*.md
 ```
 
 Grep for `done: false` (incomplete) and `done: true` (done).
@@ -334,7 +348,7 @@ Read selected checkpoints. Show `## Progress` and `## Next` from each.
 
 ## save.md template
 
-Session save procedure. Substitute `{vault_root}`, `{path}`, `{title}`.
+Session save procedure. Substitute `<vault_root>`, `<path>`, `<title>`.
 
 ````markdown
 # Save — write a checkpoint
@@ -374,16 +388,16 @@ Same method as `start.md` — see its Reference section.
 
 ### Creating a checkpoint
 
-Path: `{vault_root}/{path}/checkpoint-{UTC timestamp}.md`
+Path: `<vault_root>/<path>/checkpoint-<UTC timestamp>.md`
 UTC timestamp: `YYYY-MM-DD-HH-mm-ss` (use `date -u +%Y-%m-%d-%H-%M-%S`)
-Template: `{vault_root}/templates/Checkpoint.md`
+Template: `<vault_root>/templates/Checkpoint.md`
 
 Frontmatter:
 
 - `type: checkpoint`
 - `description` — generate from session context, ask user to confirm or edit
 - `done: false` (or `true` if complete)
-- `project: "[[{path}/{title}]]"`
+- `project: "[[<path>/<title>]]"`
 - `decisions: ["chose X because Y"]` — key decisions this session
 - `frictions: ["had to work around Z"]` — friction points encountered
 - `cost_usd`, `lines_written`, `turns_to_edit` — from stats
