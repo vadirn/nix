@@ -1,11 +1,13 @@
 ---
 name: project-setup
-description: Sets up project-as-a-skill for any project. Use "link" to connect an existing skill folder. Use without arguments (or "new") to create a full project from scratch.
+description: Sets up project-as-a-skill for any project. Use "link" to connect an existing skill folder. Use without arguments (or "new") to create a full project from scratch. Use whenever the user wants to set up a new project, initialize project tracking in Obsidian, link a vault folder to a repo, create checkpoint tracking, or scaffold project skills.
 ---
 
 # Setup Project
 
 Creates or links a project-as-a-skill.
+
+Requires `obsidian` CLI (1.12+). If unavailable, the skill falls back to asking the user for vault paths manually.
 
 ## Pseudocode
 
@@ -14,8 +16,10 @@ vault_root = discover_vault_root()
 
 if command == "link":
     link(vault_root)
+elif command == "check-permissions":
+    // handled by generated per-project SKILL.md, not here
 else:
-    setup(vault_root)
+    setup(vault_root)  // handles "already exists" via duplicate check
 ```
 
 ## Link command
@@ -51,7 +55,7 @@ Creates the full project-as-a-skill structure for a new project.
 ```
 setup(vault_root):
     inputs = collect(path, name, title, description, result)
-    check_duplicates(vault_root, inputs)
+    check_duplicates(vault_root, inputs)  // covers "already set up" case, offers to link instead
 
     target = "<vault_root>/<path>"
     if target/SKILL.md exists:
@@ -114,7 +118,8 @@ All in `<vault_root>/<path>/`:
 ### Creating symlink
 
 ```bash
-mkdir -p .claude/skills && ln -s "<vault_root>/<path>" ".claude/skills/<name>"
+mkdir -p .claude/skills
+ln -s "<vault_root>/<path>" ".claude/skills/<name>"
 ```
 
 Absolute path so it works from any repo.
@@ -130,108 +135,7 @@ Read `.claude/settings.local.json` (user-specific, absolute paths don't belong i
 
 Substitute `<path>` with the actual vault path before writing. Write via Bash `cat`, because oxfmt mangles `.base` files.
 
-```yaml
-filters:
-  and:
-    - type == "checkpoint"
-    - file.inFolder("<path>")
-formulas:
-  cost_per_line: 'if(lines_written > 0, (cost_usd / lines_written).round(3), "")'
-  lines_per_turn: 'if(turns_to_edit > 0, (lines_written / turns_to_edit).round(1), "")'
-properties:
-  file.name:
-    displayName: Checkpoint
-  note.description:
-    displayName: Description
-  note.done:
-    displayName: Done
-  note.decisions:
-    displayName: Decisions
-  note.frictions:
-    displayName: Frictions
-  note.cost_usd:
-    displayName: Cost ($)
-  note.lines_written:
-    displayName: Lines
-  note.turns_to_edit:
-    displayName: Turns
-  formula.cost_per_line:
-    displayName: $/line
-  formula.lines_per_turn:
-    displayName: Lines/turn
-views:
-  - type: table
-    name: All
-    order:
-      - file.name
-      - description
-      - done
-      - decisions
-      - frictions
-    sort:
-      - property: file.name
-        direction: DESC
-  - type: table
-    name: Incomplete
-    filters:
-      and:
-        - done == false
-    order:
-      - file.name
-      - description
-      - decisions
-      - frictions
-    sort:
-      - property: file.name
-        direction: DESC
-  - type: table
-    name: Done
-    filters:
-      and:
-        - done == true
-    order:
-      - file.name
-      - description
-      - decisions
-      - frictions
-    sort:
-      - property: file.name
-        direction: DESC
-  - type: table
-    name: Stats
-    order:
-      - file.name
-      - description
-      - cost_usd
-      - lines_written
-      - turns_to_edit
-      - formula.cost_per_line
-      - formula.lines_per_turn
-    sort:
-      - property: file.name
-        direction: DESC
-    summaries:
-      cost_usd: Sum
-      lines_written: Sum
-      turns_to_edit: Sum
-      formula.cost_per_line: Average
-      formula.lines_per_turn: Average
-  - type: table
-    name: Graduation queue
-    filters:
-      or:
-        - decisions.length > 0
-        - frictions.length > 0
-    order:
-      - file.name
-      - description
-      - done
-      - decisions
-      - frictions
-    sort:
-      - property: file.name
-        direction: DESC
-```
+Template: `Read(dir/templates/checkpoints-base.yaml)`. Replace all `<path>` occurrences with the actual vault path.
 
 ## SKILL.md template
 
