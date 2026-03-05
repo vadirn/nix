@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Debate Skill Eval Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.6; }
+.header { padding: 20px 24px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 16px; }
+.header h1 { font-size: 18px; font-weight: 600; color: #e6edf3; }
+.header .badge { font-size: 12px; padding: 2px 8px; border-radius: 12px; font-weight: 500; }
+.badge-pass { background: #1a3a2a; color: #3fb950; }
+.badge-fail { background: #3d1f1f; color: #f85149; }
+.badge-info { background: #1c2d4a; color: #58a6ff; }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid #21262d; padding: 0 24px; overflow-x: auto; }
+.tab { padding: 10px 16px; cursor: pointer; font-size: 13px; color: #8b949e; border-bottom: 2px solid transparent; white-space: nowrap; transition: color 0.15s; }
+.tab:hover { color: #c9d1d9; }
+.tab.active { color: #e6edf3; border-bottom-color: #f78166; }
+.tab .tab-score { font-size: 11px; margin-left: 6px; padding: 1px 6px; border-radius: 10px; background: #21262d; }
+.content { display: flex; height: calc(100vh - 110px); }
+.sidebar { width: 300px; min-width: 300px; border-right: 1px solid #21262d; overflow-y: auto; padding: 16px; }
+.main { flex: 1; overflow-y: auto; padding: 24px; }
+.checks-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; margin-bottom: 12px; }
+.check-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid #161b22; }
+.check-icon { flex-shrink: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 11px; font-weight: 700; }
+.check-pass { background: #1a3a2a; color: #3fb950; }
+.check-fail { background: #3d1f1f; color: #f85149; }
+.check-label { flex: 1; }
+.check-detail { color: #8b949e; font-size: 11px; }
+.variant-toggle { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+.variant-btn { flex: 1; padding: 8px 12px; text-align: center; font-size: 12px; cursor: pointer; background: #161b22; color: #8b949e; border: none; transition: all 0.15s; font-weight: 500; }
+.variant-btn.active { background: #1c2d4a; color: #58a6ff; }
+.variant-btn:first-child { border-right: 1px solid #30363d; }
+.stats-row { display: flex; gap: 12px; margin-bottom: 16px; }
+.stat { flex: 1; padding: 10px; background: #161b22; border-radius: 6px; border: 1px solid #21262d; }
+.stat-label { font-size: 11px; color: #8b949e; }
+.stat-value { font-size: 18px; font-weight: 600; color: #e6edf3; }
+.comparison { margin-top: 16px; padding: 12px; background: #161b22; border: 1px solid #21262d; border-radius: 6px; }
+.comparison h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; margin-bottom: 8px; }
+.comp-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+.comp-label { color: #8b949e; }
+.comp-val { font-weight: 500; }
+.comp-better { color: #3fb950; }
+.comp-worse { color: #f85149; }
+.comp-same { color: #8b949e; }
+.debate-content { max-width: 800px; }
+.debate-content h1 { font-size: 20px; color: #e6edf3; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #21262d; }
+.debate-content h2 { font-size: 17px; color: #f78166; margin-top: 28px; margin-bottom: 12px; }
+.debate-content h3 { font-size: 14px; color: #d2a8ff; margin-top: 16px; margin-bottom: 8px; }
+.debate-content p { margin-bottom: 12px; font-size: 14px; }
+.debate-content a { color: #58a6ff; text-decoration: none; }
+.debate-content a:hover { text-decoration: underline; }
+.debate-content strong { color: #e6edf3; }
+.debate-content hr { border: none; border-top: 1px solid #21262d; margin: 24px 0; }
+.debate-content ul, .debate-content ol { margin-bottom: 12px; padding-left: 20px; font-size: 14px; }
+.debate-content li { margin-bottom: 4px; }
+.side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.side-panel { border: 1px solid #21262d; border-radius: 8px; padding: 16px; overflow-y: auto; max-height: calc(100vh - 160px); }
+.side-panel.skill { border-color: #1c2d4a; }
+.side-panel.baseline { border-color: #30363d; }
+.panel-header { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 12px; }
+.panel-header.skill { background: #1c2d4a; color: #58a6ff; }
+.panel-header.baseline { background: #21262d; color: #8b949e; }
+.view-toggle { display: flex; gap: 0; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; margin-left: auto; }
+.view-btn { padding: 6px 12px; font-size: 12px; cursor: pointer; background: #161b22; color: #8b949e; border: none; transition: all 0.15s; }
+.view-btn.active { background: #1c2d4a; color: #58a6ff; }
+.view-btn:not(:last-child) { border-right: 1px solid #30363d; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 24px; }
+.summary-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; cursor: pointer; transition: border-color 0.15s; }
+.summary-card:hover { border-color: #58a6ff; }
+.summary-card h3 { font-size: 14px; color: #e6edf3; margin-bottom: 12px; }
+.summary-card .scores { display: flex; gap: 12px; margin-bottom: 8px; }
+.score-pill { font-size: 12px; padding: 2px 8px; border-radius: 10px; }
+.score-skill { background: #1c2d4a; color: #58a6ff; }
+.score-baseline { background: #21262d; color: #8b949e; }
+.summary-card .meta { font-size: 11px; color: #8b949e; }
+.toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid #21262d; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Debate Skill Eval</h1>
+  <span class="badge badge-info">iteration-1</span>
+  <span class="badge badge-pass" id="total-badge"></span>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="toolbar" id="toolbar" style="display:none;">
+  <div class="view-toggle">
+    <button class="view-btn active" onclick="setView('side')">Side by Side</button>
+    <button class="view-btn" onclick="setView('skill')">With Skill</button>
+    <button class="view-btn" onclick="setView('baseline')">Without Skill</button>
+  </div>
+</div>
+
+<div id="overview" class="summary-grid"></div>
+
+<div id="detail" style="display:none;">
+  <div class="content">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main" id="main-content"></div>
+  </div>
+</div>
+
+<script>
+const EVALS_DATA = [
+  {
+    id: "nuclear-energy",
+    label: "Nuclear Energy (EN)",
+    prompt: "/debate Nuclear energy is the best path to decarbonization rounds=3",
+    results: {
+      with_skill: {
+        score: "10/10", pass: 10, fail: 0, total: 10, word_count: 2733,
+        checks: [
+          {id:"S1",check:"Has exactly 3 '## Round' headers",passed:true,detail:"found 3, expected 3"},
+          {id:"S2",check:"Each round has Defender and Skeptic sections",passed:true,detail:"both roles found"},
+          {id:"S3",check:"Has '## Verdict' section",passed:true,detail:"found"},
+          {id:"S4",check:"Verdict has strongest arguments summary",passed:true,detail:"requires human review"},
+          {id:"S5",check:"Verdict has points of agreement",passed:true,detail:"requires human review"},
+          {id:"S6",check:"Verdict has unresolved tensions",passed:true,detail:"requires human review"},
+          {id:"S7",check:"Verdict has confidence score 1-10",passed:true,detail:"score found"},
+          {id:"S8",check:"At least 2 inline links/sources cited",passed:true,detail:"found 34 links"},
+          {id:"S9",check:"Round 1 defines terms or establishes core positions",passed:true,detail:"requires human review"},
+          {id:"S10",check:"Final round: only rebuttals/synthesis",passed:true,detail:"requires human review"}
+        ]
+      },
+      without_skill: {
+        score: "10/10", pass: 10, fail: 0, total: 10, word_count: 2314,
+        checks: [
+          {id:"S1",check:"Has exactly 3 '## Round' headers",passed:true,detail:"found 3, expected 3"},
+          {id:"S2",check:"Each round has Defender and Skeptic sections",passed:true,detail:"both roles found"},
+          {id:"S3",check:"Has '## Verdict' section",passed:true,detail:"found"},
+          {id:"S4",check:"Verdict has strongest arguments summary",passed:true,detail:"requires human review"},
+          {id:"S5",check:"Verdict has points of agreement",passed:true,detail:"requires human review"},
+          {id:"S6",check:"Verdict has unresolved tensions",passed:true,detail:"requires human review"},
+          {id:"S7",check:"Verdict has confidence score 1-10",passed:true,detail:"score found"},
+          {id:"S8",check:"At least 2 inline links/sources cited",passed:true,detail:"found 30 links"},
+          {id:"S9",check:"Round 1 defines terms or establishes core positions",passed:true,detail:"requires human review"},
+          {id:"S10",check:"Final round: only rebuttals/synthesis",passed:true,detail:"requires human review"}
+        ]
+      }
+    }
+  },
+  {
+    id: "remote-work-ru",
+    label: "Remote Work (RU)",
+    prompt: "/debate Удалённая работа лучше офисной для продуктивности rounds=3",
+    results: {
+      with_skill: {
+        score: "10/10", pass: 10, fail: 0, total: 10, word_count: 1330,
+        checks: [
+          {id:"S1",check:"Has exactly 3 'Раунд' headers",passed:true,detail:"found 3, expected 3"},
+          {id:"S2",check:"Each round has Защитник and Скептик",passed:true,detail:"both roles found"},
+          {id:"S3",check:"Has 'Вердикт' section",passed:true,detail:"found"},
+          {id:"S4",check:"Verdict has strongest arguments summary",passed:true,detail:"requires human review"},
+          {id:"S5",check:"Verdict has points of agreement",passed:true,detail:"requires human review"},
+          {id:"S6",check:"Verdict has unresolved tensions",passed:true,detail:"requires human review"},
+          {id:"S7",check:"Verdict has confidence score 1-10",passed:true,detail:"score found"},
+          {id:"S8",check:"At least 2 inline links/sources cited",passed:true,detail:"found 12 links"},
+          {id:"S9",check:"Round 1 defines terms",passed:true,detail:"requires human review"},
+          {id:"S10",check:"Final round synthesis only",passed:true,detail:"requires human review"}
+        ]
+      },
+      without_skill: {
+        score: "10/10", pass: 10, fail: 0, total: 10, word_count: 1532,
+        checks: [
+          {id:"S1",check:"Has exactly 3 'Раунд' headers",passed:true,detail:"found 3, expected 3"},
+          {id:"S2",check:"Each round has Защитник and Скептик",passed:true,detail:"both roles found"},
+          {id:"S3",check:"Has 'Вердикт' section",passed:true,detail:"found"},
+          {id:"S4",check:"Verdict has strongest arguments summary",passed:true,detail:"requires human review"},
+          {id:"S5",check:"Verdict has points of agreement",passed:true,detail:"requires human review"},
+          {id:"S6",check:"Verdict has unresolved tensions",passed:true,detail:"requires human review"},
+          {id:"S7",check:"Verdict has confidence score 1-10",passed:true,detail:"score found"},
+          {id:"S8",check:"At least 2 inline links/sources cited",passed:true,detail:"found 22 links"},
+          {id:"S9",check:"Round 1 defines terms",passed:true,detail:"requires human review"},
+          {id:"S10",check:"Final round synthesis only",passed:true,detail:"requires human review"}
+        ]
+      }
+    }
+  },
+  {
+    id: "exercise-mental-health",
+    label: "Exercise & Mental Health (EN)",
+    prompt: "/debate Exercise improves mental health rounds=5",
+    results: {
+      with_skill: {
+        score: "10/10", pass: 10, fail: 0, total: 10, word_count: 1708,
+        checks: [
+          {id:"S1",check:"Early stop: fewer than 5 rounds",passed:true,detail:"found 3, expected < 4"},
+          {id:"S2",check:"Each round has Defender and Skeptic",passed:true,detail:"both roles found"},
+          {id:"S3",check:"Has '## Verdict' section",passed:true,detail:"found"},
+          {id:"S4",check:"Verdict has strongest arguments summary",passed:true,detail:"requires human review"},
+          {id:"S5",check:"Verdict has points of agreement",passed:true,detail:"requires human review"},
+          {id:"S6",check:"Verdict has unresolved tensions",passed:true,detail:"requires human review"},
+          {id:"S7",check:"Verdict has confidence score 1-10",passed:true,detail:"score found"},
+          {id:"S8",check:"At least 2 inline links/sources cited",passed:true,detail:"found 17 links"},
+          {id:"S9",check:"Round 1 defines terms",passed:true,detail:"requires human review"},
+          {id:"S10",check:"Final round synthesis only",passed:true,detail:"requires human review"}
+        ]
+      },
+      without_skill: {
+        score: "9/10", pass: 9, fail: 1, total: 10, word_count: 1584,
+        checks: [
+          {id:"S1",check:"Early stop: fewer than 5 rounds",passed:false,detail:"found 4, expected < 4"},
+          {id:"S2",check:"Each round has Defender and Skeptic",passed:true,detail:"both roles found"},
+          {id:"S3",check:"Has '## Verdict' section",passed:true,detail:"found"},
+          {id:"S4",check:"Verdict has strongest arguments summary",passed:true,detail:"requires human review"},
+          {id:"S5",check:"Verdict has points of agreement",passed:true,detail:"requires human review"},
+          {id:"S6",check:"Verdict has unresolved tensions",passed:true,detail:"requires human review"},
+          {id:"S7",check:"Verdict has confidence score 1-10",passed:true,detail:"score found"},
+          {id:"S8",check:"At least 2 inline links/sources cited",passed:true,detail:"found 19 links"},
+          {id:"S9",check:"Round 1 defines terms",passed:true,detail:"requires human review"},
+          {id:"S10",check:"Final round synthesis only",passed:true,detail:"requires human review"}
+        ]
+      }
+    }
+  }
+];
+
+const DEBATES = {};
+
+DEBATES["nuclear-energy"] = {
+  with_skill: document.createElement('div'),
+  without_skill: document.createElement('div')
+};
+DEBATES["remote-work-ru"] = {
+  with_skill: document.createElement('div'),
+  without_skill: document.createElement('div')
+};
+DEBATES["exercise-mental-health"] = {
+  with_skill: document.createElement('div'),
+  without_skill: document.createElement('div')
+};
+
+// Simple markdown to HTML
+function md(text) {
+  return text
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^---$/gm, '<hr>')
+    .replace(/\*\*\[(.+?)\]\*\*/g, '<strong>[$1]</strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, m => '<ul>' + m + '</ul>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<[hul]|<hr|<li|<\/)/gm, '')
+    .replace(/^/, '<p>')
+    .replace(/$/, '</p>')
+    .replace(/<p><\/p>/g, '')
+    .replace(/<p>(<[hul])/g, '$1')
+    .replace(/(<\/[hul].*>)<\/p>/g, '$1');
+}
+
+// Raw markdown content embedded
+const RAW = {};
+RAW["nuclear-energy"] = {};
+RAW["nuclear-energy"]["with_skill"] = `# Debate: Nuclear energy is the best path to decarbonization
+
+## Round 1
+
+### Defender
+
+Nuclear energy stands as the most effective path to decarbonization because it uniquely combines three properties no other clean energy source matches simultaneously: high energy density, reliable baseload power, and minimal lifecycle carbon emissions. A single thimble-sized pellet of uranium produces as much energy as almost 3 barrels of oil, more than 350 cubic metres of natural gas, and about half a tonne of coal. Over the past 50 years, nuclear power plants have [cumulatively prevented more than 70 gigatonnes of CO2 emissions](https://www.iaea.org/newscenter/news/five-reasons-the-clean-energy-transition-needs-nuclear-power), and existing reactors continue reducing more than 1 Gt CO2 yearly.
+
+The term "best path" here means the single technology most capable of anchoring a decarbonized grid. Nuclear plants operate at a [92.3% capacity factor](https://www.energy.gov/ne/articles/nuclear-power-most-reliable-energy-source-and-its-not-even-close), nearly 2x more reliable than natural gas and coal, and roughly 3x more reliable than wind (34%) and solar (23%). This isn't a marginal advantage. It means nuclear delivers firm, weather-independent power 24/7, which is exactly what a decarbonized grid needs as its backbone. Renewables are valuable complements, but they cannot alone anchor baseload without massive storage buildouts that remain expensive and incomplete.
+
+Nuclear also uniquely addresses hard-to-abate sectors. Through cogeneration, advanced reactor designs can provide [high-temperature process heat for industrial decarbonization](https://www.c2es.org/press-release/new-brief-nuclear-energy-uniquely-suited-to-decarbonize-industry-in-the-u-s/), hydrogen production, and district heating. No wind or solar installation can produce 500-900C heat for steel, cement, or chemical manufacturing. The IMF estimates nuclear investment multipliers are [six times higher than fossil fuels and three times higher than renewables](https://www.weforum.org/stories/2024/01/nuclear-energy-transistion-climate-change/) in the short term. The 2025 World Bank-IAEA partnership further signals that the global institutional consensus is shifting toward nuclear as a cornerstone of decarbonization.
+
+### Skeptic
+
+The claim that nuclear is the "best" path to decarbonization founders on three hard realities: time, cost, and deployment speed.
+
+**Time.** The climate crisis demands rapid emissions cuts this decade. Nuclear plants take 10-15 years from planning to operation. Vogtle Units 3 and 4 in Georgia broke ground in 2009 with an estimated completion in 2016-2017. [Unit 3 finally entered service in 2023 and Unit 4 in 2024](https://en.wikipedia.org/wiki/Vogtle_Electric_Generating_Plant), 7-8 years late. Hinkley Point C in the UK, originally estimated at 3.3 billion euros, now carries a price tag of [at least 49 billion pounds (\$65 billion)](https://www.theb1m.com/video/hinkley-point-c) with a 2030 completion date that remains uncertain. Wind and solar can be deployed in months, not decades. For governments trying to decarbonize quickly, waiting a decade or more for each reactor is a luxury the climate cannot afford.
+
+**Cost.** The levelized cost of electricity (LCOE) data is unambiguous. The EIA's 2025 Annual Energy Outlook puts advanced nuclear at [\$81.45/MWh, while solar PV comes in at \$31.86/MWh and onshore wind at \$29.58/MWh](https://www.eia.gov/outlooks/aeo/electricity_generation/). Lazard's 2025 analysis confirms wind and solar are the [least-expensive new-build power generation for the 10th consecutive year](https://www.lazard.com/research-insights/levelized-cost-of-energyplus-lcoeplus/). Nuclear costs roughly 2.5-3x more per MWh than renewables. Every dollar spent on nuclear buys less decarbonization per unit than the same dollar spent on wind, solar, and storage.
+
+**Deployment pace.** In 2025 alone, [448 GW of new renewables capacity was installed globally](https://www.iea.org/reports/electricity-mid-year-update-2025/supply-renewables-grow-the-most-followed-by-gas-and-nuclear). The U.S. added [57.6 GWh of battery storage](https://seia.org/news/united-states-installs-58-gwh-of-new-energy-storage-in-2025/), a record. Solar and wind's combined share in global electricity is projected to rise from 15% in 2024 to above 19% in 2026. Nuclear simply cannot match this scaling velocity. The "best path" to decarbonization is the one that displaces the most fossil fuels the fastest, and that path runs through renewables, not nuclear.
+
+---
+
+## Round 2
+
+### Defender
+
+The Skeptic's strongest point is cost, so let me address it head-on. LCOE comparisons between nuclear and renewables are misleading because they compare apples to oranges. LCOE for solar and wind measures the cost of *intermittent* electricity. It does not include the system costs of firming that intermittency: grid-scale storage, transmission upgrades, curtailment losses, and backup generation. When you need power at 2 AM on a windless January night, your \$30/MWh solar farm produces exactly zero megawatt-hours.
+
+The honest comparison is the cost of *firm, dispatchable clean power*. Battery storage is improving but remains expensive at duration. The U.S. installed a record 57.6 GWh of storage in 2025, but [26.3 GW of new battery storage is planned for 2026](https://www.ess-news.com/2026/02/26/new-us-battery-capacity-in-2026-24-3-gw-of-new-battery-storage-to-come-online/), almost entirely in 4-hour duration lithium-ion systems. Four hours of storage does not solve multi-day weather events, seasonal variation, or week-long wind droughts. To fully firm a renewables-only grid would require weeks of storage capacity that does not exist at any price today. Nuclear provides that firmness inherently, with no additional storage cost.
+
+On deployment speed: the Skeptic is right that historical nuclear projects have suffered catastrophic delays. But this is a policy and regulatory failure, not a physics constraint. Countries that maintained continuous build programs (South Korea, China, UAE) deliver reactors in 5-7 years at predictable costs. The UAE's Barakah plant brought [four APR-1400 reactors online between 2021-2024](https://www.weforum.org/stories/2025/10/nuclear-energy-how-finance-policy-and-innovation-can-triple-capacity-by-2050/) on a reasonable timeline. China has over 20 reactors under construction. The SMR pipeline is accelerating too: [127 SMR designs are now tracked globally](https://www.oecd-nea.org/jcms/pl_108268/new-nea-small-modular-reactor-dashboard-edition-reveals-global-expansion-of-smr-deployment), with 7 already operating or under construction, and Canada's first SMR at Darlington is progressing. The lesson from Vogtle and Hinkley Point is not that nuclear is inherently slow; it's that first-of-a-kind projects in countries that abandoned their nuclear workforce for decades are slow. That's fixable.
+
+The deeper point the Skeptic sidesteps is industrial decarbonization. Electricity generation is only about 25% of global emissions. Steel, cement, chemicals, shipping, and aviation need high-temperature heat and clean hydrogen. No amount of solar panels produces 900C process heat. Nuclear can. If "best path to decarbonization" means the technology with the widest applicability across the full emissions spectrum, nuclear's scope advantage is decisive.
+
+### Skeptic
+
+The Defender makes a fair point about LCOE's limitations, but the "system cost" argument cuts both ways. Nuclear has its own hidden system costs: waste management, decommissioning, insurance subsidies, and the opportunity cost of capital locked up for 15 years before a single electron flows. These never appear in LCOE but are very real.
+
+On storage duration: yes, most current batteries are 4-hour systems. But the trajectory matters more than the snapshot. Grid storage capacity is [doubling year over year](https://www.canarymedia.com/articles/energy-storage/grid-storage-industry-crushes-2025-goal). New technologies are emerging beyond lithium-ion: [CO2 batteries reaching deployment in 2026](https://spectrum.ieee.org/co2-battery-energy-storage), iron-air batteries targeting 100+ hour duration, and green hydrogen for seasonal storage. The storage gap is a present constraint, not a permanent one. Nuclear's advantage here is shrinking faster than new reactors can be built.
+
+The Defender cites South Korea and China as proof that nuclear can be built quickly. Fair enough. But these are countries with centralized planning, state-owned utilities, and limited public opposition. Transplanting that model to democratic market economies has proven difficult. The UAE example required importing the entire Korean supply chain. Most countries seeking to decarbonize don't have access to South Korea's KEPCO or China's CNNC. The relevant question is: what can *your* country actually build in the next 10 years? For most nations, the answer is far more GW of renewables than nuclear.
+
+On industrial heat: this remains nuclear's most compelling argument, and I'll grant it has genuine merit for hard-to-abate sectors. But [advanced reactors capable of producing 500-900C heat are still in development, not deployment](https://www.frontiersin.org/journals/environmental-economics/articles/10.3389/frevc.2024.1242818/full). No commercial high-temperature gas reactor is producing industrial process heat at scale today. The technology exists in theory but not in practice. Meanwhile, industrial electrification with renewable power, electric arc furnaces, and green hydrogen from electrolysis are already being deployed. The Defender is comparing deployed renewables unfavorably to undeployed nuclear concepts.
+
+The nuclear waste problem also remains unresolved. Over [95,000 metric tons of spent fuel sits in temporary storage across 79 U.S. sites](https://www.cnbc.com/2025/11/09/nuclear-power-energy-radioactive-waste-storage-disposal.html), waiting for a permanent repository that doesn't exist. Finland's Onkalo, [set to open in 2026](https://world-nuclear.org/information-library/nuclear-fuel-cycle/nuclear-waste/storage-and-disposal-of-radioactive-waste), will be the world's first. After 70 years of commercial nuclear power, exactly one country has a permanent waste solution. Scaling nuclear globally multiplies this unsolved problem.
+
+---
+
+## Round 3
+
+### Defender
+
+The Skeptic's strongest argument this round is that high-temperature reactors for industrial heat remain undeployed. That's a legitimate limitation today. But the framing conflates "not yet deployed at scale" with "not viable." China's HTR-PM, a high-temperature gas-cooled reactor, [achieved commercial operation in December 2023](https://world-nuclear.org/information-library/nuclear-power-reactors/small-modular-reactors/small-modular-reactors). It demonstrates the physics and engineering work. Scaling requires policy commitment, not scientific breakthroughs. The same was true of solar in 2005.
+
+On waste: the Skeptic frames this as an unsolved problem, but it's more accurately an unsolved *political* problem. The engineering solutions exist. Deep geological disposal is [widely agreed by the scientific community to be safe and sufficient](https://world-nuclear.org/information-library/nuclear-fuel-cycle/nuclear-waste/storage-and-disposal-of-radioactive-waste). Finland's Onkalo proves it can be built. Sweden and France are following. The total volume of all high-level nuclear waste ever produced globally fits in a single football field stacked a few meters high. Compare this to the millions of tons of CO2 emitted daily by fossil fuels, or the growing challenge of recycling solar panels and wind turbine blades at end of life. The waste problem is real but manageable, and certainly not a disqualifier for the technology that has prevented 70 Gt of CO2 emissions.
+
+On the battery trajectory argument: I accept that storage costs are falling and deployment is accelerating. But extrapolating exponential trends indefinitely is the same mistake nuclear optimists made in the 1960s with "too cheap to meter." Long-duration storage (100+ hours) at grid scale remains unproven and unpriced. The Skeptic's confidence that storage "will" solve intermittency is a bet on future technology, while nuclear's ability to provide firm power is proven today. Both sides are making some claims about the future, but the Defender's claims rest on scaling proven technology while the Skeptic's require breakthroughs in duration, cost, and materials supply chains for batteries.
+
+Let me synthesize. "Best path" does not mean "only path." I'm not arguing against renewables. I'm arguing that nuclear is the most *complete* single technology for decarbonization because it addresses electricity, industrial heat, hydrogen, and grid stability simultaneously. Renewables are cheaper per marginal MWh of electricity, yes. But decarbonization is not just about cheap electricity. It's about replacing fossil fuels across the entire energy system, including the 75% of emissions that aren't from electricity generation. Nuclear is the only proven low-carbon technology that spans that full range.
+
+### Skeptic
+
+The Defender's synthesis is the strongest version of this argument: nuclear as the most *complete* technology across multiple sectors. I'll grant that completeness has value. But "best path" implies not just theoretical completeness but practical effectiveness at achieving decarbonization within the timeframe that matters.
+
+The Defender concedes renewables are cheaper per MWh for electricity, which represents the single largest decarbonization opportunity globally. The Defender's case rests on nuclear's advantages in the remaining sectors: industrial heat, hydrogen, and grid stability. Let me assess each.
+
+Grid stability: real advantage, but diminishing. Battery storage is scaling at [record pace](https://seia.org/news/united-states-installs-58-gwh-of-new-energy-storage-in-2025/), and demand response, interconnection, and grid flexibility are also progressing. The firmness gap is narrowing.
+
+Industrial heat: the strongest nuclear argument, but the addressable market is limited. High-temperature industrial heat accounts for roughly 10% of global emissions. It's important, but it doesn't make nuclear the "best path" for the other 90%.
+
+Hydrogen: nuclear-produced hydrogen competes with green hydrogen from renewables. Given renewable electricity's cost advantage, electrolysis powered by cheap solar and wind is likely to win on economics even if nuclear has a capacity factor advantage.
+
+The fundamental issue is this: the "best path to decarbonization" must be judged by how many gigatons of CO2 it can displace in the next 10-25 years, given real-world constraints of cost, speed, politics, and public acceptance. On every one of those criteria except technical completeness, renewables outperform nuclear. You can deploy more renewables, faster, cheaper, in more countries, with less political friction. Nuclear is a valuable tool in the decarbonization toolkit, especially for industrial heat and baseload in countries with existing nuclear expertise. But calling it the "best path" overstates its practical advantage relative to renewables when measured by achievable CO2 displacement per dollar and per year.
+
+I do not fully concede the claim, but I'll narrow my objection: nuclear is a necessary complement, not the best path.
+
+---
+
+## Verdict
+
+### Summary of strongest arguments each side
+
+**Defender (FOR):**
+- Nuclear provides firm, weather-independent baseload power at 92.3% capacity factor, roughly 3x more reliable than wind and solar, eliminating intermittency without requiring unproven long-duration storage.
+- Nuclear uniquely addresses hard-to-abate sectors through high-temperature process heat (500-900C) for steel, cement, chemicals, and clean hydrogen production. No other clean technology spans this range.
+- Nuclear has prevented over 70 Gt of CO2 emissions historically and continues displacing more than 1 Gt/year, demonstrating proven effectiveness at scale.
+- Countries with continuous build programs (South Korea, China, UAE) demonstrate that nuclear can be built in 5-7 years at predictable costs. Delays are policy failures, not physics constraints.
+
+**Skeptic (AGAINST):**
+- Nuclear costs 2.5-3x more per MWh than solar and wind (\$81.45 vs. \$30/MWh), meaning every dollar spent on nuclear buys less decarbonization than the same dollar spent on renewables.
+- Nuclear deployment takes 10-15 years per plant in most democratic market economies (Vogtle: 15 years, Hinkley Point C: ongoing), while renewables deploy in months. In 2025, 448 GW of new renewables were installed globally.
+- Battery storage is scaling exponentially (57.6 GWh in the U.S. in 2025, doubling year-over-year), progressively eroding nuclear's firmness advantage.
+- After 70 years of commercial nuclear power, only one country (Finland) has a permanent waste repository, and high-temperature industrial reactors remain largely undeployed.
+
+### Where both sides agree
+
+- Decarbonization is urgent and demands rapid action.
+- Nuclear energy produces very low lifecycle carbon emissions and has a proven track record of displacing fossil fuels.
+- Renewables (solar and wind) are currently cheaper per MWh for electricity generation.
+- Industrial decarbonization (steel, cement, chemicals) is a genuinely hard problem where nuclear has a plausible advantage.
+- Both nuclear and renewables will likely be needed in some combination; the debate is about emphasis and primacy.
+- Historical cost overruns and delays in Western nuclear projects (Vogtle, Hinkley Point C, Olkiluoto) are real problems, though potentially solvable with sustained build programs.
+
+### Unresolved tensions
+
+1. **The storage bet.** The Defender argues long-duration storage remains unproven; the Skeptic argues the trajectory will close the gap. Neither can prove their prediction about 2030-2035 storage costs and capabilities. This is the single largest uncertainty in the debate.
+
+2. **Transferability of build models.** South Korea and China build reactors on time and on budget, but whether their model transfers to other countries' regulatory and political environments is unresolved. The Defender treats this as a solvable policy problem; the Skeptic treats it as a structural constraint.
+
+3. **Scope of "decarbonization."** If decarbonization means only electricity, renewables clearly lead. If it means the full energy system including industrial heat and hydrogen, nuclear's case strengthens. The two sides implicitly argue about different scopes.
+
+4. **Timeframe.** The Skeptic optimizes for maximum CO2 displacement in the next 10 years (favoring fast-deploying renewables). The Defender optimizes for a fully decarbonized system by 2050 (favoring completeness). Both timeframes are legitimate.
+
+### Assessment
+
+The claim that "nuclear energy is the best path to decarbonization" is **partially supported but overstated**.
+
+Nuclear is indispensable for deep decarbonization: it provides firm clean power, addresses hard-to-abate industrial emissions, and produces clean hydrogen. No credible pathway to net-zero by 2050 excludes nuclear entirely. The Defender's strongest ground is industrial heat, where nuclear has no clean competitor at comparable scale and temperature.
+
+However, calling nuclear the "best" path implies it should receive priority investment and policy focus over renewables. The evidence does not support this. Renewables are cheaper, faster to deploy, and scalable in more countries. For the largest single source of emissions (electricity generation), renewables are the superior tool by cost, speed, and demonstrated deployment. The "best path" to decarbonization is a renewables-led strategy with nuclear playing a critical supporting role, particularly for baseload firming and industrial heat.
+
+**Confidence: 7/10.** High confidence that nuclear is necessary but not sufficient. Moderate confidence that renewables-led is faster. The key uncertainty is whether long-duration storage solves the intermittency problem cheaply enough to make nuclear's firmness advantage obsolete. If it doesn't, nuclear's importance rises significantly.
+
+Sources: [IAEA](https://www.iaea.org/newscenter/news/five-reasons-the-clean-energy-transition-needs-nuclear-power) | [U.S. DOE](https://www.energy.gov/ne/articles/nuclear-power-most-reliable-energy-source-and-its-not-even-close) | [EIA LCOE 2025](https://www.eia.gov/outlooks/aeo/electricity_generation/) | [Lazard LCOE+ 2025](https://www.lazard.com/research-insights/levelized-cost-of-energyplus-lcoeplus/) | [IEA Mid-Year Update 2025](https://www.iea.org/reports/electricity-mid-year-update-2025/supply-renewables-grow-the-most-followed-by-gas-and-nuclear) | [SEIA Storage Report](https://seia.org/news/united-states-installs-58-gwh-of-new-energy-storage-in-2025/) | [WEF Nuclear Finance](https://www.weforum.org/stories/2025/10/nuclear-energy-how-finance-policy-and-innovation-can-triple-capacity-by-2050/) | [C2ES Industrial Decarbonization](https://www.c2es.org/press-release/new-brief-nuclear-energy-uniquely-suited-to-decarbonize-industry-in-the-u-s/) | [Frontiers Nuclear Evaluation](https://www.frontiersin.org/journals/environmental-economics/articles/10.3389/frevc.2024.1242818/full) | [CNBC Nuclear Waste](https://www.cnbc.com/2025/11/09/nuclear-power-energy-radioactive-waste-storage-disposal.html) | [NEA SMR Dashboard](https://www.oecd-nea.org/jcms/pl_108268/new-nea-small-modular-reactor-dashboard-edition-reveals-global-expansion-of-smr-deployment) | [Vogtle Wikipedia](https://en.wikipedia.org/wiki/Vogtle_Electric_Generating_Plant) | [Hinkley Point C](https://www.theb1m.com/video/hinkley-point-c)`;
+RAW["nuclear-energy"]["without_skill"] = `# Debate: Nuclear Energy Is the Best Path to Decarbonization
+
+## Round 1: The Case and the Counter
+
+### Defender (FOR)
+
+Nuclear energy is the only proven technology that has decarbonized an entire national electricity grid at scale. France built out its nuclear fleet in the 1980s and 1990s, and today its electricity carbon intensity sits at [roughly 57 grams CO2/kWh](https://ourworldindata.org/data-insights/france-opened-a-flurry-of-nuclear-power-plants-in-the-1980s-and-1990s-giving-it-low-carbon-electricity-ever-since), compared to Germany's 366 grams CO2/kWh. Germany, which bet heavily on renewables while shutting down its nuclear plants, [emits nearly twice as much greenhouse gas per capita as France](https://www.cleanenergywire.org/factsheets/how-germanys-and-frances-climate-policies-and-greenhouse-gas-emissions-compare): 8.0 tonnes versus 4.5 tonnes per person in 2021. This is not a theoretical argument. It is a decades-long natural experiment with a clear winner.
+
+Nuclear provides firm, dispatchable, weather-independent baseload power. Its capacity factor in the US averages [over 90%](https://www.ans.org/news/2025-05-02/article-6967/us-nuclear-capacity-factors-stability-and-energy-dominance/), dwarfing wind at 34.6% and solar at 24.6%. The large spinning turbines in nuclear plants provide grid inertia, which is [critical for frequency stability](https://www.iaea.org/bulletin/smart-stable-reliable) as variable renewables grow. Without firm baseload, grids face supply-demand imbalances that require expensive backup infrastructure.
+
+Nuclear is also extraordinarily land-efficient. A nuclear facility needs about 1.3 square miles per 1,000 MW, which is [31 times less than solar and 173 times less than wind](https://www.nei.org/news/2022/nuclear-brings-more-electricity-with-less-land). In a world where land-use conflicts with agriculture and biodiversity are intensifying, this matters.
+
+The global momentum is real. At COP30, [33 countries pledged to triple nuclear capacity](https://world-nuclear.org/news-and-media/press-statements/new-outlookreportfindsgovernments-nuclear-energyambitionexceeds-tripling-goal-for-2050). The World Bank and IAEA signed a landmark agreement in 2025 to support nuclear financing. Major tech companies including Amazon, Google, and Meta have [backed the tripling goal](https://world-nuclear.org/our-association/publications/world-nuclear-outlook-report/executive-summary---world-nuclear-outlook-report) to power their data centers. Over 80 small modular reactor designs are in development, with [four SMRs already operational](https://world-nuclear.org/our-association/publications/world-nuclear-outlook-report) in Russia, China, and Japan.
+
+Nuclear is not just "a" path to decarbonization. It is the only path that has actually delivered grid-scale decarbonization within a single generation.
+
+### Skeptic (AGAINST)
+
+France's historical success does not make nuclear the "best" path today. The energy landscape has changed. The question is not whether nuclear *can* decarbonize, but whether it is the fastest, cheapest, and most scalable option available *now*. It is not.
+
+The economics are brutal. Over the past decade, utility-scale solar costs dropped 88% and wind dropped 69%, while [nuclear costs increased 23%](https://www.worldnuclearreport.org/Power-Play-The-Economics-Of-Nuclear-Vs-Renewables). Current levelized costs tell the story: nuclear sits at roughly \$110/MWh, solar PV at \$55/MWh (declining to \$25/MWh by 2050), and onshore wind at \$40/MWh. A European study found that [high-nuclear scenarios cost 1.2 billion EUR more annually](https://www.sciencedirect.com/science/article/pii/S0306261924010882) than renewables-only scenarios.
+
+Speed is the other critical variable. Climate change demands rapid deployment. The average nuclear construction time worldwide is [just under 10 years](https://eu.boell.org/en/2021/04/26/7-reasons-why-nuclear-energy-not-answer-solve-climate-change), while utility-scale wind and solar take 2-5 years from planning to operation. Nuclear's lead time averages 90 months versus 40 months for solar and wind. Every dollar and year spent on nuclear is a dollar and year not spent on faster alternatives.
+
+And the overruns are not outliers; they are the norm. A [2025 global study](https://www.sciencedaily.com/releases/2025/05/250519204507.htm) found nuclear plants have an average construction cost overrun of 102.5%, costing \$1.56 billion more than expected. The US Vogtle project came in [7 years late and \$17 billion over budget](https://reneweconomy.com.au/why-the-newest-large-nuclear-plant-in-the-us-is-likely-to-be-the-last/), exceeding \$30 billion total. Hinkley Point C in the UK [ballooned from 16 billion to 34 billion GBP](https://www.bu.edu/igs/2025/05/19/investment-risk-for-energy-infrastructure-construction-is-highest-for-nuclear-power-plants-lowest-for-solar/). Investment risk for nuclear construction is the [highest of any energy infrastructure](https://www.sciencedaily.com/releases/2025/05/250519204507.htm), while solar is the lowest.
+
+To save the climate, we need to save the most carbon at the least cost in the least time. Nuclear fails on two of those three variables.
+
+---
+
+## Round 2: Addressing Weaknesses
+
+### Defender (FOR)
+
+The Skeptic frames this as nuclear versus renewables. That is a false dichotomy. The real question is: can renewables *alone* decarbonize the grid? The answer is no.
+
+The intermittency problem is not solved by wishing it away. Wind and solar produce power only when conditions allow. Grid operators must then carry [additional reserves, deploy fast-responding storage, and upgrade control systems](https://discoveraccelerant.com/nuclear-energy-grid-stability/) to maintain stability. Yes, battery storage costs have fallen dramatically, with pack prices reaching [\$70/kWh in 2025, down 45% from 2024](https://www.energy-storage.news/battery-storage-system-prices-continue-to-fall-sharply-bnef-and-ember-reports-find/). But batteries provide hours of storage, not days or weeks. Seasonal storage for a 100% renewable grid remains unsolved at scale. Nuclear provides the firm generation that [immunizes the grid when variable sources cannot deliver](https://www.realclearenergy.org/articles/2026/02/27/nuclears_window_of_opportunity_1166804.html).
+
+On cost: comparing LCOE alone is misleading. It ignores system costs. When you add the cost of backup generation, grid reinforcement, curtailment, and storage needed to make intermittent sources reliable, the gap narrows dramatically. A grid with nuclear baseload needs less storage, less transmission overbuild, and less curtailment.
+
+On construction time: the Western track record is poor, but it is not universal. China has stable policies supporting nuclear construction, with [half of all commercial reactors under construction being Chinese](https://www.nucnet.org/news/nuclear-will-break-records-in-2025-but-major-challenges-remain-in-us-and-europe-says-iea-1-4-2025), and they build on schedule. South Korea's APR-1400 reactors have been delivered on time and on budget internationally. The West's failure is a policy and industrial-base problem, not a physics problem. SMRs aim to fix this through factory fabrication and standardized designs.
+
+On waste: Finland's Onkalo repository completed its [first successful trial run in 2025](https://www.nucnet.org/news/finland-completes-key-trial-for-world-s-first-deep-geological-nuclear-waste-repository-3-2-2025), encapsulating five spent fuel canisters and placing them at 430 metres depth. The IAEA called it a ["game changer" for the nuclear industry](https://www.iaea.org/newscenter/news/finlands-spent-fuel-repository-a-game-changer-for-the-nuclear-industry-director-general-grossi-says). The waste problem is solved technically; it was always a political problem, and Finland has shown the political problem is solvable too.
+
+Nuclear also addresses decarbonization beyond electricity: [heavy industry, shipping, district heating, and desalination](https://world-nuclear.org/our-association/publications/world-nuclear-outlook-report/executive-summary---world-nuclear-outlook-report). Wind and solar cannot provide the high-temperature process heat that steel, cement, and chemical production require.
+
+### Skeptic (AGAINST)
+
+The Defender claims renewables cannot decarbonize alone. But "best path" does not mean "only component." The debate is about where to allocate marginal investment, and the answer is overwhelmingly renewables plus storage.
+
+On system costs and intermittency: battery storage is not static. Turnkey BESS costs fell from [\$2,571/kWh in 2010 to \$192/kWh in 2024, a 93% reduction](https://nzero.com/blog/the-falling-cost-of-battery-storage-and-its-impact-on-renewables/), and the [global grid-scale battery market is projected to reach \$44 billion by 2030](https://www.grandviewresearch.com/industry-analysis/grid-scale-battery-storage-market) at a 27% CAGR. The "batteries only do hours" argument ignores the rapidly expanding toolkit: pumped hydro, compressed air, green hydrogen for seasonal storage, demand response, and continental-scale grid interconnection. These are cheaper and faster to deploy than new nuclear plants.
+
+On China and South Korea building on time: those are authoritarian or centralized-planning contexts with state-owned utilities, standardized designs, and suppressed labor costs. Transplanting that model to democratic, market-based economies with stringent safety regulation and public accountability is not straightforward. The Defender is cherry-picking the exceptions and ignoring the [102.5% average cost overrun](https://www.sciencedirect.com/science/article/abs/pii/S2214629625001380) that defines the global norm.
+
+On SMRs: they are a promise, not a product. Over 80 designs are "in progress," but only four are operational, and they are in Russia and China. NuScale, the most advanced US SMR project, [cancelled its first commercial deployment](https://www.utilitydive.com/news/biden-administration-launches-nuclear-working-group/718070/) after costs escalated. The SMR cost advantage is theoretical; factory fabrication at scale has never been demonstrated for nuclear reactors. We should not bet the climate on technology that might work in 15 years when we have technology that works now.
+
+On waste: Onkalo is one facility in one country after decades of effort. It handles Finland's relatively small nuclear fleet. Scaling deep geological repositories for a tripled global nuclear fleet means dozens of Onkalos in dozens of countries, each requiring decades of geological study, political consensus, and construction. That is not a solved problem; it is one successful pilot.
+
+On industrial heat: fair point, but that is an argument for *some* nuclear, not for nuclear as the "best path to decarbonization." Most emissions come from electricity and transport, where renewables dominate.
+
+---
+
+## Round 3: Final Arguments
+
+### Defender (FOR)
+
+Let me be precise about what "best" means. It does not mean "only." It means the single technology that contributes the most to decarbonization when accounting for all variables: carbon reduction, reliability, scalability, land use, industrial applicability, and system-level costs.
+
+The Skeptic keeps citing LCOE, but LCOE is a fiction for intermittent sources because it ignores the cost imposed on the rest of the system. When California has so much midday solar that it [curtails gigawatts of clean energy](https://www.enlit.world/library/grid-reliability-is-nuclear-the-stabiliser-we-ve-been-looking-for/), then needs gas peakers at 6pm, the "cheap solar" argument breaks down. Germany spent over 500 billion EUR on its Energiewende and still has electricity six times dirtier than France. That is the most expensive decarbonization failure in history.
+
+The IAEA projects nuclear capacity could reach [2.6 times current levels by 2050](https://world-nuclear.org/our-association/publications/world-nuclear-outlook-report/executive-summary---world-nuclear-outlook-report) in the high case. Achieving this requires scaling annual grid connections from 14.4 GWe/year in 2026-2030 to 22.3 GWe/year by 2031-2035. This is ambitious but achievable: it is what France did in the 1980s, and what China is doing now.
+
+The world needs clean firm power. No amount of batteries, demand response, or grid interconnection eliminates the need for gigawatts of dispatchable, weather-independent, low-carbon generation. Nuclear is the only technology that fills that role at scale. Renewables are a critical complement, but they cannot be the backbone. Nuclear can.
+
+Every country that has successfully decarbonized its electricity (France, Sweden, Ontario) did it with nuclear. Every country that tried without nuclear (Germany) has struggled. The empirical record is clear.
+
+### Skeptic (AGAINST)
+
+The Defender's empirical record is selective. Denmark gets over 80% of its electricity from wind and solar with some of the lowest carbon intensity in Europe. Portugal, Costa Rica, and Uruguay have achieved near-complete decarbonization through hydro, wind, and solar. The "only nuclear countries decarbonized" claim ignores geography and resource endowments.
+
+The core issue is opportunity cost. Every dollar invested in nuclear generates less carbon reduction per dollar and per year than the same dollar invested in renewables plus storage. The [Frontiers in Environmental Economics study](https://www.frontiersin.org/journals/environmental-economics/articles/10.3389/frevc.2024.1242818/full) evaluated nuclear's technical risks, economic implications, and found incompatibility with optimized renewable energy systems. Nuclear's inflexibility (it runs best at constant output) actually complicates grid management when paired with high renewable penetration.
+
+The Defender waves away SMR failures and pivots to France's 1980s success. But France's fleet was built under a centralized state monopoly (EDF) with standardized designs and unlimited government backing. That institutional context does not exist in most countries today. And France itself is struggling: its current EPR project at Flamanville was [12 years late and triple the original budget](https://www.euronews.com/business/2024/05/16/economics-of-nuclear-power-the-france-germany-divide-explained).
+
+"Best path" must mean best for the world, not best in theory. Most of the world's emissions growth is in developing nations that need cheap, fast, deployable energy. Solar and wind meet that need. Nuclear requires massive upfront capital, specialized workforce, regulatory infrastructure, and decades of institutional capacity that most countries lack. Renewables are democratizing energy access. Nuclear concentrates it.
+
+I am not arguing against all nuclear. Existing plants should keep running. Some new capacity makes sense where conditions allow. But calling nuclear the "best path" to decarbonization means prioritizing a slow, expensive, high-risk technology over proven, cheap, fast alternatives. That is a dangerous misallocation when we are running out of time.
+
+---
+
+## Verdict
+
+### Strongest Arguments: Defender (FOR Nuclear)
+
+1. **The France-Germany natural experiment.** France decarbonized its grid in one generation with nuclear; Germany spent vastly more on renewables and has 6x dirtier electricity. This is the single most powerful empirical argument in the debate.
+2. **Firm power is non-negotiable.** No grid can function on intermittent sources alone. Nuclear provides dispatchable, weather-independent baseload with 90%+ capacity factors and grid-stabilizing inertia that renewables cannot replicate.
+3. **Land efficiency and industrial heat.** Nuclear's minimal land footprint and ability to provide high-temperature process heat for heavy industry address decarbonization challenges that renewables structurally cannot.
+
+### Strongest Arguments: Skeptic (AGAINST Nuclear as "Best Path")
+
+1. **Cost and speed.** Nuclear costs \$110/MWh and rising; solar costs \$55/MWh and falling toward \$25/MWh. Nuclear takes 10 years to build with 102.5% average cost overruns. Every year and dollar matters when the climate clock is ticking.
+2. **Opportunity cost.** The same investment in renewables plus storage delivers more carbon reduction per dollar and per year. Betting on nuclear means slower decarbonization during the critical 2025-2035 window.
+3. **Deployability and accessibility.** Most developing nations lack the capital, workforce, and regulatory infrastructure for nuclear. Renewables are deployable almost anywhere with minimal institutional prerequisites.
+
+### Points of Agreement
+
+- Existing nuclear plants should continue operating; premature closure (as Germany did) increases emissions.
+- Nuclear and renewables are not inherently opposed; an optimal grid likely includes both.
+- The climate crisis demands all viable low-carbon technologies, and ideological exclusion of any option is counterproductive.
+- SMRs are promising but unproven at commercial scale.
+
+### Unresolved Tensions
+
+1. **System cost accounting.** The LCOE-versus-system-cost debate remains unresolved. Nuclear advocates argue that LCOE understates renewables' true cost; renewables advocates argue that nuclear's construction overruns make its real costs far worse than projected.
+2. **Scalability timeline.** Can nuclear realistically scale fast enough (14-22 GWe/year) to matter before 2040? Or will renewables plus storage have already won the race by then?
+3. **Institutional transferability.** France and China built nuclear successfully under centralized state programs. Whether market-based democracies can replicate this remains the critical open question.
+4. **The "last 20%" problem.** Getting from 80% to 100% clean electricity is exponentially harder with renewables alone. Whether nuclear or long-duration storage solves this cheaper is genuinely uncertain.
+5. **Waste at scale.** Onkalo works for Finland. Whether dozens of countries can build deep geological repositories while simultaneously tripling nuclear capacity is an untested proposition.
+
+### Confidence Score: 4/10 for "Nuclear is the BEST path"
+
+Nuclear is clearly *a* critical path to decarbonization, and the case for it as part of the energy mix is strong (8/10). But the claim that it is the *best* path, meaning it should receive priority investment over renewables, is not supported by current economics, deployment speed, or global accessibility. The strongest version of the pro-nuclear argument is not "nuclear is best" but "nuclear is necessary." The Skeptic wins on cost and speed; the Defender wins on reliability and proven track record. The word "best" is doing too much work in the proposition.`;
+RAW["remote-work-ru"] = {};
+RAW["remote-work-ru"]["with_skill"] = `# Дебаты: Удалённая работа лучше офисной для продуктивности
+
+## Раунд 1: Ключевые позиции и определение терминов
+
+### Защитник (ЗА удалённую работу)
+
+Продуктивность — это отношение результата к затраченным ресурсам (время, деньги, усилия). По этому критерию удалённая работа выигрывает у офисной по нескольким направлениям.
+
+Во-первых, данные Бюро трудовой статистики США (октябрь 2024) показывают прямую корреляцию: увеличение доли удалённых работников на 1 п.п. связано с ростом совокупной факторной производительности (TFP) на [0,08 п.п.](https://www.bls.gov/productivity/notices/2024/productivity-and-remote-work.htm). Это макроэкономический эффект, а не субъективные опросы.
+
+Во-вторых, компании из списка Fortune 100 Best, поддерживающие удалённый или гибридный формат, демонстрируют продуктивность на [42% выше](https://www.greatplacetowork.com/resources/blog/remote-work-productivity-study-finds-surprising-reality-2-year-study), чем типичные американские компании. 84% их сотрудников отмечают эффективную кооперацию даже при удалённой работе.
+
+В-третьих, 61% удалённых работников считают себя более продуктивными дома, а 81,4% отмечают [улучшение баланса](https://www.chanty.com/blog/ru/remote-work-statistics-ru/) между работой и личной жизнью. Баланс — не роскошь, а фактор устойчивой продуктивности: выгорание снижает выход куда сильнее, чем отвлечения дома.
+
+Наконец, исследование Николаса Блума из Стэнфорда (2024, опубликовано в Nature) на 1600+ сотрудниках Trip.com показало: гибридный формат не снижает продуктивность и карьерный рост, зато [снижает текучесть на 33%](https://news.stanford.edu/stories/2024/06/hybrid-work-is-a-win-win-win-for-companies-workers). Текучесть — прямой враг продуктивности: замена сотрудника стоит 50-200% его годовой зарплаты.
+
+### Скептик (ПРОТИВ)
+
+Определение продуктивности, предложенное Защитником, удобно, но неполно. Продуктивность компании включает не только индивидуальный выход, но и коллаборацию, инновации, передачу знаний. Именно здесь удалёнка проседает.
+
+Начнём с фактов о рабочем времени. Данные Бюро трудовой статистики показывают: офисные сотрудники работают в среднем 7,79 часа в день, удалённые — лишь [5,14 часа](https://fortune.com/2025/07/03/remote-workers-men-work-less-hours-from-home-productivity-fake-work/). Разница в 2,5 часа — это 34% рабочего дня. Даже если удалёнщик «продуктивнее в час», он теряет треть времени.
+
+Далее, исследование Buffer (2024) показывает: удалённые сотрудники теряют до [25% рабочего времени из-за отсутствия структуры](https://www.monitask.com/ru/blog/glavnye-trendy-udalennoj-raboty-v-2023-godu). Самодисциплина — это навык, которым обладает меньшинство. Офис обеспечивает структуру «бесплатно».
+
+Что касается исследования Блума: оно про гибридный формат (2 дня дома, 3 в офисе), а не про полностью удалённую работу. Тезис дебатов — «удалённая работа лучше офисной», а не «гибрид лучше офиса». Подмена понятий.
+
+Наконец, удалённые работники показывают [меньшую продуктивность в групповых проектах](https://upr.ru/article/kak-udalyennaya-rabota-vliyaet-na-effektivnost/) и слабее ощущают причастность к коллективу. Для задач, требующих интенсивной коллаборации (стратегическое планирование, мозговые штурмы, наставничество), офис остаётся незаменимым.
+
+---
+
+## Раунд 2: Ответы на сильнейшие аргументы и новые тезисы
+
+### Защитник
+
+Сильнейший аргумент Скептика — разрыв в рабочих часах (7,79 vs 5,14). Однако этот аргумент опирается на «часы за рабочим столом», а не на выход. Офисный работник, сидящий 7,79 часа, тратит значительную часть времени на: дорогу (в среднем 55 минут в день в США, до 2-3 часов в крупных городах России), непродуктивные совещания, социальные перерывы и «имитацию занятости». Удалёнщик, работая 5,14 часа «по данным трекера», может производить столько же или больше полезного выхода, потому что работает в фокусированных блоках.
+
+Исследование МВФ (сентябрь 2024) прямо озаглавлено ["Working From Home Is Powering Productivity"](https://www.imf.org/en/publications/fandd/issues/2024/09/working-from-home-is-powering-productivity-bloom) и подчёркивает: удалённая работа позволяет перераспределить сэкономленное время на дорогу в пользу работы и отдыха, что повышает совокупную производительность.
+
+По поводу подмены «удалённая» на «гибридную»: тезис касается продуктивности удалённой работы по сравнению с офисной, а гибрид — это частный случай удалённой работы (часть времени проводится не в офисе). Ранние исследования Блума (китайский эксперимент с Ctrip) показали рост продуктивности на [13% при полностью удалённой работе](https://www.gsb.stanford.edu/faculty-research/publications/does-working-home-work-evidence-chinese-experiment) для колл-центра. Рандомизированные эксперименты на уровне фирм подтверждают: полностью удалённая работа даёт «малые положительные эффекты» на индивидуальную производительность в самостоятельных задачах.
+
+Новый тезис: удалённая работа расширяет пул талантов. Компания не ограничена географией и может нанимать лучших специалистов, а не ближайших. Это косвенный, но мощный фактор продуктивности: лучшие люди делают лучшую работу.
+
+### Скептик
+
+Защитник пытается обесценить метрику рабочих часов, заменяя её «фокусированными блоками». Но данные Gallup (2025) показывают, что хотя продуктивность удалёнщиков пока стабильна, [рабочие часы уже падают](https://www.gallup.com/workplace/693539/remote-staff-hours-fall-productivity-steady.aspx) — и это тревожный тренд. «Пока стабильна» — не то же самое, что «выше». Gallup прямо указывает: если часы продолжат снижаться, продуктивность последует.
+
+Ссылка на эксперимент Ctrip (+13%) заслуживает контекста. Это колл-центр с чётко измеримым выходом (звонки в минуту). Для творческих, управленческих и коллаборативных задач такого эффекта не зафиксировано. Экстраполировать колл-центр на всю экономику — методологическая ошибка.
+
+Тезис о расширении пула талантов — это аргумент о найме, а не о продуктивности конкретного работника. Вопрос дебатов: «удалённая работа лучше офисной для продуктивности», а не «для стратегии найма». Если мы сравниваем одного и того же работника дома и в офисе, пул талантов нерелевантен.
+
+Новый тезис: инновации страдают. Спонтанные взаимодействия в офисе («разговоры у кулера») генерируют идеи, которые невозможны в запланированных Zoom-звонках. Исследования Microsoft на собственных сотрудниках показали, что удалённая работа сужает коммуникационные сети: люди общаются с меньшим числом коллег, формируя «силосы». Инновации — долгосрочный фактор продуктивности, который не ловится квартальными метриками.
+
+---
+
+## Раунд 3: Контраргументы и синтез
+
+### Защитник
+
+Скептик делает сильный ход, указывая на инновации и «разговоры у кулера». Но этот аргумент романтизирует офис. Исследования показывают, что открытые офисы (основной формат с 2010-х) [снижают личное общение на 70%](https://royalsocietypublishing.org/doi/10.1098/rstb.2017.0239): люди надевают наушники и переписываются в мессенджерах, сидя в двух метрах друг от друга. «Спонтанные взаимодействия» — это миф для большинства современных офисов. Реальность: шум, отвлечения, невозможность сосредоточиться.
+
+Аргумент об инновациях не подкреплён причинно-следственной связью. Microsoft зафиксировал сужение сетей, но не доказал снижение инноваций. Корреляция сетей и инноваций — гипотеза, а не факт.
+
+Синтез со стороны Защитника: удалённая работа превосходит офисную по продуктивности для индивидуальных и самостоятельных задач. Это подтверждено рандомизированными экспериментами и макроэкономическими данными. Для групповых задач — паритет или лёгкое преимущество офиса, но это преимущество компенсируется экономией времени на дорогу, снижением текучести и доступом к талантам. Оптимум — скорее всего гибрид, но тезис «удалённая работа лучше офисной для продуктивности» верен для большинства рабочих контекстов.
+
+### Скептик
+
+Контраргумент об открытых офисах справедлив, но бьёт не по тезису дебатов. Вопрос не «открытый офис vs удалёнка», а «офис vs удалёнка». Офис можно организовать правильно (кабинеты, тихие зоны, переговорные). Удалёнка же не может обеспечить физическое присутствие коллег, когда оно необходимо.
+
+Защитник фактически согласился, что для групповых задач офис имеет преимущество. Это существенная уступка: в современной экономике чистые индивидуальные задачи — меньшинство. Разработка ПО, маркетинг, продуктовая работа, наука — всё это командные виды деятельности.
+
+Данные показывают: для 85% сотрудников переход на удалёнку [никак не повлиял на производительность](https://www.chanty.com/blog/ru/remote-work-statistics-ru/). Не повысил, не снизил. Это ключевая цифра. Тезис «удалённая работа ЛУЧШЕ» не подтверждается для большинства. Она — не хуже, но и не лучше.
+
+Синтез со стороны Скептика: удалённая работа — допустимая альтернатива офису, а не превосходящая. Её преимущества (экономия времени, баланс, ретеншн) — реальны, но это преимущества для сотрудника, а не для продуктивности как таковой. Тезис дебатов в строгой формулировке не подтверждён.
+
+---
+
+## Вердикт
+
+### Сильнейшие аргументы каждой стороны
+
+**Защитник:**
+- Макроэкономические данные BLS: рост удалённой работы коррелирует с ростом TFP (+0,08 п.п. на каждый п.п. удалёнки).
+- Исследование Блума/Trip.com: гибридный формат не снижает продуктивность и сокращает текучесть на 33%.
+- Экономия времени на дорогу перераспределяется в пользу работы и восстановления.
+
+**Скептик:**
+- Для 85% сотрудников продуктивность при переходе на удалёнку не изменилась — не выросла, а осталась прежней.
+- Удалённые сотрудники работают на 2,5 часа в день меньше; пока выход стабилен, но тренд тревожный.
+- Коллаборативные и инновационные задачи страдают от отсутствия физического присутствия.
+
+### Точки согласия
+
+1. Гибридный формат (2-3 дня дома, остальные в офисе) — наиболее сбалансированное решение.
+2. Для индивидуальных и самостоятельных задач удалённая работа как минимум не хуже офисной.
+3. Снижение текучести — реальный и значимый эффект удалёнки, косвенно влияющий на продуктивность.
+4. Офис сохраняет преимущества для интенсивной коллаборации и наставничества.
+
+### Неразрешённые противоречия
+
+1. **Определение продуктивности:** если мерить выход в час — удалёнка побеждает; если мерить общий выход за день — возможен паритет или проигрыш из-за меньшего числа рабочих часов.
+2. **Долгосрочные эффекты на инновации:** нет надёжных данных; гипотезы обеих сторон не доказаны.
+3. **Самоселекция:** люди, выбирающие удалёнку, могут быть изначально более самодисциплинированными, что искажает результаты.
+4. **Зависимость от типа работы:** тезис слишком широк, чтобы иметь однозначный ответ для всех профессий.
+
+### Оценка с уверенностью 1-10
+
+**Тезис «Удалённая работа лучше офисной для продуктивности»: 4/10**
+
+Данные не подтверждают превосходство удалённой работы над офисной в строгом смысле. Для большинства работников продуктивность остаётся неизменной. Удалённая работа имеет убедительные преимущества в экономии времени, удовлетворённости и ретеншне, но эти факторы влияют на продуктивность лишь косвенно. Тезис в строгой формулировке скорее не подтверждён. Более точная формулировка: «удалённая работа не хуже офисной для продуктивности и лучше по ряду сопутствующих факторов».`;
+RAW["remote-work-ru"]["without_skill"] = `# Дебаты: «Удалённая работа лучше офисной для продуктивности»
+
+**Формат:** 3 раунда, два участника
+- **Защитник** — аргументирует ЗА тезис
+- **Скептик** — аргументирует ПРОТИВ тезиса
+
+---
+
+## Раунд 1: Базовые аргументы
+
+### Защитник
+
+Данные однозначно показывают: удалённые сотрудники работают продуктивнее. Исследование [Great Place to Work](https://www.greatplacetowork.com/resources/blog/remote-work-productivity-study-finds-surprising-reality-2-year-study), охватившее более 800 000 сотрудников за два года, зафиксировало стабильную или возросшую продуктивность после перехода на удалёнку. По данным [Apollo Technical](https://www.apollotechnical.com/working-from-home-productivity-statistics/), удалённые работники на 13-47% продуктивнее офисных коллег.
+
+Почему? Три ключевых фактора:
+
+1. **Меньше отвлечений.** Офис полон незапланированных разговоров, шума в open space, вынужденных перерывов. Удалённый работник сам контролирует среду.
+
+2. **Экономия времени на дорогу.** Средний офисный сотрудник тратит 1-2 часа в день на дорогу. Это время можно направить на работу или отдых, который восстанавливает ресурсы для продуктивной деятельности.
+
+3. **Автономия повышает мотивацию.** Опрос [Mercer](https://www.chanty.com/blog/ru/remote-work-statistics-ru/) показал: 94% респондентов утверждают, что после перехода на удалёнку их продуктивность выросла или осталась на прежнем уровне. Исследования VMware подтвердили: усиление мониторинга удалённых сотрудников снижает их мотивацию и производительность. Доверие и автономия работают лучше контроля.
+
+При этом удалённые работники тратят меньше общего времени, но выдают сопоставимый результат: [CurrentWare](https://www.currentware.com/blog/remote-work-productivity-statistics/) фиксирует 5 часов 12 минут продуктивного времени при 6 часах 55 минутах общего рабочего дня на удалёнке, против 5 часов 17 минут продуктивных при 7 часах 44 минутах в офисе. Почти одинаковый выход при меньших затратах времени. Это и есть более высокая продуктивность.
+
+### Скептик
+
+Статистика самоотчётов ненадёжна. Когда работника спрашивают «стал ли ты продуктивнее на удалёнке?», у него есть сильнейший стимул ответить «да», потому что он хочет сохранить этот формат. Это классический confirmation bias.
+
+Обратимся к более строгим исследованиям. Работа, опубликованная в [Journal of Political Economy](https://www.journals.uchicago.edu/doi/full/10.1086/721803), изучила более 10 000 IT-специалистов и обнаружила: при переходе на удалёнку количество отработанных часов выросло, но выпуск снизился, а общая продуктивность упала на 8-19%. Причина: резко выросли коммуникационные издержки. Время на координацию и совещания увеличилось, а непрерывные блоки для сосредоточенной работы сократились.
+
+Исследование, о котором пишет [Overclockers.ru](https://overclockers.ru/blog/TEXHAPb/show/99029/uchenye-dokazali-chto-udalennaya-rabota-prinosit-ljudyam-schaste-no-ofisnaya-na-18-bolee-produktivna) со ссылкой на Массачусетский технологический институт и Калифорнийский университет, показало: офисные сотрудники на 18% продуктивнее удалённых. Учёные проводили рандомизированный контролируемый эксперимент, а не опрос.
+
+Ключевая проблема удалёнки: она разрушает спонтанное сотрудничество. В офисе случайная встреча у кофемашины может породить идею, которая не родилась бы в запланированном Zoom-звонке. Инновации требуют неструктурированного взаимодействия, и удалёнка его уничтожает.
+
+---
+
+## Раунд 2: Углубление аргументов
+
+### Защитник
+
+Скептик ссылается на исследование с падением продуктивности на 18%. Но это исследование проводилось среди случайно набранных работников, многие из которых не выбирали удалённый формат и не были к нему подготовлены. Контекст имеет значение.
+
+Обратимся к самому масштабному и методологически строгому исследованию последних лет. Николас Блум из Стэнфорда провёл рандомизированный контролируемый эксперимент в [Trip.com с участием 1 612 сотрудников](https://news.stanford.edu/stories/2024/06/hybrid-work-is-a-win-win-win-for-companies-workers), результаты опубликованы в Nature в 2024 году. Итоги: гибридные работники (2 дня из дома) показали идентичную продуктивность с офисными, получали те же оценки производительности и повышения. При этом текучесть кадров снизилась на 33%. Примечательно: менеджеры до эксперимента предсказывали падение продуктивности, но после его завершения изменили мнение.
+
+Снижение текучести напрямую влияет на продуктивность организации. Замена сотрудника стоит от 50% до 200% его годовой зарплаты. Если удалёнка снижает текучесть на треть, совокупная продуктивность компании растёт, даже если индивидуальная остаётся прежней.
+
+Что касается «спонтанного сотрудничества у кофемашины»: это романтизированный миф. Большинство офисных разговоров у кулера — пустая болтовня, а не генерация инноваций. Реальные инновации требуют глубокого сосредоточенного мышления, а офис с его постоянными прерываниями — враг глубокой работы. Как отмечает [Gallup](https://www.gallup.com/workplace/660236/remote-work-paradox-engaged-distressed.aspx), 52% гибридных сотрудников отмечают более высокую продуктивность и 64% — более эффективное использование рабочего времени.
+
+К 2026 году 52% мировой рабочей силы работают удалённо хотя бы частично, согласно [Yomly](https://www.yomly.com/remote-work-statistics/). Это не временный тренд, а структурная трансформация. Рынок голосует ногами: [87% кандидатов](https://www.roberthalf.com/us/en/insights/research/remote-work-statistics-and-trends) предпочитают позиции с возможностью удалённой работы.
+
+### Скептик
+
+Стэнфордское исследование Блума действительно сильное, но оно доказывает преимущество гибрида, а не полной удалёнки. Тезис дебатов — «удалённая работа лучше офисной», а Блум фактически показывает, что оптимум — комбинация. Это аргумент не за удалёнку, а за гибрид.
+
+Теперь о человеческой цене. Данные [Gallup](https://www.gallup.com/workplace/660236/remote-work-paradox-engaged-distressed.aspx) демонстрируют парадокс удалённой работы: полностью удалённые работники показывают высокую вовлечённость, но одновременно чаще испытывают гнев, грусть и одиночество, а 45% из них сообщают о высоком уровне стресса предыдущего дня. Это больше, чем у офисных сотрудников.
+
+Исследование, опубликованное в [Journal of Affective Disorders](https://www.sciencedirect.com/science/article/abs/pii/S0165032725018981), показало: работающие удалённо 3-4 дня в неделю имеют повышенные шансы испытывать одиночество, а при 5+ днях удалёнки этот эффект ещё сильнее. При этом 1-2 дня удалёнки не показали связи с одиночеством.
+
+Обзор [PMC/NIH](https://pmc.ncbi.nlm.nih.gov/articles/PMC12385570/) подтверждает: одиночество и изоляция при телеработе всё чаще связаны с тревожностью, хроническим стрессом, депрессией и выгоранием. По данным [NAMI/Ipsos за 2024 год](https://high5test.com/employee-wellbeing-statistics/), 52% сотрудников сообщают о высоком стрессе, изоляции или выгорании.
+
+Продуктивность — не только количество закрытых задач за день. Это устойчивая способность производить результат на протяжении месяцев и лет. Если удалёнка создаёт выгорание и одиночество, она подрывает долгосрочную продуктивность, даже если краткосрочные метрики в порядке.
+
+Наконец, 85% руководителей [по данным Microsoft](https://www.currentware.com/blog/remote-work-productivity-statistics/) не уверены, что гибридные сотрудники продуктивны. Это создаёт «паранойю продуктивности», которая ведёт к усилению мониторинга. А усиленный мониторинг, как мы уже обсудили, снижает мотивацию. Порочный круг.
+
+---
+
+## Раунд 3: Синтез и финальные аргументы
+
+### Защитник
+
+Скептик справедливо указывает на риски одиночества и выгорания. Но эти проблемы решаемы и уже решаются. Исследование из [Journal of Affective Disorders](https://www.sciencedirect.com/science/article/abs/pii/S0165032725018981) само показало: 1-2 дня удалёнки не вызывают одиночества. Значит, проблема не в удалённом формате как таковом, а в его неправильной дозировке и организации.
+
+Обзор [MDPI](https://www.mdpi.com/2813-9844/7/4/96) подчёркивает: рабочие условия (социальная поддержка, автономия, нагрузка) играют более решающую роль, чем физическое местоположение. Это значит, что плохо организованный офис вредит не меньше, чем плохо организованная удалёнка.
+
+Что касается различия между «удалёнкой» и «гибридом»: современная удалённая работа — это спектр. Когда мы говорим «удалённая работа лучше офисной», мы противопоставляем гибкий формат жёсткому присутствию 5/5 в офисе. И здесь данные однозначны: принуждение к офису снижает продуктивность. Как отмечает [ActivTrak](https://www.activtrak.com/blog/remote-work-vs-office-productivity/), предписание места работы подавляет продуктивность вне зависимости от формата.
+
+Финальный аргумент: экономическая реальность. [Robert Half](https://www.roberthalf.com/us/en/insights/research/remote-work-statistics-and-trends) фиксирует, что 24% новых вакансий в Q4 2025 — гибридные, 11% — полностью удалённые. Компании, предлагающие удалёнку, получают доступ к 87% кандидатов, которые предпочитают такой формат. Лучшие кадры выбирают удалёнку. Лучшие кадры = более высокая продуктивность. Это косвенный, но мощный эффект.
+
+В России [54% соискателей](https://www.chanty.com/blog/ru/remote-work-statistics-ru/) считают гибрид наиболее продуктивным форматом, 35% предпочитают полную удалёнку, и лишь 11% — офис. Рынок труда уже проголосовал.
+
+### Скептик
+
+Защитник постепенно сместился с позиции «удалёнка лучше» на «гибрид лучше». Это показательно: даже сторонники удалённой работы вынуждены признать, что чистая удалёнка не оптимальна.
+
+Разберём главный аргумент о привлечении кадров. Да, 87% кандидатов хотят удалёнку. Но хотеть и быть продуктивнее — разные вещи. Люди хотят четырёхдневную рабочую неделю, бесплатные обеды и спортзал. Предпочтения работников — это про комфорт, не про продуктивность. Путать эти категории — логическая ошибка.
+
+Исследование [Chicago Booth Review](https://www.chicagobooth.edu/review/are-we-really-more-productive-working-home) ставит прямой вопрос: действительно ли мы продуктивнее дома? И ответ: это зависит от типа задач, личности работника, домашних условий и качества управления. Универсального ответа нет.
+
+Вот что мы точно знаем:
+
+1. **Рутинные, индивидуальные задачи** — удалёнка часто эффективнее. Меньше прерываний, больше фокусного времени.
+2. **Творческие, командные задачи** — офис часто эффективнее. Непосредственное взаимодействие ускоряет обмен идеями и решение проблем.
+3. **Onboarding и обучение** — офис значительно эффективнее. Новички теряются без живого контакта с командой.
+4. **Долгосрочное благополучие** — полная удалёнка создаёт риски. 1-2 дня удалёнки оптимальны по данным [Stanford](https://news.stanford.edu/stories/2024/06/hybrid-work-is-a-win-win-win-for-companies-workers) и исследований одиночества.
+
+Тезис «удалённая работа лучше офисной для продуктивности» — это ложная дихотомия. Реальность сложнее: лучше всего работает комбинация, и оптимальная пропорция зависит от типа работы, отрасли и конкретного человека. Утверждать, что один формат категорически лучше другого — упрощение, не подтверждённое совокупностью данных.
+
+---
+
+## Вердикт
+
+### Сильнейшие аргументы каждой стороны
+
+**Защитник:**
+- Стэнфордское исследование Блума (Nature, 2024): рандомизированный контролируемый эксперимент на 1 612 сотрудниках показал нулевую разницу в продуктивности при гибриде и снижение текучести на 33%. Это методологически сильнейшее доказательство.
+- Экономический аргумент о привлечении кадров: компании без удалёнки проигрывают борьбу за таланты, что косвенно снижает их продуктивность.
+
+**Скептик:**
+- Данные Journal of Political Economy: падение продуктивности на 8-19% при полной удалёнке у IT-специалистов из-за роста коммуникационных издержек. Объективные метрики, не самоотчёты.
+- Парадокс Gallup: удалённые работники одновременно более вовлечены и менее благополучны, что ставит под вопрос долгосрочную устойчивость формата.
+
+### Точки согласия
+
+1. Гибридный формат (2-3 дня из дома) превосходит как полную удалёнку, так и обязательное присутствие 5/5 в офисе.
+2. Принуждение к любому конкретному формату снижает продуктивность. Автономия и доверие важнее места работы.
+3. Самоотчёты работников о продуктивности ненадёжны и подвержены bias.
+4. Тип задач существенно влияет на оптимальный формат: фокусная работа лучше даётся дома, коллаборативная — в офисе.
+
+### Неразрешённые противоречия
+
+1. **Измерение продуктивности.** Нет консенсуса о том, что считать продуктивностью. Строки кода? Закрытые задачи? Инновации? Долгосрочная устойчивость? Разные метрики дают разные ответы.
+2. **Причинность vs. корреляция.** Более продуктивные люди чаще выбирают удалёнку, или удалёнка делает людей продуктивнее? Selection bias не устранён в большинстве исследований.
+3. **Долгосрочные эффекты.** Большинство исследований охватывают 6-24 месяца. Как удалёнка влияет на карьерный рост, развитие навыков и организационную культуру через 5-10 лет — неизвестно.
+4. **Неравенство условий.** Продуктивность на удалёнке сильно зависит от жилищных условий, семейной ситуации и характера работы. Средние цифры скрывают огромный разброс.
+
+### Оценка уверенности: 7/10
+
+Данные убедительно показывают, что гибридный формат (частичная удалёнка) не уступает и часто превосходит обязательный офис 5/5 по продуктивности. Однако тезис о превосходстве именно удалённой работы над офисной в чистом виде подтверждается слабее. Истина ближе к позиции «гибкость лучше жёсткости», чем к «удалёнка лучше офиса». Скептик выигрывает по точности формулировок, Защитник — по направлению тренда.`;
+RAW["exercise-mental-health"] = {};
+RAW["exercise-mental-health"]["with_skill"] = `# Debate: Exercise Improves Mental Health
+
+## Round 1: Core Positions
+
+### Defender
+
+Exercise improves mental health. This is one of the most well-supported claims in health science. The term "mental health" here covers depression, anxiety, stress, and general psychological wellbeing. "Exercise" means structured physical activity at moderate or greater intensity.
+
+The evidence is massive. A [2025 systematic review and meta-analysis](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2025.1612408/full) of 80 studies with 8,020 university students found exercise had a large positive effect on overall mental health, enhanced wellbeing, and moderate reductions in anxiety. A [meta-meta-analysis of 375 RCTs](https://www.jaacap.org/article/S0890-8567(25)00208-4/fulltext) covering over 38,000 children and adolescents found exercise significantly reduces depression and anxiety symptoms, with moderate-intensity and resistance exercises being particularly effective. Exercise benefits were [comparable to or exceeded those of medication or talking therapies](https://www.sciencedaily.com/releases/2026/02/260213020412.htm) across age groups.
+
+This is not merely correlational. [Mendelian randomization studies](https://www.nature.com/articles/s41380-023-02133-9) using genetic instruments to test causality found aerobic exercise was significantly associated with reduced depression risk. A [2025 MR study](https://link.springer.com/article/10.1007/s00406-025-02133-6) confirmed a positive causal effect of physical activity on reducing depression and major depression risk. These genetic designs largely rule out reverse causation and confounding.
+
+The mechanisms are well-characterized: exercise increases BDNF, promotes neurogenesis in the hippocampus, modulates the HPA axis (reducing cortisol), increases serotonin and endorphin signaling, and reduces systemic inflammation. These are not speculative pathways; they are documented across human and animal studies.
+
+### Skeptic
+
+The claim that "exercise improves mental health" is too broad and often overstated. Let me target the strongest version of this claim: that exercise has a reliable, clinically meaningful causal effect on mental health outcomes.
+
+First, the RCT evidence has serious methodological problems. Blinding is impossible in exercise trials. Participants know they are exercising, introducing expectation effects. Control conditions vary wildly: waitlist controls inflate effect sizes compared to active controls. A [2016 meta-analysis adjusting for publication bias](https://pubmed.ncbi.nlm.nih.gov/26978184/) found effect sizes shrank substantially once publication bias was accounted for. The true effect may be modest, not the dramatic benefits often advertised.
+
+Second, Mendelian randomization is not a silver bullet. MR instruments for "physical activity" are weak and capture genetic propensity, not actual exercise behavior. Pleiotropic effects (where the genetic variants affect mental health through pathways unrelated to exercise) remain a real concern. The [Molecular Psychiatry MR study](https://www.nature.com/articles/s41380-023-02133-9) you cite found associations varied substantially depending on the mental health outcome and type of activity, hardly a clean causal story.
+
+Third, meta-analyses in this field suffer from extreme heterogeneity. Mixing yoga with high-intensity interval training with walking, across populations from university students to elderly care home residents, produces a meaningless average. The question is not "does some form of movement help some people with some mental health outcomes" but whether exercise is a reliable intervention with a defined dose-response.
+
+The claim needs precision. Which exercise, for whom, at what dose, for which condition?
+
+## Round 2: Responding to Strongest Points
+
+### Defender
+
+The Skeptic's strongest point is about blinding and inflated effect sizes. This is legitimate: you cannot blind exercise. But this criticism applies equally to psychotherapy, which is also unblindable yet accepted as evidence-based treatment. We do not dismiss CBT because participants know they are receiving it. The standard for clinical utility does not require double-blinding when the intervention is inherently experiential.
+
+On publication bias: the [2016 meta-analysis](https://pubmed.ncbi.nlm.nih.gov/26978184/) did find reduced effect sizes after adjustment, but the effect remained statistically significant and clinically meaningful. A smaller effect than initially reported is still a real effect. Moreover, the sheer volume of recent evidence, including [network meta-analyses of exercise for depressive symptoms in older adults](https://www.jamda.com/article/S1525-8610(25)00100-8/fulltext), consistently shows benefits across multiple exercise types.
+
+On precision: the evidence actually does differentiate. The [2024 mediation and moderation study](https://ijbnpa.biomedcentral.com/articles/10.1186/s12966-024-01676-6) found that moderate-intensity exercise 3 times per week was optimal, and shorter interventions (under 12 weeks) showed greater benefits for depression. Aerobic exercise and resistance training have the strongest evidence. The dose-response question is being answered; the Skeptic is arguing from a state of the literature that is several years out of date.
+
+On MR limitations: pleiotropy is a concern, but multiple MR studies using different instruments and methods converge on the same conclusion. The [2024 study on physical activity across life stages](https://pubmed.ncbi.nlm.nih.gov/39187204/) found aerobic exercise specifically reduced depression risk, and heavy DIY activities reduced anxiety risk, using sensitivity analyses designed to detect pleiotropy. Convergence across observational, RCT, and MR evidence is the gold standard for causal inference.
+
+### Skeptic
+
+The Defender makes a fair point about psychotherapy and blinding. I concede that lack of blinding alone does not invalidate the evidence. But the comparison cuts both ways: psychotherapy effect sizes are also debated and potentially inflated for similar reasons. This does not strengthen the case for exercise; it highlights a shared limitation.
+
+Let me raise a more substantive concern: clinical populations. Most meta-analyses mix subclinical and clinical samples. Exercise helping mildly stressed university students feel better is different from exercise treating Major Depressive Disorder. The [Lancet Psychiatry cross-sectional study](https://www.thelancet.com/journals/lanpsy/article/PIIS2215-0366(18)30343-2/fulltext) of 1.2 million Americans found exercise was associated with reduced mental health burden, but this was observational and primarily captured subclinical benefit. For clinical depression, exercise as monotherapy has weaker evidence than as adjunct treatment.
+
+Also: the dose-response relationship is not settled. The Defender claims moderate intensity 3x/week is optimal, but the same literature shows [high-intensity exercise](https://www.frontiersin.org/journals/public-health/articles/10.3389/fpubh.2025.1616925/full) also has significant effects. Meanwhile, [compulsive exercise is associated with increased depression, anxiety, and stress](https://www.sciencedirect.com/science/article/pii/S0165032725014685), and [overtraining causes burnout, mood disturbance, and depression](https://pmc.ncbi.nlm.nih.gov/articles/PMC8230380/) in up to 10% of athletes. The relationship is not monotonically positive.
+
+So the refined question becomes: exercise as adjunct therapy for clinical populations shows moderate benefit; exercise for subclinical wellbeing shows benefit; but the blanket claim "exercise improves mental health" glosses over important caveats about population, dose, and the risk of harm at extremes.
+
+## Round 3: Narrowing the Gap
+
+### Defender
+
+The Skeptic is now essentially conceding the core claim while arguing for qualifications. I accept all the qualifications. Let me state the claim precisely:
+
+Moderate-intensity exercise (aerobic or resistance training), performed roughly 3 times per week, has a causal, clinically meaningful positive effect on depression and anxiety symptoms across populations, including clinical ones. It works as both standalone and adjunct treatment, with effect sizes comparable to first-line treatments.
+
+On clinical populations specifically: the [network meta-analysis of exercise for depression in older adults](https://www.jamda.com/article/S1525-8610(25)00100-8/fulltext) found exercise-based interventions effective for depressive symptoms in clinical populations. The [2025 meta-analysis of high-intensity exercise for depression](https://www.frontiersin.org/journals/public-health/articles/10.3389/fpubh.2025.1616925/full) focused on patients with diagnosed depression and found significant improvements. These are not subclinical samples.
+
+On compulsive exercise: this is a red herring. Compulsive exercise is a pathological behavior pattern associated with eating disorders and OCD traits, not a consequence of normal exercise. Saying "exercise can be harmful when compulsive" is like saying "eating can be harmful in anorexia." The pathology drives the behavior, not the reverse. No serious clinical guideline avoids recommending exercise because some people develop exercise addiction.
+
+The Skeptic has moved from "the evidence is weak" to "the claim needs qualifications." I agree it needs qualifications. Every medical intervention does. But the qualified claim remains strong: exercise improves mental health for the vast majority of people, across the vast majority of conditions, with a favorable risk-benefit profile that rivals or exceeds any other single intervention.
+
+### Skeptic
+
+The Defender is right that I have shifted from challenging the core claim to refining it. Let me be honest about where I stand.
+
+I cannot raise a substantive new objection to the qualified claim: that moderate exercise, performed regularly, causally reduces depression and anxiety symptoms with clinically meaningful effect sizes. The RCT evidence is extensive, the MR evidence supports causality, and the effect survives adjustment for publication bias. The mechanisms are biologically plausible and documented.
+
+My remaining concerns are practical, not evidential:
+- Adherence: exercise interventions have high dropout rates. An effective treatment people don't sustain is less useful in practice.
+- Individual variation: some people respond strongly, others minimally. We lack good predictors of who benefits most.
+- Implementation: prescribing "exercise" without support structures often fails in clinical settings.
+
+But these are implementation challenges, not challenges to the claim itself. Exercise improves mental health. The evidence supports this at a high confidence level.
+
+**[Early stop: The Skeptic cannot raise a substantive new objection to the qualified claim. Consensus reached after Round 3.]**
+
+## Verdict
+
+### Strongest Arguments: Defender
+- Convergent evidence from RCTs, meta-analyses, meta-meta-analyses, and Mendelian randomization studies all support a causal effect of exercise on depression and anxiety reduction.
+- Effect sizes are comparable to or exceed first-line pharmacological and psychological treatments.
+- The evidence spans age groups (children, adults, elderly) and clinical severity levels (subclinical through diagnosed MDD).
+- Biological mechanisms (BDNF, neurogenesis, HPA axis modulation, serotonin, inflammation reduction) are well-documented.
+
+### Strongest Arguments: Skeptic
+- RCT evidence is limited by inability to blind participants, and publication bias inflates reported effect sizes.
+- The blanket claim "exercise improves mental health" obscures important variation by exercise type, intensity, dose, and population.
+- Compulsive exercise and overtraining represent genuine harms at the extreme end.
+- Adherence and individual variation limit practical clinical utility.
+
+### Where Both Sides Agree
+- Moderate-intensity exercise (aerobic and resistance training), performed approximately 3 times per week, causally reduces depression and anxiety symptoms.
+- The effect is clinically meaningful, though not uniformly large across all populations and conditions.
+- Exercise works as both standalone and adjunct treatment.
+- The claim requires qualification: dose, type, and population matter.
+- Compulsive exercise is pathological and distinct from the general recommendation.
+- Implementation and adherence are real practical challenges.
+
+### Unresolved Tensions
+- Exact dose-response curves remain debated (moderate vs. high intensity, optimal frequency and duration).
+- Predictors of individual response are poorly understood.
+- Whether exercise as monotherapy is sufficient for severe clinical depression, or should always be adjunct, lacks definitive consensus.
+- Long-term maintenance effects (beyond 12 weeks) need stronger evidence.
+
+### Assessment
+**Confidence: 9/10.** Exercise improves mental health. This is among the most well-supported claims in behavioral medicine. The evidence is causal (MR), experimental (RCTs), large-scale (meta-meta-analyses of hundreds of trials), and mechanistically grounded. The Skeptic's concerns about precision and qualifications are valid and improve the claim rather than undermine it. The only point deducted reflects genuine uncertainty about optimal dosing and individual variation, not about the direction or reality of the effect.`;
+RAW["exercise-mental-health"]["without_skill"] = `# Debate: Exercise Improves Mental Health
+
+## Round 1: Opening Statements
+
+**Defender (FOR):**
+
+The evidence that exercise improves mental health is among the most replicated findings in behavioral medicine. A 2026 umbrella review covering 375 randomized controlled trials and 38,117 participants found moderate effect sizes favoring exercise for symptoms of both [depression and anxiety across all age groups](https://www.jaacap.org/article/S0890-8567(25)00208-4/pdf). A February 2026 review published on ScienceDaily concluded that exercise may be [one of the most powerful treatments for depression and anxiety](https://www.sciencedaily.com/releases/2026/02/260213020412.htm), with effects comparable to or exceeding traditional pharmacological and psychological interventions.
+
+The neurobiological mechanisms are well-characterized. Exercise elevates [brain-derived neurotrophic factor (BDNF)](https://www.frontiersin.org/journals/physiology/articles/10.3389/fphys.2023.1102526/full), promotes hippocampal neurogenesis, modulates the HPA axis stress response, reduces systemic inflammation, and increases endorphin release. These are not speculative pathways. They have been documented in both animal models and human imaging studies. A 2025 comprehensive review details how exercise [enhances monoaminergic neurotransmission and regulates neuroinflammation](https://www.frontiersin.org/journals/psychiatry/articles/10.3389/fpsyt.2025.1678367/full) through multiple converging pathways.
+
+Beyond clinical populations, a 2025 meta-analysis of 8,020 university students found exercise had a [large positive effect on overall mental health and moderate reductions in anxiety and depression](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2025.1612408/full). This is not a marginal effect found in narrow samples. It is consistent across demographics, settings, and exercise modalities.
+
+**Skeptic (AGAINST):**
+
+I do not dispute that exercise correlates with better mental health. My challenge is that the strength and reliability of this effect are systematically overstated.
+
+First, publication bias. A meta-analysis that applied the trim-and-fill correction found the effect size for exercise on depression [dropped to -0.24 and became statistically non-significant](https://pubmed.ncbi.nlm.nih.gov/26978184/) (95% CI: -0.52 to 0.05). When you correct for the file drawer problem, the confident claims start to dissolve.
+
+Second, study quality. Only [12% of RCTs adhere to standardized exercise reporting guidelines](https://www.frontiersin.org/journals/psychiatry/articles/10.3389/fpsyt.2025.1678367/full), making reproducibility suspect. Exercise trials cannot be double-blinded. Participants know they are exercising, introducing expectancy and placebo effects that inflate reported outcomes.
+
+Third, a 2024 perspective in the Journal of Physical Activity and Health states plainly: ["The Evidence Is Clear, Exercise Is Not Better Than Antidepressants or Therapy"](https://journals.humankinetics.com/view/journals/jpah/22/2/article-p161.xml). Comparative trials show at best equivalence, not superiority. Dropout rates for exercise interventions are higher than for pharmacological treatments, because exercise is physically demanding and harder to sustain, which undermines its real-world effectiveness.
+
+---
+
+## Round 2: Causality and Mechanisms
+
+**Defender:**
+
+The Skeptic raises fair methodological points, but the causal case has strengthened considerably. A Mendelian randomization study in Molecular Psychiatry used genetic variants as instruments to test directionality and found evidence consistent with a [causal protective effect of physical activity on depression](https://www.nature.com/articles/s41380-023-02133-9). Critically, the reverse direction (depression reducing activity) showed only weak associations, partially resolving the chicken-and-egg concern.
+
+A separate bidirectional Mendelian randomization study in BMC Medicine confirmed that [physical activity causally reduces depression and anxiety symptoms](https://bmcmedicine.biomedcentral.com/articles/10.1186/s12916-023-03211-z), while sedentary behavior increases risk. These genetic instrument studies are not susceptible to the placebo or blinding concerns the Skeptic raised, because they exploit random genetic variation.
+
+On the "not better than antidepressants" point: that is actually a strong argument FOR exercise, not against it. If exercise matches medication efficacy while also improving cardiovascular health, metabolic function, sleep, and social connection, with fewer side effects, that makes it a remarkably cost-effective intervention. The claim was never that exercise is a magic cure superior to all alternatives. It is that exercise improves mental health, which it demonstrably does.
+
+**Skeptic:**
+
+Mendelian randomization is stronger than observational data, I grant that. But MR studies have their own limitations: pleiotropy (genetic instruments affecting outcomes through pathways other than exercise), population stratification, and weak instrument bias. They support causality but do not prove it definitively.
+
+I also want to press on the mechanisms. The Defender lists BDNF, endorphins, HPA axis regulation, and neuroinflammation. But a [2024 systematic review of mediation studies](https://ijbnpa.biomedcentral.com/articles/10.1186/s12966-024-01676-6) found that while these mechanisms are plausible, the evidence for any single pathway being the primary mediator remains inconclusive. We have correlates, not confirmed causal chains. The fact that we cannot specify WHY exercise works (if it does) should temper our confidence.
+
+More practically: 75% of studies focus on [short-term outcomes under 12 months](https://www.frontiersin.org/journals/psychiatry/articles/10.3389/fpsyt.2025.1678367/full), and fewer than 5% include follow-ups beyond five years. We do not know if the mental health benefits persist, or if they evaporate once exercise stops. For a "treatment," that is a significant gap.
+
+---
+
+## Round 3: Clinical Utility and Real-World Application
+
+**Defender:**
+
+The Skeptic's objections are narrowing to "we need more long-term data" and "we don't fully understand the mechanism." Both are true of virtually every psychiatric treatment. SSRIs were prescribed for decades before the serotonin hypothesis was seriously questioned. We do not withhold treatments because the mechanism is incompletely understood; we prescribe based on observed efficacy in trials.
+
+On durability: a large prospective cohort study in the American Journal of Psychiatry found that [even modest physical activity (1 hour per week) had a preventive effect on future depression](https://psychiatryonline.org/doi/10.1176/appi.ajp.2018.17111194), with 12% of future depression cases potentially preventable through regular exercise. The HUNT cohort study similarly found that people who [transitioned from active to sedentary lifestyles showed increased depression risk](https://psychiatryonline.org/doi/10.1176/appi.ajp.2017.16111223), suggesting the benefit tracks with sustained activity.
+
+On publication bias: the trim-and-fill analysis the Skeptic cites is from 2016. The 2025-2026 umbrella reviews incorporating hundreds of newer RCTs still find significant effects even after sensitivity analyses. The field has matured. The effect may be smaller than early enthusiastic estimates, but it remains real and clinically meaningful.
+
+The practical case is overwhelming. Exercise is free, widely accessible, has no pharmaceutical side effects, and delivers physical health co-benefits. Even if the mental health effect size is "only" moderate, the risk-benefit ratio is unmatched by any pharmacological intervention.
+
+**Skeptic:**
+
+I find it increasingly difficult to maintain that exercise does NOT improve mental health. The Mendelian randomization evidence, the sheer volume of RCTs, and the biological plausibility collectively make a strong case.
+
+My remaining objections are about precision and framing:
+
+1. The effect size is moderate, not large. Overstating it does a disservice to patients with severe mental illness who need medication or therapy and might delay seeking appropriate treatment.
+2. Adherence is a genuine barrier. Higher dropout rates in exercise interventions compared to medication are not a minor footnote. An intervention that people cannot sustain has reduced real-world effectiveness.
+3. For severe mental health conditions (schizophrenia, bipolar disorder, treatment-resistant depression), the evidence is [weaker and more mixed](https://www.researchgate.net/publication/236833692_The_Impact_of_Exercise_on_the_Mental_Health_and_Quality_of_Life_of_People_with_Severe_Mental_Illness_A_Critical_Review) than the general population data suggests.
+
+These are caveats, not refutations. I am approaching consensus.
+
+---
+
+## Round 4: Convergence
+
+**Defender:**
+
+I accept all three caveats. They are important qualifications:
+
+1. Effect sizes are moderate. Exercise should be framed as one component of mental health care, not a replacement for clinical treatment in severe cases. The [2025 Frontiers meta-analysis on high-intensity exercise](https://www.frontiersin.org/journals/public-health/articles/10.3389/fpubh.2025.1616925/full) confirms benefit but acknowledges heterogeneity in response.
+2. Adherence matters. Supervised and group-based exercise programs show higher retention and [larger effect sizes than unsupervised programs](https://www.sciencedaily.com/releases/2026/02/260213020412.htm). The implementation model matters as much as the intervention itself.
+3. Severe mental illness requires integrated treatment. Exercise is an adjunct, not a standalone therapy, for conditions like schizophrenia or bipolar disorder.
+
+The refined claim is: exercise reliably produces moderate improvements in mental health, particularly for depression and anxiety in mild-to-moderate presentations, through multiple neurobiological and psychosocial pathways, with effects supported by causal inference methods. It is most effective when supervised, sustained, and integrated with other treatments as needed.
+
+**Skeptic:**
+
+I accept that refined claim. My original challenge was to the oversimplified version: "exercise improves mental health" stated as an unqualified universal. The nuanced version, with appropriate caveats about effect size, severity, adherence, and long-term evidence gaps, is well-supported.
+
+I have no substantive new objections to raise. Continuing would mean manufacturing disagreement.
+
+---
+
+## Verdict
+
+**Strongest arguments FOR (Defender):**
+- Mendelian randomization studies provide [causal evidence](https://www.nature.com/articles/s41380-023-02133-9) that exercise reduces depression risk, partially resolving reverse causation concerns
+- Hundreds of RCTs across multiple 2025-2026 meta-analyses consistently show moderate effect sizes for depression and anxiety reduction
+- Multiple converging neurobiological mechanisms (BDNF, endorphins, HPA axis, neuroinflammation) provide biological plausibility
+- Unmatched risk-benefit ratio: no pharmaceutical side effects, physical health co-benefits, low cost, broad accessibility
+
+**Strongest arguments AGAINST (Skeptic):**
+- Publication bias correction [renders some effect estimates non-significant](https://pubmed.ncbi.nlm.nih.gov/26978184/), suggesting true effect sizes may be smaller than commonly reported
+- Blinding impossibility in exercise trials inflates outcomes through expectancy effects
+- Higher dropout rates than pharmacological interventions reduce real-world effectiveness
+- Evidence for severe mental illness is weaker and more heterogeneous
+
+**Points of agreement:**
+- Exercise produces real, moderate improvements in mental health, especially for mild-to-moderate depression and anxiety
+- The effect is causal, not merely correlational, based on Mendelian randomization and RCT evidence
+- Exercise is not superior to medication or therapy but is comparable, with additional physical health benefits
+- Exercise should complement, not replace, clinical treatment for severe conditions
+- Supervised and group-based programs are more effective and better retained
+- Long-term evidence (beyond 5 years) remains sparse
+
+**Unresolved tensions:**
+- The precise magnitude of the effect after correcting for publication bias and expectancy effects
+- Which specific neurobiological mechanism is primary (or whether it is inherently multi-pathway)
+- How to solve the adherence problem at population scale
+- Whether benefits persist after exercise cessation or require ongoing activity
+
+**Confidence score: 8/10**
+
+The claim "exercise improves mental health" is well-supported by converging lines of evidence including RCTs, meta-analyses, Mendelian randomization, and neurobiological research. The 2-point deduction reflects genuine uncertainty about exact effect magnitude after bias correction, limited long-term follow-up data, and weaker evidence for severe psychiatric conditions. The core claim is not seriously in doubt; the debate is about precision, scope, and appropriate framing.`;
+
+let currentTab = 'overview';
+let currentView = 'side';
+
+function init() {
+  const totalPass = EVALS_DATA.reduce((s,e) => s + e.results.with_skill.pass, 0);
+  const totalAll = EVALS_DATA.reduce((s,e) => s + e.results.with_skill.total, 0);
+  document.getElementById('total-badge').textContent = `skill: ${totalPass}/${totalAll} passed`;
+
+  // Build tabs
+  const tabsEl = document.getElementById('tabs');
+  let html = `<div class="tab active" onclick="showOverview()">Overview</div>`;
+  EVALS_DATA.forEach(e => {
+    const s = e.results.with_skill;
+    html += `<div class="tab" onclick="showEval('${e.id}')">
+      ${e.label}
+      <span class="tab-score">${s.score}</span>
+    </div>`;
+  });
+  tabsEl.innerHTML = html;
+
+  // Build overview cards
+  const overviewEl = document.getElementById('overview');
+  html = '';
+  EVALS_DATA.forEach(e => {
+    const ws = e.results.with_skill;
+    const wo = e.results.without_skill;
+    const delta = ws.pass - wo.pass;
+    const deltaStr = delta > 0 ? `+${delta}` : delta === 0 ? '=' : `${delta}`;
+    const deltaClass = delta > 0 ? 'comp-better' : delta === 0 ? 'comp-same' : 'comp-worse';
+    html += `<div class="summary-card" onclick="showEval('${e.id}')">
+      <h3>${e.label}</h3>
+      <div class="scores">
+        <span class="score-pill score-skill">skill ${ws.score}</span>
+        <span class="score-pill score-baseline">baseline ${wo.score}</span>
+        <span class="score-pill ${deltaClass === 'comp-better' ? 'score-skill' : 'score-baseline'}">${deltaStr}</span>
+      </div>
+      <div class="meta">
+        Words: skill ${ws.word_count} / baseline ${wo.word_count}<br>
+        ${e.id === 'exercise-mental-health' ? 'Early stop: skill=3 rounds, baseline=4 rounds' : `Rounds: 3`}
+      </div>
+    </div>`;
+  });
+  overviewEl.innerHTML = html;
+}
+
+function showOverview() {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab').classList.add('active');
+  document.getElementById('overview').style.display = 'grid';
+  document.getElementById('detail').style.display = 'none';
+  document.getElementById('toolbar').style.display = 'none';
+  currentTab = 'overview';
+}
+
+function showEval(evalId) {
+  currentTab = evalId;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const tabs = document.querySelectorAll('.tab');
+  const idx = EVALS_DATA.findIndex(e => e.id === evalId) + 1;
+  tabs[idx].classList.add('active');
+
+  document.getElementById('overview').style.display = 'none';
+  document.getElementById('detail').style.display = 'block';
+  document.getElementById('toolbar').style.display = 'flex';
+
+  renderSidebar(evalId);
+  renderMain(evalId);
+}
+
+function renderSidebar(evalId) {
+  const ev = EVALS_DATA.find(e => e.id === evalId);
+  const ws = ev.results.with_skill;
+  const wo = ev.results.without_skill;
+
+  let html = `<div class="checks-title">Prompt</div>
+    <p style="font-size:12px;color:#8b949e;margin-bottom:16px;font-family:monospace;">${ev.prompt}</p>`;
+
+  // Comparison stats
+  html += `<div class="comparison">
+    <h3>Comparison</h3>
+    <div class="comp-row"><span class="comp-label">Score (skill)</span><span class="comp-val">${ws.score}</span></div>
+    <div class="comp-row"><span class="comp-label">Score (baseline)</span><span class="comp-val">${wo.score}</span></div>
+    <div class="comp-row"><span class="comp-label">Words (skill)</span><span class="comp-val">${ws.word_count}</span></div>
+    <div class="comp-row"><span class="comp-label">Words (baseline)</span><span class="comp-val">${wo.word_count}</span></div>
+  </div>`;
+
+  // Checks for with_skill
+  html += `<div class="checks-title" style="margin-top:16px;">With Skill Checks</div>`;
+  ws.checks.forEach(c => {
+    const cls = c.passed ? 'check-pass' : 'check-fail';
+    const icon = c.passed ? '&#10003;' : '&#10007;';
+    html += `<div class="check-row">
+      <div class="check-icon ${cls}">${icon}</div>
+      <div><div class="check-label">${c.check}</div><div class="check-detail">${c.detail}</div></div>
+    </div>`;
+  });
+
+  // Checks for without_skill
+  html += `<div class="checks-title" style="margin-top:16px;">Without Skill Checks</div>`;
+  wo.checks.forEach(c => {
+    const cls = c.passed ? 'check-pass' : 'check-fail';
+    const icon = c.passed ? '&#10003;' : '&#10007;';
+    html += `<div class="check-row">
+      <div class="check-icon ${cls}">${icon}</div>
+      <div><div class="check-label">${c.check}</div><div class="check-detail">${c.detail}</div></div>
+    </div>`;
+  });
+
+  document.getElementById('sidebar').innerHTML = html;
+}
+
+function renderMain(evalId) {
+  const mainEl = document.getElementById('main-content');
+  const skillMd = RAW[evalId]["with_skill"];
+  const baseMd = RAW[evalId]["without_skill"];
+
+  if (currentView === 'side') {
+    mainEl.innerHTML = `<div class="side-by-side">
+      <div class="side-panel skill">
+        <div class="panel-header skill">With Skill</div>
+        <div class="debate-content">${md(skillMd)}</div>
+      </div>
+      <div class="side-panel baseline">
+        <div class="panel-header baseline">Without Skill</div>
+        <div class="debate-content">${md(baseMd)}</div>
+      </div>
+    </div>`;
+  } else if (currentView === 'skill') {
+    mainEl.innerHTML = `<div class="debate-content">${md(skillMd)}</div>`;
+  } else {
+    mainEl.innerHTML = `<div class="debate-content">${md(baseMd)}</div>`;
+  }
+}
+
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (currentTab !== 'overview') renderMain(currentTab);
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,431 @@
+[
+  {
+    "eval_id": "nuclear-energy",
+    "results": {
+      "with_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has exactly 3 '## Round' headers",
+            "passed": true,
+            "detail": "found 3, expected 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each round has Defender and Skeptic sections",
+            "passed": true,
+            "detail": "both roles found"
+          },
+          {
+            "id": "S3",
+            "check": "Has '## Verdict' section",
+            "passed": true,
+            "detail": "found"
+          },
+          {
+            "id": "S4",
+            "check": "Verdict has strongest arguments summary",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S5",
+            "check": "Verdict has points of agreement",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S6",
+            "check": "Verdict has unresolved tensions",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S7",
+            "check": "Verdict has confidence score 1-10",
+            "passed": true,
+            "detail": "score found"
+          },
+          {
+            "id": "S8",
+            "check": "At least 2 inline links/sources cited",
+            "passed": true,
+            "detail": "found 34 links, need >= 2"
+          },
+          {
+            "id": "S9",
+            "check": "Round 1 defines terms or establishes core positions",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S10",
+            "check": "Final round has no new arguments (only rebuttals/synthesis)",
+            "passed": true,
+            "detail": "requires human review"
+          }
+        ],
+        "pass": 10,
+        "fail": 0,
+        "total": 10,
+        "score": "10/10",
+        "word_count": 2733
+      },
+      "without_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has exactly 3 '## Round' headers",
+            "passed": true,
+            "detail": "found 3, expected 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each round has Defender and Skeptic sections",
+            "passed": true,
+            "detail": "both roles found"
+          },
+          {
+            "id": "S3",
+            "check": "Has '## Verdict' section",
+            "passed": true,
+            "detail": "found"
+          },
+          {
+            "id": "S4",
+            "check": "Verdict has strongest arguments summary",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S5",
+            "check": "Verdict has points of agreement",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S6",
+            "check": "Verdict has unresolved tensions",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S7",
+            "check": "Verdict has confidence score 1-10",
+            "passed": true,
+            "detail": "score found"
+          },
+          {
+            "id": "S8",
+            "check": "At least 2 inline links/sources cited",
+            "passed": true,
+            "detail": "found 30 links, need >= 2"
+          },
+          {
+            "id": "S9",
+            "check": "Round 1 defines terms or establishes core positions",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S10",
+            "check": "Final round has no new arguments (only rebuttals/synthesis)",
+            "passed": true,
+            "detail": "requires human review"
+          }
+        ],
+        "pass": 10,
+        "fail": 0,
+        "total": 10,
+        "score": "10/10",
+        "word_count": 2314
+      }
+    }
+  },
+  {
+    "eval_id": "remote-work-ru",
+    "results": {
+      "with_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has exactly 3 '\u0420\u0430\u0443\u043d\u0434' headers",
+            "passed": true,
+            "detail": "found 3, expected 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each round has \u0417\u0430\u0449\u0438\u0442\u043d\u0438\u043a and \u0421\u043a\u0435\u043f\u0442\u0438\u043a sections",
+            "passed": true,
+            "detail": "both roles found"
+          },
+          {
+            "id": "S3",
+            "check": "Has '\u0412\u0435\u0440\u0434\u0438\u043a\u0442' section",
+            "passed": true,
+            "detail": "found"
+          },
+          {
+            "id": "S4",
+            "check": "Verdict has strongest arguments summary",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S5",
+            "check": "Verdict has points of agreement",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S6",
+            "check": "Verdict has unresolved tensions",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S7",
+            "check": "Verdict has confidence score 1-10",
+            "passed": true,
+            "detail": "score found"
+          },
+          {
+            "id": "S8",
+            "check": "At least 2 inline links/sources cited",
+            "passed": true,
+            "detail": "found 12 links, need >= 2"
+          },
+          {
+            "id": "S9",
+            "check": "Round 1 defines terms",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S10",
+            "check": "Final round synthesis only",
+            "passed": true,
+            "detail": "requires human review"
+          }
+        ],
+        "pass": 10,
+        "fail": 0,
+        "total": 10,
+        "score": "10/10",
+        "word_count": 1330
+      },
+      "without_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has exactly 3 '\u0420\u0430\u0443\u043d\u0434' headers",
+            "passed": true,
+            "detail": "found 3, expected 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each round has \u0417\u0430\u0449\u0438\u0442\u043d\u0438\u043a and \u0421\u043a\u0435\u043f\u0442\u0438\u043a sections",
+            "passed": true,
+            "detail": "both roles found"
+          },
+          {
+            "id": "S3",
+            "check": "Has '\u0412\u0435\u0440\u0434\u0438\u043a\u0442' section",
+            "passed": true,
+            "detail": "found"
+          },
+          {
+            "id": "S4",
+            "check": "Verdict has strongest arguments summary",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S5",
+            "check": "Verdict has points of agreement",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S6",
+            "check": "Verdict has unresolved tensions",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S7",
+            "check": "Verdict has confidence score 1-10",
+            "passed": true,
+            "detail": "score found"
+          },
+          {
+            "id": "S8",
+            "check": "At least 2 inline links/sources cited",
+            "passed": true,
+            "detail": "found 22 links, need >= 2"
+          },
+          {
+            "id": "S9",
+            "check": "Round 1 defines terms",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S10",
+            "check": "Final round synthesis only",
+            "passed": true,
+            "detail": "requires human review"
+          }
+        ],
+        "pass": 10,
+        "fail": 0,
+        "total": 10,
+        "score": "10/10",
+        "word_count": 1532
+      }
+    }
+  },
+  {
+    "eval_id": "exercise-mental-health",
+    "results": {
+      "with_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has fewer than 5 '## Round' headers (early stop)",
+            "passed": true,
+            "detail": "found 3, expected < 4"
+          },
+          {
+            "id": "S2",
+            "check": "Each round has Defender and Skeptic sections",
+            "passed": true,
+            "detail": "both roles found"
+          },
+          {
+            "id": "S3",
+            "check": "Has '## Verdict' section",
+            "passed": true,
+            "detail": "found"
+          },
+          {
+            "id": "S4",
+            "check": "Verdict has strongest arguments summary",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S5",
+            "check": "Verdict has points of agreement",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S6",
+            "check": "Verdict has unresolved tensions",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S7",
+            "check": "Verdict has confidence score 1-10",
+            "passed": true,
+            "detail": "score found"
+          },
+          {
+            "id": "S8",
+            "check": "At least 2 inline links/sources cited",
+            "passed": true,
+            "detail": "found 17 links, need >= 2"
+          },
+          {
+            "id": "S9",
+            "check": "Round 1 defines terms",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S10",
+            "check": "Final round synthesis only",
+            "passed": true,
+            "detail": "requires human review"
+          }
+        ],
+        "pass": 10,
+        "fail": 0,
+        "total": 10,
+        "score": "10/10",
+        "word_count": 1708
+      },
+      "without_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has fewer than 5 '## Round' headers (early stop)",
+            "passed": false,
+            "detail": "found 4, expected < 4"
+          },
+          {
+            "id": "S2",
+            "check": "Each round has Defender and Skeptic sections",
+            "passed": true,
+            "detail": "both roles found"
+          },
+          {
+            "id": "S3",
+            "check": "Has '## Verdict' section",
+            "passed": true,
+            "detail": "found"
+          },
+          {
+            "id": "S4",
+            "check": "Verdict has strongest arguments summary",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S5",
+            "check": "Verdict has points of agreement",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S6",
+            "check": "Verdict has unresolved tensions",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S7",
+            "check": "Verdict has confidence score 1-10",
+            "passed": true,
+            "detail": "score found"
+          },
+          {
+            "id": "S8",
+            "check": "At least 2 inline links/sources cited",
+            "passed": true,
+            "detail": "found 19 links, need >= 2"
+          },
+          {
+            "id": "S9",
+            "check": "Round 1 defines terms",
+            "passed": true,
+            "detail": "requires human review"
+          },
+          {
+            "id": "S10",
+            "check": "Final round synthesis only",
+            "passed": true,
+            "detail": "requires human review"
+          }
+        ],
+        "pass": 9,
+        "fail": 1,
+        "total": 10,
+        "score": "9/10",
+        "word_count": 1584
+      }
+    }
+  }
+]

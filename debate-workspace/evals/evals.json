@@ -1,0 +1,79 @@
+{
+  "evals": [
+    {
+      "id": "nuclear-energy",
+      "prompt_with_skill": "/debate Nuclear energy is the best path to decarbonization rounds=3",
+      "prompt_without_skill": "Debate: Nuclear energy is the best path to decarbonization. Present 3 rounds of structured debate with a Defender and Skeptic, then give a verdict.",
+      "language": "en",
+      "rounds": 3,
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has exactly 3 '## Round' headers", "type": "count", "pattern": "## Round", "expected": 3 },
+          { "id": "S2", "check": "Each round has Defender and Skeptic sections", "type": "role_presence" },
+          { "id": "S3", "check": "Has '## Verdict' section", "type": "contains", "pattern": "## Verdict" },
+          { "id": "S4", "check": "Verdict has strongest arguments summary", "type": "verdict_section", "section": "strongest_arguments" },
+          { "id": "S5", "check": "Verdict has points of agreement", "type": "verdict_section", "section": "agreement" },
+          { "id": "S6", "check": "Verdict has unresolved tensions", "type": "verdict_section", "section": "unresolved" },
+          { "id": "S7", "check": "Verdict has confidence score 1-10", "type": "confidence_score" },
+          { "id": "S8", "check": "At least 2 inline links/sources cited", "type": "min_links", "expected": 2 },
+          { "id": "S9", "check": "Round 1 defines terms or establishes core positions", "type": "round1_terms" },
+          { "id": "S10", "check": "Final round has no new arguments (only rebuttals/synthesis)", "type": "final_round_synthesis" }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Skeptic targets strongest claims, not strawmen", "type": "human_review" },
+          { "id": "E2", "check": "Evidence is empirical (studies, data, reports)", "type": "human_review" }
+        ]
+      }
+    },
+    {
+      "id": "remote-work-ru",
+      "prompt_with_skill": "/debate Удалённая работа лучше офисной для продуктивности rounds=3",
+      "prompt_without_skill": "Проведи дебаты: Удалённая работа лучше офисной для продуктивности. 3 раунда со структурированными аргументами Защитника и Скептика, затем вердикт.",
+      "language": "ru",
+      "rounds": 3,
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has exactly 3 'Раунд' headers", "type": "count", "pattern": "## Раунд", "expected": 3 },
+          { "id": "S2", "check": "Each round has Защитник and Скептик sections", "type": "role_presence" },
+          { "id": "S3", "check": "Has 'Вердикт' section", "type": "contains", "pattern": "## Вердикт" },
+          { "id": "S4", "check": "Verdict has strongest arguments summary", "type": "verdict_section", "section": "strongest_arguments" },
+          { "id": "S5", "check": "Verdict has points of agreement", "type": "verdict_section", "section": "agreement" },
+          { "id": "S6", "check": "Verdict has unresolved tensions", "type": "verdict_section", "section": "unresolved" },
+          { "id": "S7", "check": "Verdict has confidence score 1-10", "type": "confidence_score" },
+          { "id": "S8", "check": "At least 2 inline links/sources cited", "type": "min_links", "expected": 2 },
+          { "id": "S9", "check": "Round 1 defines terms", "type": "round1_terms" },
+          { "id": "S10", "check": "Final round synthesis only", "type": "final_round_synthesis" }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Russian language used throughout (not mixed with English)", "type": "human_review" },
+          { "id": "E2", "check": "Progression across rounds (not repetitive)", "type": "human_review" }
+        ]
+      }
+    },
+    {
+      "id": "exercise-mental-health",
+      "prompt_with_skill": "/debate Exercise improves mental health rounds=5",
+      "prompt_without_skill": "Debate: Exercise improves mental health. Present up to 5 rounds of structured debate with a Defender and Skeptic. Stop early if consensus is reached. Then give a verdict.",
+      "language": "en",
+      "rounds": 5,
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has fewer than 5 '## Round' headers (early stop)", "type": "count_max", "pattern": "## Round", "expected_max": 4 },
+          { "id": "S2", "check": "Each round has Defender and Skeptic sections", "type": "role_presence" },
+          { "id": "S3", "check": "Has '## Verdict' section", "type": "contains", "pattern": "## Verdict" },
+          { "id": "S4", "check": "Verdict has strongest arguments summary", "type": "verdict_section", "section": "strongest_arguments" },
+          { "id": "S5", "check": "Verdict has points of agreement", "type": "verdict_section", "section": "agreement" },
+          { "id": "S6", "check": "Verdict has unresolved tensions", "type": "verdict_section", "section": "unresolved" },
+          { "id": "S7", "check": "Verdict has confidence score 1-10", "type": "confidence_score" },
+          { "id": "S8", "check": "At least 2 inline links/sources cited", "type": "min_links", "expected": 2 },
+          { "id": "S9", "check": "Round 1 defines terms", "type": "round1_terms" },
+          { "id": "S10", "check": "Final round synthesis only", "type": "final_round_synthesis" }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Early stop triggered (fewer than 5 rounds)", "type": "early_stop" },
+          { "id": "E2", "check": "Skeptic finds substantive nuance (not just agreeing)", "type": "human_review" }
+        ]
+      }
+    }
+  ]
+}

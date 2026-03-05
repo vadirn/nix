@@ -1,6 +1,6 @@
 ---
 name: debate
-description: Structured debate exploring a topic through Defender/Skeptic roles. Use when user invokes /debate or wants to analyze a claim from multiple angles with systematic argumentation.
+description: Structured debate exploring a topic through Defender/Skeptic roles. Use when user invokes /debate or wants to analyze a claim from multiple angles with systematic argumentation. Also use when the user asks for pros and cons, devil's advocate, "argue both sides", steelman/steelman, "is X really better than Y", "convince me", or "arguments for and against".
 ---
 
 # Debate
