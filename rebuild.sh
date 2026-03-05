@@ -6,6 +6,7 @@ sudo darwin-rebuild switch --flake ~/nix
 echo "Installing Claude plugins..."
 claude plugin install typescript-lsp
 claude plugin install firecrawl@claude-plugins-official
+claude plugin install skill-creator@claude-plugins-official
 
 echo "Installing global npm packages..."
 npm install -g @playwright/cli@latest

@@ -1,5 +1,5 @@
 .DS_Store
-plans/
+__pycache__/
 .claude-plans/
 .firecrawl/
 .claude/skills/nix
