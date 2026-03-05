@@ -5,8 +5,8 @@ import re
 import sys
 from pathlib import Path
 
-WORKSPACE = Path(__file__).parent
-EVALS_FILE = WORKSPACE / "evals" / "evals.json"
+EVALS_DIR = Path(__file__).parent
+EVALS_FILE = EVALS_DIR / "evals.json"
 
 
 def count_pattern(text: str, pattern: str) -> int:
@@ -51,7 +51,7 @@ def grade_eval(eval_cfg: dict, iteration: str = "iteration-1") -> dict:
     results = {}
 
     for variant in ["with_skill", "without_skill"]:
-        output_file = WORKSPACE / iteration / eval_id / variant / "outputs" / "debate.md"
+        output_file = EVALS_DIR / iteration / eval_id / variant / "outputs" / "debate.md"
         if not output_file.exists():
             results[variant] = {"error": f"File not found: {output_file}", "pass": 0, "fail": 0, "total": 0}
             continue
@@ -153,7 +153,7 @@ def main():
         print(f"  {r['eval_id']}: skill={ws_score}/{ws_total} baseline={wo_score}/{wo_total} delta={sign}{delta} | words: skill={ws_words} baseline={wo_words}")
 
     # Save JSON
-    out_path = WORKSPACE / "evals" / "results.json"
+    out_path = EVALS_DIR / "results.json"
     with open(out_path, "w") as f:
         json.dump(all_results, f, indent=2)
     print(f"\nDetailed results saved to {out_path}")
