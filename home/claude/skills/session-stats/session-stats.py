@@ -157,24 +157,52 @@ def find_latest_session(cwd: str) -> Path | None:
     return max(jsonl_files, key=lambda p: p.stat().st_mtime)
 
 
+def format_table(result: dict) -> str:
+    labels = {
+        "cost_usd": ("Cost", lambda v: f"${v:.2f}" if v is not None else "unknown"),
+        "api_turns": ("API turns", str),
+        "turns_to_edit": ("Turns to first edit", lambda v: str(v) if v else "none"),
+        "lines_written": ("Lines written", lambda v: f"{v:,}"),
+        "duration_min": ("Duration", lambda v: f"{v} min" if v else "unknown"),
+        "output_tokens": ("Output tokens", lambda v: f"{v:,}"),
+        "peak_context": ("Peak context", lambda v: f"{v:,} tokens"),
+        "model": ("Model", str),
+    }
+    lines = []
+    lines.append(f"| Metric | Value |")
+    lines.append(f"|--------|-------|")
+    for key, (label, fmt) in labels.items():
+        val = result.get(key)
+        lines.append(f"| {label} | {fmt(val)} |")
+    return "\n".join(lines)
+
+
 def main():
-    if len(sys.argv) < 2:
+    args = sys.argv[1:]
+    fmt = "json"
+    if "--format" in args:
+        idx = args.index("--format")
+        if idx + 1 < len(args):
+            fmt = args[idx + 1]
+            args = args[:idx] + args[idx + 2:]
+
+    if not args:
         print(
-            f"Usage: {sys.argv[0]} [--latest] <session.jsonl> [session2.jsonl ...]",
+            f"Usage: {sys.argv[0]} [--format table|json] [--latest] <session.jsonl> [...]",
             file=sys.stderr,
         )
         sys.exit(1)
 
     paths = []
-    if sys.argv[1] == "--latest":
-        cwd = sys.argv[2] if len(sys.argv) > 2 else os.getcwd()
+    if args[0] == "--latest":
+        cwd = args[1] if len(args) > 1 else os.getcwd()
         latest = find_latest_session(cwd)
         if latest is None:
             print(f"No sessions found for {cwd}", file=sys.stderr)
             sys.exit(1)
         paths = [latest]
     else:
-        for arg in sys.argv[1:]:
+        for arg in args:
             p = Path(arg)
             if not p.exists():
                 print(f"Not found: {arg}", file=sys.stderr)
@@ -190,13 +218,21 @@ def main():
             continue
         results.append(r)
 
-    if len(results) == 1:
-        json.dump(results[0], sys.stdout, indent=2)
-    elif results:
-        json.dump(results, sys.stdout, indent=2)
-    else:
+    if not results:
         print("{}")
-    print()
+        print()
+        return
+
+    if fmt == "table":
+        for r in results:
+            print(format_table(r))
+            print()
+    elif len(results) == 1:
+        json.dump(results[0], sys.stdout, indent=2)
+        print()
+    else:
+        json.dump(results, sys.stdout, indent=2)
+        print()
 
 
 if __name__ == "__main__":

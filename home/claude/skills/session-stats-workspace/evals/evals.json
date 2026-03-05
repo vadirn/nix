@@ -1,0 +1,23 @@
+{
+  "skill_name": "session-stats",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "how much has this session cost me so far?",
+      "expected_output": "A formatted display of session cost and related metrics",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "show me session stats -- lines written, turns, cost, everything",
+      "expected_output": "A comprehensive formatted table of all session metrics",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I feel like I've been going back and forth too much. How many API turns have there been and when did I start actually editing code?",
+      "expected_output": "Focused display of turns-to-edit and API turns metrics with context",
+      "files": []
+    }
+  ]
+}
