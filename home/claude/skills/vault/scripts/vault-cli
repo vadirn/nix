@@ -2,6 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+QMD="bunx @tobilu/qmd"
+QMD_MARKER="$HOME/.cache/qmd/.vault-ready"
 VAULT_ROOT=""
 PROJECT_NAME=""
 PROJECT_TITLE=""
@@ -34,6 +36,17 @@ resolve_config() {
 
   # Final fallback
   VAULT_ROOT="$HOME/Documents/vault"
+}
+
+# --- Helpers ---
+
+ensure_collection() {
+  [[ -f "$QMD_MARKER" ]] && return
+  $QMD collection add "$VAULT_ROOT" --name vault --mask "**/*.md" >&2 2>/dev/null || true
+  $QMD update >&2
+  $QMD embed >&2
+  mkdir -p "$(dirname "$QMD_MARKER")"
+  touch "$QMD_MARKER"
 }
 
 # --- Subcommands ---
@@ -84,9 +97,16 @@ cmd_search() {
     echo "Usage: vault-cli search <query> [-n N]" >&2
     exit 1
   fi
+  ensure_collection
   local query="$1"
   shift
-  bunx @tobilu/qmd query "$query" -c vault "$@"
+  $QMD query "$query" -c vault "$@"
+}
+
+cmd_update() {
+  ensure_collection
+  $QMD update
+  $QMD embed
 }
 
 cmd_projects() {
@@ -191,15 +211,17 @@ case "${1:-}" in
   context)     cmd_context ;;
   checkpoints) shift; cmd_checkpoints "$@" ;;
   search)      shift; cmd_search "$@" ;;
+  update)      cmd_update ;;
   projects)    cmd_projects ;;
   cards)       cmd_cards ;;
   *)
-    echo "Usage: vault-cli {config|context|checkpoints|search|projects|cards}" >&2
+    echo "Usage: vault-cli {config|context|checkpoints|search|update|projects|cards}" >&2
     echo "" >&2
     echo "  config                  Print resolved config JSON" >&2
     echo "  context                 Print project context.md" >&2
     echo "  checkpoints [view]      Query project checkpoints (All|Incomplete|Done|Stats)" >&2
     echo "  search <query> [-n N]   Search vault via qmd" >&2
+    echo "  update                  Re-index and re-embed vault collection" >&2
     echo "  projects                List active projects" >&2
     echo "  cards                   List all cards with metadata" >&2
     exit 1

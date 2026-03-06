@@ -93,5 +93,6 @@ The CLI script lives at `dir/scripts/vault-cli`. Subcommands:
 | `context`               | Print project context.md                      | Yes             |
 | `checkpoints [view]`    | Query checkpoints (All/Incomplete/Done/Stats) | Yes             |
 | `search <query> [-n N]` | Hybrid search via qmd                         | No              |
+| `update`                | Re-index and re-embed vault collection        | No              |
 | `projects`              | List active projects                          | No              |
 | `cards`                 | List all cards with metadata                  | No              |
