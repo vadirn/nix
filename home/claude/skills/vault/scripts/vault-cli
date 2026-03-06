@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VAULT_ROOT=""
+PROJECT_NAME=""
+PROJECT_TITLE=""
+PROJECT_PATH=""
+
+# --- Config resolution ---
+
+resolve_config() {
+  local dir="$PWD"
+
+  # Walk up from cwd looking for .claude/.vault.config.json
+  while [[ "$dir" != "/" ]]; do
+    local cfg="$dir/.claude/.vault.config.json"
+    if [[ -f "$cfg" ]]; then
+      VAULT_ROOT=$(jq -r '.vault_root' "$cfg")
+      PROJECT_NAME=$(jq -r '.project.name // empty' "$cfg")
+      PROJECT_TITLE=$(jq -r '.project.title // empty' "$cfg")
+      PROJECT_PATH=$(jq -r '.project.path // empty' "$cfg")
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+
+  # Try obsidian CLI
+  local vaults
+  if vaults=$(timeout 10 obsidian vaults verbose 2>/dev/null); then
+    VAULT_ROOT=$(echo "$vaults" | head -1 | awk '{print $NF}')
+    [[ -n "$VAULT_ROOT" ]] && return
+  fi
+
+  # Final fallback
+  VAULT_ROOT="$HOME/Documents/vault"
+}
+
+# --- Subcommands ---
+
+cmd_config() {
+  local json="{\"vault_root\":\"$VAULT_ROOT\""
+  if [[ -n "$PROJECT_NAME" ]]; then
+    json+=",\"project\":{\"name\":\"$PROJECT_NAME\",\"title\":\"$PROJECT_TITLE\",\"path\":\"$PROJECT_PATH\"}"
+  fi
+  json+="}"
+  echo "$json" | jq .
+}
+
+cmd_context() {
+  if [[ -z "$PROJECT_PATH" ]]; then
+    echo "Error: no project config found (.claude/.vault.config.json)" >&2
+    exit 1
+  fi
+  cat "$VAULT_ROOT/$PROJECT_PATH/context.md"
+}
+
+cmd_checkpoints() {
+  if [[ -z "$PROJECT_PATH" ]]; then
+    echo "Error: no project config found (.claude/.vault.config.json)" >&2
+    exit 1
+  fi
+
+  local view="${1:-All}"
+  local base_path="$PROJECT_PATH/Checkpoints.base"
+
+  # Try obsidian base:query
+  if timeout 30 obsidian base:query path="$base_path" view="$view" 2>/dev/null; then
+    return
+  fi
+
+  # Fallback: grep checkpoint files
+  echo "# Fallback: file-based checkpoint listing" >&2
+  local pattern="$VAULT_ROOT/$PROJECT_PATH/checkpoint-*.md"
+  case "$view" in
+    Incomplete) grep -l "done: false" $pattern 2>/dev/null || true ;;
+    Done)       grep -l "done: true" $pattern 2>/dev/null || true ;;
+    *)          ls $pattern 2>/dev/null || true ;;
+  esac
+}
+
+cmd_search() {
+  if [[ $# -lt 1 ]]; then
+    echo "Usage: vault-cli search <query> [-n N]" >&2
+    exit 1
+  fi
+  local query="$1"
+  shift
+  bunx @tobilu/qmd query "$query" -c vault "$@"
+}
+
+cmd_projects() {
+  # Try obsidian base:query
+  if timeout 30 obsidian base:query path="90 bases/Projects.base" view="Активные проекты" 2>/dev/null; then
+    return
+  fi
+
+  # Fallback: find project notes
+  echo "# Fallback: file-based project listing" >&2
+  find "$VAULT_ROOT/41 projects" -maxdepth 2 -name '*.md' -not -name 'checkpoint-*' -not -name 'context.md' -not -name 'SKILL.md' -not -name 'start.md' -not -name 'save.md' | sort
+}
+
+cmd_cards() {
+  local cards_dir="$VAULT_ROOT/20 cards"
+
+  get_field() {
+    local field="$1"
+    local fm="$2"
+    local val
+    val=$(printf '%s\n' "$fm" | sed -n "s/^${field}: *//p" | head -1)
+    if [[ -n "$val" ]]; then
+      printf '%s' "$val"
+      return
+    fi
+    local in_field=false
+    local items=""
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^${field}:[[:space:]]*$ ]]; then
+        in_field=true
+        continue
+      fi
+      if $in_field; then
+        if [[ "$line" =~ ^[[:space:]]+-[[:space:]]+(.*) ]]; then
+          [[ -n "$items" ]] && items="$items, "
+          items="${items}${BASH_REMATCH[1]}"
+        else
+          break
+        fi
+      fi
+    done <<< "$fm"
+    printf '%s' "$items"
+  }
+
+  strip_wikilinks() {
+    local s="$1"
+    s="${s//\"/}"
+    while [[ "$s" =~ \[\[([^]|]*)\|([^]]*)\]\] ]]; do
+      s="${s//"${BASH_REMATCH[0]}"/"${BASH_REMATCH[2]}"}"
+    done
+    while [[ "$s" =~ \[\[([^]]*)\]\] ]]; do
+      s="${s//"${BASH_REMATCH[0]}"/"${BASH_REMATCH[1]}"}"
+    done
+    printf '%s' "$s"
+  }
+
+  strip_brackets() {
+    local s="$1"
+    s="${s#\[}"
+    s="${s%\]}"
+    printf '%s' "$s"
+  }
+
+  find "$cards_dir" -name '*.md' -type f | sort | while IFS= read -r file; do
+    title="$(basename "$file" .md)"
+    fm=""
+    in_fm=false
+    while IFS= read -r line; do
+      if [[ "$line" == "---" ]]; then
+        if $in_fm; then break; fi
+        in_fm=true
+        continue
+      fi
+      if $in_fm; then
+        fm+="$line"$'\n'
+      fi
+    done < "$file"
+
+    [[ -z "$fm" ]] && continue
+
+    desc=$(get_field "description" "$fm")
+    tags=$(get_field "tags" "$fm")
+    tags=$(strip_brackets "$tags")
+    ref=$(get_field "reference" "$fm")
+    ref=$(strip_wikilinks "$ref")
+
+    line="$title"
+    [[ -n "$desc" ]] && line="$line — $desc"
+    [[ -n "$tags" ]] && line="$line [$tags]"
+    [[ -n "$ref" ]] && line="$line (ref: $ref)"
+
+    printf '%s\n' "$line"
+  done
+}
+
+# --- Main ---
+
+resolve_config
+
+case "${1:-}" in
+  config)      cmd_config ;;
+  context)     cmd_context ;;
+  checkpoints) shift; cmd_checkpoints "$@" ;;
+  search)      shift; cmd_search "$@" ;;
+  projects)    cmd_projects ;;
+  cards)       cmd_cards ;;
+  *)
+    echo "Usage: vault-cli {config|context|checkpoints|search|projects|cards}" >&2
+    echo "" >&2
+    echo "  config                  Print resolved config JSON" >&2
+    echo "  context                 Print project context.md" >&2
+    echo "  checkpoints [view]      Query project checkpoints (All|Incomplete|Done|Stats)" >&2
+    echo "  search <query> [-n N]   Search vault via qmd" >&2
+    echo "  projects                List active projects" >&2
+    echo "  cards                   List all cards with metadata" >&2
+    exit 1
+    ;;
+esac
