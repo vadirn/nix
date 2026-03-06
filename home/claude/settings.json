@@ -43,13 +43,31 @@
       "Bash(obsidian *)",
       "Bash(timeout 30 obsidian *)",
       "Skill(obsidian-cli)",
-      "Skill(q)",
+
       "Skill(session-stats)",
+      "Skill(vault)",
+      "Bash(vault-cli *)",
+      "Bash(/Users/vadim/.claude/skills/vault/scripts/vault-cli *)",
       "Bash(python3 /Users/vadim/.claude/skills/session-stats/session-stats.py *)",
       "Bash(/Users/vadim/.claude/skills/session-stats/session-stats.py *)",
       "Bash(bunx @tobilu/qmd *)",
       "Bash(ls *)",
       "Bash(date *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(which *)",
+      "Bash(file *)",
+      "Bash(readlink *)",
+      "Bash(jq *)",
+      "Bash(base64 *)",
+      "Bash(ps *)",
+      "Bash(stat *)",
+      "Skill(tool-stats)",
+      "Bash(python3 /Users/vadim/.claude/skills/tool-stats/tool-stats.py *)",
       "Read(/Users/vadim/.claude/skills/**)"
     ],
     "deny": [
@@ -152,6 +170,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/no-git-c.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/no-secrets.sh"
           }
         ]
       }
