@@ -1,0 +1,82 @@
+[
+  {
+    "query": "I just read this great article about event sourcing, want to save the link somewhere so I can come back to it later — https://martinfowler.com/eaaDev/EventSourcing.html",
+    "should_trigger": true
+  },
+  {
+    "query": "что я знаю про dependency injection? Покажи все заметки на эту тему",
+    "should_trigger": true
+  },
+  {
+    "query": "I watched a talk on YouTube about the impureim sandwich pattern and took some mental notes. Let me distill the key concept into something I can review later",
+    "should_trigger": true
+  },
+  {
+    "query": "I've been thinking about how parse-don't-validate connects to the sandwich pattern — they both push validation to the boundary. Want to write that down as my own observation",
+    "should_trigger": true
+  },
+  {
+    "query": "time to quiz myself, pick a few cards and test my recall on the concepts",
+    "should_trigger": true
+  },
+  {
+    "query": "show me all my cards tagged Тема/Dev, I want to see what I've accumulated so far",
+    "should_trigger": true
+  },
+  {
+    "query": "resuming work on the claude-skills project, show me where I left off and what checkpoints are still open",
+    "should_trigger": true
+  },
+  {
+    "query": "wrapping up for today on this project. Save what we did — we refactored the CLI, fixed the config resolution bug, and still need to add tests",
+    "should_trigger": true
+  },
+  {
+    "query": "find everything in my notes related to functional programming patterns, especially anything about pure functions or side effects",
+    "should_trigger": true
+  },
+  {
+    "query": "which projects am I currently working on? Give me a status overview",
+    "should_trigger": true
+  },
+  {
+    "query": "rename all the .ts files in src/ to use kebab-case instead of camelCase",
+    "should_trigger": false
+  },
+  {
+    "query": "set up a new Next.js project with TypeScript and Tailwind, scaffold the basic folder structure",
+    "should_trigger": false
+  },
+  {
+    "query": "my Obsidian graph view is cluttered, how do I filter out daily notes from the graph? Is there a setting for that?",
+    "should_trigger": false
+  },
+  {
+    "query": "write a Python script that reads a CSV of employee data and generates a summary report with department-level averages",
+    "should_trigger": false
+  },
+  {
+    "query": "I need to create a .base file in Obsidian that shows all notes with status: draft grouped by tag — help me set up the formula",
+    "should_trigger": false
+  },
+  {
+    "query": "debug this React component, it's re-rendering on every keystroke even though I'm using useMemo — here's the code in src/components/SearchBar.tsx",
+    "should_trigger": false
+  },
+  {
+    "query": "search the web for the latest Claude API pricing and compare it to GPT-4o pricing",
+    "should_trigger": false
+  },
+  {
+    "query": "help me write a commit message for these changes — I refactored the auth middleware and added rate limiting",
+    "should_trigger": false
+  },
+  {
+    "query": "add a callout block to my Obsidian note at 30 notes/Meeting.md — use the warning type with a reminder about the deadline",
+    "should_trigger": false
+  },
+  {
+    "query": "I have a markdown file with some wikilinks that are broken, can you check which ones point to files that don't exist?",
+    "should_trigger": false
+  }
+]

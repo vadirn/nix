@@ -1,11 +1,15 @@
 ---
 name: vault
 description: >
-  Universal Obsidian vault skill. Handles search, cards, notes, references, review, projects, and per-project sessions.
-  Use for: /vault search, /vault card, /vault note, /vault reference, /vault review, /vault cards, /vault projects,
-  /vault <project> start, /vault <project> save, /vault <project> <question>.
-  Also triggers on: find in vault, search notes, list cards, create card, create note, create reference,
-  review cards, project status, checkpoint, save session, resume session.
+  Personal knowledge management in an Obsidian vault. Use this skill whenever the user wants to save, find, review,
+  or organize knowledge — even if they don't say "vault" or "Obsidian". Triggers on: saving a link/article/video/book
+  for later (creates a reference in 10 references/), distilling a concept or takeaway from something they read/watched
+  (creates a card in 20 cards/), writing down an original idea, observation, or synthesis connecting multiple concepts
+  (creates a note in 30 notes/), searching or browsing what they know about a topic, quizzing or testing recall on
+  saved concepts, listing or filtering cards by tag, resuming or saving progress on a project, checking project status
+  or open checkpoints. Also handles explicit /vault commands (search, card, note, reference, review, cards, projects,
+  start, save). Do NOT use for: Obsidian app settings/UI questions, editing .base files, creating canvas files,
+  general markdown editing, or web search.
 ---
 
 # Vault
