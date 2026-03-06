@@ -156,6 +156,8 @@ Path: `<repo>/.claude/.vault.config.json`
 }
 ```
 
+After writing, ensure `.claude/.vault.config.json` is in `.gitignore` (it contains absolute paths). Read `.gitignore`, append the line if missing.
+
 ### Writing thin wrapper skill
 
 Path: `<repo>/.claude/skills/<name>/SKILL.md`

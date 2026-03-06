@@ -3,3 +3,4 @@ __pycache__/
 .claude-plans/
 .firecrawl/
 .claude/skills/nix
+.claude/.vault.config.json
