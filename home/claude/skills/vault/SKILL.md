@@ -1,7 +1,7 @@
 ---
 name: vault
 description: >
-  Universal vault skill. Handles search, cards, notes, references, review, projects, and per-project sessions.
+  Universal Obsidian vault skill. Handles search, cards, notes, references, review, projects, and per-project sessions.
   Use for: /vault search, /vault card, /vault note, /vault reference, /vault review, /vault cards, /vault projects,
   /vault <project> start, /vault <project> save, /vault <project> <question>.
   Also triggers on: find in vault, search notes, list cards, create card, create note, create reference,
@@ -10,7 +10,16 @@ description: >
 
 # Vault
 
-Universal skill for Obsidian vault operations.
+Universal Obsidian vault skill.
+
+## Note types
+
+- **reference** — pointer to external source (article, book, video). Raw capture, no analysis. → `10 references/`
+- **card** — distilled atomic concept extracted from a reference. Your understanding in your words. → `20 cards/`
+- **note** — original thinking, free-form. Connects ideas, not tied to a single source. → `30 notes/`
+- **goal** — high-level aspiration with success criteria and plans. → `41 projects/`
+- **project** — concrete deliverable linked to a goal. Has status, deadline, checkpoints. → `41 projects/<project>/`
+- **checkpoint** — session snapshot for a project. Tracks progress, decisions, frictions. → `41 projects/<project>/`
 
 ```
 dir = directory containing this file
