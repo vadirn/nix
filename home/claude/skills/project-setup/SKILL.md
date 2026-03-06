@@ -24,7 +24,7 @@ else:
 
 ## Link command
 
-Links an existing skill folder (one that already has SKILL.md) to the current repo.
+Links an existing vault project folder to the current repo.
 
 ### Pseudocode
 
@@ -33,16 +33,16 @@ link(vault_root):
     path = ask "Vault path?" (e.g. "41 projects/visa-agent")
     target = "<vault_root>/<path>"
 
-    if target/SKILL.md does not exist:
-        error "No SKILL.md found at <target>. Use /project-setup new to create one."
+    if target/context.md does not exist:
+        error "No context.md found at <target>. Use /project-setup new to create one."
         return
 
-    name = infer from SKILL.md frontmatter `name` field
-    if not name:
-        name = last segment of path  // e.g. "visa-agent" from "41 projects/visa-agent"
+    name = last segment of path  // e.g. "visa-agent" from "41 projects/visa-agent"
+    title = infer from context.md heading or ask user
 
-    create_symlink()        // .claude/skills/<name> → target
-    register_in_settings()  // add Skill(<name>) to allow list
+    write_vault_config()    // .claude/.vault.config.json in repo
+    write_thin_wrapper()    // .claude/skills/<name>/SKILL.md in repo
+    register_in_settings()  // add Skill(<name>), Skill(vault), Read, Bash(vault-cli *)
     report linked, suggest /clear
 ```
 
@@ -95,9 +95,10 @@ setup(vault_root):
     mkdir target
     write_project_note()        // from Project.md template
     write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
-    write_skill_files()         // SKILL.md, context.md, start.md, save.md
-    create_symlink()            // .claude/skills/<name> → target
-    register_in_settings()      // add Skill(<name>) to allow list
+    write_context_md()          // context.md only (no SKILL.md, start.md, save.md — vault skill handles routing)
+    write_vault_config()        // .claude/.vault.config.json in repo
+    write_thin_wrapper()        // .claude/skills/<name>/SKILL.md in repo (delegates to /vault)
+    register_in_settings()      // add Skill(<name>), Skill(vault), Read, Bash(vault-cli *)
     report created files, suggest /clear
 ```
 
@@ -134,30 +135,42 @@ Template: `<vault_root>/templates/Project.md`. Fill frontmatter (`result`, `stat
 Path: `<vault_root>/<path>/Checkpoints.base`
 Write via Bash `cat` (oxfmt mangles YAML in `.base` files). See template below.
 
-### Writing skill files
+### Writing context.md
 
-All in `<vault_root>/<path>/`:
+In `<vault_root>/<path>/context.md`. Substitute `<path>`, `<title>`, `<description>`, `<result>`. See context.md template.
 
-- **SKILL.md** (command router): substitute `<name>`, `<title>`. See SKILL.md template.
-- **context.md**: substitute `<path>`, `<title>`, `<description>`, `<result>`. See context.md template.
-- **start.md**: no substitution needed (uses `dir` at runtime). See start.md template.
-- **save.md**: no substitution needed (uses `dir` and context.md at runtime). See save.md template.
+No SKILL.md, start.md, or save.md in the vault project folder. The /vault skill handles routing.
 
-### Creating symlink
+### Writing .vault.config.json
 
-```bash
-mkdir -p .claude/skills
-ln -s "<vault_root>/<path>" ".claude/skills/<name>"
+Path: `<repo>/.claude/.vault.config.json`
+
+```json
+{
+  "vault_root": "<vault_root>",
+  "project": {
+    "name": "<name>",
+    "title": "<title>",
+    "path": "<path>"
+  }
+}
 ```
 
-Absolute path so it works from any repo.
+### Writing thin wrapper skill
+
+Path: `<repo>/.claude/skills/<name>/SKILL.md`
+
+See thin wrapper template below.
 
 ### Registering in settings
 
 Read `.claude/settings.local.json` (user-specific, absolute paths don't belong in shared settings). Add these entries to the `allow` list:
 
 - `Skill(<name>)` — insert alphabetically among existing `Skill(...)` entries
+- `Skill(vault)` — the universal vault skill
 - `Read(<vault_root>/<path>/**)` — allows reading project files and checkpoints from the vault
+- `Bash(vault-cli *)` — allows vault-cli commands
+- `Bash(~/.claude/skills/vault/scripts/vault-cli *)` — full path variant
 
 ## Checkpoints.base template
 
@@ -165,34 +178,22 @@ Substitute `<path>` with the actual vault path before writing. Write via Bash `c
 
 Template: `Read(dir/templates/checkpoints-base.yaml)`. Replace all `<path>` occurrences with the actual vault path.
 
-## SKILL.md template
+## Thin wrapper template
 
-Per-project command router. Substitute `<name>`, `<title>`.
+Per-repo convenience skill at `<repo>/.claude/skills/<name>/SKILL.md`. Substitute `<name>`, `<title>`.
 
 ````markdown
 ---
 name: <name>
-description: "Track <title> project sessions. Use /vault <name> start to resume or /vault <name> save to checkpoint."
+description: "<title> project sessions. Use /<name> start to resume or /<name> save to checkpoint."
 ---
 
-# <title>
+Delegates to /vault.
 
 ```
-dir = directory containing this file
-
-Read(dir/context.md)
-
-if command == "start":
-    Read(dir/start.md)
-    follow procedure
-elif command == "save":
-    Read(dir/save.md)
-    follow procedure
-else:
-    // context.md already loaded above
-    answer the user's question using the project context
-    // if the question involves checkpoints, query them
-    // if the question involves the project note, read it
+config = Read(.claude/.vault.config.json)
+command = user's command after /<name>
+Skill(vault) with "{config.project.name} {command}"
 ```
 ````
 
@@ -220,139 +221,6 @@ Per-project context. Substitute `<path>`, `<title>`, `<description>`, `<result>`
 
 <!-- project-specific conventions -->
 ```
-
-## start.md template
-
-Session start procedure. No substitution needed. Uses `dir` from SKILL.md at runtime.
-
-````markdown
-# Start — resume or begin a session
-
-## Pseudocode
-
-```
-incomplete = query_incomplete_checkpoints()
-
-if incomplete is not empty:
-    selected = AskUserQuestion(incomplete, multiSelect=true)  // include "All" option
-    for each in selected:
-        show "## Progress" and "## Next"
-else:
-    done = query_done_checkpoints()
-    print "All checkpoints done." if done is not empty else "First session."
-
-ask "What to work on?"
-```
-
-## Reference
-
-### Querying checkpoints
-
-`dir` is the directory containing the SKILL.md that invoked this procedure.
-
-Primary (Obsidian running):
-
-```
-timeout 30 obsidian base:query path="{dir}/Checkpoints.base" view="Incomplete"
-```
-
-Empty result = no incomplete checkpoints. Then query Done view to distinguish all-done vs first-session:
-
-```
-timeout 30 obsidian base:query path="{dir}/Checkpoints.base" view="Done"
-```
-
-Non-empty = all done. Empty = first session.
-
-Fallback (Obsidian offline):
-
-```
-Glob: {dir}/checkpoint-*.md
-```
-
-Grep for `done: false` (incomplete) and `done: true` (done).
-
-### Presenting checkpoints
-
-Use `AskUserQuestion` with `multiSelect: true`. Each option label: `description` field (fall back to filename if missing). Include an "All" option.
-
-Read selected checkpoints. Show `## Progress` and `## Next` from each.
-````
-
-## save.md template
-
-Session save procedure. No substitution needed. Uses `dir` and context.md at runtime.
-
-````markdown
-# Save — write a checkpoint
-
-## Pseudocode
-
-```
-stats = session_stats()  // cost_usd, lines_written, turns_to_edit
-checkpoints = query_incomplete_checkpoints()  // same as start.md
-
-for each incomplete checkpoint:
-    ask "does this session resolve it?"
-    if yes:
-        update checkpoint in place (Read, then Write)
-        ask "mark done?"
-
-if new work uncovered by existing checkpoints:
-    create new checkpoint from template
-    fill frontmatter: description, done, project, decisions, frictions, stats
-    fill body: ## Progress, ## Next
-
-graduation = review decisions and frictions
-propose candidates for CLAUDE.md, skills, or vault notes  // let user decide
-
-suggest "/clear"
-```
-
-## Reference
-
-### Session stats
-
-Use the `session-stats` skill. Extract `cost_usd`, `lines_written`, `turns_to_edit` from its output.
-
-### Querying incomplete checkpoints
-
-Same method as `start.md` — see its Reference section.
-
-### Creating a checkpoint
-
-`dir` is the directory containing the SKILL.md that invoked this procedure.
-`project_wikilink` is derived from context.md's `Project note: [[...]]` line.
-
-Path: `{dir}/checkpoint-{UTC timestamp}.md`
-UTC timestamp: `YYYY-MM-DD-HH-mm-ss` (use `date -u +%Y-%m-%d-%H-%M-%S`)
-Template: `{vault_root}/templates/Checkpoint.md` (vault_root from `obsidian vaults verbose`)
-
-Frontmatter:
-
-- `type: checkpoint`
-- `description` — generate from session context, ask user to confirm or edit
-- `done: false` (or `true` if complete)
-- `project` — `project_wikilink` from context.md
-- `decisions: ["chose X because Y"]` — key decisions this session
-- `frictions: ["had to work around Z"]` — friction points encountered
-- `cost_usd`, `lines_written`, `turns_to_edit` — from stats
-
-Body:
-
-- `## Progress` — what happened (concrete changes, files, code state)
-- `## Next` — remaining work across full breadth (all parts, not just current area)
-
-### Graduation candidates
-
-Review session decisions and frictions. Propose which could graduate to:
-
-- `CLAUDE.md` (global or project)
-- Repo skills
-- Vault notes
-
-Present as suggestions. Let the user decide.
-````
 
 ## Notes
 
