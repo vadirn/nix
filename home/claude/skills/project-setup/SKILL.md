@@ -17,7 +17,7 @@ vault_root = discover_vault_root()
 if command == "link":
     link(vault_root)
 elif command == "check-permissions":
-    // handled by generated per-project SKILL.md, not here
+    check_permissions(vault_root)
 else:
     setup(vault_root)  // handles "already exists" via duplicate check
 ```
@@ -44,6 +44,34 @@ link(vault_root):
     create_symlink()        // .claude/skills/<name> → target
     register_in_settings()  // add Skill(<name>) to allow list
     report linked, suggest /clear
+```
+
+## Check-permissions command
+
+Verifies a project skill has the right entries in `.claude/settings.local.json`.
+
+### Pseudocode
+
+```
+check_permissions(vault_root):
+    name = ask "Which project skill?" or infer from context
+    skill_dir = ".claude/skills/<name>"
+    if skill_dir does not exist:
+        error "No skill named <name>. Run /project-setup link first."
+        return
+
+    real_dir = resolve symlinks of skill_dir  // realpath
+    path = relative path of real_dir within vault_root
+
+    settings_file = .claude/settings.local.json
+    Read(settings_file)
+    expected_skill = "Skill(<name>)"
+    expected_read = "Read(<vault_root>/<path>/**)"
+    missing = items from [expected_skill, expected_read] not in allow list
+    if missing:
+        add missing to allow list, report added
+    else:
+        report all present
 ```
 
 ## Setup command (default)
@@ -110,10 +138,10 @@ Write via Bash `cat` (oxfmt mangles YAML in `.base` files). See template below.
 
 All in `<vault_root>/<path>/`:
 
-- **SKILL.md** (command router): substitute `<name>`, `<title>`, `<description>`. See SKILL.md template.
-- **context.md**: substitute `<path>`, `<title>`, `<description>`. See context.md template.
-- **start.md**: substitute `<vault_root>`, `<path>`. See start.md template.
-- **save.md**: substitute `<vault_root>`, `<path>`, `<title>`. See save.md template.
+- **SKILL.md** (command router): substitute `<name>`, `<title>`. See SKILL.md template.
+- **context.md**: substitute `<path>`, `<title>`, `<description>`, `<result>`. See context.md template.
+- **start.md**: no substitution needed (uses `dir` at runtime). See start.md template.
+- **save.md**: no substitution needed (uses `dir` and context.md at runtime). See save.md template.
 
 ### Creating symlink
 
@@ -139,12 +167,12 @@ Template: `Read(dir/templates/checkpoints-base.yaml)`. Replace all `<path>` occu
 
 ## SKILL.md template
 
-Per-project command router. Substitute `<name>`, `<title>`, `<description>`.
+Per-project command router. Substitute `<name>`, `<title>`.
 
 ````markdown
 ---
 name: <name>
-description: <description>
+description: "Track <title> project sessions. Use /vault <name> start to resume or /vault <name> save to checkpoint."
 ---
 
 # <title>
@@ -160,28 +188,17 @@ if command == "start":
 elif command == "save":
     Read(dir/save.md)
     follow procedure
-elif command == "check-permissions":
-    real_dir = resolve symlinks of dir  // realpath
-    vault_root = discover_vault_root()  // timeout 30 obsidian vaults verbose
-    path = relative path of real_dir within vault_root
-    name = skill name from frontmatter
-    settings_file = .claude/settings.local.json  // user-specific, not shared
-    Read(settings_file)
-    expected_skill = "Skill(<name>)"
-    expected_read = "Read(<vault_root>/<path>/**)"
-    missing = items from [expected_skill, expected_read] not in allow list
-    if missing:
-        add missing to allow list, report added
-    else:
-        report all present
 else:
-    use context to navigate the vault
+    // context.md already loaded above
+    answer the user's question using the project context
+    // if the question involves checkpoints, query them
+    // if the question involves the project note, read it
 ```
 ````
 
 ## context.md template
 
-Per-project context. Substitute `<path>`, `<title>`, `<description>`.
+Per-project context. Substitute `<path>`, `<title>`, `<description>`, `<result>`.
 
 ```markdown
 # <title> Context
@@ -191,12 +208,22 @@ Per-project context. Substitute `<path>`, `<title>`, `<description>`.
 - Project note: [[<path>/<title>]]
 - Checkpoints: `<path>/`
 
-<!-- Add context below: tech stack, related cards, conventions -->
+## Result
+
+<result>
+
+## Tech stack
+
+<!-- filled by user or Claude during setup -->
+
+## Conventions
+
+<!-- project-specific conventions -->
 ```
 
 ## start.md template
 
-Session start procedure. Substitute `<vault_root>`, `<path>`.
+Session start procedure. No substitution needed. Uses `dir` from SKILL.md at runtime.
 
 ````markdown
 # Start — resume or begin a session
@@ -221,16 +248,18 @@ ask "What to work on?"
 
 ### Querying checkpoints
 
+`dir` is the directory containing the SKILL.md that invoked this procedure.
+
 Primary (Obsidian running):
 
 ```
-timeout 30 obsidian base:query path="<path>/Checkpoints.base" view="Incomplete"
+timeout 30 obsidian base:query path="{dir}/Checkpoints.base" view="Incomplete"
 ```
 
 Empty result = no incomplete checkpoints. Then query Done view to distinguish all-done vs first-session:
 
 ```
-timeout 30 obsidian base:query path="<path>/Checkpoints.base" view="Done"
+timeout 30 obsidian base:query path="{dir}/Checkpoints.base" view="Done"
 ```
 
 Non-empty = all done. Empty = first session.
@@ -238,7 +267,7 @@ Non-empty = all done. Empty = first session.
 Fallback (Obsidian offline):
 
 ```
-Glob: <vault_root>/<path>/checkpoint-*.md
+Glob: {dir}/checkpoint-*.md
 ```
 
 Grep for `done: false` (incomplete) and `done: true` (done).
@@ -252,7 +281,7 @@ Read selected checkpoints. Show `## Progress` and `## Next` from each.
 
 ## save.md template
 
-Session save procedure. Substitute `<vault_root>`, `<path>`, `<title>`.
+Session save procedure. No substitution needed. Uses `dir` and context.md at runtime.
 
 ````markdown
 # Save — write a checkpoint
@@ -292,16 +321,19 @@ Same method as `start.md` — see its Reference section.
 
 ### Creating a checkpoint
 
-Path: `<vault_root>/<path>/checkpoint-<UTC timestamp>.md`
+`dir` is the directory containing the SKILL.md that invoked this procedure.
+`project_wikilink` is derived from context.md's `Project note: [[...]]` line.
+
+Path: `{dir}/checkpoint-{UTC timestamp}.md`
 UTC timestamp: `YYYY-MM-DD-HH-mm-ss` (use `date -u +%Y-%m-%d-%H-%M-%S`)
-Template: `<vault_root>/templates/Checkpoint.md`
+Template: `{vault_root}/templates/Checkpoint.md` (vault_root from `obsidian vaults verbose`)
 
 Frontmatter:
 
 - `type: checkpoint`
 - `description` — generate from session context, ask user to confirm or edit
 - `done: false` (or `true` if complete)
-- `project: "[[<path>/<title>]]"`
+- `project` — `project_wikilink` from context.md
 - `decisions: ["chose X because Y"]` — key decisions this session
 - `frictions: ["had to work around Z"]` — friction points encountered
 - `cost_usd`, `lines_written`, `turns_to_edit` — from stats
