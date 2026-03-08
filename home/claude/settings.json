@@ -1,8 +1,104 @@
 {
+  "alwaysThinkingEnabled": true,
+  "enableAllProjectMcpServers": true,
+  "enabledPlugins": {
+    "firecrawl@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
+  },
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75",
-    "ENABLE_TOOL_SEARCH": "auto:5",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "ENABLE_TOOL_SEARCH": "auto:5"
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "bash ~/.claude/hooks/sound.sh Notification",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "bash ~/.claude/hooks/sound.sh PostToolUseFailure",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash ~/.claude/hooks/no-git-c.sh",
+            "type": "command"
+          },
+          {
+            "command": "bash ~/.claude/hooks/no-secrets.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash ~/.claude/hooks/sound.sh SessionStart",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "bash ~/.claude/hooks/sound.sh Stop",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "bash ~/.claude/hooks/sound.sh TaskCompleted",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "bash ~/.claude/hooks/sound.sh UserPromptSubmit",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ]
   },
   "includeCoAuthoredBy": false,
   "permissions": {
@@ -38,14 +134,16 @@
       "Bash(gh repo view:*)",
       "Bash(gh run view:*)",
       "Bash(gh run list:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr checks:*)",
       "Bash(firecrawl *)",
       "Bash(playwright-cli *)",
       "Bash(obsidian *)",
       "Bash(timeout 30 obsidian *)",
       "Skill(obsidian-cli)",
-
       "Skill(session-stats)",
       "Skill(vault)",
+      "Skill(pr)",
       "Bash(vault-cli *)",
       "Bash(/Users/vadim/.claude/skills/vault/scripts/vault-cli *)",
       "Bash(python3 /Users/vadim/.claude/skills/session-stats/session-stats.py *)",
@@ -90,106 +188,11 @@
       "Bash(obsidian history:restore *)"
     ]
   },
-  "enableAllProjectMcpServers": true,
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh SessionStart",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh UserPromptSubmit",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh Stop",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh Notification",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
-    "TaskCompleted": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh TaskCompleted",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh PostToolUseFailure",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/no-git-c.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/no-secrets.sh"
-          }
-        ]
-      }
-    ]
-  },
+  "plansDirectory": "./.claude-plans",
   "statusLine": {
-    "type": "command",
-    "command": "bash ~/.claude/statusline.sh"
-  },
-  "enabledPlugins": {
-    "typescript-lsp@claude-plugins-official": true,
-    "firecrawl@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true
+    "command": "bash ~/.claude/statusline.sh",
+    "type": "command"
   },
   "syntaxHighlightingDisabled": false,
-  "alwaysThinkingEnabled": true,
-  "plansDirectory": "./.claude-plans",
   "teammateMode": "tmux"
 }
