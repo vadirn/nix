@@ -42,7 +42,7 @@ link(vault_root):
 
     write_vault_config()    // .claude/.vault.config.json in repo
     write_thin_wrapper()    // .claude/skills/<name>/SKILL.md in repo
-    register_in_settings()  // add Skill(<name>), Skill(vault), Read, Bash(vault-cli *)
+    register_in_settings()  // add Skill(<name>); skip entries already in global settings
     report linked, suggest /clear
 ```
 
@@ -166,12 +166,15 @@ See thin wrapper template below.
 
 ### Registering in settings
 
-Read `.claude/settings.local.json` (user-specific, absolute paths don't belong in shared settings). Add these entries to the `allow` list:
+Read `.claude/settings.local.json` (user-specific, absolute paths don't belong in shared settings). Also read `~/.claude/settings.json` (global). Only add entries that aren't already in the global allow list.
 
-- `Skill(<name>)` — insert alphabetically among existing `Skill(...)` entries
-- `Skill(vault)` — the universal vault skill
-- `Read(<vault_root>/<path>/**)` — allows reading project files and checkpoints from the vault
-- `Bash(vault-cli *)` — allows vault-cli commands
+Typically needed (not in global):
+
+- `Skill(<name>)` — the project-specific skill
+
+Skip if already in global settings:
+
+- `Skill(vault)`, `Bash(vault-cli *)`, `Read` — usually already allowed globally
 
 ## Checkpoints.base template
 
@@ -192,9 +195,8 @@ description: "<title> project sessions. Use /<name> start to resume or /<name> s
 Delegates to /vault.
 
 ```
-config = Read(.claude/.vault.config.json)
 command = user's command after /<name>
-Skill(vault) with "{config.project.name} {command}"
+Skill(vault) with "<name> {command}"
 ```
 ````
 
