@@ -16,97 +16,97 @@ description: >
 
 Universal Obsidian vault skill.
 
-## Note types
-
-- **reference** — pointer to external source (article, book, video). Raw capture, no analysis. → `10 references/`
-- **card** — distilled atomic concept extracted from a reference. Your understanding in your words. → `20 cards/`
-- **note** — original thinking, free-form. Connects ideas, not tied to a single source. → `30 notes/`
-- **goal** — high-level aspiration with success criteria and plans. → `41 projects/`
-- **project** — concrete deliverable linked to a goal. Has status, deadline, checkpoints. → `41 projects/<project>/`
-- **checkpoint** — session snapshot for a project. Tracks progress, decisions, frictions. → `41 projects/<project>/`
-
 ```
 cli = "vault-cli"
+dir = skill base directory
 
-// Parse command: first word after /vault
-command = user's command after /vault
-
-if command starts with "search ":
-    query = everything after "search "
+// Route by command
+if "search <query>":
     results = Bash(cli search <query>)
-    present results with file paths
-    offer to Read top hits
+    do("present results with file paths, offer to Read top hits")
 
-elif command == "card" or command starts with "card ":
+elif "card" or "card <topic>":
     Read(dir/references/card.md)
-    follow card creation/editing process
+    do("follow card creation/editing process")
 
-elif command == "note" or command starts with "note ":
+elif "note" or "note <topic>":
     Read(dir/references/note.md)
-    follow note creation/editing process
+    do("follow note creation/editing process")
 
-elif command == "reference" or command starts with "reference ":
+elif "reference" or "reference <topic>":
     Read(dir/references/reference.md)
-    follow reference creation/editing process
+    do("follow reference creation/editing process")
 
-elif command == "review":
+elif "review":
     Read(dir/references/review.md)
-    follow review process
+    do("follow review process")
 
-elif command == "cards" or command starts with "cards ":
+elif "cards":
     results = Bash(cli cards)
     Read(dir/references/cards.md)
-    follow cards presentation process with results
+    do("follow cards presentation process with results")
 
-elif command == "projects":
+elif "notes":
+    results = Bash(cli notes)
+    do("present notes with metadata")
+
+elif "projects":
     results = Bash(cli projects)
-    present results with status
+    do("present projects with status")
 
-elif command matches "<project> start":
-    project_context = Bash(cli context)  // needs .vault.config.json in cwd
-    Read(dir/references/project-start.md)
-    follow start procedure
-    // use: Bash(cli checkpoints Incomplete) and Bash(cli checkpoints Done)
+// Project commands — load context once
+elif "<project> ...":
+    project_context ??= Bash(cli context)
 
-elif command matches "<project> save":
-    project_context = Bash(cli context)
-    Read(dir/references/project-save.md)
-    follow save procedure
-    // use: Bash(cli checkpoints Incomplete) for queries
-
-elif command matches "<project> ...":
-    project_context = Bash(cli context)
-    answer using project context
-    // if question involves checkpoints: Bash(cli checkpoints)
-    // if question involves search: Bash(cli search <terms>)
-
-elif user mentions a checkpoint by name or date:
-    // e.g. "read checkpoint-2026-03-07-11-42-34", "show me yesterday's checkpoint"
-    file = Glob("41 projects/**/checkpoint-*<fragment>*")
-    if exactly one match:
-        Read(file)
-        summarize: description, progress, open next items
-    elif multiple matches:
-        present list, ask which one
+    if "start":
+        Read(dir/references/project-start.md)
+        do("follow start procedure")
+    elif "save":
+        Read(dir/references/project-save.md)
+        do("follow save procedure")
     else:
-        "Checkpoint not found" — offer to search or list project checkpoints
+        do("answer using project context, checkpoints, or search as needed")
+
+elif user mentions a note/card/reference/checkpoint by name:
+    result = Bash(cli get <fragment>)
+    if single match: do("summarize content")
+    elif multiple matches: AskUserQuestion("which one?")
+    else: do("offer to search")
 
 else:
-    // Generic vault question — use search + context
-    Bash(cli config)  // show what's available
-    help user with their request
+    Bash(cli config)
+    do("help user with their request")
 ```
 
-## vault-cli reference
+## Reference
 
-Subcommands:
+### Note types
 
-| Command                 | Description                                   | Requires config |
-| ----------------------- | --------------------------------------------- | --------------- |
-| `config`                | Print resolved config JSON                    | No              |
-| `context`               | Print project context.md                      | Yes             |
-| `checkpoints [view]`    | Query checkpoints (All/Incomplete/Done/Stats) | Yes             |
-| `search <query> [-n N]` | Hybrid search via qmd                         | No              |
-| `update`                | Re-index and re-embed vault collection        | No              |
-| `projects`              | List active projects                          | No              |
-| `cards`                 | List all cards with metadata                  | No              |
+| Type       | Folder                       | Purpose                                              |
+| ---------- | ---------------------------- | ---------------------------------------------------- |
+| reference  | `10 references/`             | Pointer to external source. Raw capture, no analysis  |
+| card       | `20 cards/`                  | Distilled atomic concept from a reference             |
+| note       | `30 notes/`                  | Original thinking, connects ideas across sources      |
+| goal       | `41 projects/`               | High-level aspiration with success criteria           |
+| project    | `41 projects/<project>/`     | Concrete deliverable linked to a goal                 |
+| checkpoint | `41 projects/<project>/`     | Session snapshot. Tracks progress, decisions, frictions |
+
+### vault-cli subcommands
+
+| Command                 | Description                                    | Requires config |
+| ----------------------- | ---------------------------------------------- | --------------- |
+| `config`                | Print resolved config JSON                     | No              |
+| `context`               | Print project context.md                       | Yes             |
+| `checkpoints [view]`    | Query checkpoints (All/Incomplete/Done/Stats)  | Yes             |
+| `get <fragment>`        | Find and read a note/card/reference/checkpoint | No              |
+| `search <query> [-n N]` | Hybrid search via qmd                          | No              |
+| `update`                | Re-index and re-embed vault collection         | No              |
+| `projects`              | List active projects                           | No              |
+| `cards`                 | List all cards with metadata                   | No              |
+| `notes`                 | List all notes with metadata                   | No              |
+
+### Project commands
+
+`<project> start` and `<project> save` require `.claude/.vault.config.json` in cwd. The start procedure uses `cli checkpoints Incomplete` and `cli checkpoints Done`. The save procedure uses `cli checkpoints Incomplete`.
+
+For generic `<project> <question>`, use `cli checkpoints` or `cli search <terms>` as needed.
