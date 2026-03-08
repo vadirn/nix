@@ -8,37 +8,35 @@ description: >
 
 # Image — Gemini Generation & Editing
 
-## Generate
+```
+dir = directory containing this file
+script = dir + "/scripts/generate.py"
+run = "doppler run -p claude-code -c std -- uv run " + script
 
-1. Expand the user's prompt: add style, lighting, composition, colors, mood. Keep under 200 words. Preserve intent.
-2. Run:
-   ```sh
-   doppler run -p claude-code -c std -- uv run ~/.claude/skills/image/scripts/generate.py '<expanded_prompt>' --aspect-ratio <ratio> --size <size>
-   ```
-3. Parse `IMAGE_PATH=<path>` from stdout.
-4. Read the output image to show it.
+if editing existing image:
+    path = resolve image from previous generation, user path, or conversation context
+    output = Bash(<run> '<edit_prompt>' --image '<path>')
+else:
+    expanded = do("expand prompt: add style, lighting, composition, colors, mood. Under 200 words. Preserve intent.")
+    output = Bash(<run> '<expanded>' --aspect-ratio <ratio> --size <size>)
 
-## Edit
+image_path = parse IMAGE_PATH=<path> from output
+Read(image_path)  // show the result
+```
 
-1. Resolve image path from previous generation, user-provided path, or conversation context.
-2. Run:
-   ```sh
-   doppler run -p claude-code -c std -- uv run ~/.claude/skills/image/scripts/generate.py '<edit_prompt>' --image '<path>'
-   ```
-3. Parse `IMAGE_PATH=<path>` from stdout.
-4. Read the output image to show it.
+## Reference
 
-## Options
+### Script options
 
-| Flag | Default | Values |
-|------|---------|--------|
-| `--aspect-ratio` | `1:1` | `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `9:16`, `16:9`, `2:1`, `1:2`, `4:5`, `5:4`, `3:1`, `1:3`, `9:21` |
-| `--size` | `1K` | `512px`, `1K`, `2K`, `4K` |
-| `--model` | `gemini-3.1-flash-image-preview` | Any Gemini model with image output |
-| `--image` | None | Input image path (triggers edit mode) |
-| `--output` | `/tmp/image-<ts>.png` | Custom output path |
+| Flag             | Default                          | Values                                                                                              |
+| ---------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `--aspect-ratio` | `1:1`                            | `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `9:16`, `16:9`, `2:1`, `1:2`, `4:5`, `5:4`, `3:1`, `1:3`, `9:21` |
+| `--size`         | `1K`                             | `512px`, `1K`, `2K`, `4K`                                                                           |
+| `--model`        | `gemini-3.1-flash-image-preview` | Any Gemini model with image output                                                                  |
+| `--image`        | None                             | Input image path (triggers edit mode)                                                               |
+| `--output`       | `/tmp/image-<ts>.png`            | Custom output path                                                                                  |
 
-## Prompt expansion
+### Prompt expansion
 
 - Add visual specifics: "a cat" → "a fluffy orange tabby cat sitting on a sandy beach at golden hour, soft warm lighting, shallow depth of field"
 - Specify style if the user didn't: photorealistic, illustration, watercolor, 3D render, etc.
