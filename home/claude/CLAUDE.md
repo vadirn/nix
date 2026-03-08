@@ -34,7 +34,9 @@ Use conventional commit prefixes (feat, fix, chore). Short message, no body.
 - chore: no user-facing behavior change (design, performance)
 - feat: everything else
 
-Run each git command separately. Don't chain with `&&` or `;`. Chained commands bypass the permissions allowlist.
+## Bash
+
+Run one command at a time so permissions auto-apply. Chained commands (`&&`, `||`, `;`) bypass the allowlist. Pipes (`|`) are fine when output needs filtering (`| head`, `| wc -l`, `| sort`).
 
 ## Web
 
