@@ -10,10 +10,8 @@ Run the stats script, then present the results with brief interpretation.
 ## Step 1: Get the data
 
 ```bash
-python3 <dir>/session-stats.py --latest --format table
+session-stats --latest --format table
 ```
-
-`<dir>` is the directory containing this SKILL.md file.
 
 The script reads the JSONL session transcript and outputs a formatted table. If `--format table` is not recognized, fall back to plain `--latest` (JSON output) and format it yourself.
 

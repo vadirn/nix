@@ -172,7 +172,6 @@ Read `.claude/settings.local.json` (user-specific, absolute paths don't belong i
 - `Skill(vault)` — the universal vault skill
 - `Read(<vault_root>/<path>/**)` — allows reading project files and checkpoints from the vault
 - `Bash(vault-cli *)` — allows vault-cli commands
-- `Bash(~/.claude/skills/vault/scripts/vault-cli *)` — full path variant
 
 ## Checkpoints.base template
 

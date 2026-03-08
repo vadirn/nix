@@ -72,6 +72,9 @@
         fi
       '';
 
+      home.file.".local/bin/session-stats".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/session-stats/session-stats.py";
+      home.file.".local/bin/tool-stats".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/tool-stats/tool-stats.py";
+      home.file.".local/bin/vault-cli".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/vault/scripts/vault-cli";
       home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
       home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/CLAUDE.md";
       home.file.".claude/skills".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills";

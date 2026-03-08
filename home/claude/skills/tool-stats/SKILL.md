@@ -10,10 +10,8 @@ Analyze CLI tool usage from Claude Code session transcripts.
 ## Step 1: Run the script
 
 ```bash
-python3 <dir>/tool-stats.py [OPTIONS]
+tool-stats [OPTIONS]
 ```
-
-`<dir>` is the directory containing this SKILL.md file.
 
 ### Options
 

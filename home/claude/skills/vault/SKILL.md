@@ -26,8 +26,7 @@ Universal Obsidian vault skill.
 - **checkpoint** — session snapshot for a project. Tracks progress, decisions, frictions. → `41 projects/<project>/`
 
 ```
-dir = directory containing this file
-cli = dir + "/scripts/vault-cli"
+cli = "vault-cli"
 
 // Parse command: first word after /vault
 command = user's command after /vault
@@ -100,7 +99,7 @@ else:
 
 ## vault-cli reference
 
-The CLI script lives at `dir/scripts/vault-cli`. Subcommands:
+Subcommands:
 
 | Command                 | Description                                   | Requires config |
 | ----------------------- | --------------------------------------------- | --------------- |
