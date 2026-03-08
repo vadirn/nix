@@ -7,7 +7,7 @@ description: >
   (creates a card in 20 cards/), writing down an original idea, observation, or synthesis connecting multiple concepts
   (creates a note in 30 notes/), searching or browsing what they know about a topic, quizzing or testing recall on
   saved concepts, listing or filtering cards by tag, resuming or saving progress on a project, checking project status
-  or open checkpoints. Also handles explicit /vault commands (search, card, note, reference, review, cards, projects,
+  or open checkpoints, reading a specific checkpoint by name or date. Also handles explicit /vault commands (search, card, note, reference, review, cards, projects,
   start, save). Do NOT use for: Obsidian app settings/UI questions, editing .base files, creating canvas files,
   general markdown editing, or web search.
 ---
@@ -80,6 +80,17 @@ elif command matches "<project> ...":
     answer using project context
     // if question involves checkpoints: Bash(cli checkpoints)
     // if question involves search: Bash(cli search <terms>)
+
+elif user mentions a checkpoint by name or date:
+    // e.g. "read checkpoint-2026-03-07-11-42-34", "show me yesterday's checkpoint"
+    file = Glob("41 projects/**/checkpoint-*<fragment>*")
+    if exactly one match:
+        Read(file)
+        summarize: description, progress, open next items
+    elif multiple matches:
+        present list, ask which one
+    else:
+        "Checkpoint not found" — offer to search or list project checkpoints
 
 else:
     // Generic vault question — use search + context
