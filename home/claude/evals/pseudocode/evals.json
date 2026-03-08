@@ -1,0 +1,20 @@
+{
+  "skill_name": "pseudocode",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Convert this to pseudocode for a skill:\n\nRead a file, extract all URLs from it using grep, deduplicate them, and save to urls.txt. If the file doesn't exist, tell the user.",
+      "expected_output": "Short pseudocode with guard clause for missing file, Bash calls for grep, assignments, no numbered steps. No Reference section needed (simple enough)."
+    },
+    {
+      "id": 2,
+      "prompt": "Convert this to pseudocode for a skill:\n\nFirst check git status and what branch we're on, and also find the default branch. These can all run at the same time. If we're on the default branch, stop and tell the user to create a feature branch. If there are uncommitted changes, run the commit skill and stop. Then push if needed - if there's no upstream, push with -u flag, otherwise just push if we're ahead. Check if a PR already exists, if so show the URL and ask whether to update or stop. Generate a good PR title (under 70 chars, conventional commit style) and body with Summary bullets and Test plan checklist from the diff. Always create as draft unless user says otherwise. Show the user what we're about to create and confirm before running gh pr create. Use HEREDOC for the body to preserve formatting.",
+      "expected_output": "Pseudocode block with parallel gathering, guard clauses, branching logic, do() for title/body generation, literal Bash/Skill/AskUserQuestion calls. Reference section with PR title/body format details, draft behavior, HEREDOC pattern."
+    },
+    {
+      "id": 3,
+      "prompt": "Convert this to pseudocode for a skill:\n\nThe skill should deploy a Docker container. First build the image with docker build, tag it with the current git SHA. Then check if the target environment variable is set - it should be 'staging' or 'production'. For production, always ask the user to confirm. Push the image to ECR. Then update the ECS service to use the new task definition. Wait for the deployment to stabilize (check every 30 seconds, timeout after 10 minutes). If it fails, roll back to the previous task definition and tell the user what went wrong. Log the deployment to a file with timestamp, environment, SHA, and status.",
+      "expected_output": "Pseudocode with environment guard, confirmation for production, deployment loop with timeout, rollback branch, do() for logging. Reference section with ECR/ECS command details, log format."
+    }
+  ]
+}
