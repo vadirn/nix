@@ -99,12 +99,15 @@ cmd_get() {
   fi
   local fragment="$1"
   local matches=()
+  local search_dirs=("$VAULT_ROOT/00 inbox" "$VAULT_ROOT/10 references" "$VAULT_ROOT/20 cards" "$VAULT_ROOT/30 notes" "$VAULT_ROOT/41 projects")
 
-  # Search across all note types
+  # Replace dashes with wildcards to handle qmd handelized paths (spaces→dashes)
+  local fuzzy="${fragment//-/*}"
+
   while IFS= read -r -d '' file; do
     matches+=("$file")
-  done < <(find "$VAULT_ROOT/10 references" "$VAULT_ROOT/20 cards" "$VAULT_ROOT/30 notes" "$VAULT_ROOT/41 projects" \
-    -name "*${fragment}*.md" -type f -print0 2>/dev/null | sort -z)
+  done < <(find "${search_dirs[@]}" \
+    -iname "*${fuzzy}*.md" -type f -print0 2>/dev/null | sort -z)
 
   if [[ ${#matches[@]} -eq 0 ]]; then
     echo "No matches for '$fragment'" >&2
