@@ -70,24 +70,7 @@
       "Bash(tool-stats *)",
       "Read"
     ],
-    "deny": [
-      "Read(.env*)",
-      "Grep(.env)",
-      "Read(**/credentials*)",
-      "Bash(sudo *)",
-      "Bash(chmod 777 *)",
-      "Bash(git push --force *)",
-      "Bash(git reset --hard *)",
-      "Bash(git branch -D *)",
-      "Bash(git branch -D:*)",
-      "Bash(obsidian eval *)",
-      "Bash(obsidian delete * permanent*)",
-      "Bash(obsidian plugin:install *)",
-      "Bash(obsidian plugin:uninstall *)",
-      "Bash(obsidian dev:cdp *)",
-      "Bash(obsidian command *)",
-      "Bash(obsidian history:restore *)"
-    ]
+    "deny": []
   },
   "enableAllProjectMcpServers": true,
   "hooks": {
@@ -131,6 +114,28 @@
           {
             "type": "command",
             "command": "python3 ~/.claude/hooks/no-dangerous-rm.py"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/no-dangerous.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/no-secrets-read.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/no-secrets-read.sh"
           }
         ]
       }
