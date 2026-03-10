@@ -118,6 +118,14 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/no-dangerous.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/no-network-abuse.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/quiet-override.sh"
           }
         ]
       },
