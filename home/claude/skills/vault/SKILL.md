@@ -17,12 +17,12 @@ description: >
 Universal Obsidian vault skill.
 
 ```
-cli = "vault-cli"
+// vault-cli is on PATH; call it directly as `vault-cli`
 dir = skill base directory
 
 // Route by command
 if "search <query>":
-    results = Bash(cli search <query>)
+    results = Bash(vault-cli search <query>)
     do("present results with file paths, offer to Read top hits")
 
 elif "card" or "card <topic>":
@@ -42,21 +42,21 @@ elif "review":
     do("follow review process")
 
 elif "cards":
-    results = Bash(cli cards)
+    results = Bash(vault-cli cards)
     Read(dir/references/cards.md)
     do("follow cards presentation process with results")
 
 elif "notes":
-    results = Bash(cli notes)
+    results = Bash(vault-cli notes)
     do("present notes with metadata")
 
 elif "projects":
-    results = Bash(cli projects)
+    results = Bash(vault-cli projects)
     do("present projects with status")
 
 // Project commands — load context once
 elif "<project> ...":
-    project_context ??= Bash(cli context)
+    project_context ??= Bash(vault-cli context)
 
     if "start":
         Read(dir/references/project-start.md)
@@ -68,13 +68,13 @@ elif "<project> ...":
         do("answer using project context, checkpoints, or search as needed")
 
 elif user mentions a note/card/reference/checkpoint by name:
-    result = Bash(cli get <fragment>)
+    result = Bash(vault-cli get <fragment>)
     if single match: do("summarize content")
     elif multiple matches: AskUserQuestion("which one?")
     else: do("offer to search")
 
 else:
-    Bash(cli config)
+    Bash(vault-cli config)
     do("help user with their request")
 ```
 
@@ -82,14 +82,14 @@ else:
 
 ### Note types
 
-| Type       | Folder                       | Purpose                                              |
-| ---------- | ---------------------------- | ---------------------------------------------------- |
-| reference  | `10 references/`             | Pointer to external source. Raw capture, no analysis  |
-| card       | `20 cards/`                  | Distilled atomic concept from a reference             |
-| note       | `30 notes/`                  | Original thinking, connects ideas across sources      |
-| goal       | `41 projects/`               | High-level aspiration with success criteria           |
-| project    | `41 projects/<project>/`     | Concrete deliverable linked to a goal                 |
-| checkpoint | `41 projects/<project>/`     | Session snapshot. Tracks progress, decisions, frictions |
+| Type       | Folder                   | Purpose                                                 |
+| ---------- | ------------------------ | ------------------------------------------------------- |
+| reference  | `10 references/`         | Pointer to external source. Raw capture, no analysis    |
+| card       | `20 cards/`              | Distilled atomic concept from a reference               |
+| note       | `30 notes/`              | Original thinking, connects ideas across sources        |
+| goal       | `41 projects/`           | High-level aspiration with success criteria             |
+| project    | `41 projects/<project>/` | Concrete deliverable linked to a goal                   |
+| checkpoint | `41 projects/<project>/` | Session snapshot. Tracks progress, decisions, frictions |
 
 ### vault-cli subcommands
 
@@ -107,6 +107,6 @@ else:
 
 ### Project commands
 
-`<project> start` and `<project> save` require `.claude/.vault.config.json` in cwd. The start procedure uses `cli checkpoints Incomplete` and `cli checkpoints Done`. The save procedure uses `cli checkpoints Incomplete`.
+`<project> start` and `<project> save` require `.claude/.vault.config.json` in cwd. The start procedure uses `vault-cli checkpoints Incomplete` and `vault-cli checkpoints Done`. The save procedure uses `vault-cli checkpoints Incomplete`.
 
-For generic `<project> <question>`, use `cli checkpoints` or `cli search <terms>` as needed.
+For generic `<project> <question>`, use `vault-cli checkpoints` or `vault-cli search <terms>` as needed.
