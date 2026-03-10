@@ -21,3 +21,7 @@ confirm-close-surface = false
 unfocused-split-opacity = 0.4
 window-colorspace = display-p3
 copy-on-select = clipboard
+shell-integration-features = no-title
+notify-on-command-finish = unfocused
+notify-on-command-finish-action = no-bell,notify
+notify-on-command-finish-after = 30s

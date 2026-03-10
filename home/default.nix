@@ -52,7 +52,10 @@
         };
         lazygit = {
           enable = true;
-          settings.os.editPreset = "micro";
+          settings = {
+            os.editPreset = "micro";
+            gui.theme.selectedLineBgColor = [ "#A590FF" ];
+          };
         };
       };
       home.activation.installClaude = config.lib.dag.entryAfter ["writeBoundary"] ''

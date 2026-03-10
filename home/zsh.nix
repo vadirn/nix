@@ -16,6 +16,7 @@
 
     localVariables = {
       ZSH_AUTOSUGGEST_STRATEGY = ["history" "completion"];
+      DISABLE_AUTO_TITLE = "true";
     };
 
     oh-my-zsh = {
@@ -38,6 +39,10 @@
       fi
 
       export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
+
+      _set_tab_title() { print -Pn "\e]0;%1~\a" }
+      precmd_functions+=(_set_tab_title)
+      chpwd_functions+=(_set_tab_title)
 
       alias lg='lazygit'
       alias y='yazi'
