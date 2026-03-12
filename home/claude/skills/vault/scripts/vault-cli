@@ -358,7 +358,7 @@ cmd_xp() {
 
   # Single pass over weekly files: collect task counts and coverage bonuses
   declare -A day_tasks day_bonus
-  for f in "$log_dir"/week-*.md; do
+  for f in "$log_dir"/[0-9]*-w[0-9]*.md; do
     [[ -f "$f" ]] || continue
     local content
     content=$(<"$f")
@@ -568,7 +568,7 @@ cmd_log_init() {
   local target_week
   target_week=$(iso_week_for_date "$target_date")
   local log_dir="$VAULT_ROOT/41 projects/block-buster"
-  local log_file="$log_dir/week-${target_week}.md"
+  local log_file="$log_dir/${target_week,,}.md"
 
   if [[ -f "$log_file" ]]; then
     echo "$log_file"
@@ -598,7 +598,7 @@ cmd_log_init() {
 
 collect_sleep_dates() {
   local log_dir="$VAULT_ROOT/41 projects/block-buster"
-  for f in "$log_dir"/week-*.md; do
+  for f in "$log_dir"/[0-9]*-w[0-9]*.md; do
     [[ -f "$f" ]] || continue
     local fm sleep_val
     fm=$(extract_frontmatter "$f")

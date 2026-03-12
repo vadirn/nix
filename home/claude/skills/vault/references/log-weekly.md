@@ -47,11 +47,11 @@ The `(YYYY-MM-DD)` date on completed tasks is used for per-day XP attribution in
 
 ### Activity
 
-Activity is auto-appended by the post-commit hook. Grouped by date heading (`### YYYY-MM-DD`).
+Activity is auto-appended by the post-commit hook. Each entry prefixed with `YYYY-MM-DD-HH-MM` (no date headings).
 
 ### Weekly file
 
-One file per ISO week: `week-YYYY-Www.md` in `41 projects/block-buster/`.
+One file per ISO week: `YYYY-wWW.md` in `41 projects/block-buster/`.
 Created by `vault-cli log-init` with frontmatter: `week`, `start`, `end`, `sleep: []`.
 
 The `sleep` field is a YAML list of ISO dates: `sleep: [2026-03-10, 2026-03-11]`. The sleep action appends today's date to this list.

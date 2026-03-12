@@ -92,10 +92,10 @@ echo "# log-init"
 
 # Compute expected week for 2026-03-12
 result=$(run log-init 2026-03-12)
-assert_eq "log-init returns weekly path" "$LOG_DIR/week-2026-W11.md" "$result"
-assert_file_exists "log-init creates file" "$LOG_DIR/week-2026-W11.md"
+assert_eq "log-init returns weekly path" "$LOG_DIR/2026-w11.md" "$result"
+assert_file_exists "log-init creates file" "$LOG_DIR/2026-w11.md"
 
-content=$(cat "$LOG_DIR/week-2026-W11.md")
+content=$(cat "$LOG_DIR/2026-w11.md")
 assert_contains "log-init fills week" "week: 2026-W11" "$content"
 assert_contains "log-init fills start" "start: 2026-03-09" "$content"
 assert_contains "log-init fills end" "end: 2026-03-15" "$content"
@@ -106,18 +106,18 @@ assert_contains "log-init has Backlog section" "## Backlog" "$content"
 
 # Idempotent: running again returns same path
 result2=$(run log-init 2026-03-12)
-assert_eq "log-init idempotent" "$LOG_DIR/week-2026-W11.md" "$result2"
+assert_eq "log-init idempotent" "$LOG_DIR/2026-w11.md" "$result2"
 
 # Same week, different day
 result3=$(run log-init 2026-03-14)
-assert_eq "log-init same week different day" "$LOG_DIR/week-2026-W11.md" "$result3"
+assert_eq "log-init same week different day" "$LOG_DIR/2026-w11.md" "$result3"
 
 # --- xp tests ---
 
 echo "# xp"
 
 # Create weekly logs with tasks and projects
-cat > "$LOG_DIR/week-2026-W10.md" <<'EOF'
+cat > "$LOG_DIR/2026-w10.md" <<'EOF'
 ---
 type: weekly-log
 week: 2026-W10
@@ -162,7 +162,7 @@ assert_contains "xp shows total" "Total:" "$xp_out"
 
 echo "# xp with sleep"
 
-cat > "$LOG_DIR/week-2026-W09.md" <<'EOF'
+cat > "$LOG_DIR/2026-w09.md" <<'EOF'
 ---
 type: weekly-log
 week: 2026-W09
@@ -194,7 +194,7 @@ assert_contains "xp with sleep shows Feb" "Feb" "$xp_sleep"
 
 echo "# xp partial coverage"
 
-cat > "$LOG_DIR/week-2026-W08.md" <<'EOF'
+cat > "$LOG_DIR/2026-w08.md" <<'EOF'
 ---
 type: weekly-log
 week: 2026-W08
