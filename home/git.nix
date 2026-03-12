@@ -15,6 +15,7 @@
       rebase.updateRefs = true;
       rebase.autosquash = true;
       rerere.enabled = true;
+      core.hooksPath = "~/.config/git/hooks";
     };
   };
 }
