@@ -47,7 +47,7 @@ def scan_sessions(sessions_dir: Path) -> Counter:
                             tool = extract_cli_tool(cmd)
                             if tool:
                                 tools[tool] += 1
-                except Exception:
+                except (json.JSONDecodeError, KeyError, TypeError):
                     pass
     return tools
 

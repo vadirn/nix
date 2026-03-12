@@ -79,10 +79,6 @@ def main():
         print("Error: GEMINI_API_KEY not set", file=sys.stderr)
         sys.exit(1)
 
-    if args.image and not os.path.isfile(args.image):
-        print(f"Error: image not found: {args.image}", file=sys.stderr)
-        sys.exit(1)
-
     output_path = args.output or f"/tmp/image-{int(time.time())}.png"
 
     client = genai.Client(api_key=api_key)
@@ -90,7 +86,11 @@ def main():
     # Build contents
     contents = []
     if args.image:
-        img = Image.open(args.image)
+        try:
+            img = Image.open(args.image)
+        except FileNotFoundError:
+            print(f"Error: image not found: {args.image}", file=sys.stderr)
+            sys.exit(1)
         contents.append(img)
     contents.append(args.prompt)
 

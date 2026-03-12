@@ -70,7 +70,6 @@ def parse_session(path: Path) -> dict:
     first_edit_turn = None
     lines_written = 0
     peak_context = 0
-    per_turn_context = []
 
     with open(path) as f:
         for line in f:
@@ -96,7 +95,6 @@ def parse_session(path: Path) -> dict:
             output_tokens += turn_output
 
             turn_context = turn_input + turn_cache_create + turn_cache_read
-            per_turn_context.append(turn_context)
             if turn_context > peak_context:
                 peak_context = turn_context
 
