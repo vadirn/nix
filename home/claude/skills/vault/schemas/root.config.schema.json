@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Vault root config",
+  "description": "Global config at ~/.claude/.vault.config.json. Used for --project resolution and vault-wide defaults.",
+  "type": "object",
+  "required": ["vault_root", "projects_path"],
+  "additionalProperties": false,
+  "properties": {
+    "vault_root": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Absolute path to the Obsidian vault root."
+    },
+    "projects_path": {
+      "type": "string",
+      "description": "Relative path from vault_root to the projects folder (e.g. '41 projects')."
+    }
+  }
+}

@@ -56,7 +56,7 @@ elif "projects":
 
 // Project commands — load context once
 elif "<project> ...":
-    project_context ??= Bash(vault-cli context)
+    project_context ??= Bash(vault-cli --project <project> context)
 
     if "start":
         Read(dir/references/project-start.md)
@@ -66,6 +66,31 @@ elif "<project> ...":
         do("follow save procedure")
     else:
         do("answer using project context, checkpoints, or search as needed")
+
+elif "log" or daily log intent (morning plans, evening wrap-up, streak check):
+    target_date = do("resolve date: today unless user says 'tomorrow' or specific date")
+    log = Read("41 projects/block-buster/log-{target_date}.md") or nil
+    intent = do("detect intent from message: plan, complete, or ambiguous")
+
+    if no log and intent == "complete":
+        // Skipped morning, logging results directly
+        Read(dir/references/log-save.md)
+        do("create log with empty plan")
+        Read(dir/references/log-complete.md)
+        do("fill results from user's message, all items are (unplanned)")
+    elif no log:
+        Read(dir/references/log-save.md)
+        do("create log with plan from user's message")
+    elif log.status == "incomplete" and intent == "complete":
+        Read(dir/references/log-complete.md)
+        do("follow completion process")
+    elif log.status == "incomplete":
+        do("show log, ask: add to plan or complete the day?")
+        if plan: Read(dir/references/log-save.md), do("append to plan")
+        if complete: Read(dir/references/log-complete.md), do("follow completion process")
+    elif log.status == "complete":
+        results = Bash(vault-cli streak)
+        do("show log and streak stats")
 
 elif user mentions a note/card/reference/checkpoint by name:
     result = Bash(vault-cli get <fragment>)
@@ -82,14 +107,15 @@ else:
 
 ### Note types
 
-| Type       | Folder                   | Purpose                                                 |
-| ---------- | ------------------------ | ------------------------------------------------------- |
-| reference  | `10 references/`         | Pointer to external source. Raw capture, no analysis    |
-| card       | `20 cards/`              | Distilled atomic concept from a reference               |
-| note       | `30 notes/`              | Original thinking, connects ideas across sources        |
-| goal       | `41 projects/`           | High-level aspiration with success criteria             |
-| project    | `41 projects/<project>/` | Concrete deliverable linked to a goal                   |
-| checkpoint | `41 projects/<project>/` | Session snapshot. Tracks progress, decisions, frictions |
+| Type       | Folder                      | Purpose                                                 |
+| ---------- | --------------------------- | ------------------------------------------------------- |
+| reference  | `10 references/`            | Pointer to external source. Raw capture, no analysis    |
+| card       | `20 cards/`                 | Distilled atomic concept from a reference               |
+| note       | `30 notes/`                 | Original thinking, connects ideas across sources        |
+| goal       | `41 projects/`              | High-level aspiration with success criteria             |
+| project    | `41 projects/<project>/`    | Concrete deliverable linked to a goal                   |
+| checkpoint | `41 projects/<project>/`    | Session snapshot. Tracks progress, decisions, frictions |
+| daily-log  | `41 projects/block-buster/` | Daily plan/result/activity log for gamified tracking    |
 
 ### vault-cli subcommands
 
@@ -104,9 +130,12 @@ else:
 | `projects`              | List active projects                           | No              |
 | `cards`                 | List all cards with metadata                   | No              |
 | `notes`                 | List all notes with metadata                   | No              |
+| `streak`                | Show streak, XP, level, and 7-day heatmap      | No              |
 
 ### Project commands
 
-`<project> start` and `<project> save` require `.claude/.vault.config.json` in cwd. The start procedure uses `vault-cli checkpoints Incomplete` and `vault-cli checkpoints Done`. The save procedure uses `vault-cli checkpoints Incomplete`.
+`<project> start` and `<project> save` resolve the project via `--project <name>` flag, which uses the root config (`~/.claude/.vault.config.json`) to find `{vault_root}/{projects_path}/<name>`. This works from any directory. If called from a repo with `.claude/.vault.config.json`, the local project config takes precedence unless `--project` is given.
 
-For generic `<project> <question>`, use `vault-cli checkpoints` or `vault-cli search <terms>` as needed.
+The start procedure uses `vault-cli --project <name> checkpoints Incomplete` and `vault-cli --project <name> checkpoints Done`. The save procedure uses `vault-cli --project <name> checkpoints Incomplete`.
+
+For generic `<project> <question>`, use `vault-cli --project <name> checkpoints` or `vault-cli search <terms>` as needed.

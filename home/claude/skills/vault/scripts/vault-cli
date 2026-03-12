@@ -1,41 +1,73 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+SCHEMA_DIR="$SCRIPT_DIR/../schemas"
 QMD="bunx @tobilu/qmd"
 QMD_MARKER="$HOME/.cache/qmd/.vault-ready"
 VAULT_ROOT=""
-PROJECT_NAME=""
-PROJECT_TITLE=""
 PROJECT_PATH=""
+PROJECTS_PATH=""
+PROJECT_FLAG=""
 
 # --- Config resolution ---
 
-resolve_config() {
-  local dir="$PWD"
+validate_config() {
+  local cfg="$1"
+  local schema="$2"
+  local errors
+  if ! errors=$(bunx ajv-cli validate -s "$schema" -d "$cfg" 2>&1); then
+    echo "Error: invalid config $cfg" >&2
+    echo "$errors" >&2
+    echo "" >&2
+    echo "Expected schema: $schema" >&2
+    exit 1
+  fi
+}
 
-  # Walk up from cwd looking for .claude/.vault.config.json
+resolve_config() {
+  # Layer 1: Walk up from cwd for project config
+  local dir="$PWD"
   while [[ "$dir" != "/" ]]; do
     local cfg="$dir/.claude/.vault.config.json"
     if [[ -f "$cfg" ]]; then
-      VAULT_ROOT=$(jq -r '.vault_root' "$cfg")
-      PROJECT_NAME=$(jq -r '.project.name // empty' "$cfg")
-      PROJECT_TITLE=$(jq -r '.project.title // empty' "$cfg")
-      PROJECT_PATH=$(jq -r '.project.path // empty' "$cfg")
-      return
+      validate_config "$cfg" "$SCHEMA_DIR/project.config.schema.json"
+      local fields
+      fields=$(jq -r '[.vault_root, .project_path] | @tsv' "$cfg")
+      VAULT_ROOT=$(cut -f1 <<< "$fields")
+      PROJECT_PATH=$(cut -f2 <<< "$fields")
+      break
     fi
     dir="$(dirname "$dir")"
   done
 
-  # Try obsidian CLI
-  local vaults
-  if vaults=$(timeout 10 obsidian vaults verbose 2>/dev/null); then
-    VAULT_ROOT=$(echo "$vaults" | head -1 | awk '{print $NF}')
-    [[ -n "$VAULT_ROOT" ]] && return
+  # Layer 2: Root config for vault_root and projects_path
+  local root_cfg="$HOME/.claude/.vault.config.json"
+  if [[ -f "$root_cfg" ]]; then
+    validate_config "$root_cfg" "$SCHEMA_DIR/root.config.schema.json"
+    local root_fields
+    root_fields=$(jq -r '[.vault_root, .projects_path] | @tsv' "$root_cfg")
+    [[ -z "$VAULT_ROOT" ]] && VAULT_ROOT=$(cut -f1 <<< "$root_fields")
+    PROJECTS_PATH=$(cut -f2 <<< "$root_fields")
   fi
 
-  # Final fallback
-  VAULT_ROOT="$HOME/Documents/vault"
+  # Layer 3: --project flag overrides PROJECT_PATH
+  if [[ -n "$PROJECT_FLAG" ]]; then
+    if [[ -z "$VAULT_ROOT" ]]; then
+      echo "Error: --project requires vault_root (set in root or project config)" >&2
+      exit 1
+    fi
+    local pp="${PROJECTS_PATH:-41 projects}"
+    PROJECT_PATH="$VAULT_ROOT/$pp/$PROJECT_FLAG"
+  fi
+
+  # Require vault_root from config
+  if [[ -z "$VAULT_ROOT" ]]; then
+    echo "Error: no vault config found." >&2
+    echo "Create ~/.claude/.vault.config.json with:" >&2
+    echo '  { "vault_root": "/absolute/path/to/vault", "projects_path": "41 projects" }' >&2
+    exit 1
+  fi
 }
 
 # --- Helpers ---
@@ -51,31 +83,34 @@ ensure_collection() {
 
 # --- Subcommands ---
 
-cmd_config() {
-  local json="{\"vault_root\":\"$VAULT_ROOT\""
-  if [[ -n "$PROJECT_NAME" ]]; then
-    json+=",\"project\":{\"name\":\"$PROJECT_NAME\",\"title\":\"$PROJECT_TITLE\",\"path\":\"$PROJECT_PATH\"}"
+require_project() {
+  if [[ -z "$PROJECT_PATH" ]]; then
+    echo "Error: no project resolved (use --project <name> or add .claude/.vault.config.json)" >&2
+    exit 1
   fi
-  json+="}"
-  echo "$json" | jq .
+}
+
+cmd_config() {
+  local json
+  json=$(jq -n --arg vr "$VAULT_ROOT" --arg pp "$PROJECTS_PATH" --arg ppath "$PROJECT_PATH" \
+    '{vault_root: $vr} + (if $pp != "" then {projects_path: $pp} else {} end) + (if $ppath != "" then {project_path: $ppath} else {} end)')
+  echo "$json"
 }
 
 cmd_context() {
-  if [[ -z "$PROJECT_PATH" ]]; then
-    echo "Error: no project config found (.claude/.vault.config.json)" >&2
-    exit 1
+  require_project
+  if [[ -f "$PROJECT_PATH/context.md" ]]; then
+    cat "$PROJECT_PATH/context.md"
   fi
-  cat "$VAULT_ROOT/$PROJECT_PATH/context.md"
 }
 
 cmd_checkpoints() {
-  if [[ -z "$PROJECT_PATH" ]]; then
-    echo "Error: no project config found (.claude/.vault.config.json)" >&2
-    exit 1
-  fi
+  require_project
 
   local view="${1:-All}"
-  local base_path="$PROJECT_PATH/Checkpoints.base"
+  # Derive relative path from vault root for obsidian base:query
+  local rel_path="${PROJECT_PATH#"$VAULT_ROOT/"}"
+  local base_path="$rel_path/Checkpoints.base"
 
   # Try obsidian base:query
   if timeout 30 obsidian base:query path="$base_path" view="$view" 2>/dev/null; then
@@ -84,7 +119,7 @@ cmd_checkpoints() {
 
   # Fallback: grep checkpoint files
   echo "# Fallback: file-based checkpoint listing" >&2
-  local pattern="$VAULT_ROOT/$PROJECT_PATH/checkpoint-*.md"
+  local pattern="$PROJECT_PATH/checkpoint-*.md"
   case "$view" in
     Incomplete) grep -l "done: false" $pattern 2>/dev/null || true ;;
     Done)       grep -l "done: true" $pattern 2>/dev/null || true ;;
@@ -99,7 +134,12 @@ cmd_get() {
   fi
   local fragment="$1"
   local matches=()
-  local search_dirs=("$VAULT_ROOT/00 inbox" "$VAULT_ROOT/10 references" "$VAULT_ROOT/20 cards" "$VAULT_ROOT/30 notes" "$VAULT_ROOT/41 projects")
+  local search_dirs
+  if [[ -n "$PROJECT_PATH" ]]; then
+    search_dirs=("$PROJECT_PATH")
+  else
+    search_dirs=("$VAULT_ROOT/00 inbox" "$VAULT_ROOT/10 references" "$VAULT_ROOT/20 cards" "$VAULT_ROOT/30 notes" "$VAULT_ROOT/41 projects")
+  fi
 
   # Replace dashes with wildcards to handle qmd handelized paths (spaces→dashes)
   local fuzzy="${fragment//-/*}"
@@ -208,19 +248,7 @@ list_notes() {
 
   find "$notes_dir" -name '*.md' -type f | sort | while IFS= read -r file; do
     title="$(basename "$file" .md)"
-    fm=""
-    in_fm=false
-    while IFS= read -r line; do
-      if [[ "$line" == "---" ]]; then
-        if $in_fm; then break; fi
-        in_fm=true
-        continue
-      fi
-      if $in_fm; then
-        fm+="$line"$'\n'
-      fi
-    done < "$file"
-
+    fm=$(extract_frontmatter "$file")
     [[ -z "$fm" ]] && continue
 
     desc=$(get_field "description" "$fm")
@@ -245,11 +273,260 @@ cmd_cards() {
   list_notes "$VAULT_ROOT/20 cards" "reference"
 }
 
+extract_frontmatter() {
+  local file="$1"
+  local fm=""
+  local in_fm=false
+  while IFS= read -r line; do
+    if [[ "$line" == "---" ]]; then
+      if $in_fm; then break; fi
+      in_fm=true
+      continue
+    fi
+    if $in_fm; then
+      fm+="$line"$'\n'
+    fi
+  done < "$file"
+  printf '%s' "$fm"
+}
+
+get_current_streak() {
+  local log_dir="$VAULT_ROOT/41 projects/block-buster"
+  local today
+  today=$(date +%Y-%m-%d)
+  local streak=0 i=1
+  while true; do
+    local check_date
+    check_date=$(date -d "$today - $i days" +%Y-%m-%d)
+    local f="$log_dir/log-${check_date}.md"
+    if [[ -f "$f" ]]; then
+      local fm status
+      fm=$(extract_frontmatter "$f")
+      status=$(get_field "status" "$fm")
+      if [[ "$status" == "complete" ]]; then
+        streak=$((streak + 1))
+        i=$((i + 1))
+        continue
+      fi
+    fi
+    break
+  done
+  printf '%d' "$streak"
+}
+
+cmd_xp() {
+  local sleep_flag=false
+  local target_date=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --sleep) sleep_flag=true; shift ;;
+      *) target_date="$1"; shift ;;
+    esac
+  done
+  [[ -z "$target_date" ]] && target_date=$(date +%Y-%m-%d)
+
+  local log_dir="$VAULT_ROOT/41 projects/block-buster"
+  local log_file="$log_dir/log-${target_date}.md"
+  if [[ ! -f "$log_file" ]]; then
+    echo "Error: no log for $target_date" >&2
+    exit 1
+  fi
+
+  local content
+  content=$(cat "$log_file")
+
+  # Count plan items (lines starting with "- " between ## Plan and next ##)
+  local plan_count=0
+  local in_plan=false
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^##[[:space:]]+Plan ]]; then
+      in_plan=true
+      continue
+    fi
+    if $in_plan && [[ "$line" =~ ^## ]]; then
+      break
+    fi
+    if $in_plan && [[ "$line" =~ ^-[[:space:]] ]]; then
+      plan_count=$((plan_count + 1))
+    fi
+  done <<< "$content"
+
+  # Count result items (✓ lines, split planned vs unplanned)
+  local planned_done=0 unplanned_done=0
+  local in_result=false
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^##[[:space:]]+Result ]]; then
+      in_result=true
+      continue
+    fi
+    if $in_result && [[ "$line" =~ ^## ]]; then
+      break
+    fi
+    if $in_result && [[ "$line" == *"✓"* ]]; then
+      if [[ "$line" == *"(unplanned)"* ]]; then
+        unplanned_done=$((unplanned_done + 1))
+      else
+        planned_done=$((planned_done + 1))
+      fi
+    fi
+  done <<< "$content"
+
+  # XP computation
+  local xp=0
+  local plan_bonus=0
+  if [[ $plan_count -gt 0 ]]; then
+    plan_bonus=3
+  fi
+  xp=$((xp + plan_bonus))
+
+  local planned_xp=$((planned_done * 2))
+  xp=$((xp + planned_xp))
+
+  local unplanned_xp=$((unplanned_done * 1))
+  xp=$((xp + unplanned_xp))
+
+  local streak
+  streak=$(get_current_streak)
+  local streak_bonus=$((streak > 7 ? 7 : streak))
+  xp=$((xp + streak_bonus))
+
+  local sleep_bonus=0
+  if $sleep_flag; then
+    sleep_bonus=3
+    xp=$((xp + sleep_bonus))
+  fi
+
+  # Print breakdown to stderr
+  echo "Plan bonus:      +${plan_bonus} (${plan_count} items planned)" >&2
+  echo "Planned done:    +${planned_xp} (${planned_done} × 2)" >&2
+  echo "Unplanned done:  +${unplanned_xp} (${unplanned_done} × 1)" >&2
+  echo "Streak bonus:    +${streak_bonus} (streak: ${streak}, cap 7)" >&2
+  echo "Sleep bonus:     +${sleep_bonus}" >&2
+  echo "Total:           ${xp}" >&2
+
+  # Print integer total to stdout
+  printf '%d' "$xp"
+}
+
+cmd_log_init() {
+  local target_date="${1:-$(date +%Y-%m-%d)}"
+  local log_dir="$VAULT_ROOT/41 projects/block-buster"
+  local log_file="$log_dir/log-${target_date}.md"
+
+  if [[ -f "$log_file" ]]; then
+    echo "$log_file"
+    return 0
+  fi
+
+  local template="$VAULT_ROOT/templates/Daily Log.md"
+  if [[ ! -f "$template" ]]; then
+    echo "Error: template not found: $template" >&2
+    exit 1
+  fi
+
+  [[ -d "$log_dir" ]] || mkdir -p "$log_dir"
+  sed "s/^date:$/date: ${target_date}/" "$template" > "$log_file"
+  echo "$log_file"
+}
+
+cmd_streak() {
+  local log_dir="$VAULT_ROOT/41 projects/block-buster"
+  local today
+  today=$(date +%Y-%m-%d)
+
+  # Single pass: collect status and xp per date
+  declare -A log_status log_xp
+  local all_dates=()
+  for f in "$log_dir"/log-*.md; do
+    [[ -f "$f" ]] || continue
+    local bname d fm status xp
+    bname=$(basename "$f" .md)
+    d="${bname#log-}"
+    fm=$(extract_frontmatter "$f")
+    status=$(get_field "status" "$fm")
+    xp=$(get_field "xp" "$fm")
+    log_status["$d"]="$status"
+    log_xp["$d"]="${xp:-0}"
+    all_dates+=("$d")
+  done
+  IFS=$'\n' read -r -d '' -a all_dates <<< "$(printf '%s\n' "${all_dates[@]}" | sort)" || true
+
+  # Current streak
+  local streak
+  streak=$(get_current_streak)
+
+  # Best streak
+  local best=0 run=0 prev_date=""
+  for d in "${all_dates[@]}"; do
+    if [[ "${log_status[$d]}" == "complete" ]]; then
+      if [[ -n "$prev_date" ]]; then
+        local expected
+        expected=$(date -d "$prev_date + 1 day" +%Y-%m-%d 2>/dev/null || echo "")
+        if [[ "$d" == "$expected" ]]; then
+          run=$((run + 1))
+        else
+          run=1
+        fi
+      else
+        run=1
+      fi
+      prev_date="$d"
+    else
+      run=0
+      prev_date=""
+    fi
+    [[ $run -gt $best ]] && best=$run
+  done
+
+  # Total XP
+  local total_xp=0
+  for d in "${all_dates[@]}"; do
+    total_xp=$((total_xp + ${log_xp[$d]}))
+  done
+
+  # Today's info
+  local today_xp="${log_xp[$today]:-0}"
+  local today_status="${log_status[$today]:-no log}"
+  [[ -z "$today_status" ]] && today_status="incomplete"
+
+  local level=$((total_xp / 50))
+
+  # 7-day heatmap
+  local heatmap=""
+  for i in $(seq 6 -1 0); do
+    local check_date
+    check_date=$(date -d "$today - $i days" +%Y-%m-%d)
+    if [[ "${log_status[$check_date]:-}" == "complete" ]]; then
+      heatmap+="■ "
+    else
+      heatmap+="□ "
+    fi
+  done
+
+  printf 'Режим                    Level %d (%d XP)\n' "$level" "$total_xp"
+  printf '  streak: %d   best: %d\n' "$streak" "$best"
+  printf '  Last 7 days: %s\n' "${heatmap% }"
+  printf '  Today: %s (%d XP)\n' "$today_status" "$today_xp"
+}
+
 cmd_notes() {
   list_notes "$VAULT_ROOT/30 notes"
 }
 
 # --- Main ---
+
+# Parse --project flag before subcommand
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --project)
+      [[ $# -lt 2 ]] && { echo "Error: --project requires a name" >&2; exit 1; }
+      PROJECT_FLAG="$2"
+      shift 2
+      ;;
+    *) break ;;
+  esac
+done
 
 resolve_config
 
@@ -263,9 +540,13 @@ case "${1:-}" in
   projects)    cmd_projects ;;
   cards)       cmd_cards ;;
   notes)       cmd_notes ;;
+  streak)      cmd_streak ;;
+  xp)          shift; cmd_xp "$@" ;;
+  log-init)    shift; cmd_log_init "$@" ;;
   *)
-    echo "Usage: vault-cli {config|context|checkpoints|get|search|update|projects|cards|notes}" >&2
+    echo "Usage: vault-cli [--project <name>] {config|context|checkpoints|get|search|update|projects|cards|notes|streak|xp|log-init}" >&2
     echo "" >&2
+    echo "  --project <name>        Override project (resolved via root config)" >&2
     echo "  config                  Print resolved config JSON" >&2
     echo "  context                 Print project context.md" >&2
     echo "  checkpoints [view]      Query project checkpoints (All|Incomplete|Done|Stats)" >&2
@@ -275,6 +556,9 @@ case "${1:-}" in
     echo "  projects                List active projects" >&2
     echo "  cards                   List all cards with metadata" >&2
     echo "  notes                   List all notes with metadata" >&2
+    echo "  streak                  Show streak, XP, level, and 7-day heatmap" >&2
+    echo "  xp [--sleep] [DATE]     Compute XP for a log (default: today)" >&2
+    echo "  log-init [DATE]         Create empty daily log from vault template" >&2
     exit 1
     ;;
 esac
