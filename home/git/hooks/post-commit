@@ -24,7 +24,7 @@ append_activity() {
   repo=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null) || return 0
   msg=$(git log -1 --format='%s' 2>/dev/null) || return 0
 
-  local entry="- ${time} ${repo}: ${msg}"
+  local entry="- ${time} [${repo}] ${msg}"
 
   # Append after ## Activity line
   if grep -q '^## Activity' "$log_file"; then
