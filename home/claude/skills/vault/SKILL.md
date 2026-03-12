@@ -8,7 +8,7 @@ description: >
   (creates a note in 30 notes/), searching or browsing what they know about a topic, quizzing or testing recall on
   saved concepts, listing or filtering cards by tag, resuming or saving progress on a project, checking project status
   or open checkpoints, reading a specific checkpoint by name or date. Also handles explicit /vault commands (search, card, note, reference, review, cards, projects,
-  start, save). Do NOT use for: Obsidian app settings/UI questions, editing .base files, creating canvas files,
+  start, save). XP/streak reports are CLI-only (vault-cli xp), not routed through the skill. Do NOT use for: Obsidian app settings/UI questions, editing .base files, creating canvas files,
   general markdown editing, or web search.
 ---
 
@@ -67,30 +67,11 @@ elif "<project> ...":
     else:
         do("answer using project context, checkpoints, or search as needed")
 
-elif "log" or daily log intent (morning plans, evening wrap-up, streak check):
-    target_date = do("resolve date: today unless user says 'tomorrow' or specific date")
-    log = Read("41 projects/block-buster/log-{target_date}.md") or nil
-    intent = do("detect intent from message: plan, complete, or ambiguous")
-
-    if no log and intent == "complete":
-        // Skipped morning, logging results directly
-        Read(dir/references/log-save.md)
-        do("create log with empty plan")
-        Read(dir/references/log-complete.md)
-        do("fill results from user's message, all items are (unplanned)")
-    elif no log:
-        Read(dir/references/log-save.md)
-        do("create log with plan from user's message")
-    elif log.status == "incomplete" and intent == "complete":
-        Read(dir/references/log-complete.md)
-        do("follow completion process")
-    elif log.status == "incomplete":
-        do("show log, ask: add to plan or complete the day?")
-        if plan: Read(dir/references/log-save.md), do("append to plan")
-        if complete: Read(dir/references/log-complete.md), do("follow completion process")
-    elif log.status == "complete":
-        results = Bash(vault-cli streak)
-        do("show log and streak stats")
+elif "log" or weekly log intent (planning, tasks, sleep):
+    Read(dir/references/log-weekly.md)
+    week_file = Bash(vault-cli log-init)
+    log = Read(week_file)
+    do("show current week's log, ask what user wants to do")
 
 elif user mentions a note/card/reference/checkpoint by name:
     result = Bash(vault-cli get <fragment>)
@@ -115,7 +96,7 @@ else:
 | goal       | `41 projects/`              | High-level aspiration with success criteria             |
 | project    | `41 projects/<project>/`    | Concrete deliverable linked to a goal                   |
 | checkpoint | `41 projects/<project>/`    | Session snapshot. Tracks progress, decisions, frictions |
-| daily-log  | `41 projects/block-buster/` | Daily plan/result/activity log for gamified tracking    |
+| weekly-log | `41 projects/block-buster/` | Weekly plan/tasks/activity log for gamified tracking    |
 
 ### vault-cli subcommands
 
@@ -130,7 +111,7 @@ else:
 | `projects`              | List active projects                           | No              |
 | `cards`                 | List all cards with metadata                   | No              |
 | `notes`                 | List all notes with metadata                   | No              |
-| `streak`                | Show streak, XP, level, and 7-day heatmap      | No              |
+| `log-init [DATE]`       | Create weekly log from vault template           | No              |
 
 ### Project commands
 

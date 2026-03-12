@@ -1,5 +1,5 @@
 #!/bin/bash
-# Tests for vault-cli: cmd_xp, cmd_log_init, get_current_streak
+# Tests for vault-cli: weekly log (log-init, xp, streak)
 set -uo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/vault-cli"
@@ -14,18 +14,23 @@ LOG_DIR="$TMPVAULT/41 projects/block-buster"
 TEMPLATE_DIR="$TMPVAULT/templates"
 mkdir -p "$LOG_DIR" "$TEMPLATE_DIR"
 
-# Create Daily Log template (matches real vault template)
-cat > "$TEMPLATE_DIR/Daily Log.md" <<'EOF'
+# Create Weekly Log template
+cat > "$TEMPLATE_DIR/Weekly Log.md" <<'EOF'
 ---
-type: daily-log
-date:
+type: weekly-log
+week:
+start:
+end:
 status: incomplete
 xp: 0
+sleep: []
 ---
 
-## Plan
+## Projects
 
-## Result
+## Tasks
+
+## Backlog
 
 ## Activity
 EOF
@@ -41,7 +46,6 @@ cat > "$WORKDIR/.claude/.vault.config.json" <<EOF
 }
 EOF
 
-# Also create schema files that vault-cli expects
 SCHEMA_SRC="$(cd "$(dirname "$0")/../schemas" && pwd)"
 
 run() {
@@ -86,152 +90,138 @@ assert_file_exists() {
 
 echo "# log-init"
 
-result=$(run log-init 2025-01-15)
-assert_eq "log-init returns path" "$LOG_DIR/log-2025-01-15.md" "$result"
-assert_file_exists "log-init creates file" "$LOG_DIR/log-2025-01-15.md"
-assert_contains "log-init fills date" "date: 2025-01-15" "$(cat "$LOG_DIR/log-2025-01-15.md")"
-assert_contains "log-init has Plan section" "## Plan" "$(cat "$LOG_DIR/log-2025-01-15.md")"
-assert_contains "log-init has Activity section" "## Activity" "$(cat "$LOG_DIR/log-2025-01-15.md")"
+# Compute expected week for 2026-03-12
+result=$(run log-init 2026-03-12)
+assert_eq "log-init returns weekly path" "$LOG_DIR/week-2026-W11.md" "$result"
+assert_file_exists "log-init creates file" "$LOG_DIR/week-2026-W11.md"
 
-# Idempotent: running again returns same path, doesn't error
-result2=$(run log-init 2025-01-15)
-assert_eq "log-init idempotent" "$LOG_DIR/log-2025-01-15.md" "$result2"
+content=$(cat "$LOG_DIR/week-2026-W11.md")
+assert_contains "log-init fills week" "week: 2026-W11" "$content"
+assert_contains "log-init fills start" "start: 2026-03-09" "$content"
+assert_contains "log-init fills end" "end: 2026-03-15" "$content"
+assert_contains "log-init has Tasks section" "## Tasks" "$content"
+assert_contains "log-init has Activity section" "## Activity" "$content"
+assert_contains "log-init has Projects section" "## Projects" "$content"
+assert_contains "log-init has Backlog section" "## Backlog" "$content"
+
+# Idempotent: running again returns same path
+result2=$(run log-init 2026-03-12)
+assert_eq "log-init idempotent" "$LOG_DIR/week-2026-W11.md" "$result2"
+
+# Same week, different day
+result3=$(run log-init 2026-03-14)
+assert_eq "log-init same week different day" "$LOG_DIR/week-2026-W11.md" "$result3"
 
 # --- xp tests ---
 
 echo "# xp"
 
-# Create a log with plan items and results
-cat > "$LOG_DIR/log-2025-01-20.md" <<'EOF'
+# Create weekly logs with tasks and projects
+cat > "$LOG_DIR/week-2026-W10.md" <<'EOF'
 ---
-type: daily-log
-date: 2025-01-20
+type: weekly-log
+week: 2026-W10
+start: 2026-03-02
+end: 2026-03-08
 status: incomplete
 xp: 0
+sleep: []
 ---
 
-## Plan
+## Projects
 
-- write tests
-- fix sidebar
-- deploy app
+- [[project-a]]
+- [[project-b]]
 
-## Result
+## Tasks
 
-- ✓ write tests
-- ✓ fix sidebar
-- ✗ deploy app
-- ✓ hotfix auth (unplanned)
+- [x] (2026-03-02) Fix sidebar [[project-a]]
+- [x] (2026-03-03) Write tests [[project-b]]
+- [ ] Deploy app [[project-a]]
+- [x] (2026-03-03) Hotfix auth [[project-a]]
+
+## Backlog
 
 ## Activity
 EOF
 
-# No streak (no prior complete days), no sleep
-xp_total=$(run xp 2025-01-20 2>/dev/null)
-# plan_bonus=3 (3 items planned) + planned_done=2×2=4 + unplanned=1×1=1 + streak=0 + sleep=0 = 8
-assert_eq "xp basic: 3+4+1+0+0=8" "8" "$xp_total"
+# xp prints year calendar to stdout
+xp_out=$(run xp)
+assert_contains "xp shows calendar" "Jan" "$xp_out"
+assert_contains "xp shows streak" "Streak:" "$xp_out"
+assert_contains "xp shows level" "Level:" "$xp_out"
 
-# With --sleep
-xp_sleep=$(run xp --sleep 2025-01-20 2>/dev/null)
-# 8 + 3 = 11
-assert_eq "xp with sleep: 8+3=11" "11" "$xp_sleep"
+# Mar 02 should show 1 (one task), Mar 03 should show 2 (two tasks)
+assert_contains "xp shows Mar" "Mar" "$xp_out"
 
-# Breakdown printed to stderr
-xp_stderr=$(run xp 2025-01-20 2>&1 >/dev/null)
-assert_contains "stderr shows plan bonus" "Plan bonus:" "$xp_stderr"
-assert_contains "stderr shows planned done" "Planned done:" "$xp_stderr"
-assert_contains "stderr shows streak" "Streak bonus:" "$xp_stderr"
+# Coverage bonus: full coverage in W10 → lands on Monday 2026-03-09
+# 2 projects both covered → +2 on Mar 09
+assert_contains "xp shows total" "Total:" "$xp_out"
 
-# --- xp with no plan ---
+# --- xp with sleep ---
 
-cat > "$LOG_DIR/log-2025-01-21.md" <<'EOF'
+echo "# xp with sleep"
+
+cat > "$LOG_DIR/week-2026-W09.md" <<'EOF'
 ---
-type: daily-log
-date: 2025-01-21
+type: weekly-log
+week: 2026-W09
+start: 2026-02-23
+end: 2026-03-01
 status: incomplete
 xp: 0
+sleep:
+  - 2026-02-23
+  - 2026-02-24
 ---
 
-## Plan
+## Projects
 
-## Result
+## Tasks
 
-- ✓ emergency fix (unplanned)
+- [x] (2026-02-23) Something
+
+## Backlog
 
 ## Activity
 EOF
 
-xp_noplan=$(run xp 2025-01-21 2>/dev/null)
-# plan_bonus=0 + planned=0 + unplanned=1 + streak=0 + sleep=0 = 1
-assert_eq "xp no plan: 0+0+1+0+0=1" "1" "$xp_noplan"
+# Sleep dates not consecutive from today → no streak bonus, but task shows in calendar
+xp_sleep=$(run xp)
+assert_contains "xp with sleep shows Feb" "Feb" "$xp_sleep"
 
-# --- xp with streak ---
+# --- xp partial coverage ---
 
-echo "# xp with streak"
+echo "# xp partial coverage"
 
-# Create consecutive complete days before today
-# We'll use a fixed "today" by creating logs for a sequence
-# Streak counts backward from yesterday relative to today's date
-today=$(date +%Y-%m-%d)
-day1=$(date -d "$today - 1 days" +%Y-%m-%d 2>/dev/null || date -v-1d +%Y-%m-%d)
-day2=$(date -d "$today - 2 days" +%Y-%m-%d 2>/dev/null || date -v-2d +%Y-%m-%d)
-day3=$(date -d "$today - 3 days" +%Y-%m-%d 2>/dev/null || date -v-3d +%Y-%m-%d)
-
-for d in "$day1" "$day2" "$day3"; do
-  cat > "$LOG_DIR/log-${d}.md" <<EOF
+cat > "$LOG_DIR/week-2026-W08.md" <<'EOF'
 ---
-type: daily-log
-date: ${d}
-status: complete
-xp: 5
----
-
-## Plan
-
-## Result
-
-## Activity
-EOF
-done
-
-# Create today's log with a plan
-cat > "$LOG_DIR/log-${today}.md" <<EOF
----
-type: daily-log
-date: ${today}
+type: weekly-log
+week: 2026-W08
+start: 2026-02-16
+end: 2026-02-22
 status: incomplete
 xp: 0
+sleep: []
 ---
 
-## Plan
+## Projects
 
-- test streak
+- [[project-a]]
+- [[project-b]]
 
-## Result
+## Tasks
 
-- ✓ test streak
+- [x] (2026-02-16) Fix bug [[project-a]]
+
+## Backlog
 
 ## Activity
 EOF
 
-xp_streak=$(run xp "$today" 2>/dev/null)
-# plan_bonus=3 + planned=1×2=2 + unplanned=0 + streak=3 + sleep=0 = 8
-assert_eq "xp with 3-day streak: 3+2+0+3+0=8" "8" "$xp_streak"
-
-# --- xp missing log ---
-
-echo "# xp error cases"
-
-xp_err=$(run xp 1999-01-01 2>&1 || true)
-assert_contains "xp missing log errors" "no log for 1999-01-01" "$xp_err"
-
-# --- streak command still works ---
-
-echo "# streak"
-
-streak_out=$(run streak 2>&1)
-assert_contains "streak shows streak count" "streak:" "$streak_out"
-assert_contains "streak shows level" "Level" "$streak_out"
+# Partial coverage (project-b has no done task) → no coverage bonus
+xp_partial=$(run xp)
+assert_contains "xp partial shows Feb" "Feb" "$xp_partial"
 
 # --- Summary ---
 

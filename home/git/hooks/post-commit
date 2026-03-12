@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Appends commit info to today's block-buster log ## Activity section.
-# Creates a minimal log if none exists. Fails silently on any error.
+# Appends commit info to this week's block-buster log ## Activity section.
+# Creates a weekly log if none exists. Fails silently on any error.
 
 append_activity() {
   local config="$HOME/.claude/.vault.config.json"
@@ -12,8 +12,17 @@ append_activity() {
 
   local today
   today=$(date +%Y-%m-%d)
+
+  # Compute ISO week
+  local iso_week
+  if date --version >/dev/null 2>&1; then
+    iso_week=$(date -d "$today" +%G-W%V)
+  else
+    iso_week=$(date -j -f "%Y-%m-%d" "$today" +%G-W%V)
+  fi
+
   local log_dir="$vault_root/41 projects/block-buster"
-  local log_file="$log_dir/log-${today}.md"
+  local log_file="$log_dir/week-${iso_week}.md"
 
   if [[ ! -f "$log_file" ]]; then
     vault-cli log-init "$today" >/dev/null || return 0
@@ -25,23 +34,45 @@ append_activity() {
   msg=$(git log -1 --format='%s' 2>/dev/null) || return 0
 
   local entry="- ${time} [${repo}] ${msg}"
+  local date_heading="### ${today}"
 
-  # Append after ## Activity line
-  if grep -q '^## Activity' "$log_file"; then
-    # Find the line number of ## Activity, then the next ## (or EOF)
-    local activity_line next_section_line
-    activity_line=$(grep -n '^## Activity' "$log_file" | head -1 | cut -d: -f1)
-    next_section_line=$(tail -n +"$((activity_line + 1))" "$log_file" | grep -n '^## ' | head -1 | cut -d: -f1)
+  # Find ## Activity section
+  if ! grep -q '^## Activity' "$log_file"; then
+    return 0
+  fi
 
-    if [[ -n "$next_section_line" ]]; then
-      # Insert before the next section
-      local insert_at=$((activity_line + next_section_line - 1))
+  # Check if date heading already exists under ## Activity
+  if grep -q "^### ${today}$" "$log_file"; then
+    # Find the date heading line and append after it (before next ### or ##)
+    local date_line next_line
+    date_line=$(grep -n "^### ${today}$" "$log_file" | head -1 | cut -d: -f1)
+    next_line=$(tail -n +"$((date_line + 1))" "$log_file" | grep -n '^##' | head -1 | cut -d: -f1)
+
+    if [[ -n "$next_line" ]]; then
+      local insert_at=$((date_line + next_line - 1))
       sed -i '' "${insert_at}i\\
 ${entry}
 " "$log_file"
     else
-      # No next section: append to end of file
-      printf '\n%s\n' "$entry" >> "$log_file"
+      printf '%s\n' "$entry" >> "$log_file"
+    fi
+  else
+    # No date heading yet: find ## Activity and insert date heading + entry
+    local activity_line next_section_line
+    activity_line=$(grep -n '^## Activity' "$log_file" | head -1 | cut -d: -f1)
+    next_section_line=$(tail -n +"$((activity_line + 1))" "$log_file" | grep -n '^## ' | head -1 | cut -d: -f1)
+
+    local block=$'\n'"${date_heading}"$'\n'"${entry}"
+
+    if [[ -n "$next_section_line" ]]; then
+      local insert_at=$((activity_line + next_section_line - 1))
+      sed -i '' "${insert_at}i\\
+\\
+${date_heading}\\
+${entry}
+" "$log_file"
+    else
+      printf '\n%s\n%s\n' "$date_heading" "$entry" >> "$log_file"
     fi
   fi
 }

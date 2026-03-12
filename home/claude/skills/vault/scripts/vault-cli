@@ -290,224 +290,323 @@ extract_frontmatter() {
   printf '%s' "$fm"
 }
 
-get_current_streak() {
-  local log_dir="$VAULT_ROOT/41 projects/block-buster"
-  local today
-  today=$(date +%Y-%m-%d)
-  local streak=0 i=1
-  while true; do
-    local check_date
-    check_date=$(date -d "$today - $i days" +%Y-%m-%d)
-    local f="$log_dir/log-${check_date}.md"
-    if [[ -f "$f" ]]; then
-      local fm status
-      fm=$(extract_frontmatter "$f")
-      status=$(get_field "status" "$fm")
-      if [[ "$status" == "complete" ]]; then
-        streak=$((streak + 1))
-        i=$((i + 1))
-        continue
-      fi
+# Detect GNU vs BSD date once
+if date --version >/dev/null 2>&1; then
+  IS_GNU_DATE=true
+else
+  IS_GNU_DATE=false
+fi
+
+iso_week_for_date() {
+  local d="${1:-$(date +%Y-%m-%d)}"
+  if $IS_GNU_DATE; then
+    date -d "$d" +%G-W%V
+  else
+    date -j -f "%Y-%m-%d" "$d" +%G-W%V
+  fi
+}
+
+week_start_end() {
+  local week="$1"
+  local year="${week%%-W*}"
+  local wnum="${week##*-W}"
+  if $IS_GNU_DATE; then
+    local start end
+    start=$(date -d "${year}-01-04 +$((( ${wnum#0} - 1) * 7)) days -$(date -d "${year}-01-04" +%u) days +1 day" +%Y-%m-%d)
+    end=$(date -d "$start +6 days" +%Y-%m-%d)
+  else
+    local jan4_dow start end
+    jan4_dow=$(date -j -f "%Y-%m-%d" "${year}-01-04" +%u)
+    start=$(date -j -v+"$(( (${wnum#0} - 1) * 7 - jan4_dow + 1 ))d" -f "%Y-%m-%d" "${year}-01-04" +%Y-%m-%d)
+    end=$(date -j -v+6d -f "%Y-%m-%d" "$start" +%Y-%m-%d)
+  fi
+  printf '%s\t%s' "$start" "$end"
+}
+
+# Offset a date by N days (positive = forward, negative = backward)
+date_offset_days() {
+  local d="$1" n="$2"
+  if $IS_GNU_DATE; then
+    date -d "$d + $n days" +%Y-%m-%d
+  else
+    if [[ $n -ge 0 ]]; then
+      date -j -v+"${n}d" -f "%Y-%m-%d" "$d" +%Y-%m-%d
+    else
+      date -j -v"${n}d" -f "%Y-%m-%d" "$d" +%Y-%m-%d
     fi
-    break
-  done
-  printf '%d' "$streak"
+  fi
+}
+
+days_in_month() {
+  local y="$1" m="$2"
+  local next_m=$((10#$m + 1)) next_y="$y"
+  if [[ $next_m -gt 12 ]]; then
+    next_m=1
+    next_y=$((y + 1))
+  fi
+  local first_of_next
+  first_of_next=$(printf '%04d-%02d-01' "$next_y" "$next_m")
+  date_offset_days "$first_of_next" -1 | cut -d- -f3
+  # Returns zero-padded day, caller should use $((10#...)) if needed
 }
 
 cmd_xp() {
-  local sleep_flag=false
-  local target_date=""
-
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --sleep) sleep_flag=true; shift ;;
-      *) target_date="$1"; shift ;;
-    esac
-  done
-  [[ -z "$target_date" ]] && target_date=$(date +%Y-%m-%d)
-
+  local today
+  today=$(date +%Y-%m-%d)
+  local year="${1:-${today%%-*}}"
   local log_dir="$VAULT_ROOT/41 projects/block-buster"
-  local log_file="$log_dir/log-${target_date}.md"
-  if [[ ! -f "$log_file" ]]; then
-    echo "Error: no log for $target_date" >&2
-    exit 1
-  fi
 
-  local content
-  content=$(cat "$log_file")
+  # Single pass over weekly files: collect task counts and coverage bonuses
+  declare -A day_tasks day_bonus
+  for f in "$log_dir"/week-*.md; do
+    [[ -f "$f" ]] || continue
+    local content
+    content=$(<"$f")
 
-  # Count plan items (lines starting with "- " between ## Plan and next ##)
-  local plan_count=0
-  local in_plan=false
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^##[[:space:]]+Plan ]]; then
-      in_plan=true
-      continue
-    fi
-    if $in_plan && [[ "$line" =~ ^## ]]; then
-      break
-    fi
-    if $in_plan && [[ "$line" =~ ^-[[:space:]] ]]; then
-      plan_count=$((plan_count + 1))
-    fi
-  done <<< "$content"
+    # Task counts
+    local in_t=false
+    local done_links=()
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^##[[:space:]]+Tasks ]]; then in_t=true; continue; fi
+      if $in_t && [[ "$line" =~ ^## ]]; then break; fi
+      if $in_t && [[ "$line" =~ ^-[[:space:]]\[x\][[:space:]]\(([0-9]{4}-[0-9]{2}-[0-9]{2})\) ]]; then
+        local d="${BASH_REMATCH[1]}"
+        day_tasks["$d"]=$(( ${day_tasks["$d"]:-0} + 1 ))
+        local tmp="$line"
+        while [[ "$tmp" =~ \[\[([^]|]*)\]\] ]]; do
+          done_links+=("${BASH_REMATCH[1]}")
+          tmp="${tmp#*"${BASH_REMATCH[0]}"}"
+        done
+      fi
+    done <<< "$content"
 
-  # Count result items (✓ lines, split planned vs unplanned)
-  local planned_done=0 unplanned_done=0
-  local in_result=false
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^##[[:space:]]+Result ]]; then
-      in_result=true
-      continue
-    fi
-    if $in_result && [[ "$line" =~ ^## ]]; then
-      break
-    fi
-    if $in_result && [[ "$line" == *"✓"* ]]; then
-      if [[ "$line" == *"(unplanned)"* ]]; then
-        unplanned_done=$((unplanned_done + 1))
-      else
-        planned_done=$((planned_done + 1))
+    # Coverage bonus (inline weekly_bonus logic to avoid re-reading)
+    local fm week_id
+    fm=$(extract_frontmatter "$f")
+    week_id=$(get_field "week" "$fm")
+    local projects=() in_p=false
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^##[[:space:]]+Projects ]]; then in_p=true; continue; fi
+      if $in_p && [[ "$line" =~ ^## ]]; then break; fi
+      if $in_p && [[ "$line" =~ \[\[([^]|]*)\]\] ]]; then
+        projects+=("${BASH_REMATCH[1]}")
+      fi
+    done <<< "$content"
+
+    if [[ ${#projects[@]} -gt 0 && ${#done_links[@]} -gt 0 ]]; then
+      local all_covered=true
+      for p in "${projects[@]}"; do
+        local found=false
+        for dl in "${done_links[@]}"; do
+          [[ "$dl" == "$p" ]] && { found=true; break; }
+        done
+        $found || { all_covered=false; break; }
+      done
+      if $all_covered; then
+        local start_end monday
+        start_end=$(week_start_end "$week_id")
+        monday=$(date_offset_days "$(cut -f1 <<< "$start_end")" 7)
+        day_bonus["$monday"]=$(( ${day_bonus["$monday"]:-0} + ${#projects[@]} ))
       fi
     fi
-  done <<< "$content"
+  done
 
-  # XP computation
-  local xp=0
-  local plan_bonus=0
-  if [[ $plan_count -gt 0 ]]; then
-    plan_bonus=3
-  fi
-  xp=$((xp + plan_bonus))
-
-  local planned_xp=$((planned_done * 2))
-  xp=$((xp + planned_xp))
-
-  local unplanned_xp=$((unplanned_done * 1))
-  xp=$((xp + unplanned_xp))
-
-  local streak
-  streak=$(get_current_streak)
-  local streak_bonus=$((streak > 7 ? 7 : streak))
-  xp=$((xp + streak_bonus))
-
-  local sleep_bonus=0
-  if $sleep_flag; then
-    sleep_bonus=3
-    xp=$((xp + sleep_bonus))
+  # Sleep streak: collect dates into associative array, walk once
+  declare -A sleep_set
+  local sleep_raw
+  sleep_raw=$(collect_sleep_dates)
+  if [[ -n "$sleep_raw" ]]; then
+    while IFS= read -r sd; do
+      sleep_set["$sd"]=1
+    done <<< "$sleep_raw"
   fi
 
-  # Print breakdown to stderr
-  echo "Plan bonus:      +${plan_bonus} (${plan_count} items planned)" >&2
-  echo "Planned done:    +${planned_xp} (${planned_done} × 2)" >&2
-  echo "Unplanned done:  +${unplanned_xp} (${unplanned_done} × 1)" >&2
-  echo "Streak bonus:    +${streak_bonus} (streak: ${streak}, cap 7)" >&2
-  echo "Sleep bonus:     +${sleep_bonus}" >&2
-  echo "Total:           ${xp}" >&2
+  local streak=0
+  local streak_dates=()
+  local si=1
+  while true; do
+    local check
+    check=$(date_offset_days "$today" "-$si")
+    if [[ -n "${sleep_set[$check]:-}" ]]; then
+      streak_dates+=("$check")
+      si=$((si + 1))
+    else
+      break
+    fi
+  done
+  if [[ -n "${sleep_set[$today]:-}" ]]; then
+    streak_dates+=("$today")
+  fi
+  streak=${#streak_dates[@]}
 
-  # Print integer total to stdout
-  printf '%d' "$xp"
+  declare -A day_streak
+  if [[ $streak -gt 0 ]]; then
+    local sday=1
+    for sd in $(printf '%s\n' "${streak_dates[@]}" | sort); do
+      local sb=$((sday > 7 ? 7 : sday))
+      day_streak["$sd"]=$sb
+      sday=$((sday + 1))
+    done
+  fi
+
+  # Build output
+  local year_total=0
+  local out=""
+  local dim=$'\033[2m' reset=$'\033[0m' green=$'\033[32m'
+  local cur_month="${today:5:2}"
+  cur_month=$((10#$cur_month))
+  local is_current_year=false
+  [[ "$year" == "${today%%-*}" ]] && is_current_year=true
+
+  # Year header
+  local nl=$'\n'
+  if $is_current_year; then
+    local day_of_year days_in_year pct
+    if $IS_GNU_DATE; then
+      day_of_year=$(date -d "$today" +%j)
+      days_in_year=$(date -d "${year}-12-31" +%j)
+    else
+      day_of_year=$(date -j -f "%Y-%m-%d" "$today" +%j)
+      days_in_year=$(date -j -f "%Y-%m-%d" "${year}-12-31" +%j)
+    fi
+    day_of_year=$((10#$day_of_year))
+    days_in_year=$((10#$days_in_year))
+    pct=$((day_of_year * 100 / days_in_year))
+    out+="${nl}${year} (${pct}%)${nl}${nl}"
+  else
+    out+="${nl}${year}${nl}${nl}"
+  fi
+
+  local months=("Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec")
+  for m in $(seq 1 12); do
+    local month_name="${months[$((m-1))]}"
+    local mm
+    mm=$(printf '%02d' "$m")
+    local dim_count
+    dim_count=$((10#$(days_in_month "$year" "$mm")))
+
+    local past_month=false future_month=false
+    $is_current_year && [[ $m -lt $cur_month ]] && past_month=true
+    $is_current_year && [[ $m -gt $cur_month ]] && future_month=true
+
+    # Precompute date strings and XP values
+    local month_total=0
+    local date_strs=() day_xps=()
+    for d in $(seq 1 "$dim_count"); do
+      local dd
+      dd=$(printf '%02d' "$d")
+      local ds="${year}-${mm}-${dd}"
+      date_strs+=("$ds")
+      local dxp=$(( ${day_tasks["$ds"]:-0} + ${day_bonus["$ds"]:-0} + ${day_streak["$ds"]:-0} ))
+      day_xps+=("$dxp")
+      month_total=$((month_total + dxp))
+    done
+    year_total=$((year_total + month_total))
+
+    # Header row
+    local hdr=""
+    if $past_month; then
+      hdr+="${dim}${month_name}"
+      for d in $(seq 1 "$dim_count"); do
+        hdr+=$(printf ' %2d' "$d")
+      done
+      hdr+="${reset}"
+    else
+      hdr+="$month_name"
+      for idx in "${!date_strs[@]}"; do
+        local ds="${date_strs[$idx]}"
+        local d=$((idx + 1))
+        if [[ "$ds" == "$today" ]]; then
+          hdr+=$(printf ' %s%2d%s' "$green" "$d" "$reset")
+        elif [[ "$ds" < "$today" ]]; then
+          hdr+=$(printf ' %s%2d%s' "$dim" "$d" "$reset")
+        else
+          hdr+=$(printf ' %2d' "$d")
+        fi
+      done
+    fi
+    out+="${hdr}${nl}"
+
+    # Data row
+    if ! ($future_month && [[ $month_total -eq 0 ]]); then
+      local drow=""
+      if $past_month; then
+        drow+="${dim}$(printf '%3d' "$month_total")"
+      else
+        drow+=$(printf '%3d' "$month_total")
+      fi
+      for idx in "${!date_strs[@]}"; do
+        local ds="${date_strs[$idx]}"
+        local dxp="${day_xps[$idx]}"
+        if [[ $dxp -gt 0 ]]; then
+          if $past_month || [[ "$ds" < "$today" ]]; then
+            drow+="${dim}$(printf ' %2d' "$dxp")${reset}"
+          else
+            drow+=$(printf ' %2d' "$dxp")
+          fi
+        elif [[ "$ds" > "$today" ]]; then
+          drow+='   '
+        else
+          drow+="${dim}  ×${reset}"
+        fi
+      done
+      if $past_month; then drow+="${reset}"; fi
+      out+="${drow}${nl}"
+    else
+      out+="${nl}"
+    fi
+  done
+
+  local level=$((year_total / 50))
+  out+="Streak: ${streak}   Level: ${level}   Total: ${year_total} XP${nl}"
+
+  printf '%s' "$out"
 }
 
 cmd_log_init() {
   local target_date="${1:-$(date +%Y-%m-%d)}"
+  local target_week
+  target_week=$(iso_week_for_date "$target_date")
   local log_dir="$VAULT_ROOT/41 projects/block-buster"
-  local log_file="$log_dir/log-${target_date}.md"
+  local log_file="$log_dir/week-${target_week}.md"
 
   if [[ -f "$log_file" ]]; then
     echo "$log_file"
     return 0
   fi
 
-  local template="$VAULT_ROOT/templates/Daily Log.md"
+  local template="$VAULT_ROOT/templates/Weekly Log.md"
   if [[ ! -f "$template" ]]; then
     echo "Error: template not found: $template" >&2
     exit 1
   fi
 
   [[ -d "$log_dir" ]] || mkdir -p "$log_dir"
-  sed "s/^date:$/date: ${target_date}/" "$template" > "$log_file"
+
+  local start_end
+  start_end=$(week_start_end "$target_week")
+  local week_start week_end
+  week_start=$(cut -f1 <<< "$start_end")
+  week_end=$(cut -f2 <<< "$start_end")
+
+  sed -e "s/^week:$/week: ${target_week}/" \
+      -e "s/^start:$/start: ${week_start}/" \
+      -e "s/^end:$/end: ${week_end}/" \
+      "$template" > "$log_file"
   echo "$log_file"
 }
 
-cmd_streak() {
+collect_sleep_dates() {
   local log_dir="$VAULT_ROOT/41 projects/block-buster"
-  local today
-  today=$(date +%Y-%m-%d)
-
-  # Single pass: collect status and xp per date
-  declare -A log_status log_xp
-  local all_dates=()
-  for f in "$log_dir"/log-*.md; do
+  for f in "$log_dir"/week-*.md; do
     [[ -f "$f" ]] || continue
-    local bname d fm status xp
-    bname=$(basename "$f" .md)
-    d="${bname#log-}"
+    local fm sleep_val
     fm=$(extract_frontmatter "$f")
-    status=$(get_field "status" "$fm")
-    xp=$(get_field "xp" "$fm")
-    log_status["$d"]="$status"
-    log_xp["$d"]="${xp:-0}"
-    all_dates+=("$d")
-  done
-  IFS=$'\n' read -r -d '' -a all_dates <<< "$(printf '%s\n' "${all_dates[@]}" | sort)" || true
-
-  # Current streak
-  local streak
-  streak=$(get_current_streak)
-
-  # Best streak
-  local best=0 run=0 prev_date=""
-  for d in "${all_dates[@]}"; do
-    if [[ "${log_status[$d]}" == "complete" ]]; then
-      if [[ -n "$prev_date" ]]; then
-        local expected
-        expected=$(date -d "$prev_date + 1 day" +%Y-%m-%d 2>/dev/null || echo "")
-        if [[ "$d" == "$expected" ]]; then
-          run=$((run + 1))
-        else
-          run=1
-        fi
-      else
-        run=1
-      fi
-      prev_date="$d"
-    else
-      run=0
-      prev_date=""
+    sleep_val=$(get_field "sleep" "$fm")
+    if [[ -n "$sleep_val" && "$sleep_val" != "[]" ]]; then
+      echo "$sleep_val" | tr ',' '\n' | sed 's/^[[:space:]]*//' | grep '[0-9]'
     fi
-    [[ $run -gt $best ]] && best=$run
-  done
-
-  # Total XP
-  local total_xp=0
-  for d in "${all_dates[@]}"; do
-    total_xp=$((total_xp + ${log_xp[$d]}))
-  done
-
-  # Today's info
-  local today_xp="${log_xp[$today]:-0}"
-  local today_status="${log_status[$today]:-no log}"
-  [[ -z "$today_status" ]] && today_status="incomplete"
-
-  local level=$((total_xp / 50))
-
-  # 7-day heatmap
-  local heatmap=""
-  for i in $(seq 6 -1 0); do
-    local check_date
-    check_date=$(date -d "$today - $i days" +%Y-%m-%d)
-    if [[ "${log_status[$check_date]:-}" == "complete" ]]; then
-      heatmap+="■ "
-    else
-      heatmap+="□ "
-    fi
-  done
-
-  printf 'Режим                    Level %d (%d XP)\n' "$level" "$total_xp"
-  printf '  streak: %d   best: %d\n' "$streak" "$best"
-  printf '  Last 7 days: %s\n' "${heatmap% }"
-  printf '  Today: %s (%d XP)\n' "$today_status" "$today_xp"
+  done | sort -u
 }
 
 cmd_notes() {
@@ -540,11 +639,10 @@ case "${1:-}" in
   projects)    cmd_projects ;;
   cards)       cmd_cards ;;
   notes)       cmd_notes ;;
-  streak)      cmd_streak ;;
   xp)          shift; cmd_xp "$@" ;;
   log-init)    shift; cmd_log_init "$@" ;;
   *)
-    echo "Usage: vault-cli [--project <name>] {config|context|checkpoints|get|search|update|projects|cards|notes|streak|xp|log-init}" >&2
+    echo "Usage: vault-cli [--project <name>] {config|context|checkpoints|get|search|update|projects|cards|notes|xp|log-init}" >&2
     echo "" >&2
     echo "  --project <name>        Override project (resolved via root config)" >&2
     echo "  config                  Print resolved config JSON" >&2
@@ -556,9 +654,8 @@ case "${1:-}" in
     echo "  projects                List active projects" >&2
     echo "  cards                   List all cards with metadata" >&2
     echo "  notes                   List all notes with metadata" >&2
-    echo "  streak                  Show streak, XP, level, and 7-day heatmap" >&2
-    echo "  xp [--sleep] [DATE]     Compute XP for a log (default: today)" >&2
-    echo "  log-init [DATE]         Create empty daily log from vault template" >&2
+    echo "  xp [YEAR]               XP report: calendar, streak, level" >&2
+    echo "  log-init [DATE]         Create weekly log from vault template" >&2
     exit 1
     ;;
 esac
