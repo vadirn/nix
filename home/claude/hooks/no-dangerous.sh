@@ -1,6 +1,7 @@
 #!/bin/bash
 # Block dangerous Bash commands with descriptive messages.
 # Note: rm -rf is handled separately by no-dangerous-rm.py (path-aware).
+# Also handles git -C (absorbed from no-git-c.sh).
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 
@@ -15,33 +16,36 @@ deny() {
   exit 0
 }
 
-# sudo
-if echo "$COMMAND" | grep -qE '(^|\s|;|&&|\|)sudo\s'; then
+P='(^|[[:space:];]|&&|\|)'
+FORCE_RE="${P}git[[:space:]]+push.*(-f|--force)"
+BRANCH_RE="${P}git[[:space:]]+branch.*-D([[:space:]]|$)"
+OBSIDIAN_RE="${P}obsidian[[:space:]]+(eval|delete[[:space:]].*permanent|plugin:(un)?install|dev:cdp|command|history:restore)([[:space:]]|$)"
+
+if [[ "$COMMAND" =~ ${P}sudo[[:space:]] ]]; then
   deny "Blocked: sudo runs commands as root. Too risky."
 fi
 
-# chmod 777
-if echo "$COMMAND" | grep -qE '(^|\s|;|&&|\|)chmod\s+777\s'; then
+if [[ "$COMMAND" =~ ${P}chmod[[:space:]]+777[[:space:]] ]]; then
   deny "Blocked: chmod 777 makes files world-writable."
 fi
 
-# git push --force / -f
-if echo "$COMMAND" | grep -qE '(^|\s|;|&&|\|)git\s+push\s+.*(-f|--force)'; then
+if [[ "$COMMAND" =~ $FORCE_RE ]]; then
   deny "Blocked: force push overwrites remote history."
 fi
 
-# git reset --hard
-if echo "$COMMAND" | grep -qE '(^|\s|;|&&|\|)git\s+reset\s+--hard'; then
+if [[ "$COMMAND" =~ ${P}git[[:space:]]+reset[[:space:]]+--hard ]]; then
   deny "Blocked: git reset --hard discards uncommitted changes."
 fi
 
-# git branch -D
-if echo "$COMMAND" | grep -qE '(^|\s|;|&&|\|)git\s+branch\s+.*-D\s'; then
+if [[ "$COMMAND" =~ $BRANCH_RE ]]; then
   deny "Blocked: git branch -D force-deletes without merge check."
 fi
 
-# obsidian dangerous subcommands
-if echo "$COMMAND" | grep -qE '(^|\s|;|&&|\|)obsidian\s+(eval|delete\s.*permanent|plugin:(un)?install|dev:cdp|command|history:restore)\s'; then
+if [[ "$COMMAND" =~ ${P}git[[:space:]]+-C[[:space:]] ]]; then
+  deny "Use plain \`git\` — you are already in the repo."
+fi
+
+if [[ "$COMMAND" =~ $OBSIDIAN_RE ]]; then
   deny "Blocked: this obsidian subcommand can cause data loss or run arbitrary code."
 fi
 

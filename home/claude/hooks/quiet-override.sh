@@ -4,7 +4,7 @@
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 
-quiet() {
+emit() {
   jq -n --arg cmd "$1" '{
     "hookSpecificOutput": {
       "hookEventName": "PreToolUse",
@@ -14,52 +14,52 @@ quiet() {
   exit 0
 }
 
-# git commit/clone/fetch/pull → -q
-if [[ "$COMMAND" =~ git[[:space:]]+(commit|clone|fetch|pull) ]] && [[ ! "$COMMAND" =~ (-q|--quiet) ]]; then
-  QUIET_CMD=$(printf '%s' "$COMMAND" | sed -E 's/(git[[:space:]]+(commit|clone|fetch|pull))/\1 -q/')
-  quiet "$QUIET_CMD"
-fi
+# try_quiet MATCH_PATTERN SKIP_PATTERN SED_REPLACEMENT
+try_quiet() {
+  local match="$1" skip="$2" replacement="$3"
+  if [[ "$COMMAND" =~ $match ]] && [[ ! "$COMMAND" =~ $skip ]]; then
+    emit "$(printf '%s' "$COMMAND" | sed -E "$replacement")"
+  fi
+}
 
-# npm install/ci → --silent
-if [[ "$COMMAND" =~ ^npm[[:space:]]+(install|i|ci)([[:space:]]|$) ]] && [[ ! "$COMMAND" =~ (--silent|--quiet|\||'>'|'&') ]]; then
-  QUIET_CMD=$(printf '%s' "$COMMAND" | sed -E 's/^(npm[[:space:]]+(install|i|ci))/\1 --silent/')
-  quiet "$QUIET_CMD"
-fi
+try_quiet \
+  '(^|[[:space:]])git[[:space:]]+(commit|clone|fetch|pull)' \
+  '(-q|--quiet)' \
+  's/(git[[:space:]]+(commit|clone|fetch|pull))/\1 -q/'
 
-# cargo build → -q
-if [[ "$COMMAND" =~ ^cargo[[:space:]]+build ]] && [[ ! "$COMMAND" =~ (-q|--quiet|\||'>'|'&') ]]; then
-  QUIET_CMD=$(printf '%s' "$COMMAND" | sed -E 's/^(cargo[[:space:]]+build)/\1 -q/')
-  quiet "$QUIET_CMD"
-fi
+try_quiet \
+  '^npm[[:space:]]+(install|i|ci)([[:space:]]|$)' \
+  '(--silent|--quiet|\||>|&)' \
+  's/^(npm[[:space:]]+(install|i|ci))/\1 --silent/'
 
-# make → -s
-if [[ "$COMMAND" =~ ^make([[:space:]]|$) ]] && [[ ! "$COMMAND" =~ (-s|--silent|\||'>'|'&') ]]; then
-  QUIET_CMD=$(printf '%s' "$COMMAND" | sed -E 's/^make/make -s/')
-  quiet "$QUIET_CMD"
-fi
+try_quiet \
+  '^cargo[[:space:]]+build' \
+  '(-q|--quiet|\||>|&)' \
+  's/^(cargo[[:space:]]+build)/\1 -q/'
 
-# pip install/download → -q
-if [[ "$COMMAND" =~ (^|python3?[[:space:]]+-m[[:space:]]+)pip3?[[:space:]]+(install|download) ]] && [[ ! "$COMMAND" =~ (-q|--quiet) ]]; then
-  QUIET_CMD=$(printf '%s' "$COMMAND" | sed -E 's/(pip3?[[:space:]]+(install|download))/\1 -q/')
-  quiet "$QUIET_CMD"
-fi
+try_quiet \
+  '^make([[:space:]]|$)' \
+  '(-s|--silent|\||>|&)' \
+  's/^make/make -s/'
 
-# wget → -q
-if [[ "$COMMAND" =~ ^wget[[:space:]] ]] && [[ ! "$COMMAND" =~ (-q|--quiet|-O) ]]; then
-  QUIET_CMD=$(printf '%s' "$COMMAND" | sed -E 's/^wget/wget -q/')
-  quiet "$QUIET_CMD"
-fi
+try_quiet \
+  '(^|python3?[[:space:]]+-m[[:space:]]+)pip3?[[:space:]]+(install|download)' \
+  '(-q|--quiet)' \
+  's/(pip3?[[:space:]]+(install|download))/\1 -q/'
 
-# docker build/pull → -q
-if [[ "$COMMAND" =~ ^docker[[:space:]]+(build|pull) ]] && [[ ! "$COMMAND" =~ (-q|--quiet|\|) ]]; then
-  QUIET_CMD=$(printf '%s' "$COMMAND" | sed -E 's/^(docker[[:space:]]+(build|pull))/\1 -q/')
-  quiet "$QUIET_CMD"
-fi
+try_quiet \
+  '^wget[[:space:]]' \
+  '(-q|--quiet|-O)' \
+  's/^wget/wget -q/'
 
-# ffmpeg → -nostats -loglevel error
-if [[ "$COMMAND" =~ (^|[[:space:]|;&])ffmpeg[[:space:]] ]] && [[ ! "$COMMAND" =~ -nostats ]]; then
-  QUIET_CMD=$(printf '%s' "$COMMAND" | sed -E 's/(^|[[:space:]])ffmpeg[[:space:]]/\1ffmpeg -nostats -loglevel error /')
-  quiet "$QUIET_CMD"
-fi
+try_quiet \
+  '^docker[[:space:]]+(build|pull)' \
+  '(-q|--quiet|\|)' \
+  's/^(docker[[:space:]]+(build|pull))/\1 -q/'
+
+try_quiet \
+  '(^|[[:space:]])ffmpeg[[:space:]]' \
+  '-nostats' \
+  's/(^|[[:space:]])ffmpeg[[:space:]]/\1ffmpeg -nostats -loglevel error /'
 
 exit 0

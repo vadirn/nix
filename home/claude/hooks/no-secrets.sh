@@ -4,13 +4,10 @@
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 
-# Patterns for sensitive file paths/names
-SENSITIVE='(\.env($|\s|\.)|credentials|secret|\.pem|\.key|id_rsa|id_ed25519|\.p12|\.pfx|\.keystore|token\.json|auth\.json|\.netrc|\.npmrc|\.pypirc)'
+SENSITIVE='(\.env($|[[:space:]]|\.)|credentials|secret|\.pem|\.key|id_rsa|id_ed25519|\.p12|\.pfx|\.keystore|token\.json|auth\.json|\.netrc|\.npmrc|\.pypirc)'
+READERS='(^|[[:space:]]|/)(cat|head|tail|less|more|grep|rg|egrep|fgrep|ag|ack|sed|awk|jq|yq|bat|find[[:space:]].*-exec|xargs)'
 
-# Commands that read file contents (not just metadata)
-READERS='(^|\s|/)(cat|head|tail|less|more|grep|rg|egrep|fgrep|ag|ack|sed|awk|jq|yq|bat|find\s.*-exec|xargs)'
-
-if echo "$COMMAND" | grep -qEi "$READERS" && echo "$COMMAND" | grep -qEi "$SENSITIVE"; then
+if [[ "$COMMAND" =~ $READERS ]] && [[ "${COMMAND,,}" =~ $SENSITIVE ]]; then
   jq -n '{
     "hookSpecificOutput": {
       "hookEventName": "PreToolUse",
