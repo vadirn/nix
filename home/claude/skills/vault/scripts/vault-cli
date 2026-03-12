@@ -16,11 +16,9 @@ validate_config() {
   local cfg="$1"
   local schema="$2"
   local errors
-  if ! errors=$(bunx ajv-cli validate -s "$schema" -d "$cfg" 2>&1); then
+  if ! errors=$(check-jsonschema --schemafile "$schema" "$cfg" 2>&1); then
     echo "Error: invalid config $cfg" >&2
     echo "$errors" >&2
-    echo "" >&2
-    echo "Expected schema: $schema" >&2
     exit 1
   fi
 }

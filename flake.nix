@@ -39,6 +39,7 @@
               typst
               uv
               coreutils
+              check-jsonschema
             ];
 
             environment.systemPath = [
