@@ -125,7 +125,7 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/pipe-allow.sh"
+            "command": "python3 ~/.claude/hooks/pipe-allow.py"
           }
         ]
       },
