@@ -69,7 +69,7 @@ elif "<project> ...":
 
 elif "log" or weekly log intent (planning, tasks, sleep):
     Read(dir/references/log-weekly.md)
-    week_file = Bash(vault-cli log-init)
+    week_file = Bash(vault-cli log)
     log = Read(week_file)
     do("show current week's log, ask what user wants to do")
 
@@ -111,7 +111,7 @@ else:
 | `projects`              | List active projects                           | No              |
 | `cards`                 | List all cards with metadata                   | No              |
 | `notes`                 | List all notes with metadata                   | No              |
-| `log-init [DATE]`       | Create weekly log from vault template           | No              |
+| `log [DATE\|WEEK\|last\|next]` | Open or create weekly log                 | No              |
 
 ### Project commands
 

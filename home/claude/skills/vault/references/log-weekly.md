@@ -53,6 +53,6 @@ Activity is auto-appended by the post-commit hook. Each entry prefixed with `YYY
 ### Weekly file
 
 One file per ISO week: `YYYY-wWW.md` in `41 projects/block-buster/`.
-Created by `vault-cli log-init` with frontmatter: `week`, `start`, `end`, `sleep: []`.
+Created by `vault-cli log` with frontmatter: `week`, `start`, `end`, `sleep: []`.
 
 The `sleep` field is a YAML list of ISO dates: `sleep: [2026-03-10, 2026-03-11]`. The sleep action appends today's date to this list.

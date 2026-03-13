@@ -335,20 +335,75 @@ date_offset_days() {
   fi
 }
 
+resolve_log_date() {
+  local input="${1:-}"
+  if [[ -z "$input" ]]; then
+    iso_week_for_date "$(date +%Y-%m-%d)"
+    return
+  fi
+  case "$input" in
+    last|prev)
+      local d
+      d=$(date_offset_days "$(date +%Y-%m-%d)" -7)
+      iso_week_for_date "$d"
+      ;;
+    next)
+      local d
+      d=$(date_offset_days "$(date +%Y-%m-%d)" 7)
+      iso_week_for_date "$d"
+      ;;
+    [0-9]|[0-9][0-9])
+      printf '%s-W%02d' "$(date +%G)" "${input#0}"
+      ;;
+    [wW][0-9]|[wW][0-9][0-9])
+      local n="${input:1}"
+      printf '%s-W%02d' "$(date +%G)" "${n#0}"
+      ;;
+    [0-9][0-9][0-9][0-9]-[wW][0-9]|[0-9][0-9][0-9][0-9]-[wW][0-9][0-9])
+      local year="${input:0:4}"
+      local n="${input:6}"
+      printf '%s-W%02d' "$year" "${n#0}"
+      ;;
+    [0-9][0-9][0-9][0-9][wW][0-9]|[0-9][0-9][0-9][0-9][wW][0-9][0-9])
+      local year="${input:0:4}"
+      local n="${input:5}"
+      printf '%s-W%02d' "$year" "${n#0}"
+      ;;
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+      iso_week_for_date "$input"
+      ;;
+    *)
+      echo "Error: unknown date format '$input'" >&2
+      exit 1
+      ;;
+  esac
+}
+
 cmd_xp() {
   ruby "$SCRIPT_DIR/vault-xp.rb" "$VAULT_ROOT" "$@"
 }
 
-cmd_log_init() {
-  local target_date="${1:-$(date +%Y-%m-%d)}"
+cmd_log() {
   local target_week
-  target_week=$(iso_week_for_date "$target_date")
+  target_week=$(resolve_log_date "${1:-}")
   local log_dir="$VAULT_ROOT/41 projects/block-buster"
   local log_file="$log_dir/${target_week,,}.md"
 
   if [[ -f "$log_file" ]]; then
     echo "$log_file"
     return 0
+  fi
+
+  # Guard: don't create files for past weeks
+  local start_end
+  start_end=$(week_start_end "$target_week")
+  local week_end
+  week_end=$(cut -f2 <<< "$start_end")
+  local today
+  today=$(date +%Y-%m-%d)
+  if [[ "$week_end" < "$today" ]]; then
+    echo "Error: no log for past week ${target_week} (ended ${week_end})" >&2
+    exit 1
   fi
 
   local template="$VAULT_ROOT/templates/Weekly Log.md"
@@ -359,11 +414,8 @@ cmd_log_init() {
 
   [[ -d "$log_dir" ]] || mkdir -p "$log_dir"
 
-  local start_end
-  start_end=$(week_start_end "$target_week")
-  local week_start week_end
+  local week_start
   week_start=$(cut -f1 <<< "$start_end")
-  week_end=$(cut -f2 <<< "$start_end")
 
   sed -e "s/^week:$/week: ${target_week}/" \
       -e "s/^start:$/start: ${week_start}/" \
@@ -404,9 +456,9 @@ case "${1:-}" in
   cards)       cmd_cards ;;
   notes)       cmd_notes ;;
   xp)          shift; cmd_xp "$@" ;;
-  log-init)    shift; cmd_log_init "$@" ;;
+  log)         shift; cmd_log "$@" ;;
   *)
-    echo "Usage: vault-cli [--project <name>] {config|context|checkpoints|get|search|update|projects|cards|notes|xp|log-init}" >&2
+    echo "Usage: vault-cli [--project <name>] {config|context|checkpoints|get|search|update|projects|cards|notes|xp|log}" >&2
     echo "" >&2
     echo "  --project <name>        Override project (resolved via root config)" >&2
     echo "  config                  Print resolved config JSON" >&2
@@ -419,7 +471,7 @@ case "${1:-}" in
     echo "  cards                   List all cards with metadata" >&2
     echo "  notes                   List all notes with metadata" >&2
     echo "  xp [YEAR]               XP report: calendar, streak, level" >&2
-    echo "  log-init [DATE]         Create weekly log from vault template" >&2
+    echo "  log [DATE|WEEK|last|next] Open or create weekly log" >&2
     exit 1
     ;;
 esac
