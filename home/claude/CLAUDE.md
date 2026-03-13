@@ -48,7 +48,10 @@ Use conventional commit prefixes (feat, fix, chore). Short message, no body.
 
 ## Bash
 
-Run one command at a time so permissions auto-apply. Chained commands (`&&`, `||`, `;`) bypass the allowlist. Pipes (`|`) are fine when output needs filtering (`| head`, `| wc -l`, `| sort`).
+- Run one command at a time so permissions auto-apply.
+- Pipes (`|`) are fine when output needs filtering (`| head`, `| wc -l`, `| sort`).
+- Chained commands (`&&`, `||`, `;`) bypass the allowlist: avoid them.
+- Quote paths with spaces using double quotes (`"path with spaces"`).
 
 ## Web
 
