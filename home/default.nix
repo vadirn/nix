@@ -26,6 +26,7 @@
           btop
           delta
           ngrok
+          ruby
         ];
       };
       programs = {

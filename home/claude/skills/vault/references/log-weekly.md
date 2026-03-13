@@ -36,6 +36,7 @@ else:
 | Source         | XP               | Logic                                                        |
 | -------------- | ---------------- | ------------------------------------------------------------ |
 | Completed tasks | +1 each         | `- [x]` count in ## Tasks                                    |
+| Backlog tasks   | -1 each         | `- [x]` count in ## Backlog (penalty for completing backlog instead of planned tasks) |
 | Full coverage  | +N (next Monday) | N = projects in ## Projects; all must have a linked `- [x]` task. Bonus lands on Monday of the following week. |
 | Sleep streak   | +1..+7/day       | Consecutive days in `sleep: []` across weekly files. Day 1 → +1, day 2 → +2, ..., day 7+ → +7. |
 

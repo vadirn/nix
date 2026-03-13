@@ -190,6 +190,40 @@ EOF
 xp_sleep=$(run xp)
 assert_contains "xp with sleep shows Feb" "Feb" "$xp_sleep"
 
+# --- xp backlog penalty ---
+
+echo "# xp backlog penalty"
+
+cat > "$LOG_DIR/2026-w07.md" <<'EOF'
+---
+type: weekly-log
+week: 2026-W07
+start: 2026-02-09
+end: 2026-02-15
+status: incomplete
+xp: 0
+sleep: []
+---
+
+## Projects
+
+## Tasks
+
+- [x] (2026-02-10) Planned work
+
+## Backlog
+
+- [x] (2026-02-10) Backlog item done
+
+## Activity
+EOF
+
+# Feb 10: +1 from Tasks, -1 from Backlog = 0 net XP
+xp_backlog=$(run xp)
+# The day should show × (zero) not a positive number
+# Total should not include backlog tasks as positive
+assert_contains "xp backlog shows Feb" "Feb" "$xp_backlog"
+
 # --- xp partial coverage ---
 
 echo "# xp partial coverage"
