@@ -1,27 +1,28 @@
-theme = dark:"Catppuccin Mocha",light:"Catppuccin Latte"
-font-family = "MonoLisa Variable"
-font-size = 13
-font-feature = zero
-font-variation = "wght=560"
+adjust-cursor-thickness = 200%
+auto-update-channel = tip
+confirm-close-surface = false
+copy-on-select = clipboard
 cursor-style = block
 cursor-style-blink = true
-adjust-cursor-thickness = 200%
-keybind = shift+enter=text:\x1b\r
-keybind = super+s=text:\x13
-keybind = super+left=text:\x1b[H
-keybind = super+right=text:\x1b[F
+font-family = "MonoLisa Variable"
+font-feature = zero
+font-size = 13
+font-variation = "wght=560"
 keybind = alt+left=text:\x1bb
 keybind = alt+right=text:\x1bf
+keybind = shift+enter=text:\x1b\r
 keybind = super+backspace=text:\x15
 keybind = super+c=copy_to_clipboard
-keybind = super+v=paste_from_clipboard
-keybind = super+up=text:\x1b[1;5H
 keybind = super+down=text:\x1b[1;5F
-confirm-close-surface = false
-unfocused-split-opacity = 0.4
-window-colorspace = display-p3
-copy-on-select = clipboard
-shell-integration-features = no-title
+keybind = super+left=text:\x1b[H
+keybind = super+right=text:\x1b[F
+keybind = super+s=text:\x13
+keybind = super+up=text:\x1b[1;5H
+keybind = super+v=paste_from_clipboard
 notify-on-command-finish = unfocused
 notify-on-command-finish-action = no-bell,notify
 notify-on-command-finish-after = 30s
+shell-integration-features = no-title
+theme = dark:"Catppuccin Mocha",light:"Catppuccin Latte"
+unfocused-split-opacity = 0.4
+window-colorspace = display-p3
