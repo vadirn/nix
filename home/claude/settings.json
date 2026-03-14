@@ -205,6 +205,23 @@
     "skill-creator@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true
   },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": [
+        "api.firecrawl.dev"
+      ],
+      "allowManagedDomainsOnly": false
+    },
+    "filesystem": {
+      "allowWrite": [
+        "~/Documents/vault",
+        "$TMPDIR"
+      ]
+    }
+  },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
   "plansDirectory": "./.claude-plans",

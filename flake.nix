@@ -18,6 +18,12 @@
     home-manager,
   }: let
     system = "aarch64-darwin";
+    vault-query = nixpkgs.legacyPackages.${system}.rustPlatform.buildRustPackage {
+      pname = "vault-query";
+      version = "0.1.0";
+      src = ./vault-query;
+      cargoLock.lockFile = ./vault-query/Cargo.lock;
+    };
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:
       nix-darwin.lib.darwinSystem {
@@ -30,7 +36,7 @@
           }: {
             nixpkgs.config.allowUnfree = true;
 
-            environment.systemPackages = with pkgs; [
+            environment.systemPackages = (with pkgs; [
               yazi
               alejandra
               nixd
@@ -40,6 +46,8 @@
               uv
               coreutils
               check-jsonschema
+            ]) ++ [
+              vault-query
             ];
 
             environment.systemPath = [
@@ -67,6 +75,7 @@
                 "tw93/tap/mole"
                 "dopplerhq/cli/doppler"
                 "micro"
+                "rustup"
                 "arimxyer/tap/models"
               ];
               casks = [

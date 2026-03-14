@@ -1,0 +1,87 @@
+filters:
+  and:
+    - type == "checkpoint"
+    - file.inFolder("41 projects/nix")
+formulas:
+  cost_per_line: if(lines_written > 0, (cost_usd / lines_written).round(3), "")
+  lines_per_turn: if(turns_to_edit > 0, (lines_written / turns_to_edit).round(1), "")
+properties:
+  file.name:
+    displayName: Checkpoint
+  note.description:
+    displayName: Description
+  note.done:
+    displayName: Done
+  note.decisions:
+    displayName: Decisions
+  note.frictions:
+    displayName: Frictions
+  note.cost_usd:
+    displayName: Cost ($)
+  note.lines_written:
+    displayName: Lines
+  note.turns_to_edit:
+    displayName: Turns
+  formula.cost_per_line:
+    displayName: $/line
+  formula.lines_per_turn:
+    displayName: Lines/turn
+views:
+  - type: table
+    name: All
+    order:
+      - file.name
+      - description
+      - done
+      - decisions
+      - frictions
+    sort:
+      - property: file.name
+        direction: DESC
+  - type: table
+    name: Incomplete
+    filters:
+      and:
+        - done == false
+    order:
+      - file.name
+      - description
+      - decisions
+      - frictions
+    sort:
+      - property: file.name
+        direction: DESC
+  - type: table
+    name: Stats
+    order:
+      - file.name
+      - description
+      - cost_usd
+      - lines_written
+      - turns_to_edit
+      - formula.cost_per_line
+      - formula.lines_per_turn
+    sort:
+      - property: file.name
+        direction: DESC
+    summaries:
+      cost_usd: Sum
+      lines_written: Sum
+      turns_to_edit: Sum
+      formula.cost_per_line: Average
+      formula.lines_per_turn: Average
+  - type: table
+    name: Graduation queue
+    filters:
+      or:
+        - decisions.length > 0
+        - frictions.length > 0
+    order:
+      - file.name
+      - description
+      - done
+      - decisions
+      - frictions
+    sort:
+      - property: file.name
+        direction: DESC

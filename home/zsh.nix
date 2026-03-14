@@ -10,6 +10,8 @@
       GPG_TTY = "$(tty)";
 
       NPM_CONFIG_PREFIX = "$HOME/.npm-global";
+      RUSTUP_HOME = "$HOME/.rustup";
+      CARGO_HOME = "$HOME/.cargo";
       EDITOR = "code --wait";
       DOCKER_HOST = "unix://$HOME/.orbstack/run/docker.sock";
     };
@@ -38,7 +40,7 @@
         eval "$(zoxide init --cmd cd zsh)"
       fi
 
-      export PATH="$HOME/.bun/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
+      export PATH="$HOME/.cargo/bin:$HOME/.bun/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
       _set_tab_title() { print -Pn "\e]0;%1~\a" }
       precmd_functions+=(_set_tab_title)

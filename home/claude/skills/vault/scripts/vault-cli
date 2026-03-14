@@ -106,22 +106,24 @@ cmd_checkpoints() {
   require_project
 
   local view="${1:-All}"
-  # Derive relative path from vault root for obsidian base:query
-  local rel_path="${PROJECT_PATH#"$VAULT_ROOT/"}"
-  local base_path="$rel_path/Checkpoints.base"
+  local base_path="$PROJECT_PATH/Checkpoints.base"
 
-  # Try obsidian base:query
-  if timeout 30 obsidian base:query path="$base_path" view="$view" 2>/dev/null; then
+  # Try vault-query first, fall back to obsidian, then file listing
+  if command -v vault-query >/dev/null 2>&1 && [[ -f "$base_path" ]]; then
+    vault-query query "$base_path" --view "$view" --vault-root "$VAULT_ROOT"
+    return
+  fi
+
+  if timeout 30 obsidian base:query path="${PROJECT_PATH#"$VAULT_ROOT/"}/Checkpoints.base" view="$view" < /dev/null 2>/dev/null; then
     return
   fi
 
   # Fallback: grep checkpoint files
   echo "# Fallback: file-based checkpoint listing" >&2
-  local pattern="$PROJECT_PATH/checkpoint-*.md"
   case "$view" in
-    Incomplete) grep -l "done: false" $pattern 2>/dev/null || true ;;
-    Done)       grep -l "done: true" $pattern 2>/dev/null || true ;;
-    *)          ls $pattern 2>/dev/null || true ;;
+    Incomplete) find "$PROJECT_PATH" -maxdepth 1 -name 'checkpoint-*.md' -exec grep -l "done: false" {} + 2>/dev/null || true ;;
+    Done)       find "$PROJECT_PATH" -maxdepth 1 -name 'checkpoint-*.md' -exec grep -l "done: true" {} + 2>/dev/null || true ;;
+    *)          find "$PROJECT_PATH" -maxdepth 1 -name 'checkpoint-*.md' 2>/dev/null | sort || true ;;
   esac
 }
 
@@ -179,8 +181,15 @@ cmd_update() {
 }
 
 cmd_projects() {
-  # Try obsidian base:query
-  if timeout 30 obsidian base:query path="90 bases/Projects.base" view="Активные проекты" 2>/dev/null; then
+  local base_path="$VAULT_ROOT/90 bases/Projects.base"
+
+  # Try vault-query first, fall back to obsidian, then file listing
+  if command -v vault-query >/dev/null 2>&1 && [[ -f "$base_path" ]]; then
+    vault-query query "$base_path" --view "Активные проекты" --vault-root "$VAULT_ROOT"
+    return
+  fi
+
+  if timeout 30 obsidian base:query path="90 bases/Projects.base" view="Активные проекты" < /dev/null 2>/dev/null; then
     return
   fi
 

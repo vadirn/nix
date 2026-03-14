@@ -16,15 +16,30 @@ triggers:
 
 # Obsidian CLI — Agent Reference
 
-## When to Use CLI vs File Tools
+## When to Use Which Tool
 
-**Use CLI** when you need Obsidian's index or app features:
-search, backlinks, links, tags, tasks, properties, bases, templates, orphans, unresolved links
+**Use `vault-query`** (primary, no app dependency) for read-only data retrieval:
+base queries, tags, backlinks, links, search, properties, files, orphans, unresolved links
+
+```sh
+vault-query query <base-path> --view <name> --vault-root <path>
+vault-query tags --vault-root <path> --sort count
+vault-query backlinks <file> --vault-root <path>
+vault-query links <file>
+vault-query search <query> --vault-root <path> --context 2
+vault-query properties <file>
+vault-query files --vault-root <path> --folder <path> --count
+vault-query orphans --vault-root <path>
+vault-query unresolved --vault-root <path>
+```
+
+Output formats: `--format table` (default), `--format json`, `--format tsv`
+
+**Use Obsidian CLI** when you need app features vault-query cannot provide:
+tasks, templates, sync, history, commands, bookmarks, create/move/delete files
 
 **Use file tools** (Read/Write/Edit/Grep/Glob) for:
-simple file read/write, bulk text replacement, grep across files — no app dependency
-
-Rule of thumb: if Obsidian's index adds value, use CLI. If it's plain text manipulation, use file tools.
+simple file read/write, bulk text replacement, grep across files
 
 ## Execution
 

@@ -4,3 +4,4 @@ __pycache__/
 .firecrawl/
 .claude/skills/nix
 .claude/.vault.config.json
+vault-query/target/
