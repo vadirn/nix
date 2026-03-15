@@ -74,19 +74,41 @@ enum Commands {
         #[arg(long)]
         vault_root: PathBuf,
     },
-    /// Full-text search
+    /// Full-text search (BM25 ranked by default, regex with --regex)
     Search {
-        /// Search query (regex)
+        /// Search query
         query: String,
         /// Vault root directory
         #[arg(long)]
         vault_root: PathBuf,
-        /// Context lines around matches
+        /// Context lines around matches (regex mode only)
         #[arg(long, default_value = "2")]
         context: usize,
         /// Limit search to a subfolder
         #[arg(long)]
         path: Option<PathBuf>,
+        /// Use regex grep instead of BM25
+        #[arg(long)]
+        regex: bool,
+    },
+    /// Resolve a slug to a vault file path
+    Resolve {
+        /// Slug to resolve (e.g. "impureim-sandwich")
+        slug: String,
+        /// Vault root directory
+        #[arg(long)]
+        vault_root: PathBuf,
+    },
+    /// List files in a folder with frontmatter metadata
+    List {
+        /// Folder relative to vault root (e.g. "20 cards")
+        folder: String,
+        /// Vault root directory
+        #[arg(long)]
+        vault_root: PathBuf,
+        /// Extra frontmatter fields to display (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        fields: Vec<String>,
     },
     /// List files in the vault
     Files {
@@ -128,7 +150,20 @@ fn main() -> Result<()> {
             vault_root,
             context,
             path,
-        } => commands::search::run(&query, &vault_root, context, path.as_deref()),
+            regex,
+        } => commands::search::run(&query, &vault_root, context, path.as_deref(), regex),
+        Commands::Resolve { slug, vault_root } => {
+            let found = commands::resolve::run(&slug, &vault_root)?;
+            if !found {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        Commands::List {
+            folder,
+            vault_root,
+            fields,
+        } => commands::list::run(&vault_root, &folder, &fields),
         Commands::Files {
             vault_root,
             folder,

@@ -3,8 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 SCHEMA_DIR="$SCRIPT_DIR/../schemas"
-QMD="bunx @tobilu/qmd"
-QMD_MARKER="$HOME/.cache/qmd/.vault-ready"
 VAULT_ROOT=""
 PROJECT_PATH=""
 PROJECTS_PATH=""
@@ -70,15 +68,6 @@ resolve_config() {
 
 # --- Helpers ---
 
-ensure_collection() {
-  [[ -f "$QMD_MARKER" ]] && return
-  $QMD collection add "$VAULT_ROOT" --name vault --mask "**/*.md" >&2 2>/dev/null || true
-  $QMD update >&2
-  $QMD embed >&2
-  mkdir -p "$(dirname "$QMD_MARKER")"
-  touch "$QMD_MARKER"
-}
-
 # --- Subcommands ---
 
 require_project() {
@@ -104,27 +93,8 @@ cmd_context() {
 
 cmd_checkpoints() {
   require_project
-
   local view="${1:-All}"
-  local base_path="$PROJECT_PATH/Checkpoints.base"
-
-  # Try vault-query first, fall back to obsidian, then file listing
-  if command -v vault-query >/dev/null 2>&1 && [[ -f "$base_path" ]]; then
-    vault-query query "$base_path" --view "$view" --vault-root "$VAULT_ROOT"
-    return
-  fi
-
-  if timeout 30 obsidian base:query path="${PROJECT_PATH#"$VAULT_ROOT/"}/Checkpoints.base" view="$view" < /dev/null 2>/dev/null; then
-    return
-  fi
-
-  # Fallback: grep checkpoint files
-  echo "# Fallback: file-based checkpoint listing" >&2
-  case "$view" in
-    Incomplete) find "$PROJECT_PATH" -maxdepth 1 -name 'checkpoint-*.md' -exec grep -l "done: false" {} + 2>/dev/null || true ;;
-    Done)       find "$PROJECT_PATH" -maxdepth 1 -name 'checkpoint-*.md' -exec grep -l "done: true" {} + 2>/dev/null || true ;;
-    *)          find "$PROJECT_PATH" -maxdepth 1 -name 'checkpoint-*.md' 2>/dev/null | sort || true ;;
-  esac
+  vault-query query "$PROJECT_PATH/Checkpoints.base" --view "$view" --vault-root "$VAULT_ROOT"
 }
 
 cmd_get() {
@@ -134,20 +104,10 @@ cmd_get() {
   fi
   local fragment="$1"
   local matches=()
-  local search_dirs
-  if [[ -n "$PROJECT_PATH" ]]; then
-    search_dirs=("$PROJECT_PATH")
-  else
-    search_dirs=("$VAULT_ROOT/00 inbox" "$VAULT_ROOT/10 references" "$VAULT_ROOT/20 cards" "$VAULT_ROOT/30 notes" "$VAULT_ROOT/41 projects")
-  fi
 
-  # Replace dashes with wildcards to handle qmd handelized paths (spaces→dashes)
-  local fuzzy="${fragment//-/*}"
-
-  while IFS= read -r -d '' file; do
-    matches+=("$file")
-  done < <(find "${search_dirs[@]}" \
-    -iname "*${fuzzy}*.md" -type f -print0 2>/dev/null | sort -z)
+  while IFS= read -r line; do
+    matches+=("$VAULT_ROOT/$line")
+  done < <(vault-query resolve "$fragment" --vault-root "$VAULT_ROOT")
 
   if [[ ${#matches[@]} -eq 0 ]]; then
     echo "No matches for '$fragment'" >&2
@@ -165,31 +125,20 @@ cmd_get() {
 
 cmd_search() {
   if [[ $# -lt 1 ]]; then
-    echo "Usage: vault-cli search <query> [-n N]" >&2
+    echo "Usage: vault-cli search <query>" >&2
     exit 1
   fi
-  ensure_collection
   local query="$1"
   shift
-  $QMD query "$query" -c vault "$@"
-}
-
-cmd_update() {
-  ensure_collection
-  $QMD update
-  $QMD embed
+  vault-query search "$query" --vault-root "$VAULT_ROOT" "$@"
 }
 
 cmd_projects() {
   local base_path="$VAULT_ROOT/90 bases/Projects.base"
 
-  # Try vault-query first, fall back to obsidian, then file listing
+  # Try vault-query first, fall back to file listing
   if command -v vault-query >/dev/null 2>&1 && [[ -f "$base_path" ]]; then
     vault-query query "$base_path" --view "Активные проекты" --vault-root "$VAULT_ROOT"
-    return
-  fi
-
-  if timeout 30 obsidian base:query path="90 bases/Projects.base" view="Активные проекты" < /dev/null 2>/dev/null; then
     return
   fi
 
@@ -198,103 +147,9 @@ cmd_projects() {
   find "$VAULT_ROOT/41 projects" -maxdepth 2 -name '*.md' -not -name 'checkpoint-*' -not -name 'context.md' -not -name 'SKILL.md' -not -name 'start.md' -not -name 'save.md' | sort
 }
 
-get_field() {
-  local field="$1"
-  local fm="$2"
-  local val
-  val=$(printf '%s\n' "$fm" | sed -n "s/^${field}: *//p" | head -1)
-  if [[ -n "$val" ]]; then
-    printf '%s' "$val"
-    return
-  fi
-  local in_field=false
-  local items=""
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^${field}:[[:space:]]*$ ]]; then
-      in_field=true
-      continue
-    fi
-    if $in_field; then
-      if [[ "$line" =~ ^[[:space:]]+-[[:space:]]+(.*) ]]; then
-        [[ -n "$items" ]] && items="$items, "
-        items="${items}${BASH_REMATCH[1]}"
-      else
-        break
-      fi
-    fi
-  done <<< "$fm"
-  printf '%s' "$items"
-}
-
-strip_wikilinks() {
-  local s="$1"
-  s="${s//\"/}"
-  while [[ "$s" =~ \[\[([^]|]*)\|([^]]*)\]\] ]]; do
-    s="${s//"${BASH_REMATCH[0]}"/"${BASH_REMATCH[2]}"}"
-  done
-  while [[ "$s" =~ \[\[([^]]*)\]\] ]]; do
-    s="${s//"${BASH_REMATCH[0]}"/"${BASH_REMATCH[1]}"}"
-  done
-  printf '%s' "$s"
-}
-
-strip_brackets() {
-  local s="$1"
-  s="${s#\[}"
-  s="${s%\]}"
-  printf '%s' "$s"
-}
-
-# List markdown files with frontmatter metadata
-# Usage: list_notes <dir> [extra_fields...]
-# Always shows: title, description, tags. Extra fields appended as "(field: value)".
-list_notes() {
-  local notes_dir="$1"
-  shift
-  local extra_fields=("$@")
-
-  find "$notes_dir" -name '*.md' -type f | sort | while IFS= read -r file; do
-    title="$(basename "$file" .md)"
-    fm=$(extract_frontmatter "$file")
-    [[ -z "$fm" ]] && continue
-
-    desc=$(get_field "description" "$fm")
-    tags=$(get_field "tags" "$fm")
-    tags=$(strip_brackets "$tags")
-
-    line="$title"
-    [[ -n "$desc" ]] && line="$line — $desc"
-    [[ -n "$tags" ]] && line="$line [$tags]"
-
-    for ef in "${extra_fields[@]}"; do
-      val=$(get_field "$ef" "$fm")
-      val=$(strip_wikilinks "$val")
-      [[ -n "$val" ]] && line="$line ($ef: $val)"
-    done
-
-    printf '%s\n' "$line"
-  done
-}
 
 cmd_cards() {
-  list_notes "$VAULT_ROOT/20 cards" "reference"
-}
-
-extract_frontmatter() {
-  local file="$1"
-  local fm=""
-  local in_fm=false
-  while IFS= read -r line; do
-    if [[ "$line" == "---" ]]; then
-      if $in_fm; then break; fi
-      in_fm=true
-      continue
-    fi
-    if $in_fm; then
-      fm+="$line"$'\n'
-    fi
-  done < "$file"
-  printf '%s' "$fm"
+  vault-query list "20 cards" --vault-root "$VAULT_ROOT" --fields reference
 }
 
 # Detect GNU vs BSD date once
@@ -435,7 +290,7 @@ cmd_log() {
 
 
 cmd_notes() {
-  list_notes "$VAULT_ROOT/30 notes"
+  vault-query list "30 notes" --vault-root "$VAULT_ROOT"
 }
 
 # --- Main ---
@@ -460,22 +315,20 @@ case "${1:-}" in
   checkpoints) shift; cmd_checkpoints "$@" ;;
   get)         shift; cmd_get "$@" ;;
   search)      shift; cmd_search "$@" ;;
-  update)      cmd_update ;;
   projects)    cmd_projects ;;
   cards)       cmd_cards ;;
   notes)       cmd_notes ;;
   xp)          shift; cmd_xp "$@" ;;
   log)         shift; cmd_log "$@" ;;
   *)
-    echo "Usage: vault-cli [--project <name>] {config|context|checkpoints|get|search|update|projects|cards|notes|xp|log}" >&2
+    echo "Usage: vault-cli [--project <name>] {config|context|checkpoints|get|search|projects|cards|notes|xp|log}" >&2
     echo "" >&2
     echo "  --project <name>        Override project (resolved via root config)" >&2
     echo "  config                  Print resolved config JSON" >&2
     echo "  context                 Print project context.md" >&2
     echo "  checkpoints [view]      Query project checkpoints (All|Incomplete|Done|Stats)" >&2
     echo "  get <fragment>          Find and read a note/card/reference/checkpoint by name" >&2
-    echo "  search <query> [-n N]   Search vault via qmd" >&2
-    echo "  update                  Re-index and re-embed vault collection" >&2
+    echo "  search <query>          BM25 full-text search (--regex for grep mode)" >&2
     echo "  projects                List active projects" >&2
     echo "  cards                   List all cards with metadata" >&2
     echo "  notes                   List all notes with metadata" >&2
