@@ -23,10 +23,12 @@ static CONTAINS_ANY_RE: LazyLock<Regex> =
 static LENGTH_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^(\w+)\.length\s*>\s*(\d+)$"#).unwrap());
 
+static QUOTED_STR_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#""([^"]*)""#).unwrap());
+
 /// Parse quoted strings from a containsAny argument list.
 fn parse_contains_any_args(args: &str) -> Vec<String> {
-    let re = Regex::new(r#""([^"]*)""#).unwrap();
-    re.captures_iter(args)
+    QUOTED_STR_RE.captures_iter(args)
         .map(|c| c[1].to_string())
         .collect()
 }
@@ -131,7 +133,7 @@ mod tests {
             path: PathBuf::from(format!("/vault/{}", rel_path)),
             name: name.to_string(),
             frontmatter: fm,
-            content: String::new(),
+            ..Default::default()
         }
     }
 

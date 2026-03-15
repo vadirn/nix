@@ -7,24 +7,7 @@ use tantivy::schema::*;
 use tantivy::tokenizer::TextAnalyzer;
 use tantivy::{doc, Index, IndexWriter, SnippetGenerator};
 
-use crate::vault;
-
-/// Strip YAML frontmatter (between `---` delimiters) from markdown content.
-fn strip_frontmatter(content: &str) -> &str {
-    let trimmed = content.trim_start_matches('\u{feff}');
-    if !trimmed.starts_with("---") {
-        return content;
-    }
-    // Find the closing --- after the opening one
-    if let Some(end) = trimmed[3..].find("\n---") {
-        let after = end + 3 + 4; // skip past "\n---"
-        if after < trimmed.len() {
-            return &trimmed[after..];
-        }
-        return "";
-    }
-    content
-}
+use crate::{frontmatter, vault};
 
 pub fn run(
     query: &str,
@@ -40,10 +23,7 @@ pub fn run(
 }
 
 fn run_bm25(query: &str, vault_root: &Path, subfolder: Option<&Path>) -> Result<()> {
-    let root = match subfolder {
-        Some(folder) => vault_root.join(folder),
-        None => vault_root.to_path_buf(),
-    };
+    let root = vault::resolve_root(vault_root, subfolder);
 
     let files = vault::scan(&root)?;
 
@@ -79,11 +59,13 @@ fn run_bm25(query: &str, vault_root: &Path, subfolder: Option<&Path>) -> Result<
             .build(),
     );
 
-    let mut writer: IndexWriter = index.writer(50_000_000)?;
+    let total_content: usize = files.iter().map(|f| f.content.len()).sum();
+    let writer_budget = total_content.max(15_000_000);
+    let mut writer: IndexWriter = index.writer(writer_budget)?;
 
     for file in &files {
         let rel = file.relative_path(vault_root);
-        let body_text = strip_frontmatter(&file.content);
+        let body_text = frontmatter::body(&file.content);
         writer.add_document(doc!(
             title => file.name.as_str(),
             body => body_text,
@@ -140,10 +122,7 @@ fn run_regex(
 ) -> Result<()> {
     let re = Regex::new(query)?;
 
-    let root = match subfolder {
-        Some(folder) => vault_root.join(folder),
-        None => vault_root.to_path_buf(),
-    };
+    let root = vault::resolve_root(vault_root, subfolder);
 
     let files = vault::scan(&root)?;
 

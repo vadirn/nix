@@ -4,10 +4,7 @@ use std::path::Path;
 use crate::vault;
 
 pub fn run(vault_root: &Path, folder: Option<&Path>, count: bool) -> Result<()> {
-    let root = match folder {
-        Some(f) => vault_root.join(f),
-        None => vault_root.to_path_buf(),
-    };
+    let root = vault::resolve_root(vault_root, folder);
 
     let files = vault::scan(&root)?;
 

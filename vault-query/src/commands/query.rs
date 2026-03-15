@@ -37,7 +37,7 @@ pub fn run(base_path: &Path, view_name: &str, vault_root: &Path, format: Format)
         bail!("no files match the filters");
     }
 
-    let result = view::apply(&target_view, &base_file, &mut filtered, vault_root);
+    let result = view::apply(&target_view, &base_file, &mut filtered);
     print!("{}", output::render(&result, &format));
 
     Ok(())

@@ -26,6 +26,22 @@ pub fn parse(content: &str) -> Result<Option<BTreeMap<String, Value>>> {
     Ok(None)
 }
 
+/// Return the content body after frontmatter (stripping the YAML block).
+pub fn body(content: &str) -> &str {
+    let trimmed = content.trim_start_matches('\u{feff}');
+    if !trimmed.starts_with("---") {
+        return content;
+    }
+    if let Some(end) = trimmed[3..].find("\n---") {
+        let after = end + 3 + 4; // skip past "\n---"
+        if after < trimmed.len() {
+            return &trimmed[after..];
+        }
+        return "";
+    }
+    content
+}
+
 /// Get a value from frontmatter by key, returning a display string.
 pub fn get_display(fm: &BTreeMap<String, Value>, key: &str) -> String {
     match fm.get(key) {

@@ -72,7 +72,7 @@ impl EvalResult {
     }
 }
 
-fn format_number(n: f64) -> String {
+pub fn format_number(n: f64) -> String {
     if n == n.floor() && n.abs() < 1e15 {
         format!("{}", n as i64)
     } else {
@@ -90,11 +90,6 @@ fn eval_expr(expr: &str, ctx: &EvalContext) -> EvalResult {
     // String literal
     if expr.starts_with('"') && expr.ends_with('"') && expr.len() >= 2 {
         return EvalResult::Str(expr[1..expr.len() - 1].to_string());
-    }
-
-    // Empty string literal
-    if expr == "\"\"" {
-        return EvalResult::Str(String::new());
     }
 
     // if(cond, then, else)
@@ -314,7 +309,7 @@ mod tests {
             path: PathBuf::from("/vault/test.md"),
             name: "test".to_string(),
             frontmatter: fm,
-            content: String::new(),
+            ..Default::default()
         }
     }
 

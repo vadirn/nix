@@ -1,7 +1,7 @@
 use crate::base::{BaseFile, SortDirection, ViewDef};
 use crate::frontmatter;
 use crate::vault::VaultFile;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 /// Result of applying a view to filtered files.
 pub struct ViewResult {
@@ -20,22 +20,14 @@ pub fn apply(
     view: &ViewDef,
     base: &BaseFile,
     files: &mut Vec<VaultFile>,
-    vault_root: &std::path::Path,
 ) -> ViewResult {
-    // Compute formulas for each file
-    let formula_results: Vec<BTreeMap<String, String>> = files
+    // Compute formulas for each file, then sort files and formulas together
+    let mut formula_results: Vec<BTreeMap<String, String>> = files
         .iter()
         .map(|f| crate::base::formula::evaluate_all(&base.formulas, f))
         .collect();
 
-    // Sort files
-    sort_files(files, &formula_results, &view.sort, base, vault_root);
-
-    // Re-compute formulas after sort (indices changed)
-    let formula_results: Vec<BTreeMap<String, String>> = files
-        .iter()
-        .map(|f| crate::base::formula::evaluate_all(&base.formulas, f))
-        .collect();
+    sort_files(files, &mut formula_results, &view.sort);
 
     // Build headers from property display names
     let headers: Vec<String> = view
@@ -51,7 +43,7 @@ pub fn apply(
         .map(|(file, formulas)| {
             view.order
                 .iter()
-                .map(|col| resolve_cell(col, file, formulas, base))
+                .map(|col| resolve_value(col, file, formulas))
                 .collect()
         })
         .collect();
@@ -61,7 +53,7 @@ pub fn apply(
         let group_values: Vec<String> = files
             .iter()
             .zip(formula_results.iter())
-            .map(|(file, formulas)| resolve_value(&gb.property, file, formulas, base))
+            .map(|(file, formulas)| resolve_value(&gb.property, file, formulas))
             .collect();
 
         build_groups(&group_values, &rows, &gb.direction)
@@ -76,7 +68,6 @@ pub fn apply(
             &view.order,
             files,
             &formula_results,
-            base,
         ))
     } else {
         None
@@ -113,20 +104,10 @@ fn resolve_display_name(col: &str, base: &BaseFile) -> String {
     col.to_string()
 }
 
-fn resolve_cell(
-    col: &str,
-    file: &VaultFile,
-    formulas: &BTreeMap<String, String>,
-    base: &BaseFile,
-) -> String {
-    resolve_value(col, file, formulas, base)
-}
-
 fn resolve_value(
     col: &str,
     file: &VaultFile,
     formulas: &BTreeMap<String, String>,
-    _base: &BaseFile,
 ) -> String {
     // file.name
     if col == "file.name" {
@@ -134,7 +115,7 @@ fn resolve_value(
     }
     // file.ctime
     if col == "file.ctime" {
-        if let Some(ctime) = file.ctime()
+        if let Some(ctime) = file.ctime
             && let Ok(duration) = ctime.duration_since(std::time::UNIX_EPOCH)
         {
             let secs = duration.as_secs();
@@ -198,23 +179,30 @@ fn is_leap(y: i64) -> bool {
 
 fn sort_files(
     files: &mut Vec<VaultFile>,
-    formula_results: &[BTreeMap<String, String>],
+    formula_results: &mut Vec<BTreeMap<String, String>>,
     sort_defs: &[super::SortDef],
-    base: &BaseFile,
-    _vault_root: &std::path::Path,
 ) {
     if sort_defs.is_empty() {
         return;
     }
 
-    // Build sort keys for each file
-    let mut indexed: Vec<(usize, &VaultFile)> = files.iter().enumerate().collect();
+    // Precompute sort keys to avoid recomputing in comparator
+    let keys: Vec<Vec<String>> = files
+        .iter()
+        .zip(formula_results.iter())
+        .map(|(file, formulas)| {
+            sort_defs
+                .iter()
+                .map(|sd| resolve_value(&sd.property, file, formulas))
+                .collect()
+        })
+        .collect();
 
-    indexed.sort_by(|a, b| {
-        for sd in sort_defs {
-            let a_val = resolve_value(&sd.property, a.1, &formula_results[a.0], base);
-            let b_val = resolve_value(&sd.property, b.1, &formula_results[b.0], base);
-            let ord = a_val.cmp(&b_val);
+    // Build index permutation
+    let mut indices: Vec<usize> = (0..files.len()).collect();
+    indices.sort_by(|&a, &b| {
+        for (i, sd) in sort_defs.iter().enumerate() {
+            let ord = keys[a][i].cmp(&keys[b][i]);
             let ord = match sd.direction {
                 SortDirection::Asc => ord,
                 SortDirection::Desc => ord.reverse(),
@@ -226,8 +214,18 @@ fn sort_files(
         std::cmp::Ordering::Equal
     });
 
-    let sorted: Vec<VaultFile> = indexed.into_iter().map(|(i, _)| files[i].clone()).collect();
-    *files = sorted;
+    // Apply permutation: zip into pairs, reorder, unzip
+    let mut pairs: Vec<(VaultFile, BTreeMap<String, String>)> = files
+        .drain(..)
+        .zip(formula_results.drain(..))
+        .collect();
+    let reordered: Vec<(VaultFile, BTreeMap<String, String>)> = indices
+        .iter()
+        .map(|&i| std::mem::take(&mut pairs[i]))
+        .collect();
+    let (f, r): (Vec<_>, Vec<_>) = reordered.into_iter().unzip();
+    *files = f;
+    *formula_results = r;
 }
 
 fn build_groups(
@@ -235,12 +233,12 @@ fn build_groups(
     rows: &[Vec<String>],
     direction: &SortDirection,
 ) -> Vec<Group> {
-    // Collect unique group labels in order
+    let mut seen_set = HashSet::new();
     let mut seen = Vec::new();
     let mut groups_map: BTreeMap<String, Vec<Vec<String>>> = BTreeMap::new();
 
     for (i, label) in group_values.iter().enumerate() {
-        if !seen.contains(label) {
+        if seen_set.insert(label.clone()) {
             seen.push(label.clone());
         }
         groups_map.entry(label.clone()).or_default().push(rows[i].clone());
@@ -268,13 +266,10 @@ fn compute_summaries(
     order: &[String],
     files: &[VaultFile],
     formula_results: &[BTreeMap<String, String>],
-    base: &BaseFile,
 ) -> Vec<String> {
     order
         .iter()
         .map(|col| {
-            // Check if this column has a summary
-            // The summary key might be the bare name or the full property reference
             let summary_op = summary_defs.get(col)
                 .or_else(|| summary_defs.get(&format!("note.{}", col)))
                 .or_else(|| summary_defs.get(&format!("formula.{}", col)));
@@ -285,7 +280,7 @@ fn compute_summaries(
                         .iter()
                         .zip(formula_results.iter())
                         .filter_map(|(file, formulas)| {
-                            let val = resolve_value(col, file, formulas, base);
+                            let val = resolve_value(col, file, formulas);
                             val.parse::<f64>().ok()
                         })
                         .collect();
@@ -293,7 +288,7 @@ fn compute_summaries(
                     match op.as_str() {
                         "Sum" => {
                             let sum: f64 = values.iter().sum();
-                            format_number_smart(sum)
+                            crate::base::formula::format_number(sum)
                         }
                         "Average" => {
                             if values.is_empty() {
@@ -310,14 +305,6 @@ fn compute_summaries(
             }
         })
         .collect()
-}
-
-fn format_number_smart(n: f64) -> String {
-    if n == n.floor() && n.abs() < 1e15 {
-        format!("{}", n as i64)
-    } else {
-        format!("{:.2}", n)
-    }
 }
 
 #[cfg(test)]

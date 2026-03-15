@@ -8,12 +8,13 @@ use walkdir::WalkDir;
 use crate::frontmatter;
 
 /// A parsed markdown file with its frontmatter and metadata.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct VaultFile {
     pub path: PathBuf,
     pub name: String, // filename without extension
     pub frontmatter: BTreeMap<String, Value>,
     pub content: String,
+    pub ctime: Option<std::time::SystemTime>,
 }
 
 impl VaultFile {
@@ -36,9 +37,13 @@ impl VaultFile {
         rel.starts_with(folder)
     }
 
-    /// Get file creation time (macOS birthtime / Unix ctime).
-    pub fn ctime(&self) -> Option<std::time::SystemTime> {
-        fs::metadata(&self.path).ok()?.created().ok()
+}
+
+/// Resolve an optional subfolder relative to vault root.
+pub fn resolve_root(vault_root: &Path, subfolder: Option<&Path>) -> PathBuf {
+    match subfolder {
+        Some(f) => vault_root.join(f),
+        None => vault_root.to_path_buf(),
     }
 }
 
@@ -74,11 +79,13 @@ pub fn scan(root: &Path) -> Result<Vec<VaultFile>> {
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
+        let ctime = fs::metadata(path).ok().and_then(|m| m.created().ok());
         files.push(VaultFile {
             path: path.to_path_buf(),
             name,
             frontmatter: fm,
             content,
+            ctime,
         });
     }
     Ok(files)

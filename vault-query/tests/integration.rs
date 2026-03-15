@@ -86,7 +86,7 @@ fn test_view_all_sorted_desc() {
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
     let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir);
-    let result = view::apply(&all_view, &base, &mut filtered, &dir);
+    let result = view::apply(&all_view, &base, &mut filtered);
 
     // Sorted DESC by file.name: checkpoint-003, checkpoint-002, checkpoint-001
     assert_eq!(result.groups.len(), 1);
@@ -138,7 +138,7 @@ fn test_stats_view_summaries() {
     let stats_view = base.views.iter().find(|v| v.name == "Stats").unwrap().clone();
 
     let mut filtered = filter::apply(&files, &base.filters, &stats_view.filters, &dir);
-    let result = view::apply(&stats_view, &base, &mut filtered, &dir);
+    let result = view::apply(&stats_view, &base, &mut filtered);
 
     assert!(result.summaries.is_some());
     let summaries = result.summaries.unwrap();
@@ -157,7 +157,7 @@ fn test_json_output() {
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
     let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir);
-    let result = view::apply(&all_view, &base, &mut filtered, &dir);
+    let result = view::apply(&all_view, &base, &mut filtered);
     let json = vault_query::output::render(&result, &vault_query::output::Format::Json);
 
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -174,7 +174,7 @@ fn test_tsv_output() {
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
     let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir);
-    let result = view::apply(&all_view, &base, &mut filtered, &dir);
+    let result = view::apply(&all_view, &base, &mut filtered);
     let tsv = vault_query::output::render(&result, &vault_query::output::Format::Tsv);
 
     let lines: Vec<&str> = tsv.lines().collect();
