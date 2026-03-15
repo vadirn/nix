@@ -1,5 +1,5 @@
 #!/bin/bash
-# Tests for vault-cli: weekly log (log-init, xp, streak)
+# Tests for vault-cli: weekly log (log, xp, streak)
 set -uo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/vault-cli"
@@ -86,31 +86,31 @@ assert_file_exists() {
   fi
 }
 
-# --- log-init tests ---
+# --- log tests ---
 
-echo "# log-init"
+echo "# log"
 
 # Compute expected week for 2026-03-12
-result=$(run log-init 2026-03-12)
-assert_eq "log-init returns weekly path" "$LOG_DIR/2026-w11.md" "$result"
-assert_file_exists "log-init creates file" "$LOG_DIR/2026-w11.md"
+result=$(run log 2026-03-12)
+assert_eq "log returns weekly path" "$LOG_DIR/2026-w11.md" "$result"
+assert_file_exists "log creates file" "$LOG_DIR/2026-w11.md"
 
 content=$(cat "$LOG_DIR/2026-w11.md")
-assert_contains "log-init fills week" "week: 2026-W11" "$content"
-assert_contains "log-init fills start" "start: 2026-03-09" "$content"
-assert_contains "log-init fills end" "end: 2026-03-15" "$content"
-assert_contains "log-init has Tasks section" "## Tasks" "$content"
-assert_contains "log-init has Activity section" "## Activity" "$content"
-assert_contains "log-init has Projects section" "## Projects" "$content"
-assert_contains "log-init has Backlog section" "## Backlog" "$content"
+assert_contains "log fills week" "week: 2026-W11" "$content"
+assert_contains "log fills start" "start: 2026-03-09" "$content"
+assert_contains "log fills end" "end: 2026-03-15" "$content"
+assert_contains "log has Tasks section" "## Tasks" "$content"
+assert_contains "log has Activity section" "## Activity" "$content"
+assert_contains "log has Projects section" "## Projects" "$content"
+assert_contains "log has Backlog section" "## Backlog" "$content"
 
 # Idempotent: running again returns same path
-result2=$(run log-init 2026-03-12)
-assert_eq "log-init idempotent" "$LOG_DIR/2026-w11.md" "$result2"
+result2=$(run log 2026-03-12)
+assert_eq "log idempotent" "$LOG_DIR/2026-w11.md" "$result2"
 
 # Same week, different day
-result3=$(run log-init 2026-03-14)
-assert_eq "log-init same week different day" "$LOG_DIR/2026-w11.md" "$result3"
+result3=$(run log 2026-03-14)
+assert_eq "log same week different day" "$LOG_DIR/2026-w11.md" "$result3"
 
 # --- xp tests ---
 
@@ -256,6 +256,86 @@ EOF
 # Partial coverage (project-b has no done task) → no coverage bonus
 xp_partial=$(run xp)
 assert_contains "xp partial shows Feb" "Feb" "$xp_partial"
+
+# --- checkpoints tests (file-based fallback) ---
+
+echo "# checkpoints"
+
+# Create checkpoint files in project dir
+PROJ_DIR="$TMPVAULT/41 projects/block-buster"
+cat > "$PROJ_DIR/checkpoint-001.md" <<'EOF'
+---
+done: false
+---
+First checkpoint
+EOF
+
+cat > "$PROJ_DIR/checkpoint-002.md" <<'EOF'
+---
+done: true
+---
+Second checkpoint
+EOF
+
+cat > "$PROJ_DIR/checkpoint-003.md" <<'EOF'
+---
+done: false
+---
+Third checkpoint
+EOF
+
+# All view lists all checkpoint files
+cp_all=$(run checkpoints All 2>/dev/null)
+assert_contains "checkpoints All includes 001" "checkpoint-001.md" "$cp_all"
+assert_contains "checkpoints All includes 002" "checkpoint-002.md" "$cp_all"
+assert_contains "checkpoints All includes 003" "checkpoint-003.md" "$cp_all"
+
+# Incomplete view lists only done: false
+cp_inc=$(run checkpoints Incomplete 2>/dev/null)
+assert_contains "checkpoints Incomplete includes 001" "checkpoint-001.md" "$cp_inc"
+assert_contains "checkpoints Incomplete includes 003" "checkpoint-003.md" "$cp_inc"
+# Should not include done: true
+if [[ "$cp_inc" == *"checkpoint-002.md"* ]]; then
+  ((FAIL++))
+  echo "FAIL: checkpoints Incomplete should not include checkpoint-002"
+else
+  ((PASS++))
+fi
+
+# Done view lists only done: true
+cp_done=$(run checkpoints Done 2>/dev/null)
+assert_contains "checkpoints Done includes 002" "checkpoint-002.md" "$cp_done"
+if [[ "$cp_done" == *"checkpoint-001.md"* ]]; then
+  ((FAIL++))
+  echo "FAIL: checkpoints Done should not include checkpoint-001"
+else
+  ((PASS++))
+fi
+
+# --- projects tests (file-based fallback) ---
+
+echo "# projects"
+
+# Create project files
+PROJ_ROOT="$TMPVAULT/41 projects"
+mkdir -p "$PROJ_ROOT/my-project"
+cat > "$PROJ_ROOT/my-project/my-project.md" <<'EOF'
+---
+type: project
+status: active
+---
+A test project
+EOF
+
+# projects lists project files (excludes checkpoint-*, context.md, etc.)
+proj_out=$(run projects 2>/dev/null)
+assert_contains "projects includes my-project.md" "my-project.md" "$proj_out"
+if [[ "$proj_out" == *"checkpoint-001.md"* ]]; then
+  ((FAIL++))
+  echo "FAIL: projects should not include checkpoint files"
+else
+  ((PASS++))
+fi
 
 # --- Summary ---
 

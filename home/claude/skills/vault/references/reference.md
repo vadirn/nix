@@ -12,7 +12,7 @@ References are raw captures. They contain the source link and metadata, not your
    - `Bash(vault-cli search "<title>" -n 5 --files)` — near-duplicates by meaning
    - If matches found, present them and ask whether to proceed or edit existing
 3. Pick `reference-type`: `Web` or `Book`. YouTube, articles, talks — all `Web`.
-4. Pick tags: run `timeout 10 obsidian tags sort=count counts` to get the live tag list, pick from it. If Obsidian is not running, fall back to the tag tree in CLAUDE.md. Ask if ambiguous.
+4. Pick tags: run `vault-query tags --vault-root <vault_root> --sort count` to get the live tag list, pick from it. Fall back to the tag tree in CLAUDE.md if vault-query is unavailable. Ask if ambiguous.
 5. Write a 1-sentence `description`
 6. Create the file in `10 references/`
 

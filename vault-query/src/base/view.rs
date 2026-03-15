@@ -97,19 +97,18 @@ fn resolve_display_name(col: &str, base: &BaseFile) -> String {
         col.to_string(),
     ];
     for key in &candidates {
-        if let Some(prop) = base.properties.get(key) {
-            if !prop.display_name.is_empty() {
-                return prop.display_name.clone();
-            }
+        if let Some(prop) = base.properties.get(key)
+            && !prop.display_name.is_empty()
+        {
+            return prop.display_name.clone();
         }
     }
     // Check if col itself starts with "formula."
-    if col.starts_with("formula.") {
-        if let Some(prop) = base.properties.get(col) {
-            if !prop.display_name.is_empty() {
-                return prop.display_name.clone();
-            }
-        }
+    if col.starts_with("formula.")
+        && let Some(prop) = base.properties.get(col)
+        && !prop.display_name.is_empty()
+    {
+        return prop.display_name.clone();
     }
     col.to_string()
 }
@@ -135,13 +134,11 @@ fn resolve_value(
     }
     // file.ctime
     if col == "file.ctime" {
-        if let Some(ctime) = file.ctime() {
-            if let Ok(duration) = ctime.duration_since(std::time::UNIX_EPOCH) {
-                let secs = duration.as_secs();
-                // Format as ISO date
-                let dt = chrono_format(secs);
-                return dt;
-            }
+        if let Some(ctime) = file.ctime()
+            && let Ok(duration) = ctime.duration_since(std::time::UNIX_EPOCH)
+        {
+            let secs = duration.as_secs();
+            return chrono_format(secs);
         }
         return String::new();
     }
@@ -211,7 +208,7 @@ fn sort_files(
     }
 
     // Build sort keys for each file
-    let mut indexed: Vec<(usize, &VaultFile)> = files.iter().enumerate().map(|(i, f)| (i, f)).collect();
+    let mut indexed: Vec<(usize, &VaultFile)> = files.iter().enumerate().collect();
 
     indexed.sort_by(|a, b| {
         for sd in sort_defs {
@@ -219,8 +216,8 @@ fn sort_files(
             let b_val = resolve_value(&sd.property, b.1, &formula_results[b.0], base);
             let ord = a_val.cmp(&b_val);
             let ord = match sd.direction {
-                SortDirection::ASC => ord,
-                SortDirection::DESC => ord.reverse(),
+                SortDirection::Asc => ord,
+                SortDirection::Desc => ord.reverse(),
             };
             if ord != std::cmp::Ordering::Equal {
                 return ord;
@@ -251,8 +248,8 @@ fn build_groups(
 
     // Sort groups
     match direction {
-        SortDirection::ASC => seen.sort(),
-        SortDirection::DESC => {
+        SortDirection::Asc => seen.sort(),
+        SortDirection::Desc => {
             seen.sort();
             seen.reverse();
         }

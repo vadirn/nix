@@ -1,13 +1,13 @@
 # qmd — Vault Search Reference
 
-## When to Use qmd vs obsidian-cli
+## When to Use qmd vs vault-query
 
 **Use qmd** for content discovery: semantic search, keyword search, hybrid queries.
 qmd indexes markdown files independently and works without Obsidian running.
 
-**Use obsidian-cli** for CRUD, graph traversal, tags, properties, tasks, bases, backlinks.
+**Use vault-query** for tags, properties, bases, backlinks, orphans, unresolved links, and file listing.
 
-Rule of thumb: finding content by meaning or keywords = qmd. Everything else = obsidian-cli or file tools.
+Rule of thumb: finding content by meaning or keywords = qmd. Structured vault queries = vault-query. Simple reads/writes = file tools.
 
 ## Execution
 

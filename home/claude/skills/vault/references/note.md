@@ -21,7 +21,7 @@ if exact or semantic:
   present matches, ask: proceed / edit existing?
 
 // Build the note
-tags = timeout 10 obsidian tags sort=count counts  // fall back to CLAUDE.md tag tree
+tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // fall back to CLAUDE.md tag tree
 description = 1-sentence summary of what this note explores
 body = help structure thinking if requested
 create file in 30 notes/

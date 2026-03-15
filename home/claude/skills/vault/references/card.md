@@ -23,7 +23,7 @@ if not fast and missing concept or description:
   use their input as basis — refine wording, fix factual errors, don't replace
 
 // Build the card
-tags = timeout 10 obsidian tags sort=count counts  // fall back to CLAUDE.md tag tree
+tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // fall back to CLAUDE.md tag tree
 description = 1-sentence core idea
 body = concise summary in user's own framing
 create file in 20 cards/

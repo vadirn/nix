@@ -1,9 +1,11 @@
 pub mod backlinks;
 pub mod files;
 pub mod links;
+pub mod list;
 pub mod orphans;
 pub mod properties;
 pub mod query;
+pub mod resolve;
 pub mod search;
 pub mod tags;
 pub mod unresolved;

@@ -49,8 +49,8 @@ pub struct SortDef {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SortDirection {
-    ASC,
-    DESC,
+    Asc,
+    Desc,
 }
 
 #[derive(Debug, Clone)]
@@ -109,8 +109,8 @@ struct RawGroupByDef {
 
 fn parse_direction(s: Option<&str>) -> SortDirection {
     match s {
-        Some("ASC") => SortDirection::ASC,
-        _ => SortDirection::DESC,
+        Some("ASC") => SortDirection::Asc,
+        _ => SortDirection::Desc,
     }
 }
 
@@ -323,6 +323,6 @@ views:
         assert!(base.views[0].group_by.is_some());
         let gb = base.views[0].group_by.as_ref().unwrap();
         assert_eq!(gb.property, "formula.status_order");
-        assert_eq!(gb.direction, SortDirection::ASC);
+        assert_eq!(gb.direction, SortDirection::Asc);
     }
 }

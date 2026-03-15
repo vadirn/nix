@@ -20,7 +20,7 @@ ask "What to work on?"
 
 ### Querying checkpoints
 
-Use `vault-cli checkpoints <view>` which calls `obsidian base:query` under the hood.
+Use `vault-cli checkpoints <view>` which calls `vault-query` under the hood.
 
 Views: `Incomplete`, `Done`, `All`, `Stats`.
 

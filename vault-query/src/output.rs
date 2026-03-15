@@ -55,7 +55,7 @@ fn render_table(result: &ViewResult) -> String {
         output.push_str(&headers.join(" | "));
         output.push_str(" |\n");
 
-        output.push_str("|");
+        output.push('|');
         for _ in headers {
             output.push_str(" --- |");
         }

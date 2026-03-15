@@ -86,15 +86,15 @@ pub fn evaluate_filter_set(
     file: &VaultFile,
     vault_root: &Path,
 ) -> bool {
-    if !filters.and.is_empty() {
-        if !filters.and.iter().all(|e| evaluate(e, file, vault_root)) {
-            return false;
-        }
+    if !filters.and.is_empty()
+        && !filters.and.iter().all(|e| evaluate(e, file, vault_root))
+    {
+        return false;
     }
-    if !filters.or.is_empty() {
-        if !filters.or.iter().any(|e| evaluate(e, file, vault_root)) {
-            return false;
-        }
+    if !filters.or.is_empty()
+        && !filters.or.iter().any(|e| evaluate(e, file, vault_root))
+    {
+        return false;
     }
     true
 }
