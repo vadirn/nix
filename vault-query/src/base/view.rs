@@ -88,18 +88,18 @@ fn resolve_display_name(col: &str, base: &BaseFile) -> String {
         col.to_string(),
     ];
     for key in &candidates {
-        if let Some(prop) = base.properties.get(key)
-            && !prop.display_name.is_empty()
-        {
-            return prop.display_name.clone();
+        if let Some(prop) = base.properties.get(key) {
+            if !prop.display_name.is_empty() {
+                return prop.display_name.clone();
+            }
         }
     }
-    // Check if col itself starts with "formula."
-    if col.starts_with("formula.")
-        && let Some(prop) = base.properties.get(col)
-        && !prop.display_name.is_empty()
-    {
-        return prop.display_name.clone();
+    if col.starts_with("formula.") {
+        if let Some(prop) = base.properties.get(col) {
+            if !prop.display_name.is_empty() {
+                return prop.display_name.clone();
+            }
+        }
     }
     col.to_string()
 }
@@ -115,11 +115,8 @@ fn resolve_value(
     }
     // file.ctime
     if col == "file.ctime" {
-        if let Some(ctime) = file.ctime
-            && let Ok(duration) = ctime.duration_since(std::time::UNIX_EPOCH)
-        {
-            let secs = duration.as_secs();
-            return chrono_format(secs);
+        if let Some(Ok(duration)) = file.ctime.map(|c| c.duration_since(std::time::UNIX_EPOCH)) {
+            return chrono_format(duration.as_secs());
         }
         return String::new();
     }
