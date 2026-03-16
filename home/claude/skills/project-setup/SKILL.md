@@ -157,13 +157,13 @@ Path: `<repo>/.claude/.vault.config.json`
 ```json
 {
   "vault_root": "<vault_root>",
-  "project": {
-    "name": "<name>",
-    "title": "<title>",
-    "path": "<path>"
-  }
+  "project_path": "<vault_root>/<path>"
 }
 ```
+
+Schema: `~/.claude/skills/vault/schemas/project.config.schema.json`
+
+Both values are absolute paths. `project_path` is `vault_root` joined with the vault-relative path (e.g. `41 projects/nix`).
 
 After writing, ensure `.claude/.vault.config.json` is in `.gitignore` (it contains absolute paths). Read `.gitignore`, append the line if missing.
 
