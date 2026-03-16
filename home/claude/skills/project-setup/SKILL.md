@@ -7,8 +7,6 @@ description: Sets up project-as-a-skill for any project. Use "link" to connect a
 
 Creates or links a project-as-a-skill.
 
-Requires `obsidian` CLI (1.12+). If unavailable, the skill falls back to asking the user for vault paths manually.
-
 ## Pseudocode
 
 ```
@@ -104,11 +102,22 @@ setup(vault_root):
 
 ## Reference
 
-### Discovering vault root
+### Discovering vault root (root config)
 
-Run `timeout 30 obsidian vaults verbose`.
-One vault → use its path. Multiple → `AskUserQuestion`. Command fails → ask user for absolute path.
-Store as `<vault_root>`.
+1. Read `$HOME/.claude/.vault.config.json` (root config)
+2. If exists and has `vault_root` → use it
+3. If not found → ask user for vault_root and projects_path, then create root config.
+   `projects_path` is used by vault-cli for project resolution; this skill doesn't use it directly.
+
+   Write `$HOME/.claude/.vault.config.json`:
+   ```json
+   {
+     "vault_root": "<vault_root>",
+     "projects_path": "<projects_path>"
+   }
+   ```
+
+   Schema: `~/.claude/skills/vault/schemas/root.config.schema.json`
 
 ### Collecting inputs
 
@@ -141,7 +150,7 @@ In `<vault_root>/<path>/context.md`. Substitute `<path>`, `<title>`, `<descripti
 
 No SKILL.md, start.md, or save.md in the vault project folder. The /vault skill handles routing.
 
-### Writing .vault.config.json
+### Writing .vault.config.json (per-repo config)
 
 Path: `<repo>/.claude/.vault.config.json`
 
@@ -229,5 +238,4 @@ Per-project context. Substitute `<path>`, `<title>`, `<description>`, `<result>`
 
 - `/clear` or restart is required after setup for the new skill to load.
 - The generated files live in the vault. Wikilinks work. The user adds project-specific context to context.md.
-- Write checkpoints via the Write tool. `obsidian create` fails with multiline content.
-- Query checkpoints via `base:query`. `obsidian search` breaks on paths with spaces.
+- Write and query checkpoints via `/vault`.
