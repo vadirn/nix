@@ -16,7 +16,7 @@ if not fast and missing thesis:
 
 // Duplicate check — before creating anything
 exact = Glob("<topic>.md", "30 notes/")
-semantic = Bash(vault-cli search "<topic>" -n 5 --files)
+semantic = Bash(vault-query search "<topic>" -n 5 --files)
 if exact or semantic:
   present matches, ask: proceed / edit existing?
 
@@ -27,7 +27,7 @@ body = help structure thinking if requested
 create file in 30 notes/
 
 // Surface connections
-related = Bash(vault-cli search "<key terms>" -n 10 --files)
+related = Bash(vault-query search "<key terms>" -n 10 --files)
 present related cards/references as potential wikilink targets
 ```
 

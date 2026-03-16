@@ -11,7 +11,7 @@ source = identify source reference (should exist in 10 references/)
 
 // Duplicate check — before creating anything
 exact = Glob("<concept>.md", "20 cards/")
-semantic = Bash(vault-cli search "<concept>" -n 5 --files)
+semantic = Bash(vault-query search "<concept>" -n 5 --files)
 if exact or semantic:
   present matches, ask: proceed / merge / edit existing?
 
@@ -29,7 +29,7 @@ body = concise summary in user's own framing
 create file in 20 cards/
 
 // Surface connections
-related = Bash(vault-cli search "<key terms>" -n 10 --files)
+related = Bash(vault-query search "<key terms>" -n 10 --files)
 if non-trivial connection (pattern, tension, synthesis):
   propose creating a note in 30 notes/  // cards stay atomic, connections live in notes
 ```

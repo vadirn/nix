@@ -351,6 +351,42 @@ fn test_regex_mode_context() {
     assert!(!context_lines.is_empty(), "expected context lines in output: {}", stdout);
 }
 
+// --- files --tag tests ---
+
+#[test]
+fn test_files_tag_filter() {
+    let output = Command::new(cargo_bin())
+        .args(["files", "--vault-root", fixture_dir().to_str().unwrap(), "--tag", "rust"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(stdout.contains("Test card"), "expected Test card in output: {}", stdout);
+    assert!(!stdout.contains("checkpoint"), "should not contain checkpoint files: {}", stdout);
+}
+
+#[test]
+fn test_files_tag_count() {
+    let output = Command::new(cargo_bin())
+        .args(["files", "--vault-root", fixture_dir().to_str().unwrap(), "--tag", "rust", "--count"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(output.status.success());
+    assert_eq!(stdout.trim(), "1");
+}
+
+#[test]
+fn test_files_tag_no_match() {
+    let output = Command::new(cargo_bin())
+        .args(["files", "--vault-root", fixture_dir().to_str().unwrap(), "--tag", "nonexistent"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.is_empty(), "expected empty output, got: {}", stdout);
+}
+
 #[test]
 fn test_list_empty_folder() {
     let output = Command::new(cargo_bin())

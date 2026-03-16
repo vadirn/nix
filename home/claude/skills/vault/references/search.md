@@ -1,89 +1,45 @@
-# qmd — Vault Search Reference
+# vault-query search
 
-## When to Use qmd vs vault-query
-
-**Use qmd** for content discovery: semantic search, keyword search, hybrid queries.
-qmd indexes markdown files independently and works without Obsidian running.
-
-**Use vault-query** for tags, properties, bases, backlinks, orphans, unresolved links, and file listing.
-
-Rule of thumb: finding content by meaning or keywords = qmd. Structured vault queries = vault-query. Simple reads/writes = file tools.
-
-## Execution
-
-Always run via bunx. No global install needed:
+## Usage
 
 ```sh
-bunx @tobilu/qmd <command> [options]
+vault-query search <query>           # BM25 full-text search (default)
+vault-query search <query> --regex   # regex grep mode
+vault-query search <query> --path "20 cards"  # limit to subfolder
+vault-query search <query> --context 3        # context lines (regex mode)
 ```
 
-## Search Commands
+## When to Use
 
-Three search modes, ordered by quality:
+Use `vault-query search` for content discovery: keyword search, finding files by content.
 
-### `search` — BM25 keyword search
+Use other vault-query commands for structured queries: tags, properties, bases, backlinks, orphans, unresolved links, file listing.
 
-Fast lexical matching. Best for exact terms, names, specific phrases.
+Rule of thumb: finding content by keywords = `vault-query search`. Structured vault queries = other vault-query subcommands. Simple reads/writes = file tools.
+
+## Search Modes
+
+### BM25 (default)
+
+Fast ranked keyword search. Best for exact terms, names, specific phrases.
 
 ```sh
-bunx @tobilu/qmd search "exact phrase or keyword" -c vault
-bunx @tobilu/qmd search "project standup notes" -c vault -n 10
+vault-query search "impureim sandwich"
+vault-query search "project standup"
 ```
 
-### `vsearch` — vector (semantic) search
+### Regex (--regex)
 
-Finds conceptually similar content even without keyword overlap.
-
-```sh
-bunx @tobilu/qmd vsearch "how to handle authentication" -c vault
-bunx @tobilu/qmd vsearch "meeting about Q4 planning" -c vault -n 5
-```
-
-### `query` — hybrid search with reranking (best quality)
-
-Combines BM25 + vector search, then reranks results. Use this as default when quality matters.
+Grep-style pattern matching with context lines.
 
 ```sh
-bunx @tobilu/qmd query "weekly review process" -c vault
-bunx @tobilu/qmd query "delegation framework" -c vault -n 10 --json
-```
-
-## Retrieval Commands
-
-### `get` — retrieve a single document
-
-```sh
-bunx @tobilu/qmd get "path/to/note.md" -c vault
-```
-
-### `multi-get` — retrieve multiple documents
-
-```sh
-bunx @tobilu/qmd multi-get "note1.md" "note2.md" -c vault
-```
-
-## Output Flags
-
-| Flag          | Effect                            |
-| ------------- | --------------------------------- |
-| `--json`      | JSON output (for parsing)         |
-| `--files`     | File paths only (no content)      |
-| `--all`       | Return all results (no limit)     |
-| `-n <number>` | Limit number of results           |
-| `--min-score` | Filter by minimum relevance score |
-
-## Index Maintenance
-
-```sh
-bunx @tobilu/qmd status -c vault          # check status
-bunx @tobilu/qmd update                    # re-index all collections
-bunx @tobilu/qmd embed -c vault            # rebuild vector embeddings
+vault-query search "Impureim.*pattern" --regex
+vault-query search "test card" --regex --context 1
 ```
 
 ## Tips
 
-- Default to `query` for general searches: best results.
-- Use `search` for exact keyword matching or speed.
-- Use `vsearch` when the user describes a concept but may not know the exact terms.
-- Combine `--files` with search to get paths, then read files for full content.
-- Use `-n` to limit results and reduce noise. Default is usually 10.
+- BM25 mode returns results ranked by relevance
+- Regex mode shows matching lines with `>` marker and context lines
+- Use `--path` to limit search scope to a subfolder
+- Combine with `Read` to get full content of matched files

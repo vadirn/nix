@@ -3,14 +3,14 @@
 ## Pseudocode
 
 ```
-incomplete = Bash(vault-cli checkpoints Incomplete)
+incomplete = Bash(vault-query checkpoints --view Incomplete)
 
 if incomplete is not empty:
     selected = AskUserQuestion(incomplete, multiSelect=true)  // include "All" option
     for each in selected:
         show "## Progress" and "## Next"
 else:
-    done = Bash(vault-cli checkpoints Done)
+    done = Bash(vault-query checkpoints --view Done)
     print "All checkpoints done." if done is not empty else "First session."
 
 ask "What to work on?"
@@ -20,13 +20,11 @@ ask "What to work on?"
 
 ### Querying checkpoints
 
-Use `vault-cli checkpoints <view>` which calls `vault-query` under the hood.
+Use `vault-query checkpoints --view <view>`.
 
 Views: `Incomplete`, `Done`, `All`, `Stats`.
 
 Empty result = no checkpoints in that view.
-
-Fallback (Obsidian offline): vault-cli falls back to grep on checkpoint files.
 
 ### Presenting checkpoints
 

@@ -4,7 +4,7 @@ Browse and search the card inventory. Finds connections, supporting ideas, and d
 
 ## Process
 
-1. Run `vault-cli cards` to get the full card inventory
+1. Run `vault-query cards` to get the full card inventory
 2. If a query was provided, analyze all cards against it:
    - **Direct matches** — cards explicitly about the queried topic
    - **Supporting** — cards that provide useful context or building blocks

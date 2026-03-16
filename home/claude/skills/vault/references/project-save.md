@@ -4,7 +4,7 @@
 
 ```
 stats = session_stats()  // cost_usd, lines_written, turns_to_edit
-checkpoints = Bash(vault-cli checkpoints Incomplete)
+checkpoints = Bash(vault-query checkpoints --view Incomplete)
 
 for each incomplete checkpoint:
     ask "does this session resolve it?"
@@ -31,11 +31,11 @@ Use the `session-stats` skill. Extract `cost_usd`, `lines_written`, `turns_to_ed
 
 ### Querying incomplete checkpoints
 
-Use `vault-cli checkpoints Incomplete`.
+Use `vault-query checkpoints --view Incomplete`.
 
 ### Creating a checkpoint
 
-Get vault root and project path from `vault-cli config`.
+Get vault root and project path from `vault-query config`.
 `project_wikilink` is derived from the project context (context.md's `Project note: [[...]]` line).
 
 Path: `{vault_root}/{project_path}/checkpoint-{UTC timestamp}.md`

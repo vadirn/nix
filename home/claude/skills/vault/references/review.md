@@ -9,13 +9,13 @@ Research basis: retrieval practice is the strongest finding in learning science.
 ```
 // Phase 1: Select 3 cards
 if user provided topic or tag:
-  results = Bash(vault-cli search "<topic_or_tag>" -n 10 --files)
+  results = Bash(vault-query search "<topic_or_tag>" -n 10 --files)
   cards = filter results to 20 cards/ only
   pick 3 cards from results
 else:
-  all = Bash(vault-cli cards)
+  all = Bash(vault-query cards)
   seed = pick random card
-  similar = Bash(vault-cli search "<seed card title>" -n 5 --files)
+  similar = Bash(vault-query search "<seed card title>" -n 5 --files)
   cards = filter to 20 cards/, deduplicate
   pick 3 from seed + similar
 // Semantic clustering: similar concepts together tests differentiation
@@ -29,7 +29,7 @@ for each card in 3 selected cards:
 
 // Phase 3: Connection synthesis
 key_terms = extract from reviewed cards
-related = Bash(vault-cli search "<key terms>" -n 10 --files)
+related = Bash(vault-query search "<key terms>" -n 10 --files)
 if non-trivial pattern, tension, or synthesis across cards:
   propose creating a note in 30 notes/
 if user had ideas or reactions during recall:
