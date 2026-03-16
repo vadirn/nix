@@ -96,7 +96,7 @@ setup(vault_root):
     write_context_md()          // context.md only (no SKILL.md, start.md, save.md — vault skill handles routing)
     write_vault_config()        // .claude/.vault.config.json in repo
     write_thin_wrapper()        // .claude/skills/<name>/SKILL.md in repo (delegates to /vault)
-    register_in_settings()      // add Skill(<name>), Skill(vault), Read, Bash(vault-cli *)
+    register_in_settings()      // add Skill(<name>), Skill(vault), Read
     report created files, suggest /clear
 ```
 
@@ -107,7 +107,7 @@ setup(vault_root):
 1. Read `$HOME/.claude/.vault.config.json` (root config)
 2. If exists and has `vault_root` → use it
 3. If not found → ask user for vault_root and projects_path, then create root config.
-   `projects_path` is used by vault-cli for project resolution; this skill doesn't use it directly.
+   `projects_path` is used by vault-query for project resolution; this skill doesn't use it directly.
 
    Write `$HOME/.claude/.vault.config.json`:
    ```json
@@ -183,7 +183,7 @@ Typically needed (not in global):
 
 Skip if already in global settings:
 
-- `Skill(vault)`, `Bash(vault-cli *)`, `Read` — usually already allowed globally
+- `Skill(vault)`, `Read` — usually already allowed globally
 
 ## Checkpoints.base template
 

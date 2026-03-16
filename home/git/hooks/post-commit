@@ -25,7 +25,7 @@ append_activity() {
   local log_file="$log_dir/${iso_week,,}.md"
 
   if [[ ! -f "$log_file" ]]; then
-    vault-cli log-init "$today" >/dev/null || return 0
+    vault-query log >/dev/null || return 0
   fi
 
   local time repo msg

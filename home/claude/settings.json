@@ -44,7 +44,6 @@
       "Skill(session-stats)",
       "Skill(vault)",
       "Skill(pr)",
-      "Bash(vault-cli *)",
       "Bash(session-stats *)",
       "Bash(bunx @tobilu/qmd *)",
       "Bash(ls *)",
