@@ -28,7 +28,7 @@ pub struct LogData {
 pub fn parse_weekly_logs(log_dir: &Path) -> Result<LogData> {
     let mut data = LogData::default();
 
-    let task_re = Regex::new(r"^- \[x\] \((\d{4}-\d{2}-\d{2})\)").unwrap();
+    let task_re = Regex::new(r"^\s*- \[x\] \((\d{4}-\d{2}-\d{2})\)").unwrap();
     let wikilink_re = Regex::new(r"\[\[([^\]|]*)\]\]").unwrap();
 
     let mut log_files: Vec<_> = std::fs::read_dir(log_dir)
