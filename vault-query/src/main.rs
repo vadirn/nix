@@ -78,7 +78,7 @@ enum Commands {
         #[arg(long)]
         regex: bool,
         /// Max results (BM25 mode only)
-        #[arg(long, default_value = "20")]
+        #[arg(short = 'n', long, default_value = "20")]
         limit: usize,
     },
     /// Resolve a slug to a vault file path
