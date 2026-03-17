@@ -77,6 +77,9 @@ enum Commands {
         /// Use regex grep instead of BM25
         #[arg(long)]
         regex: bool,
+        /// Max results (BM25 mode only)
+        #[arg(long, default_value = "20")]
+        limit: usize,
     },
     /// Resolve a slug to a vault file path
     Resolve {
@@ -211,9 +214,10 @@ fn main() -> Result<()> {
             context,
             path,
             regex,
+            limit,
         } => {
             let vault_root = resolve_vault_root(&cli)?;
-            commands::search::run(query, &vault_root, *context, path.as_deref(), *regex)
+            commands::search::run(query, &vault_root, *context, path.as_deref(), *regex, *limit)
         }
         Commands::Resolve { slug } => {
             let vault_root = resolve_vault_root(&cli)?;

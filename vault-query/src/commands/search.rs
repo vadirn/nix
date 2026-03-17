@@ -15,14 +15,15 @@ pub fn run(
     context: usize,
     subfolder: Option<&Path>,
     regex_mode: bool,
+    limit: usize,
 ) -> Result<()> {
     if regex_mode {
         return run_regex(query, vault_root, context, subfolder);
     }
-    run_bm25(query, vault_root, subfolder)
+    run_bm25(query, vault_root, subfolder, limit)
 }
 
-fn run_bm25(query: &str, vault_root: &Path, subfolder: Option<&Path>) -> Result<()> {
+fn run_bm25(query: &str, vault_root: &Path, subfolder: Option<&Path>, limit: usize) -> Result<()> {
     let root = vault::resolve_root(vault_root, subfolder);
 
     let files = vault::scan(&root)?;
@@ -82,7 +83,7 @@ fn run_bm25(query: &str, vault_root: &Path, subfolder: Option<&Path>) -> Result<
     query_parser.set_field_boost(title, 2.0);
     let parsed = query_parser.parse_query(query)?;
 
-    let top_docs = searcher.search(&parsed, &TopDocs::with_limit(20))?;
+    let top_docs = searcher.search(&parsed, &TopDocs::with_limit(limit))?;
 
     if top_docs.is_empty() {
         return Ok(());
