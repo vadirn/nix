@@ -208,7 +208,11 @@
     "allowUnsandboxedCommands": false,
     "network": {
       "allowedDomains": [
-        "api.firecrawl.dev"
+        "api.firecrawl.dev",
+        "github.com",
+        "crates.io",
+        "static.crates.io",
+        "registry.npmjs.org"
       ],
       "allowManagedDomainsOnly": false
     },
