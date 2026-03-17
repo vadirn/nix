@@ -8,7 +8,7 @@ description: >
   (creates a note in 30 notes/), searching or browsing what they know about a topic, quizzing or testing recall on
   saved concepts, listing or filtering cards by tag, resuming or saving progress on a project, checking project status
   or open checkpoints, reading a specific checkpoint by name or date. Also handles explicit /vault commands (search, card, note, reference, review, cards, projects,
-  start, save). XP/streak reports use `vault-query xp`. Do NOT use for: Obsidian app settings/UI questions, editing .base files, creating canvas files,
+  start, save, validate). XP/streak reports use `vault-query xp`. Do NOT use for: Obsidian app settings/UI questions, editing .base files, creating canvas files,
   general markdown editing, or web search.
 ---
 
@@ -72,6 +72,19 @@ elif "log" or weekly log intent (planning, tasks, sleep):
     week_file = Bash(vault-query log)
     log = Read(week_file)
     do("show current week's log, ask what user wants to do")
+
+elif "validate":
+    schemas = skill base directory + "/schemas"
+    root_config = "~/.claude/.vault.config.json"
+    project_config = ".claude/.vault.config.json"  // in current repo
+
+    if root_config exists:
+        Bash(check-jsonschema --schemafile {schemas}/root.config.schema.json {root_config})
+    if project_config exists:
+        Bash(check-jsonschema --schemafile {schemas}/project.config.schema.json {project_config})
+    if neither exists:
+        do("tell user no config files found")
+    do("report validation results")
 
 elif user mentions a note/card/reference/checkpoint by name:
     result = Bash(vault-query get <fragment>)
