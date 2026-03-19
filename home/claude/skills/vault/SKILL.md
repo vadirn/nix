@@ -6,10 +6,18 @@ description: >
   for later (creates a reference in 10 references/), distilling a concept or takeaway from something they read/watched
   (creates a card in 20 cards/), writing down an original idea, observation, or synthesis connecting multiple concepts
   (creates a note in 30 notes/), searching or browsing what they know about a topic, quizzing or testing recall on
-  saved concepts, listing or filtering cards by tag, resuming or saving progress on a project, checking project status
-  or open checkpoints, reading a specific checkpoint by name or date. Also handles explicit /vault commands (search, card, note, reference, review, cards, projects,
-  start, save, validate). XP/streak reports use `vault-query xp`. Do NOT use for: Obsidian app settings/UI questions, editing .base files, creating canvas files,
-  general markdown editing, or web search.
+  saved concepts, listing or filtering cards by tag, checking project status or open checkpoints, reading a specific
+  checkpoint by name or date, listing active or current projects ("which projects am I working on", "project status
+  overview", "what are my open projects"). Also handles explicit /vault commands (search, card, note, reference, review,
+  cards, projects, start, save, validate). XP/streak reports use `vault-query xp`. Also triggers on weekly log
+  operations: adding tasks to backlog ("добавь в бэклог", "backlog"), planning tasks for the week, completing tasks,
+  tracking sleep, or any mention of weekly planning, task lists, or activity log. Triggers on session save/checkpoint:
+  "wrapping up", "save what we did", "log what we accomplished", "save our progress", "end of session", "save session",
+  "we finished X and still need to do Y", resuming or saving progress on a project. DO NOT USE for: editing specific
+  Obsidian markdown files directly (callout blocks, formatting, syntax), Obsidian app features (kanban boards, canvas
+  files, graph view, plugins, settings, UI configuration), editing .base files, creating canvas files, or general web
+  search. The distinction: vault skill manages *what you know* (saving, finding, reviewing knowledge); it does not
+  edit raw markdown files or configure the Obsidian app.
 ---
 
 # Vault
@@ -113,18 +121,18 @@ else:
 
 ### vault-query subcommands
 
-| Command                              | Description                                    | Requires config |
-| ------------------------------------ | ---------------------------------------------- | --------------- |
-| `config`                             | Print resolved config JSON                     | No              |
-| `context`                            | Print project context.md                       | Yes             |
-| `checkpoints [--view <view>]`        | Query checkpoints (All/Incomplete/Done/Stats)  | Yes             |
-| `get <fragment>`                     | Find and read a note/card/reference/checkpoint | No              |
-| `search <query>`                     | BM25 full-text search (--regex for grep mode)  | No              |
-| `projects [--view <view>]`           | List active projects                           | No              |
-| `cards`                              | List all cards with metadata                   | No              |
-| `notes`                              | List all notes with metadata                   | No              |
-| `log [DATE\|WEEK\|last\|next]`       | Open or create weekly log                      | No              |
-| `xp [YEAR]`                          | XP report: calendar, streak, level             | No              |
+| Command                        | Description                                    | Requires config |
+| ------------------------------ | ---------------------------------------------- | --------------- |
+| `config`                       | Print resolved config JSON                     | No              |
+| `context`                      | Print project context.md                       | Yes             |
+| `checkpoints [--view <view>]`  | Query checkpoints (All/Incomplete/Done/Stats)  | Yes             |
+| `get <fragment>`               | Find and read a note/card/reference/checkpoint | No              |
+| `search <query>`               | BM25 full-text search (--regex for grep mode)  | No              |
+| `projects [--view <view>]`     | List active projects                           | No              |
+| `cards`                        | List all cards with metadata                   | No              |
+| `notes`                        | List all notes with metadata                   | No              |
+| `log [DATE\|WEEK\|last\|next]` | Open or create weekly log                      | No              |
+| `xp [YEAR]`                    | XP report: calendar, streak, level             | No              |
 
 ### Project commands
 

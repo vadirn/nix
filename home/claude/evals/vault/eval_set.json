@@ -40,35 +40,39 @@
     "should_trigger": true
   },
   {
-    "query": "rename all the .ts files in src/ to use kebab-case instead of camelCase",
-    "should_trigger": false
+    "query": "добавь в бэклог на эту неделю: написать тесты для vault-query и обновить README",
+    "should_trigger": true
   },
   {
-    "query": "set up a new Next.js project with TypeScript and Tailwind, scaffold the basic folder structure",
-    "should_trigger": false
+    "query": "how's my streak looking? Show me the XP report for this year",
+    "should_trigger": true
+  },
+  {
+    "query": "list all my notes, I want to see what original thinking I've captured so far",
+    "should_trigger": true
+  },
+  {
+    "query": "open the checkpoint from last Friday, the one about fixing config resolution",
+    "should_trigger": true
+  },
+  {
+    "query": "отметь сон за сегодня",
+    "should_trigger": true
+  },
+  {
+    "query": "what tasks do I have planned for this week? Show me the weekly plan",
+    "should_trigger": true
+  },
+  {
+    "query": "I keep a personal knowledge base and want to jot down something I realized about how Conway's Law applies to microservices — it's not just about team structure, it's about communication bandwidth",
+    "should_trigger": true
   },
   {
     "query": "my Obsidian graph view is cluttered, how do I filter out daily notes from the graph? Is there a setting for that?",
     "should_trigger": false
   },
   {
-    "query": "write a Python script that reads a CSV of employee data and generates a summary report with department-level averages",
-    "should_trigger": false
-  },
-  {
     "query": "I need to create a .base file in Obsidian that shows all notes with status: draft grouped by tag — help me set up the formula",
-    "should_trigger": false
-  },
-  {
-    "query": "debug this React component, it's re-rendering on every keystroke even though I'm using useMemo — here's the code in src/components/SearchBar.tsx",
-    "should_trigger": false
-  },
-  {
-    "query": "search the web for the latest Claude API pricing and compare it to GPT-4o pricing",
-    "should_trigger": false
-  },
-  {
-    "query": "help me write a commit message for these changes — I refactored the auth middleware and added rate limiting",
     "should_trigger": false
   },
   {
@@ -77,6 +81,34 @@
   },
   {
     "query": "I have a markdown file with some wikilinks that are broken, can you check which ones point to files that don't exist?",
+    "should_trigger": false
+  },
+  {
+    "query": "create a GitHub issue for the bug we found in the search command, tag it with 'vault-query' label",
+    "should_trigger": false
+  },
+  {
+    "query": "set up a recurring reminder to review my pull requests every morning at 9am",
+    "should_trigger": false
+  },
+  {
+    "query": "I need a todo list for this coding session — first fix the tests, then refactor the parser, then update the docs",
+    "should_trigger": false
+  },
+  {
+    "query": "напиши скрипт который парсит YAML frontmatter из всех markdown файлов в папке и выводит статистику по тегам",
+    "should_trigger": false
+  },
+  {
+    "query": "track my time on this task — I started 30 minutes ago and I'm about to finish. Log it somewhere",
+    "should_trigger": false
+  },
+  {
+    "query": "can you set up a kanban board in Obsidian? I want columns for todo, in progress, and done",
+    "should_trigger": false
+  },
+  {
+    "query": "I want to export my Obsidian vault to a static site using Quartz, help me configure it",
     "should_trigger": false
   }
 ]
