@@ -215,7 +215,8 @@
         "static.crates.io",
         "registry.npmjs.org"
       ],
-      "allowManagedDomainsOnly": false
+      "allowManagedDomainsOnly": false,
+      "allowAllUnixSockets": true
     },
     "filesystem": {
       "allowWrite": [

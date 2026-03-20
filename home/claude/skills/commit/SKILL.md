@@ -20,10 +20,6 @@ log = Bash(git log --oneline -5)
 
 if no changes: tell user "Nothing to commit.", stop
 
-// Sandbox bypasses hook safety checks. Remind user to disable it.
-do("tell user: 'Please make sure /sandbox is off so hooks can guard the commit. Type /sandbox to toggle, then tell me to proceed.'")
-// Wait for user to respond before continuing
-
 // Analyze changes, pick ONE prefix: feat | fix | chore
 // Stage files selectively (never `git add -A` or `git add .`)
 // Skip secrets (.env, credentials, tokens); warn if found
