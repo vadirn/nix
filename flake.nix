@@ -77,6 +77,7 @@
                 "micro"
                 "rustup"
                 "arimxyer/tap/models"
+                "neovim"
               ];
               casks = [
                 "1password-cli"
