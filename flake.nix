@@ -77,7 +77,6 @@
                 "rustup"
                 "arimxyer/tap/models"
                 "neovim"
-                "neurosnap/tap/zmx"
               ];
               casks = [
                 "1password-cli"

@@ -3,12 +3,7 @@
     enable = true;
     enableZshIntegration = true;
     settings = {
-      format = "\${env_var.ZMX_SESSION}$directory$git_branch$git_status$line_break$character";
-      env_var.ZMX_SESSION = {
-        format = "[$env_value]($style) ";
-        style = "bold blue";
-        default = "";
-      };
+      format = "$directory$git_branch$git_status$line_break$character";
       directory = {
         truncation_length = 3;
         truncate_to_repo = true;
