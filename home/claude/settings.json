@@ -64,6 +64,7 @@
       "Bash(echo *)",
       "Skill(tool-stats)",
       "Bash(tool-stats *)",
+      "Bash(claude-sessions *)",
       "Read"
     ],
     "deny": []
@@ -227,6 +228,5 @@
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "plansDirectory": "./.claude-plans",
-  "teammateMode": "tmux"
+  "plansDirectory": "./.claude-plans"
 }

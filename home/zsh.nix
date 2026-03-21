@@ -61,27 +61,16 @@
         eza "''${args[@]}" | less -FRNX
       }
 
-      tc() {
+      _cl_base() {
         local dir=''${PWD##*/}
         dir=''${dir//./-}
         local hash=$(echo -n "$PWD" | md5 -q | cut -c1-6)
-        local name="''${dir}-''${hash}"
-        [[ -n "$1" ]] && name="''${name}-$1"
-        if tmux has-session -t "$name" 2>/dev/null; then
-          if [ -n "$TMUX" ]; then
-            tmux switch-client -t "$name"
-          else
-            tmux attach-session -t "$name"
-          fi
-        else
-          local cmd="claude --continue || claude; read '?Kill tmux session? [Y]/n ' r; [[ \$r != [nN] ]] && tmux kill-session || exec \$SHELL"
-          if [ -n "$TMUX" ]; then
-            tmux new-session -d -s "$name" "$cmd" && tmux switch-client -t "$name"
-          else
-            tmux new-session -d -s "$name" "$cmd" && tmux attach-session -t "$name"
-          fi
-        fi
+        echo "''${dir}-''${hash}"
       }
+
+      cl() { local n=$(_cl_base); claude --resume "$n" || claude --name "$n"; }
+      cln() { local n=$(_cl_base); claude --name "''${n}-$(date +%m%d-%H%M)"; }
+      clf() { local n=$(_cl_base); claude --resume "$n" --fork-session --name "''${n}-$(date +%m%d-%H%M)" || cln; }
     '';
   };
 }

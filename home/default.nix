@@ -76,6 +76,9 @@
         fi
       '';
 
+      home.file.".local/bin/claude-sessions".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/scripts/claude-sessions.sh";
+      home.file.".claude/scripts/ghostty-claude-split.applescript".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/scripts/ghostty-claude-split.applescript";
+      home.file.".claude/scripts/ghostty-claude-split.sh".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/scripts/ghostty-claude-split.sh";
       home.file.".local/bin/session-stats".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/session-stats/session-stats.py";
       home.file.".local/bin/tool-stats".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/tool-stats/tool-stats.py";
       home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
