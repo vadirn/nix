@@ -81,7 +81,7 @@
 
       cl() {
         local n=$(_cl_base)
-        zmx attach "$n" sh -c "claude --resume '$n' || claude --name '$n'"
+        zmx attach "$n" claude --resume "$n" || zmx attach "$n" claude --name "$n"
       }
       cln() {
         local n=$(_cl_base)
@@ -92,7 +92,7 @@
         local n=$(_cl_base)
         local ts=$(date +%m%d-%H%M)
         local sn="''${n}-''${ts}"
-        zmx attach "$sn" sh -c "claude --resume '$n' --fork-session --name '$sn' || claude --name '$sn'"
+        zmx attach "$sn" claude --resume "$n" --fork-session --name "$sn" || zmx attach "$sn" claude --name "$sn"
       }
     '';
   };
