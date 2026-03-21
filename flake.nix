@@ -114,6 +114,7 @@
               finder.FXPreferredViewStyle = "clmv";
               loginwindow.GuestEnabled = false;
               NSGlobalDomain.AppleICUForce24HourTime = true;
+              NSGlobalDomain.ApplePressAndHoldEnabled = false;
               dock.mru-spaces = false;
               dock.expose-group-apps = false;
             };
