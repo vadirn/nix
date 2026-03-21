@@ -70,14 +70,6 @@
 
       cl() { claude --continue || claude; }
       cln() { claude; }
-      clf() {
-        local sid="''${1:-}"
-        if [[ -n "$sid" ]]; then
-          claude --resume "$sid" --fork-session
-        else
-          claude --continue --fork-session || claude
-        fi
-      }
     '';
   };
 }
