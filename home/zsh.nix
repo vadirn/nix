@@ -43,6 +43,10 @@
 
       export PATH="$HOME/.cargo/bin:$HOME/.bun/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
 
+      if command -v zmx &> /dev/null; then
+        eval "$(zmx completions zsh)"
+      fi
+
       _set_tab_title() { print -Pn "\e]0;%1~\a" }
       precmd_functions+=(_set_tab_title)
       chpwd_functions+=(_set_tab_title)
@@ -75,9 +79,21 @@
         echo "''${dir}-''${hash}"
       }
 
-      cl() { local n=$(_cl_base); claude --resume "$n" || claude --name "$n"; }
-      cln() { local n=$(_cl_base); claude --name "''${n}-$(date +%m%d-%H%M)"; }
-      clf() { local n=$(_cl_base); claude --resume "$n" --fork-session --name "''${n}-$(date +%m%d-%H%M)" || cln; }
+      cl() {
+        local n=$(_cl_base)
+        zmx attach "$n" sh -c "claude --resume '$n' || claude --name '$n'"
+      }
+      cln() {
+        local n=$(_cl_base)
+        local ts=$(date +%m%d-%H%M)
+        zmx attach "''${n}-''${ts}" claude --name "''${n}-''${ts}"
+      }
+      clf() {
+        local n=$(_cl_base)
+        local ts=$(date +%m%d-%H%M)
+        local sn="''${n}-''${ts}"
+        zmx attach "$sn" sh -c "claude --resume '$n' --fork-session --name '$sn' || claude --name '$sn'"
+      }
     '';
   };
 }

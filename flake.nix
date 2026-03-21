@@ -69,7 +69,6 @@
                 "yt-dlp"
                 "gnupg"
                 "pinentry-mac"
-                "reattach-to-user-namespace"
                 "openssl-osx-ca"
                 "syncthing"
                 "tw93/tap/mole"
@@ -78,6 +77,7 @@
                 "rustup"
                 "arimxyer/tap/models"
                 "neovim"
+                "neurosnap/tap/zmx"
               ];
               casks = [
                 "1password-cli"

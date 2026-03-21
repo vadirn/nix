@@ -34,8 +34,6 @@
       bind | split-window -h
       bind _ split-window -v
       bind -T copy-mode MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
-
-      set -g default-command "reattach-to-user-namespace -l $SHELL"
     '';
   };
 }
