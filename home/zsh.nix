@@ -68,16 +68,16 @@
         eza "''${args[@]}" | less -FRNX
       }
 
-      _cl_base() {
-        local dir=''${PWD##*/}
-        dir=''${dir//./-}
-        local hash=$(echo -n "$PWD" | md5 -q | cut -c1-6)
-        echo "''${dir}-''${hash}"
+      cl() { claude --continue || claude; }
+      cln() { claude; }
+      clf() {
+        local sid="''${1:-}"
+        if [[ -n "$sid" ]]; then
+          claude --resume "$sid" --fork-session
+        else
+          claude --continue --fork-session || claude
+        fi
       }
-
-      cl() { local n=$(_cl_base); claude --resume "$n" || claude --name "$n"; }
-      cln() { local n=$(_cl_base); claude --name "''${n}-$(date +%m%d-%H%M)"; }
-      clf() { local n=$(_cl_base); claude --resume "$n" --fork-session --name "''${n}-$(date +%m%d-%H%M)" || cln; }
     '';
   };
 }
