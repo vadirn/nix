@@ -47,7 +47,13 @@
       precmd_functions+=(_set_tab_title)
       chpwd_functions+=(_set_tab_title)
 
-      alias lg='lazygit'
+      lg() {
+        local cfg="$HOME/.config/lazygit/config.yml"
+        if [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" != "Dark" ]]; then
+          cfg="$cfg,$HOME/.config/lazygit/light.yml"
+        fi
+        LG_CONFIG_FILE="$cfg" lazygit "$@"
+      }
       alias y='yazi'
 
       alias gtimeout='timeout'

@@ -3,6 +3,4 @@ gui:
     activeBorderColor:
     - green
     selectedLineBgColor:
-    - '#585b70'
-os:
-  editPreset: micro
+    - '#bcc0cc'
