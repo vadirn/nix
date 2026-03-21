@@ -2,9 +2,6 @@
 set -euo pipefail
 shopt -s nullglob
 
-# Skip sounds in headless/subprocess mode (e.g. claude -p eval runs)
-[[ ! -t 1 ]] && exit 0
-
 SOUNDS_DIR="$HOME/.claude/hooks/sounds"
 
 case "${1:-}" in
