@@ -12,6 +12,7 @@
       NPM_CONFIG_PREFIX = "$HOME/.npm-global";
       RUSTUP_HOME = "$HOME/.rustup";
       CARGO_HOME = "$HOME/.cargo";
+      XDG_CONFIG_HOME = "$HOME/.config";
       EDITOR = "code --wait";
       DOCKER_HOST = "unix://$HOME/.orbstack/run/docker.sock";
     };

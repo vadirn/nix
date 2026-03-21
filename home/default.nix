@@ -51,13 +51,7 @@
           enable = true;
           enableZshIntegration = true;
         };
-        lazygit = {
-          enable = true;
-          settings = {
-            os.editPreset = "micro";
-            gui.theme.selectedLineBgColor = [ "#A590FF" ];
-          };
-        };
+        lazygit.enable = true;
       };
       home.activation.installClaude = config.lib.dag.entryAfter ["writeBoundary"] ''
         export PATH="${pkgs.curl}/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
@@ -88,6 +82,7 @@
       home.file.".claude/statusline.sh".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/statusline.sh";
       home.file.".config/git/hooks/post-commit".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/post-commit";
       home.file.".config/ghostty/config".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/ghostty-config";
+      home.file.".config/lazygit/config.yml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazygit-config.yml";
       home.file.".config/micro/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/micro-settings.json";
       home.file.".config/micro/bindings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/micro-bindings.json";
       imports = [

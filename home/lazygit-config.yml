@@ -1,0 +1,8 @@
+gui:
+  theme:
+    activeBorderColor:
+    - '#30a024'
+    selectedLineBgColor:
+    - '#30a024'
+os:
+  editPreset: micro
