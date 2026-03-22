@@ -5,12 +5,12 @@
       "defender": {
         "material_conditions": 3,
         "contradictions": 3,
-        "dependencies": 2,
+        "dependencies": 3,
         "resolution_by_conditions": 2
       },
       "skeptic": {
         "material_conditions": 3,
-        "contradictions": 2,
+        "contradictions": 3,
         "dependencies": 3,
         "resolution_by_conditions": 2
       }
@@ -25,8 +25,8 @@
       },
       "skeptic": {
         "material_conditions": 3,
-        "contradictions": 2,
-        "dependencies": 2,
+        "contradictions": 3,
+        "dependencies": 3,
         "resolution_by_conditions": 2
       }
     },
@@ -36,13 +36,13 @@
         "material_conditions": 3,
         "contradictions": 2,
         "dependencies": 2,
-        "resolution_by_conditions": 2
+        "resolution_by_conditions": 3
       },
       "skeptic": {
         "material_conditions": 3,
         "contradictions": 3,
         "dependencies": 3,
-        "resolution_by_conditions": 3
+        "resolution_by_conditions": 2
       }
     }
   ],
@@ -52,6 +52,6 @@
     "dependencies": 3,
     "resolution_by_conditions": 2
   },
-  "total_score": 86,
-  "summary": "Both roles consistently ground arguments in material conditions and trace dependency chains. The Defender excels at system-cost analysis and resolution-by-conditions in Round 2; the Skeptic's Round 3 synthesis of unresolved contradictions and portfolio resolution is the debate's strongest dialectical moment. Resolution_by_conditions is slightly weaker in early rounds where both sides identify contradictions without fully articulating condition-changes."
+  "total_score": 90,
+  "summary": "Both roles consistently ground arguments in concrete data and trace dependency chains explicitly. The Defender's system-cost analysis and portfolio resolution are structurally driven by dialectical method. The Skeptic's time paradox and capacity arithmetic are strong dialectical moves. Resolution_by_conditions is slightly weaker on the Skeptic side (identifying broken dependencies more than proposing condition-changes), but material_conditions and contradictions are strong throughout."
 }
