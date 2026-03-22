@@ -77,7 +77,7 @@
                 "rustup"
                 "arimxyer/tap/models"
                 "neovim"
-                "bun"
+                "oven-sh/bun/bun"
               ];
               casks = [
                 "1password-cli"
