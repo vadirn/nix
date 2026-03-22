@@ -6,6 +6,6 @@ gui:
     - '#585b70'
 git:
   paging:
-    pager: delta --dark --paging=never
+    pager: delta --features=catppuccin-mocha --paging=never
 os:
   editPreset: micro

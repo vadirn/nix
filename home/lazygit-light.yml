@@ -6,4 +6,4 @@ gui:
     - '#bcc0cc'
 git:
   paging:
-    pager: delta --light --paging=never
+    pager: delta --features=catppuccin-latte --paging=never

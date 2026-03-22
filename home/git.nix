@@ -6,9 +6,12 @@
       options = {
         navigate = true;
         line-numbers = true;
-        syntax-theme = "GitHub";
+        features = "catppuccin-mocha";
       };
     };
+    includes = [
+      { path = "~/nix/home/catppuccin-delta.gitconfig"; }
+    ];
     extraConfig = {
       merge.conflictstyle = "diff3";
       diff.colorMoved = "default";
