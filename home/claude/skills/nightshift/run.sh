@@ -24,14 +24,14 @@ MODEL="claude-opus-4-6[1m]"
 DOCKER_IMAGE="claude-runner"
 DOCKER_VOLUME="claude-runner-home"
 DOCKERFILE=""
-CONTAINER_NAME="nightshift-$$"
+RUN_ID="nightshift-$$-$(date +%s)"
 STOPPED=false
 
 cleanup() {
     STOPPED=true
     echo ""
     echo "nightshift: stopping after current iteration (Ctrl+C again to force)"
-    trap 'docker kill "$CONTAINER_NAME" 2>/dev/null; exit 130' INT TERM
+    trap 'docker kill "$RUN_ID" 2>/dev/null; exit 130' INT TERM
 }
 trap cleanup INT TERM
 
@@ -84,11 +84,16 @@ if [ -n "$DOCKERFILE" ]; then
     docker build -t "$RUN_IMAGE" -f "$DOCKERFILE" "$(dirname "$DOCKERFILE")"
 fi
 
-touch "$WORKSPACE/progress.txt"
+# Progress file in tmp, unique per run, survives iterations but not reboots
+PROGRESS_DIR="/tmp/$RUN_ID"
+mkdir -p "$PROGRESS_DIR"
+PROGRESS_FILE="$PROGRESS_DIR/progress.txt"
+touch "$PROGRESS_FILE"
 
 echo "nightshift: up to $ITERATIONS iterations, ${WAIT}s between, model=$MODEL"
 echo "nightshift: workspace=$WORKSPACE"
 echo "nightshift: project=$PROJECT"
+echo "nightshift: progress=$PROGRESS_FILE"
 echo "nightshift: image=$RUN_IMAGE"
 echo "nightshift: Ctrl+C to stop gracefully"
 echo ""
@@ -117,10 +122,11 @@ Instructions:
 Work autonomously. Do not ask questions."
 
     docker run --rm \
-        --name "$CONTAINER_NAME" \
+        --name "$RUN_ID" \
         -v "$DOCKER_VOLUME:/home/claude" \
         -v "$WORKSPACE:/workspace" \
         -v "$PROJECT:/workspace/project.md:ro" \
+        -v "$PROGRESS_FILE:/workspace/progress.txt" \
         "$RUN_IMAGE" \
         -p "$PROMPT" \
         --dangerously-skip-permissions \
@@ -131,16 +137,14 @@ Work autonomously. Do not ask questions."
     echo ""
     echo "=== iteration $i complete (exit=$EXIT_CODE) ==="
 
-    if [ -f "$WORKSPACE/progress.txt" ]; then
-        echo "--- progress ---"
-        tail -20 "$WORKSPACE/progress.txt"
-        echo "--- end ---"
+    echo "--- progress ---"
+    tail -20 "$PROGRESS_FILE"
+    echo "--- end ---"
 
-        if tail -1 "$WORKSPACE/progress.txt" | grep -q "NIGHTSHIFT_COMPLETE"; then
-            echo ""
-            echo "nightshift: all tasks complete"
-            break
-        fi
+    if tail -1 "$PROGRESS_FILE" | grep -q "NIGHTSHIFT_COMPLETE"; then
+        echo ""
+        echo "nightshift: all tasks complete"
+        break
     fi
     echo ""
 
@@ -152,3 +156,4 @@ Work autonomously. Do not ask questions."
 done
 
 echo "nightshift: finished after $i iterations"
+echo "nightshift: progress saved at $PROGRESS_FILE"
