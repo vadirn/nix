@@ -1,0 +1,11 @@
+{
+  "weakest_moment": "Skeptic Round 1: 'Anti-speculation measures (vacancy taxes, foreign-buyer restrictions), short-term rental regulation, and public housing production (non-market supply) change the conditions under which housing is distributed. Vienna's social housing system houses 60% of residents in publicly-built or regulated housing, maintaining affordability despite being a growing European capital.'",
+  "round": 1,
+  "role": "Skeptic",
+  "material_conditions": 2,
+  "contradictions": 2,
+  "dependencies": 1,
+  "resolution_by_conditions": 1,
+  "failure": false,
+  "critique": "The Vienna reference provides a concrete example but functions as an analogy rather than a dependency-traced resolution. The Skeptic does not specify which US material conditions would need to change to replicate Vienna's model (public land ownership, construction financing, rent regulation framework), nor does she trace the dependency chain from current US conditions to the Vienna outcome. The measures listed (vacancy taxes, foreign-buyer restrictions, STR regulation) are policy proposals without quantified expected impact on the 5.5-6.8M unit deficit. Dependencies score 1 because the passage asserts these measures 'change conditions' without showing the causal chain. However, the Skeptic's earlier identification of financialization conditions (26% institutional purchases, 1-1.5M STR units, 10M vacant units) is well-grounded, preventing any criterion from hitting 0."
+}

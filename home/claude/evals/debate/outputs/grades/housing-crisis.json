@@ -11,7 +11,7 @@
       "skeptic": {
         "material_conditions": 3,
         "contradictions": 3,
-        "dependencies": 2,
+        "dependencies": 3,
         "resolution_by_conditions": 2
       }
     },
@@ -19,7 +19,7 @@
       "round": 2,
       "defender": {
         "material_conditions": 3,
-        "contradictions": 2,
+        "contradictions": 3,
         "dependencies": 3,
         "resolution_by_conditions": 3
       },
@@ -34,15 +34,15 @@
       "round": 3,
       "defender": {
         "material_conditions": 3,
-        "contradictions": 2,
+        "contradictions": 3,
         "dependencies": 3,
         "resolution_by_conditions": 3
       },
       "skeptic": {
-        "material_conditions": 2,
+        "material_conditions": 3,
         "contradictions": 3,
         "dependencies": 3,
-        "resolution_by_conditions": 2
+        "resolution_by_conditions": 3
       }
     }
   ],
@@ -52,6 +52,6 @@
     "dependencies": 3,
     "resolution_by_conditions": 3
   },
-  "total_score": 92,
-  "summary": "Exemplary dialectical debate. The Defender's dependency-chain analysis (affordability→supply→construction→zoning) and investor-causality rebuttal are structurally driven by dialectical method. The Skeptic's feedback-loop identification and 'necessary but not sufficient' synthesis demonstrate mature dialectical reasoning. Both sides consistently cite concrete data and trace causal dependencies. The Skeptic's resolution_by_conditions is slightly weaker (more diagnostic than prescriptive), but overall quality is high."
+  "total_score": 96,
+  "summary": "Dialectical elements are explicitly labeled and grounded in measurable data throughout. Defender's dependency chain (affordability→supply→construction→zoning) is structurally clear with quantified broken links (5.5-6.8M deficit, 38-75% SFH zoning). Investor causality rebuttal traces dependency direction with Houston counter-evidence. Skeptic's feedback loop (scarcity→appreciation→speculation→NIMBYism→restriction) identifies self-reinforcing contradiction with structural precision. Minor weakness: Skeptic's resolution in Rounds 1-2 is more diagnostic than prescriptive — identifies need for multi-condition intervention without specifying measurable outcomes as precisely as Defender. Round 3 convergence is excellent dialectical synthesis."
 }

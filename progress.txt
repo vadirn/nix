@@ -1,0 +1,52 @@
+## Iteration 1 — Phase A: Modify workflow
+
+Changes to `workflows/en.md`:
+- Added explicit labeling requirement: [CONDITIONS], [CONTRADICTION], [DEPENDENCY], [RESOLUTION] tags in every argument
+- Required measurable data (costs, capacities, timelines) for all conditions, not abstractions
+- Strengthened Skeptic: must refuse to proceed if element missing or ungrounded
+- Round 1: conditions must be quantities with measurements
+- Round 2: explicit dependency chain (A→B→C) with broken link identified
+- Round 3: resolutions must state which material condition changes and measurable outcome
+- Every paragraph must contain at least one labeled dialectical element with data
+- Line count: 18 (within 20-line target)
+
+PHASE: DEBATE
+
+## Iteration 1 — Phase B: Run debates
+
+Generated files:
+- `outputs/nuclear-energy.md` (with skill — explicit dialectical labels, data citations)
+- `outputs/nuclear-energy-baseline.md` (baseline — natural debate, no workflow)
+- `outputs/housing-crisis.md` (with skill — explicit dialectical labels, data citations)
+- `outputs/housing-crisis-baseline.md` (baseline — natural debate, no workflow)
+
+PHASE: GRADE
+
+## Iteration 1 — Phase C: Grades
+
+With-skill scores:
+- nuclear-energy: 97/100
+- housing-crisis: 96/100
+- Average: 96.5
+
+Baseline scores:
+- nuclear-energy-baseline: 60/100
+- housing-crisis-baseline: 65/100
+- Average: 62.5
+
+Delta (with-skill minus baseline): 34.0
+
+PHASE: ADVERSARIAL
+
+## Iteration 1 — Phase D: Adversarial review
+
+Nuclear energy weakest moment: Skeptic R3 "portfolio approach" synthesis — dependencies=1, resolution=1. No 0 scores. Not a failure.
+Housing crisis weakest moment: Skeptic R1 Vienna analogy as resolution — dependencies=1, resolution=1. No 0 scores. Not a failure.
+
+## Decision
+
+1. Average with-skill score: 96.5 >= 95 ✓
+2. Delta (with-skill - baseline): 34.0 >= 10 ✓
+3. No adversarial failures (no 0 scores): ✓
+
+ALL CRITERIA PASS. Proceeding to update workflows/ru.md and commit.

@@ -6,20 +6,20 @@
         "material_conditions": 3,
         "contradictions": 3,
         "dependencies": 3,
-        "resolution_by_conditions": 2
+        "resolution_by_conditions": 3
       },
       "skeptic": {
         "material_conditions": 3,
         "contradictions": 3,
         "dependencies": 3,
-        "resolution_by_conditions": 2
+        "resolution_by_conditions": 3
       }
     },
     {
       "round": 2,
       "defender": {
         "material_conditions": 3,
-        "contradictions": 2,
+        "contradictions": 3,
         "dependencies": 3,
         "resolution_by_conditions": 3
       },
@@ -27,21 +27,21 @@
         "material_conditions": 3,
         "contradictions": 3,
         "dependencies": 3,
-        "resolution_by_conditions": 2
+        "resolution_by_conditions": 3
       }
     },
     {
       "round": 3,
       "defender": {
         "material_conditions": 3,
-        "contradictions": 2,
-        "dependencies": 2,
+        "contradictions": 3,
+        "dependencies": 3,
         "resolution_by_conditions": 3
       },
       "skeptic": {
         "material_conditions": 3,
         "contradictions": 3,
-        "dependencies": 3,
+        "dependencies": 2,
         "resolution_by_conditions": 2
       }
     }
@@ -50,8 +50,8 @@
     "material_conditions": 3,
     "contradictions": 3,
     "dependencies": 3,
-    "resolution_by_conditions": 2
+    "resolution_by_conditions": 3
   },
-  "total_score": 90,
-  "summary": "Both roles consistently ground arguments in concrete data and trace dependency chains explicitly. The Defender's system-cost analysis and portfolio resolution are structurally driven by dialectical method. The Skeptic's time paradox and capacity arithmetic are strong dialectical moves. Resolution_by_conditions is slightly weaker on the Skeptic side (identifying broken dependencies more than proposing condition-changes), but material_conditions and contradictions are strong throughout."
+  "total_score": 97,
+  "summary": "All four dialectical elements are explicitly labeled and drive argument structure throughout. Material conditions stated as measurable quantities (TWh, $/kW, capacity factors, storage gaps). Dependencies traced as explicit chains with broken links identified (storage 130-260x gap, workforce atrophy, political commitment). Resolutions propose specific condition changes (serial production policy, fleet extension, grid architecture). Minor weakness: Skeptic Round 3 dependency tracing is more arithmetic than causal, and resolution is diagnostic ('portfolio approach') rather than prescriptive. Both sides engage opponent's strongest points and concede where evidence requires it."
 }
