@@ -12,7 +12,7 @@
 #   docker volume create claude-runner-home
 #   docker run --rm -it -v claude-runner-home:/home/claude claude-runner bash -c "claude /login"
 #
-# Stop: Ctrl+C to stop after the current iteration finishes.
+# Stop: Ctrl+C, or: touch <progress-dir>/STOP
 
 set -uo pipefail
 
@@ -26,6 +26,8 @@ DOCKER_VOLUME="claude-runner-home"
 DOCKERFILE=""
 RUN_ID="nightshift-$$-$(date +%s)"
 STOPPED=false
+FAIL_COUNT=0
+MAX_CONSECUTIVE_FAILURES=3
 
 cleanup() {
     STOPPED=true
@@ -84,8 +86,8 @@ if [ -n "$DOCKERFILE" ]; then
     docker build -t "$RUN_IMAGE" -f "$DOCKERFILE" "$(dirname "$DOCKERFILE")"
 fi
 
-# Progress file in tmp, unique per run, survives iterations but not reboots
-PROGRESS_DIR="/tmp/$RUN_ID"
+# Progress file unique per run, inside workspace so Docker can mount it
+PROGRESS_DIR="$WORKSPACE/.nightshift/$RUN_ID"
 mkdir -p "$PROGRESS_DIR"
 PROGRESS_FILE="$PROGRESS_DIR/progress.txt"
 touch "$PROGRESS_FILE"
@@ -93,14 +95,20 @@ touch "$PROGRESS_FILE"
 echo "nightshift: up to $ITERATIONS iterations, ${WAIT}s between, model=$MODEL"
 echo "nightshift: workspace=$WORKSPACE"
 echo "nightshift: project=$PROJECT"
-echo "nightshift: progress=$PROGRESS_FILE"
+echo "nightshift: progress=$PROGRESS_DIR"
 echo "nightshift: image=$RUN_IMAGE"
-echo "nightshift: Ctrl+C to stop gracefully"
+echo "nightshift: stop with: touch $PROGRESS_DIR/STOP"
 echo ""
 
 for i in $(seq 1 "$ITERATIONS"); do
+    # Check stop signals
     if [ "$STOPPED" = true ]; then
         echo "nightshift: stopped by user after iteration $((i - 1))"
+        break
+    fi
+
+    if [ -f "$PROGRESS_DIR/STOP" ]; then
+        echo "nightshift: stop file detected, stopping after iteration $((i - 1))"
         break
     fi
 
@@ -137,6 +145,18 @@ Work autonomously. Do not ask questions."
     echo ""
     echo "=== iteration $i complete (exit=$EXIT_CODE) ==="
 
+    # Track consecutive failures
+    if [ "$EXIT_CODE" -ne 0 ]; then
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        if [ "$FAIL_COUNT" -ge "$MAX_CONSECUTIVE_FAILURES" ]; then
+            echo "nightshift: $MAX_CONSECUTIVE_FAILURES consecutive failures, aborting"
+            break
+        fi
+        echo "nightshift: iteration failed ($FAIL_COUNT/$MAX_CONSECUTIVE_FAILURES consecutive)"
+    else
+        FAIL_COUNT=0
+    fi
+
     echo "--- progress ---"
     tail -20 "$PROGRESS_FILE"
     echo "--- end ---"
@@ -156,4 +176,3 @@ Work autonomously. Do not ask questions."
 done
 
 echo "nightshift: finished after $i iterations"
-echo "nightshift: progress saved at $PROGRESS_FILE"

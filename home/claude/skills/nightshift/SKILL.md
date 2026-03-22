@@ -42,8 +42,18 @@ elif "dockerfile" or needs per-project dependencies:
     do("create Dockerfile extending claude-runner with required packages")
 
 elif "progress" or "status" or wants to check results:
-    progress = Read(workspace/progress.txt)
+    runs = Bash(ls workspace/.nightshift/)
+    latest = do("pick most recent run by timestamp in directory name")
+    progress = Read(workspace/.nightshift/{latest}/progress.txt)
     do("summarize what was done, what remains")
+    AskUserQuestion("Continue watching, or stop the run?")
+    if stop: Bash(touch workspace/.nightshift/{latest}/STOP)
+
+elif "stop" or wants to stop a running nightshift:
+    runs = Bash(ls workspace/.nightshift/)
+    latest = do("pick most recent run by timestamp in directory name")
+    Bash(touch workspace/.nightshift/{latest}/STOP)
+    do("confirm stop file created")
 
 else:
     do("help user with their nightshift question")
@@ -140,8 +150,13 @@ Each iteration runs `claude -p` in a fresh Docker container with `--dangerously-
 
 The Docker volume persists `~/.claude.json` (OAuth) and `~/.claude/` (MCP config, settings) across runs. The entrypoint self-heals stale claude symlinks when the volume outlives an image rebuild.
 
-### Stopping
+### Progress and stopping
 
+Progress is stored per-run at `$WORKSPACE/.nightshift/<run-id>/progress.txt`. The run ID and progress path are printed at startup.
+
+Stopping:
 - **Automatic**: claude writes `NIGHTSHIFT_COMPLETE` to progress.txt when all tasks are done
-- **Manual**: Ctrl+C stops gracefully after the current iteration. Ctrl+C again force-kills the running container
-- **Iterations cap**: default 100, set lower with `--iterations` for shorter runs
+- **Stop file**: `touch .nightshift/<run-id>/STOP` stops after the current iteration (works from any terminal or Claude session)
+- **Ctrl+C**: stops gracefully after the current iteration. Ctrl+C again force-kills the container
+- **Failure guard**: 3 consecutive failed iterations abort the run
+- **Iterations cap**: default 100, set lower with `--iterations`

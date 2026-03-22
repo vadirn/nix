@@ -21,6 +21,24 @@ if [ ! -x "$CLAUDE_BIN" ] || [ ! -e "$CLAUDE_BIN" ]; then
     echo "entrypoint: repaired claude symlink -> $LATEST" >&2
 fi
 
+# Reset config between iterations using git
+CLAUDE_DIR="$HOME/.claude"
+CLAUDE_JSON="$HOME/.claude.json"
+CLAUDE_JSON_SNAPSHOT="$HOME/.claude.json.snapshot"
+
+if [ -d "$CLAUDE_DIR" ]; then
+    if [ ! -d "$CLAUDE_DIR/.git" ]; then
+        git -C "$CLAUDE_DIR" init -q
+        git -C "$CLAUDE_DIR" add -A
+        git -C "$CLAUDE_DIR" commit -q -m "baseline" --allow-empty
+        [ -f "$CLAUDE_JSON" ] && cp "$CLAUDE_JSON" "$CLAUDE_JSON_SNAPSHOT"
+    else
+        git -C "$CLAUDE_DIR" checkout -q -- .
+        git -C "$CLAUDE_DIR" clean -qfd
+        [ -f "$CLAUDE_JSON_SNAPSHOT" ] && cp "$CLAUDE_JSON_SNAPSHOT" "$CLAUDE_JSON"
+    fi
+fi
+
 case "${1:-}" in
     ""|-*)
         exec claude "$@"
