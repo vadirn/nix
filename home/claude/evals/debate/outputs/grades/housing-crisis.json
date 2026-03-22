@@ -10,7 +10,7 @@
       },
       "skeptic": {
         "material_conditions": 3,
-        "contradictions": 3,
+        "contradictions": 2,
         "dependencies": 3,
         "resolution_by_conditions": 2
       }
@@ -27,7 +27,7 @@
         "material_conditions": 3,
         "contradictions": 3,
         "dependencies": 3,
-        "resolution_by_conditions": 2
+        "resolution_by_conditions": 3
       }
     },
     {
@@ -39,10 +39,10 @@
         "resolution_by_conditions": 3
       },
       "skeptic": {
-        "material_conditions": 3,
+        "material_conditions": 2,
         "contradictions": 3,
-        "dependencies": 3,
-        "resolution_by_conditions": 3
+        "dependencies": 2,
+        "resolution_by_conditions": 2
       }
     }
   ],
@@ -50,8 +50,8 @@
     "material_conditions": 3,
     "contradictions": 3,
     "dependencies": 3,
-    "resolution_by_conditions": 3
+    "resolution_by_conditions": 2
   },
-  "total_score": 96,
-  "summary": "Dialectical elements are explicitly labeled and grounded in measurable data throughout. Defender's dependency chain (affordability→supply→construction→zoning) is structurally clear with quantified broken links (5.5-6.8M deficit, 38-75% SFH zoning). Investor causality rebuttal traces dependency direction with Houston counter-evidence. Skeptic's feedback loop (scarcity→appreciation→speculation→NIMBYism→restriction) identifies self-reinforcing contradiction with structural precision. Minor weakness: Skeptic's resolution in Rounds 1-2 is more diagnostic than prescriptive — identifies need for multi-condition intervention without specifying measurable outcomes as precisely as Defender. Round 3 convergence is excellent dialectical synthesis."
+  "total_score": 93,
+  "summary": "Strong dialectical reasoning throughout: both sides ground claims in measurable data, identify genuine structural contradictions in their own positions, and trace explicit causal chains with broken links named. The Defender maintains higher consistency across all three rounds, while the Skeptic peaks in Round 2 with the split-tax proposal and demand-suppression contradiction but weakens in Round 3 with less original material and a governance critique that is more political than material. The verdict synthesizes well but does not fully resolve the governance dependency it identifies."
 }

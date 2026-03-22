@@ -11,8 +11,8 @@
       "skeptic": {
         "material_conditions": 3,
         "contradictions": 3,
-        "dependencies": 3,
-        "resolution_by_conditions": 3
+        "dependencies": 2,
+        "resolution_by_conditions": 2
       }
     },
     {
@@ -21,28 +21,28 @@
         "material_conditions": 3,
         "contradictions": 3,
         "dependencies": 3,
-        "resolution_by_conditions": 3
+        "resolution_by_conditions": 2
       },
       "skeptic": {
         "material_conditions": 3,
         "contradictions": 3,
         "dependencies": 3,
-        "resolution_by_conditions": 3
+        "resolution_by_conditions": 2
       }
     },
     {
       "round": 3,
       "defender": {
-        "material_conditions": 3,
+        "material_conditions": 2,
         "contradictions": 3,
-        "dependencies": 3,
+        "dependencies": 2,
         "resolution_by_conditions": 3
       },
       "skeptic": {
-        "material_conditions": 3,
-        "contradictions": 3,
+        "material_conditions": 2,
+        "contradictions": 2,
         "dependencies": 2,
-        "resolution_by_conditions": 2
+        "resolution_by_conditions": 3
       }
     }
   ],
@@ -52,6 +52,6 @@
     "dependencies": 3,
     "resolution_by_conditions": 3
   },
-  "total_score": 97,
-  "summary": "All four dialectical elements are explicitly labeled and drive argument structure throughout. Material conditions stated as measurable quantities (TWh, $/kW, capacity factors, storage gaps). Dependencies traced as explicit chains with broken links identified (storage 130-260x gap, workforce atrophy, political commitment). Resolutions propose specific condition changes (serial production policy, fleet extension, grid architecture). Minor weakness: Skeptic Round 3 dependency tracing is more arithmetic than causal, and resolution is diagnostic ('portfolio approach') rather than prescriptive. Both sides engage opponent's strongest points and concede where evidence requires it."
+  "total_score": 89,
+  "summary": "Strong dialectical reasoning throughout: both sides ground arguments in quantified material conditions, identify genuine structural contradictions (including self-identified tensions), and trace explicit dependency chains with named broken links. Deductions: Skeptic R1 dependencies assert negative learning curve without full structural tracing; both sides' R2 resolutions propose policy mechanisms underspecified in implementation; R3 both sides partially restate prior evidence rather than introducing new material conditions; R3 Skeptic contradiction ('alongside not instead') is a logical inconsistency rather than a deep structural tension. Verdict excels by sequencing six condition-changes in dependency order and honestly naming four unresolved dependencies."
 }

@@ -1,11 +1,12 @@
 {
-  "weakest_moment": "Skeptic Round 1: 'Anti-speculation measures (vacancy taxes, foreign-buyer restrictions), short-term rental regulation, and public housing production (non-market supply) change the conditions under which housing is distributed. Vienna's social housing system houses 60% of residents in publicly-built or regulated housing, maintaining affordability despite being a growing European capital.'",
-  "round": 1,
-  "role": "Skeptic",
-  "material_conditions": 2,
-  "contradictions": 2,
-  "dependencies": 1,
-  "resolution_by_conditions": 1,
-  "failure": false,
-  "critique": "The Vienna reference provides a concrete example but functions as an analogy rather than a dependency-traced resolution. The Skeptic does not specify which US material conditions would need to change to replicate Vienna's model (public land ownership, construction financing, rent regulation framework), nor does she trace the dependency chain from current US conditions to the Vienna outcome. The measures listed (vacancy taxes, foreign-buyer restrictions, STR regulation) are policy proposals without quantified expected impact on the 5.5-6.8M unit deficit. Dependencies score 1 because the passage asserts these measures 'change conditions' without showing the causal chain. However, the Skeptic's earlier identification of financialization conditions (26% institutional purchases, 1-1.5M STR units, 10M vacant units) is well-grounded, preventing any criterion from hitting 0."
+  "weakest_moment": {
+    "round": 1,
+    "role": "Skeptic",
+    "paragraph_summary": "RESOLUTION paragraph proposing a graduated vacancy tax and 15% investor purchase cap, claiming 500K-1M units returned to occupancy within 3 years",
+    "material_conditions": 1,
+    "contradictions": 0,
+    "dependencies": 0,
+    "resolution_by_conditions": 1,
+    "explanation": "This is the weakest moment because it proceeds as if its own preceding contradiction did not occur. The Skeptic's CONTRADICTION paragraph just conceded that the 15.1M vacancy figure collapses once seasonal, transitional, and geographically mismatched units are excluded, reducing the actionable number far below the headline. Yet the RESOLUTION builds on the discredited 15.1M figure to project 500K-1M recoverable units with no derivation showing how many units actually qualify after the concession. The 15% investor cap is asserted without material basis: why 15% rather than 20% or 10%? No mechanism traces how a vacancy tax on units held >12 months translates to occupancy, since owners may sell rather than rent, convert to commercial use, or accept the tax as a cost of holding. The dependency chain (vacancy tax -> units returned -> vacancy rate rises to 9-10%) has two untraced links: tax-to-behavioral-response and behavioral-response-to-occupancy. The contradiction score is 0 because the resolution ignores rather than engages the contradiction the Skeptic raised one paragraph earlier. The resolution amounts to an administrative threshold imposed on conditions the Skeptic already undermined, changing a regulatory number rather than a material condition."
+  }
 }

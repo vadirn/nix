@@ -5,14 +5,14 @@
       "defender": {
         "material_conditions": 2,
         "contradictions": 2,
-        "dependencies": 1,
-        "resolution_by_conditions": 1
+        "dependencies": 2,
+        "resolve_by_changing_conditions": 2
       },
       "skeptic": {
-        "material_conditions": 2,
+        "material_conditions": 3,
         "contradictions": 2,
         "dependencies": 2,
-        "resolution_by_conditions": 1
+        "resolve_by_changing_conditions": 1
       }
     },
     {
@@ -21,13 +21,13 @@
         "material_conditions": 2,
         "contradictions": 2,
         "dependencies": 2,
-        "resolution_by_conditions": 2
+        "resolve_by_changing_conditions": 1
       },
       "skeptic": {
         "material_conditions": 2,
         "contradictions": 2,
         "dependencies": 2,
-        "resolution_by_conditions": 1
+        "resolve_by_changing_conditions": 0
       }
     },
     {
@@ -35,23 +35,23 @@
       "defender": {
         "material_conditions": 2,
         "contradictions": 1,
-        "dependencies": 1,
-        "resolution_by_conditions": 2
+        "dependencies": 2,
+        "resolve_by_changing_conditions": 1
       },
       "skeptic": {
-        "material_conditions": 2,
-        "contradictions": 1,
-        "dependencies": 1,
-        "resolution_by_conditions": 1
+        "material_conditions": 3,
+        "contradictions": 2,
+        "dependencies": 3,
+        "resolve_by_changing_conditions": 2
       }
     }
   ],
   "verdict": {
     "material_conditions": 2,
     "contradictions": 2,
-    "dependencies": 1,
-    "resolution_by_conditions": 1
+    "dependencies": 2,
+    "resolve_by_changing_conditions": 1
   },
-  "total_score": 60,
-  "summary": "Data is present but not systematically organized as material conditions. Contradictions are mentioned (intermittency, cost vs speed) but not developed as structural tensions between opposing conditions. Dependencies are rarely traced as explicit chains — arguments jump from data points to conclusions without showing causal links. Resolutions are stated as preferences ('nuclear is needed') rather than as specific changes to material conditions. The debate reads as a conventional pros/cons discussion rather than a dialectical analysis. Round 2 is strongest, with system cost and Barakah data approaching dialectical structure."
+  "total_score": 62,
+  "summary": "The debate is empirically rich and argumentatively competent, with both sides grounding claims in concrete data (Vogtle costs, France's buildout, market capital flows). The principal weakness under Cornforth's method is that neither side consistently resolves contradictions by proposing changes to material conditions: the Skeptic rarely offers constructive proposals, and the Defender's resolutions tend toward general appeals rather than specifying what institutional or political conditions must change and how."
 }

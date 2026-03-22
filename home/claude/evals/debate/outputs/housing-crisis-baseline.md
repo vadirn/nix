@@ -1,93 +1,87 @@
-# The housing crisis is primarily a supply problem (Baseline)
+# Debate: The Housing Crisis Is Primarily a Supply Problem
 
 ## Round 1
 
 ### Defender
 
-The numbers tell a clear story. The US is short roughly 5.5 to 6.8 million homes. Housing starts have averaged about 1.4 million per year since 2010, but we need 1.7 million just to keep up with population growth and replacement of aging stock. That gap has accumulated over more than a decade.
+The evidence for insufficient supply as the central driver of the housing crisis is broad and consistent across countries, decades, and methodologies.
 
-The biggest obstacle to building more housing is zoning. In San Francisco, about 38% of residential land is zoned exclusively for single-family homes. In Los Angeles, it's 75%. These laws literally prohibit the construction of apartments and multi-family housing in most of the city. You can't build your way out of a shortage if the law says you can't build.
+Start with the numbers. The National Association of Realtors estimates the US is short 5.5 million homes. Freddie Mac puts the figure at 3.8 million. The exact number varies by methodology, but every serious estimate points to a large and growing deficit accumulated over more than a decade of underbuilding. Between 2010 and 2020, the country added roughly 15 million new households but permitted only about 12 million new units. That gap is cumulative and compounds year over year.
 
-Look at what happens when you allow building. Tokyo reformed its zoning in 2002 to allow much more density. Now Tokyo builds more housing per year than the entire state of California, despite having about a third of the population. And Tokyo's rents have been roughly flat for 20 years while American cities have seen rents spike 50-100%.
+The geographic pattern is telling. Cities where building is easy have moderate housing costs. Cities where building is hard have extreme costs. Houston has no formal zoning code, builds prolifically, and has a median home price around $330,000. San Francisco zones 38% of its residential land exclusively for single-family homes, builds almost nothing relative to demand, and has a median price above $1.3 million. This pattern holds internationally. Tokyo reformed its zoning nationally in 2002 to permit far greater density. It now builds more housing annually than the entire state of California while keeping rents roughly flat for two decades. Meanwhile, London, Sydney, Vancouver, and Auckland all share the combination of restrictive land-use rules and spiraling housing costs.
 
-Houston is another instructive example. It has no formal zoning code. Housing supply responds to demand. The result: a major American city where median home prices are around $330,000, far below the $1.3 million in San Francisco. Housing is affordable when you let people build it.
+The mechanism is not mysterious. When the quantity demanded exceeds the quantity supplied at prevailing prices, prices rise. Zoning, lengthy permitting, environmental review abuse, and neighborhood vetoes all constrain supply. Remove those constraints and supply responds. This is the single largest factor.
 
 ### Skeptic
 
-The supply story is too simple. Yes, there's a housing shortage, but focusing only on supply ignores several important factors.
+The supply narrative is appealing in its simplicity, but several facts sit uncomfortably within it.
 
-First, investors. In 2021-2022, institutional investors bought about a quarter of all single-family homes. Companies like Blackstone and Invitation Homes are buying up neighborhoods and converting them to rentals. They're not increasing the housing stock — they're financializing it, extracting rent from what used to be owner-occupied homes. When Wall Street competes with families for the same houses, prices go up regardless of supply.
+First, the financialization of housing. In 2021, institutional investors purchased roughly one in four single-family homes sold in major metros. Firms like Invitation Homes and American Homes 4 Rent now own hundreds of thousands of units. They compete directly with first-time buyers, pay cash, waive inspections, and bid above asking. In specific submarkets -- entry-level homes in Sun Belt cities -- their share reaches 20-25% of purchases. These actors do not add supply. They convert owner-occupied homes into rental properties and extract returns from scarcity they help perpetuate.
 
-Second, there are about 15 million vacant housing units in America. Ten million of those aren't even on the market — not for sale, not for rent. Some are second homes, some are held for speculation, some are just sitting empty. If supply were really the main problem, why are millions of units sitting unused?
+Second, vacancy. The US has roughly 15 million vacant housing units. Around 10 million are not on the market at all -- not listed for sale, not listed for rent. Some are second homes, some are held speculatively, some are simply warehoused. If the crisis were purely about insufficient physical structures, this stockpile should trouble the supply-first camp more than it does.
 
-Third, when developers do build in expensive markets, they build luxury. In New York City, 80% of new construction in recent years has been market-rate luxury housing. Building more doesn't automatically mean building affordably. The market naturally targets the highest-margin product.
+Third, new construction overwhelmingly targets the luxury segment. In New York City, approximately 80% of new units built in recent years have been market-rate luxury. Developers maximize margin per unit, not units per acre. Building more does not automatically mean building what people need. The market, left to its own logic, produces $3,000/month studios, not workforce housing.
 
-And the Tokyo comparison isn't as clean as the Defender suggests. Japan's population has been shrinking since 2008. They have essentially no immigration. Demand pressure is fundamentally different when your population is declining.
+Finally, the Tokyo comparison requires context. Japan's population has declined since 2008. It has minimal immigration. Comparing demand dynamics in a shrinking population to those in a growing one is analytically suspect.
 
 ## Round 2
 
 ### Defender
 
-Let me address each of those points.
+Let me take these objections in order.
 
-On investors: Why are they buying housing? Because it's profitable. And why is it profitable? Because there's a shortage, which drives up both prices and rents. In Houston, where supply is elastic, investors are present too — but prices stay moderate because building keeps pace with demand. Investors are a symptom of the shortage, not a cause. Fix the shortage, and investment returns decline.
+On institutional investors: the Skeptic confuses symptom with cause. Why do investors target housing? Because restricted supply guarantees appreciation and stable rental yields. In markets where supply is elastic -- Houston, Dallas, much of Texas -- investors are present but returns are lower and prices stay moderate, because new construction disciplines price growth. Scarcity is what makes housing an attractive financial asset. Increase supply and the investment thesis weakens. The arrow of causation runs from shortage to financialization, not the reverse.
 
-On vacant units: most of those 10 million vacant homes are in places like Detroit, rural West Virginia, or small towns where populations are declining. The vacancy rate in San Francisco is under 4%, in New York about 3.5%. The homes are empty where nobody wants to live. You can't solve the San Francisco housing crisis with an empty house in Cleveland without also moving the jobs.
+On vacancy: the 15 million figure is misleading without geographic decomposition. Vacancies concentrate in declining markets -- rural areas, shrinking Rust Belt cities, depopulating small towns. The vacancy rate in San Francisco is under 4%. In New York it hovers around 3.5%. In the places where the crisis is most acute, there are almost no vacant units. You cannot solve San Francisco's housing shortage with an empty house in Youngstown, Ohio. The jobs are not there. The infrastructure is not there. Housing markets are local.
 
-On luxury construction: the research actually shows that new market-rate housing helps everyone, not just the wealthy. A 2021 study by Evan Mast found that for every 100 new market-rate units built, about 70 units in lower-income neighborhoods become available through the "filtering" chain — as people move up, they free up more affordable units. The process takes time, but it works. And if we want developers to include affordable units (through inclusionary zoning mandates), we need high enough construction volume to make the cross-subsidy work.
+On luxury construction: the empirical research supports filtering. Evan Mast's 2021 study traced moving chains from new market-rate buildings and found that for every 100 new high-end units, roughly 70 units in lower-income neighborhoods opened up as residents moved along the chain. New luxury construction does help lower-income renters, albeit indirectly and with a lag. And the reason developers build luxury is partly because constrained supply and lengthy approvals make each project so expensive and risky that only high-margin products pencil out. Reduce regulatory burden, increase volume, and the economics shift toward more moderate price points.
 
-On Tokyo: fair point about demographics. But the mechanism still holds. Before the 2002 reform, Tokyo was also expensive despite demographic trends. The reform enabled supply to respond to whatever demand existed. The lesson isn't that demographics don't matter — it's that regulatory permission is a prerequisite for supply response.
+On Tokyo: yes, Japan's population is declining. But Tokyo's population is not -- the metro area has continued growing as people concentrate in the capital. And before the 2002 zoning reform, Tokyo was expensive despite the same demographic backdrop. The reform enabled supply to match demand within the metro area. The demographic argument does not explain the change that occurred after reform.
 
 ### Skeptic
 
-I'll concede the investor point — the Defender's logic on causality is sound. If housing were abundant, the returns wouldn't be there to attract institutional money. Scarcity creates the profit opportunity.
+The causal argument on investors is well-taken. I concede that financialization is better understood as an amplifier of shortage-driven price signals than as an independent cause.
 
-But I think the Defender is missing a feedback loop. Here's how it works: housing shortage pushes prices up. Rising prices make homeowners wealthier. Wealthy homeowners then oppose new construction because it might lower their property values. They use their political influence to maintain restrictive zoning. And the shortage continues.
+But the Defender is skating past a deeper structural problem. Suppose we agree that restrictive zoning is the principal barrier. Who maintains that zoning? Homeowners. And why? Because their largest financial asset -- their home -- appreciates most reliably when supply is constrained. American households hold roughly $45 trillion in housing wealth. Every homeowner has a direct financial interest in maintaining scarcity. They vote in local elections at far higher rates than renters. They donate to campaigns, attend planning meetings, and file lawsuits against new development.
 
-This means that even though supply is the root cause, supply-only solutions face a fundamental political obstacle: the people who need to approve zoning changes are the same people who benefit from the status quo. You can't just say "change the zoning" without addressing the political economy that keeps the zoning in place.
+This creates a self-reinforcing cycle: shortage drives up prices, rising prices enrich incumbents, enriched incumbents block new supply, and the shortage deepens. The supply diagnosis may be correct, but the supply prescription -- "change the zoning" -- runs headlong into the political economy that sustains the zoning. Identifying the right variable is not the same as being able to change it.
 
-Also, the Houston model has real downsides. No zoning means you get houses built in flood plains, industrial sites next to schools, sprawl that creates enormous commute times. Houston got devastated by Hurricane Harvey partly because homes were built in places that should never have been developed. There's a reason cities have land-use regulations, and "just remove all the rules" has consequences.
+There is also the construction capacity problem. The US is roughly 400,000 construction workers short of what would be needed to build at the pace the Defender envisions. Immigration policy, which could help close that gap, is gridlocked. Materials costs have risen sharply. The homebuilding industry has consolidated: the top 10 builders now control a much larger share of production than they did in the 1990s, and they have little incentive to flood the market with supply that would erode their margins. Even with perfect zoning, the physical and industrial capacity to build at the required scale is not currently present.
 
-The filtering argument is real but slow. In the hottest markets, high-income workers pour in faster than filtering can work. San Francisco adds maybe 5,000 housing units a year but attracts 15,000-20,000 new tech workers annually. The math doesn't work unless you can massively increase the rate of building, which brings us back to the political problem.
+Finally, the filtering literature shows a lag of 5-10 years before benefits reach lower-income households. In a market where rents rise 8-10% annually, that lag means the bottom of the market gets worse for a decade before it gets better. For a family facing eviction today, "build luxury apartments and wait for filtering" is not a solution.
 
 ## Round 3
 
 ### Defender
 
-The Skeptic raises a legitimate challenge with the political economy argument. Let me address it directly.
+The political economy objection is the strongest the Skeptic has raised, so let me engage with it seriously.
 
-Yes, homeowners benefit from scarcity and resist change. But this obstacle has been overcome in several places. Oregon passed HB 2001 in 2019, effectively banning single-family-only zoning statewide. Minneapolis eliminated its single-family zoning. California passed a series of bills (SB 9, SB 10, the Builder's Remedy) to override local zoning restrictions. These reforms happened through state-level action that bypassed local opposition. The political mechanism exists — it's state preemption of local zoning authority.
+The claim is not that zoning reform is politically easy. The claim is that insufficient supply is the primary cause of the crisis and that expanding supply is the necessary foundation for any solution. These are separate propositions. Identifying the root cause correctly matters even when the cure is difficult to administer, because misdiagnosis leads to policies that fail or make things worse.
 
-On Houston: I'm not arguing for no regulation at all. I'm arguing that the problem is zoning that prevents multi-family housing, not building codes or safety regulations. Japan and the Netherlands have permissive zoning and strict building codes — you can build densely, but you have to build well. That's the model: reform zoning while keeping quality and safety standards.
+On the political feasibility question itself: state-level preemption has proven to be a viable path around local obstruction. Oregon banned single-family-only zoning statewide in 2019. Minneapolis eliminated it citywide. California has passed SB 9, SB 10, and the Builder's Remedy, overriding local refusal to zone for housing. Montana, a deep-red state, passed significant zoning reform in 2023. These are not hypothetical -- they are enacted law. The political obstacle is real but has been overcome repeatedly through state action that aggregates the diffuse interests of renters and prospective buyers against the concentrated interests of incumbent homeowners.
 
-On filtering speed: I agree that in the hottest markets, supply needs to massively increase. That's the whole point of the supply argument. The solution to "we're not building enough" is not "stop trying to build" — it's "build much more." Faster permitting (Austin cut permit times from months to weeks), modular construction, and broader upzoning all increase the rate.
+On construction labor and industry consolidation: these are genuine constraints, but they are downstream of the policy environment. Construction workers left the industry after 2008 because demand collapsed and never fully recovered. A credible, sustained commitment to building -- through zoning reform and streamlined permitting -- would draw workers back and attract new entrants. The consolidation of builders is itself partly a product of regulatory complexity: navigating permitting in restrictive jurisdictions favors large firms with legal and lobbying capacity over small builders. Simplify the rules and smaller firms can compete.
 
-Let me be clear about what I'm not saying: I'm not saying supply is the only factor, or that no other interventions help. Public housing, tenant protections, and anti-speculation measures all have roles. But none of them work without more supply. Rent control without supply just rations scarcity. Subsidies without supply just bid up prices. Supply is the necessary condition that makes everything else work.
+On filtering lag: I agree that filtering alone is insufficient for the poorest households. Direct subsidies, public housing, and vouchers all have roles. But every one of those interventions works better -- or only works -- when supply is adequate. Vouchers in a tight market just bid up rents. Public housing in a city that blocks all construction faces the same permitting gauntlet. Rent control without supply creates long waiting lists and insider-outsider dynamics. Supply is the precondition that makes demand-side interventions effective rather than merely redistributive of scarcity.
+
+The thesis is not that supply is everything. It is that supply is primary: the single largest factor and the necessary precondition for all other interventions.
 
 ### Skeptic
 
-I think the Defender has made a compelling case. The supply argument holds up as the primary explanation and the most effective lever. I'd make a few final points about where it falls short.
+I want to push back on one final dimension before we close. The Defender treats the housing market as though it operates according to a standard commodity model: increase quantity, reduce price. But housing is not a commodity. It is simultaneously shelter, a financial asset, a vehicle for intergenerational wealth transfer, and a determinant of access to schools, jobs, and social networks. These functions create demand dynamics that a simple supply-and-demand framework does not fully capture.
 
-The state preemption examples are encouraging, but they're still the exception. Most states haven't followed Oregon and Minnesota's lead, and federal action on zoning seems unlikely. The political obstacle is real even if not insurmountable.
+Consider: if we doubled housing supply overnight, would prices fall proportionally? The asset function of housing means that lower prices trigger panic among the two-thirds of American households who own homes and whose retirement plans depend on appreciation. Political backlash would be severe and immediate. Any supply expansion large enough to meaningfully reduce prices would be large enough to destabilize household balance sheets across the country. The system is path-dependent in ways that constrain the supply solution even in theory.
 
-The construction labor shortage is also a real constraint. We're about 400,000 workers short, and immigration policy — which could help fill that gap — is politically gridlocked. You can change the zoning all you want, but if there aren't enough construction workers, building doesn't accelerate as much as hoped.
+Income inequality also deserves more weight than the Defender gives it. In 1970, a median-income household could afford a median-priced home in most American cities. Today, median home prices exceed five times median household income in dozens of metros. This is not solely a supply phenomenon. Real wages for the bottom half of earners have barely grown in four decades while housing has been treated as a primary savings vehicle, inflated by mortgage interest deductions, capital gains exclusions, and accommodative monetary policy. The demand side of the equation has been systematically distorted by policy over 50 years. Calling it "primarily supply" understates the role of these demand-side distortions.
 
-And income inequality compounds everything. Even with more supply, if housing costs $300,000 but median household income is $50,000 in that market, affordability remains a challenge without some form of subsidy or publicly-provided housing.
-
-My revised position: the housing crisis is primarily a supply problem, and supply reform is the most important single intervention. But "primarily" isn't "entirely." The crisis has become self-reinforcing through political economy dynamics, and resolving it fully requires supply reform plus complementary measures. I think the Defender's thesis holds under a reasonable interpretation of "primarily."
+That said, I want to be honest about where the weight of evidence lies. The cross-city and cross-national pattern is consistent and difficult to explain without supply constraints as a major factor. The causal logic on investors, filtering, and the dependency of demand-side interventions on adequate supply is sound. My final position is this: supply constraints are the largest single factor, and supply reform is the most important single intervention. But framing the crisis as "primarily" a supply problem risks giving policymakers permission to ignore the demand-side distortions -- financialization, tax policy, wage stagnation, monetary policy -- that have made housing into something more pathological than a simple shortage.
 
 ## Verdict
 
-**Strongest arguments:**
+The Defender presented a well-evidenced case built on cross-national comparisons, causal analysis of financialization, and the logical dependency of demand-side interventions on adequate supply. The strongest contributions were the reframing of institutional investment as a symptom rather than cause, the geographic decomposition of vacancy data, and the argument that supply is a necessary precondition for other policies to function.
 
-Defender: The causal logic on investors (scarcity drives profitability, not the reverse), the international comparisons (Tokyo, Houston), and the dependency argument that demand-side interventions can't work without supply.
+The Skeptic raised important objections, the most potent being the political economy feedback loop (homeowner wealth depends on scarcity, homeowners block supply), the construction capacity constraints, and the observation that housing's dual role as shelter and financial asset complicates the standard supply-demand framework. The Skeptic weakened their position by conceding the investor causality point early and by ultimately agreeing with the Defender's core thesis while disputing emphasis.
 
-Skeptic: The feedback loop argument about political economy, the limitations of filtering in hot markets, and the legitimate concerns about Houston's model of deregulation.
+The debate narrowed to whether "primarily" is the right word. The Defender argued it means "largest single factor and necessary precondition." The Skeptic argued it risks understating demand-side distortions. On the evidence presented, the Defender's interpretation is more consistent with the empirical record: the geographic correlation between building restrictions and high costs is the most robust finding in housing economics, and no demand-side factor has comparable explanatory power across cases.
 
-**Key areas of agreement:**
-- The housing deficit is real
-- Supply reform is necessary
-- Complementary measures are needed alongside supply reform
-- "Primarily" means most important factor, not only factor
-
-**Assessment:** The Defender wins this debate. The supply argument is well-supported by data and logic. The Skeptic raised important qualifications but ultimately conceded the core thesis. The debate narrowed to whether "primarily" means "exclusively" (it shouldn't) and whether supply reform is politically feasible (it's hard but has precedent). Confidence: 7/10.
+**Winner: Defender.** The housing crisis is primarily a supply problem, where "primarily" means it is the largest single factor and the necessary foundation for effective policy responses. The Skeptic is right that it is not the only factor, and that demand-side reforms -- particularly around housing's role as a financial asset -- matter substantially. But the Defender's framework better explains the data and better organizes the policy response.
