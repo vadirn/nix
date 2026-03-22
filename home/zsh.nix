@@ -55,6 +55,7 @@
         LG_CONFIG_FILE="$cfg" lazygit "$@"
       }
       alias y='yazi'
+      alias v='nvim'
 
       alias gtimeout='timeout'
 
