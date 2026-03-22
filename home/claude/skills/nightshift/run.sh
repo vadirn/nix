@@ -117,7 +117,7 @@ Read progress.txt for what previous iterations accomplished.
 Instructions:
 - If progress.txt is empty, start from the beginning.
 - Otherwise, continue from where the last iteration left off.
-- Work on one task at a time. Commit after completing each task.
+- Work on one task at a time. Save your work by editing files directly. The orchestrator commits after each iteration.
 - Before finishing, append a summary to progress.txt: what you did, what remains.
 - If blocked on something, document it in progress.txt and move to the next task.
 - When ALL tasks in project.md are complete, write NIGHTSHIFT_COMPLETE as the last line of progress.txt.
@@ -128,6 +128,7 @@ Work autonomously. Do not ask questions."
         --name "$RUN_ID" \
         -v "$DOCKER_VOLUME:/home/claude" \
         -v "$WORKSPACE:/workspace" \
+        -v "$WORKSPACE/.git:/workspace/.git:ro" \
         -v "$PROJECT:/workspace/project.md:ro" \
         -v "$PROGRESS_FILE:/workspace/progress.txt" \
         "$RUN_IMAGE" \
@@ -138,6 +139,12 @@ Work autonomously. Do not ask questions."
     EXIT_CODE=$?
 
     COMPLETED=$i
+
+    # Commit workspace changes from this iteration (if any)
+    if [ -n "$(git -C "$WORKSPACE" status --porcelain)" ]; then
+        git -C "$WORKSPACE" add -A
+        git -C "$WORKSPACE" commit -m "nightshift: iteration $i"
+    fi
 
     echo ""
     echo "=== iteration $i complete (exit=$EXIT_CODE) ==="

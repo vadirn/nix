@@ -45,6 +45,10 @@ if [[ "$COMMAND" =~ ${P}git[[:space:]]+-C[[:space:]] ]]; then
   deny "Use plain \`git\` — you are already in the repo."
 fi
 
+if [[ "$COMMAND" =~ ${P}git[[:space:]]+config[[:space:]] ]]; then
+  deny "Blocked: git config changes persist and affect all future commits."
+fi
+
 if [[ "$COMMAND" =~ $OBSIDIAN_RE ]]; then
   deny "Blocked: this obsidian subcommand can cause data loss or run arbitrary code."
 fi
