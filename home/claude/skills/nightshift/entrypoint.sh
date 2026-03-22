@@ -21,7 +21,7 @@ if [ ! -x "$CLAUDE_BIN" ] || [ ! -e "$CLAUDE_BIN" ]; then
     echo "entrypoint: repaired claude symlink -> $LATEST" >&2
 fi
 
-# Reset config between iterations using git
+# Prevent config drift between iterations: settings/MCP changes from one run must not leak into the next
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_JSON="$HOME/.claude.json"
 CLAUDE_JSON_SNAPSHOT="$HOME/.claude.json.snapshot"

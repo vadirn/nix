@@ -100,15 +100,10 @@ echo "nightshift: image=$RUN_IMAGE"
 echo "nightshift: stop with: touch $PROGRESS_DIR/STOP"
 echo ""
 
+COMPLETED=0
 for i in $(seq 1 "$ITERATIONS"); do
-    # Check stop signals
-    if [ "$STOPPED" = true ]; then
-        echo "nightshift: stopped by user after iteration $((i - 1))"
-        break
-    fi
-
-    if [ -f "$PROGRESS_DIR/STOP" ]; then
-        echo "nightshift: stop file detected, stopping after iteration $((i - 1))"
+    if [ "$STOPPED" = true ] || [ -f "$PROGRESS_DIR/STOP" ]; then
+        echo "nightshift: stopped after iteration $COMPLETED"
         break
     fi
 
@@ -141,6 +136,8 @@ Work autonomously. Do not ask questions."
         --model "$MODEL"
 
     EXIT_CODE=$?
+
+    COMPLETED=$i
 
     echo ""
     echo "=== iteration $i complete (exit=$EXIT_CODE) ==="
@@ -175,4 +172,4 @@ Work autonomously. Do not ask questions."
     fi
 done
 
-echo "nightshift: finished after $i iterations"
+echo "nightshift: finished after $COMPLETED iterations"
