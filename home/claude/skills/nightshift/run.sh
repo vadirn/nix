@@ -17,6 +17,7 @@
 set -uo pipefail
 
 WORKSPACE=""
+PROJECT=""
 ITERATIONS=100
 WAIT=300
 MODEL="claude-opus-4-6[1m]"
@@ -37,6 +38,7 @@ trap cleanup INT TERM
 while [ $# -gt 0 ]; do
     case "$1" in
         --workspace)     WORKSPACE="$2"; shift 2 ;;
+        --project)       PROJECT="$2"; shift 2 ;;
         --iterations)    ITERATIONS="$2"; shift 2 ;;
         --wait)          WAIT="$2"; shift 2 ;;
         --model)         MODEL="$2"; shift 2 ;;
@@ -45,7 +47,7 @@ while [ $# -gt 0 ]; do
         --dockerfile)    DOCKERFILE="$2"; shift 2 ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "Usage: $0 --workspace DIR [--iterations N] [--wait SECONDS] [--model MODEL] [--dockerfile PATH]" >&2
+            echo "Usage: $0 --workspace DIR [--project FILE] [--iterations N] [--wait SECONDS] [--model MODEL] [--dockerfile PATH]" >&2
             exit 1
             ;;
     esac
@@ -58,10 +60,16 @@ fi
 
 WORKSPACE=$(cd "$WORKSPACE" && pwd)
 
-if [ ! -f "$WORKSPACE/project.md" ]; then
-    echo "error: project.md not found in $WORKSPACE" >&2
+if [ -z "$PROJECT" ]; then
+    PROJECT="$WORKSPACE/project.md"
+fi
+
+if [ ! -f "$PROJECT" ]; then
+    echo "error: project file not found at $PROJECT" >&2
     exit 1
 fi
+
+PROJECT=$(cd "$(dirname "$PROJECT")" && echo "$(pwd)/$(basename "$PROJECT")")
 
 # Build project-specific image if --dockerfile provided
 RUN_IMAGE="$DOCKER_IMAGE"
@@ -80,6 +88,7 @@ touch "$WORKSPACE/progress.txt"
 
 echo "nightshift: up to $ITERATIONS iterations, ${WAIT}s between, model=$MODEL"
 echo "nightshift: workspace=$WORKSPACE"
+echo "nightshift: project=$PROJECT"
 echo "nightshift: image=$RUN_IMAGE"
 echo "nightshift: Ctrl+C to stop gracefully"
 echo ""
@@ -111,6 +120,7 @@ Work autonomously. Do not ask questions."
         --name "$CONTAINER_NAME" \
         -v "$DOCKER_VOLUME:/home/claude" \
         -v "$WORKSPACE:/workspace" \
+        -v "$PROJECT:/workspace/project.md:ro" \
         "$RUN_IMAGE" \
         -p "$PROMPT" \
         --dangerously-skip-permissions \

@@ -80,7 +80,8 @@ To verify: `docker run --rm -v claude-runner-home:/home/claude claude-runner --v
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--workspace` | (required) | Repo directory containing `project.md` |
+| `--workspace` | (required) | Repo directory mounted as `/workspace` |
+| `--project` | `project.md` in workspace | Task specification file (mounted read-only) |
 | `--iterations` | 100 | Max iterations (stops early on NIGHTSHIFT_COMPLETE) |
 | `--wait` | 300 | Seconds between iterations (5 min) |
 | `--model` | claude-opus-4-6[1m] | Model for each iteration |
