@@ -62,15 +62,6 @@
         fi
       '';
 
-      home.activation.installBun = config.lib.dag.entryAfter ["writeBoundary"] ''
-        if [[ ! -x "$HOME/.bun/bin/bun" ]]; then
-          echo "Installing Bun..."
-          export PATH="${pkgs.curl}/bin:${pkgs.unzip}/bin:$PATH"
-          curl -fsSL https://bun.sh/install | bash
-        fi
-      '';
-
-      home.file.".local/bin/claude-sessions".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/scripts/claude-sessions.sh";
       home.file.".claude/scripts/ghostty-claude-split.applescript".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/scripts/ghostty-claude-split.applescript";
       home.file.".claude/scripts/ghostty-claude-split.sh".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/scripts/ghostty-claude-split.sh";
       home.file.".local/bin/session-stats".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/session-stats/session-stats.py";

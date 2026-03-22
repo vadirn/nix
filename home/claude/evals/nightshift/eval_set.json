@@ -1,0 +1,66 @@
+[
+  {
+    "query": "I want to run nightshift on this repo to refactor the auth module, maybe 5 iterations with opus",
+    "should_trigger": true
+  },
+  {
+    "query": "set up nightshift for me, I haven't used it before and need to get the docker stuff going",
+    "should_trigger": true
+  },
+  {
+    "query": "my nightshift project needs eslint and node, can you make a Dockerfile for it?",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to leave this running overnight while I sleep, it should work through the backlog of lint fixes in the repo",
+    "should_trigger": true
+  },
+  {
+    "query": "can you set up an autonomous claude run in docker to handle these migration tasks unattended?",
+    "should_trigger": true
+  },
+  {
+    "query": "check the nightshift progress, what did it get done last night?",
+    "should_trigger": true
+  },
+  {
+    "query": "write me a project.md for nightshift that covers adding pagination to all our API endpoints",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to run a headless claude session in a container against my rails app, budget $10 per pass",
+    "should_trigger": true
+  },
+  {
+    "query": "deploy this app to a docker container on our kubernetes cluster",
+    "should_trigger": false
+  },
+  {
+    "query": "write a Dockerfile for my python flask app with gunicorn",
+    "should_trigger": false
+  },
+  {
+    "query": "can you run the test suite and fix whatever fails?",
+    "should_trigger": false
+  },
+  {
+    "query": "set up a cron job that runs our data pipeline every night at 2am",
+    "should_trigger": false
+  },
+  {
+    "query": "refactor the auth module to use JWT instead of session cookies",
+    "should_trigger": false
+  },
+  {
+    "query": "I want to automate our CI/CD pipeline with github actions",
+    "should_trigger": false
+  },
+  {
+    "query": "help me dockerize this node app for production",
+    "should_trigger": false
+  },
+  {
+    "query": "run this script in the background and let me know when it's done",
+    "should_trigger": false
+  }
+]
