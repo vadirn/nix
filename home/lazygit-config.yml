@@ -4,5 +4,8 @@ gui:
     - green
     selectedLineBgColor:
     - '#585b70'
+git:
+  paging:
+    pager: delta --dark --paging=never
 os:
   editPreset: micro

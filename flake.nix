@@ -45,6 +45,7 @@
               typst
               uv
               coreutils
+              delta
               check-jsonschema
             ]) ++ [
               vault-query

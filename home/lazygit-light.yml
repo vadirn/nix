@@ -4,3 +4,6 @@ gui:
     - green
     selectedLineBgColor:
     - '#bcc0cc'
+git:
+  paging:
+    pager: delta --light --paging=never
