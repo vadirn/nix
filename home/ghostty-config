@@ -5,7 +5,7 @@ copy-on-select = clipboard
 cursor-style = block
 cursor-style-blink = true
 font-family = "MonoLisa Variable"
-font-feature = zero
+font-family = "Symbols Nerd Font Mono"
 font-size = 13
 font-variation = "wght=560"
 keybind = alt+left=text:\x1bb
