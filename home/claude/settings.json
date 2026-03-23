@@ -148,6 +148,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "mkdir -p /tmp/claude",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/sound.sh SessionStart",
             "timeout": 5
           }
