@@ -1,32 +1,11 @@
-{...}: {
+{config, ...}:
+let
+  homeDirectory = config.home.homeDirectory;
+in
+{
   programs.starship = {
     enable = true;
     enableZshIntegration = true;
-    settings = {
-      format = "$directory$git_branch$git_status$line_break$character";
-      directory = {
-        truncation_length = 3;
-        truncate_to_repo = true;
-      };
-      git_branch = {
-        symbol = " ";
-        format = "[$symbol$branch]($style)";
-        style = "purple";
-      };
-      git_status = {
-        format = "[[(*$conflicted$untracked$modified$staged$renamed$deleted)](218) ($ahead_behind$stashed)]($style)";
-        style = "cyan";
-        ahead = "󰁝$count";
-        diverged = "󰁝$ahead_count󰁅$behind_count";
-        behind = "󰁅$count";
-        conflicted = "󰘬";
-        untracked = "󰝦";
-        modified = "󰏫";
-        staged = "󰻃";
-        renamed = "󰁔";
-        deleted = "󰍶";
-        stashed = "󰏓";
-      };
-    };
   };
+  home.file.".config/starship.toml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/starship.toml";
 }
