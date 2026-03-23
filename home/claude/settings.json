@@ -108,7 +108,7 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/no-dangerous.sh"
+            "command": "python3 ~/.claude/hooks/no-dangerous.py"
           },
           {
             "type": "command",

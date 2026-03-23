@@ -4,6 +4,8 @@
 # Also handles git -C (absorbed from no-git-c.sh).
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
+# Strip single/double-quoted strings so patterns don't match inside commit messages etc.
+COMMAND_STRIPPED=$(echo "$COMMAND" | sed "s/'[^']*'//g; s/\"[^\"]*\"//g")
 
 deny() {
   jq -n --arg reason "$1" '{
@@ -47,6 +49,10 @@ fi
 
 if [[ "$COMMAND" =~ ${P}git[[:space:]]+config[[:space:]] ]]; then
   deny "Blocked: git config changes persist and affect all future commits."
+fi
+
+if [[ "$COMMAND" =~ ${P}git[[:space:]]+push([[:space:]]|$) ]]; then
+  deny "Blocked: git push must be done manually."
 fi
 
 if [[ "$COMMAND" =~ $OBSIDIAN_RE ]]; then
