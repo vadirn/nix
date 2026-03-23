@@ -31,6 +31,6 @@ behind = "󰁅$count"
 
 [git_metrics]
 disabled = false
-format = "( [│](dimmed white) [+$added]($added_style) [-$deleted]($deleted_style))"
+format = "( [│](dimmed white)( [+$added]($added_style))( [-$deleted]($deleted_style)))"
 added_style = "bold green"
 deleted_style = "bold red"
