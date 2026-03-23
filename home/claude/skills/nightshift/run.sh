@@ -63,8 +63,16 @@ fi
 WORKSPACE=$(cd "$WORKSPACE" && pwd)
 
 if [ -z "$PROJECT" ]; then
-    PROJECT="$WORKSPACE/project.md"
+    PROJECT="$WORKSPACE/.nightshift/project.md"
 fi
+
+# Auto-detect project Dockerfile
+if [ -z "$DOCKERFILE" ] && [ -f "$WORKSPACE/.nightshift/Dockerfile" ]; then
+    DOCKERFILE="$WORKSPACE/.nightshift/Dockerfile"
+fi
+
+# Ensure .nightshift directory exists
+mkdir -p "$WORKSPACE/.nightshift"
 
 if [ ! -f "$PROJECT" ]; then
     echo "error: project file not found at $PROJECT" >&2
@@ -111,16 +119,16 @@ for i in $(seq 1 "$ITERATIONS"); do
 
     PROMPT="You are running as an autonomous agent in iteration $i of $ITERATIONS.
 
-Read project.md for the task specification.
-Read progress.txt for what previous iterations accomplished.
+Read .nightshift/project.md for the task specification.
+Read .nightshift/progress.txt for what previous iterations accomplished.
 
 Instructions:
-- If progress.txt is empty, start from the beginning.
+- If .nightshift/progress.txt is empty, start from the beginning.
 - Otherwise, continue from where the last iteration left off.
 - Work on one task at a time. Save your work by editing files directly. The orchestrator commits after each iteration.
-- Before finishing, append a summary to progress.txt: what you did, what remains.
-- If blocked on something, document it in progress.txt and move to the next task.
-- When ALL tasks in project.md are complete, write NIGHTSHIFT_COMPLETE as the last line of progress.txt.
+- Before finishing, append a summary to .nightshift/progress.txt: what you did, what remains.
+- If blocked on something, document it in .nightshift/progress.txt and move to the next task.
+- When ALL tasks in .nightshift/project.md are complete, write NIGHTSHIFT_COMPLETE as the last line of .nightshift/progress.txt.
 
 Work autonomously. Do not ask questions."
 
@@ -129,8 +137,8 @@ Work autonomously. Do not ask questions."
         -v "$DOCKER_VOLUME:/home/claude" \
         -v "$WORKSPACE:/workspace" \
         -v "$WORKSPACE/.git:/workspace/.git:ro" \
-        -v "$PROJECT:/workspace/project.md:ro" \
-        -v "$PROGRESS_FILE:/workspace/progress.txt" \
+        -v "$PROJECT:/workspace/.nightshift/project.md:ro" \
+        -v "$PROGRESS_FILE:/workspace/.nightshift/progress.txt" \
         "$RUN_IMAGE" \
         -p "$PROMPT" \
         --dangerously-skip-permissions \
@@ -142,7 +150,7 @@ Work autonomously. Do not ask questions."
 
     # Commit workspace changes from this iteration (if any)
     if [ -n "$(git -C "$WORKSPACE" status --porcelain)" ]; then
-        git -C "$WORKSPACE" add -A
+        git -C "$WORKSPACE" add -A -- ':!.nightshift'
         git -C "$WORKSPACE" commit -m "nightshift: iteration $i"
     fi
 

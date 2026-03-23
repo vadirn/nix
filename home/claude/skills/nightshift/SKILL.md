@@ -27,19 +27,19 @@ if "setup":
     do("follow Setup procedure")
 
 elif "run" or wants to launch a nightshift:
-    if no project.md in workspace:
-        do("help user create project.md from template")
+    if no .nightshift/project.md in workspace:
+        do("help user create .nightshift/project.md from template")
     do("determine flags: workspace, iterations, wait, model")
     if project needs extra tools (linters, runtimes, test frameworks):
-        do("create per-project Dockerfile extending claude-runner")
+        do("create .nightshift/Dockerfile extending claude-runner")
     do("construct and show nightshift command, confirm before running")
 
 elif "project" or wants to write a project.md:
     Read(dir/project.md)  // template
-    do("fill template from user's task description")
+    do("fill template, write to .nightshift/project.md")
 
 elif "dockerfile" or needs per-project dependencies:
-    do("create Dockerfile extending claude-runner with required packages")
+    do("create .nightshift/Dockerfile extending claude-runner with required packages")
 
 elif "progress" or "status" or wants to check results:
     runs = Bash(ls workspace/.nightshift/)
@@ -85,19 +85,19 @@ To verify: `docker run --rm -v claude-runner-home:/home/claude claude-runner --v
 ```bash
 {dir}/run.sh --workspace ~/projects/myapp
 {dir}/run.sh --workspace . --model claude-opus-4-6[1m] --wait 60
-{dir}/run.sh --workspace . --dockerfile ./Dockerfile.claude
+{dir}/run.sh --workspace . --dockerfile .nightshift/Dockerfile
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--workspace` | (required) | Repo directory mounted as `/workspace` |
-| `--project` | `project.md` in workspace | Task specification file (mounted read-only) |
-| `--iterations` | 100 | Max iterations (stops early on NIGHTSHIFT_COMPLETE) |
-| `--wait` | 300 | Seconds between iterations (5 min) |
-| `--model` | claude-opus-4-6[1m] | Model for each iteration |
-| `--dockerfile` | (none) | Per-project Dockerfile extending claude-runner |
-| `--docker-image` | claude-runner | Base image name |
-| `--docker-volume` | claude-runner-home | Named volume for `/home/claude` |
+| Flag              | Default                  | Description                                                    |
+| ----------------- | ------------------------ | -------------------------------------------------------------- |
+| `--workspace`     | (required)               | Repo directory mounted as `/workspace`                         |
+| `--project`       | `.nightshift/project.md` | Task specification file (mounted read-only)                    |
+| `--iterations`    | 100                      | Max iterations (stops early on NIGHTSHIFT_COMPLETE)            |
+| `--wait`          | 300                      | Seconds between iterations (5 min)                             |
+| `--model`         | claude-opus-4-6[1m]      | Model for each iteration                                       |
+| `--dockerfile`    | `.nightshift/Dockerfile` | Per-project Dockerfile extending claude-runner (auto-detected) |
+| `--docker-image`  | claude-runner            | Base image name                                                |
+| `--docker-volume` | claude-runner-home       | Named volume for `/home/claude`                                |
 
 Ctrl+C stops gracefully after the current iteration. Press Ctrl+C again to force-kill immediately.
 
@@ -142,11 +142,13 @@ RUN apt-get update && apt-get install -y nodejs npm python3
 USER claude
 ```
 
-Pass via `--dockerfile ./Dockerfile.claude`. The runner builds a tagged image from it before starting iterations.
+Place at `.nightshift/Dockerfile` for auto-detection, or pass explicitly via `--dockerfile`. The runner builds a tagged image from it before starting iterations.
 
 ### How it works
 
-Each iteration runs `claude -p` in a fresh Docker container with `--dangerously-skip-permissions`. The prompt instructs claude to read `project.md` for the task and `progress.txt` for prior iteration state. Claude appends a summary to `progress.txt` before finishing, so the next iteration can continue. When all tasks are done, claude writes `NIGHTSHIFT_COMPLETE` as the last line of `progress.txt`, and the runner stops.
+Each iteration runs `claude -p` in a fresh Docker container with `--dangerously-skip-permissions`. The prompt instructs claude to read `.nightshift/project.md` for the task and `.nightshift/progress.txt` for prior iteration state. Claude appends a summary to `.nightshift/progress.txt` before finishing, so the next iteration can continue. When all tasks are done, claude writes `NIGHTSHIFT_COMPLETE` as the last line of `.nightshift/progress.txt`, and the runner stops.
+
+All nightshift artifacts (project.md, Dockerfile, progress files, run state) live inside `.nightshift/` to keep the workspace root clean. Add `.nightshift` to `.gitignore`.
 
 The Docker volume persists `~/.claude.json` (OAuth) and `~/.claude/` (MCP config, settings) across runs. The entrypoint self-heals stale claude symlinks when the volume outlives an image rebuild.
 
@@ -155,6 +157,7 @@ The Docker volume persists `~/.claude.json` (OAuth) and `~/.claude/` (MCP config
 Progress is stored per-run at `$WORKSPACE/.nightshift/<run-id>/progress.txt`. The run ID and progress path are printed at startup.
 
 Stopping:
+
 - **Automatic**: claude writes `NIGHTSHIFT_COMPLETE` to progress.txt when all tasks are done
 - **Stop file**: `touch .nightshift/<run-id>/STOP` stops after the current iteration (works from any terminal or Claude session)
 - **Ctrl+C**: stops gracefully after the current iteration. Ctrl+C again force-kills the container
