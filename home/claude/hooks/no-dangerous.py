@@ -10,8 +10,8 @@ import shlex
 import sys
 
 # Git rules: (subcommand, required_args or None, deny message)
-# Rules with required_args are checked first (more specific match).
-# Rules with None match any invocation of that subcommand.
+# Evaluated in order. Rules with required_args match only when at least one
+# required arg is present. Rules with None match any invocation of that subcommand.
 GIT_RULES = [
     ("push",   ("-f", "--force", "--force-with-lease"), "Blocked: force push overwrites remote history."),
     ("push",   None,                                    "Blocked: git push must be done manually."),
@@ -20,21 +20,15 @@ GIT_RULES = [
     ("config", None,                                    "Blocked: git config changes persist and affect all future commits."),
 ]
 
-# Token rules: (token, deny message)
-# Matches if the token appears as a top-level word in the parsed command.
 TOKEN_RULES = [
     ("sudo", "Blocked: sudo runs commands as root. Too risky."),
 ]
 
-# Token pair rules: (token_a, token_b, deny message)
-# Matches if both tokens appear in the parsed command.
 TOKEN_PAIR_RULES = [
     ("chmod", "777", "Blocked: chmod 777 makes files world-writable."),
 ]
 
-# Regex rules: (pattern, deny message)
-# Applied to the raw command string for patterns that don't appear in quoted args.
-REGEX_RULES = [
+_REGEX_RULES = [
     (
         r'(^|[\s;]|&&|\|)git\s+-C\s',
         "Use plain `git` — you are already in the repo.",
@@ -46,6 +40,9 @@ REGEX_RULES = [
         "Blocked: this obsidian subcommand can cause data loss or run arbitrary code.",
     ),
 ]
+REGEX_RULES = [(re.compile(p), m) for p, m in _REGEX_RULES]
+
+GIT_FLAGS_WITH_VALUE = frozenset(("-C", "-c", "--git-dir", "--work-tree"))
 
 
 def deny(reason: str):
@@ -67,11 +64,11 @@ def get_git_invocations(tokens: list[str]) -> list[tuple[str, list[str]]]:
         if tokens[i] == "git":
             j = i + 1
             while j < len(tokens) and tokens[j].startswith("-"):
-                if tokens[j] in ("-C", "-c", "--git-dir", "--work-tree"):
+                if tokens[j] in GIT_FLAGS_WITH_VALUE:
                     j += 2
                 else:
                     j += 1
-            if j < len(tokens) and not tokens[j].startswith("-"):
+            if j < len(tokens):
                 results.append((tokens[j], tokens[j + 1:]))
             i = j + 1
         else:
@@ -85,29 +82,25 @@ def check(command: str):
     except ValueError:
         tokens = []
 
-    # Git subcommand rules (token-based, quote-aware)
+    token_set = frozenset(tokens)
+
     for subcmd, args in get_git_invocations(tokens):
         for rule_subcmd, required_args, message in GIT_RULES:
             if subcmd != rule_subcmd:
                 continue
-            if required_args is None:
-                deny(message)
-            if any(a in args for a in required_args):
+            if required_args is None or any(a in args for a in required_args):
                 deny(message)
 
-    # Single-token rules
     for token, message in TOKEN_RULES:
-        if token in tokens:
+        if token in token_set:
             deny(message)
 
-    # Token-pair rules
     for token_a, token_b, message in TOKEN_PAIR_RULES:
-        if token_a in tokens and token_b in tokens:
+        if token_a in token_set and token_b in token_set:
             deny(message)
 
-    # Regex rules (raw string, for patterns safe from quoting issues)
     for pattern, message in REGEX_RULES:
-        if re.search(pattern, command):
+        if pattern.search(command):
             deny(message)
 
 
