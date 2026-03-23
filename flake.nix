@@ -79,6 +79,7 @@
                 "arimxyer/tap/models"
                 "neovim"
                 "oven-sh/bun/bun"
+                "agent-browser"
               ];
               casks = [
                 "1password-cli"

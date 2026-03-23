@@ -8,9 +8,10 @@ claude plugin install typescript-lsp
 claude plugin install firecrawl@claude-plugins-official
 claude plugin install skill-creator@claude-plugins-official
 claude plugin install frontend-design@claude-plugins-official
+claude plugin install playground@claude-plugins-official
+claude plugin install agent-browser@agent-browser
 
 echo "Installing global npm packages..."
-npm install -g @playwright/cli@latest
 npm install -g firecrawl-cli
 
 echo "Collecting garbage..."

@@ -10,7 +10,6 @@
       "Skill(writing-ru)",
       "Skill(writing-en)",
       "Skill(firecrawl)",
-      "Skill(playwright-cli)",
       "Skill(playground)",
       "Skill(reflect)",
       "Skill(tdd)",
@@ -40,7 +39,6 @@
       "Bash(gh run list *)",
       "Bash(gh pr create *)",
       "Bash(firecrawl *)",
-      "Bash(playwright-cli *)",
       "Skill(session-stats)",
       "Skill(vault)",
       "Skill(pr)",
@@ -202,7 +200,16 @@
     "skill-creator@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true
+    "frontend-design@claude-plugins-official": true,
+    "agent-browser@agent-browser": true
+  },
+  "extraKnownMarketplaces": {
+    "agent-browser": {
+      "source": {
+        "source": "github",
+        "repo": "vercel-labs/agent-browser"
+      }
+    }
   },
   "sandbox": {
     "enabled": true,
@@ -212,6 +219,8 @@
       "allowedDomains": [
         "api.firecrawl.dev",
         "github.com",
+        "api.github.com",
+        "lfs.github.com",
         "crates.io",
         "static.crates.io",
         "registry.npmjs.org"
@@ -221,10 +230,15 @@
     },
     "filesystem": {
       "allowWrite": [
+        "~/.docker",
         "~/Documents/vault",
         "$TMPDIR"
+      ],
+      "denyRead": [
+        "~/.ssh"
       ]
-    }
+    },
+    "enableWeakerNetworkIsolation": true
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
