@@ -215,6 +215,7 @@
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
+
     "allowUnsandboxedCommands": false,
     "network": {
       "allowedDomains": [
@@ -231,12 +232,10 @@
     },
     "filesystem": {
       "allowWrite": [
+        "~/.agent-browser",
         "~/.docker",
         "~/Documents/vault",
         "$TMPDIR"
-      ],
-      "denyRead": [
-        "~/.ssh"
       ]
     },
     "enableWeakerNetworkIsolation": true
