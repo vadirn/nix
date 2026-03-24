@@ -3,15 +3,15 @@ name: nightshift
 description: >
   Set up and run autonomous Claude Code sessions in Docker. Use when the user says "nightshift",
   "run overnight", "autonomous run", "run this unattended", "Docker Claude", "headless Claude",
-  or wants to delegate a task to run without supervision. Also use when creating a project.md
+  or wants to delegate a task to run without supervision. Also use when creating a pipeline.yaml
   for nightshift, building a project-specific Dockerfile, checking nightshift progress, or
-  setting up the Docker runner for the first time. Covers setup, project file creation,
+  setting up the Docker runner for the first time. Covers setup, pipeline creation,
   per-project dependencies, and launching runs.
 ---
 
 # Nightshift
 
-Autonomous Claude Code runner in Docker. Runs a task list iteratively with fresh context per iteration, coordinated via `project.md` (task spec) and `progress.txt` (cross-iteration state).
+Declarative pipeline runner for autonomous Claude Code sessions in Docker. Each step defines a task with its own skills, agent, model, and acceptance criteria. Each round runs `claude -p` in a fresh container with isolated context. Checkpoints provide structured state transfer between rounds.
 
 ```
 dir = skill base directory
@@ -27,32 +27,32 @@ if "setup":
     do("follow Setup procedure")
 
 elif "run" or wants to launch a nightshift:
-    if no .nightshift/project.md in workspace:
-        do("help user create .nightshift/project.md from template")
-    do("determine flags: workspace, iterations, wait, model")
+    if no .nightshift/pipeline.yaml in workspace:
+        do("help user create .nightshift/pipeline.yaml")
     if project needs extra tools (linters, runtimes, test frameworks):
-        do("create .nightshift/Dockerfile extending claude-runner")
-    do("construct and show nightshift command, confirm before running")
+        do("create .nightshift/Dockerfile or .nightshift/Dockerfile.{step} extending claude-runner")
+    if project needs custom skills:
+        do("create skills in .nightshift/skills/")
+    do("construct and show run command, confirm before running")
+    // uv run --with pyyaml {dir}/run.py --workspace {workspace}
 
-elif "project" or wants to write a project.md:
-    Read(dir/project.md)  // template
-    do("fill template, write to .nightshift/project.md")
+elif "pipeline" or wants to write a pipeline.yaml:
+    do("help user define steps with prompts, acceptance criteria, skills")
+    do("write to .nightshift/pipeline.yaml")
 
 elif "dockerfile" or needs per-project dependencies:
     do("create .nightshift/Dockerfile extending claude-runner with required packages")
 
 elif "progress" or "status" or wants to check results:
-    runs = Bash(ls workspace/.nightshift/)
-    latest = do("pick most recent run by timestamp in directory name")
-    progress = Read(workspace/.nightshift/{latest}/progress.txt)
+    checkpoints = Bash(ls workspace/.nightshift/checkpoint-*)
+    latest = do("pick most recent checkpoint by name")
+    Read(latest)
     do("summarize what was done, what remains")
     AskUserQuestion("Continue watching, or stop the run?")
-    if stop: Bash(touch workspace/.nightshift/{latest}/STOP)
+    if stop: Bash(touch workspace/.nightshift/STOP)
 
 elif "stop" or wants to stop a running nightshift:
-    runs = Bash(ls workspace/.nightshift/)
-    latest = do("pick most recent run by timestamp in directory name")
-    Bash(touch workspace/.nightshift/{latest}/STOP)
+    Bash(touch workspace/.nightshift/STOP)
     do("confirm stop file created")
 
 else:
@@ -83,57 +83,116 @@ To verify: `docker run --rm -v claude-runner-home:/home/claude claude-runner --v
 ### Running
 
 ```bash
-{dir}/run.sh --workspace ~/projects/myapp
-{dir}/run.sh --workspace . --model claude-opus-4-6[1m] --wait 60
-{dir}/run.sh --workspace . --dockerfile .nightshift/Dockerfile
+uv run --with pyyaml {dir}/run.py --workspace ~/projects/myapp
+uv run --with pyyaml {dir}/run.py --workspace . --docker-image claude-runner-custom
 ```
 
-| Flag              | Default                  | Description                                                    |
-| ----------------- | ------------------------ | -------------------------------------------------------------- |
-| `--workspace`     | (required)               | Repo directory mounted as `/workspace`                         |
-| `--project`       | `.nightshift/project.md` | Task specification file (mounted read-only)                    |
-| `--iterations`    | 100                      | Max iterations (stops early on NIGHTSHIFT_COMPLETE)            |
-| `--wait`          | 300                      | Seconds between iterations (5 min)                             |
-| `--model`         | claude-opus-4-6[1m]      | Model for each iteration                                       |
-| `--dockerfile`    | `.nightshift/Dockerfile` | Per-project Dockerfile extending claude-runner (auto-detected) |
-| `--docker-image`  | claude-runner            | Base image name                                                |
-| `--docker-volume` | claude-runner-home       | Named volume for `/home/claude`                                |
+| Flag              | Default                      | Description                          |
+| ----------------- | ---------------------------- | ------------------------------------ |
+| `--workspace`     | (required)                   | Repo directory                       |
+| `--pipeline`      | `.nightshift/pipeline.yaml`  | Pipeline definition file             |
+| `--docker-image`  | `claude-runner`              | Base image name                      |
+| `--docker-volume` | `claude-runner-home`         | Named volume for `/home/claude`      |
 
-Ctrl+C stops gracefully after the current iteration. Press Ctrl+C again to force-kill immediately.
+The runner is launched by Claude via the Bash tool. It ignores signals and runs until the pipeline completes or a stop mechanism is used (see Stopping section).
 
-### project.md template
+### pipeline.yaml
+
+```yaml
+name: auth-refactor
+
+defaults:
+  model: claude-opus-4-6[1m]     # model for work rounds
+  image: claude-runner            # default Docker image
+  max_rounds: 50                  # max rounds per step
+  wait: 30                        # seconds between rounds
+  resolve_questions: true         # spawn resolver for open questions
+  explore_model: claude-haiku-4-5 # model for resolver agent
+
+steps:
+  - name: analyze
+    prompt: |
+      Analyze the auth module. Identify every file using session auth.
+      Write a migration plan.
+    skills: [explore]
+    max_rounds: 30
+
+  - name: implement
+    prompt: |
+      Replace session auth with JWT. Start with /api/login end-to-end,
+      then expand to remaining endpoints.
+    accept: |
+      - no session-based auth imports remain
+      - tests pass
+    skills: [tracer-bullet, tdd]
+    agent: api-developer
+    image: .nightshift/Dockerfile.implement
+    max_rounds: 100
+
+  - name: verify
+    prompt: |
+      Run full test suite. Fix any failures.
+    accept: |
+      - test suite passes
+    verify: "cd /workspace && npm test"
+    skills: [tdd]
+    max_rounds: 30
+    on_fail: retry
+    max_retries: 2
+```
+
+Step fields:
+
+| Field               | Default              | Description                                      |
+| ------------------- | -------------------- | ------------------------------------------------ |
+| `name`              | (required)           | Step identifier                                  |
+| `prompt`            | (required)           | Task description for the agent                   |
+| `accept`            | (none)               | Acceptance criteria                              |
+| `skills`            | `[]`                 | Skills from `.nightshift/skills/`                |
+| `agent`             | (none)               | Agent from `.nightshift/agents/`                 |
+| `image`             | from defaults        | Docker image or Dockerfile path                  |
+| `model`             | from defaults        | Model override                                   |
+| `max_rounds`        | from defaults        | Max rounds for this step                         |
+| `on_fail`           | `stop`               | `stop` or `retry`                                |
+| `max_retries`       | `0`                  | Retry count when `on_fail: retry`                |
+| `resolve_questions` | from defaults        | Spawn resolver for open questions                |
+| `verify`            | (none)               | Shell command run inside Docker after each round |
+| `depends_on`        | (none)               | Reserved for v2 DAG support                      |
+
+### Checkpoint format
+
+Each round writes a checkpoint with YAML frontmatter + markdown body:
 
 ```markdown
-# Task: [title]
+---
+status: STEP_IN_PROGRESS
+step: implement
+round: 3
+---
 
-## Objective
+## Done
+...
 
-[One paragraph describing what should be accomplished]
+## Decisions
+...
 
-## Deliverables
+## Frictions
+...
 
-1. [Concrete deliverable 1]
-2. [Concrete deliverable 2]
+## Next
+...
 
-## Acceptance criteria
-
-- [ ] [Testable criterion 1]
-- [ ] [Testable criterion 2]
-
-## Context
-
-[Background, architectural constraints, links to docs]
-
-## Files
-
-[Key files to read or modify]
+## Open questions
+...
 ```
 
-A good project.md is self-contained: the autonomous agent has no access to conversation history, only this file and the repo. Include enough context for a cold start.
+Status values: `STEP_COMPLETE`, `STEP_IN_PROGRESS`, `STEP_FAILED`.
+
+Filename: `checkpoint-{step}-{seq}-{timestamp}.md` (e.g., `checkpoint-implement-003-2026-03-24-11-45-58.md`).
 
 ### Per-project Dockerfile
 
-When a project needs tools beyond bash/curl/git (linters, Node, Python, Rust, test frameworks):
+When a project needs tools beyond bash/curl/git:
 
 ```dockerfile
 FROM claude-runner
@@ -142,24 +201,50 @@ RUN apt-get update && apt-get install -y nodejs npm python3
 USER claude
 ```
 
-Place at `.nightshift/Dockerfile` for auto-detection, or pass explicitly via `--dockerfile`. The runner builds a tagged image from it before starting iterations.
+Place at `.nightshift/Dockerfile` for all steps, or `.nightshift/Dockerfile.{step-name}` for a specific step.
+
+### Directory layout
+
+```
+.nightshift/
+  pipeline.yaml
+  Dockerfile
+  Dockerfile.{step-name}
+  skills/
+    checkpoint/SKILL.md        # always injected (provided by nightshift)
+    tracer-bullet/SKILL.md     # methodology skills
+  agents/
+    resolver.md                # question resolver (provided by nightshift)
+  checkpoint-analyze-001-2026-03-24-11-45-58.md
+  checkpoint-implement-001-2026-03-24-11-50-12.md
+  STOP
+```
+
+Add `.nightshift` to `.gitignore`. All nightshift artifacts are ephemeral.
 
 ### How it works
 
-Each iteration runs `claude -p` in a fresh Docker container with `--dangerously-skip-permissions`. The prompt instructs claude to read `.nightshift/project.md` for the task and `.nightshift/progress.txt` for prior iteration state. Claude appends a summary to `.nightshift/progress.txt` before finishing, so the next iteration can continue. When all tasks are done, claude writes `NIGHTSHIFT_COMPLETE` as the last line of `.nightshift/progress.txt`, and the runner stops.
+The runner (`run.py`) reads `pipeline.yaml` and executes steps sequentially. Each step runs one or more rounds (a round is one `claude -p` invocation in Docker). Each round:
 
-All nightshift artifacts (project.md, Dockerfile, progress files, run state) live inside `.nightshift/` to keep the workspace root clean. Add `.nightshift` to `.gitignore`.
+1. Builds a `claude -p` prompt with the step's task, acceptance criteria, and previous checkpoint
+2. Mounts filtered skills (checkpoint + step-specific) and agents into the container
+3. Runs `claude -p` inside Docker with `--dangerously-skip-permissions`
+4. Commits workspace changes outside Docker (`git add -A -- ':!.nightshift'`)
+5. Parses the checkpoint's YAML frontmatter for status
+6. Runs the `verify` command if configured (overrides status on failure)
+7. Spawns a resolver agent (haiku) if open questions exist and `resolve_questions` is enabled
 
-The Docker volume persists `~/.claude.json` (OAuth) and `~/.claude/` (MCP config, settings) across runs. The entrypoint self-heals stale claude symlinks when the volume outlives an image rebuild.
+Git is mounted read-only inside Docker to prevent `.git/config` corruption. The agent can read git history but cannot commit or push.
 
-### Progress and stopping
+The Docker volume persists `~/.claude.json` (OAuth) and `~/.claude/` (settings) across runs. The entrypoint self-heals stale claude symlinks when the volume outlives an image rebuild.
 
-Progress is stored per-run at `$WORKSPACE/.nightshift/<run-id>/progress.txt`. The run ID and progress path are printed at startup.
+### Stopping
 
-Stopping:
+- **Stop file**: `touch .nightshift/STOP` stops after the current round (works from any terminal or Claude session)
+- **Immediate kill**: `docker kill nightshift-{step}-{round}` kills the current round's container (container names are printed at round start)
+- **Kill everything**: `docker kill $(docker ps -q -f name=nightshift) 2>/dev/null; pkill -f "run.py --workspace"` kills all nightshift containers and the runner process
+- **Automatic**: step writes `STEP_COMPLETE` in checkpoint frontmatter
+- **Max rounds**: each step has a configurable round limit
+- **Pipeline abort**: a failed step with `on_fail: stop` aborts the entire pipeline
 
-- **Automatic**: claude writes `NIGHTSHIFT_COMPLETE` to progress.txt when all tasks are done
-- **Stop file**: `touch .nightshift/<run-id>/STOP` stops after the current iteration (works from any terminal or Claude session)
-- **Ctrl+C**: stops gracefully after the current iteration. Ctrl+C again force-kills the container
-- **Failure guard**: 3 consecutive failed iterations abort the run
-- **Iterations cap**: default 100, set lower with `--iterations`
+The stop file is the universal escape hatch. It works regardless of how the runner was launched.

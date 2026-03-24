@@ -238,6 +238,7 @@
     "filesystem": {
       "allowWrite": [
         "~/.agent-browser",
+        "~/.cache",
         "~/.docker",
         "~/Documents/vault",
         "$TMPDIR"
