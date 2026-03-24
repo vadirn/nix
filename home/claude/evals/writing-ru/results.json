@@ -1,0 +1,808 @@
+[
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043e\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u043b\u0435\u043d\u0438\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043f\u0440\u043e\u0438\u0437\u0432\u0435\u0434\u0435\u043d\u0438\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043e\u0431\u0435\u0441\u043f\u0435\u0447\u0438\u043b\u043e \u0444\u0443\u043d\u043a\u0446\u0438\u043e\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0435 \u043e\u043f\u0442\u0438\u043c\u0438\u0437\u0430\u0446\u0438\u0438",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0434\u043e\u0441\u0442\u0438\u0436\u0435\u043d\u0438\u044e \u0443\u043b\u0443\u0447\u0448\u0435\u043d\u0438\u044f",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043a\u043b\u0438\u0435\u043d\u0442",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0431\u0430\u0437.? \u0434\u0430\u043d\u043d\u044b\u0445",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.78 (max=0.8, 23\u219218 words)"
+      }
+    ],
+    "pass": 9,
+    "fail": 0,
+    "total": 9,
+    "score": "9/9",
+    "input_words": 23,
+    "output_words": 18,
+    "eval_id": "otglagolnye",
+    "elapsed_seconds": 15.085574626922607
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0431\u044b\u043b\u0430 \u043f\u0435\u0440\u0435\u043d\u0435\u0441\u0435\u043d\u0430 \u043a\u043e\u043c\u0430\u043d\u0434\u043e\u0439",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0431\u044b\u043b\u0438 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b \u0434\u043b\u044f",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0431\u044b\u043b\u0438 \u0443\u0434\u0430\u043b\u0435\u043d\u044b \u043f\u043e\u0441\u043b\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0431\u044b\u043b\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430 \u0438\u043d\u0436\u0435\u043d\u0435\u0440\u0430\u043c\u0438",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0431\u044b\u043b \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u043b\u0435\u043d",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0438\u043d\u0434\u0435\u043a\u0441",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043e\u0442\u043a\u0430\u0442",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.85 (max=0.9, 34\u219229 words)"
+      }
+    ],
+    "pass": 8,
+    "fail": 0,
+    "total": 8,
+    "score": "8/8",
+    "input_words": 34,
+    "output_words": 29,
+    "eval_id": "passivnyj-zalog",
+    "elapsed_seconds": 13.878224849700928
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0421\u043b\u0435\u0434\u0443\u0435\u0442 \u043e\u0442\u043c\u0435\u0442\u0438\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412 \u0441\u0432\u044f\u0437\u0438 \u0441 \u0442\u0435\u043c, \u0447\u0442\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043d\u0435\u043e\u0431\u0445\u043e\u0434\u0438\u043c\u043e \u043e\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0438\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041d\u0438 \u0434\u043b\u044f \u043a\u043e\u0433\u043e \u043d\u0435 \u0441\u0435\u043a\u0440\u0435\u0442",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043f\u0440\u0438 \u0443\u0441\u043b\u043e\u0432\u0438\u0438, \u0447\u0442\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e\u043c \u043f\u043e\u0440\u044f\u0434\u043a\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043e\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0438\u0442\u044c \u0440\u0435\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "100 \u0437\u0430\u043f\u0440\u043e\u0441",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043a\u044d\u0448",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043f\u043e\u0432\u0442\u043e\u0440",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.60 (max=0.6, 47\u219228 words)"
+      }
+    ],
+    "pass": 11,
+    "fail": 0,
+    "total": 11,
+    "score": "11/11",
+    "input_words": 47,
+    "output_words": 28,
+    "eval_id": "musor-i-voda",
+    "elapsed_seconds": 15.903191089630127
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412 \u0441\u043e\u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e\u043c \u043c\u0438\u0440\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0438\u043d\u043d\u043e\u0432\u0430\u0446\u0438\u043e\u043d\u043d",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0448\u0438\u0440\u043e\u043a\u0438\u0439 \u0441\u043f\u0435\u043a\u0442\u0440",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041a\u0440\u043e\u043c\u0435 \u0442\u043e\u0433\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0438\u043d\u0434\u0438\u0432\u0438\u0434\u0443\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u043e\u0434\u0445\u043e\u0434",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432\u044b\u0441\u043e\u043a\u043e\u0435 \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0422\u0430\u043a\u0436\u0435 \u0441\u043b\u0435\u0434\u0443\u0435\u0442 \u043e\u0442\u043c\u0435\u0442\u0438\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0448\u0438\u0440\u043e\u043a\u0438\u0439 \u0430\u0441\u0441\u043e\u0440\u0442\u0438\u043c\u0435\u043d\u0442",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0438\u0434\u0435\u0430\u043b\u044c\u043d\u044b\u043c \u0440\u0435\u0448\u0435\u043d\u0438\u0435\u043c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412 \u0437\u0430\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0440\u044f\u0434 \u043f\u0440\u0435\u0438\u043c\u0443\u0449\u0435\u0441\u0442\u0432",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u0447\u0438\u043a",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043f\u043b\u0430\u0442\u0444\u043e\u0440\u043c",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.51 (max=0.65, 47\u219224 words)"
+      }
+    ],
+    "pass": 14,
+    "fail": 0,
+    "total": 14,
+    "score": "14/14",
+    "input_words": 47,
+    "output_words": 24,
+    "eval_id": "ai-shtampy",
+    "elapsed_seconds": 19.464207410812378
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412 \u0440\u0430\u043c\u043a\u0430\u0445 \u0434\u0430\u043d\u043d\u043e\u0433\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043d\u0430\u043c\u0438 \u0431\u044b\u043b\u0430 \u043f\u0440\u043e\u0438\u0437\u0432\u0435\u0434\u0435\u043d\u0430",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412\u0432\u0438\u0434\u0443 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0438\u044f",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0438\u043c\u0435\u043b\u043e \u043c\u0435\u0441\u0442\u043e \u0431\u044b\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041d\u0430 \u0441\u0435\u0433\u043e\u0434\u043d\u044f\u0448\u043d\u0438\u0439 \u0434\u0435\u043d\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432\u044b\u0448\u0435\u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0439",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043e\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u043b\u044f\u0435\u0442 \u0434\u0435\u044f\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432 \u0446\u0435\u043b\u044f\u0445 \u043e\u0431\u0435\u0441\u043f\u0435\u0447\u0435\u043d\u0438\u044f",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043e\u043f\u0442\u0438\u043c\u0438\u0437\u0430\u0446",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e\u0441\u0442",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.57 (max=0.6, 30\u219217 words)"
+      }
+    ],
+    "pass": 12,
+    "fail": 0,
+    "total": 12,
+    "score": "12/12",
+    "input_words": 30,
+    "output_words": 17,
+    "eval_id": "kantselyarit",
+    "elapsed_seconds": 15.10968828201294
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041d\u0435 \u0437\u0430\u0431\u0443\u0434\u044c\u0442\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041d\u0435\u043b\u044c\u0437\u044f \u043d\u0435 \u043e\u0442\u043c\u0435\u0442\u0438\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043d\u0435 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e\u0439",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041d\u0435 \u0441\u043b\u0435\u0434\u0443\u0435\u0442 \u0438\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043d\u0435 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043d\u0435\u043e\u0436\u0438\u0434\u0430\u043d\u043d\u044b\u043c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043d\u0435 \u043e\u0442\u043b\u0438\u0447\u0430\u0435\u0442\u0441\u044f \u043e\u0442",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0434\u0430\u043d\u043d",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0441\u0438\u0441\u0442\u0435\u043c",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.61 (max=0.75, 31\u219219 words)"
+      }
+    ],
+    "pass": 10,
+    "fail": 0,
+    "total": 10,
+    "score": "10/10",
+    "input_words": 31,
+    "output_words": 19,
+    "eval_id": "otritsaniya",
+    "elapsed_seconds": 15.563790082931519
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412\u0430\u0436\u043d\u043e \u043e\u0442\u043c\u0435\u0442\u0438\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043e\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u043b\u0435\u043d\u0438\u0435 \u0432\u043d\u0435\u0434\u0440\u0435\u043d\u0438\u044f",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0431\u044b\u043b\u043e \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u043e \u043a\u043e\u043c\u0430\u043d\u0434\u043e\u0439",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041a\u0440\u043e\u043c\u0435 \u0442\u043e\u0433\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432 \u0441\u0432\u044f\u0437\u0438 \u0441 \u0442\u0435\u043c, \u0447\u0442\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0438\u043d\u043d\u043e\u0432\u0430\u0446\u0438\u043e\u043d\u043d",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432\u0432\u0438\u0434\u0443 \u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0438\u044f",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0438\u043c\u0435\u043b\u043e \u043c\u0435\u0441\u0442\u043e \u0431\u044b\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043f\u0440\u043e\u0438\u0437\u0432\u0435\u0434\u0435\u043d\u043e \u043f\u0440\u0438\u043d\u044f\u0442\u0438\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041d\u0430 \u0441\u0435\u0433\u043e\u0434\u043d\u044f\u0448\u043d\u0438\u0439 \u0434\u0435\u043d\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043d\u0435 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u043d\u0435\u0432\u043e\u0437\u043c\u043e\u0436\u043d\u043e\u0439",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0422\u0430\u043a\u0436\u0435 \u0441\u043b\u0435\u0434\u0443\u0435\u0442 \u0443\u0447\u0438\u0442\u044b\u0432\u0430\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412 \u0440\u0430\u043c\u043a\u0430\u0445 \u0434\u0430\u043d\u043d\u043e\u0433\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043d\u0430\u043c\u0438 \u0431\u044b\u043b\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432\u044b\u0441\u043e\u043a\u043e\u0433\u043e \u043a\u0430\u0447\u0435\u0441\u0442\u0432\u0430",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043a\u044d\u0448",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043c\u0438\u0433\u0440",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.47 (max=0.5, 62\u219229 words)"
+      }
+    ],
+    "pass": 19,
+    "fail": 0,
+    "total": 19,
+    "score": "19/19",
+    "input_words": 62,
+    "output_words": 29,
+    "eval_id": "mixed-vse-problemy",
+    "elapsed_seconds": 23.056049823760986
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412 \u0434\u0430\u043d\u043d\u043e\u043c \u0440\u0430\u0437\u0434\u0435\u043b\u0435 \u043c\u044b \u0440\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0438\u043c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0421\u043b\u0435\u0434\u0443\u0435\u0442 \u043e\u0442\u043c\u0435\u0442\u0438\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f \u0434\u043e\u0440\u043e\u0433\u043e\u0441\u0442\u043e\u044f\u0449\u0435\u0439",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041e\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e\u0433\u043e \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u043d\u0438\u044f",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043f\u0440\u043e\u0438\u0437\u0432\u0435\u0441\u0442\u0438 \u0443\u0441\u0442\u0440\u0430\u043d\u0435\u043d\u0438\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412\u0430\u0436\u043d\u043e \u043e\u0442\u043c\u0435\u0442\u0438\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043f\u0443\u043b",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "TCP",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "TLS",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0442\u0430\u0439\u043c\u0430\u0443\u0442",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.86 (max=0.9, 86\u219274 words)"
+      }
+    ],
+    "pass": 11,
+    "fail": 0,
+    "total": 11,
+    "score": "11/11",
+    "input_words": 86,
+    "output_words": 74,
+    "eval_id": "technical-doc-ru",
+    "elapsed_seconds": 26.616923809051514
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432\u043e\u0441\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0432\u0448\u0438\u0439\u0441\u044f \u0441\u0435\u0440\u0432\u0438\u0441\u043e\u043c \u0438 \u043f\u043e\u043b\u0443\u0447\u0438\u0432\u0448\u0438\u0439",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041e\u0431\u0435\u0441\u043f\u0435\u0447\u0438\u0432\u0430\u044f \u043d\u0430\u0434\u0451\u0436\u043d\u043e\u0441\u0442\u044c \u0438 \u0443\u0441\u0442\u043e\u0439\u0447\u0438\u0432\u043e\u0441\u0442\u044c \u043a \u0441\u0431\u043e\u044f\u043c, \u0430 \u0442\u0430\u043a\u0436\u0435 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u044f",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "API",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430\u0446",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=1.08 (max=1.1, 39\u219242 words)"
+      }
+    ],
+    "pass": 6,
+    "fail": 0,
+    "total": 6,
+    "score": "6/6",
+    "input_words": 39,
+    "output_words": 42,
+    "eval_id": "prichastiya-i-deeprichastiya",
+    "elapsed_seconds": 18.74248957633972
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041e\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u043b\u0435\u043d\u0438\u0435 \u0440\u0435\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u0438",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0431\u044b\u043b\u043e \u043f\u0440\u043e\u0438\u0437\u0432\u0435\u0434\u0435\u043d\u043e \u043f\u043e\u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e\u043c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u041a\u0440\u043e\u043c\u0435 \u0442\u043e\u0433\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0432 \u0440\u0430\u043c\u043a\u0430\u0445 \u0434\u0430\u043d\u043d\u043e\u0433\u043e",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u043d\u0430\u043c\u0438 \u0431\u044b\u043b\u043e \u043e\u0431\u0435\u0441\u043f\u0435\u0447\u0435\u043d\u043e \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u0435",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0422\u0430\u043a\u0436\u0435 \u0441\u043b\u0435\u0434\u0443\u0435\u0442 \u0443\u0447\u0438\u0442\u044b\u0432\u0430\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0438\u043d\u043d\u043e\u0432\u0430\u0446\u0438\u043e\u043d\u043d",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\u0412\u0430\u0436\u043d\u043e \u043e\u0442\u043c\u0435\u0442\u0438\u0442\u044c",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0438\u0434\u0435\u043c\u043f\u043e\u0442\u0435\u043d\u0442\u043d",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "Stripe API",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u044d\u043a\u0441\u043f\u043e\u043d\u0435\u043d\u0446\u0438\u0430\u043b\u044c\u043d",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "\u0434\u0436\u0438\u0442\u0442\u0435\u0440",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "HMAC-SHA256",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "Content-Type",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "application/json",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.69 (max=0.75, 52\u219236 words)"
+      }
+    ],
+    "pass": 16,
+    "fail": 0,
+    "total": 16,
+    "score": "16/16",
+    "input_words": 52,
+    "output_words": 36,
+    "eval_id": "preserve-technical-terms-ru",
+    "elapsed_seconds": 21.323082208633423
+  }
+]
