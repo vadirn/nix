@@ -1,0 +1,97 @@
+name: eval-gen
+
+defaults:
+  model: claude-sonnet-4-20250514
+  image: claude-runner-bun
+  max_rounds: 3
+  wait: 15
+  resolve_questions: false
+
+steps:
+  - name: analyze
+    prompt: |
+      Analyze all skills at home/claude/skills/*/SKILL.md.
+
+      For each skill:
+      1. Extract the description from YAML frontmatter. If no frontmatter exists,
+         use the first non-heading line as the description.
+      2. Check if home/claude/evals/{skill-name}/eval_set.json already exists.
+      3. Identify 3-5 edge case categories for trigger testing:
+         - What queries should trigger this skill but use unusual phrasing?
+         - What queries from adjacent skills share vocabulary but should NOT trigger?
+         - Are there multilingual triggers (Russian)?
+
+      Read the existing eval sets as quality references:
+      - home/claude/evals/vault/eval_set.json (27 entries)
+      - home/claude/evals/overnight/eval_set.json (16 entries)
+
+      Produce a structured analysis in the checkpoint covering every skill.
+    accept: |
+      - Analysis covers all skills with descriptions
+      - Each skill has identified edge case categories
+      - Skills with existing eval_set.json are marked as complete
+    max_rounds: 2
+    model: claude-sonnet-4-20250514
+
+  - name: generate
+    prompt: |
+      Generate trigger eval sets for every skill that lacks one.
+      Use the analysis from the previous checkpoint.
+
+      For each skill without an eval_set.json, create:
+        home/claude/evals/{skill-name}/eval_set.json
+
+      Format:
+      [
+        {"query": "user input text", "should_trigger": true},
+        {"query": "unrelated input", "should_trigger": false}
+      ]
+
+      Requirements per eval set:
+      - Minimum 16 entries: at least 8 should_trigger=true, 8 should_trigger=false
+      - True queries: natural user requests that should route to this skill,
+        including indirect phrasing, Russian variants where applicable, and
+        edge cases that just barely qualify
+      - False queries: plausible requests that share keywords but belong to a
+        different skill or no skill. Must be genuinely confusable.
+      - Match the quality and style of home/claude/evals/vault/eval_set.json
+
+      Read each skill's SKILL.md to understand its full description and triggers.
+      Create the evals/ subdirectory for a skill if it does not exist.
+      Do NOT overwrite existing eval_set.json files (vault, overnight already have them).
+    accept: |
+      - Every skill with a description has an eval_set.json
+      - Each file is valid JSON matching the schema
+      - Each file has at least 16 entries with balanced true/false
+      - No existing eval sets were overwritten
+    agent: eval-gen
+    model: claude-opus-4-6[1m]
+    max_rounds: 5
+    verify: |
+      cd /workspace && bun -e "
+      import {readFileSync} from 'fs';
+      const glob = new Bun.Glob('home/claude/evals/*/eval_set.json');
+      const files = [...glob.scanSync('.')];
+      const errors = [];
+      if (files.length < 10) errors.push('Only ' + files.length + ' eval sets, expected 10+');
+      for (const f of files) {
+        try {
+          const data = JSON.parse(readFileSync(f, 'utf8'));
+          if (!Array.isArray(data)) { errors.push(f + ': not an array'); continue; }
+          if (data.length < 16) errors.push(f + ': only ' + data.length + ' entries');
+          data.forEach((e, i) => {
+            const keys = Object.keys(e).sort().join(',');
+            if (keys !== 'query,should_trigger') errors.push(f + '[' + i + ']: bad keys');
+            if (typeof e.query !== 'string') errors.push(f + '[' + i + ']: query not string');
+            if (typeof e.should_trigger !== 'boolean') errors.push(f + '[' + i + ']: not bool');
+          });
+          const t = data.filter(e => e.should_trigger).length, fa = data.length - t;
+          if (t < 8) errors.push(f + ': only ' + t + ' true entries');
+          if (fa < 8) errors.push(f + ': only ' + fa + ' false entries');
+        } catch (e) { errors.push(f + ': ' + e.message); }
+      }
+      if (errors.length) { console.log('VERIFY FAILED:'); errors.forEach(e => console.log('  - ' + e)); process.exit(1); }
+      console.log('VERIFY PASSED: ' + files.length + ' eval sets validated');
+      "
+    on_fail: retry
+    max_retries: 1

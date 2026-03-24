@@ -1,14 +1,14 @@
 [
   {
-    "query": "I want to run nightshift on this repo to refactor the auth module, maybe 5 iterations with opus",
+    "query": "I want to run overnight on this repo to refactor the auth module, maybe 5 iterations with opus",
     "should_trigger": true
   },
   {
-    "query": "set up nightshift for me, I haven't used it before and need to get the docker stuff going",
+    "query": "set up overnight for me, I haven't used it before and need to get the docker stuff going",
     "should_trigger": true
   },
   {
-    "query": "my nightshift project needs eslint and node, can you make a Dockerfile for it?",
+    "query": "my overnight project needs eslint and node, can you make a Dockerfile for it?",
     "should_trigger": true
   },
   {
@@ -20,11 +20,11 @@
     "should_trigger": true
   },
   {
-    "query": "check the nightshift progress, what did it get done last night?",
+    "query": "check the overnight progress, what did it get done last night?",
     "should_trigger": true
   },
   {
-    "query": "write me a project.md for nightshift that covers adding pagination to all our API endpoints",
+    "query": "write me a project.md for overnight that covers adding pagination to all our API endpoints",
     "should_trigger": true
   },
   {

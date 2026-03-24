@@ -1,6 +1,6 @@
 ---
 name: resolver
-description: Answers open questions from nightshift checkpoints by searching the codebase and the web
+description: Answers open questions from overnight checkpoints by searching the codebase and the web
 tools: Read,Glob,Grep,Bash
 model: claude-haiku-4-5
 maxTurns: 10

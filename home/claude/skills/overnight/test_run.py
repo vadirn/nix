@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Smoke tests for nightshift pipeline runner.
+"""Smoke tests for overnight pipeline runner.
 
-Run: uv run --with pyyaml python3 home/claude/skills/nightshift/test_run.py
+Run: uv run --with pyyaml python3 home/claude/skills/overnight/test_run.py
 """
 
 import os
@@ -334,7 +334,7 @@ if __name__ == "__main__":
     old_stderr = sys.stderr
     sys.stderr = open(os.devnull, "w")
 
-    print("Running nightshift smoke tests...\n")
+    print("Running overnight smoke tests...\n")
 
     tests = [
         test_load_pipeline_minimal,

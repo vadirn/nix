@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nightshift pipeline runner.
+"""Overnight pipeline runner.
 
 Invoked via: uv run --with pyyaml run.py --workspace DIR
 
@@ -94,7 +94,7 @@ def load_pipeline(path: str) -> PipelineConfig:
         steps.append(step)
 
     return PipelineConfig(
-        name=raw.get("name", "nightshift"),
+        name=raw.get("name", "overnight"),
         defaults=defaults,
         steps=steps,
     )
@@ -119,7 +119,7 @@ Step: "{step_name}", round {round_number}.
 
 ## Instructions
 - Read the codebase using git log, git diff, git status, and file reads.
-- Write your checkpoint to .nightshift/{checkpoint_filename} before finishing.
+- Write your checkpoint to .overnight/{checkpoint_filename} before finishing.
 - Set status to STEP_COMPLETE when all acceptance criteria are met.
 - Set status to STEP_IN_PROGRESS with clear ## Next items when work remains.
 - Set status to STEP_FAILED when the task is blocked and cannot proceed.
@@ -129,20 +129,20 @@ Step: "{step_name}", round {round_number}.
 
 
 def build_skills_dir(
-    nightshift_skills: Path, step_skills: list[str], tmpdir: str
+    overnight_skills: Path, step_skills: list[str], tmpdir: str
 ) -> str:
     """Build a temp directory with checkpoint/ + step's listed skills."""
     skills_dir = os.path.join(tmpdir, "skills")
     os.makedirs(skills_dir)
 
     # Always include checkpoint skill
-    checkpoint_src = nightshift_skills / "checkpoint"
+    checkpoint_src = overnight_skills / "checkpoint"
     if checkpoint_src.is_dir():
         shutil.copytree(str(checkpoint_src), os.path.join(skills_dir, "checkpoint"))
 
     # Copy step-specific skills
     for skill_name in step_skills:
-        src = nightshift_skills / skill_name
+        src = overnight_skills / skill_name
         if src.is_dir():
             shutil.copytree(str(src), os.path.join(skills_dir, skill_name))
         else:
@@ -158,7 +158,7 @@ def run_round(
     checkpoint_filename: str,
     round_number: int,
     docker_volume: str,
-    nightshift_dir: Path,
+    overnight_dir: Path,
     tmpdir: str,
 ) -> tuple[str, int]:
     """Run one claude -p invocation inside Docker. Returns (checkpoint_path, exit_code)."""
@@ -174,13 +174,13 @@ def run_round(
 
     # Build filtered skills directory
     skills_dir = build_skills_dir(
-        nightshift_dir / "skills", step.skills, tmpdir
+        overnight_dir / "skills", step.skills, tmpdir
     )
 
-    agents_dir = nightshift_dir / "agents"
+    agents_dir = overnight_dir / "agents"
 
     # Construct docker run command
-    container_name = f"nightshift-{step.name}-{round_number}"
+    container_name = f"overnight-{step.name}-{round_number}"
     cmd = [
         "docker", "run", "--rm",
         "--name", container_name,
@@ -206,7 +206,7 @@ def run_round(
     # Start container in its own process group so signals don't propagate.
     proc = subprocess.Popen(cmd, start_new_session=True)
     proc.wait()
-    checkpoint_path = os.path.join(workspace, ".nightshift", checkpoint_filename)
+    checkpoint_path = os.path.join(workspace, ".overnight", checkpoint_filename)
 
     return checkpoint_path, proc.returncode
 
@@ -280,21 +280,21 @@ def resolve_questions(
     agents_dir: Path,
 ) -> None:
     """Spawn resolver agent to answer open questions in the checkpoint."""
-    print("nightshift: resolving open questions...")
+    print("overnight: resolving open questions...")
 
     prompt = (
-        f"Read the checkpoint file at /workspace/.nightshift/{os.path.basename(checkpoint_path)}. "
+        f"Read the checkpoint file at /workspace/.overnight/{os.path.basename(checkpoint_path)}. "
         f"Find the ## Open questions section and answer each question. "
         f"Append a ## Answers section to the same file."
     )
 
     cmd = [
         "docker", "run", "--rm",
-        "--name", "nightshift-resolver",
+        "--name", "overnight-resolver",
         "-v", f"{docker_volume}:/home/claude",
         "-v", f"{workspace}:/workspace:ro",
         # Mount checkpoint read-write so resolver can append answers
-        "-v", f"{checkpoint_path}:/workspace/.nightshift/{os.path.basename(checkpoint_path)}",
+        "-v", f"{checkpoint_path}:/workspace/.overnight/{os.path.basename(checkpoint_path)}",
     ]
 
     if agents_dir.is_dir():
@@ -322,7 +322,7 @@ def run_verify(step: StepConfig, workspace: str) -> bool:
     if not step.verify:
         return True
 
-    print(f"nightshift: verifying step '{step.name}'...")
+    print(f"overnight: verifying step '{step.name}'...")
     cmd = [
         "docker", "run", "--rm",
         "-v", f"{workspace}:/workspace:ro",
@@ -332,10 +332,10 @@ def run_verify(step: StepConfig, workspace: str) -> bool:
 
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        print(f"nightshift: verify failed (exit={result.returncode})", file=sys.stderr)
+        print(f"overnight: verify failed (exit={result.returncode})", file=sys.stderr)
         return False
 
-    print("nightshift: verify passed")
+    print("overnight: verify passed")
     return True
 
 
@@ -344,24 +344,24 @@ def run_verify(step: StepConfig, workspace: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def commit_round(workspace: str, timestamp: str) -> None:
-    """Commit workspace changes, excluding .nightshift/."""
+    """Commit workspace changes, excluding .overnight/."""
     # Check if there are changes to commit
     result = subprocess.run(
         ["git", "-C", workspace, "status", "--porcelain"],
         capture_output=True, text=True,
     )
-    # Filter out .nightshift/ changes
+    # Filter out .overnight/ changes
     changes = [
         line for line in result.stdout.strip().split("\n")
-        if line and not line.lstrip("? MADRC").lstrip().startswith(".nightshift/")
+        if line and not line.lstrip("? MADRC").lstrip().startswith(".overnight/")
     ]
 
     if not changes:
         return
 
-    subprocess.run(["git", "-C", workspace, "add", "-A", "--", ":!.nightshift"])
+    subprocess.run(["git", "-C", workspace, "add", "-A", "--", ":!.overnight"])
     subprocess.run(
-        ["git", "-C", workspace, "commit", "-m", f"nightshift: {timestamp}"],
+        ["git", "-C", workspace, "commit", "-m", f"overnight: {timestamp}"],
         capture_output=True,
     )
 
@@ -379,7 +379,7 @@ def run_step(
     pipeline: PipelineConfig,
     prev_step_checkpoint: str | None,
     docker_volume: str,
-    nightshift_dir: Path,
+    overnight_dir: Path,
 ) -> str | None:
     """Run rounds within a step. Returns last checkpoint path, or None on failure."""
     global STOPPED
@@ -392,8 +392,8 @@ def run_step(
     retries = 0
 
     for rnd in range(step.max_rounds):
-        if STOPPED or os.path.exists(os.path.join(workspace, ".nightshift", "STOP")):
-            print(f"nightshift: stopped during step '{step.name}'")
+        if STOPPED or os.path.exists(os.path.join(workspace, ".overnight", "STOP")):
+            print(f"overnight: stopped during step '{step.name}'")
             return None
 
         seq = rnd + 1
@@ -410,7 +410,7 @@ def run_step(
                 checkpoint_filename=checkpoint_filename,
                 round_number=seq,
                 docker_volume=docker_volume,
-                nightshift_dir=nightshift_dir,
+                overnight_dir=overnight_dir,
                 tmpdir=tmpdir,
             )
 
@@ -427,20 +427,20 @@ def run_step(
         if status == "STEP_COMPLETE" and step.verify:
             if not run_verify(step, workspace):
                 status = "STEP_IN_PROGRESS"
-                print("nightshift: verify failed, overriding status to IN_PROGRESS")
+                print("overnight: verify failed, overriding status to IN_PROGRESS")
 
         # Handle status
         if status == "STEP_COMPLETE":
-            print(f"nightshift: step '{step.name}' complete")
+            print(f"overnight: step '{step.name}' complete")
             return checkpoint_path
 
         elif status == "STEP_FAILED":
             if step.on_fail == "retry" and retries < step.max_retries:
                 retries += 1
-                print(f"nightshift: step failed, retrying ({retries}/{step.max_retries})")
+                print(f"overnight: step failed, retrying ({retries}/{step.max_retries})")
                 continue
             else:
-                print(f"nightshift: step '{step.name}' failed", file=sys.stderr)
+                print(f"overnight: step '{step.name}' failed", file=sys.stderr)
                 return None
 
         else:  # STEP_IN_PROGRESS
@@ -452,7 +452,7 @@ def run_step(
                     docker_volume=docker_volume,
                     image=step.image,
                     model=pipeline.defaults.get("explore_model", DEFAULTS["explore_model"]),
-                    agents_dir=nightshift_dir / "agents",
+                    agents_dir=overnight_dir / "agents",
                 )
 
             # Update prev checkpoint for next round
@@ -463,10 +463,10 @@ def run_step(
         # Wait between rounds
         wait = pipeline.defaults.get("wait", DEFAULTS["wait"])
         if rnd < step.max_rounds - 1 and not STOPPED:
-            print(f"nightshift: waiting {wait}s before next round")
+            print(f"overnight: waiting {wait}s before next round")
             time.sleep(wait)
 
-    print(f"nightshift: step '{step.name}' reached max rounds ({step.max_rounds})", file=sys.stderr)
+    print(f"overnight: step '{step.name}' reached max rounds ({step.max_rounds})", file=sys.stderr)
     return None
 
 
@@ -491,7 +491,7 @@ def preflight(pipeline: PipelineConfig, workspace: str, docker_volume: str, dock
     for step in pipeline.steps:
         image = step.image if step.image != DEFAULTS["image"] else docker_image
         # Check if a per-step Dockerfile would override the image
-        dockerfile = os.path.join(workspace, ".nightshift", f"Dockerfile.{step.name}")
+        dockerfile = os.path.join(workspace, ".overnight", f"Dockerfile.{step.name}")
         if os.path.exists(dockerfile):
             image = f"claude-runner-{step.name}"  # will be built by build_image()
         images_to_check.setdefault(image, []).append(step.name)
@@ -500,7 +500,7 @@ def preflight(pipeline: PipelineConfig, workspace: str, docker_volume: str, dock
     for image, step_names in images_to_check.items():
         # If a Dockerfile.{step} exists, it will be built later — skip check
         has_dockerfile = any(
-            os.path.exists(os.path.join(workspace, ".nightshift", f"Dockerfile.{name}"))
+            os.path.exists(os.path.join(workspace, ".overnight", f"Dockerfile.{name}"))
             for name in step_names
         )
         if has_dockerfile:
@@ -518,7 +518,7 @@ def preflight(pipeline: PipelineConfig, workspace: str, docker_volume: str, dock
         if not step.verify:
             continue
         image = step.image if step.image != DEFAULTS["image"] else docker_image
-        dockerfile = os.path.join(workspace, ".nightshift", f"Dockerfile.{step.name}")
+        dockerfile = os.path.join(workspace, ".overnight", f"Dockerfile.{step.name}")
         if os.path.exists(dockerfile):
             image = f"claude-runner-{step.name}"
         # Skip tool check if image doesn't exist yet (already reported above)
@@ -543,22 +543,22 @@ def preflight(pipeline: PipelineConfig, workspace: str, docker_volume: str, dock
                 errors.append(f"Step '{step.name}' verify uses '{first_word}' but it's not in image '{image}'")
 
     if errors:
-        print("nightshift: preflight failed:", file=sys.stderr)
+        print("overnight: preflight failed:", file=sys.stderr)
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
         sys.exit(1)
 
-    print("nightshift: preflight passed")
+    print("overnight: preflight passed")
 
 
 def build_image(step: StepConfig, workspace: str) -> None:
     """Build per-step Docker image if Dockerfile.{step.name} exists."""
-    dockerfile = os.path.join(workspace, ".nightshift", f"Dockerfile.{step.name}")
+    dockerfile = os.path.join(workspace, ".overnight", f"Dockerfile.{step.name}")
     if not os.path.exists(dockerfile):
         return
 
     tag = f"claude-runner-{step.name}"
-    print(f"nightshift: building image '{tag}' from {dockerfile}")
+    print(f"overnight: building image '{tag}' from {dockerfile}")
     subprocess.run(
         ["docker", "build", "-t", tag, "-f", dockerfile, os.path.dirname(dockerfile)],
         check=True,
@@ -574,17 +574,17 @@ def run_pipeline(
 ) -> None:
     """Load pipeline. Execute steps sequentially."""
     pipeline = load_pipeline(pipeline_path)
-    nightshift_dir = Path(workspace) / ".nightshift"
+    overnight_dir = Path(workspace) / ".overnight"
 
-    # Ensure .nightshift directory exists
-    nightshift_dir.mkdir(exist_ok=True)
+    # Ensure .overnight directory exists
+    overnight_dir.mkdir(exist_ok=True)
 
     # Validate prerequisites before starting
     preflight(pipeline, workspace, docker_volume, docker_image)
 
-    print(f"nightshift: pipeline '{pipeline.name}' with {len(pipeline.steps)} steps")
-    print(f"nightshift: workspace={workspace}")
-    print(f"nightshift: stop with: touch {nightshift_dir}/STOP")
+    print(f"overnight: pipeline '{pipeline.name}' with {len(pipeline.steps)} steps")
+    print(f"overnight: workspace={workspace}")
+    print(f"overnight: stop with: touch {overnight_dir}/STOP")
     print()
 
     prev_step_checkpoint = None
@@ -601,7 +601,7 @@ def run_pipeline(
         build_image(step, workspace)
 
         print(f"\n{'='*60}")
-        print(f"nightshift: starting step {i+1}/{len(pipeline.steps)}: '{step.name}'")
+        print(f"overnight: starting step {i+1}/{len(pipeline.steps)}: '{step.name}'")
         print(f"{'='*60}")
 
         result = run_step(
@@ -610,16 +610,16 @@ def run_pipeline(
             pipeline=pipeline,
             prev_step_checkpoint=prev_step_checkpoint,
             docker_volume=docker_volume,
-            nightshift_dir=nightshift_dir,
+            overnight_dir=overnight_dir,
         )
 
         if result is None:
-            print(f"\nnightshift: pipeline aborted at step '{step.name}'", file=sys.stderr)
+            print(f"\novernight: pipeline aborted at step '{step.name}'", file=sys.stderr)
             sys.exit(1)
 
         prev_step_checkpoint = result
 
-    print(f"\nnightshift: pipeline '{pipeline.name}' complete")
+    print(f"\novernight: pipeline '{pipeline.name}' complete")
 
 
 # ---------------------------------------------------------------------------
@@ -629,15 +629,15 @@ def run_pipeline(
 def main():
     global STOPPED
 
-    parser = argparse.ArgumentParser(description="Nightshift pipeline runner")
+    parser = argparse.ArgumentParser(description="Overnight pipeline runner")
     parser.add_argument("--workspace", required=True, help="Repo directory")
-    parser.add_argument("--pipeline", default=None, help="Pipeline YAML (default: .nightshift/pipeline.yaml)")
+    parser.add_argument("--pipeline", default=None, help="Pipeline YAML (default: .overnight/pipeline.yaml)")
     parser.add_argument("--docker-volume", default="claude-runner-home", help="Named volume for /home/claude")
     parser.add_argument("--docker-image", default="claude-runner", help="Base Docker image")
     args = parser.parse_args()
 
     workspace = os.path.abspath(args.workspace)
-    pipeline_path = args.pipeline or os.path.join(workspace, ".nightshift", "pipeline.yaml")
+    pipeline_path = args.pipeline or os.path.join(workspace, ".overnight", "pipeline.yaml")
 
     if not os.path.isdir(workspace):
         print(f"error: workspace not found: {workspace}", file=sys.stderr)
@@ -647,7 +647,7 @@ def main():
         print(f"error: pipeline not found: {pipeline_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Ignore signals. The stop file (.nightshift/STOP) is the only control mechanism.
+    # Ignore signals. The stop file (.overnight/STOP) is the only control mechanism.
     # The runner is launched from Claude Code, not a terminal.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, signal.SIG_IGN)

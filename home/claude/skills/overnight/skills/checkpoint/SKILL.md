@@ -1,9 +1,9 @@
 ---
 name: checkpoint
 description: >
-  Write a structured checkpoint at the end of every nightshift round.
+  Write a structured checkpoint at the end of every overnight round.
   Produces checkpoint-{timestamp}-{seq}.md with YAML frontmatter
-  and markdown body. Used automatically inside nightshift pipeline turns.
+  and markdown body. Used automatically inside overnight pipeline turns.
 ---
 
 # Checkpoint
@@ -11,7 +11,7 @@ description: >
 Write a checkpoint file at the end of every round. The orchestrator provides the filename via the prompt.
 
 ```
-checkpoint_file = from prompt (e.g. ".nightshift/checkpoint-2026-03-24-11-45-58-003.md")
+checkpoint_file = from prompt (e.g. ".overnight/checkpoint-2026-03-24-11-45-58-003.md")
 
 do("complete assigned work first, then write checkpoint")
 
