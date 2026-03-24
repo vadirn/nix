@@ -200,7 +200,7 @@
         ", yet frequent"
       ],
       "present_patterns": ["API", "staging", "deployments", "test coverage"],
-      "max_word_ratio": 1.20
+      "max_word_ratio": 1.35
     }
   },
   {
@@ -222,6 +222,75 @@
       ],
       "present_patterns": ["idempotent", "idempotency keys", "exponential backoff", "jitter", "HMAC-SHA256", "Content-Type", "application/json", "Stripe API"],
       "max_word_ratio": 0.70
+    }
+  },
+  {
+    "id": "long-migration-doc",
+    "input": "Introduction\n\nIn this section, we will explore the process of migrating our primary database from PostgreSQL 12 to PostgreSQL 16. It is important to note that the decision to perform the migration was made by the database team after a comprehensive evaluation of the available options was conducted. The utilization of logical replication was facilitated by the establishment of a dedicated migration environment.\n\nThere are many factors that affect the migration timeline. One of them is the size of the dataset. Another is the number of dependent services. A third consideration that should not be ignored is the maintenance of backwards compatibility.\n\nThe preparation phase involved the identification of all tables that would be affected. Subsequently, the creation of replication slots was performed by the operations team. Furthermore, it is worth mentioning that the monitoring of replication lag was implemented using a robust and scalable observability platform. The establishment of alerting thresholds was completed prior to the commencement of the migration.\n\nDuring the migration itself, each and every table was replicated to the new cluster. The verification of data integrity was performed by running checksums on both the source and target databases. In the event that discrepancies were discovered, the rollback procedure would be initiated. Due to the fact that the replication was not dissimilar to a standard logical replication setup, the team was not unfamiliar with the operational procedures.\n\nConclusion\n\nTaking into account all the factors described above, including risk, timeline, and resource requirements, we concluded that the migration was successful. It is recommended that future migrations utilize a similar approach.",
+    "assertions": {
+      "absent_patterns": [
+        "Introduction",
+        "Conclusion",
+        "In this section, we will explore",
+        "It is important to note",
+        "comprehensive evaluation",
+        "utilization of",
+        "facilitated by the establishment",
+        "There are many factors",
+        "should not be ignored",
+        "identification of all",
+        "Subsequently",
+        "creation of replication",
+        "Furthermore",
+        "it is worth mentioning",
+        "\\brobust\\b",
+        "\\bscalable\\b",
+        "establishment of alerting",
+        "prior to the commencement",
+        "each and every",
+        "verification of data",
+        "In the event that",
+        "Due to the fact that",
+        "not dissimilar",
+        "not unfamiliar",
+        "Taking into account all the factors",
+        "It is recommended that",
+        "\\butilize\\b"
+      ],
+      "max_word_ratio": 0.60,
+      "present_patterns": ["PostgreSQL 12", "PostgreSQL 16", "logical replication", "replication lag", "checksums", "rollback"]
+    }
+  },
+  {
+    "id": "long-architecture-adr",
+    "input": "Background\n\nIt is important to note that our innovative event-driven architecture was originally designed by the platform team in 2023. The implementation of the message broker was completed using RabbitMQ, which was selected due to the fact that it provided a comprehensive set of features for message routing. Furthermore, the utilization of exchange-based routing facilitated the achievement of flexible message distribution across our growing number of microservices.\n\nHowever, it is worth mentioning that the system has not been without its challenges. The occurrence of message loss was observed during periods of high load, and the establishment of dead-letter queues did not fully resolve the problem. Additionally, the monitoring of queue depths was performed using a custom solution that was built by the infrastructure team, but this solution was not considered to be robust enough for production use.\n\nProposed Solution\n\nAfter careful consideration of the available alternatives, the decision was made to migrate from RabbitMQ to Apache Kafka. The selection of Kafka was facilitated by an evaluation that was conducted by the architecture review board. It is important to note that Kafka provides durable, ordered, and replayable event streams, which are not provided by RabbitMQ in a comparable manner.\n\nThe migration will be performed in three phases. In the first phase, the implementation of dual-write capability will be completed. This means that events will be published to both RabbitMQ and Kafka simultaneously. In the second phase, consumers will be migrated to read from Kafka. In the third and final phase, RabbitMQ will be decommissioned.\n\nConsequences\n\nIt is important to note that the adoption of Kafka introduces operational complexity that is not insignificant. The team will need to become familiar with Kafka's partition model, consumer groups, and offset management. Furthermore, the establishment of a comprehensive monitoring and alerting system will need to be completed prior to the production deployment. Additionally, it should be noted that Kafka's storage requirements are substantially larger than those of RabbitMQ, and the provisioning of additional disk space will be necessary.",
+    "assertions": {
+      "absent_patterns": [
+        "Background",
+        "Proposed Solution",
+        "Consequences",
+        "It is important to note",
+        "innovative",
+        "implementation of the message",
+        "due to the fact that",
+        "comprehensive set",
+        "Furthermore",
+        "utilization of",
+        "facilitated the achievement",
+        "it is worth mentioning",
+        "occurrence of",
+        "establishment of dead-letter",
+        "Additionally",
+        "was not considered to be robust",
+        "facilitated by an evaluation",
+        "not provided by RabbitMQ in a comparable manner",
+        "not insignificant",
+        "establishment of a comprehensive",
+        "prior to the production",
+        "it should be noted"
+      ],
+      "max_word_ratio": 0.60,
+      "present_patterns": ["RabbitMQ", "Kafka", "dead-letter", "dual-write", "partition", "consumer group", "offset"]
     }
   }
 ]

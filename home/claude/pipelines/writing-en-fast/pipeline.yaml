@@ -45,7 +45,7 @@ steps:
          {"elapsed_seconds": <seconds as float>}
 
       Use the bench skill for measuring elapsed time per case.
-      Process all 13 eval cases. Overwrite any existing output files.
+      Process all 15 eval cases. Overwrite any existing output files.
       Create the outputs/ directory if needed.
     accept: |
       - All 8 output files exist in home/claude/evals/writing-en/outputs/
