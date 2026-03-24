@@ -20,7 +20,7 @@ The Obsidian vault at `~/Documents/vault` stores knowledge as interconnected mar
 - **Card**: `type: card`, `description`, `tags`, `reference` (wikilink to source)
 - **Note**: `type: note`, `description`, `tags` (optional)
 - **Project**: `type: project`, `result`, `status` (in progress/done/paused)
-- **Checkpoint**: `type: checkpoint`, `description`, `done`, `project`, `decisions`, `frictions`, `cost_usd`, `lines_written`, `turns_to_edit`
+- **Checkpoint**: `type: checkpoint`, `description`, `done`, `project`, `decisions`, `frictions`
 
 ## Conventions
 

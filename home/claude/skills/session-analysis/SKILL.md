@@ -2,8 +2,7 @@
 name: session-analysis
 description: >
   Analyze prompt patterns across all Claude Code sessions. Focuses on what the user *asked* (prompt
-  content and recurring patterns), not costs/tokens (that's session-stats) or CLI commands Claude ran
-  (that's tool-stats). Use when user asks what they keep asking Claude for, what their most common
+  content and recurring patterns), not CLI commands Claude ran (that's tool-stats). Use when user asks what they keep asking Claude for, what their most common
   prompts are, what patterns repeat across sessions, what should be a skill but isn't, or wants a
   history/usage overview. Also triggers on "how do I use Claude", "show my prompt history", "what
   should I automate", or any curiosity about cross-session habits.

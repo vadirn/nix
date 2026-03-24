@@ -3,7 +3,6 @@
 ## Pseudocode
 
 ```
-stats = session_stats()  // cost_usd, lines_written, turns_to_edit
 checkpoints = Bash(vault-query checkpoints --view Incomplete)
 
 for each incomplete checkpoint:
@@ -14,7 +13,7 @@ for each incomplete checkpoint:
 
 if new work uncovered by existing checkpoints:
     create new checkpoint from template
-    fill frontmatter: description, done, project, decisions, frictions, stats
+    fill frontmatter: description, done, project, decisions, frictions
     fill body: ## Progress, ## Next
 
 graduation = review decisions and frictions
@@ -24,10 +23,6 @@ suggest "/clear"
 ```
 
 ## Reference
-
-### Session stats
-
-Use the `session-stats` skill. Extract `cost_usd`, `lines_written`, `turns_to_edit` from its output.
 
 ### Querying incomplete checkpoints
 
@@ -50,8 +45,6 @@ Frontmatter:
 - `project` — `project_wikilink` from context.md
 - `decisions: ["chose X because Y"]` — key decisions this session
 - `frictions: ["had to work around Z"]` — friction points encountered
-- `cost_usd`, `lines_written`, `turns_to_edit` — from stats
-
 Body:
 
 - `## Progress` — what happened (concrete changes, files, code state)
