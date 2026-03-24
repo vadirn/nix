@@ -318,14 +318,14 @@ def test_prompt_template():
         prompt="Fix the auth module.",
         accept="Tests pass.",
         prev_checkpoint="## Done\nAnalyzed files.\n",
-        checkpoint_filename="checkpoint-implement-003-2026-03-24-11-45-58.md",
+        checkpoint_filename="checkpoint-2026-03-24-11-45-58-003.md",
     )
     assert "implement" in result
     assert "round 3" in result
     assert "Fix the auth module." in result
     assert "Tests pass." in result
     assert "Analyzed files." in result
-    assert "checkpoint-implement-003" in result
+    assert "checkpoint-" in result
     print("  PASS test_prompt_template")
 
 

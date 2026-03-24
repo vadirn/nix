@@ -188,7 +188,7 @@ round: 3
 
 Status values: `STEP_COMPLETE`, `STEP_IN_PROGRESS`, `STEP_FAILED`.
 
-Filename: `checkpoint-{step}-{seq}-{timestamp}.md` (e.g., `checkpoint-implement-003-2026-03-24-11-45-58.md`).
+Filename: `checkpoint-{timestamp}-{seq}.md` (e.g., `checkpoint-2026-03-24-11-45-58-001.md`).
 
 ### Per-project Dockerfile
 
@@ -215,8 +215,8 @@ Place at `.nightshift/Dockerfile` for all steps, or `.nightshift/Dockerfile.{ste
     tracer-bullet/SKILL.md     # methodology skills
   agents/
     resolver.md                # question resolver (provided by nightshift)
-  checkpoint-analyze-001-2026-03-24-11-45-58.md
-  checkpoint-implement-001-2026-03-24-11-50-12.md
+  checkpoint-2026-03-24-11-45-58-001.md
+  checkpoint-2026-03-24-11-50-12-002.md
   STOP
 ```
 

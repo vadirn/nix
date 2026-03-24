@@ -398,7 +398,7 @@ def run_step(
 
         seq = rnd + 1
         timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        checkpoint_filename = f"checkpoint-{step.name}-{seq:03d}-{timestamp}.md"
+        checkpoint_filename = f"checkpoint-{timestamp}-{seq:03d}.md"
 
         print(f"\n=== step '{step.name}', round {seq}/{step.max_rounds} ===")
 
