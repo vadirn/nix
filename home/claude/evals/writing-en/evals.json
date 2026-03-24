@@ -1,0 +1,131 @@
+[
+  {
+    "id": "nominalizations",
+    "input": "The implementation of the new authentication system was completed by the engineering team. The utilization of JWT tokens facilitated the achievement of better security. The establishment of a review committee enabled the identification of remaining vulnerabilities.",
+    "assertions": {
+      "absent_patterns": [
+        "implementation of",
+        "utilization of",
+        "achievement of",
+        "establishment of",
+        "identification of"
+      ],
+      "max_word_ratio": 0.75,
+      "present_patterns": ["JWT", "security", "vulnerabilities"]
+    }
+  },
+  {
+    "id": "passive-voice",
+    "input": "The database was migrated by the platform team. New indexes were added to improve query performance. The old tables were dropped after verification was performed by the QA engineers. A rollback plan was prepared in case issues were discovered.",
+    "assertions": {
+      "absent_patterns": [
+        "was migrated by",
+        "were added to",
+        "were dropped after",
+        "was performed by",
+        "was prepared",
+        "were discovered"
+      ],
+      "max_word_ratio": 0.85,
+      "present_patterns": ["database", "indexes", "rollback"]
+    }
+  },
+  {
+    "id": "filler-and-padding",
+    "input": "It is important to note that the API rate limit is 100 requests per minute. Due to the fact that the cache expires every hour, it is necessary to implement a refresh mechanism. In the event that the service becomes unavailable, each and every client should implement retry logic with exponential backoff.",
+    "assertions": {
+      "absent_patterns": [
+        "It is important to note that",
+        "Due to the fact that",
+        "it is necessary to",
+        "In the event that",
+        "each and every"
+      ],
+      "max_word_ratio": 0.65,
+      "present_patterns": ["100 requests", "cache", "retry", "exponential backoff"]
+    }
+  },
+  {
+    "id": "ai-promotional",
+    "input": "Our innovative solution leverages cutting-edge technology to deliver a robust and scalable architecture. This groundbreaking approach empowers developers to build transformative applications. Furthermore, the seamless integration provides a comprehensive toolkit for modern development. Additionally, the platform offers powerful features that enable teams to achieve unprecedented productivity.",
+    "assertions": {
+      "absent_patterns": [
+        "innovative",
+        "cutting-edge",
+        "robust",
+        "groundbreaking",
+        "empowers",
+        "transformative",
+        "Furthermore",
+        "seamless",
+        "comprehensive",
+        "Additionally",
+        "powerful",
+        "unprecedented"
+      ],
+      "max_word_ratio": 0.80,
+      "present_patterns": ["developer", "platform"]
+    }
+  },
+  {
+    "id": "long-words",
+    "input": "We will utilize this framework to facilitate the development process. Subsequently, the team will commence testing approximately three weeks prior to the deployment. It is sufficient to terminate the old service and commence the new one.",
+    "assertions": {
+      "absent_patterns": [
+        "\\butilize\\b",
+        "\\bfacilitate\\b",
+        "\\bSubsequently\\b",
+        "\\bcommence\\b",
+        "\\bapproximately\\b",
+        "\\bprior to\\b",
+        "\\bsufficient\\b",
+        "\\bterminate\\b"
+      ],
+      "max_word_ratio": 0.80,
+      "present_patterns": ["framework", "testing", "deployment"]
+    }
+  },
+  {
+    "id": "negatives-and-metaphors",
+    "input": "The system is not uncommon in enterprise environments. It is not impossible to extend, but it is not easy either. We need to think outside the box and move the needle on performance. The low-hanging fruit is to not ignore the caching layer, which is not dissimilar to what competitors offer.",
+    "assertions": {
+      "absent_patterns": [
+        "not uncommon",
+        "not impossible",
+        "not easy",
+        "think outside the box",
+        "move the needle",
+        "low-hanging fruit",
+        "not dissimilar"
+      ],
+      "max_word_ratio": 0.85,
+      "present_patterns": ["caching", "performance"]
+    }
+  },
+  {
+    "id": "mixed-paragraph-structure",
+    "input": "Taking into account all the factors, including latency, throughput, and memory usage, we concluded that switching to a streaming architecture is the best option. There are many considerations that affect this decision. One of them is backwards compatibility. The old batch system processes data in chunks. The new streaming system handles records individually. It uses Kafka. Kafka is a distributed event streaming platform. It was originally developed by LinkedIn. The team at LinkedIn built it to handle their activity stream data.",
+    "assertions": {
+      "absent_patterns": [
+        "Taking into account all the factors",
+        "There are many considerations"
+      ],
+      "max_word_ratio": 0.80,
+      "present_patterns": ["streaming", "Kafka", "latency"]
+    }
+  },
+  {
+    "id": "uniform-sentence-length",
+    "input": "The monitoring system collects metrics from all services. The dashboard displays these metrics in real time. The alerting rules trigger notifications when thresholds are exceeded. The on-call engineer receives these notifications via PagerDuty. The engineer then investigates the root cause of the issue. The resolution is documented in the incident report.",
+    "assertions": {
+      "absent_patterns": [
+        "Furthermore",
+        "Additionally",
+        "Moreover"
+      ],
+      "max_word_ratio": 1.10,
+      "sentence_length_variance": true,
+      "present_patterns": ["monitoring", "metrics", "PagerDuty"]
+    }
+  }
+]
