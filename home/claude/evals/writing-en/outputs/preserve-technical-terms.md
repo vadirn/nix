@@ -1,0 +1,1 @@
+We handle idempotent requests using Stripe API's idempotency keys. Our retry mechanism includes exponential backoff and jitter to prevent duplicate charges from transient failures. Webhook verification uses HMAC-SHA256 signatures to protect against replay attacks. Set the Content-Type header to application/json for all API requests.

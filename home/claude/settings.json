@@ -228,7 +228,9 @@
         "lfs.github.com",
         "crates.io",
         "static.crates.io",
-        "registry.npmjs.org"
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org"
       ],
       "allowManagedDomainsOnly": false,
       "allowAllUnixSockets": true

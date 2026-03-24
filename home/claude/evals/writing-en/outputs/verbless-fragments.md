@@ -1,0 +1,1 @@
+We made progress on the API in staging but not production. More endpoints mean less stability. Fast iteration creates fragile deployments. This is an architecture problem, not a sprint issue. Despite good test coverage, regressions occur frequently. Tooling improved while documentation suffered.

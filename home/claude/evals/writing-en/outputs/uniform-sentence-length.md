@@ -1,0 +1,1 @@
+The monitoring system collects metrics from all services. These appear in real-time on the dashboard. Alerting rules trigger notifications when thresholds are exceeded, sending alerts to the on-call engineer via PagerDuty. The engineer investigates and documents the resolution.

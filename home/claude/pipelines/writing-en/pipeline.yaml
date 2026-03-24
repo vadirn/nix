@@ -2,7 +2,7 @@ name: writing-en-bench
 
 defaults:
   model: claude-sonnet-4-20250514
-  image: claude-runner
+  image: claude-runner-writing-en
   max_rounds: 1
   wait: 10
   resolve_questions: false
@@ -35,7 +35,7 @@ steps:
       - home/claude/skills/writing-en/pass-3-paragraphs.md
       - home/claude/skills/writing-en/pass-4-ai.md
 
-      Process all 8 eval cases. Create the outputs/ directory if needed.
+      Process all 13 eval cases. Create the outputs/ directory if needed.
     accept: |
       - All 8 output files exist in home/claude/evals/writing-en/outputs/
       - All 8 meta.json files exist with elapsed_seconds

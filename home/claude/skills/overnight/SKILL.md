@@ -38,6 +38,8 @@ elif "run" or wants to launch an overnight run:
         // Copy all resources from versioned pipeline to .overnight/
         Bash(mkdir -p .overnight)
         Bash(cp -r {pipeline_dir}/* .overnight/)
+        // Always copy built-in checkpoint skill (required by runner)
+        Bash(cp -r {dir}/skills/checkpoint .overnight/skills/checkpoint)
     if no .overnight/pipeline.yaml in workspace:
         do("help user create .overnight/pipeline.yaml")
     if project needs extra tools (linters, runtimes, test frameworks):

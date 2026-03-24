@@ -175,9 +175,12 @@ def main():
 
     print(f"\nTotal: {total_pass} passed, {total_fail} failed")
 
-    with open(RESULTS_PATH, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"Results written to {RESULTS_PATH}")
+    try:
+        with open(RESULTS_PATH, "w") as f:
+            json.dump(results, f, indent=2)
+        print(f"Results written to {RESULTS_PATH}")
+    except OSError:
+        print(json.dumps(results, indent=2))
 
     if total_fail > 0:
         sys.exit(1)

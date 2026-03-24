@@ -1,0 +1,1 @@
+The system is common in enterprise environments. Extension is possible but hard. We need to try new approaches to improve performance. The quick win is using the caching layer, which resembles what competitors offer.

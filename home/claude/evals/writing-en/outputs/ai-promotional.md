@@ -1,0 +1,1 @@
+Our solution delivers a scalable architecture. Developers can build applications with this approach. The integration provides a toolkit for development. The platform helps teams achieve higher productivity.
