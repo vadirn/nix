@@ -1,0 +1,70 @@
+[
+  {
+    "query": "commit these changes",
+    "should_trigger": true
+  },
+  {
+    "query": "let's commit, we're done with this refactor",
+    "should_trigger": true
+  },
+  {
+    "query": "коммит",
+    "should_trigger": true
+  },
+  {
+    "query": "закоммить изменения",
+    "should_trigger": true
+  },
+  {
+    "query": "save changes to git",
+    "should_trigger": true
+  },
+  {
+    "query": "stage and commit the parser changes",
+    "should_trigger": true
+  },
+  {
+    "query": "зафиксируй что мы сделали",
+    "should_trigger": true
+  },
+  {
+    "query": "wrap up with a commit, this feature is ready",
+    "should_trigger": true
+  },
+  {
+    "query": "сохрани изменения в гит",
+    "should_trigger": true
+  },
+  {
+    "query": "create a PR for this branch",
+    "should_trigger": false
+  },
+  {
+    "query": "push to remote",
+    "should_trigger": false
+  },
+  {
+    "query": "amend the last commit with these new changes",
+    "should_trigger": false
+  },
+  {
+    "query": "rebase my branch onto main",
+    "should_trigger": false
+  },
+  {
+    "query": "show me the git log",
+    "should_trigger": false
+  },
+  {
+    "query": "undo the last commit",
+    "should_trigger": false
+  },
+  {
+    "query": "what files changed since yesterday?",
+    "should_trigger": false
+  },
+  {
+    "query": "stash my changes for now",
+    "should_trigger": false
+  }
+]

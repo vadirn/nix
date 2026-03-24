@@ -1,0 +1,70 @@
+[
+  {
+    "query": "edit this paragraph for clarity, it's too wordy and full of passive voice",
+    "should_trigger": true
+  },
+  {
+    "query": "rewrite this README section to be more concise and direct",
+    "should_trigger": true
+  },
+  {
+    "query": "this email sounds too formal and stiff, make it plain language",
+    "should_trigger": true
+  },
+  {
+    "query": "cut the fluff from this documentation, it reads like AI wrote it",
+    "should_trigger": true
+  },
+  {
+    "query": "simplify this error message for end users",
+    "should_trigger": true
+  },
+  {
+    "query": "check this text for nominalizations and replace them with verbs",
+    "should_trigger": true
+  },
+  {
+    "query": "the UI copy on this page needs work, too many words to say something simple",
+    "should_trigger": true
+  },
+  {
+    "query": "proofread and tighten this blog post, remove anything that doesn't carry meaning",
+    "should_trigger": true
+  },
+  {
+    "query": "make this report clearer, I want my manager to understand it in one read",
+    "should_trigger": true
+  },
+  {
+    "query": "отредактируй этот текст, слишком много воды",
+    "should_trigger": false
+  },
+  {
+    "query": "write a commit message for these changes",
+    "should_trigger": false
+  },
+  {
+    "query": "translate this paragraph to French",
+    "should_trigger": false
+  },
+  {
+    "query": "generate API documentation from these TypeScript types",
+    "should_trigger": false
+  },
+  {
+    "query": "write a new feature description for the product roadmap",
+    "should_trigger": false
+  },
+  {
+    "query": "fix the typo on line 42 of README.md",
+    "should_trigger": false
+  },
+  {
+    "query": "add JSDoc comments to these functions",
+    "should_trigger": false
+  },
+  {
+    "query": "create a changelog entry for this release",
+    "should_trigger": false
+  }
+]

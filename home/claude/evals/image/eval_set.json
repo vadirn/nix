@@ -1,0 +1,70 @@
+[
+  {
+    "query": "generate an image of a sunset over mountains",
+    "should_trigger": true
+  },
+  {
+    "query": "make me a logo for my startup, something minimal and techy",
+    "should_trigger": true
+  },
+  {
+    "query": "draw a cat sitting on a keyboard",
+    "should_trigger": true
+  },
+  {
+    "query": "edit this image — remove the background and make it transparent",
+    "should_trigger": true
+  },
+  {
+    "query": "create a hero image for the landing page, abstract geometric shapes",
+    "should_trigger": true
+  },
+  {
+    "query": "нарисуй иконку для приложения в стиле flat design",
+    "should_trigger": true
+  },
+  {
+    "query": "сгенерируй картинку: робот читает книгу в библиотеке",
+    "should_trigger": true
+  },
+  {
+    "query": "modify this photo to look like a watercolor painting",
+    "should_trigger": true
+  },
+  {
+    "query": "I need a visual for my presentation — a diagram showing data flow",
+    "should_trigger": true
+  },
+  {
+    "query": "read this screenshot and tell me what error message it shows",
+    "should_trigger": false
+  },
+  {
+    "query": "extract text from this image using OCR",
+    "should_trigger": false
+  },
+  {
+    "query": "resize all images in the assets folder to 800x600",
+    "should_trigger": false
+  },
+  {
+    "query": "add an img tag to the HTML with alt text",
+    "should_trigger": false
+  },
+  {
+    "query": "optimize the PNG files in this directory for web",
+    "should_trigger": false
+  },
+  {
+    "query": "convert this SVG to a React component",
+    "should_trigger": false
+  },
+  {
+    "query": "what's in this image? Describe what you see",
+    "should_trigger": false
+  },
+  {
+    "query": "fix the broken image link in the README",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,66 @@
+[
+  {
+    "query": "set up a new project skill for this repo",
+    "should_trigger": true
+  },
+  {
+    "query": "link this repo to my vault project folder",
+    "should_trigger": true
+  },
+  {
+    "query": "initialize project tracking for this codebase in Obsidian",
+    "should_trigger": true
+  },
+  {
+    "query": "scaffold the project-as-a-skill structure for visa-agent",
+    "should_trigger": true
+  },
+  {
+    "query": "connect my vault folder to this repository so I can use checkpoints",
+    "should_trigger": true
+  },
+  {
+    "query": "настрой проект как скилл для этого репо",
+    "should_trigger": true
+  },
+  {
+    "query": "create the thin wrapper skill and vault config for this project",
+    "should_trigger": true
+  },
+  {
+    "query": "check permissions for the nix project skill, make sure settings are correct",
+    "should_trigger": true
+  },
+  {
+    "query": "show me the current project status and open checkpoints",
+    "should_trigger": false
+  },
+  {
+    "query": "save a checkpoint for what we did today",
+    "should_trigger": false
+  },
+  {
+    "query": "create a new GitHub repository for this project",
+    "should_trigger": false
+  },
+  {
+    "query": "set up the CI/CD pipeline for this repo",
+    "should_trigger": false
+  },
+  {
+    "query": "initialize a new npm project with package.json",
+    "should_trigger": false
+  },
+  {
+    "query": "add this note to my vault knowledge base",
+    "should_trigger": false
+  },
+  {
+    "query": "what projects am I working on? Give me an overview",
+    "should_trigger": false
+  },
+  {
+    "query": "set up ESLint and Prettier for this project",
+    "should_trigger": false
+  }
+]
