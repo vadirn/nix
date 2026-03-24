@@ -474,6 +474,83 @@ def run_step(
 # Section 8: Pipeline runner
 # ---------------------------------------------------------------------------
 
+def preflight(pipeline: PipelineConfig, workspace: str, docker_volume: str, docker_image: str) -> None:
+    """Validate prerequisites before running any steps. Exits on failure."""
+    errors: list[str] = []
+
+    # Check Docker volume exists
+    result = subprocess.run(
+        ["docker", "volume", "inspect", docker_volume],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        errors.append(f"Docker volume '{docker_volume}' not found. Run: docker volume create {docker_volume}")
+
+    # Collect all images needed (resolve defaults and per-step Dockerfiles)
+    images_to_check: dict[str, list[str]] = {}  # image -> [step names]
+    for step in pipeline.steps:
+        image = step.image if step.image != DEFAULTS["image"] else docker_image
+        # Check if a per-step Dockerfile would override the image
+        dockerfile = os.path.join(workspace, ".nightshift", f"Dockerfile.{step.name}")
+        if os.path.exists(dockerfile):
+            image = f"claude-runner-{step.name}"  # will be built by build_image()
+        images_to_check.setdefault(image, []).append(step.name)
+
+    # Check each image exists (skip ones that will be built from Dockerfile.{step})
+    for image, step_names in images_to_check.items():
+        # If a Dockerfile.{step} exists, it will be built later — skip check
+        has_dockerfile = any(
+            os.path.exists(os.path.join(workspace, ".nightshift", f"Dockerfile.{name}"))
+            for name in step_names
+        )
+        if has_dockerfile:
+            continue
+
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if result.returncode != 0:
+            errors.append(f"Docker image '{image}' not found (used by steps: {', '.join(step_names)})")
+
+    # Check verify command tools exist in their respective images
+    for step in pipeline.steps:
+        if not step.verify:
+            continue
+        image = step.image if step.image != DEFAULTS["image"] else docker_image
+        dockerfile = os.path.join(workspace, ".nightshift", f"Dockerfile.{step.name}")
+        if os.path.exists(dockerfile):
+            image = f"claude-runner-{step.name}"
+        # Skip tool check if image doesn't exist yet (already reported above)
+        img_check = subprocess.run(
+            ["docker", "image", "inspect", image],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if img_check.returncode != 0:
+            continue
+        # Extract the first command from the verify string
+        verify_stripped = step.verify.strip()
+        # Handle "cd /workspace && cmd ..." pattern
+        if "&&" in verify_stripped:
+            verify_stripped = verify_stripped.split("&&")[-1].strip()
+        first_word = verify_stripped.split()[0] if verify_stripped else ""
+        if first_word:
+            result = subprocess.run(
+                ["docker", "run", "--rm", "--entrypoint", "sh", image, "-c", f"command -v {first_word}"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            if result.returncode != 0:
+                errors.append(f"Step '{step.name}' verify uses '{first_word}' but it's not in image '{image}'")
+
+    if errors:
+        print("nightshift: preflight failed:", file=sys.stderr)
+        for e in errors:
+            print(f"  - {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print("nightshift: preflight passed")
+
+
 def build_image(step: StepConfig, workspace: str) -> None:
     """Build per-step Docker image if Dockerfile.{step.name} exists."""
     dockerfile = os.path.join(workspace, ".nightshift", f"Dockerfile.{step.name}")
@@ -501,6 +578,9 @@ def run_pipeline(
 
     # Ensure .nightshift directory exists
     nightshift_dir.mkdir(exist_ok=True)
+
+    # Validate prerequisites before starting
+    preflight(pipeline, workspace, docker_volume, docker_image)
 
     print(f"nightshift: pipeline '{pipeline.name}' with {len(pipeline.steps)} steps")
     print(f"nightshift: workspace={workspace}")
