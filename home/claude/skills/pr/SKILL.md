@@ -43,7 +43,11 @@ else if ahead: Bash(git push)
 existing = Bash(gh pr view --json url,state -q '.url' 2>/dev/null)
 if existing: show URL, ask update or stop
 
-title, body = generate from diff and log
+// Load PR template if available
+template = Glob("**/.github/pull_request_template.md") or Glob("**/PULL_REQUEST_TEMPLATE.md")
+if template: template_content = Read(template)
+
+title, body = generate from diff and log, using template_content as body structure if available
 confirm with user: title, body, base branch, draft status
 Bash(gh pr create --title "<title>" --body "$(cat <<'EOF' ... EOF)" --draft)
 show PR URL
@@ -70,7 +74,7 @@ if mechanical: offer to fix, Skill(commit), Bash(git push)
 
 - **Draft by default.** Always pass `--draft`. Omit only when user says "no draft" or "ready".
 - **Title:** <70 chars, conventional style matching commit prefixes.
-- **Body:** `## Summary` (bullet points) + `## Test plan` (checklist). Keep short: user edits on GitHub where repo template is available.
+- **Body:** Use repo's PR template (`.github/pull_request_template.md`) if it exists. Fill in the template sections from the diff. Fall back to `## Summary` (bullet points) + `## Test plan` (checklist) if no template found.
 - **HEREDOC for body.** Preserves formatting:
   ```
   gh pr create --title "<title>" --body "$(cat <<'EOF'
