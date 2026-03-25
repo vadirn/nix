@@ -236,19 +236,16 @@
         "static.crates.io",
         "registry.npmjs.org",
         "pypi.org",
-        "files.pythonhosted.org"
+        "files.pythonhosted.org",
+        "api.doppler.com",
+        "cli.doppler.com",
+        "generativelanguage.googleapis.com"
       ],
       "allowManagedDomainsOnly": false,
       "allowAllUnixSockets": true
     },
     "filesystem": {
-      "allowWrite": [
-        "~/.agent-browser",
-        "~/.cache",
-        "~/.docker",
-        "~/Documents/vault",
-        "$TMPDIR"
-      ]
+      "allowWrite": ["~/.agent-browser", "~/.cache", "~/.docker", "~/Documents/vault", "$TMPDIR"]
     },
     "enableWeakerNetworkIsolation": true
   },
