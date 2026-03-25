@@ -9,6 +9,7 @@ inside Docker containers, and manages checkpoints between rounds.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -198,14 +199,21 @@ def run_round(
         "-p", prompt,
         "--dangerously-skip-permissions",
         "--model", step.model,
+        "--output-format", "stream-json",
+        "--verbose",
     ])
 
     if step.agent:
         cmd.extend(["--agent", step.agent])
 
-    # Start container in its own process group so signals don't propagate.
-    proc = subprocess.Popen(cmd, start_new_session=True)
-    proc.wait()
+    # Log tool calls to .overnight/tool-calls.jsonl
+    log_path = os.path.join(workspace, ".overnight", "tool-calls.jsonl")
+    with open(log_path, "a") as log_file:
+        marker = json.dumps({"type": "round_start", "step": step.name, "round": round_number, "ts": timestamp})
+        log_file.write(marker + "\n")
+        log_file.flush()
+        proc = subprocess.Popen(cmd, stdout=log_file, start_new_session=True)
+        proc.wait()
     checkpoint_path = os.path.join(workspace, ".overnight", checkpoint_filename)
 
     return checkpoint_path, proc.returncode
