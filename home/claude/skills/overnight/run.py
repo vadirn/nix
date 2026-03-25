@@ -209,7 +209,7 @@ def run_round(
     # Log tool calls to .overnight/tool-calls.jsonl
     log_path = os.path.join(workspace, ".overnight", "tool-calls.jsonl")
     with open(log_path, "a") as log_file:
-        marker = json.dumps({"type": "round_start", "step": step.name, "round": round_number, "ts": timestamp})
+        marker = json.dumps({"type": "round_start", "step": step.name, "round": round_number, "ts": datetime.now().isoformat()})
         log_file.write(marker + "\n")
         log_file.flush()
         proc = subprocess.Popen(cmd, stdout=log_file, start_new_session=True)
