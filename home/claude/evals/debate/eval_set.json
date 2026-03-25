@@ -82,5 +82,13 @@
   {
     "query": "here's my plan for splitting the monorepo — tear it apart",
     "should_trigger": false
+  },
+  {
+    "query": "design the CLI interface for this tool — show me different approaches",
+    "should_trigger": false
+  },
+  {
+    "query": "give me 3 radically different data model options",
+    "should_trigger": false
   }
 ]

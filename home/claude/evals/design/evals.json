@@ -1,0 +1,73 @@
+{
+  "evals": [
+    {
+      "id": "cli-interface",
+      "prompt_with_skill": "/design Design the CLI interface for a file sync tool that watches local directories and syncs changes to S3. Supports multiple profiles, ignore patterns, and dry-run mode.",
+      "prompt_without_skill": "Design the CLI interface for a file sync tool that watches local directories and syncs changes to S3. Supports multiple profiles, ignore patterns, and dry-run mode. Generate at least 3 radically different designs, each with a different design constraint. Show interface signatures, usage examples, and tradeoffs for each. Then compare them and recommend which to use.",
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has at least 3 design sections", "type": "min_designs", "expected": 3 },
+          { "id": "S2", "check": "Each design has a distinct constraint or approach label", "type": "designs_differ" },
+          { "id": "S3", "check": "Each design shows interface signature or schema", "type": "has_signatures" },
+          { "id": "S4", "check": "Each design includes a usage example", "type": "has_usage" },
+          { "id": "S5", "check": "Each design names its tradeoffs", "type": "has_tradeoffs" },
+          { "id": "S6", "check": "Has a comparison section", "type": "has_comparison" },
+          { "id": "S7", "check": "Has a synthesis or recommendation section", "type": "has_synthesis" },
+          { "id": "S8", "check": "Word count between 800 and 4000", "type": "word_range", "min": 800, "max": 4000 }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Covers watch/sync functionality", "type": "contains_any", "patterns": ["watch", "sync", "monitor", "daemon"] },
+          { "id": "E2", "check": "Covers profile management", "type": "contains_any", "patterns": ["profile", "config", "--profile", "named config"] },
+          { "id": "E3", "check": "Covers ignore patterns", "type": "contains_any", "patterns": ["ignore", "exclude", "filter", ".syncignore", "glob"] },
+          { "id": "E4", "check": "Covers dry-run", "type": "contains_any", "patterns": ["dry-run", "dry run", "--dry", "preview", "what-if"] }
+        ]
+      }
+    },
+    {
+      "id": "data-model",
+      "prompt_with_skill": "/design Design the data model for a multi-tenant task management system. Tenants have workspaces, workspaces have projects, projects have tasks. Tasks support assignments, labels, due dates, and custom fields.",
+      "prompt_without_skill": "Design the data model for a multi-tenant task management system. Tenants have workspaces, workspaces have projects, projects have tasks. Tasks support assignments, labels, due dates, and custom fields. Generate at least 3 radically different designs (e.g., relational, document-oriented, event-sourced). Show schema, usage examples, and tradeoffs for each. Then compare them and recommend which to use.",
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has at least 3 design sections", "type": "min_designs", "expected": 3 },
+          { "id": "S2", "check": "Each design has a distinct constraint or approach label", "type": "designs_differ" },
+          { "id": "S3", "check": "Each design shows interface signature or schema", "type": "has_signatures" },
+          { "id": "S4", "check": "Each design includes a usage example", "type": "has_usage" },
+          { "id": "S5", "check": "Each design names its tradeoffs", "type": "has_tradeoffs" },
+          { "id": "S6", "check": "Has a comparison section", "type": "has_comparison" },
+          { "id": "S7", "check": "Has a synthesis or recommendation section", "type": "has_synthesis" },
+          { "id": "S8", "check": "Word count between 800 and 4000", "type": "word_range", "min": 800, "max": 4000 }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Covers multi-tenancy isolation", "type": "contains_any", "patterns": ["tenant", "isolation", "multi-tenant", "tenant_id", "row-level"] },
+          { "id": "E2", "check": "Covers custom fields", "type": "contains_any", "patterns": ["custom field", "dynamic field", "EAV", "JSONB", "schemaless", "flexible schema"] },
+          { "id": "E3", "check": "Covers query patterns", "type": "contains_any", "patterns": ["query", "index", "lookup", "filter", "search", "read path"] },
+          { "id": "E4", "check": "Designs are architecturally different", "type": "contains_any", "patterns": ["relational", "document", "event", "graph", "normalized", "denormalized", "NoSQL"] }
+        ]
+      }
+    },
+    {
+      "id": "config-format",
+      "prompt_with_skill": "/design Design the configuration format for an autonomous pipeline runner. Pipelines have steps with prompts, acceptance criteria, model selection, retry policies, and skill dependencies. Steps can depend on other steps.",
+      "prompt_without_skill": "Design the configuration format for an autonomous pipeline runner. Pipelines have steps with prompts, acceptance criteria, model selection, retry policies, and skill dependencies. Steps can depend on other steps. Generate at least 3 radically different configuration designs. Show schema, usage examples, and tradeoffs for each. Then compare them and recommend which to use.",
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has at least 3 design sections", "type": "min_designs", "expected": 3 },
+          { "id": "S2", "check": "Each design has a distinct constraint or approach label", "type": "designs_differ" },
+          { "id": "S3", "check": "Each design shows interface signature or schema", "type": "has_signatures" },
+          { "id": "S4", "check": "Each design includes a usage example", "type": "has_usage" },
+          { "id": "S5", "check": "Each design names its tradeoffs", "type": "has_tradeoffs" },
+          { "id": "S6", "check": "Has a comparison section", "type": "has_comparison" },
+          { "id": "S7", "check": "Has a synthesis or recommendation section", "type": "has_synthesis" },
+          { "id": "S8", "check": "Word count between 800 and 4000", "type": "word_range", "min": 800, "max": 4000 }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Covers step dependencies", "type": "contains_any", "patterns": ["depends_on", "dependency", "DAG", "prerequisite", "depends on", "after"] },
+          { "id": "E2", "check": "Covers retry/failure handling", "type": "contains_any", "patterns": ["retry", "on_fail", "failure", "max_retries", "backoff"] },
+          { "id": "E3", "check": "Covers acceptance criteria", "type": "contains_any", "patterns": ["accept", "criteria", "verify", "validation", "condition"] },
+          { "id": "E4", "check": "Shows concrete config examples", "type": "contains_any", "patterns": ["yaml", "json", "toml", "name:", "steps:", "pipeline"] }
+        ]
+      }
+    }
+  ]
+}
