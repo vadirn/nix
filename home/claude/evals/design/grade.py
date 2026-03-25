@@ -71,7 +71,7 @@ def check_per_design(text: str, check_type: str) -> tuple[bool, str]:
 def check_comparison(text: str) -> tuple[bool, str]:
     """Check for a comparison section."""
     patterns = [
-        r'(?i)##\s+comparison',
+        r'(?i)##\s+(?:design\s+)?comparison',
         r'(?i)##\s+comparing',
         r'(?i)##\s+analysis',
         r'(?i)##\s+evaluation',
