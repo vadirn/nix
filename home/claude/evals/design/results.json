@@ -1,0 +1,503 @@
+[
+  {
+    "eval_id": "cli-interface",
+    "results": {
+      "with_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has at least 3 design sections",
+            "passed": true,
+            "detail": "found 4, expected >= 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each design has a distinct constraint or approach label",
+            "passed": true,
+            "detail": "4 distinct design headers"
+          },
+          {
+            "id": "S3",
+            "check": "Each design shows interface signature or schema",
+            "passed": true,
+            "detail": "4/4 designs have signature/schema"
+          },
+          {
+            "id": "S4",
+            "check": "Each design includes a usage example",
+            "passed": true,
+            "detail": "4/4 designs have usage example"
+          },
+          {
+            "id": "S5",
+            "check": "Each design names its tradeoffs",
+            "passed": true,
+            "detail": "4/4 designs have tradeoffs"
+          },
+          {
+            "id": "S6",
+            "check": "Has a comparison section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+(?:design\\s+)?comparison"
+          },
+          {
+            "id": "S7",
+            "check": "Has a synthesis or recommendation section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+synthesis"
+          },
+          {
+            "id": "S8",
+            "check": "Word count between 800 and 4000",
+            "passed": true,
+            "detail": "888 words, expected 800-4000"
+          },
+          {
+            "id": "E1",
+            "check": "Covers watch/sync functionality",
+            "passed": true,
+            "detail": "found: watch, sync, monitor"
+          },
+          {
+            "id": "E2",
+            "check": "Covers profile management",
+            "passed": true,
+            "detail": "found: profile, config, --profile"
+          },
+          {
+            "id": "E3",
+            "check": "Covers ignore patterns",
+            "passed": true,
+            "detail": "found: ignore"
+          },
+          {
+            "id": "E4",
+            "check": "Covers dry-run",
+            "passed": true,
+            "detail": "found: dry-run, --dry, preview"
+          }
+        ],
+        "pass": 12,
+        "fail": 0,
+        "total": 12,
+        "score": "12/12",
+        "word_count": 888
+      },
+      "without_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has at least 3 design sections",
+            "passed": true,
+            "detail": "found 4, expected >= 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each design has a distinct constraint or approach label",
+            "passed": true,
+            "detail": "4 distinct design headers"
+          },
+          {
+            "id": "S3",
+            "check": "Each design shows interface signature or schema",
+            "passed": true,
+            "detail": "4/4 designs have signature/schema"
+          },
+          {
+            "id": "S4",
+            "check": "Each design includes a usage example",
+            "passed": true,
+            "detail": "4/4 designs have usage example"
+          },
+          {
+            "id": "S5",
+            "check": "Each design names its tradeoffs",
+            "passed": true,
+            "detail": "4/4 designs have tradeoffs"
+          },
+          {
+            "id": "S6",
+            "check": "Has a comparison section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+(?:design\\s+)?comparison"
+          },
+          {
+            "id": "S7",
+            "check": "Has a synthesis or recommendation section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+recommend"
+          },
+          {
+            "id": "S8",
+            "check": "Word count between 800 and 4000",
+            "passed": true,
+            "detail": "856 words, expected 800-4000"
+          },
+          {
+            "id": "E1",
+            "check": "Covers watch/sync functionality",
+            "passed": true,
+            "detail": "found: watch, sync, monitor, daemon"
+          },
+          {
+            "id": "E2",
+            "check": "Covers profile management",
+            "passed": true,
+            "detail": "found: profile, config, --profile"
+          },
+          {
+            "id": "E3",
+            "check": "Covers ignore patterns",
+            "passed": true,
+            "detail": "found: ignore, filter, glob"
+          },
+          {
+            "id": "E4",
+            "check": "Covers dry-run",
+            "passed": true,
+            "detail": "found: dry-run, --dry"
+          }
+        ],
+        "pass": 12,
+        "fail": 0,
+        "total": 12,
+        "score": "12/12",
+        "word_count": 856
+      }
+    }
+  },
+  {
+    "eval_id": "data-model",
+    "results": {
+      "with_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has at least 3 design sections",
+            "passed": true,
+            "detail": "found 4, expected >= 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each design has a distinct constraint or approach label",
+            "passed": true,
+            "detail": "4 distinct design headers"
+          },
+          {
+            "id": "S3",
+            "check": "Each design shows interface signature or schema",
+            "passed": true,
+            "detail": "4/4 designs have signature/schema"
+          },
+          {
+            "id": "S4",
+            "check": "Each design includes a usage example",
+            "passed": true,
+            "detail": "4/4 designs have usage example"
+          },
+          {
+            "id": "S5",
+            "check": "Each design names its tradeoffs",
+            "passed": true,
+            "detail": "4/4 designs have tradeoffs"
+          },
+          {
+            "id": "S6",
+            "check": "Has a comparison section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+(?:design\\s+)?comparison"
+          },
+          {
+            "id": "S7",
+            "check": "Has a synthesis or recommendation section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+synthesis"
+          },
+          {
+            "id": "S8",
+            "check": "Word count between 800 and 4000",
+            "passed": true,
+            "detail": "2017 words, expected 800-4000"
+          },
+          {
+            "id": "E1",
+            "check": "Covers multi-tenancy isolation",
+            "passed": true,
+            "detail": "found: tenant, isolation, multi-tenant, tenant_id"
+          },
+          {
+            "id": "E2",
+            "check": "Covers custom fields",
+            "passed": true,
+            "detail": "found: custom field, EAV, JSONB"
+          },
+          {
+            "id": "E3",
+            "check": "Covers query patterns",
+            "passed": true,
+            "detail": "found: query, index, lookup, filter"
+          },
+          {
+            "id": "E4",
+            "check": "Designs are architecturally different",
+            "passed": true,
+            "detail": "found: document, event, normalized, denormalized"
+          }
+        ],
+        "pass": 12,
+        "fail": 0,
+        "total": 12,
+        "score": "12/12",
+        "word_count": 2017
+      },
+      "without_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has at least 3 design sections",
+            "passed": true,
+            "detail": "found 3, expected >= 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each design has a distinct constraint or approach label",
+            "passed": true,
+            "detail": "3 distinct design headers"
+          },
+          {
+            "id": "S3",
+            "check": "Each design shows interface signature or schema",
+            "passed": true,
+            "detail": "3/3 designs have signature/schema"
+          },
+          {
+            "id": "S4",
+            "check": "Each design includes a usage example",
+            "passed": true,
+            "detail": "3/3 designs have usage example"
+          },
+          {
+            "id": "S5",
+            "check": "Each design names its tradeoffs",
+            "passed": true,
+            "detail": "3/3 designs have tradeoffs"
+          },
+          {
+            "id": "S6",
+            "check": "Has a comparison section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+(?:design\\s+)?comparison"
+          },
+          {
+            "id": "S7",
+            "check": "Has a synthesis or recommendation section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+recommend"
+          },
+          {
+            "id": "S8",
+            "check": "Word count between 800 and 4000",
+            "passed": true,
+            "detail": "1069 words, expected 800-4000"
+          },
+          {
+            "id": "E1",
+            "check": "Covers multi-tenancy isolation",
+            "passed": true,
+            "detail": "found: tenant, isolation, multi-tenant, tenant_id"
+          },
+          {
+            "id": "E2",
+            "check": "Covers custom fields",
+            "passed": true,
+            "detail": "found: custom field, EAV, JSONB, flexible schema"
+          },
+          {
+            "id": "E3",
+            "check": "Covers query patterns",
+            "passed": true,
+            "detail": "found: query, index, filter"
+          },
+          {
+            "id": "E4",
+            "check": "Designs are architecturally different",
+            "passed": true,
+            "detail": "found: relational, document, event, normalized, denormalized, NoSQL"
+          }
+        ],
+        "pass": 12,
+        "fail": 0,
+        "total": 12,
+        "score": "12/12",
+        "word_count": 1069
+      }
+    }
+  },
+  {
+    "eval_id": "config-format",
+    "results": {
+      "with_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has at least 3 design sections",
+            "passed": true,
+            "detail": "found 4, expected >= 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each design has a distinct constraint or approach label",
+            "passed": true,
+            "detail": "4 distinct design headers"
+          },
+          {
+            "id": "S3",
+            "check": "Each design shows interface signature or schema",
+            "passed": true,
+            "detail": "4/4 designs have signature/schema"
+          },
+          {
+            "id": "S4",
+            "check": "Each design includes a usage example",
+            "passed": true,
+            "detail": "4/4 designs have usage example"
+          },
+          {
+            "id": "S5",
+            "check": "Each design names its tradeoffs",
+            "passed": true,
+            "detail": "4/4 designs have tradeoffs"
+          },
+          {
+            "id": "S6",
+            "check": "Has a comparison section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+(?:design\\s+)?comparison"
+          },
+          {
+            "id": "S7",
+            "check": "Has a synthesis or recommendation section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+synthesis"
+          },
+          {
+            "id": "S8",
+            "check": "Word count between 800 and 4000",
+            "passed": true,
+            "detail": "2123 words, expected 800-4000"
+          },
+          {
+            "id": "E1",
+            "check": "Covers step dependencies",
+            "passed": true,
+            "detail": "found: depends_on, dependency, prerequisite"
+          },
+          {
+            "id": "E2",
+            "check": "Covers retry/failure handling",
+            "passed": true,
+            "detail": "found: retry, on_fail, failure, max_retries, backoff"
+          },
+          {
+            "id": "E3",
+            "check": "Covers acceptance criteria",
+            "passed": true,
+            "detail": "found: accept, criteria, verify, validation, condition"
+          },
+          {
+            "id": "E4",
+            "check": "Shows concrete config examples",
+            "passed": true,
+            "detail": "found: yaml, json, name:, steps:, pipeline"
+          }
+        ],
+        "pass": 12,
+        "fail": 0,
+        "total": 12,
+        "score": "12/12",
+        "word_count": 2123
+      },
+      "without_skill": {
+        "checks": [
+          {
+            "id": "S1",
+            "check": "Has at least 3 design sections",
+            "passed": true,
+            "detail": "found 3, expected >= 3"
+          },
+          {
+            "id": "S2",
+            "check": "Each design has a distinct constraint or approach label",
+            "passed": true,
+            "detail": "3 distinct design headers"
+          },
+          {
+            "id": "S3",
+            "check": "Each design shows interface signature or schema",
+            "passed": true,
+            "detail": "3/3 designs have signature/schema"
+          },
+          {
+            "id": "S4",
+            "check": "Each design includes a usage example",
+            "passed": true,
+            "detail": "3/3 designs have usage example"
+          },
+          {
+            "id": "S5",
+            "check": "Each design names its tradeoffs",
+            "passed": true,
+            "detail": "3/3 designs have tradeoffs"
+          },
+          {
+            "id": "S6",
+            "check": "Has a comparison section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+(?:design\\s+)?comparison"
+          },
+          {
+            "id": "S7",
+            "check": "Has a synthesis or recommendation section",
+            "passed": true,
+            "detail": "matched: (?i)##\\s+recommend"
+          },
+          {
+            "id": "S8",
+            "check": "Word count between 800 and 4000",
+            "passed": true,
+            "detail": "1026 words, expected 800-4000"
+          },
+          {
+            "id": "E1",
+            "check": "Covers step dependencies",
+            "passed": true,
+            "detail": "found: depends_on"
+          },
+          {
+            "id": "E2",
+            "check": "Covers retry/failure handling",
+            "passed": true,
+            "detail": "found: retry, on_fail, failure, backoff"
+          },
+          {
+            "id": "E3",
+            "check": "Covers acceptance criteria",
+            "passed": true,
+            "detail": "found: accept, verify, validation, condition"
+          },
+          {
+            "id": "E4",
+            "check": "Shows concrete config examples",
+            "passed": true,
+            "detail": "found: yaml, json, name:, steps:, pipeline"
+          }
+        ],
+        "pass": 12,
+        "fail": 0,
+        "total": 12,
+        "score": "12/12",
+        "word_count": 1026
+      }
+    }
+  }
+]
