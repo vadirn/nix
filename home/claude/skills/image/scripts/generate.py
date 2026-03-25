@@ -3,6 +3,7 @@
 # dependencies = [
 #     "google-genai>=1.0.0",
 #     "Pillow>=10.0.0",
+#     "socksio>=1.0.0",
 # ]
 # ///
 """Generate or edit images via Gemini API."""
@@ -19,27 +20,24 @@ from PIL import Image
 
 ASPECT_RATIOS = [
     "1:1",
+    "1:2",
+    "1:3",
+    "1:4",
+    "1:8",
     "2:3",
     "3:2",
     "3:4",
+    "4:1",
     "4:3",
-    "9:16",
-    "16:9",
-    "2:1",
-    "1:2",
     "4:5",
     "5:4",
-    "3:1",
-    "1:3",
-    "9:21",
+    "8:1",
+    "9:16",
+    "16:9",
+    "21:9",
 ]
 
-SIZE_MAP = {
-    "512px": "512x512",
-    "1K": "1024x1024",
-    "2K": "2048x2048",
-    "4K": "4096x4096",
-}
+SIZES = ["512", "1K", "2K", "4K"]
 
 
 def parse_args():
@@ -60,7 +58,7 @@ def parse_args():
     p.add_argument(
         "--size",
         default="1K",
-        choices=list(SIZE_MAP.keys()),
+        choices=SIZES,
         help="Output size (default: 1K)",
     )
     p.add_argument(
@@ -79,7 +77,8 @@ def main():
         print("Error: GEMINI_API_KEY not set", file=sys.stderr)
         sys.exit(1)
 
-    output_path = args.output or f"/tmp/image-{int(time.time())}.png"
+    tmpdir = os.environ.get("TMPDIR", "/tmp/claude")
+    output_path = args.output or os.path.join(tmpdir, f"image-{int(time.time())}.png")
 
     client = genai.Client(api_key=api_key)
 
@@ -102,7 +101,7 @@ def main():
     # image_config only for generation (not editing)
     if not args.image:
         generate_config["image_config"] = types.ImageConfig(
-            image_size=SIZE_MAP[args.size],
+            image_size=args.size,
             aspect_ratio=args.aspect_ratio,
         )
 

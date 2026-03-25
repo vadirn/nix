@@ -28,13 +28,13 @@ Read(image_path)  // show the result
 
 ### Script options
 
-| Flag             | Default                          | Values                                                                                              |
-| ---------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `--aspect-ratio` | `1:1`                            | `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `9:16`, `16:9`, `2:1`, `1:2`, `4:5`, `5:4`, `3:1`, `1:3`, `9:21` |
-| `--size`         | `1K`                             | `512px`, `1K`, `2K`, `4K`                                                                           |
-| `--model`        | `gemini-3.1-flash-image-preview` | Any Gemini model with image output                                                                  |
-| `--image`        | None                             | Input image path (triggers edit mode)                                                               |
-| `--output`       | `/tmp/image-<ts>.png`            | Custom output path                                                                                  |
+| Flag             | Default                          | Values                                                                                                            |
+| ---------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `--aspect-ratio` | `1:1`                            | `1:1`, `1:2`, `1:3`, `1:4`, `1:8`, `2:3`, `3:2`, `3:4`, `4:1`, `4:3`, `4:5`, `5:4`, `8:1`, `9:16`, `16:9`, `21:9` |
+| `--size`         | `1K`                             | `512`, `1K`, `2K`, `4K`                                                                                           |
+| `--model`        | `gemini-3.1-flash-image-preview` | Any Gemini model with image output                                                                                |
+| `--image`        | None                             | Input image path (triggers edit mode)                                                                             |
+| `--output`       | `$TMPDIR/image-<ts>.png`         | Custom output path                                                                                                |
 
 ### Prompt expansion
 
