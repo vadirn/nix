@@ -222,6 +222,12 @@
     "allowUnsandboxedCommands": false,
     "network": {
       "allowedDomains": [
+        "api.anthropic.com",
+        "mcp-proxy.anthropic.com",
+        "downloads.claude.ai",
+        "raw.githubusercontent.com",
+        "browser-intake-datadoghq.com",
+        "http-intake.logs.datadoghq.com",
         "api.firecrawl.dev",
         "github.com",
         "api.github.com",
