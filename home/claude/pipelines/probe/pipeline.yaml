@@ -1,0 +1,44 @@
+name: probe-bench
+
+defaults:
+  model: claude-sonnet-4-20250514
+  image: claude-runner-probe
+  max_rounds: 1
+  wait: 10
+  resolve_questions: false
+
+steps:
+  - name: bench
+    prompt: |
+      You are benchmarking the probe skill. Read the eval cases from
+      home/claude/evals/probe/evals.json.
+
+      For each eval case, run both variants:
+
+      **with_skill variant:**
+      1. Record the start time.
+      2. Execute the prompt_with_skill field (invoke /probe with the plan text).
+      3. Record the end time.
+      4. Save the full output to home/claude/evals/probe/iteration-1/{id}/with_skill/outputs/probe.md
+         Save ONLY the probe output, no commentary.
+      5. Save timing to home/claude/evals/probe/iteration-1/{id}/with_skill/outputs/probe.meta.json
+
+      **without_skill variant:**
+      1. Record the start time.
+      2. Execute the prompt_without_skill field (plain text prompt, no skill invocation).
+      3. Record the end time.
+      4. Save the full output to home/claude/evals/probe/iteration-1/{id}/without_skill/outputs/probe.md
+      5. Save timing to home/claude/evals/probe/iteration-1/{id}/without_skill/outputs/probe.meta.json
+
+      Create all directories as needed. Process all 3 eval cases (6 total runs).
+
+      Use the bench skill for measuring elapsed time per case.
+    accept: |
+      - All 6 output files exist (3 evals x 2 variants)
+      - All 6 meta.json files exist with elapsed_seconds
+      - Each output file contains only the probe output
+    skills: [probe, bench]
+    verify: |
+      cd /workspace && python3 home/claude/evals/probe/grade.py
+    on_fail: retry
+    max_retries: 1

@@ -1,0 +1,61 @@
+{
+  "evals": [
+    {
+      "id": "cache-layer",
+      "prompt_with_skill": "/probe Add a Redis caching layer to our API. Cache GET responses with 5-minute TTL, invalidate on writes. Use Redis Cluster for HA.",
+      "prompt_without_skill": "I'm planning to add a Redis caching layer to our API. Cache GET responses with 5-minute TTL, invalidate on writes. Use Redis Cluster for HA. Walk through every aspect of this plan and find weaknesses. For each question, provide your recommended answer.",
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has at least 5 questions", "type": "min_questions", "expected": 5 },
+          { "id": "S2", "check": "Each question has a recommended answer", "type": "answers_present" },
+          { "id": "S3", "check": "Has a summary or resolution section", "type": "has_summary" },
+          { "id": "S4", "check": "Word count between 500 and 3000", "type": "word_range", "min": 500, "max": 3000 }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Covers cache invalidation strategy", "type": "contains_any", "patterns": ["invalidat", "stale", "dirty", "bust"] },
+          { "id": "E2", "check": "Covers failure modes", "type": "contains_any", "patterns": ["failover", "fallback", "unavailable", "down", "failure"] },
+          { "id": "E3", "check": "Covers cache key design", "type": "contains_any", "patterns": ["key design", "key schema", "key pattern", "cache key", "key space"] },
+          { "id": "E4", "check": "Covers consistency", "type": "contains_any", "patterns": ["consistent", "consistency", "stale read", "race condition", "thundering herd"] }
+        ]
+      }
+    },
+    {
+      "id": "auth-migration",
+      "prompt_with_skill": "/probe Migrate from session-based auth to JWT. Issue short-lived access tokens (15min) with refresh tokens (7d). Store refresh tokens in httpOnly cookies.",
+      "prompt_without_skill": "I'm planning to migrate from session-based auth to JWT. Issue short-lived access tokens (15min) with refresh tokens (7d). Store refresh tokens in httpOnly cookies. Walk through every aspect of this plan and find weaknesses. For each question, provide your recommended answer.",
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has at least 5 questions", "type": "min_questions", "expected": 5 },
+          { "id": "S2", "check": "Each question has a recommended answer", "type": "answers_present" },
+          { "id": "S3", "check": "Has a summary or resolution section", "type": "has_summary" },
+          { "id": "S4", "check": "Word count between 500 and 3000", "type": "word_range", "min": 500, "max": 3000 }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Covers token revocation", "type": "contains_any", "patterns": ["revok", "revocation", "blocklist", "blacklist", "invalidate token"] },
+          { "id": "E2", "check": "Covers migration rollout", "type": "contains_any", "patterns": ["rollout", "migration path", "backward compat", "dual auth", "gradual", "cutover"] },
+          { "id": "E3", "check": "Covers security implications", "type": "contains_any", "patterns": ["XSS", "CSRF", "token theft", "replay", "secret rotation", "signing key"] },
+          { "id": "E4", "check": "Covers refresh flow edge cases", "type": "contains_any", "patterns": ["refresh rotation", "token reuse", "concurrent refresh", "expired refresh", "refresh race"] }
+        ]
+      }
+    },
+    {
+      "id": "monorepo-split",
+      "prompt_with_skill": "/probe Split our monorepo into 4 separate repos: frontend, backend-api, shared-libs, infra. Use git filter-branch to preserve history. Publish shared-libs as npm packages.",
+      "prompt_without_skill": "I'm planning to split our monorepo into 4 separate repos: frontend, backend-api, shared-libs, infra. Use git filter-branch to preserve history. Publish shared-libs as npm packages. Walk through every aspect of this plan and find weaknesses. For each question, provide your recommended answer.",
+      "assertions": {
+        "structural": [
+          { "id": "S1", "check": "Has at least 5 questions", "type": "min_questions", "expected": 5 },
+          { "id": "S2", "check": "Each question has a recommended answer", "type": "answers_present" },
+          { "id": "S3", "check": "Has a summary or resolution section", "type": "has_summary" },
+          { "id": "S4", "check": "Word count between 500 and 3000", "type": "word_range", "min": 500, "max": 3000 }
+        ],
+        "eval_specific": [
+          { "id": "E1", "check": "Covers shared code dependency management", "type": "contains_any", "patterns": ["versioning", "semver", "dependency graph", "diamond dependency", "shared-libs version"] },
+          { "id": "E2", "check": "Covers CI/CD changes", "type": "contains_any", "patterns": ["CI", "pipeline", "build", "deploy", "CD"] },
+          { "id": "E3", "check": "Covers developer workflow impact", "type": "contains_any", "patterns": ["developer experience", "DX", "local dev", "cross-repo", "workflow", "inner loop"] },
+          { "id": "E4", "check": "Questions git filter-branch choice", "type": "contains_any", "patterns": ["filter-repo", "filter-branch", "history rewrite", "subtree", "git-filter"] }
+        ]
+      }
+    }
+  ]
+}

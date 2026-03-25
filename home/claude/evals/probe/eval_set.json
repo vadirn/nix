@@ -1,0 +1,78 @@
+[
+  {
+    "query": "probe this migration plan — what am I missing?",
+    "should_trigger": true
+  },
+  {
+    "query": "stress-test my design before I start implementing",
+    "should_trigger": true
+  },
+  {
+    "query": "poke holes in this architecture proposal",
+    "should_trigger": true
+  },
+  {
+    "query": "what are the weak points in my caching strategy?",
+    "should_trigger": true
+  },
+  {
+    "query": "challenge my approach to this auth rewrite",
+    "should_trigger": true
+  },
+  {
+    "query": "grill me on this API design",
+    "should_trigger": true
+  },
+  {
+    "query": "find weaknesses in this deployment plan",
+    "should_trigger": true
+  },
+  {
+    "query": "I have a plan for splitting the monorepo — tear it apart",
+    "should_trigger": true
+  },
+  {
+    "query": "here's my proposal for the new queue system, what could go wrong?",
+    "should_trigger": true
+  },
+  {
+    "query": "argue both sides: is microservices really better than a monolith?",
+    "should_trigger": false
+  },
+  {
+    "query": "pros and cons of GraphQL vs REST for this API",
+    "should_trigger": false
+  },
+  {
+    "query": "play devil's advocate — convince me we shouldn't rewrite this in Rust",
+    "should_trigger": false
+  },
+  {
+    "query": "is TDD really worth the overhead? Give me arguments for and against",
+    "should_trigger": false
+  },
+  {
+    "query": "review this PR and tell me if the approach is good",
+    "should_trigger": false
+  },
+  {
+    "query": "explain how the auth middleware works",
+    "should_trigger": false
+  },
+  {
+    "query": "fix the failing test in the cache module",
+    "should_trigger": false
+  },
+  {
+    "query": "what do you think about using Redis here?",
+    "should_trigger": false
+  },
+  {
+    "query": "write a proposal for migrating to Kubernetes",
+    "should_trigger": false
+  },
+  {
+    "query": "help me decide between React and Vue",
+    "should_trigger": false
+  }
+]

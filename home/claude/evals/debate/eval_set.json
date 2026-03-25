@@ -66,5 +66,21 @@
   {
     "query": "summarize the key points from this architecture document",
     "should_trigger": false
+  },
+  {
+    "query": "probe this migration plan — what am I missing?",
+    "should_trigger": false
+  },
+  {
+    "query": "stress-test my design before I start implementing",
+    "should_trigger": false
+  },
+  {
+    "query": "poke holes in this architecture proposal",
+    "should_trigger": false
+  },
+  {
+    "query": "here's my plan for splitting the monorepo — tear it apart",
+    "should_trigger": false
   }
 ]
