@@ -9,11 +9,11 @@ week_file = already read by SKILL.md
 action = do("parse user intent: add task, complete task, move from backlog, update projects, mark sleep, or general update")
 
 if action == "add task":
-    Edit(week_file) — append "- [ ] {task} [[project]]" to ## Tasks
+    Edit(week_file) — append "- [ ] <task> [[project]]" to ## Tasks
 
 elif action == "complete task":
     today = date
-    Edit(week_file) — change "- [ ] {task}" → "- [x] (today) {task}" in ## Tasks
+    Edit(week_file) — change "- [ ] <task>" → "- [x] (today) <task>" in ## Tasks
 
 elif action == "backlog":
     Edit(week_file) — add/remove items in ## Backlog
@@ -33,12 +33,12 @@ else:
 
 ### XP scoring
 
-| Source         | XP               | Logic                                                        |
-| -------------- | ---------------- | ------------------------------------------------------------ |
-| Completed tasks | +1 each         | `- [x]` count in ## Tasks                                    |
-| Backlog tasks   | -1 each         | `- [x]` count in ## Backlog (penalty for completing backlog instead of planned tasks) |
-| Full coverage  | +N (next Monday) | N = projects in ## Projects; all must have a linked `- [x]` task. Bonus lands on Monday of the following week. |
-| Sleep streak   | +1..+7/day       | Consecutive days in `sleep: []` across weekly files. Day 1 → +1, day 2 → +2, ..., day 7+ → +7. |
+| Source          | XP               | Logic                                                                                                          |
+| --------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| Completed tasks | +1 each          | `- [x]` count in ## Tasks                                                                                      |
+| Backlog tasks   | -1 each          | `- [x]` count in ## Backlog (penalty for completing backlog instead of planned tasks)                          |
+| Full coverage   | +N (next Monday) | N = projects in ## Projects; all must have a linked `- [x]` task. Bonus lands on Monday of the following week. |
+| Sleep streak    | +1..+7/day       | Consecutive days in `sleep: []` across weekly files. Day 1 → +1, day 2 → +2, ..., day 7+ → +7.                 |
 
 ### Task format
 

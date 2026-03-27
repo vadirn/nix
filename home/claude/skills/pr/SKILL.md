@@ -88,7 +88,7 @@ if mechanical: offer to fix, Skill(commit), Bash(git push)
 
 - Show 3-5 key error lines per failure, link to full run.
 - **Mechanical failures** (lint/format/types): offer to auto-fix, commit with `fix:` prefix, push.
-- **Semantic failures** (tests/infra): diagnose and explain, don't auto-fix.
+- **Semantic failures** (tests/infra): diagnose and explain only.
 
 ## Rules
 

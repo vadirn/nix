@@ -4,7 +4,7 @@ description: >
   Systematically interrogate a plan or design until every decision branch is resolved.
   Use when user invokes /probe or wants to stress-test a plan, poke holes in a design,
   find weaknesses in a proposal, get grilled on their approach, or asks "what am I missing".
-  Do NOT use for open-ended comparisons (that's debate). Probe requires a concrete plan as input.
+  For open-ended comparisons, use debate instead. Probe requires a concrete plan as input.
 ---
 
 # Probe
@@ -52,10 +52,11 @@ Strong: "When Redis is unreachable, do you fall back to the database (adding lat
 
 ### Recommended answer format
 
-Each question should include a recommended answer. The answer should:
-1. State the recommended choice
-2. Explain why (one sentence)
-3. Name the tradeoff accepted
+Each question includes a recommended answer. The answer:
+
+1. States the recommended choice
+2. Explains why (one sentence)
+3. Names the tradeoff accepted
 
 ### Output structure
 
@@ -81,4 +82,4 @@ Each question should include a recommended answer. The answer should:
 Debate explores open questions from opposing sides ("is X better than Y?").
 Probe interrogates a specific plan the user has committed to ("here's my plan, find the holes").
 
-If the user hasn't committed to a plan and wants to compare options, suggest /debate instead.
+When the user wants to compare options rather than interrogate a chosen plan, suggest /debate instead.

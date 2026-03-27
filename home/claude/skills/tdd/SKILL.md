@@ -29,7 +29,7 @@ Answer these design questions:
 
 - What interfaces change? What functions, methods, or APIs are added or modified?
 - Which behaviors matter most? Prioritize critical paths and complex logic over edge cases.
-- How to design for testability? Functions accept dependencies, return results, avoid side effects.
+- How to design for testability? Functions accept dependencies, return results, isolate side effects at boundaries.
 
 Unfamiliar API or system: write a small PoC (10-line script, learning test) to prove assumptions with running code first. Deterministic feedback replaces probabilistic inference.
 
@@ -37,7 +37,7 @@ Unfamiliar API or system: write a small PoC (10-line script, learning test) to p
 
 ### 3. Skeleton
 
-Write types, interfaces, and function signatures across all files. Run typecheck. Signatures only — no implementation yet.
+Write types, interfaces, and function signatures across all files. Run typecheck. Signatures only; leave bodies empty.
 
 This establishes the shape of the change before any behavior is added.
 
@@ -85,4 +85,4 @@ Each ⏸ stop is a natural save point. If the project uses checkpoints, note the
 
 ## Mocking
 
-Mock at system boundaries only: external APIs, databases, time, filesystem. Keep mocks out of your own code. See [mocking.md](mocking.md) for details.
+Mock at system boundaries only: external APIs, databases, time, filesystem. All internal code uses real implementations. See [mocking.md](mocking.md) for details.

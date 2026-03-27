@@ -48,8 +48,8 @@ else if ahead: Bash(git push)
 - **Tool calls are literal.** `Bash(...)`, `Skill(...)`, `AskUserQuestion(...)` are real instructions.
 - **`do()` for freeform directives.** When the step is "use your judgment", wrap it in `do()`. This distinguishes LLM-directed work from mechanical tool calls.
 - **Variable names carry intent.** `default_branch` not `db`. The model reads these as semantic hints.
-- **No numbered steps.** Sequence is implicit from order.
-- **Comments label sections only.** Never comment-only steps. If a line is only a comment, it should be a section label or it should be rewritten as a call, assignment, or logic.
+- **Sequence from order.** Omit step numbers; line position encodes sequence.
+- **Comments label sections only.** Every line is a call, assignment, or logic. A comment stands alone only as a section label; otherwise rewrite it as a call, assignment, or logic.
 - **Details live in Reference.** The pseudocode block shows WHAT happens and WHEN. The Reference section explains HOW and WHY.
 
 ## Process

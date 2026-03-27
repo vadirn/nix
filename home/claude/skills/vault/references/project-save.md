@@ -33,9 +33,9 @@ Use `vault-query checkpoints --view Incomplete`.
 Get vault root and project path from `vault-query config`.
 `project_wikilink` is derived from the project context (context.md's `Project note: [[...]]` line).
 
-Path: `{vault_root}/{project_path}/checkpoint-{UTC timestamp}.md`
+Path: `<vault_root>/<project_path>/checkpoint-<UTC timestamp>.md`
 UTC timestamp: `YYYY-MM-DD-HH-mm-ss` (use `date -u +%Y-%m-%d-%H-%M-%S`)
-Template: `{vault_root}/templates/Checkpoint.md`
+Template: `<vault_root>/templates/Checkpoint.md`
 
 Frontmatter:
 
@@ -45,7 +45,7 @@ Frontmatter:
 - `project` — `project_wikilink` from context.md
 - `decisions: ["chose X because Y"]` — key decisions this session
 - `frictions: ["had to work around Z"]` — friction points encountered
-Body:
+  Body:
 
 - `## Progress` — what happened (concrete changes, files, code state)
 - `## Next` — remaining work across full breadth (all parts, not just current area)

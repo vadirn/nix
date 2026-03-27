@@ -21,7 +21,7 @@ log = Bash(git log --oneline -5)
 if no changes: tell user "Nothing to commit.", stop
 
 // Analyze changes, pick ONE prefix: feat | fix | chore
-// Stage files selectively (never `git add -A` or `git add .`)
+// Stage files by name (`git add file1 file2`)
 // Skip secrets (.env, credentials, tokens); warn if found
 // If user targets a subset ("commit the refactor"), stage only those
 

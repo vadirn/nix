@@ -2,7 +2,7 @@
 name: checkpoint
 description: >
   Write a structured checkpoint at the end of every overnight round.
-  Produces checkpoint-{timestamp}-{seq}.md with YAML frontmatter
+  Produces checkpoint-<timestamp>-<seq>.md with YAML frontmatter
   and markdown body. Used automatically inside overnight pipeline turns.
 ---
 
@@ -25,8 +25,8 @@ The checkpoint has two parts: YAML frontmatter (machine-readable) and markdown b
 ```markdown
 ---
 status: STEP_IN_PROGRESS
-step: {step name from prompt}
-round: {round number from prompt}
+step: <step name from prompt>
+round: <round number from prompt>
 ---
 
 ## Done
@@ -48,6 +48,7 @@ Concrete next actions, ordered by priority. Each item should be actionable by a 
 ## Open questions
 
 Questions that could not be resolved from the codebase alone. Be specific:
+
 - "Does UserService.validate() check email format or just presence?"
 - "What rate limit does the external payments API enforce?"
 

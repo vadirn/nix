@@ -37,7 +37,7 @@ else:
 
 // Phase 2: Generate designs (parallel sub-agents)
 (parallel) for each constraint in constraints[:count]:
-    Agent("design {topic} under constraint: {constraint}")
+    Agent("design <topic> under constraint: <constraint>")
     do("output: signature, usage example, what it hides, tradeoffs")
 
 // Phase 3: Present designs
@@ -61,30 +61,35 @@ do("suggest /probe to stress-test the chosen design")
 ### Predefined constraint sets
 
 **api** (module/library interfaces):
+
 1. Minimize method count: aim for 1-3 methods max
 2. Maximize flexibility: support many use cases via composition
 3. Optimize for the most common case: make the easy thing easy
 4. Paradigm-inspired: take cues from a specific well-known library
 
 **data** (data models, schemas, storage):
+
 1. Fully normalized: no redundancy, strict referential integrity
 2. Denormalized for reads: optimize query patterns, accept write complexity
 3. Event-sourced: store events, derive state
 4. Document-oriented: self-contained documents, embed related data
 
 **cli** (command-line interfaces):
+
 1. Minimal flags: fewest possible options, sensible defaults
 2. Subcommand-heavy: git-style verb hierarchy
 3. Pipeline-composable: stdin/stdout, unix philosophy
 4. Interactive-first: prompts, wizards, progressive disclosure
 
 **config** (configuration formats):
+
 1. Flat key-value: simple, greppable, env-var compatible
 2. Nested hierarchy: YAML/TOML-style structured config
 3. Convention-over-configuration: minimal config, derive from structure
 4. Schema-driven: JSON Schema validated, self-documenting
 
 **pipeline** (workflow/orchestration):
+
 1. Sequential steps: simple ordered list
 2. DAG: directed acyclic graph with explicit dependencies
 3. Event-driven: steps trigger on events/conditions
@@ -98,7 +103,7 @@ do("suggest /probe to stress-test the chosen design")
 
 **Ease of correct use vs ease of misuse**: can the caller use it wrong? How hard is it to get right?
 
-**General-purpose vs specialized**: can it handle future use cases? But beware over-generalization.
+**General-purpose vs specialized**: can it handle future use cases? Stay grounded in actual use cases.
 
 ### Anti-patterns
 

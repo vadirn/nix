@@ -13,11 +13,11 @@ description: >
   operations: adding tasks to backlog ("добавь в бэклог", "backlog"), planning tasks for the week, completing tasks,
   tracking sleep, or any mention of weekly planning, task lists, or activity log. Triggers on session save/checkpoint:
   "wrapping up", "save what we did", "log what we accomplished", "save our progress", "end of session", "save session",
-  "we finished X and still need to do Y", resuming or saving progress on a project. DO NOT USE for: editing specific
+  "we finished X and still need to do Y", resuming or saving progress on a project. EXCLUDES: editing specific
   Obsidian markdown files directly (callout blocks, formatting, syntax), Obsidian app features (kanban boards, canvas
   files, graph view, plugins, settings, UI configuration), editing .base files, creating canvas files, or general web
-  search. The distinction: vault skill manages *what you know* (saving, finding, reviewing knowledge); it does not
-  edit raw markdown files or configure the Obsidian app.
+  search. The distinction: vault skill manages *what you know* (saving, finding, reviewing knowledge). Raw markdown
+  editing and Obsidian app configuration are outside this skill's scope.
 ---
 
 # Vault
@@ -87,9 +87,9 @@ elif "validate":
     project_config = ".claude/.vault.config.json"  // in current repo
 
     if root_config exists:
-        Bash(check-jsonschema --schemafile {schemas}/root.config.schema.json {root_config})
+        Bash(check-jsonschema --schemafile <schemas>/root.config.schema.json <root_config>)
     if project_config exists:
-        Bash(check-jsonschema --schemafile {schemas}/project.config.schema.json {project_config})
+        Bash(check-jsonschema --schemafile <schemas>/project.config.schema.json <project_config>)
     if neither exists:
         do("tell user no config files found")
     do("report validation results")
@@ -136,7 +136,7 @@ else:
 
 ### Project commands
 
-`<project> start` and `<project> save` resolve the project via `--project <name>` flag, which uses the root config (`~/.claude/.vault.config.json`) to find `{vault_root}/{projects_path}/<name>`. This works from any directory. If called from a repo with `.claude/.vault.config.json`, the local project config takes precedence unless `--project` is given.
+`<project> start` and `<project> save` resolve the project via `--project <name>` flag, which uses the root config (`~/.claude/.vault.config.json`) to find `<vault_root>/<projects_path>/<name>`. This works from any directory. If called from a repo with `.claude/.vault.config.json`, the local project config takes precedence unless `--project` is given.
 
 The start procedure uses `vault-query --project <name> checkpoints --view Incomplete` and `vault-query --project <name> checkpoints --view Done`. The save procedure uses `vault-query --project <name> checkpoints --view Incomplete`.
 

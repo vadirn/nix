@@ -24,6 +24,6 @@ else:
 
 follow loaded workflow template
 do("use firecrawl to find evidence supporting arguments")
-do("output each round progressively, don't batch")
+do("output each round progressively, one at a time")
 if genuine consensus reached: stop early
 ```

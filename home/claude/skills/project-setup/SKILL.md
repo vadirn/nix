@@ -106,10 +106,11 @@ setup(vault_root):
 
 1. Read `$HOME/.claude/.vault.config.json` (root config)
 2. If exists and has `vault_root` → use it
-3. If not found → ask user for vault_root and projects_path, then create root config.
-   `projects_path` is used by vault-query for project resolution; this skill doesn't use it directly.
+3. If absent → ask user for vault_root and projects_path, then create root config.
+   `projects_path` is used by vault-query for project resolution; this skill only stores it.
 
    Write `$HOME/.claude/.vault.config.json`:
+
    ```json
    {
      "vault_root": "<vault_root>",
@@ -148,7 +149,7 @@ Write via Bash `cat` (oxfmt mangles YAML in `.base` files). See template below.
 
 In `<vault_root>/<path>/context.md`. Substitute `<path>`, `<title>`, `<description>`, `<result>`. See context.md template.
 
-No SKILL.md, start.md, or save.md in the vault project folder. The /vault skill handles routing.
+Only context.md goes in the vault project folder. The /vault skill handles routing.
 
 ### Writing .vault.config.json (per-repo config)
 
@@ -165,7 +166,7 @@ Schema: `~/.claude/skills/vault/schemas/project.config.schema.json`
 
 Both values are absolute paths. `project_path` is `vault_root` joined with the vault-relative path (e.g. `41 projects/nix`).
 
-After writing, ensure `.claude/.vault.config.json` is in `.gitignore` (it contains absolute paths). Read `.gitignore`, append the line if missing.
+After writing, add `.claude/.vault.config.json` to `.gitignore` (it contains absolute paths). Read `.gitignore`, append the line if missing.
 
 ### Writing thin wrapper skill
 
@@ -175,7 +176,7 @@ See thin wrapper template below.
 
 ### Registering in settings
 
-Read `.claude/settings.local.json` (user-specific, absolute paths don't belong in shared settings). Also read `~/.claude/settings.json` (global). Only add entries that aren't already in the global allow list.
+Read `.claude/settings.local.json` (user-specific; absolute paths belong here, not in shared settings). Also read `~/.claude/settings.json` (global). Skip entries already present in the global allow list.
 
 Typically needed (not in global):
 
@@ -205,7 +206,7 @@ Delegates to /vault.
 
 ```
 command = user's command after /<name>
-Skill(vault) with "<name> {command}"
+Skill(vault) with "<name> <command>"
 ```
 ````
 

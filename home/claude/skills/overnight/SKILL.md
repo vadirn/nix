@@ -37,22 +37,22 @@ elif "run" or wants to launch an overnight run:
         pipeline_dir = dirname(selected)
         // Copy all resources from versioned pipeline to .overnight/
         Bash(mkdir -p .overnight)
-        Bash(cp -r {pipeline_dir}/* .overnight/)
+        Bash(cp -r <pipeline_dir>/* .overnight/)
         // Always copy built-in checkpoint skill (required by runner)
-        Bash(cp -r {dir}/skills/checkpoint .overnight/skills/checkpoint)
+        Bash(cp -r <dir>/skills/checkpoint .overnight/skills/checkpoint)
     if no .overnight/pipeline.yaml in workspace:
         do("help user create .overnight/pipeline.yaml")
     if project needs extra tools (linters, runtimes, test frameworks):
-        do("create .overnight/Dockerfile or .overnight/Dockerfile.{step} extending claude-runner")
+        do("create .overnight/Dockerfile or .overnight/Dockerfile.<step> extending claude-runner")
     if project needs custom skills:
         do("create skills in .overnight/skills/")
     do("construct and show run command, confirm before running")
-    // uv run --with pyyaml {dir}/run.py --workspace {workspace}
+    // uv run --with pyyaml <dir>/run.py --workspace <workspace>
 
 elif "pipeline" or wants to write a pipeline.yaml:
     do("help user define steps with prompts, acceptance criteria, skills")
     do("write to .overnight/pipeline.yaml")
-    do("also save to home/claude/pipelines/{name}/ for version control")
+    do("also save to home/claude/pipelines/<name>/ for version control")
 
 elif "dockerfile" or needs per-project dependencies:
     do("create .overnight/Dockerfile extending claude-runner with required packages")
@@ -79,11 +79,11 @@ else:
 
 Three steps, each requires the previous:
 
-All paths below use `{dir}` for the skill base directory. Resolve it before showing commands to the user.
+All paths below use `<dir>` for the skill base directory. Resolve it before showing commands to the user.
 
 ```bash
 # 1. Build the image
-docker build -t claude-runner {dir}
+docker build -t claude-runner <dir>
 
 # 2. Create persistent volume for auth + claude state
 docker volume create claude-runner-home
@@ -97,16 +97,16 @@ To verify: `docker run --rm -v claude-runner-home:/home/claude claude-runner --v
 ### Running
 
 ```bash
-uv run --with pyyaml {dir}/run.py --workspace ~/projects/myapp
-uv run --with pyyaml {dir}/run.py --workspace . --docker-image claude-runner-custom
+uv run --with pyyaml <dir>/run.py --workspace ~/projects/myapp
+uv run --with pyyaml <dir>/run.py --workspace . --docker-image claude-runner-custom
 ```
 
-| Flag              | Default                      | Description                          |
-| ----------------- | ---------------------------- | ------------------------------------ |
-| `--workspace`     | (required)                   | Repo directory                       |
-| `--pipeline`      | `.overnight/pipeline.yaml`  | Pipeline definition file             |
-| `--docker-image`  | `claude-runner`              | Base image name                      |
-| `--docker-volume` | `claude-runner-home`         | Named volume for `/home/claude`      |
+| Flag              | Default                    | Description                     |
+| ----------------- | -------------------------- | ------------------------------- |
+| `--workspace`     | (required)                 | Repo directory                  |
+| `--pipeline`      | `.overnight/pipeline.yaml` | Pipeline definition file        |
+| `--docker-image`  | `claude-runner`            | Base image name                 |
+| `--docker-volume` | `claude-runner-home`       | Named volume for `/home/claude` |
 
 The runner is launched by Claude via the Bash tool. It ignores signals and runs until the pipeline completes or a stop mechanism is used (see Stopping section).
 
@@ -116,11 +116,11 @@ The runner is launched by Claude via the Bash tool. It ignores signals and runs 
 name: auth-refactor
 
 defaults:
-  model: claude-opus-4-6[1m]     # model for work rounds
-  image: claude-runner            # default Docker image
-  max_rounds: 50                  # max rounds per step
-  wait: 30                        # seconds between rounds
-  resolve_questions: true         # spawn resolver for open questions
+  model: claude-opus-4-6[1m] # model for work rounds
+  image: claude-runner # default Docker image
+  max_rounds: 50 # max rounds per step
+  wait: 30 # seconds between rounds
+  resolve_questions: true # spawn resolver for open questions
   explore_model: claude-haiku-4-5 # model for resolver agent
 
 steps:
@@ -157,21 +157,21 @@ steps:
 
 Step fields:
 
-| Field               | Default              | Description                                      |
-| ------------------- | -------------------- | ------------------------------------------------ |
-| `name`              | (required)           | Step identifier                                  |
-| `prompt`            | (required)           | Task description for the agent                   |
-| `accept`            | (none)               | Acceptance criteria                              |
-| `skills`            | `[]`                 | Skills from `.overnight/skills/`                |
-| `agent`             | (none)               | Agent from `.overnight/agents/`                 |
-| `image`             | from defaults        | Docker image or Dockerfile path                  |
-| `model`             | from defaults        | Model override                                   |
-| `max_rounds`        | from defaults        | Max rounds for this step                         |
-| `on_fail`           | `stop`               | `stop` or `retry`                                |
-| `max_retries`       | `0`                  | Retry count when `on_fail: retry`                |
-| `resolve_questions` | from defaults        | Spawn resolver for open questions                |
-| `verify`            | (none)               | Shell command run inside Docker after each round |
-| `depends_on`        | (none)               | Reserved for v2 DAG support                      |
+| Field               | Default       | Description                                      |
+| ------------------- | ------------- | ------------------------------------------------ |
+| `name`              | (required)    | Step identifier                                  |
+| `prompt`            | (required)    | Task description for the agent                   |
+| `accept`            | (none)        | Acceptance criteria                              |
+| `skills`            | `[]`          | Skills from `.overnight/skills/`                 |
+| `agent`             | (none)        | Agent from `.overnight/agents/`                  |
+| `image`             | from defaults | Docker image or Dockerfile path                  |
+| `model`             | from defaults | Model override                                   |
+| `max_rounds`        | from defaults | Max rounds for this step                         |
+| `on_fail`           | `stop`        | `stop` or `retry`                                |
+| `max_retries`       | `0`           | Retry count when `on_fail: retry`                |
+| `resolve_questions` | from defaults | Spawn resolver for open questions                |
+| `verify`            | (none)        | Shell command run inside Docker after each round |
+| `depends_on`        | (none)        | Reserved for v2 DAG support                      |
 
 ### Checkpoint format
 
@@ -185,24 +185,29 @@ round: 3
 ---
 
 ## Done
+
 ...
 
 ## Decisions
+
 ...
 
 ## Frictions
+
 ...
 
 ## Next
+
 ...
 
 ## Open questions
+
 ...
 ```
 
 Status values: `STEP_COMPLETE`, `STEP_IN_PROGRESS`, `STEP_FAILED`.
 
-Filename: `checkpoint-{timestamp}-{seq}.md` (e.g., `checkpoint-2026-03-24-11-45-58-001.md`).
+Filename: `checkpoint-<timestamp>-<seq>.md` (e.g., `checkpoint-2026-03-24-11-45-58-001.md`).
 
 ### Per-project Dockerfile
 
@@ -215,7 +220,7 @@ RUN apt-get update && apt-get install -y nodejs npm python3
 USER claude
 ```
 
-Place at `.overnight/Dockerfile` for all steps, or `.overnight/Dockerfile.{step-name}` for a specific step.
+Place at `.overnight/Dockerfile` for all steps, or `.overnight/Dockerfile.<step-name>` for a specific step.
 
 ### Directory layout
 
@@ -262,14 +267,14 @@ The runner (`run.py`) reads `pipeline.yaml` and executes steps sequentially. Eac
 6. Runs the `verify` command if configured (overrides status on failure)
 7. Spawns a resolver agent (haiku) if open questions exist and `resolve_questions` is enabled
 
-Git is mounted read-only inside Docker to prevent `.git/config` corruption. The agent can read git history but cannot commit or push.
+Git is mounted read-only inside Docker to prevent `.git/config` corruption. The agent has read-only access to git history.
 
 The Docker volume persists `~/.claude.json` (OAuth) and `~/.claude/` (settings) across runs. The entrypoint self-heals stale claude symlinks when the volume outlives an image rebuild.
 
 ### Stopping
 
 - **Stop file**: `touch .overnight/STOP` stops after the current round (works from any terminal or Claude session)
-- **Immediate kill**: `docker kill overnight-{step}-{round}` kills the current round's container (container names are printed at round start)
+- **Immediate kill**: `docker kill overnight-<step>-<round>` kills the current round's container (container names are printed at round start)
 - **Kill everything**: `docker kill $(docker ps -q -f name=overnight) 2>/dev/null; pkill -f "run.py --workspace"` kills all overnight containers and the runner process
 - **Automatic**: step writes `STEP_COMPLETE` in checkpoint frontmatter
 - **Max rounds**: each step has a configurable round limit

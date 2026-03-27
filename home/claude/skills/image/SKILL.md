@@ -41,5 +41,5 @@ Read(image_path)  // show the result
 - Add visual specifics: "a cat" → "a fluffy orange tabby cat sitting on a sandy beach at golden hour, soft warm lighting, shallow depth of field"
 - Specify style if the user didn't: photorealistic, illustration, watercolor, 3D render, etc.
 - Include composition hints: foreground/background, camera angle, framing
-- Preserve the user's core intent. Enrich, don't change.
+- Keep the user's core intent intact. Enrich only.
 - For edits: be precise about what to change and what to preserve.
