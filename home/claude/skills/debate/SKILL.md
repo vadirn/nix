@@ -33,7 +33,7 @@ if lang == "ru":
 else:
     Read(dir/workflows/en.md)
 
-do("follow loaded workflow template, using evidence_base as shared context")
+do("follow loaded workflow as internal instructions, output only the debate rounds and verdict, use evidence_base as shared context")
 do("cite sources from research as inline links")
 do("output each round progressively, one at a time")
 if genuine consensus reached: stop early
