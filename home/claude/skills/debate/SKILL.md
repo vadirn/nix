@@ -14,16 +14,33 @@ Structured exploration of a topic through opposing viewpoints.
 - `lang=en|ru`: Output language (default: auto-detect from topic)
 
 ```
-lang = detect from topic, or parse lang= parameter
-rounds = parse rounds= parameter, default 7
+lang = do("detect language from topic, or parse lang= parameter")
+rounds = do("parse rounds= parameter, default 7")
 
+// Research phase (parallel)
+results_for = Skill(firecrawl:search "evidence arguments for: <topic>")
+results_against = Skill(firecrawl:search "evidence arguments against: <topic>")
+results_data = Skill(firecrawl:search "statistics data <topic>")
+
+evidence_base = do("compile search results into structured notes, discard results without concrete data")
+
+if promising URLs in results:
+    Skill(firecrawl:scrape top 2-3 URLs for deeper evidence)
+
+// Debate phase
 if lang == "ru":
     Read(dir/workflows/ru.md)
 else:
     Read(dir/workflows/en.md)
 
-follow loaded workflow template
-do("use firecrawl to find evidence supporting arguments")
+do("follow loaded workflow template, using evidence_base as shared context")
+do("cite sources from research as inline links")
 do("output each round progressively, one at a time")
 if genuine consensus reached: stop early
 ```
+
+## Reference
+
+### Evidence base structure
+
+Each entry in evidence_base contains: claim with source (URL, date), statistics and measurements, counterarguments found. Discard search results that lack concrete data.
