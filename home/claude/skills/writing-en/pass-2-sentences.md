@@ -15,6 +15,17 @@ for each sentence:
   if sentence has no main verb and uses contrast markers (but, not, yet) to imply meaning:
     rewrite with a subject and verb that state the point  // Replace verbless fragments
 
+// Cohesion between sentences (known-new contract, Williams)
+for each paragraph:
+  for each adjacent pair (sentence N, sentence N+1):
+    topic_N1 = subject/topic of sentence N+1
+    end_N = new information at the end of sentence N
+    if topic_N1 does not pick up end_N and does not repeat topic_N:
+      rewrite: move known info to the start of N+1, new info to the end  // Chain known→new across sentences
+  topics = [subject of each sentence in the paragraph]
+  if topics jump (each sentence starts with a different subject):
+    rewrite with a consistent topic or merge sentences  // Keep consistent topics in a paragraph
+
 // Split and reconnect loop
 loop:
   for each sentence:
@@ -76,7 +87,31 @@ Start with what the reader knows. End with new, complex information. The end pos
 | A completely redesigned query engine powers the new version.          | The new version is powered by a completely redesigned query engine. |
 | Unexpected latency spikes are what the monitoring dashboard revealed. | The monitoring dashboard revealed unexpected latency spikes.        |
 
-**Cohesion:** end one sentence with info that begins the next. This creates flow between sentences.
+**Diagnostic:** underline the topic (beginning) and new info (end) of each sentence. Cohesion holds when the beginning of N+1 picks up the end of N.
+
+### Chain known→new across sentences
+
+The end of sentence N introduces new information. The beginning of sentence N+1 picks it up as known. This creates a chain that carries the reader forward (known-new contract, Williams Lesson 5).
+
+| Before                                                                         | After                                                                                            |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Half-life is 5–7 hours. Caffeine 6 hours before bed cuts sleep by 45 min.      | Half-life is 5–7 hours, so caffeine 6 hours before bed cuts sleep by 45 min.                     |
+| To fall asleep, the body drops 1–3°F. Warm extremities speed heat loss.        | To fall asleep, the body drops 1–3°F, and warm extremities speed this process.                   |
+| Overhead light is worst: melanopsin sits in the lower retina. Use table lamps. | Overhead light is worst because melanopsin sits in the lower retina, so use table lamps instead. |
+
+**Diagnostic:** for each adjacent pair, check: does the start of N+1 refer to the end of N? If not, rewrite or merge.
+
+### Keep consistent topics in a paragraph
+
+Sentences in one paragraph start from the same topic or a variation of it. When every sentence introduces a new subject (A, B, C, D), the reader loses the thread.
+
+| Before                                                                                        | After                                                                                                    |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| The bed is only for sleep. If you can't fall asleep in 15–20 min, get up. Return when sleepy. | The bed is only for sleep. If you can't fall asleep in 15–20 min, leave the room and return when sleepy. |
+
+**Diagnostic:** list the subject of each sentence. If they all differ, rewrite with a shared subject or merge.
+
+Source: Williams, Style: Lessons in Clarity and Grace, Lesson 5 "Cohesion and Coherence", principles 4, 6, 7.
 
 ### Replace verbless fragments
 

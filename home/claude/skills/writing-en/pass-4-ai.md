@@ -67,7 +67,7 @@ AI text is predictable: medium-length sentences, every paragraph opens with a ge
 
 ### Match punctuation to emphasis
 
-Use periods, colons, or parentheses instead of em-dashes. Em-dashes are overused in AI-generated text and become a crutch for loose thinking.
+Use periods, colons, or parentheses instead of em-dashes. AI-generated text leans on em-dashes as a crutch for loose thinking.
 
 | Before                                                                | After                                                                  |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------- |

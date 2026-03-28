@@ -38,7 +38,7 @@ Each paragraph develops one idea. Start with a topic sentence, then add details,
 | A single paragraph covering architecture, testing, and deployment | Three paragraphs: architecture, testing, deployment      |
 | A 15-sentence paragraph about everything                          | Three paragraphs of 3–5 sentences, each about one aspect |
 
-**Structure:** topic sentence → supporting details → (optional) transition to next paragraph.
+**Structure:** topic sentence → supporting details → (optional) end with a detail the next paragraph can pick up, or open the next paragraph by referencing the previous one's conclusion.
 
 ### Use informative headings
 

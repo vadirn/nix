@@ -38,7 +38,6 @@ Short words read faster and resist misunderstanding.
 
 | Before        | After |
 | ------------- | ----- |
-| utilize       | use   |
 | facilitate    | help  |
 | approximately | about |
 | commence      | start |
@@ -85,7 +84,7 @@ Negatives force the reader to picture an action and then cancel it. Affirmatives
 
 ### Invent fresh comparisons
 
-When you need a figure of speech, create one that produces a visual image. Dead metaphors ("level playing field", "at the end of the day") are invisible to the reader.
+When you need a figure of speech, create one that produces a visual image. Dead metaphors ("level playing field", "at the end of the day") pass unnoticed.
 
 | Before                | After                         |
 | --------------------- | ----------------------------- |
