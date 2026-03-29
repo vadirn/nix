@@ -1,278 +1,480 @@
-# Configuration Format Design for Autonomous Pipeline Runner
+# Configuration Format Design: Autonomous Pipeline Runner
 
-## Design 1: Declarative YAML
+I'll design three radically different configuration formats for an autonomous pipeline runner that handles complex workflows with step dependencies, model selection, retry policies, and skill requirements.
 
-**Schema:**
-```yaml
-pipeline:
-  name: "data-processing-pipeline"
-  version: "1.0.0"
+## Design 1: Graph-Based TOML Configuration
 
-defaults:
-  model: "claude-sonnet-4"
-  max_rounds: 50
-  timeout: 300
-  retry_policy: "stop"
+**Approach:** Structure configuration as explicit graph nodes with dependency relationships
 
-steps:
-  - name: "extract"
-    prompt: "Extract data from source systems and validate format"
-    accept:
-      - "Data extraction completed successfully"
-      - "All required fields present in extracted data"
-      - "Data validation passes with no critical errors"
-    depends_on: []
-    skills: ["data-fetch", "validation"]
-    model: "claude-haiku-4"  # Override default
-    max_rounds: 10
+### Schema
+```toml
+[pipeline]
+name = "content-workflow"
+description = "Automated content generation and review"
+version = "1.0"
 
-    retry:
-      max_attempts: 3
-      on_failure: "retry"
-      backoff: "exponential"
+[pipeline.defaults]
+model = "claude-sonnet-4"
+timeout = "30m"
+max_retries = 3
 
-    verification: "test -f extracted_data.json && jq '.records | length > 0' extracted_data.json"
+# Graph nodes (steps)
+[[nodes]]
+id = "research"
+type = "llm_step"
+prompt = """
+Research the following topic thoroughly: {{inputs.topic}}
+Provide factual information with credible sources.
+"""
+model = "claude-opus-4"
+skills = ["web_search", "fact_verification"]
+timeout = "15m"
 
-  - name: "transform"
-    prompt: "Transform extracted data according to business rules and clean inconsistencies"
-    accept:
-      - "Data transformation applied successfully"
-      - "Output schema matches target format"
-      - "Data quality checks pass"
-    depends_on: ["extract"]
-    skills: ["data-transform", "validation"]
+[nodes.acceptance]
+word_count_min = 300
+word_count_max = 800
+source_count_min = 3
+factual_accuracy_threshold = 0.95
 
-  - name: "load"
-    prompt: "Load transformed data into target system with error handling"
-    accept:
-      - "Data loaded successfully to target system"
-      - "Load process completed without data loss"
-      - "Target system confirms data integrity"
-    depends_on: ["transform"]
-    skills: ["data-load", "monitoring"]
+[nodes.retry]
+max_attempts = 2
+backoff_strategy = "exponential"
+backoff_base = 2
+
+[[nodes]]
+id = "draft"
+type = "llm_step"
+prompt = """
+Based on this research: {{nodes.research.output}}
+Write a comprehensive blog post about {{inputs.topic}}.
+"""
+skills = ["content_writing", "seo_optimization"]
+
+[nodes.acceptance]
+word_count_min = 800
+word_count_max = 1500
+readability_score_max = 12
+structure_check = ["intro", "body", "conclusion"]
+
+[[nodes]]
+id = "review"
+type = "llm_step"
+prompt = """
+Review and enhance this content: {{nodes.draft.output}}
+Focus on clarity, engagement, and factual accuracy.
+"""
+model = "claude-sonnet-4-latest"
+skills = ["content_editing", "grammar_check"]
+
+[nodes.acceptance]
+grammar_score_min = 95
+engagement_score_min = 80
+factual_consistency_check = true
+
+# Dependency edges
+[[edges]]
+from = "research"
+to = "draft"
+condition = "success"
+
+[[edges]]
+from = "draft"
+to = "review"
+condition = "success"
+
+[inputs]
+topic = { type = "string", required = true, description = "Content topic" }
+
+[outputs]
+final_content = "{{nodes.review.output}}"
+research_data = "{{nodes.research.output}}"
 ```
 
-**Usage Example:**
+### Usage Example
 ```bash
-# Run pipeline with defaults
-pipeline-runner execute data-pipeline.yaml
+# Execute pipeline
+pipeline-runner execute config.toml --input topic="Machine Learning Ethics"
 
-# Override global settings
-pipeline-runner execute data-pipeline.yaml \
-  --set defaults.model=claude-opus-4-6 \
-  --set defaults.max_rounds=100
+# Visualize dependency graph
+pipeline-runner graph config.toml --output graph.png
 
-# Environment variables override
-PIPELINE_MODEL=claude-sonnet-4-6 pipeline-runner execute data-pipeline.yaml
+# Validate configuration
+pipeline-runner validate config.toml --check-dependencies
 ```
 
-**Tradeoffs:**
-- ✅ Human-readable and intuitive structure
-- ✅ Clear inheritance from defaults to steps
-- ✅ Native support for arrays and complex data types
-- ✅ Good tool support for editing and validation
-- ❌ YAML parsing quirks and indentation sensitivity
-- ❌ Limited ability to validate complex business rules
-- ❌ Verbose for simple linear pipelines
+### Tradeoffs
+- **Pros:** Clear separation of graph structure from execution logic, excellent visualization
+- **Cons:** More verbose than other formats, requires understanding of graph concepts
+- **Best for:** Complex pipelines with intricate dependencies and visualization needs
 
-## Design 2: Code-as-Configuration (Python DSL)
+## Design 2: Code-as-Configuration (JavaScript/TypeScript)
 
-**Schema:**
-```python
-from pipeline import Pipeline, Step, RetryPolicy
+**Approach:** Use executable code with strong typing and composition patterns
 
-# Define pipeline using fluent interface
-pipeline = Pipeline("data-processing") \
-    .version("1.0.0") \
-    .default_model("claude-sonnet-4") \
-    .default_timeout(300)
+### Schema
+```typescript
+// pipeline.config.ts
+import { Pipeline, Step, Model, Skills, AcceptanceCriteria } from '@pipeline-runner/core';
 
-# Define steps with method chaining
-extract = Step("extract") \
-    .prompt("Extract data from source systems and validate format") \
-    .accept([
-        "Data extraction completed successfully",
-        "All required fields present in extracted data"
-    ]) \
-    .skills(["data-fetch", "validation"]) \
-    .model("claude-haiku-4") \
-    .max_rounds(10) \
-    .retry(RetryPolicy.exponential(max_attempts=3)) \
-    .verify("test -f extracted_data.json")
+export default Pipeline.create({
+  name: 'content-workflow',
+  description: 'Automated content generation and review',
+})
+.withDefaults({
+  model: Model.CLAUDE_SONNET_4,
+  timeout: Duration.minutes(30),
+  maxRetries: 3,
+})
+.addStep(
+  Step.llm('research')
+    .withPrompt(({ inputs }) => `
+      Research the following topic thoroughly: ${inputs.topic}
+      Provide factual information with credible sources.
+    `)
+    .withModel(Model.CLAUDE_OPUS_4)
+    .withSkills(Skills.WEB_SEARCH, Skills.FACT_VERIFICATION)
+    .withTimeout(Duration.minutes(15))
+    .acceptWhen(
+      AcceptanceCriteria.wordCount({ min: 300, max: 800 }),
+      AcceptanceCriteria.sourceCount({ min: 3 }),
+      AcceptanceCriteria.factualAccuracy({ threshold: 0.95 })
+    )
+    .retryWith({
+      maxAttempts: 2,
+      backoffStrategy: 'exponential',
+      backoffBase: 2
+    })
+)
+.addStep(
+  Step.llm('draft')
+    .dependsOn('research')
+    .withPrompt(({ nodes, inputs }) => `
+      Based on this research: ${nodes.research.output}
+      Write a comprehensive blog post about ${inputs.topic}.
+    `)
+    .withSkills(Skills.CONTENT_WRITING, Skills.SEO_OPTIMIZATION)
+    .acceptWhen(
+      AcceptanceCriteria.wordCount({ min: 800, max: 1500 }),
+      AcceptanceCriteria.readabilityScore({ max: 12 }),
+      AcceptanceCriteria.structureCheck(['intro', 'body', 'conclusion'])
+    )
+)
+.addStep(
+  Step.llm('review')
+    .dependsOn('draft')
+    .withPrompt(({ nodes }) => `
+      Review and enhance this content: ${nodes.draft.output}
+      Focus on clarity, engagement, and factual accuracy.
+    `)
+    .withModel(Model.CLAUDE_SONNET_4_LATEST)
+    .withSkills(Skills.CONTENT_EDITING, Skills.GRAMMAR_CHECK)
+    .acceptWhen(
+      AcceptanceCriteria.grammarScore({ min: 95 }),
+      AcceptanceCriteria.engagementScore({ min: 80 }),
+      AcceptanceCriteria.factualConsistency()
+    )
+)
+.withInputs({
+  topic: Input.string({ 
+    required: true, 
+    description: 'Content topic',
+    validation: z.string().min(5).max(100)
+  })
+})
+.withOutputs({
+  finalContent: '{{nodes.review.output}}',
+  researchData: '{{nodes.research.output}}'
+});
 
-transform = Step("transform") \
-    .prompt("Transform extracted data according to business rules") \
-    .accept([
-        "Data transformation applied successfully",
-        "Output schema matches target format"
-    ]) \
-    .depends_on(extract) \
-    .skills(["data-transform", "validation"])
-
-load = Step("load") \
-    .prompt("Load transformed data into target system") \
-    .accept([
-        "Data loaded successfully to target system",
-        "Load process completed without data loss"
-    ]) \
-    .depends_on(transform) \
-    .skills(["data-load", "monitoring"])
-
-# Assemble pipeline
-pipeline.add_steps([extract, transform, load])
-
-# Export for runner
-pipeline.export("data-pipeline.json")
+// Custom acceptance criteria
+export const AcceptanceCriteria = {
+  wordCount: ({ min, max }: { min: number; max: number }) =>
+    new WordCountCriteria({ min, max }),
+    
+  sourceCount: ({ min }: { min: number }) =>
+    new SourceCountCriteria({ min }),
+    
+  structureCheck: (sections: string[]) =>
+    new StructureCriteria({ requiredSections: sections }),
+    
+  // Can define complex, reusable acceptance logic
+  factualAccuracy: ({ threshold }: { threshold: number }) =>
+    new CustomCriteria({
+      name: 'factual_accuracy',
+      check: async (output: string, context: ExecutionContext) => {
+        const facts = await extractFacts(output);
+        const verificationResults = await Promise.all(
+          facts.map(fact => verifyFact(fact, context))
+        );
+        const accuracy = verificationResults.filter(Boolean).length / facts.length;
+        return accuracy >= threshold;
+      }
+    })
+};
 ```
 
-**Usage Example:**
+### Usage Example
+```typescript
+// Execute programmatically
+const pipeline = await import('./pipeline.config.ts');
+const result = await pipeline.default.execute({ 
+  topic: 'Machine Learning Ethics' 
+});
+
+// Conditional modification
+const prodPipeline = process.env.NODE_ENV === 'production'
+  ? pipeline.withModelOverride(Model.CLAUDE_OPUS_4)
+  : pipeline;
+
+// Composition and extension
+const extendedPipeline = pipeline
+  .addStep(
+    Step.llm('seo-metadata')
+      .dependsOn('review')
+      .withPrompt(({ nodes }) => `Generate SEO metadata for: ${nodes.review.output}`)
+  )
+  .chain(publishingPipeline)
+  .chain(analyticsePipeline);
+
+// Testing configuration
+describe('Content Pipeline', () => {
+  it('should validate input requirements', () => {
+    expect(() => pipeline.validate({ topic: '' })).toThrow();
+  });
+  
+  it('should execute successfully with valid input', async () => {
+    const result = await pipeline.execute({ topic: 'AI Ethics' });
+    expect(result.finalContent).toBeDefined();
+  });
+});
+```
+
+### Tradeoffs
+- **Pros:** Type safety, IDE support, powerful composition, testability, reusable components
+- **Cons:** Requires programming knowledge, runtime dependencies, deployment complexity
+- **Best for:** Complex pipelines requiring logic reuse and programmatic generation
+
+## Design 3: Hierarchical XML with Declarative Rules
+
+**Approach:** Structured markup with embedded rule engines and validation schemas
+
+### Schema
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<pipeline xmlns="http://pipeline-runner.org/schema/v1" 
+          name="content-workflow" 
+          description="Automated content generation and review"
+          version="1.0">
+
+  <defaults>
+    <model>claude-sonnet-4</model>
+    <timeout>PT30M</timeout>
+    <maxRetries>3</maxRetries>
+    <retryStrategy>exponential</retryStrategy>
+  </defaults>
+
+  <inputs>
+    <input name="topic" type="string" required="true">
+      <description>Content topic for blog post generation</description>
+      <validation>
+        <minLength>5</minLength>
+        <maxLength>100</maxLength>
+        <pattern>^[a-zA-Z0-9\s\-\.]+$</pattern>
+      </validation>
+    </input>
+  </inputs>
+
+  <steps>
+    <step id="research" type="llm-task">
+      <model>claude-opus-4</model>
+      <timeout>PT15M</timeout>
+      <skills>
+        <skill name="web_search"/>
+        <skill name="fact_verification"/>
+      </skills>
+      
+      <prompt>
+        <![CDATA[
+        Research the following topic thoroughly: {{inputs.topic}}
+        Provide factual information with credible sources.
+        ]]>
+      </prompt>
+      
+      <acceptanceCriteria operator="all">
+        <criterion type="word-count">
+          <min>300</min>
+          <max>800</max>
+        </criterion>
+        <criterion type="source-count">
+          <min>3</min>
+        </criterion>
+        <criterion type="factual-accuracy">
+          <threshold>0.95</threshold>
+        </criterion>
+      </acceptanceCriteria>
+      
+      <retryPolicy>
+        <maxAttempts>2</maxAttempts>
+        <backoffStrategy>exponential</backoffStrategy>
+        <backoffBase>2</backoffBase>
+      </retryPolicy>
+    </step>
+
+    <step id="draft" type="llm-task">
+      <dependsOn>
+        <step ref="research" condition="success"/>
+      </dependsOn>
+      
+      <skills>
+        <skill name="content_writing"/>
+        <skill name="seo_optimization"/>
+      </skills>
+      
+      <prompt>
+        <![CDATA[
+        Based on this research: {{steps.research.output}}
+        Write a comprehensive blog post about {{inputs.topic}}.
+        ]]>
+      </prompt>
+      
+      <acceptanceCriteria operator="all">
+        <criterion type="word-count">
+          <min>800</min>
+          <max>1500</max>
+        </criterion>
+        <criterion type="readability-score">
+          <max>12</max>
+        </criterion>
+        <criterion type="structure-check">
+          <requiredSections>
+            <section>intro</section>
+            <section>body</section>
+            <section>conclusion</section>
+          </requiredSections>
+        </criterion>
+      </acceptanceCriteria>
+    </step>
+
+    <step id="review" type="llm-task">
+      <dependsOn>
+        <step ref="draft" condition="success"/>
+      </dependsOn>
+      
+      <model>claude-sonnet-4-latest</model>
+      <skills>
+        <skill name="content_editing"/>
+        <skill name="grammar_check"/>
+      </skills>
+      
+      <prompt>
+        <![CDATA[
+        Review and enhance this content: {{steps.draft.output}}
+        Focus on clarity, engagement, and factual accuracy.
+        ]]>
+      </prompt>
+      
+      <acceptanceCriteria operator="all">
+        <criterion type="grammar-score">
+          <min>95</min>
+        </criterion>
+        <criterion type="engagement-score">
+          <min>80</min>
+        </criterion>
+        <criterion type="factual-consistency-check">
+          <enabled>true</enabled>
+        </criterion>
+      </acceptanceCriteria>
+    </step>
+  </steps>
+
+  <outputs>
+    <output name="finalContent" value="{{steps.review.output}}"/>
+    <output name="researchData" value="{{steps.research.output}}"/>
+  </outputs>
+
+  <monitoring>
+    <metrics>
+      <metric name="execution_time" enabled="true"/>
+      <metric name="success_rate" enabled="true"/>
+      <metric name="retry_count" enabled="true"/>
+    </metrics>
+    <alerts>
+      <alert condition="execution_time > PT60M" action="notify"/>
+      <alert condition="success_rate < 0.8" action="escalate"/>
+    </alerts>
+  </monitoring>
+
+</pipeline>
+```
+
+### Usage Example
 ```bash
-# Generate config from Python
-python3 data-pipeline.py
+# Execute with XML config
+pipeline-runner run --config pipeline.xml --input topic="AI Ethics"
 
-# Run generated pipeline
-pipeline-runner execute data-pipeline.json
+# Validate against XSD schema
+xmllint --schema pipeline-schema.xsd pipeline.xml
 
-# Dynamic configuration with Python logic
-python3 -c "
-import pipeline_config as cfg
-cfg.pipeline.default_model = 'claude-opus-4-6'
-cfg.extract.max_rounds = 20 if cfg.is_production else 5
-cfg.pipeline.export('runtime-pipeline.json')
-"
-pipeline-runner execute runtime-pipeline.json
+# Transform for different environments
+xsltproc prod-transform.xsl pipeline.xml > pipeline-prod.xml
+
+# Generate documentation
+pipeline-runner docs --config pipeline.xml --output docs/
 ```
 
-**Tradeoffs:**
-- ✅ Full programming language power for complex logic
-- ✅ Type checking and IDE support (autocomplete, refactoring)
-- ✅ Reusable components and abstraction capabilities
-- ✅ Dynamic configuration based on environment/conditions
-- ❌ Requires programming knowledge to modify
-- ❌ More complex toolchain and dependencies
-- ❌ Harder to review configuration changes in git
-- ❌ Runtime evaluation needed to see final config
+### Tradeoffs
+- **Pros:** Rich validation through XSD schemas, excellent tooling support, hierarchical organization
+- **Cons:** Verbose syntax, limited dynamic capabilities, XML complexity
+- **Best for:** Enterprise environments requiring formal validation and documentation generation
 
-## Design 3: Flat Environment-Based
+## Comparison Matrix
 
-**Schema:**
-```bash
-# Pipeline metadata
-PIPELINE_NAME=data-processing-pipeline
-PIPELINE_VERSION=1.0.0
-
-# Global defaults
-DEFAULT_MODEL=claude-sonnet-4
-DEFAULT_MAX_ROUNDS=50
-DEFAULT_TIMEOUT=300
-DEFAULT_RETRY_POLICY=stop
-
-# Step 1: extract
-STEP_1_NAME=extract
-STEP_1_PROMPT="Extract data from source systems and validate format"
-STEP_1_ACCEPT="Data extraction completed successfully; All required fields present"
-STEP_1_DEPENDS_ON=
-STEP_1_SKILLS=data-fetch,validation
-STEP_1_MODEL=claude-haiku-4
-STEP_1_MAX_ROUNDS=10
-STEP_1_RETRY_MAX_ATTEMPTS=3
-STEP_1_RETRY_ON_FAILURE=retry
-STEP_1_RETRY_BACKOFF=exponential
-STEP_1_VERIFY="test -f extracted_data.json && jq '.records | length > 0' extracted_data.json"
-
-# Step 2: transform
-STEP_2_NAME=transform
-STEP_2_PROMPT="Transform extracted data according to business rules and clean inconsistencies"
-STEP_2_ACCEPT="Data transformation applied successfully; Output schema matches target format"
-STEP_2_DEPENDS_ON=extract
-STEP_2_SKILLS=data-transform,validation
-STEP_2_MODEL=${DEFAULT_MODEL}
-STEP_2_MAX_ROUNDS=${DEFAULT_MAX_ROUNDS}
-
-# Step 3: load
-STEP_3_NAME=load
-STEP_3_PROMPT="Load transformed data into target system with error handling"
-STEP_3_ACCEPT="Data loaded successfully; Load process completed without data loss"
-STEP_3_DEPENDS_ON=transform
-STEP_3_SKILLS=data-load,monitoring
-STEP_3_MODEL=${DEFAULT_MODEL}
-STEP_3_MAX_ROUNDS=${DEFAULT_MAX_ROUNDS}
-```
-
-**Usage Example:**
-```bash
-# Load from file
-pipeline-runner execute --config data-pipeline.env
-
-# Override via environment
-export STEP_1_MAX_ROUNDS=20
-export DEFAULT_MODEL=claude-opus-4-6
-pipeline-runner execute --config data-pipeline.env
-
-# Search and modify with standard tools
-grep "MODEL=" data-pipeline.env          # Find all model settings
-sed -i 's/claude-haiku-4/claude-sonnet-4/g' data-pipeline.env  # Bulk replace
-grep "DEPENDS_ON=extract" data-pipeline.env  # Find dependencies
-
-# Generate variations programmatically
-cat data-pipeline.env | sed 's/MAX_ROUNDS=50/MAX_ROUNDS=100/g' > high-rounds-pipeline.env
-```
-
-**Tradeoffs:**
-- ✅ Simple key-value format compatible with shell tools
-- ✅ Easy environment variable override capabilities
-- ✅ Grep-friendly for searching and bulk operations
-- ✅ No parsing complexity or dependencies
-- ❌ Verbose and repetitive (STEP_N_PREFIX for everything)
-- ❌ Limited data types (everything is a string)
-- ❌ Poor readability for complex configurations
-- ❌ No validation or schema enforcement
-
-## Comparison & Analysis
-
-**Ease of Authoring:**
-- Code-as-Configuration: Best for programmers, worst for operators
-- Declarative YAML: Good balance of readability and functionality
-- Flat Environment: Simple but verbose and repetitive
-
-**Validation & Safety:**
-- Code-as-Configuration: Best (type checking, IDE support)
-- Declarative YAML: Good (schema validation possible)
-- Flat Environment: Worst (no built-in validation)
-
-**Tool Integration:**
-- Flat Environment: Best (grep, sed, awk, env vars)
-- Declarative YAML: Good (YAML tools, editors)
-- Code-as-Configuration: Mixed (great IDE support, limited ops tools)
-
-**Flexibility:**
-- Code-as-Configuration: Highest (full language capabilities)
-- Declarative YAML: Medium (structured but limited logic)
-- Flat Environment: Lowest (key-value only)
-
-**Maintainability:**
-- Declarative YAML: Best balance of structure and simplicity
-- Code-as-Configuration: Good for complex cases, overkill for simple ones
-- Flat Environment: Poor for large configurations
+| Aspect | Graph-Based TOML | Code-as-Config | Hierarchical XML |
+|--------|------------------|----------------|------------------|
+| Human readability | High | Medium | Medium |
+| Type safety | Schema-based | Native | Schema-based |
+| Tooling support | Good | Excellent | Excellent |
+| Learning curve | Medium | High | Medium |
+| Expressiveness | Medium | Highest | Medium |
+| Validation | External | Compile-time | Built-in |
+| Version control | Excellent | Good | Good |
+| Dynamic generation | Limited | Excellent | Limited |
+| Enterprise features | Basic | Custom | Rich |
 
 ## Recommendation
 
-**Choose Declarative YAML for most use cases** because:
+For an autonomous pipeline runner, I recommend **Design 2: Code-as-Configuration (TypeScript)** as the primary configuration format with the following justification:
 
-1. **Optimal balance**: Readable for humans, parseable by machines
-2. **Industry standard**: Widely adopted in DevOps and configuration management
-3. **Tool ecosystem**: Rich support for editing, validation, and transformation
-4. **Scalability**: Handles both simple and complex pipelines effectively
-5. **Version control friendly**: Clean diffs and merge behavior
+### Why Code-as-Configuration Wins
 
-**Implementation considerations:**
-- Use YAML schema validation to catch errors early
-- Support environment variable overrides for operational flexibility
-- Provide templates and examples for common patterns
-- Include linting tools to enforce consistency
+1. **Type Safety**: Compile-time validation prevents configuration errors before runtime
+2. **Composition Power**: Can build complex pipelines from reusable components
+3. **Testing**: Configuration can be unit tested, ensuring reliability
+4. **IDE Support**: Full autocomplete, refactoring, and debugging support
+5. **Flexibility**: Supports conditional logic, loops, and dynamic generation
 
-**When to consider alternatives:**
-- **Use Code-as-Configuration** for highly dynamic pipelines with complex business logic
-- **Use Flat Environment** for simple linear pipelines in constrained environments
+### Implementation Strategy
 
-The YAML approach provides the best developer experience while maintaining operational flexibility and avoiding the complexity overhead of more sophisticated approaches.
+**Phase 1: Core TypeScript DSL**
+- Implement type-safe configuration builder with fluent API
+- Support for all required features: dependencies, retry policies, acceptance criteria
+- CLI tool for executing TypeScript configurations
+
+**Phase 2: Multi-Format Support**
+- Add TOML export for simple pipelines and GitOps workflows
+- Provide XML import/export for enterprise integration
+- Support configuration migration between formats
+
+**Phase 3: Advanced Features**
+- Configuration composition and inheritance
+- Hot-reloading for development
+- Visual pipeline editor that generates TypeScript
+
+### Key Design Decisions
+
+1. **Fluent Builder Pattern**: Makes complex configurations readable and discoverable
+2. **Strong Typing**: Prevents runtime errors through compile-time validation
+3. **Composition Over Inheritance**: Allows flexible pipeline assembly
+4. **Plugin Architecture**: Extensible skill and acceptance criteria system
+
+This approach provides the power and flexibility needed for autonomous pipeline orchestration while maintaining developer productivity through excellent tooling support and type safety.

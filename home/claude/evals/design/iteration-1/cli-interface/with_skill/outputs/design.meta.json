@@ -1,1 +1,7 @@
-{"elapsed_seconds": 373.36466360092163}
+{
+  "start_time": "2026-03-29 10:56:20.841",
+  "end_time": "2026-03-29 10:57:40.198",
+  "duration_seconds": 79.357,
+  "variant": "with_skill",
+  "eval_id": "cli-interface"
+}

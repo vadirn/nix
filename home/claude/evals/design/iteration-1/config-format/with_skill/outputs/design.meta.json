@@ -1,1 +1,7 @@
-{"elapsed_seconds": 330.2926890850067}
+{
+  "start_time": "2026-03-29 11:01:46.366",
+  "end_time": "2026-03-29 11:02:59.020",
+  "duration_seconds": 72.654,
+  "variant": "with_skill",
+  "eval_id": "config-format"
+}

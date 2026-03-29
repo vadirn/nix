@@ -1,184 +1,155 @@
-# CLI Interface Design for S3 File Sync Tool
+# CLI Interface Design: File Sync Tool
 
-## Design 1: Minimal Flags Approach
+## Design 1: Profile-Centric Approach
 
-**Interface Signature:**
+**Constraint:** Optimize for multi-profile management and quick profile switching.
+
+### Interface Signature
 ```bash
-s3sync init [DIRECTORY]
-s3sync start [PATH] [--profile PROFILE] [--dry-run]
-s3sync stop
-s3sync status
+syncfs [global-options] <command> [command-options] [args]
+
+Global Options:
+  --profile, -p <name>    Use specified profile
+  --config-dir <path>     Custom config directory
+  --verbose, -v           Enable verbose output
+
+Commands:
+  profile create <name> --local=<path> --remote=<s3-uri> [options]
+  profile list
+  profile delete <name>
+  sync start [profile]    Start watching and syncing
+  sync once [profile]     One-time sync
+  sync status             Show sync status
+  ignore add <pattern> [--profile=<name>]
+  ignore remove <pattern> [--profile=<name>]
+  ignore list [--profile=<name>]
 ```
 
-**Usage Example:**
+### Usage Example
 ```bash
-s3sync init ~/Documents
-s3sync start --profile work --dry-run
-s3sync start  # actual sync
+# Setup profiles
+syncfs profile create work --local=~/work --remote=s3://company-bucket/work
+syncfs profile create personal --local=~/docs --remote=s3://my-bucket/personal
+
+# Configure ignore patterns
+syncfs ignore add "*.tmp" --profile=work
+syncfs ignore add ".DS_Store" --profile=work
+
+# Start syncing
+syncfs --profile=work sync start
+syncfs --profile=personal sync once --dry-run
 ```
 
-**Hidden Complexity:**
-- AWS credential discovery and validation
-- Platform-specific file watching (inotify/fsevents)
-- Intelligent batching and retry logic
-- Multipart uploads and checksumming
-- Cross-platform compatibility
+### Tradeoffs
+- **Pros:** Clear profile management, easy switching between configurations
+- **Cons:** More verbose for single-profile use cases, requires profile setup before first sync
 
-**Tradeoffs:**
-- ✅ Extreme simplicity: 95% of users need zero flag knowledge
-- ❌ Advanced customization: Power users must edit config files
-- ❌ Multi-directory sync: Requires multiple instances
-- ❌ One-off overrides: Can't temporarily change config via flags
+## Design 2: Directory-First Approach
 
-## Design 2: Subcommand-Heavy Approach
+**Constraint:** Optimize for simplicity and immediate use without setup.
 
-**Interface Signature:**
+### Interface Signature
 ```bash
-s3sync profile {create|list|edit|delete|set-default}
-s3sync watch {start|stop|status|logs}
-s3sync sync {push|pull|bidirectional|preview}
-s3sync ignore {add|remove|list|test}
-s3sync config {get|set|list|reset}
-s3sync remote {list|create|delete|info}
-s3sync history {show|clear|export}
-s3sync conflict {list|resolve|auto-resolve}
-s3sync status {overview|detailed|health}
+syncfs [options] <local-path> <s3-uri>
+
+Options:
+  --watch, -w             Enable continuous watching
+  --dry-run, -n           Show what would be synced without doing it
+  --ignore-file <path>    Path to ignore patterns file
+  --ignore <pattern>      Add ignore pattern (repeatable)
+  --config <file>         Save/load configuration from file
+  --verbose, -v           Enable verbose output
+  --one-time              Sync once and exit (default without --watch)
 ```
 
-**Usage Example:**
+### Usage Example
 ```bash
-s3sync profile create work --region us-east-1
-s3sync ignore add "*.tmp" "node_modules/"
-s3sync sync preview /home/user/docs --profile work
-s3sync watch start /home/user/docs --profile work
+# Quick one-time sync
+syncfs ~/work s3://company-bucket/work --dry-run
+syncfs ~/work s3://company-bucket/work
+
+# Continuous watching
+syncfs ~/work s3://company-bucket/work --watch --ignore="*.tmp" --ignore=".git/*"
+
+# Save configuration for reuse
+syncfs ~/work s3://company-bucket/work --watch --config=work.toml
+syncfs --config=work.toml  # reuse saved config
 ```
 
-**Hidden Complexity:**
-- Cross-platform file system monitoring
-- AWS SDK authentication and session management
-- Multipart uploads with resume capability
-- Three-way merge conflict detection
-- Content-based change detection using checksums
-- Local state management with SQLite
-- Pattern matching with gitignore-style rules
+### Tradeoffs
+- **Pros:** Immediate use, simple mental model, no setup required
+- **Cons:** Config reuse is more manual, harder to manage multiple sync targets
 
-**Tradeoffs:**
-- ✅ Discoverability: Users can explore through tab completion
-- ✅ Focused functionality: Each command has a single clear purpose
-- ✅ Composability: Scripts can use specific subcommands with predictable outputs
-- ❌ Verbosity: Simple operations require more typing
-- ❌ Implementation complexity: Sophisticated argument parsing and help systems
-- ❌ Cognitive overhead: Users must learn the command hierarchy
+## Design 3: Workspace-Based Approach
 
-## Design 3: Pipeline-Composable Approach
+**Constraint:** Optimize for project-based workflows and team collaboration.
 
-**Interface Signature:**
+### Interface Signature
 ```bash
-s3sync watch [OPTIONS] [DIRECTORY...]
-s3sync sync [OPTIONS] [DIRECTORY...]
-s3sync list [OPTIONS] [DIRECTORY...]
-s3sync status [OPTIONS]
+syncfs [global-options] [workspace/]command [command-options]
+
+Global Options:
+  --workspace, -w <name>  Target workspace (default: current directory)
+  --global, -g           Apply to global config
+
+Commands:
+  init <s3-uri>          Initialize workspace with S3 target
+  add <path> [--ignore=<pattern>...]  Add path to sync with optional ignores
+  remove <path>          Remove path from sync
+  start                  Start continuous sync for workspace
+  stop                   Stop sync daemon
+  status                 Show sync status and configuration
+  dry-run                Preview what would be synced
+  ignore <pattern>       Add ignore pattern to workspace
+  pull                   Force pull from S3
+  push                   Force push to S3
 ```
 
-**Usage Example:**
+### Usage Example
 ```bash
-find . -name "*.jpg" | s3sync sync --bucket my-photos
-s3sync list --format json /data | jq '.[] | select(.status == "pending")'
-s3sync watch /src --profile dev | grep ERROR | mail admin@company.com
+# Initialize project workspace
+cd ~/projects/myapp
+syncfs init s3://company-bucket/myapp
+syncfs add src/ --ignore="*.log"
+syncfs add config/
+syncfs ignore "node_modules/*"
+
+# Start syncing
+syncfs start
+syncfs status
+
+# One-off operations
+syncfs dry-run
+syncfs pull  # force sync down from S3
 ```
 
-**Hidden Complexity:**
-- Native filesystem event monitoring with debouncing
-- Multipart upload management and connection pooling
-- Local metadata caching for efficient change detection
-- Sophisticated error handling and retry logic
-- Cross-platform path normalization
+### Tradeoffs
+- **Pros:** Project-aware, team-friendly (workspace configs can be shared), context-aware
+- **Cons:** More complex, requires workspace initialization, less portable across directories
 
-**Tradeoffs:**
-- ✅ Unix philosophy compliance: Composable with standard tools
-- ✅ Automation-friendly: Text-based interfaces work well in scripts
-- ✅ Flexible output formats: JSON, CSV, TSV for different pipeline needs
-- ❌ Requires chaining for complex workflows
-- ❌ Local state caching creates potential inconsistency
-- ❌ Error propagation can break pipelines
+## Comparison
 
-## Design 4: Interactive-First Approach
+| Aspect | Profile-Centric | Directory-First | Workspace-Based |
+|--------|----------------|-----------------|-----------------|
+| Setup complexity | Medium | Low | High |
+| Multi-target use | Excellent | Poor | Excellent |
+| Immediate use | Poor | Excellent | Poor |
+| Team sharing | Good | Poor | Excellent |
+| Mental overhead | Medium | Low | High |
+| Configuration reuse | Excellent | Manual | Excellent |
 
-**Interface Signature:**
-```bash
-s3sync setup                    # Setup wizard
-s3sync COMMAND --interactive    # Interactive mode
-s3sync [start|sync|watch|status] # Commands with progressive disclosure
-```
+## Synthesis and Recommendation
 
-**Usage Example:**
-```bash
-s3sync setup
-> Welcome to S3 Sync! Let's get you set up...
-> [1/6] AWS Profile Configuration
-> [2/6] S3 Bucket Selection
-> [3/6] Local Directory Setup
-> [4/6] Ignore Patterns
-> [5/6] Sync Options
-> [6/6] Final Review
+For a file sync tool targeting developers and teams, I recommend the **Workspace-Based Approach** with the following rationale:
 
-s3sync start --interactive
-> Analyzing directory... 1,247 files found
-> Preview changes? [Y/n]
-> Start sync? [Y/n]
-> [████████████████████████████████████████] 100% Complete
-```
+1. **Project context matters:** Developers think in terms of projects/repositories. A workspace-based approach aligns with this mental model.
 
-**Hidden Complexity:**
-- Configuration management: Profile validation, template expansion, conflict detection
-- UI/UX state: Terminal adaptation, responsive layouts, input validation, navigation state
-- Integration: AWS service discovery, credential management, permission validation
-- Smart systems: Intelligent recommendations, optimal settings calculation, contextual troubleshooting
-- Error recovery: Progressive problem solving, guided debugging, automatic recovery
+2. **Team collaboration:** Workspace configuration can be committed to version control, enabling consistent sync behavior across team members.
 
-**Tradeoffs:**
-- ✅ Ease of use: Guided experiences prevent configuration errors
-- ✅ Built-in help: Context-sensitive assistance and troubleshooting
-- ✅ Progressive disclosure: Complexity revealed as needed
-- ✅ Visual feedback: Real-time progress and status indication
-- ❌ Power user efficiency: Slower for experts who know what they want
-- ❌ Terminal limitations: Rich UI constrained by terminal capabilities
-- ❌ Implementation complexity: State management and UI frameworks required
+3. **Scaling:** As projects grow, the ability to selectively sync subdirectories and manage complex ignore patterns becomes crucial.
 
-## Design Comparison
+4. **Power user friendly:** While it has higher initial complexity, it provides the most powerful feature set for sustained use.
 
-**Interface Simplicity**:
-- **Minimal flags** (winner): Just `s3sync start --profile X --dry-run`
-- **Interactive**: `s3sync setup` then guided flows
-- **Pipeline**: `s3sync sync DIR --bucket X`
-- **Subcommand**: `s3sync sync push DIR --profile X`
+**Implementation priority:** Start with core workspace functionality, then add profile-like features for cross-workspace management in later versions.
 
-**Depth Analysis**:
-- **Minimal flags**: Deep module - tiny interface hiding massive complexity
-- **Subcommand**: Medium depth - organized complexity but verbose interface
-- **Pipeline**: Deep for composition, shallow for individual commands
-- **Interactive**: Variable depth - progressive disclosure allows both
-
-**Ease of Correct Use**:
-- **Interactive** (winner): Wizards prevent most errors, guided troubleshooting
-- **Minimal flags**: Hard to misuse due to few options, but errors are cryptic
-- **Pipeline**: Clear data flow, but requires Unix knowledge
-- **Subcommand**: Discoverable but many ways to combine incorrectly
-
-## Synthesis & Recommendation
-
-**For most users, choose the Interactive-first design** because:
-
-1. **Lower barrier to entry**: Setup wizard eliminates AWS/S3 knowledge requirements
-2. **Guided error recovery**: Built-in troubleshooting reduces support burden
-3. **Progressive complexity**: Grows with user expertise rather than overwhelming beginners
-4. **Visual feedback**: Real-time sync monitoring and progress indication
-
-**However, provide escape hatches**:
-- Add `--batch` mode for automation (pipeline-style text output)
-- Add `--quick` flag to bypass wizards for power users
-- Support configuration import/export for reproducible setups
-
-**Implementation insight**: The interactive design can subsume the others - wizards can generate minimal commands, expose pipeline output modes, and organize features into subcommand-like sections.
-
-This hybrid approach serves the broadest audience while maintaining power-user workflows through progressive disclosure rather than separate interfaces.
+The recommended CLI balances power-user needs with team collaboration while maintaining a logical project-based mental model that developers expect.

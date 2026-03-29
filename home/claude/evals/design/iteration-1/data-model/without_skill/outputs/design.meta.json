@@ -1,1 +1,7 @@
-{"elapsed_seconds": 44.16594624519348}
+{
+  "start_time": "2026-03-29 11:00:00.065",
+  "end_time": "2026-03-29 11:01:12.206",
+  "duration_seconds": 72.141,
+  "variant": "without_skill", 
+  "eval_id": "data-model"
+}
