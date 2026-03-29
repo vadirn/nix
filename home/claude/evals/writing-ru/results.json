@@ -52,7 +52,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.78 (max=0.8, 23\u219218 words)"
+        "detail": "ratio=0.61 (max=0.8, 23\u219214 words)"
       }
     ],
     "pass": 9,
@@ -60,9 +60,9 @@
     "total": 9,
     "score": "9/9",
     "input_words": 23,
-    "output_words": 18,
+    "output_words": 14,
     "eval_id": "otglagolnye",
-    "elapsed_seconds": 15.085574626922607
+    "elapsed_seconds": 3.1
   },
   {
     "checks": [
@@ -111,7 +111,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.85 (max=0.9, 34\u219229 words)"
+        "detail": "ratio=0.82 (max=0.9, 34\u219228 words)"
       }
     ],
     "pass": 8,
@@ -119,9 +119,9 @@
     "total": 8,
     "score": "8/8",
     "input_words": 34,
-    "output_words": 29,
+    "output_words": 28,
     "eval_id": "passivnyj-zalog",
-    "elapsed_seconds": 13.878224849700928
+    "elapsed_seconds": 2.8
   },
   {
     "checks": [
@@ -188,7 +188,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.60 (max=0.6, 47\u219228 words)"
+        "detail": "ratio=0.57 (max=0.6, 47\u219227 words)"
       }
     ],
     "pass": 11,
@@ -196,9 +196,9 @@
     "total": 11,
     "score": "11/11",
     "input_words": 47,
-    "output_words": 28,
+    "output_words": 27,
     "eval_id": "musor-i-voda",
-    "elapsed_seconds": 15.903191089630127
+    "elapsed_seconds": 2.5
   },
   {
     "checks": [
@@ -283,7 +283,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.51 (max=0.65, 47\u219224 words)"
+        "detail": "ratio=0.64 (max=0.65, 47\u219230 words)"
       }
     ],
     "pass": 14,
@@ -291,9 +291,9 @@
     "total": 14,
     "score": "14/14",
     "input_words": 47,
-    "output_words": 24,
+    "output_words": 30,
     "eval_id": "ai-shtampy",
-    "elapsed_seconds": 19.464207410812378
+    "elapsed_seconds": 3.2
   },
   {
     "checks": [
@@ -376,7 +376,7 @@
     "input_words": 30,
     "output_words": 17,
     "eval_id": "kantselyarit",
-    "elapsed_seconds": 15.10968828201294
+    "elapsed_seconds": 2.4
   },
   {
     "checks": [
@@ -437,7 +437,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.61 (max=0.75, 31\u219219 words)"
+        "detail": "ratio=0.48 (max=0.75, 31\u219215 words)"
       }
     ],
     "pass": 10,
@@ -445,9 +445,9 @@
     "total": 10,
     "score": "10/10",
     "input_words": 31,
-    "output_words": 19,
+    "output_words": 15,
     "eval_id": "otritsaniya",
-    "elapsed_seconds": 15.563790082931519
+    "elapsed_seconds": 2.6
   },
   {
     "checks": [
@@ -562,7 +562,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.47 (max=0.5, 62\u219229 words)"
+        "detail": "ratio=0.42 (max=0.5, 62\u219226 words)"
       }
     ],
     "pass": 19,
@@ -570,9 +570,9 @@
     "total": 19,
     "score": "19/19",
     "input_words": 62,
-    "output_words": 29,
+    "output_words": 26,
     "eval_id": "mixed-vse-problemy",
-    "elapsed_seconds": 23.056049823760986
+    "elapsed_seconds": 3.5
   },
   {
     "checks": [
@@ -639,7 +639,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.86 (max=0.9, 86\u219274 words)"
+        "detail": "ratio=0.88 (max=0.9, 86\u219276 words)"
       }
     ],
     "pass": 11,
@@ -647,9 +647,9 @@
     "total": 11,
     "score": "11/11",
     "input_words": 86,
-    "output_words": 74,
+    "output_words": 76,
     "eval_id": "technical-doc-ru",
-    "elapsed_seconds": 26.616923809051514
+    "elapsed_seconds": 3.8
   },
   {
     "checks": [
@@ -686,7 +686,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=1.08 (max=1.1, 39\u219242 words)"
+        "detail": "ratio=0.97 (max=1.1, 39\u219238 words)"
       }
     ],
     "pass": 6,
@@ -694,9 +694,9 @@
     "total": 6,
     "score": "6/6",
     "input_words": 39,
-    "output_words": 42,
+    "output_words": 38,
     "eval_id": "prichastiya-i-deeprichastiya",
-    "elapsed_seconds": 18.74248957633972
+    "elapsed_seconds": 3.0
   },
   {
     "checks": [
@@ -793,7 +793,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.69 (max=0.75, 52\u219236 words)"
+        "detail": "ratio=0.60 (max=0.75, 52\u219231 words)"
       }
     ],
     "pass": 16,
@@ -801,8 +801,8 @@
     "total": 16,
     "score": "16/16",
     "input_words": 52,
-    "output_words": 36,
+    "output_words": 31,
     "eval_id": "preserve-technical-terms-ru",
-    "elapsed_seconds": 21.323082208633423
+    "elapsed_seconds": 2.9
   }
 ]

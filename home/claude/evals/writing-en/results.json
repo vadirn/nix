@@ -52,7 +52,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.53 (max=0.75, 36\u219219 words)"
+        "detail": "ratio=0.50 (max=0.75, 36\u219218 words)"
       }
     ],
     "pass": 9,
@@ -60,9 +60,9 @@
     "total": 9,
     "score": "9/9",
     "input_words": 36,
-    "output_words": 19,
+    "output_words": 18,
     "eval_id": "nominalizations",
-    "elapsed_seconds": 28.427
+    "elapsed_seconds": 4.65
   },
   {
     "checks": [
@@ -122,18 +122,18 @@
       },
       {
         "type": "max_word_ratio",
-        "passed": true,
-        "detail": "ratio=0.77 (max=0.85, 39\u219230 words)"
+        "passed": false,
+        "detail": "ratio=0.87 (max=0.85, 39\u219234 words)"
       }
     ],
-    "pass": 10,
-    "fail": 0,
+    "pass": 9,
+    "fail": 1,
     "total": 10,
-    "score": "10/10",
+    "score": "9/10",
     "input_words": 39,
-    "output_words": 30,
+    "output_words": 34,
     "eval_id": "passive-voice",
-    "elapsed_seconds": 16.7325
+    "elapsed_seconds": 6.74
   },
   {
     "checks": [
@@ -193,18 +193,18 @@
       },
       {
         "type": "max_word_ratio",
-        "passed": false,
-        "detail": "ratio=0.67 (max=0.65, 52\u219235 words)"
+        "passed": true,
+        "detail": "ratio=0.63 (max=0.7, 52\u219233 words)"
       }
     ],
-    "pass": 9,
-    "fail": 1,
+    "pass": 10,
+    "fail": 0,
     "total": 10,
-    "score": "9/10",
+    "score": "10/10",
     "input_words": 52,
-    "output_words": 35,
+    "output_words": 33,
     "eval_id": "filler-and-padding",
-    "elapsed_seconds": 14.526
+    "elapsed_seconds": 4.83
   },
   {
     "checks": [
@@ -295,7 +295,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.63 (max=0.8, 46\u219229 words)"
+        "detail": "ratio=0.70 (max=0.8, 46\u219232 words)"
       }
     ],
     "pass": 15,
@@ -303,9 +303,9 @@
     "total": 15,
     "score": "15/15",
     "input_words": 46,
-    "output_words": 29,
+    "output_words": 32,
     "eval_id": "ai-promotional",
-    "elapsed_seconds": 21.5805
+    "elapsed_seconds": 8.68
   },
   {
     "checks": [
@@ -388,7 +388,7 @@
     "input_words": 36,
     "output_words": 28,
     "eval_id": "long-words",
-    "elapsed_seconds": 15.1776
+    "elapsed_seconds": 4.25
   },
   {
     "checks": [
@@ -449,7 +449,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.57 (max=0.85, 51\u219229 words)"
+        "detail": "ratio=0.71 (max=0.85, 51\u219236 words)"
       }
     ],
     "pass": 10,
@@ -457,9 +457,9 @@
     "total": 10,
     "score": "10/10",
     "input_words": 51,
-    "output_words": 29,
+    "output_words": 36,
     "eval_id": "negatives-and-metaphors",
-    "elapsed_seconds": 15.2019
+    "elapsed_seconds": 7.3
   },
   {
     "checks": [
@@ -496,7 +496,7 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.60 (max=0.8, 81\u219249 words)"
+        "detail": "ratio=0.65 (max=0.8, 81\u219253 words)"
       }
     ],
     "pass": 6,
@@ -504,9 +504,9 @@
     "total": 6,
     "score": "6/6",
     "input_words": 81,
-    "output_words": 49,
+    "output_words": 53,
     "eval_id": "mixed-paragraph-structure",
-    "elapsed_seconds": 18.4468
+    "elapsed_seconds": 6.2
   },
   {
     "checks": [
@@ -549,12 +549,12 @@
       {
         "type": "max_word_ratio",
         "passed": true,
-        "detail": "ratio=0.63 (max=1.1, 51\u219232 words)"
+        "detail": "ratio=0.86 (max=1.1, 51\u219244 words)"
       },
       {
         "type": "sentence_length_variance",
         "passed": true,
-        "detail": "lengths=[14, 6, 8, 4], spread=10 (min 5)"
+        "detail": "lengths=[17, 14, 6, 7], spread=11 (min 5)"
       }
     ],
     "pass": 8,
@@ -562,8 +562,919 @@
     "total": 8,
     "score": "8/8",
     "input_words": 51,
-    "output_words": 32,
+    "output_words": 44,
     "eval_id": "uniform-sentence-length",
-    "elapsed_seconds": 17.8277
+    "elapsed_seconds": 4.65
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "It is important to note",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "implementation of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "utilization of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "achievement of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "establishment of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Furthermore",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Additionally",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "not insignificant",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "not uncommon",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "not unacceptable",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "not dissimilar",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Due to the fact that",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "groundbreaking",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\bcommenced\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\bprior to\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\bSubsequently\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "each and every",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\butilize\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "was completed by",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "was performed",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "Redis",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "caching",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "latency",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "monitoring",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.50 (max=0.55, 96\u219248 words)"
+      }
+    ],
+    "pass": 25,
+    "fail": 0,
+    "total": 25,
+    "score": "25/25",
+    "input_words": 96,
+    "output_words": 48,
+    "eval_id": "mixed-all-issues",
+    "elapsed_seconds": 5.07
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "In this section, we will explore",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "It is worth mentioning",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "establishment of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\butilized\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "creation of a new",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "It is important to note",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Furthermore",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Additionally",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "it is recommended that",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "connection pool",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "TCP",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "TLS",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "timeout",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.59 (max=0.7, 177\u2192104 words)"
+      }
+    ],
+    "pass": 14,
+    "fail": 0,
+    "total": 14,
+    "score": "14/14",
+    "input_words": 177,
+    "output_words": 104,
+    "eval_id": "technical-doc-long",
+    "elapsed_seconds": 9.09
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "was renewed by Certbot",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "was identified by the on-call",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "was deployed and the incident was resolved",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "3 AM",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "cron job",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "Certbot",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "two hours",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.81 (max=0.9, 52\u219242 words)"
+      }
+    ],
+    "pass": 8,
+    "fail": 0,
+    "total": 8,
+    "score": "8/8",
+    "input_words": 52,
+    "output_words": 42,
+    "eval_id": "passive-with-unknown-actor",
+    "elapsed_seconds": 6.11
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "Not a sprint problem, but",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": ", but fragile",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": ", yet frequent",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "API",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "staging",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "deployments",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "test coverage",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=1.00 (max=1.35, 39\u219239 words)"
+      }
+    ],
+    "pass": 8,
+    "fail": 0,
+    "total": 8,
+    "score": "8/8",
+    "input_words": 39,
+    "output_words": 39,
+    "eval_id": "verbless-fragments",
+    "elapsed_seconds": 5.38
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "implementation of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\bfacilitated\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "utilization of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Furthermore",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "establishment of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "comprehensive",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Additionally",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "innovative",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "leverages",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "robust",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "It is important to note",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "idempotent",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "idempotency keys",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "exponential backoff",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "jitter",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "HMAC-SHA256",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "Content-Type",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "application/json",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "Stripe API",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.61 (max=0.7, 74\u219245 words)"
+      }
+    ],
+    "pass": 20,
+    "fail": 0,
+    "total": 20,
+    "score": "20/20",
+    "input_words": 74,
+    "output_words": 45,
+    "eval_id": "preserve-technical-terms",
+    "elapsed_seconds": 6.31
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "Introduction",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Conclusion",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "In this section, we will explore",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "It is important to note",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "comprehensive evaluation",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "utilization of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "facilitated by the establishment",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "There are many factors",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "should not be ignored",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "identification of all",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Subsequently",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "creation of replication",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Furthermore",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "it is worth mentioning",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\brobust\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\bscalable\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "establishment of alerting",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "prior to the commencement",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "each and every",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "verification of data",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "In the event that",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Due to the fact that",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "not dissimilar",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "not unfamiliar",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Taking into account all the factors",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "It is recommended that",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "\\butilize\\b",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "PostgreSQL 12",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "PostgreSQL 16",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "logical replication",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "replication lag",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "checksums",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "rollback",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.48 (max=0.6, 262\u2192127 words)"
+      }
+    ],
+    "pass": 34,
+    "fail": 0,
+    "total": 34,
+    "score": "34/34",
+    "input_words": 262,
+    "output_words": 127,
+    "eval_id": "long-migration-doc",
+    "elapsed_seconds": 8.42
+  },
+  {
+    "checks": [
+      {
+        "type": "absent_pattern",
+        "pattern": "Background",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Proposed Solution",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Consequences",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "It is important to note",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "innovative",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "implementation of the message",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "due to the fact that",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "comprehensive set",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Furthermore",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "utilization of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "facilitated the achievement",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "it is worth mentioning",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "occurrence of",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "establishment of dead-letter",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "Additionally",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "was not considered to be robust",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "facilitated by an evaluation",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "not provided by RabbitMQ in a comparable manner",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "not insignificant",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "establishment of a comprehensive",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "prior to the production",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "absent_pattern",
+        "pattern": "it should be noted",
+        "passed": true,
+        "detail": "absent"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "RabbitMQ",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "Kafka",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "dead-letter",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "dual-write",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "partition",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "consumer group",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "present_pattern",
+        "pattern": "offset",
+        "passed": true,
+        "detail": "present"
+      },
+      {
+        "type": "max_word_ratio",
+        "passed": true,
+        "detail": "ratio=0.47 (max=0.6, 333\u2192158 words)"
+      }
+    ],
+    "pass": 30,
+    "fail": 0,
+    "total": 30,
+    "score": "30/30",
+    "input_words": 333,
+    "output_words": 158,
+    "eval_id": "long-architecture-adr",
+    "elapsed_seconds": 8.47
   }
 ]

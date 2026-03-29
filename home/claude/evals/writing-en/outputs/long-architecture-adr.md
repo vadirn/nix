@@ -1,9 +1,15 @@
-The platform team built our event-driven architecture in 2023 using RabbitMQ for message routing across microservices.
+## Why We Are Leaving RabbitMQ
 
-RabbitMQ created challenges: message loss during high load, and dead-letter queues didn't solve the problem. Our custom monitoring solution for queue depths wasn't production-ready.
+The platform team built our event-driven architecture in 2023 using RabbitMQ. The team chose it for its exchange-based routing, which enabled flexible message distribution across microservices.
 
-We decided to migrate from RabbitMQ to Apache Kafka after the architecture review board's evaluation. Kafka provides durable, ordered, replayable event streams that RabbitMQ cannot match.
+RabbitMQ has created problems. Message loss occurred during high load, and dead-letter queues didn't solve it. We monitored queue depths with a custom solution built by the infrastructure team, but it wasn't production-ready.
 
-The three-phase migration: First, implement dual-write to publish events to both RabbitMQ and Kafka. Second, migrate consumers to read from Kafka. Third, decommission RabbitMQ.
+## Migrating to Apache Kafka
 
-Kafka introduces operational complexity. The team must learn partition models, consumer groups, and offset management. We need monitoring and alerting before production deployment. Kafka requires more disk space than RabbitMQ.
+The architecture review board evaluated alternatives and chose Apache Kafka. Kafka provides durable, ordered, replayable event streams. RabbitMQ does not.
+
+The migration runs in three phases. First, implement dual-write to publish events to both RabbitMQ and Kafka. Second, migrate consumers to read from Kafka. Third, decommission RabbitMQ.
+
+## Operational Impact
+
+Kafka introduces significant operational complexity. The team must learn Kafka's partition model, consumer groups, and offset management. Set up monitoring and alerting before the production deployment. Kafka also requires more disk space than RabbitMQ, so provision additional storage.

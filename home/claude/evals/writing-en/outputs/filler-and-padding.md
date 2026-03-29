@@ -1,1 +1,1 @@
-The API rate limit is 100 requests per minute. The cache expires every hour, so implement a refresh mechanism. If the service becomes unavailable, every client needs retry logic with exponential backoff.
+The API rate limit is 100 requests per minute. Because the cache expires every hour, implement a refresh mechanism. If the service becomes unavailable, every client should implement retry logic with exponential backoff.

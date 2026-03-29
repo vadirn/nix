@@ -1,1 +1,1 @@
-The monitoring system collects metrics from all services and displays them in real time on the dashboard. Alerts trigger when thresholds are exceeded. The on-call engineer gets PagerDuty notifications, investigates the root cause, and documents the resolution.
+The monitoring system collects metrics from all services and displays them on the dashboard in real time. When thresholds are exceeded, alerting rules send notifications to the on-call engineer via PagerDuty. The engineer investigates the root cause. The resolution goes into the incident report.

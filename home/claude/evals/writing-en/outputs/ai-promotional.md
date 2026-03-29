@@ -1,1 +1,1 @@
-Our solution delivers a scalable architecture. Developers can build applications. The integration provides a toolkit for development. The platform helps teams boost productivity.
+Our solution uses modern technology to deliver a well-structured architecture. Developers can build applications with it. The integration includes a toolkit for modern development. The platform gives teams tools to increase productivity.
