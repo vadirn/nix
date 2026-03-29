@@ -269,19 +269,17 @@ def test_gp_after_skeptic_template():
 
 
 def test_skeptic_template():
-    """Skeptic template includes diff and GP checkpoint."""
+    """Skeptic template includes GP checkpoint."""
     step = run.StepConfig(name="review", prompt="Check for hardcoded secrets.", role="skeptic")
     result = run.make_skeptic_prompt(
         step, "/workspace", "/workspace/pipelines/test",
         "## Done\nImplemented JWT.",
-        "diff --git a/auth.py b/auth.py\n+SECRET='abc'",
         "checkpoint-003.md", 1,
     )
     assert "Check for hardcoded secrets." in result
     assert "Implemented JWT." in result
-    assert "SECRET='abc'" in result
     assert "Review Criteria" in result
-    assert "Changes Made" in result
+    assert "Work Under Review" in result
     print("  PASS test_skeptic_template")
 
 

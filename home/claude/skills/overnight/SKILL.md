@@ -172,7 +172,7 @@ Default values: `model: claude-opus-4-6[1m]`, `max_rounds: 5`, `wait: 30`.
 Steps are paired by adjacency: a skeptic step always reviews the preceding GP step.
 
 1. Runner runs the GP step. GP does work, writes a checkpoint.
-2. Runner runs the skeptic step. Skeptic receives the GP checkpoint and a git diff of changes.
+2. Runner runs the skeptic step. Skeptic receives the GP checkpoint (and verify_cmd output if configured).
 3. If skeptic writes STEP_COMPLETE: the pair is done. Move to the next GP step.
 4. If skeptic writes STEP_IN_PROGRESS: runner feeds the skeptic's feedback back to the GP. GP re-runs, addressing each feedback item.
 5. Repeat until skeptic approves or max_rounds is reached.
@@ -265,8 +265,8 @@ STOP
 The runner (`run.py`) reads `pipeline.yaml`, generates `docker-compose.yml` from the step names, and builds all images via `docker compose build`. Then it executes steps:
 
 1. For a GP step: builds a prompt with the task and previous state, runs `docker compose run {step}` with the prompt
-2. Commits workspace changes outside Docker
-3. If a skeptic follows: builds a review prompt with the GP checkpoint and git diff, runs `docker compose run {skeptic}`
+2. Commits workspace changes outside Docker (excluding pipeline runtime artifacts)
+3. If a skeptic follows: builds a review prompt with the GP checkpoint, runs `docker compose run {skeptic}`
 4. If skeptic says IN_PROGRESS: loops back to GP with feedback
 5. If skeptic says COMPLETE: advances to the next pair
 

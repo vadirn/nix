@@ -182,9 +182,6 @@ Step: "{step_name}", round {round_number}.
 ## Work Under Review
 {gp_checkpoint}
 
-## Changes Made
-{git_diff}
-
 ## Instructions
 - Write checkpoint to {checkpoint_path} with your verdict. This is required.
 - Set STEP_COMPLETE if the work meets criteria.
@@ -314,51 +311,6 @@ def run_round(
 # Section 5: Git helpers
 # ---------------------------------------------------------------------------
 
-def get_commit_hash(workspace: str) -> str:
-    """Get current HEAD commit hash."""
-    result = subprocess.run(
-        ["git", "-C", workspace, "rev-parse", "HEAD"],
-        capture_output=True, text=True,
-    )
-    return result.stdout.strip()
-
-
-MAX_DIFF_LINES = 500
-
-
-def get_diff_since(workspace: str, commit_hash: str) -> str:
-    """Get diff from commit_hash to current working state.
-
-    If the diff exceeds MAX_DIFF_LINES, returns a stat summary instead
-    to avoid overwhelming the agent's context window.
-    Uses --shortstat first to decide whether to fetch the full diff.
-    """
-    shortstat = subprocess.run(
-        ["git", "-C", workspace, "diff", "--shortstat", commit_hash],
-        capture_output=True, text=True,
-    )
-    # Parse "N files changed, M insertions(+), K deletions(-)"
-    # Use insertions + deletions as a line count estimate
-    nums = re.findall(r"(\d+)", shortstat.stdout)
-    estimated_lines = sum(int(n) for n in nums[1:]) if len(nums) > 1 else 0
-
-    if estimated_lines <= MAX_DIFF_LINES:
-        result = subprocess.run(
-            ["git", "-C", workspace, "diff", commit_hash],
-            capture_output=True, text=True,
-        )
-        return result.stdout
-
-    # Diff too large: use stat summary instead
-    stat = subprocess.run(
-        ["git", "-C", workspace, "diff", "--stat", commit_hash],
-        capture_output=True, text=True,
-    )
-    return (
-        f"[Diff truncated: ~{estimated_lines} changed lines exceeds {MAX_DIFF_LINES} limit. "
-        f"Showing --stat summary. Read individual files for detail.]\n\n"
-        + stat.stdout
-    )
 
 
 def commit_round(
@@ -473,7 +425,6 @@ def make_skeptic_prompt(
     workspace: str,
     pipeline_dir: str,
     gp_checkpoint: str,
-    git_diff: str,
     checkpoint_filename: str,
     round_number: int,
 ) -> str:
@@ -482,7 +433,6 @@ def make_skeptic_prompt(
         round_number=round_number,
         prompt=step.prompt,
         gp_checkpoint=gp_checkpoint,
-        git_diff=git_diff or "No changes detected.",
         checkpoint_path=docker_checkpoint_path(workspace, pipeline_dir, checkpoint_filename),
         checkpoint_format=CHECKPOINT_FORMAT.format(step_name=step.name, round_number=round_number),
     )
@@ -572,7 +522,6 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
         print(f"{'=' * 60}")
 
         # First GP run
-        pre_gp_commit = get_commit_hash(workspace)
         cp_filename = make_checkpoint_filename(step.name, 1)
         prompt = make_gp_prompt(
             step, workspace, pipeline_dir_str, prev_checkpoint_content, cp_filename, 1,
@@ -649,26 +598,23 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
             if (pipeline_dir / "STOP").exists():
                 return
 
-            # Skeptic reviews
-            git_diff = get_diff_since(workspace, pre_gp_commit)
-
-            # Run verify_cmd if present: execute script, include output
-            verify_output = ""
+            # Run verify_cmd if present: execute script, prepend to GP checkpoint
             if next_step.verify_cmd:
                 print(f"overnight: running verify_cmd for '{next_step.name}'")
                 verify_output, verify_exit = run_verify_cmd(
                     next_step, workspace, compose_path,
                 )
                 print(f"overnight: verify_cmd exit={verify_exit}")
-                git_diff = (
+                gp_content = (
                     f"## Verification Script Output (exit code {verify_exit})\n"
                     f"```\n{verify_output.strip()}\n```\n\n"
-                    f"## Git Diff\n{git_diff}"
+                    + gp_content
                 )
 
+            # Skeptic reviews
             cp_filename = make_checkpoint_filename(next_step.name, iteration + 1)
             prompt = make_skeptic_prompt(
-                next_step, workspace, pipeline_dir_str, gp_content, git_diff,
+                next_step, workspace, pipeline_dir_str, gp_content,
                 cp_filename, iteration + 1,
             )
 
@@ -697,8 +643,6 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
 
             # IN_PROGRESS: loop back to GP with feedback
             skeptic_content = read_file(skeptic_path)
-            pre_gp_commit = get_commit_hash(workspace)
-
             wait = pipeline.defaults.get("wait", DEFAULTS["wait"])
             print(f"overnight: waiting {wait}s")
             time.sleep(wait)
