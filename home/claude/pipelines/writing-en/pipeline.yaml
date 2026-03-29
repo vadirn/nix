@@ -37,7 +37,8 @@ steps:
       Process all 13 eval cases. Create the outputs/ directory if needed.
 
   - name: grade
-    role: skeptic
     prompt: |
       Run: python3 home/claude/evals/writing-en/grade.py
       Report pass/fail per assertion and overall score.
+      Save the results to home/claude/evals/writing-en/results.json as JSON:
+      {"passed": <count>, "failed": <count>, "total": <count>, "cases": [{"id": ..., "passed": ..., "failed": ...}]}

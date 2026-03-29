@@ -175,12 +175,11 @@ Step: "{step_name}", round {round_number}.
 {git_diff}
 
 ## Instructions
-- Evaluate the work against your review criteria.
+- Write checkpoint to {checkpoint_path} with your verdict. This is required.
 - Set STEP_COMPLETE if the work meets criteria.
 - Set STEP_IN_PROGRESS with specific, actionable feedback if revisions needed.
 - Set STEP_FAILED if the work has unrecoverable issues.
 - Be concrete: name files, functions, specific issues.
-- Write checkpoint to {checkpoint_path}.
 {checkpoint_format}"""
 
 
@@ -284,6 +283,19 @@ def run_round(
         pass
 
     checkpoint_path = os.path.join(pipeline_dir, checkpoint_filename)
+
+    if proc.returncode == 0 and not os.path.exists(checkpoint_path):
+        print(f"warning: {step.name} round {round_number} exited 0 but wrote no checkpoint "
+              f"(expected {checkpoint_filename}), creating synthetic STEP_COMPLETE",
+              file=sys.stderr)
+        with open(checkpoint_path, "w") as f:
+            f.write(
+                f"---\nstatus: STEP_COMPLETE\nstep: {step.name}\n"
+                f"round: {round_number}\n---\n\n"
+                "## Done\n\nAgent completed without writing checkpoint. "
+                "Synthetic STEP_COMPLETE created by runner.\n"
+            )
+
     return checkpoint_path, proc.returncode
 
 
@@ -300,13 +312,35 @@ def get_commit_hash(workspace: str) -> str:
     return result.stdout.strip()
 
 
+MAX_DIFF_LINES = 500
+
+
 def get_diff_since(workspace: str, commit_hash: str) -> str:
-    """Get diff from commit_hash to current working state."""
+    """Get diff from commit_hash to current working state.
+
+    If the diff exceeds MAX_DIFF_LINES, returns a stat summary instead
+    to avoid overwhelming the agent's context window.
+    """
     result = subprocess.run(
         ["git", "-C", workspace, "diff", commit_hash],
         capture_output=True, text=True,
     )
-    return result.stdout
+    diff = result.stdout
+    lines = diff.split("\n")
+
+    if len(lines) <= MAX_DIFF_LINES:
+        return diff
+
+    # Diff too large: use stat summary instead
+    stat = subprocess.run(
+        ["git", "-C", workspace, "diff", "--stat", commit_hash],
+        capture_output=True, text=True,
+    )
+    return (
+        f"[Diff truncated: {len(lines)} lines exceeds {MAX_DIFF_LINES} limit. "
+        f"Showing --stat summary. Read individual files for detail.]\n\n"
+        + stat.stdout
+    )
 
 
 def commit_round(workspace: str, step_name: str, iteration: int) -> None:
