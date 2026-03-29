@@ -18,12 +18,17 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from string import Template
 
 import yaml
 
 # ---------------------------------------------------------------------------
 # Section 1: Data model
 # ---------------------------------------------------------------------------
+
+COMPLETE = "STEP_COMPLETE"
+IN_PROGRESS = "STEP_IN_PROGRESS"
+FAILED = "STEP_FAILED"
 
 DEFAULTS = {
     "model": "claude-opus-4-6[1m]",
@@ -196,7 +201,7 @@ Step: "{step_name}", round {round_number}.
 def parse_checkpoint(path: str) -> dict:
     """Parse checkpoint YAML frontmatter. Returns dict with at least 'status'."""
     if not os.path.exists(path):
-        return {"status": "STEP_IN_PROGRESS"}
+        return {"status": IN_PROGRESS}
 
     with open(path) as f:
         content = f.read()
@@ -204,22 +209,22 @@ def parse_checkpoint(path: str) -> dict:
     match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
     if not match:
         print("warning: checkpoint has no YAML frontmatter, assuming IN_PROGRESS", file=sys.stderr)
-        return {"status": "STEP_IN_PROGRESS"}
+        return {"status": IN_PROGRESS}
 
     try:
         frontmatter = yaml.safe_load(match.group(1))
     except yaml.YAMLError as e:
         print(f"warning: failed to parse checkpoint frontmatter: {e}", file=sys.stderr)
-        return {"status": "STEP_IN_PROGRESS"}
+        return {"status": IN_PROGRESS}
 
     if not isinstance(frontmatter, dict) or "status" not in frontmatter:
         print("warning: checkpoint frontmatter missing 'status', assuming IN_PROGRESS", file=sys.stderr)
-        return {"status": "STEP_IN_PROGRESS"}
+        return {"status": IN_PROGRESS}
 
-    valid_statuses = {"STEP_COMPLETE", "STEP_IN_PROGRESS", "STEP_FAILED"}
+    valid_statuses = {COMPLETE, IN_PROGRESS, FAILED}
     if frontmatter["status"] not in valid_statuses:
         print(f"warning: unknown status '{frontmatter['status']}', assuming IN_PROGRESS", file=sys.stderr)
-        frontmatter["status"] = "STEP_IN_PROGRESS"
+        frontmatter["status"] = IN_PROGRESS
 
     return frontmatter
 
@@ -296,7 +301,7 @@ def run_round(
               file=sys.stderr)
         with open(checkpoint_path, "w") as f:
             f.write(
-                f"---\nstatus: STEP_COMPLETE\nstep: {step.name}\n"
+                f"---\nstatus: {COMPLETE}\nstep: {step.name}\n"
                 f"round: {round_number}\n---\n\n"
                 "## Done\n\nAgent completed without writing checkpoint. "
                 "Synthetic STEP_COMPLETE created by runner.\n"
@@ -326,16 +331,23 @@ def get_diff_since(workspace: str, commit_hash: str) -> str:
 
     If the diff exceeds MAX_DIFF_LINES, returns a stat summary instead
     to avoid overwhelming the agent's context window.
+    Uses --shortstat first to decide whether to fetch the full diff.
     """
-    result = subprocess.run(
-        ["git", "-C", workspace, "diff", commit_hash],
+    shortstat = subprocess.run(
+        ["git", "-C", workspace, "diff", "--shortstat", commit_hash],
         capture_output=True, text=True,
     )
-    diff = result.stdout
-    lines = diff.split("\n")
+    # Parse "N files changed, M insertions(+), K deletions(-)"
+    # Use insertions + deletions as a line count estimate
+    nums = re.findall(r"(\d+)", shortstat.stdout)
+    estimated_lines = sum(int(n) for n in nums[1:]) if len(nums) > 1 else 0
 
-    if len(lines) <= MAX_DIFF_LINES:
-        return diff
+    if estimated_lines <= MAX_DIFF_LINES:
+        result = subprocess.run(
+            ["git", "-C", workspace, "diff", commit_hash],
+            capture_output=True, text=True,
+        )
+        return result.stdout
 
     # Diff too large: use stat summary instead
     stat = subprocess.run(
@@ -343,7 +355,7 @@ def get_diff_since(workspace: str, commit_hash: str) -> str:
         capture_output=True, text=True,
     )
     return (
-        f"[Diff truncated: {len(lines)} lines exceeds {MAX_DIFF_LINES} limit. "
+        f"[Diff truncated: ~{estimated_lines} changed lines exceeds {MAX_DIFF_LINES} limit. "
         f"Showing --stat summary. Read individual files for detail.]\n\n"
         + stat.stdout
     )
@@ -360,29 +372,27 @@ def commit_round(
     if not result.stdout.strip():
         return
 
-    # Exclude runtime artifacts in the pipeline directory
+    # Stage everything except pipeline runtime artifacts
     rel_dir = os.path.relpath(pipeline_dir, workspace)
     excludes = [
-        f"{rel_dir}/checkpoint-*.md",
-        f"{rel_dir}/tool-calls.jsonl",
-        f"{rel_dir}/prompt-*.md",
-        f"{rel_dir}/STOP",
-        f"{rel_dir}/skills/",
+        f":!{rel_dir}/checkpoint-*.md",
+        f":!{rel_dir}/tool-calls.jsonl",
+        f":!{rel_dir}/prompt-*.md",
+        f":!{rel_dir}/STOP",
+        f":!{rel_dir}/skills",
     ]
 
-    subprocess.run(["git", "-C", workspace, "add", "-A"])
-    for pattern in excludes:
-        subprocess.run(
-            ["git", "-C", workspace, "reset", "HEAD", "--", pattern],
-            capture_output=True,
-        )
-
-    # Check if anything remains staged after exclusions
-    result = subprocess.run(
-        ["git", "-C", workspace, "diff", "--cached", "--stat"],
-        capture_output=True, text=True,
+    subprocess.run(
+        ["git", "-C", workspace, "add", "-A", "--"] + excludes,
+        capture_output=True,
     )
-    if not result.stdout.strip():
+
+    # Check if anything is staged
+    result = subprocess.run(
+        ["git", "-C", workspace, "diff", "--cached", "--quiet"],
+        capture_output=True,
+    )
+    if result.returncode == 0:
         return
 
     subprocess.run(
@@ -482,29 +492,26 @@ def make_skeptic_prompt(
 # Section 7: Pipeline runner
 # ---------------------------------------------------------------------------
 
-STOPPED = False
-
-
 def make_checkpoint_filename(step_name: str, round_number: int) -> str:
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     return f"checkpoint-{step_name}-{timestamp}-{round_number:03d}.md"
 
 
-COMPOSE_TEMPLATE = """\
+COMPOSE_TEMPLATE = Template("""\
 x-common: &common
   build: .
   volumes:
-    - ${{WORKSPACE}}:/workspace
-    - ${{WORKSPACE}}/.git:/workspace/.git:ro
+    - $${WORKSPACE}:/workspace
+    - $${WORKSPACE}/.git:/workspace/.git:ro
     - claude-home:/home/claude
 
 services:
-{services}
+$services
 volumes:
   claude-home:
     external: true
     name: claude-runner-home
-"""
+""")
 
 
 def generate_compose(pipeline: PipelineConfig, output_path: str) -> None:
@@ -515,16 +522,15 @@ def generate_compose(pipeline: PipelineConfig, output_path: str) -> None:
         if step.name not in seen:
             services.append(f"  {step.name}:\n    <<: *common")
             seen.add(step.name)
-    content = COMPOSE_TEMPLATE.format(services="\n".join(services) + "\n")
+    content = COMPOSE_TEMPLATE.substitute(services="\n".join(services))
     with open(output_path, "w") as f:
         f.write(content)
 
 
 def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
     """Load pipeline. Execute steps with GP-skeptic loop."""
-    global STOPPED
-
     pipeline_dir = Path(pipeline_dir_arg)
+    pipeline_dir_str = pipeline_dir_str
     pipeline = load_pipeline(str(pipeline_dir / "pipeline.yaml"))
     compose_path = str(pipeline_dir / "docker-compose.yml")
     validate_pipeline(pipeline)
@@ -552,7 +558,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
     i = 0
 
     while i < len(pipeline.steps):
-        if STOPPED or (pipeline_dir / "STOP").exists():
+        if (pipeline_dir / "STOP").exists():
             print("overnight: stopped")
             return
 
@@ -569,24 +575,24 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
         pre_gp_commit = get_commit_hash(workspace)
         cp_filename = make_checkpoint_filename(step.name, 1)
         prompt = make_gp_prompt(
-            step, workspace, str(pipeline_dir), prev_checkpoint_content, cp_filename, 1,
+            step, workspace, pipeline_dir_str, prev_checkpoint_content, cp_filename, 1,
         )
 
         print(f"\n=== {step.name} round 1 (gp) ===")
         gp_path, exit_code = run_round(
-            step, workspace, str(pipeline_dir), prompt, cp_filename, 1, compose_path,
+            step, workspace, pipeline_dir_str, prompt, cp_filename, 1, compose_path,
         )
         print(f"=== round complete (exit={exit_code}) ===")
-        commit_round(workspace, step.name, 1, str(pipeline_dir))
+        commit_round(workspace, step.name, 1, pipeline_dir_str)
 
         gp_status = parse_checkpoint(gp_path)["status"]
-        if gp_status == "STEP_FAILED":
+        if gp_status == FAILED:
             print(f"overnight: step '{step.name}' failed", file=sys.stderr)
             sys.exit(1)
 
         # Standalone GP (no skeptic following)
         if not is_paired:
-            if gp_status == "STEP_COMPLETE":
+            if gp_status == COMPLETE:
                 prev_checkpoint_content = read_file(gp_path)
                 print(f"overnight: step '{step.name}' complete")
                 i += 1
@@ -595,7 +601,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
             # Standalone GP with IN_PROGRESS: loop within its own max_rounds
             gp_content = read_file(gp_path)
             for rnd in range(2, step.max_rounds + 1):
-                if STOPPED or (pipeline_dir / "STOP").exists():
+                if (pipeline_dir / "STOP").exists():
                     return
 
                 wait = pipeline.defaults.get("wait", DEFAULTS["wait"])
@@ -604,25 +610,25 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
 
                 cp_filename = make_checkpoint_filename(step.name, rnd)
                 prompt = make_gp_prompt(
-                    step, workspace, str(pipeline_dir), gp_content, cp_filename, rnd,
+                    step, workspace, pipeline_dir_str, gp_content, cp_filename, rnd,
                 )
 
                 print(f"\n=== {step.name} round {rnd} (gp) ===")
                 gp_path, exit_code = run_round(
-                    step, workspace, str(pipeline_dir), prompt,
+                    step, workspace, pipeline_dir_str, prompt,
                     cp_filename, rnd, compose_path,
                 )
                 print(f"=== round complete (exit={exit_code}) ===")
-                commit_round(workspace, step.name, rnd, str(pipeline_dir))
+                commit_round(workspace, step.name, rnd, pipeline_dir_str)
 
                 gp_status = parse_checkpoint(gp_path)["status"]
                 gp_content = read_file(gp_path)
 
-                if gp_status == "STEP_COMPLETE":
+                if gp_status == COMPLETE:
                     prev_checkpoint_content = gp_content
                     print(f"overnight: step '{step.name}' complete")
                     break
-                if gp_status == "STEP_FAILED":
+                if gp_status == FAILED:
                     print(f"overnight: step '{step.name}' failed", file=sys.stderr)
                     sys.exit(1)
             else:
@@ -640,7 +646,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
         )
 
         for iteration in range(max_iter):
-            if STOPPED or (pipeline_dir / "STOP").exists():
+            if (pipeline_dir / "STOP").exists():
                 return
 
             # Skeptic reviews
@@ -662,20 +668,20 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
 
             cp_filename = make_checkpoint_filename(next_step.name, iteration + 1)
             prompt = make_skeptic_prompt(
-                next_step, workspace, str(pipeline_dir), gp_content, git_diff,
+                next_step, workspace, pipeline_dir_str, gp_content, git_diff,
                 cp_filename, iteration + 1,
             )
 
             print(f"\n=== {next_step.name} round {iteration + 1} (skeptic) ===")
             skeptic_path, exit_code = run_round(
-                next_step, workspace, str(pipeline_dir), prompt,
+                next_step, workspace, pipeline_dir_str, prompt,
                 cp_filename, iteration + 1, compose_path,
             )
             print(f"=== round complete (exit={exit_code}) ===")
 
             skeptic_status = parse_checkpoint(skeptic_path)["status"]
 
-            if skeptic_status == "STEP_COMPLETE":
+            if skeptic_status == COMPLETE:
                 skeptic_content = read_file(skeptic_path)
                 prev_checkpoint_content = (
                     "## Previous Work\n" + gp_content +
@@ -685,7 +691,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
                 i += 2
                 break
 
-            if skeptic_status == "STEP_FAILED":
+            if skeptic_status == FAILED:
                 print(f"overnight: '{next_step.name}' failed", file=sys.stderr)
                 sys.exit(1)
 
@@ -694,26 +700,25 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
             pre_gp_commit = get_commit_hash(workspace)
 
             wait = pipeline.defaults.get("wait", DEFAULTS["wait"])
-            if not STOPPED:
-                print(f"overnight: waiting {wait}s")
-                time.sleep(wait)
+            print(f"overnight: waiting {wait}s")
+            time.sleep(wait)
 
             cp_filename = make_checkpoint_filename(step.name, iteration + 2)
             prompt = make_gp_after_skeptic_prompt(
-                step, workspace, str(pipeline_dir), gp_content, skeptic_content,
+                step, workspace, pipeline_dir_str, gp_content, skeptic_content,
                 cp_filename, iteration + 2,
             )
 
             print(f"\n=== {step.name} round {iteration + 2} (gp, addressing feedback) ===")
             gp_path, exit_code = run_round(
-                step, workspace, str(pipeline_dir), prompt,
+                step, workspace, pipeline_dir_str, prompt,
                 cp_filename, iteration + 2, compose_path,
             )
             print(f"=== round complete (exit={exit_code}) ===")
-            commit_round(workspace, step.name, iteration + 2, str(pipeline_dir))
+            commit_round(workspace, step.name, iteration + 2, pipeline_dir_str)
 
             gp_status = parse_checkpoint(gp_path)["status"]
-            if gp_status == "STEP_FAILED":
+            if gp_status == FAILED:
                 print(f"overnight: step '{step.name}' failed", file=sys.stderr)
                 sys.exit(1)
 
