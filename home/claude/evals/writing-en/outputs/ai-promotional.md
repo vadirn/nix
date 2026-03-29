@@ -1,1 +1,1 @@
-Our solution uses modern technology to deliver a well-structured architecture. Developers can build applications with it. The integration includes a toolkit for modern development. The platform gives teams tools to increase productivity.
+Our solution uses React and GraphQL to build web applications. This approach helps developers create user-facing tools. The integration works with existing CI/CD pipelines. The platform reduces build time from 10 minutes to 2.

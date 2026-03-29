@@ -1,5 +1,16 @@
-Database connection pooling is a common pattern in web applications. Creating a new database connection is expensive: it requires TCP handshake, TLS negotiation, and authentication. A connection pool maintains idle connections and reuses them, eliminating that overhead.
+Database connection pools reuse connections instead of creating new ones.
 
-When a request needs a database connection, it borrows one from the pool and returns it when done. If all connections are busy, the request waits. If the wait exceeds the timeout, the request fails.
+Creating database connections costs time—each requires TCP handshake, TLS negotiation, and authentication. Reusing connections eliminates this overhead.
 
-Default settings: pool size 10, maximum 50, idle timeout 30 seconds, connection lifetime 1 hour. Tune these values for your workload. Monitor pool utilization and export the metrics to your monitoring system.
+Connection pools maintain idle connections. Requests borrow connections from the pool, then return them when done.
+
+If all connections are busy, requests wait. If wait exceeds timeout, the request fails.
+
+## Configuration
+
+- Default pool size: 10
+- Maximum pool size: 50
+- Idle timeout: 30 seconds
+- Connection lifetime: 1 hour
+
+Tune values based on workload. Monitor pool use. Export connection pool metrics to monitoring systems.

@@ -1,1 +1,1 @@
-The engineering team implemented the new authentication system. JWT tokens improved security. A review committee identified remaining vulnerabilities.
+The engineering team implemented the new authentication system. Using JWT tokens improved security. The team established a review committee to identify remaining vulnerabilities.
