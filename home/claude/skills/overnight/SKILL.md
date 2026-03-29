@@ -183,6 +183,8 @@ STEP_FAILED from either actor aborts the pipeline immediately.
 
 Between pairs, the next GP receives both the previous GP's work summary and the skeptic's verdict as context.
 
+**When to use GP vs skeptic for grade/verify steps:** Use skeptic when the reviewer should trigger GP revision on failure (iterative improvement). Use GP when the step runs a measurement script and reports results (benchmarks, eval grading). Benchmark grades report scores as-is; they don't request revision. A skeptic grade step will return STEP_IN_PROGRESS on poor scores, creating an unwanted feedback loop.
+
 ### Per-project Dockerfile
 
 When a project needs tools beyond bash/curl/git:
