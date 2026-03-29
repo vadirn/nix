@@ -343,8 +343,10 @@ def get_diff_since(workspace: str, commit_hash: str) -> str:
     )
 
 
-def commit_round(workspace: str, step_name: str, iteration: int) -> None:
-    """Commit workspace changes."""
+def commit_round(
+    workspace: str, step_name: str, iteration: int, pipeline_dir: str,
+) -> None:
+    """Commit workspace changes, excluding pipeline runtime artifacts."""
     result = subprocess.run(
         ["git", "-C", workspace, "status", "--porcelain"],
         capture_output=True, text=True,
@@ -352,7 +354,31 @@ def commit_round(workspace: str, step_name: str, iteration: int) -> None:
     if not result.stdout.strip():
         return
 
+    # Exclude runtime artifacts in the pipeline directory
+    rel_dir = os.path.relpath(pipeline_dir, workspace)
+    excludes = [
+        f"{rel_dir}/checkpoint-*.md",
+        f"{rel_dir}/tool-calls.jsonl",
+        f"{rel_dir}/prompt-*.md",
+        f"{rel_dir}/STOP",
+        f"{rel_dir}/skills/",
+    ]
+
     subprocess.run(["git", "-C", workspace, "add", "-A"])
+    for pattern in excludes:
+        subprocess.run(
+            ["git", "-C", workspace, "reset", "HEAD", "--", pattern],
+            capture_output=True,
+        )
+
+    # Check if anything remains staged after exclusions
+    result = subprocess.run(
+        ["git", "-C", workspace, "diff", "--cached", "--stat"],
+        capture_output=True, text=True,
+    )
+    if not result.stdout.strip():
+        return
+
     subprocess.run(
         ["git", "-C", workspace, "commit", "-m",
          f"overnight: {step_name} iteration {iteration}"],
@@ -498,7 +524,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
             step, workspace, str(pipeline_dir), prompt, cp_filename, 1, compose_path,
         )
         print(f"=== round complete (exit={exit_code}) ===")
-        commit_round(workspace, step.name, 1)
+        commit_round(workspace, step.name, 1, str(pipeline_dir))
 
         gp_status = parse_checkpoint(gp_path)["status"]
         if gp_status == "STEP_FAILED":
@@ -534,7 +560,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
                     cp_filename, rnd, compose_path,
                 )
                 print(f"=== round complete (exit={exit_code}) ===")
-                commit_round(workspace, step.name, rnd)
+                commit_round(workspace, step.name, rnd, str(pipeline_dir))
 
                 gp_status = parse_checkpoint(gp_path)["status"]
                 gp_content = read_file(gp_path)
@@ -616,7 +642,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
                 cp_filename, iteration + 2, compose_path,
             )
             print(f"=== round complete (exit={exit_code}) ===")
-            commit_round(workspace, step.name, iteration + 2)
+            commit_round(workspace, step.name, iteration + 2, str(pipeline_dir))
 
             gp_status = parse_checkpoint(gp_path)["status"]
             if gp_status == "STEP_FAILED":
