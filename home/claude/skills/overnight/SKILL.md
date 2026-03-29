@@ -11,7 +11,7 @@ description: >
 
 # Overnight
 
-Declarative pipeline runner for autonomous Claude Code sessions in Docker. Each step defines a task with its own skills, agent, model, and acceptance criteria. Each round runs `claude -p` in a fresh container with isolated context. Checkpoints provide structured state transfer between rounds.
+Two actor types: GP (general purpose) does work, skeptic reviews it. Docker Compose handles infrastructure. pipeline.yaml handles orchestration. The runner bridges them.
 
 ```
 dir = skill base directory
@@ -27,46 +27,55 @@ if "setup":
     do("follow Setup procedure")
 
 elif "run" or wants to launch an overnight run:
-    // Check for versioned pipelines
-    pipelines = Glob("home/claude/pipelines/*/pipeline.yaml")
-    if pipelines and no .overnight/pipeline.yaml in workspace:
-        if len(pipelines) == 1:
+    // Determine pipeline directory
+    if user specifies a directory:
+        target_dir = user's directory
+    elif existing pipeline.yaml found in workspace:
+        target_dir = dirname of that pipeline.yaml
+    else:
+        pipelines = Glob("home/claude/pipelines/*/pipeline.yaml")
+        if pipelines and len(pipelines) == 1:
             selected = pipelines[0]
-        else:
+        elif pipelines:
             selected = AskUserQuestion("Which pipeline?", options=pipeline names)
-        pipeline_dir = dirname(selected)
-        // Copy all resources from versioned pipeline to .overnight/
-        Bash(mkdir -p .overnight)
-        Bash(cp -r <pipeline_dir>/* .overnight/)
-        // Always copy built-in checkpoint skill (required by runner)
-        Bash(cp -r <dir>/skills/checkpoint .overnight/skills/checkpoint)
-    if no .overnight/pipeline.yaml in workspace:
-        do("help user create .overnight/pipeline.yaml")
-    if project needs extra tools (linters, runtimes, test frameworks):
-        do("create .overnight/Dockerfile or .overnight/Dockerfile.<step> extending claude-runner")
-    if project needs custom skills:
-        do("create skills in .overnight/skills/")
+        else:
+            do("help user create pipeline.yaml and docker-compose.yml")
+        target_dir = AskUserQuestion("Pipeline directory?", default=".overnight")
+        Bash(mkdir -p {target_dir})
+        Bash(cp -r {dirname(selected)}/* {target_dir}/)
+
+    // Assemble skills from canonical paths
+    skills_list = read {target_dir}/pipeline.yaml "skills" field
+    Bash(mkdir -p {target_dir}/skills)
+    Bash(cp -r {dir}/skills/checkpoint {target_dir}/skills/checkpoint)
+    for skill in skills_list:
+        Bash(cp -r home/claude/skills/{skill} {target_dir}/skills/{skill})
+
+    // Verify docker-compose.yml exists
+    if no docker-compose.yml in target_dir:
+        do("help user create docker-compose.yml")
+
     do("construct and show run command, confirm before running")
-    // uv run --with pyyaml <dir>/run.py --workspace <workspace>
+    // uv run --with pyyaml {dir}/run.py --workspace {workspace} --dir {target_dir}
 
 elif "pipeline" or wants to write a pipeline.yaml:
-    do("help user define steps with prompts, acceptance criteria, skills")
-    do("write to .overnight/pipeline.yaml")
-    do("also save to home/claude/pipelines/<name>/ for version control")
+    do("help user define steps with prompts and roles (gp/skeptic)")
+    do("help user create docker-compose.yml with services matching step names")
+    do("write both files to the pipeline directory")
 
 elif "dockerfile" or needs per-project dependencies:
-    do("create .overnight/Dockerfile extending claude-runner with required packages")
+    do("create Dockerfile extending claude-runner with required packages")
 
 elif "progress" or "status" or wants to check results:
-    checkpoints = Bash(ls workspace/.overnight/checkpoint-*)
+    checkpoints = Bash(ls {target_dir}/checkpoint-*)
     latest = do("pick most recent checkpoint by name")
     Read(latest)
     do("summarize what was done, what remains")
     AskUserQuestion("Continue watching, or stop the run?")
-    if stop: Bash(touch workspace/.overnight/STOP)
+    if stop: Bash(touch {target_dir}/STOP)
 
 elif "stop" or wants to stop a running overnight:
-    Bash(touch workspace/.overnight/STOP)
+    Bash(touch {target_dir}/STOP)
     do("confirm stop file created")
 
 else:
@@ -79,11 +88,11 @@ else:
 
 Three steps, each requires the previous:
 
-All paths below use `<dir>` for the skill base directory. Resolve it before showing commands to the user.
+All paths below use `{dir}` for the skill base directory. Resolve it before showing commands to the user.
 
 ```bash
 # 1. Build the image
-docker build -t claude-runner <dir>
+docker build -t claude-runner {dir}
 
 # 2. Create persistent volume for auth + claude state
 docker volume create claude-runner-home
@@ -97,16 +106,14 @@ To verify: `docker run --rm -v claude-runner-home:/home/claude claude-runner --v
 ### Running
 
 ```bash
-uv run --with pyyaml <dir>/run.py --workspace ~/projects/myapp
-uv run --with pyyaml <dir>/run.py --workspace . --docker-image claude-runner-custom
+uv run --with pyyaml {dir}/run.py --workspace ~/projects/myapp --dir .overnight
+uv run --with pyyaml {dir}/run.py --workspace . --dir pipelines/auth-refactor
 ```
 
-| Flag              | Default                    | Description                     |
-| ----------------- | -------------------------- | ------------------------------- |
-| `--workspace`     | (required)                 | Repo directory                  |
-| `--pipeline`      | `.overnight/pipeline.yaml` | Pipeline definition file        |
-| `--docker-image`  | `claude-runner`            | Base image name                 |
-| `--docker-volume` | `claude-runner-home`       | Named volume for `/home/claude` |
+| Flag          | Default    | Description                                          |
+| ------------- | ---------- | ---------------------------------------------------- |
+| `--workspace` | (required) | Repo directory                                       |
+| `--dir`       | (required) | Pipeline directory (pipeline.yaml, docker-compose.yml) |
 
 The runner is launched by Claude via the Bash tool. It ignores signals and runs until the pipeline completes or a stop mechanism is used (see Stopping section).
 
@@ -114,64 +121,129 @@ The runner is launched by Claude via the Bash tool. It ignores signals and runs 
 
 ```yaml
 name: auth-refactor
+skills: [tdd, probe]
 
 defaults:
-  model: claude-opus-4-6[1m] # model for work rounds
-  image: claude-runner # default Docker image
-  max_rounds: 50 # max rounds per step
-  wait: 30 # seconds between rounds
-  resolve_questions: true # spawn resolver for open questions
-  explore_model: claude-haiku-4-5 # model for resolver agent
+  model: claude-opus-4-6[1m]
+  max_rounds: 5
+  wait: 30
 
 steps:
   - name: analyze
     prompt: |
       Analyze the auth module. Identify every file using session auth.
       Write a migration plan.
-    skills: [explore]
-    max_rounds: 30
+
+  - name: review-analysis
+    role: skeptic
+    prompt: |
+      Verify the migration plan covers all auth entry points.
+      Check for missing files and implicit dependencies.
 
   - name: implement
     prompt: |
-      Replace session auth with JWT. Start with /api/login end-to-end,
+      Replace session auth with JWT. Start with /api/login,
       then expand to remaining endpoints.
-    accept: |
-      - no session-based auth imports remain
-      - tests pass
-    skills: [tracer-bullet, tdd]
-    agent: api-developer
-    image: .overnight/Dockerfile.implement
-    max_rounds: 100
 
-  - name: verify
+  - name: review-impl
+    role: skeptic
     prompt: |
-      Run full test suite. Fix any failures.
-    accept: |
-      - test suite passes
-    verify: "cd /workspace && npm test"
-    skills: [tdd]
-    max_rounds: 30
-    on_fail: retry
-    max_retries: 2
+      Run the test suite. Verify no session-based imports remain.
+      Check for hardcoded secrets and token expiry edge cases.
 ```
+
+Top-level fields:
+
+| Field      | Default     | Description                                |
+| ---------- | ----------- | ------------------------------------------ |
+| `name`     | `overnight` | Pipeline identifier                        |
+| `skills`   | `[]`        | Skills to copy from canonical paths at launch |
+| `defaults` | (see below) | Default values for step fields             |
 
 Step fields:
 
-| Field               | Default       | Description                                      |
-| ------------------- | ------------- | ------------------------------------------------ |
-| `name`              | (required)    | Step identifier                                  |
-| `prompt`            | (required)    | Task description for the agent                   |
-| `accept`            | (none)        | Acceptance criteria                              |
-| `skills`            | `[]`          | Skills from `.overnight/skills/`                 |
-| `agent`             | (none)        | Agent from `.overnight/agents/`                  |
-| `image`             | from defaults | Docker image or Dockerfile path                  |
-| `model`             | from defaults | Model override                                   |
-| `max_rounds`        | from defaults | Max rounds for this step                         |
-| `on_fail`           | `stop`        | `stop` or `retry`                                |
-| `max_retries`       | `0`           | Retry count when `on_fail: retry`                |
-| `resolve_questions` | from defaults | Spawn resolver for open questions                |
-| `verify`            | (none)        | Shell command run inside Docker after each round |
-| `depends_on`        | (none)        | Reserved for v2 DAG support                      |
+| Field        | Default       | Description                             |
+| ------------ | ------------- | --------------------------------------- |
+| `name`       | (required)    | Step identifier, maps to compose service |
+| `prompt`     | (required)    | Task (GP) or review criteria (skeptic)  |
+| `role`       | `gp`          | `gp` or `skeptic`                      |
+| `model`      | from defaults | Model override for this step            |
+| `max_rounds` | from defaults | GP-skeptic iterations for this pair     |
+
+Default values: `model: claude-opus-4-6[1m]`, `max_rounds: 5`, `wait: 30`.
+
+### docker-compose.yml
+
+Each step name in pipeline.yaml must have a matching service in docker-compose.yml.
+
+```yaml
+x-common: &common
+  build: .
+  volumes:
+    - ${WORKSPACE}:/workspace
+    - ${WORKSPACE}/.git:/workspace/.git:ro
+    - claude-home:/home/claude
+
+services:
+  analyze:
+    <<: *common
+
+  review-analysis:
+    <<: *common
+
+  implement:
+    build:
+      context: .
+      dockerfile: Dockerfile.implement
+    volumes:
+      - ${WORKSPACE}:/workspace
+      - ${WORKSPACE}/.git:/workspace/.git:ro
+      - claude-home:/home/claude
+
+  review-impl:
+    build:
+      context: .
+      dockerfile: Dockerfile.implement
+    volumes:
+      - ${WORKSPACE}:/workspace
+      - ${WORKSPACE}/.git:/workspace/.git:ro
+      - claude-home:/home/claude
+
+volumes:
+  claude-home:
+    external: true
+    name: claude-runner-home
+```
+
+### GP-skeptic workflow
+
+Steps are paired by adjacency: a skeptic step always reviews the preceding GP step.
+
+1. Runner runs the GP step. GP does work, writes a checkpoint.
+2. Runner runs the skeptic step. Skeptic receives the GP checkpoint and a git diff of changes.
+3. If skeptic writes STEP_COMPLETE: the pair is done. Move to the next GP step.
+4. If skeptic writes STEP_IN_PROGRESS: runner feeds the skeptic's feedback back to the GP. GP re-runs, addressing each feedback item.
+5. Repeat until skeptic approves or max_rounds is reached.
+
+`max_rounds` on the skeptic step controls how many GP-skeptic iterations are allowed. A standalone GP (no following skeptic) can self-complete.
+
+STEP_FAILED from either actor aborts the pipeline immediately.
+
+Between pairs, the next GP receives both the previous GP's work summary and the skeptic's verdict as context.
+
+### Per-project Dockerfile
+
+When a project needs tools beyond bash/curl/git:
+
+```dockerfile
+FROM claude-runner
+COPY skills/ /workspace/.claude/skills/
+USER root
+RUN apt-get update && apt-get install -y nodejs npm python3
+USER claude
+```
+
+The base Dockerfile COPYs `skills/` from the build context. These are assembled by the overnight skill at launch from canonical paths.
 
 ### Checkpoint format
 
@@ -185,99 +257,80 @@ round: 3
 ---
 
 ## Done
-
 ...
 
 ## Decisions
-
 ...
 
 ## Frictions
-
 ...
 
 ## Next
-
 ...
 
 ## Open questions
-
 ...
 ```
 
 Status values: `STEP_COMPLETE`, `STEP_IN_PROGRESS`, `STEP_FAILED`.
 
-Filename: `checkpoint-<timestamp>-<seq>.md` (e.g., `checkpoint-2026-03-24-11-45-58-001.md`).
+Filename: `checkpoint-{step}-{timestamp}-{seq}.md`.
 
-### Per-project Dockerfile
-
-When a project needs tools beyond bash/curl/git:
-
-```dockerfile
-FROM claude-runner
-USER root
-RUN apt-get update && apt-get install -y nodejs npm python3
-USER claude
-```
-
-Place at `.overnight/Dockerfile` for all steps, or `.overnight/Dockerfile.<step-name>` for a specific step.
-
-### Directory layout
+### Pipeline directory layout
 
 Versioned configs (tracked in git):
 
 ```
 home/claude/pipelines/
-  eval-gen/                    # one directory per pipeline
+  auth-refactor/
     pipeline.yaml
+    docker-compose.yml
     Dockerfile
-    agents/
-      eval-gen.md
-  another-pipeline/
-    pipeline.yaml
+    Dockerfile.implement
 ```
 
-Runtime directory (gitignored, ephemeral):
+Runtime directory (user-controlled via --dir):
 
 ```
-.overnight/
-  pipeline.yaml                # copied from versioned pipeline at launch
+pipelines/auth-refactor/        # or .overnight/, or any path
+  pipeline.yaml
+  docker-compose.yml
   Dockerfile
-  skills/
-    checkpoint/SKILL.md        # always injected (provided by overnight)
-    tracer-bullet/SKILL.md     # methodology skills
-  agents/
-    resolver.md                # question resolver (provided by overnight)
-  checkpoint-2026-03-24-11-45-58-001.md
-  checkpoint-2026-03-24-11-50-12-002.md
-  STOP
+  skills/                       # assembled at launch (gitignored)
+    checkpoint/SKILL.md
+    tdd/SKILL.md
+  checkpoint-*.md               # runtime (gitignored)
+  tool-calls.jsonl              # runtime (gitignored)
+  STOP                          # runtime (gitignored)
 ```
 
-Add `.overnight` to `.gitignore`. Runtime artifacts are ephemeral. Pipeline configs live in `home/claude/pipelines/` and are copied to `.overnight/` at launch.
+Suggested .gitignore for pipeline directories:
+```
+skills/
+checkpoint-*.md
+tool-calls.jsonl
+STOP
+```
 
 ### How it works
 
-The runner (`run.py`) reads `pipeline.yaml` and executes steps sequentially. Each step runs one or more rounds (a round is one `claude -p` invocation in Docker). Each round:
+The runner (`run.py`) reads `pipeline.yaml` and `docker-compose.yml`. It builds all images via `docker compose build`, then executes steps:
 
-1. Builds a `claude -p` prompt with the step's task, acceptance criteria, and previous checkpoint
-2. Mounts filtered skills (checkpoint + step-specific) and agents into the container
-3. Runs `claude -p` inside Docker with `--dangerously-skip-permissions`
-4. Commits workspace changes outside Docker (`git add -A -- ':!.overnight'`)
-5. Parses the checkpoint's YAML frontmatter for status
-6. Runs the `verify` command if configured (overrides status on failure)
-7. Spawns a resolver agent (haiku) if open questions exist and `resolve_questions` is enabled
+1. For a GP step: builds a prompt with the task and previous state, runs `docker compose run {step}` with the prompt
+2. Commits workspace changes outside Docker
+3. If a skeptic follows: builds a review prompt with the GP checkpoint and git diff, runs `docker compose run {skeptic}`
+4. If skeptic says IN_PROGRESS: loops back to GP with feedback
+5. If skeptic says COMPLETE: advances to the next pair
 
-Git is mounted read-only inside Docker to prevent `.git/config` corruption. The agent has read-only access to git history.
+Git is mounted read-only inside Docker to prevent `.git/config` corruption.
 
 The Docker volume persists `~/.claude.json` (OAuth) and `~/.claude/` (settings) across runs. The entrypoint self-heals stale claude symlinks when the volume outlives an image rebuild.
 
 ### Stopping
 
-- **Stop file**: `touch .overnight/STOP` stops after the current round (works from any terminal or Claude session)
-- **Immediate kill**: `docker kill overnight-<step>-<round>` kills the current round's container (container names are printed at round start)
+- **Stop file**: `touch {dir}/STOP` stops after the current round (works from any terminal or Claude session)
+- **Immediate kill**: `docker kill overnight-{step}-{round}` kills the current round's container
 - **Kill everything**: `docker kill $(docker ps -q -f name=overnight) 2>/dev/null; pkill -f "run.py --workspace"` kills all overnight containers and the runner process
-- **Automatic**: step writes `STEP_COMPLETE` in checkpoint frontmatter
-- **Max rounds**: each step has a configurable round limit
-- **Pipeline abort**: a failed step with `on_fail: stop` aborts the entire pipeline
-
-The stop file is the universal escape hatch. It works regardless of how the runner was launched.
+- **Automatic**: skeptic writes STEP_COMPLETE for the final pair
+- **Max rounds**: each GP-skeptic pair has a configurable iteration limit
+- **Pipeline abort**: STEP_FAILED from any actor aborts the pipeline

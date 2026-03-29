@@ -1,11 +1,10 @@
 name: writing-ru-bench
 
+skills: [bench]
+
 defaults:
   model: claude-sonnet-4-20250514
-  image: claude-runner-writing-en
   max_rounds: 1
-  wait: 10
-  resolve_questions: false
 
 steps:
   - name: bench
@@ -47,12 +46,9 @@ steps:
       Используй навык bench для измерения времени.
       Обработай все 10 кейсов. Перезаписывай существующие файлы.
       Создай директорию outputs/ если нужно.
-    accept: |
-      - Все 10 выходных файлов существуют в home/claude/evals/writing-ru/outputs/
-      - Все 10 meta.json файлов существуют с elapsed_seconds
-      - Каждый выходной файл содержит только отредактированный текст
-    skills: [bench]
-    verify: |
-      cd /workspace && python3 home/claude/evals/writing-ru/grade.py
-    on_fail: retry
-    max_retries: 1
+
+  - name: grade
+    role: skeptic
+    prompt: |
+      Run: python3 home/claude/evals/writing-ru/grade.py
+      Report pass/fail per assertion and overall score.

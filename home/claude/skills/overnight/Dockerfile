@@ -12,6 +12,8 @@ RUN cp -r /root/.local /home/claude/.local && chown -R claude:claude /home/claud
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+COPY skills/checkpoint /workspace/.claude/skills/checkpoint
+
 USER claude
 ENV PATH="/home/claude/.local/bin:$PATH"
 WORKDIR /workspace

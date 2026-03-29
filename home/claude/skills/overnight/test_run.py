@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke tests for overnight pipeline runner.
+"""Smoke tests for overnight pipeline runner v2.
 
 Run: uv run --with pyyaml python3 home/claude/skills/overnight/test_run.py
 """
@@ -7,9 +7,7 @@ Run: uv run --with pyyaml python3 home/claude/skills/overnight/test_run.py
 import os
 import sys
 import tempfile
-import shutil
 
-# Add the skill directory to path so we can import run
 sys.path.insert(0, os.path.dirname(__file__))
 import run
 
@@ -26,14 +24,13 @@ steps:
         f.flush()
         p = run.load_pipeline(f.name)
         assert p.name == "test"
+        assert p.skills == []
         assert len(p.steps) == 1
         assert p.steps[0].name == "hello"
         assert p.steps[0].prompt == "Say hello"
-        # Defaults applied
+        assert p.steps[0].role == "gp"
         assert p.steps[0].model == "claude-opus-4-6[1m]"
-        assert p.steps[0].image == "claude-runner"
-        assert p.steps[0].max_rounds == 50
-        assert p.steps[0].resolve_questions is True
+        assert p.steps[0].max_rounds == 5
         os.unlink(f.name)
     print("  PASS test_load_pipeline_minimal")
 
@@ -43,51 +40,104 @@ def test_load_pipeline_full():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write("""
 name: full-test
+skills: [tdd, probe]
 defaults:
   model: claude-sonnet-4-6
   max_rounds: 10
   wait: 5
-  resolve_questions: false
-  explore_model: claude-haiku-4-5
 steps:
-  - name: analyze
-    prompt: "Analyze code"
-    skills: [explore, tdd]
-    max_rounds: 3
   - name: implement
     prompt: "Write code"
-    accept: "tests pass"
-    agent: api-dev
-    image: custom-image
+  - name: review
+    prompt: "Review the code"
+    role: skeptic
     model: claude-opus-4-6[1m]
-    on_fail: retry
-    max_retries: 2
-    verify: "npm test"
-    resolve_questions: true
+    max_rounds: 3
 """)
         f.flush()
         p = run.load_pipeline(f.name)
         assert p.name == "full-test"
+        assert p.skills == ["tdd", "probe"]
         assert p.defaults["model"] == "claude-sonnet-4-6"
         assert p.defaults["wait"] == 5
 
         s0 = p.steps[0]
-        assert s0.name == "analyze"
-        assert s0.skills == ["explore", "tdd"]
-        assert s0.max_rounds == 3  # overridden
-        assert s0.model == "claude-sonnet-4-6"  # from defaults
-        assert s0.resolve_questions is False  # from defaults
+        assert s0.name == "implement"
+        assert s0.role == "gp"
+        assert s0.model == "claude-sonnet-4-6"
+        assert s0.max_rounds == 10
 
         s1 = p.steps[1]
-        assert s1.agent == "api-dev"
-        assert s1.image == "custom-image"
-        assert s1.model == "claude-opus-4-6[1m]"  # overridden
-        assert s1.on_fail == "retry"
-        assert s1.max_retries == 2
-        assert s1.verify == "npm test"
-        assert s1.resolve_questions is True  # overridden
+        assert s1.name == "review"
+        assert s1.role == "skeptic"
+        assert s1.model == "claude-opus-4-6[1m]"
+        assert s1.max_rounds == 3
         os.unlink(f.name)
     print("  PASS test_load_pipeline_full")
+
+
+def test_validate_pipeline_valid():
+    """Valid pipeline passes validation."""
+    pipeline = run.PipelineConfig(
+        name="test",
+        steps=[
+            run.StepConfig(name="work", prompt="do it", role="gp"),
+            run.StepConfig(name="review", prompt="check it", role="skeptic"),
+            run.StepConfig(name="more-work", prompt="do more", role="gp"),
+        ],
+    )
+    run.validate_pipeline(pipeline)  # should not raise
+    print("  PASS test_validate_pipeline_valid")
+
+
+def test_validate_pipeline_skeptic_first():
+    """Skeptic as first step is rejected."""
+    pipeline = run.PipelineConfig(
+        name="test",
+        steps=[
+            run.StepConfig(name="review", prompt="check", role="skeptic"),
+        ],
+    )
+    try:
+        run.validate_pipeline(pipeline)
+        assert False, "should have exited"
+    except SystemExit:
+        pass
+    print("  PASS test_validate_pipeline_skeptic_first")
+
+
+def test_validate_pipeline_consecutive_skeptics():
+    """Two consecutive skeptics is rejected."""
+    pipeline = run.PipelineConfig(
+        name="test",
+        steps=[
+            run.StepConfig(name="work", prompt="do", role="gp"),
+            run.StepConfig(name="r1", prompt="check", role="skeptic"),
+            run.StepConfig(name="r2", prompt="check again", role="skeptic"),
+        ],
+    )
+    try:
+        run.validate_pipeline(pipeline)
+        assert False, "should have exited"
+    except SystemExit:
+        pass
+    print("  PASS test_validate_pipeline_consecutive_skeptics")
+
+
+def test_validate_pipeline_invalid_role():
+    """Invalid role is rejected."""
+    pipeline = run.PipelineConfig(
+        name="test",
+        steps=[
+            run.StepConfig(name="work", prompt="do", role="worker"),
+        ],
+    )
+    try:
+        run.validate_pipeline(pipeline)
+        assert False, "should have exited"
+    except SystemExit:
+        pass
+    print("  PASS test_validate_pipeline_invalid_role")
 
 
 def test_parse_checkpoint_valid():
@@ -151,14 +201,12 @@ Cannot connect to database.
 
 
 def test_parse_checkpoint_missing_file():
-    """Missing file defaults to IN_PROGRESS."""
     result = run.parse_checkpoint("/nonexistent/path.md")
     assert result["status"] == "STEP_IN_PROGRESS"
     print("  PASS test_parse_checkpoint_missing_file")
 
 
 def test_parse_checkpoint_no_frontmatter():
-    """No frontmatter defaults to IN_PROGRESS."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write("# Just a regular markdown file\n\nNo frontmatter here.\n")
         f.flush()
@@ -169,7 +217,6 @@ def test_parse_checkpoint_no_frontmatter():
 
 
 def test_parse_checkpoint_invalid_status():
-    """Unknown status defaults to IN_PROGRESS."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write("---\nstatus: BOGUS_VALUE\n---\n")
         f.flush()
@@ -180,7 +227,6 @@ def test_parse_checkpoint_invalid_status():
 
 
 def test_parse_checkpoint_malformed_yaml():
-    """Malformed YAML defaults to IN_PROGRESS."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write("---\nstatus: [broken\n---\n")
         f.flush()
@@ -190,155 +236,92 @@ def test_parse_checkpoint_malformed_yaml():
     print("  PASS test_parse_checkpoint_malformed_yaml")
 
 
-def test_has_open_questions_yes():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-        f.write("""---
-status: STEP_IN_PROGRESS
-step: impl
-round: 1
----
-
-## Done
-Some work.
-
-## Open questions
-- What rate limit does the API enforce?
-- Is there a retry mechanism?
-""")
-        f.flush()
-        assert run.has_open_questions(f.name) is True
-        os.unlink(f.name)
-    print("  PASS test_has_open_questions_yes")
-
-
-def test_has_open_questions_no():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-        f.write("""---
-status: STEP_COMPLETE
-step: impl
-round: 3
----
-
-## Done
-Everything done.
-
-## Open questions
-None
-""")
-        f.flush()
-        assert run.has_open_questions(f.name) is False
-        os.unlink(f.name)
-    print("  PASS test_has_open_questions_no")
-
-
-def test_has_open_questions_empty():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-        f.write("""---
-status: STEP_COMPLETE
-step: impl
-round: 2
----
-
-## Done
-Done.
-
-## Open questions
-
-""")
-        f.flush()
-        assert run.has_open_questions(f.name) is False
-        os.unlink(f.name)
-    print("  PASS test_has_open_questions_empty")
-
-
-def test_has_open_questions_missing_section():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-        f.write("""---
-status: STEP_COMPLETE
-step: impl
-round: 1
----
-
-## Done
-Done.
-""")
-        f.flush()
-        assert run.has_open_questions(f.name) is False
-        os.unlink(f.name)
-    print("  PASS test_has_open_questions_missing_section")
-
-
-def test_build_skills_dir():
-    """Skills filtering: only checkpoint + listed skills are copied."""
-    with tempfile.TemporaryDirectory() as skills_src:
-        # Create source skills
-        for name in ["checkpoint", "tdd", "tracer-bullet", "explore"]:
-            skill_dir = os.path.join(skills_src, name)
-            os.makedirs(skill_dir)
-            with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
-                f.write(f"# {name} skill\n")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            from pathlib import Path
-            result = run.build_skills_dir(Path(skills_src), ["tdd", "explore"], tmpdir)
-
-            # checkpoint always included
-            assert os.path.exists(os.path.join(result, "checkpoint", "SKILL.md"))
-            # listed skills included
-            assert os.path.exists(os.path.join(result, "tdd", "SKILL.md"))
-            assert os.path.exists(os.path.join(result, "explore", "SKILL.md"))
-            # unlisted skill excluded
-            assert not os.path.exists(os.path.join(result, "tracer-bullet"))
-
-    print("  PASS test_build_skills_dir")
-
-
-def test_build_skills_dir_empty():
-    """No skills listed: only checkpoint."""
-    with tempfile.TemporaryDirectory() as skills_src:
-        os.makedirs(os.path.join(skills_src, "checkpoint"))
-        with open(os.path.join(skills_src, "checkpoint", "SKILL.md"), "w") as f:
-            f.write("# checkpoint\n")
-        os.makedirs(os.path.join(skills_src, "tdd"))
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            from pathlib import Path
-            result = run.build_skills_dir(Path(skills_src), [], tmpdir)
-            assert os.path.exists(os.path.join(result, "checkpoint", "SKILL.md"))
-            assert not os.path.exists(os.path.join(result, "tdd"))
-
-    print("  PASS test_build_skills_dir_empty")
-
-
-def test_prompt_template():
-    """Prompt template renders without errors."""
-    result = run.PROMPT_TEMPLATE.format(
-        step_name="implement",
-        round_number=3,
-        prompt="Fix the auth module.",
-        accept="Tests pass.",
-        prev_checkpoint="## Done\nAnalyzed files.\n",
-        checkpoint_filename="checkpoint-2026-03-24-11-45-58-003.md",
+def test_gp_template():
+    """GP prompt template renders correctly."""
+    step = run.StepConfig(name="impl", prompt="Fix the auth module.")
+    result = run.make_gp_prompt(
+        step, "/tmp/pipeline", "## Done\nAnalyzed files.\n",
+        "checkpoint-001.md", 3,
     )
-    assert "implement" in result
+    assert "impl" in result
     assert "round 3" in result
     assert "Fix the auth module." in result
-    assert "Tests pass." in result
     assert "Analyzed files." in result
-    assert "checkpoint-" in result
-    print("  PASS test_prompt_template")
+    assert "checkpoint-001.md" in result
+    assert "/tmp/pipeline" in result
+    print("  PASS test_gp_template")
+
+
+def test_gp_after_skeptic_template():
+    """GP-after-skeptic template includes both checkpoints."""
+    step = run.StepConfig(name="impl", prompt="Fix auth.")
+    result = run.make_gp_after_skeptic_prompt(
+        step, "/tmp/pipeline",
+        "## Done\nWrote JWT code.",
+        "## Feedback\nMissing token refresh.",
+        "checkpoint-002.md", 4,
+    )
+    assert "Wrote JWT code." in result
+    assert "Missing token refresh." in result
+    assert "Your Previous Checkpoint" in result
+    assert "Reviewer Feedback" in result
+    print("  PASS test_gp_after_skeptic_template")
+
+
+def test_skeptic_template():
+    """Skeptic template includes diff and GP checkpoint."""
+    step = run.StepConfig(name="review", prompt="Check for hardcoded secrets.", role="skeptic")
+    result = run.make_skeptic_prompt(
+        step, "/tmp/pipeline",
+        "## Done\nImplemented JWT.",
+        "diff --git a/auth.py b/auth.py\n+SECRET='abc'",
+        "checkpoint-003.md", 1,
+    )
+    assert "Check for hardcoded secrets." in result
+    assert "Implemented JWT." in result
+    assert "SECRET='abc'" in result
+    assert "Review Criteria" in result
+    assert "Changes Made" in result
+    print("  PASS test_skeptic_template")
+
+
+def test_read_file_missing():
+    """read_file returns empty string for missing files."""
+    assert run.read_file("/nonexistent/file.md") == ""
+    print("  PASS test_read_file_missing")
+
+
+def test_read_file_exists():
+    """read_file returns content for existing files."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write("hello world")
+        f.flush()
+        assert run.read_file(f.name) == "hello world"
+        os.unlink(f.name)
+    print("  PASS test_read_file_exists")
+
+
+def test_make_checkpoint_filename():
+    """Checkpoint filename includes step name and round."""
+    name = run.make_checkpoint_filename("impl", 3)
+    assert name.startswith("checkpoint-impl-")
+    assert name.endswith("-003.md")
+    print("  PASS test_make_checkpoint_filename")
 
 
 if __name__ == "__main__":
-    # Suppress warnings from parse_checkpoint to stderr
     old_stderr = sys.stderr
     sys.stderr = open(os.devnull, "w")
 
-    print("Running overnight smoke tests...\n")
+    print("Running overnight v2 smoke tests...\n")
 
     tests = [
         test_load_pipeline_minimal,
         test_load_pipeline_full,
+        test_validate_pipeline_valid,
+        test_validate_pipeline_skeptic_first,
+        test_validate_pipeline_consecutive_skeptics,
+        test_validate_pipeline_invalid_role,
         test_parse_checkpoint_valid,
         test_parse_checkpoint_in_progress,
         test_parse_checkpoint_failed,
@@ -346,13 +329,12 @@ if __name__ == "__main__":
         test_parse_checkpoint_no_frontmatter,
         test_parse_checkpoint_invalid_status,
         test_parse_checkpoint_malformed_yaml,
-        test_has_open_questions_yes,
-        test_has_open_questions_no,
-        test_has_open_questions_empty,
-        test_has_open_questions_missing_section,
-        test_build_skills_dir,
-        test_build_skills_dir_empty,
-        test_prompt_template,
+        test_gp_template,
+        test_gp_after_skeptic_template,
+        test_skeptic_template,
+        test_read_file_missing,
+        test_read_file_exists,
+        test_make_checkpoint_filename,
     ]
 
     passed = 0

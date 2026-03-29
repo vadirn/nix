@@ -1,11 +1,10 @@
 name: design-bench
 
+skills: [design, bench]
+
 defaults:
   model: claude-sonnet-4-20250514
-  image: claude-runner-design
   max_rounds: 1
-  wait: 10
-  resolve_questions: false
 
 steps:
   - name: bench
@@ -33,12 +32,9 @@ steps:
       Create all directories as needed. Process all 3 eval cases (6 total runs).
 
       Use the bench skill for measuring elapsed time per case.
-    accept: |
-      - All 6 output files exist (3 evals x 2 variants)
-      - All 6 meta.json files exist with elapsed_seconds
-      - Each output file contains only the design output
-    skills: [design, bench]
-    verify: |
-      cd /workspace && python3 home/claude/evals/design/grade.py
-    on_fail: retry
-    max_retries: 1
+
+  - name: grade
+    role: skeptic
+    prompt: |
+      Run: python3 home/claude/evals/design/grade.py
+      Report pass/fail per assertion and overall score.

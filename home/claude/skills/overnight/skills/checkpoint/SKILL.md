@@ -2,16 +2,16 @@
 name: checkpoint
 description: >
   Write a structured checkpoint at the end of every overnight round.
-  Produces checkpoint-<timestamp>-<seq>.md with YAML frontmatter
+  Produces checkpoint-<step>-<timestamp>-<seq>.md with YAML frontmatter
   and markdown body. Used automatically inside overnight pipeline turns.
 ---
 
 # Checkpoint
 
-Write a checkpoint file at the end of every round. The orchestrator provides the filename via the prompt.
+Write a checkpoint file at the end of every round. The orchestrator provides the filename and directory via the prompt.
 
 ```
-checkpoint_file = from prompt (e.g. ".overnight/checkpoint-2026-03-24-11-45-58-003.md")
+checkpoint_file = from prompt (e.g. "pipelines/auth-refactor/checkpoint-impl-2026-03-24-11-45-58-003.md")
 
 do("complete assigned work first, then write checkpoint")
 
@@ -57,6 +57,6 @@ Leave empty if no questions remain.
 
 ## Status values
 
-- `STEP_COMPLETE`: all acceptance criteria from the prompt are met. Work is done.
-- `STEP_IN_PROGRESS`: progress was made but work remains. List remaining items in ## Next.
-- `STEP_FAILED`: the task is blocked and cannot proceed. Explain the blocker in ## Frictions.
+- `STEP_COMPLETE`: your task is finished. For GP steps: the work described in the prompt is done. For skeptic steps: the work under review meets your review criteria.
+- `STEP_IN_PROGRESS`: progress was made but work remains. List remaining items in ## Next. For skeptic steps: list specific, actionable feedback for the GP to address.
+- `STEP_FAILED`: the task is blocked by conditions outside your control and cannot proceed. Explain the blocker in ## Frictions.

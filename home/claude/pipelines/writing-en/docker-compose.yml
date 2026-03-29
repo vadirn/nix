@@ -1,0 +1,17 @@
+x-common: &common
+  build: .
+  volumes:
+    - ${WORKSPACE}:/workspace
+    - ${WORKSPACE}/.git:/workspace/.git:ro
+    - claude-home:/home/claude
+
+services:
+  bench:
+    <<: *common
+  grade:
+    <<: *common
+
+volumes:
+  claude-home:
+    external: true
+    name: claude-runner-home

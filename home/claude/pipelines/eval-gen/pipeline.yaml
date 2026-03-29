@@ -1,11 +1,10 @@
 name: eval-gen
 
+skills: []
+
 defaults:
   model: claude-sonnet-4-20250514
-  image: claude-runner-bun
   max_rounds: 3
-  wait: 15
-  resolve_questions: false
 
 steps:
   - name: analyze
@@ -26,10 +25,6 @@ steps:
       - home/claude/evals/overnight/eval_set.json (16 entries)
 
       Produce a structured analysis in the checkpoint covering every skill.
-    accept: |
-      - Analysis covers all skills with descriptions
-      - Each skill has identified edge case categories
-      - Skills with existing eval_set.json are marked as complete
     max_rounds: 2
     model: claude-sonnet-4-20250514
 
@@ -59,15 +54,13 @@ steps:
       Read each skill's SKILL.md to understand its full description and triggers.
       Create the evals/ subdirectory for a skill if it does not exist.
       Do NOT overwrite existing eval_set.json files (vault, overnight already have them).
-    accept: |
-      - Every skill with a description has an eval_set.json
-      - Each file is valid JSON matching the schema
-      - Each file has at least 16 entries with balanced true/false
-      - No existing eval sets were overwritten
-    agent: eval-gen
     model: claude-opus-4-6[1m]
     max_rounds: 5
-    verify: |
+
+  - name: verify
+    role: skeptic
+    prompt: |
+      Run the verification script:
       cd /workspace && bun -e "
       import {readFileSync} from 'fs';
       const glob = new Bun.Glob('home/claude/evals/*/eval_set.json');
@@ -93,5 +86,4 @@ steps:
       if (errors.length) { console.log('VERIFY FAILED:'); errors.forEach(e => console.log('  - ' + e)); process.exit(1); }
       console.log('VERIFY PASSED: ' + files.length + ' eval sets validated');
       "
-    on_fail: retry
-    max_retries: 1
+      Report the result.

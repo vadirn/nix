@@ -1,11 +1,10 @@
 name: writing-en-bench
 
+skills: [bench]
+
 defaults:
   model: claude-sonnet-4-20250514
-  image: claude-runner-writing-en
   max_rounds: 1
-  wait: 10
-  resolve_questions: false
 
 steps:
   - name: bench
@@ -36,12 +35,9 @@ steps:
       - home/claude/skills/writing-en/pass-4-ai.md
 
       Process all 13 eval cases. Create the outputs/ directory if needed.
-    accept: |
-      - All 8 output files exist in home/claude/evals/writing-en/outputs/
-      - All 8 meta.json files exist with elapsed_seconds
-      - Each output file contains only the edited text
-    skills: [bench]
-    verify: |
-      cd /workspace && python3 home/claude/evals/writing-en/grade.py
-    on_fail: retry
-    max_retries: 1
+
+  - name: grade
+    role: skeptic
+    prompt: |
+      Run: python3 home/claude/evals/writing-en/grade.py
+      Report pass/fail per assertion and overall score.

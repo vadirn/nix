@@ -218,7 +218,6 @@
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
-
     "allowUnsandboxedCommands": false,
     "network": {
       "allowedDomains": [
@@ -245,7 +244,13 @@
       "allowAllUnixSockets": true
     },
     "filesystem": {
-      "allowWrite": ["~/.agent-browser", "~/.cache", "~/.docker", "~/Documents/vault", "$TMPDIR"]
+      "allowWrite": [
+        "~/.agent-browser",
+        "~/.cache",
+        "~/.docker",
+        "~/Documents/vault",
+        "$TMPDIR"
+      ]
     },
     "enableWeakerNetworkIsolation": true
   },

@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
-"""Overnight pipeline runner.
+"""Overnight pipeline runner v2.
 
-Invoked via: uv run --with pyyaml run.py --workspace DIR
+Invoked via: uv run --with pyyaml run.py --workspace DIR --dir DIR
 
-Orchestrates autonomous Claude Code sessions in Docker. Reads a pipeline.yaml
-defining steps, runs each step as a series of rounds (claude -p invocations)
-inside Docker containers, and manages checkpoints between rounds.
+Two actor types: GP (general purpose) does work, skeptic reviews it.
+Docker Compose handles infrastructure. pipeline.yaml handles orchestration.
 """
 
 import argparse
 import json
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -30,11 +27,8 @@ import yaml
 
 DEFAULTS = {
     "model": "claude-opus-4-6[1m]",
-    "image": "claude-runner",
-    "max_rounds": 50,
+    "max_rounds": 5,
     "wait": 30,
-    "resolve_questions": True,
-    "explore_model": "claude-haiku-4-5",
 }
 
 
@@ -42,21 +36,15 @@ DEFAULTS = {
 class StepConfig:
     name: str
     prompt: str
-    accept: str = ""
-    skills: list[str] = field(default_factory=list)
-    agent: str = ""
-    image: str = ""
+    role: str = "gp"
     model: str = ""
     max_rounds: int = 0
-    on_fail: str = "stop"
-    max_retries: int = 0
-    resolve_questions: bool = True
-    verify: str = ""
 
 
 @dataclass
 class PipelineConfig:
     name: str
+    skills: list[str] = field(default_factory=list)
     defaults: dict = field(default_factory=dict)
     steps: list[StepConfig] = field(default_factory=list)
 
@@ -78,145 +66,98 @@ def load_pipeline(path: str) -> PipelineConfig:
             print(f"error: step {i} must have 'name' and 'prompt'", file=sys.stderr)
             sys.exit(1)
 
+        role = s.get("role", "gp")
         step = StepConfig(
             name=s["name"],
             prompt=s["prompt"],
-            accept=s.get("accept", ""),
-            skills=s.get("skills", []),
-            agent=s.get("agent", ""),
-            image=s.get("image", defaults["image"]),
+            role=role,
             model=s.get("model", defaults["model"]),
             max_rounds=s.get("max_rounds", defaults["max_rounds"]),
-            on_fail=s.get("on_fail", "stop"),
-            max_retries=s.get("max_retries", 0),
-            resolve_questions=s.get("resolve_questions", defaults["resolve_questions"]),
-            verify=s.get("verify", ""),
         )
         steps.append(step)
 
     return PipelineConfig(
         name=raw.get("name", "overnight"),
+        skills=raw.get("skills", []),
         defaults=defaults,
         steps=steps,
     )
 
 
+def validate_pipeline(pipeline: PipelineConfig) -> None:
+    """Reject invalid step ordering."""
+    for i, step in enumerate(pipeline.steps):
+        if step.role not in ("gp", "skeptic"):
+            print(f"error: step '{step.name}' has invalid role '{step.role}'",
+                  file=sys.stderr)
+            sys.exit(1)
+        if step.role == "skeptic" and (i == 0 or pipeline.steps[i - 1].role != "gp"):
+            print(f"error: skeptic step '{step.name}' must follow a gp step",
+                  file=sys.stderr)
+            sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
-# Section 2: Round execution
+# Section 2: Prompt templates
 # ---------------------------------------------------------------------------
 
-PROMPT_TEMPLATE = """\
+GP_TEMPLATE = """\
 You are running as an autonomous agent.
 Step: "{step_name}", round {round_number}.
 
 ## Task
 {prompt}
 
-## Acceptance Criteria
-{accept}
-
-## Previous Checkpoint
+## Previous State
 {prev_checkpoint}
 
 ## Instructions
-- Read the codebase using git log, git diff, git status, and file reads.
-- Write your checkpoint to .overnight/{checkpoint_filename} before finishing.
-- Set status to STEP_COMPLETE when all acceptance criteria are met.
-- Set status to STEP_IN_PROGRESS with clear ## Next items when work remains.
-- Set status to STEP_FAILED when the task is blocked and cannot proceed.
-- Record unknowns in ## Open questions.
-- The orchestrator handles git commits. Focus on code changes and checkpoint.
-- Work autonomously."""
+- Work autonomously. Write checkpoint to {pipeline_dir}/{checkpoint_filename}.
+- Set status STEP_COMPLETE when your task is finished.
+- Set status STEP_IN_PROGRESS with clear ## Next items when work remains.
+- Set status STEP_FAILED when blocked and cannot proceed.
+- The orchestrator handles git commits. Focus on code changes and checkpoint."""
 
+GP_AFTER_SKEPTIC_TEMPLATE = """\
+You are running as an autonomous agent.
+Step: "{step_name}", round {round_number}.
 
-def build_skills_dir(
-    overnight_skills: Path, step_skills: list[str], tmpdir: str
-) -> str:
-    """Build a temp directory with checkpoint/ + step's listed skills."""
-    skills_dir = os.path.join(tmpdir, "skills")
-    os.makedirs(skills_dir)
+## Task
+{prompt}
 
-    # Always include checkpoint skill
-    checkpoint_src = overnight_skills / "checkpoint"
-    if checkpoint_src.is_dir():
-        shutil.copytree(str(checkpoint_src), os.path.join(skills_dir, "checkpoint"))
+## Your Previous Checkpoint
+{gp_checkpoint}
 
-    # Copy step-specific skills
-    for skill_name in step_skills:
-        src = overnight_skills / skill_name
-        if src.is_dir():
-            shutil.copytree(str(src), os.path.join(skills_dir, skill_name))
-        else:
-            print(f"warning: skill '{skill_name}' not found at {src}", file=sys.stderr)
+## Reviewer Feedback
+{skeptic_checkpoint}
 
-    return skills_dir
+## Instructions
+- Address each item in the reviewer feedback before proceeding.
+- Write checkpoint to {pipeline_dir}/{checkpoint_filename}.
+- Set status STEP_COMPLETE when your task is finished.
+- Set status STEP_IN_PROGRESS with clear ## Next items when work remains.
+- Set status STEP_FAILED when blocked and cannot proceed."""
 
+SKEPTIC_TEMPLATE = """\
+You are a reviewer evaluating the previous step's work.
+Step: "{step_name}", round {round_number}.
 
-def run_round(
-    step: StepConfig,
-    workspace: str,
-    prev_checkpoint_content: str,
-    checkpoint_filename: str,
-    round_number: int,
-    docker_volume: str,
-    overnight_dir: Path,
-    tmpdir: str,
-) -> tuple[str, int]:
-    """Run one claude -p invocation inside Docker. Returns (checkpoint_path, exit_code)."""
+## Review Criteria
+{prompt}
 
-    prompt = PROMPT_TEMPLATE.format(
-        step_name=step.name,
-        round_number=round_number,
-        prompt=step.prompt,
-        accept=step.accept or "Complete the task described above.",
-        prev_checkpoint=prev_checkpoint_content or "First round. No prior state.",
-        checkpoint_filename=checkpoint_filename,
-    )
+## Work Under Review
+{gp_checkpoint}
 
-    # Build filtered skills directory
-    skills_dir = build_skills_dir(
-        overnight_dir / "skills", step.skills, tmpdir
-    )
+## Changes Made
+{git_diff}
 
-    agents_dir = overnight_dir / "agents"
-
-    # Construct docker run command
-    container_name = f"overnight-{step.name}-{round_number}"
-    cmd = [
-        "docker", "run", "--rm",
-        "--name", container_name,
-        "-v", f"{docker_volume}:/home/claude",
-        "-v", f"{workspace}:/workspace",
-        "-v", f"{workspace}/.git:/workspace/.git:ro",
-        "-v", f"{skills_dir}:/workspace/.claude/skills:ro",
-    ]
-
-    if agents_dir.is_dir():
-        cmd.extend(["-v", f"{agents_dir}:/workspace/.claude/agents:ro"])
-
-    cmd.extend([
-        step.image,
-        "-p", prompt,
-        "--dangerously-skip-permissions",
-        "--model", step.model,
-        "--output-format", "stream-json",
-        "--verbose",
-    ])
-
-    if step.agent:
-        cmd.extend(["--agent", step.agent])
-
-    # Log tool calls to .overnight/tool-calls.jsonl
-    log_path = os.path.join(workspace, ".overnight", "tool-calls.jsonl")
-    with open(log_path, "a") as log_file:
-        marker = json.dumps({"type": "round_start", "step": step.name, "round": round_number, "ts": datetime.now().isoformat()})
-        log_file.write(marker + "\n")
-        log_file.flush()
-        proc = subprocess.Popen(cmd, stdout=log_file, start_new_session=True)
-        proc.wait()
-    checkpoint_path = os.path.join(workspace, ".overnight", checkpoint_filename)
-
-    return checkpoint_path, proc.returncode
+## Instructions
+- Evaluate the work against your review criteria.
+- Set STEP_COMPLETE if the work meets criteria.
+- Set STEP_IN_PROGRESS with specific, actionable feedback if revisions needed.
+- Set STEP_FAILED if the work has unrecoverable issues.
+- Be concrete: name files, functions, specific issues.
+- Write checkpoint to {pipeline_dir}/{checkpoint_filename}."""
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +172,6 @@ def parse_checkpoint(path: str) -> dict:
     with open(path) as f:
         content = f.read()
 
-    # Extract YAML frontmatter
     match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
     if not match:
         print("warning: checkpoint has no YAML frontmatter, assuming IN_PROGRESS", file=sys.stderr)
@@ -255,412 +195,394 @@ def parse_checkpoint(path: str) -> dict:
     return frontmatter
 
 
-def has_open_questions(path: str) -> bool:
-    """Check if checkpoint has non-empty ## Open questions section."""
+def read_file(path: str) -> str:
+    """Read file contents or return empty string if missing."""
     if not os.path.exists(path):
-        return False
-
+        return ""
     with open(path) as f:
-        content = f.read()
-
-    match = re.search(r"## Open questions\s*\n(.*?)(?=\n## |\Z)", content, re.DOTALL)
-    if not match:
-        return False
-
-    questions = match.group(1).strip()
-    # Ignore empty sections or "None" / "N/A" type answers
-    if not questions or questions.lower() in ("none", "none.", "n/a", "-"):
-        return False
-
-    return True
+        return f.read()
 
 
 # ---------------------------------------------------------------------------
-# Section 4: Question resolution
+# Section 4: Round execution
 # ---------------------------------------------------------------------------
 
-def resolve_questions(
-    checkpoint_path: str,
+def run_round(
+    step: StepConfig,
     workspace: str,
-    docker_volume: str,
-    image: str,
-    model: str,
-    agents_dir: Path,
-) -> None:
-    """Spawn resolver agent to answer open questions in the checkpoint."""
-    print("overnight: resolving open questions...")
-
-    prompt = (
-        f"Read the checkpoint file at /workspace/.overnight/{os.path.basename(checkpoint_path)}. "
-        f"Find the ## Open questions section and answer each question. "
-        f"Append a ## Answers section to the same file."
-    )
-
+    pipeline_dir: str,
+    prompt: str,
+    checkpoint_filename: str,
+    round_number: int,
+    compose_path: str,
+) -> tuple[str, int]:
+    """Run one claude -p invocation via docker compose. Returns (checkpoint_path, exit_code)."""
+    container_name = f"overnight-{step.name}-{round_number}"
     cmd = [
-        "docker", "run", "--rm",
-        "--name", "overnight-resolver",
-        "-v", f"{docker_volume}:/home/claude",
-        "-v", f"{workspace}:/workspace:ro",
-        # Mount checkpoint read-write so resolver can append answers
-        "-v", f"{checkpoint_path}:/workspace/.overnight/{os.path.basename(checkpoint_path)}",
-    ]
-
-    if agents_dir.is_dir():
-        cmd.extend(["-v", f"{agents_dir}:/workspace/.claude/agents:ro"])
-
-    cmd.extend([
-        image,
+        "docker", "compose", "-f", compose_path,
+        "run", "--rm", "--name", container_name,
+        step.name,
         "-p", prompt,
         "--dangerously-skip-permissions",
-        "--model", model,
-        "--agent", "resolver",
-    ])
-
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print(f"warning: resolver exited with code {result.returncode}", file=sys.stderr)
-
-
-# ---------------------------------------------------------------------------
-# Section 5: Verification
-# ---------------------------------------------------------------------------
-
-def run_verify(step: StepConfig, workspace: str) -> bool:
-    """Run verify command inside step's Docker image. Returns True if passed."""
-    if not step.verify:
-        return True
-
-    print(f"overnight: verifying step '{step.name}'...")
-    cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{workspace}:/workspace:ro",
-        step.image,
-        "sh", "-c", step.verify,
+        "--model", step.model,
+        "--output-format", "stream-json",
+        "--verbose",
     ]
 
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print(f"overnight: verify failed (exit={result.returncode})", file=sys.stderr)
-        return False
+    log_path = os.path.join(pipeline_dir, "tool-calls.jsonl")
+    with open(log_path, "a") as log_file:
+        marker = json.dumps({
+            "type": "round_start",
+            "step": step.name,
+            "round": round_number,
+            "role": step.role,
+            "ts": datetime.now().isoformat(),
+        })
+        log_file.write(marker + "\n")
+        log_file.flush()
+        proc = subprocess.Popen(
+            cmd, stdout=log_file, start_new_session=True,
+            env={**os.environ, "WORKSPACE": workspace},
+        )
+        proc.wait()
 
-    print("overnight: verify passed")
-    return True
+    checkpoint_path = os.path.join(pipeline_dir, checkpoint_filename)
+    return checkpoint_path, proc.returncode
 
 
 # ---------------------------------------------------------------------------
-# Section 6: Git commit (outside Docker)
+# Section 5: Git helpers
 # ---------------------------------------------------------------------------
 
-def commit_round(workspace: str, timestamp: str) -> None:
-    """Commit workspace changes, excluding .overnight/."""
-    # Check if there are changes to commit
+def get_commit_hash(workspace: str) -> str:
+    """Get current HEAD commit hash."""
+    result = subprocess.run(
+        ["git", "-C", workspace, "rev-parse", "HEAD"],
+        capture_output=True, text=True,
+    )
+    return result.stdout.strip()
+
+
+def get_diff_since(workspace: str, commit_hash: str) -> str:
+    """Get diff from commit_hash to current working state."""
+    result = subprocess.run(
+        ["git", "-C", workspace, "diff", commit_hash],
+        capture_output=True, text=True,
+    )
+    return result.stdout
+
+
+def commit_round(workspace: str, step_name: str, iteration: int) -> None:
+    """Commit workspace changes."""
     result = subprocess.run(
         ["git", "-C", workspace, "status", "--porcelain"],
         capture_output=True, text=True,
     )
-    # Filter out .overnight/ changes
-    changes = [
-        line for line in result.stdout.strip().split("\n")
-        if line and not line.lstrip("? MADRC").lstrip().startswith(".overnight/")
-    ]
-
-    if not changes:
+    if not result.stdout.strip():
         return
 
-    subprocess.run(["git", "-C", workspace, "add", "-A", "--", ":!.overnight"])
+    subprocess.run(["git", "-C", workspace, "add", "-A"])
     subprocess.run(
-        ["git", "-C", workspace, "commit", "-m", f"overnight: {timestamp}"],
+        ["git", "-C", workspace, "commit", "-m",
+         f"overnight: {step_name} iteration {iteration}"],
         capture_output=True,
     )
 
 
 # ---------------------------------------------------------------------------
-# Section 7: Step runner
+# Section 6: Prompt builders
+# ---------------------------------------------------------------------------
+
+def make_gp_prompt(
+    step: StepConfig,
+    pipeline_dir: str,
+    prev_checkpoint: str,
+    checkpoint_filename: str,
+    round_number: int,
+) -> str:
+    return GP_TEMPLATE.format(
+        step_name=step.name,
+        round_number=round_number,
+        prompt=step.prompt,
+        prev_checkpoint=prev_checkpoint or "First round. No prior state.",
+        pipeline_dir=pipeline_dir,
+        checkpoint_filename=checkpoint_filename,
+    )
+
+
+def make_gp_after_skeptic_prompt(
+    step: StepConfig,
+    pipeline_dir: str,
+    gp_checkpoint: str,
+    skeptic_checkpoint: str,
+    checkpoint_filename: str,
+    round_number: int,
+) -> str:
+    return GP_AFTER_SKEPTIC_TEMPLATE.format(
+        step_name=step.name,
+        round_number=round_number,
+        prompt=step.prompt,
+        gp_checkpoint=gp_checkpoint,
+        skeptic_checkpoint=skeptic_checkpoint,
+        pipeline_dir=pipeline_dir,
+        checkpoint_filename=checkpoint_filename,
+    )
+
+
+def make_skeptic_prompt(
+    step: StepConfig,
+    pipeline_dir: str,
+    gp_checkpoint: str,
+    git_diff: str,
+    checkpoint_filename: str,
+    round_number: int,
+) -> str:
+    return SKEPTIC_TEMPLATE.format(
+        step_name=step.name,
+        round_number=round_number,
+        prompt=step.prompt,
+        gp_checkpoint=gp_checkpoint,
+        git_diff=git_diff or "No changes detected.",
+        pipeline_dir=pipeline_dir,
+        checkpoint_filename=checkpoint_filename,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Section 7: Pipeline runner
 # ---------------------------------------------------------------------------
 
 STOPPED = False
 
 
-def run_step(
-    step: StepConfig,
-    workspace: str,
-    pipeline: PipelineConfig,
-    prev_step_checkpoint: str | None,
-    docker_volume: str,
-    overnight_dir: Path,
-) -> str | None:
-    """Run rounds within a step. Returns last checkpoint path, or None on failure."""
+def make_checkpoint_filename(step_name: str, round_number: int) -> str:
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    return f"checkpoint-{step_name}-{timestamp}-{round_number:03d}.md"
+
+
+def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
+    """Load pipeline. Execute steps with GP-skeptic loop."""
     global STOPPED
 
-    prev_checkpoint_content = ""
-    if prev_step_checkpoint and os.path.exists(prev_step_checkpoint):
-        with open(prev_step_checkpoint) as f:
-            prev_checkpoint_content = f.read()
+    pipeline_dir = Path(pipeline_dir_arg)
+    pipeline = load_pipeline(str(pipeline_dir / "pipeline.yaml"))
+    compose_path = str(pipeline_dir / "docker-compose.yml")
+    validate_pipeline(pipeline)
 
-    retries = 0
-
-    for rnd in range(step.max_rounds):
-        if STOPPED or os.path.exists(os.path.join(workspace, ".overnight", "STOP")):
-            print(f"overnight: stopped during step '{step.name}'")
-            return None
-
-        seq = rnd + 1
-        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        checkpoint_filename = f"checkpoint-{timestamp}-{seq:03d}.md"
-
-        print(f"\n=== step '{step.name}', round {seq}/{step.max_rounds} ===")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            checkpoint_path, exit_code = run_round(
-                step=step,
-                workspace=workspace,
-                prev_checkpoint_content=prev_checkpoint_content,
-                checkpoint_filename=checkpoint_filename,
-                round_number=seq,
-                docker_volume=docker_volume,
-                overnight_dir=overnight_dir,
-                tmpdir=tmpdir,
-            )
-
-        print(f"=== round {seq} complete (exit={exit_code}) ===")
-
-        # Commit workspace changes
-        commit_round(workspace, timestamp)
-
-        # Parse checkpoint
-        checkpoint = parse_checkpoint(checkpoint_path)
-        status = checkpoint["status"]
-
-        # Run verify if configured
-        if status == "STEP_COMPLETE" and step.verify:
-            if not run_verify(step, workspace):
-                status = "STEP_IN_PROGRESS"
-                print("overnight: verify failed, overriding status to IN_PROGRESS")
-
-        # Handle status
-        if status == "STEP_COMPLETE":
-            print(f"overnight: step '{step.name}' complete")
-            return checkpoint_path
-
-        elif status == "STEP_FAILED":
-            if step.on_fail == "retry" and retries < step.max_retries:
-                retries += 1
-                print(f"overnight: step failed, retrying ({retries}/{step.max_retries})")
-                continue
-            else:
-                print(f"overnight: step '{step.name}' failed", file=sys.stderr)
-                return None
-
-        else:  # STEP_IN_PROGRESS
-            # Resolve open questions if enabled
-            if step.resolve_questions and has_open_questions(checkpoint_path):
-                resolve_questions(
-                    checkpoint_path=checkpoint_path,
-                    workspace=workspace,
-                    docker_volume=docker_volume,
-                    image=step.image,
-                    model=pipeline.defaults.get("explore_model", DEFAULTS["explore_model"]),
-                    agents_dir=overnight_dir / "agents",
-                )
-
-            # Update prev checkpoint for next round
-            if os.path.exists(checkpoint_path):
-                with open(checkpoint_path) as f:
-                    prev_checkpoint_content = f.read()
-
-        # Wait between rounds
-        wait = pipeline.defaults.get("wait", DEFAULTS["wait"])
-        if rnd < step.max_rounds - 1 and not STOPPED:
-            print(f"overnight: waiting {wait}s before next round")
-            time.sleep(wait)
-
-    print(f"overnight: step '{step.name}' reached max rounds ({step.max_rounds})", file=sys.stderr)
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Section 8: Pipeline runner
-# ---------------------------------------------------------------------------
-
-def preflight(pipeline: PipelineConfig, workspace: str, docker_volume: str, docker_image: str) -> None:
-    """Validate prerequisites before running any steps. Exits on failure."""
-    errors: list[str] = []
-
-    # Check Docker volume exists
-    result = subprocess.run(
-        ["docker", "volume", "inspect", docker_volume],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    if result.returncode != 0:
-        errors.append(f"Docker volume '{docker_volume}' not found. Run: docker volume create {docker_volume}")
-
-    # Collect all images needed (resolve defaults and per-step Dockerfiles)
-    images_to_check: dict[str, list[str]] = {}  # image -> [step names]
-    for step in pipeline.steps:
-        image = step.image if step.image != DEFAULTS["image"] else docker_image
-        # Check if a per-step Dockerfile would override the image
-        dockerfile = os.path.join(workspace, ".overnight", f"Dockerfile.{step.name}")
-        if os.path.exists(dockerfile):
-            image = f"claude-runner-{step.name}"  # will be built by build_image()
-        images_to_check.setdefault(image, []).append(step.name)
-
-    # Check each image exists (skip ones that will be built from Dockerfile.{step})
-    for image, step_names in images_to_check.items():
-        # If a Dockerfile.{step} exists, it will be built later — skip check
-        has_dockerfile = any(
-            os.path.exists(os.path.join(workspace, ".overnight", f"Dockerfile.{name}"))
-            for name in step_names
-        )
-        if has_dockerfile:
-            continue
-
-        result = subprocess.run(
-            ["docker", "image", "inspect", image],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        if result.returncode != 0:
-            errors.append(f"Docker image '{image}' not found (used by steps: {', '.join(step_names)})")
-
-    # Check verify command tools exist in their respective images
-    for step in pipeline.steps:
-        if not step.verify:
-            continue
-        image = step.image if step.image != DEFAULTS["image"] else docker_image
-        dockerfile = os.path.join(workspace, ".overnight", f"Dockerfile.{step.name}")
-        if os.path.exists(dockerfile):
-            image = f"claude-runner-{step.name}"
-        # Skip tool check if image doesn't exist yet (already reported above)
-        img_check = subprocess.run(
-            ["docker", "image", "inspect", image],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        if img_check.returncode != 0:
-            continue
-        # Extract the first command from the verify string
-        verify_stripped = step.verify.strip()
-        # Handle "cd /workspace && cmd ..." pattern
-        if "&&" in verify_stripped:
-            verify_stripped = verify_stripped.split("&&")[-1].strip()
-        first_word = verify_stripped.split()[0] if verify_stripped else ""
-        if first_word:
-            result = subprocess.run(
-                ["docker", "run", "--rm", "--entrypoint", "sh", image, "-c", f"command -v {first_word}"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            if result.returncode != 0:
-                errors.append(f"Step '{step.name}' verify uses '{first_word}' but it's not in image '{image}'")
-
-    if errors:
-        print("overnight: preflight failed:", file=sys.stderr)
-        for e in errors:
-            print(f"  - {e}", file=sys.stderr)
+    if not os.path.isfile(compose_path):
+        print(f"error: docker-compose.yml not found: {compose_path}", file=sys.stderr)
         sys.exit(1)
 
-    print("overnight: preflight passed")
-
-
-def build_image(step: StepConfig, workspace: str) -> None:
-    """Build per-step Docker image if Dockerfile.{step.name} exists."""
-    dockerfile = os.path.join(workspace, ".overnight", f"Dockerfile.{step.name}")
-    if not os.path.exists(dockerfile):
-        return
-
-    tag = f"claude-runner-{step.name}"
-    print(f"overnight: building image '{tag}' from {dockerfile}")
-    subprocess.run(
-        ["docker", "build", "-t", tag, "-f", dockerfile, os.path.dirname(dockerfile)],
-        check=True,
+    # Build all images
+    print("overnight: building images...")
+    result = subprocess.run(
+        ["docker", "compose", "-f", compose_path, "build"],
+        env={**os.environ, "WORKSPACE": workspace},
     )
-    step.image = tag
-
-
-def run_pipeline(
-    workspace: str,
-    pipeline_path: str,
-    docker_volume: str,
-    docker_image: str,
-) -> None:
-    """Load pipeline. Execute steps sequentially."""
-    pipeline = load_pipeline(pipeline_path)
-    overnight_dir = Path(workspace) / ".overnight"
-
-    # Ensure .overnight directory exists
-    overnight_dir.mkdir(exist_ok=True)
-
-    # Validate prerequisites before starting
-    preflight(pipeline, workspace, docker_volume, docker_image)
+    if result.returncode != 0:
+        print("error: docker compose build failed", file=sys.stderr)
+        sys.exit(1)
 
     print(f"overnight: pipeline '{pipeline.name}' with {len(pipeline.steps)} steps")
     print(f"overnight: workspace={workspace}")
-    print(f"overnight: stop with: touch {overnight_dir}/STOP")
+    print(f"overnight: dir={pipeline_dir}")
+    print(f"overnight: stop with: touch {pipeline_dir}/STOP")
     print()
 
-    prev_step_checkpoint = None
+    prev_checkpoint_content = ""
+    i = 0
 
-    for i, step in enumerate(pipeline.steps):
-        if STOPPED:
-            break
+    while i < len(pipeline.steps):
+        if STOPPED or (pipeline_dir / "STOP").exists():
+            print("overnight: stopped")
+            return
 
-        # Override default image if not set per-step
-        if step.image == DEFAULTS["image"]:
-            step.image = docker_image
+        step = pipeline.steps[i]
+        next_step = pipeline.steps[i + 1] if i + 1 < len(pipeline.steps) else None
+        is_paired = next_step is not None and next_step.role == "skeptic"
 
-        # Build per-step image if Dockerfile exists
-        build_image(step, workspace)
+        print(f"\n{'=' * 60}")
+        print(f"overnight: step '{step.name}'" +
+              (f" + '{next_step.name}'" if is_paired else ""))
+        print(f"{'=' * 60}")
 
-        print(f"\n{'='*60}")
-        print(f"overnight: starting step {i+1}/{len(pipeline.steps)}: '{step.name}'")
-        print(f"{'='*60}")
-
-        result = run_step(
-            step=step,
-            workspace=workspace,
-            pipeline=pipeline,
-            prev_step_checkpoint=prev_step_checkpoint,
-            docker_volume=docker_volume,
-            overnight_dir=overnight_dir,
+        # First GP run
+        pre_gp_commit = get_commit_hash(workspace)
+        cp_filename = make_checkpoint_filename(step.name, 1)
+        prompt = make_gp_prompt(
+            step, str(pipeline_dir), prev_checkpoint_content, cp_filename, 1,
         )
 
-        if result is None:
-            print(f"\novernight: pipeline aborted at step '{step.name}'", file=sys.stderr)
+        print(f"\n=== {step.name} round 1 (gp) ===")
+        gp_path, exit_code = run_round(
+            step, workspace, str(pipeline_dir), prompt, cp_filename, 1, compose_path,
+        )
+        print(f"=== round complete (exit={exit_code}) ===")
+        commit_round(workspace, step.name, 1)
+
+        gp_status = parse_checkpoint(gp_path)["status"]
+        if gp_status == "STEP_FAILED":
+            print(f"overnight: step '{step.name}' failed", file=sys.stderr)
             sys.exit(1)
 
-        prev_step_checkpoint = result
+        # Standalone GP (no skeptic following)
+        if not is_paired:
+            if gp_status == "STEP_COMPLETE":
+                prev_checkpoint_content = read_file(gp_path)
+                print(f"overnight: step '{step.name}' complete")
+                i += 1
+                continue
+
+            # Standalone GP with IN_PROGRESS: loop within its own max_rounds
+            gp_content = read_file(gp_path)
+            for rnd in range(2, step.max_rounds + 1):
+                if STOPPED or (pipeline_dir / "STOP").exists():
+                    return
+
+                wait = pipeline.defaults.get("wait", DEFAULTS["wait"])
+                print(f"overnight: waiting {wait}s")
+                time.sleep(wait)
+
+                cp_filename = make_checkpoint_filename(step.name, rnd)
+                prompt = make_gp_prompt(
+                    step, str(pipeline_dir), gp_content, cp_filename, rnd,
+                )
+
+                print(f"\n=== {step.name} round {rnd} (gp) ===")
+                gp_path, exit_code = run_round(
+                    step, workspace, str(pipeline_dir), prompt,
+                    cp_filename, rnd, compose_path,
+                )
+                print(f"=== round complete (exit={exit_code}) ===")
+                commit_round(workspace, step.name, rnd)
+
+                gp_status = parse_checkpoint(gp_path)["status"]
+                gp_content = read_file(gp_path)
+
+                if gp_status == "STEP_COMPLETE":
+                    prev_checkpoint_content = gp_content
+                    print(f"overnight: step '{step.name}' complete")
+                    break
+                if gp_status == "STEP_FAILED":
+                    print(f"overnight: step '{step.name}' failed", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                print(f"overnight: step '{step.name}' reached max rounds "
+                      f"({step.max_rounds})", file=sys.stderr)
+                sys.exit(1)
+
+            i += 1
+            continue
+
+        # Paired: GP-skeptic loop
+        gp_content = read_file(gp_path)
+        max_iter = next_step.max_rounds or pipeline.defaults.get(
+            "max_rounds", DEFAULTS["max_rounds"],
+        )
+
+        for iteration in range(max_iter):
+            if STOPPED or (pipeline_dir / "STOP").exists():
+                return
+
+            # Skeptic reviews
+            git_diff = get_diff_since(workspace, pre_gp_commit)
+            cp_filename = make_checkpoint_filename(next_step.name, iteration + 1)
+            prompt = make_skeptic_prompt(
+                next_step, str(pipeline_dir), gp_content, git_diff,
+                cp_filename, iteration + 1,
+            )
+
+            print(f"\n=== {next_step.name} round {iteration + 1} (skeptic) ===")
+            skeptic_path, exit_code = run_round(
+                next_step, workspace, str(pipeline_dir), prompt,
+                cp_filename, iteration + 1, compose_path,
+            )
+            print(f"=== round complete (exit={exit_code}) ===")
+
+            skeptic_status = parse_checkpoint(skeptic_path)["status"]
+
+            if skeptic_status == "STEP_COMPLETE":
+                skeptic_content = read_file(skeptic_path)
+                prev_checkpoint_content = (
+                    "## Previous Work\n" + gp_content +
+                    "\n\n## Review Verdict\n" + skeptic_content
+                )
+                print(f"overnight: pair '{step.name}'/'{next_step.name}' complete")
+                i += 2
+                break
+
+            if skeptic_status == "STEP_FAILED":
+                print(f"overnight: '{next_step.name}' failed", file=sys.stderr)
+                sys.exit(1)
+
+            # IN_PROGRESS: loop back to GP with feedback
+            skeptic_content = read_file(skeptic_path)
+            pre_gp_commit = get_commit_hash(workspace)
+
+            wait = pipeline.defaults.get("wait", DEFAULTS["wait"])
+            if not STOPPED:
+                print(f"overnight: waiting {wait}s")
+                time.sleep(wait)
+
+            cp_filename = make_checkpoint_filename(step.name, iteration + 2)
+            prompt = make_gp_after_skeptic_prompt(
+                step, str(pipeline_dir), gp_content, skeptic_content,
+                cp_filename, iteration + 2,
+            )
+
+            print(f"\n=== {step.name} round {iteration + 2} (gp, addressing feedback) ===")
+            gp_path, exit_code = run_round(
+                step, workspace, str(pipeline_dir), prompt,
+                cp_filename, iteration + 2, compose_path,
+            )
+            print(f"=== round complete (exit={exit_code}) ===")
+            commit_round(workspace, step.name, iteration + 2)
+
+            gp_status = parse_checkpoint(gp_path)["status"]
+            if gp_status == "STEP_FAILED":
+                print(f"overnight: step '{step.name}' failed", file=sys.stderr)
+                sys.exit(1)
+
+            gp_content = read_file(gp_path)
+        else:
+            print(f"overnight: pair '{step.name}'/'{next_step.name}' "
+                  f"reached max iterations ({max_iter})", file=sys.stderr)
+            sys.exit(1)
 
     print(f"\novernight: pipeline '{pipeline.name}' complete")
 
 
 # ---------------------------------------------------------------------------
-# Section 9: CLI
+# Section 8: CLI
 # ---------------------------------------------------------------------------
 
 def main():
-    global STOPPED
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
-    parser = argparse.ArgumentParser(description="Overnight pipeline runner")
+    parser = argparse.ArgumentParser(description="Overnight pipeline runner v2")
     parser.add_argument("--workspace", required=True, help="Repo directory")
-    parser.add_argument("--pipeline", default=None, help="Pipeline YAML (default: .overnight/pipeline.yaml)")
-    parser.add_argument("--docker-volume", default="claude-runner-home", help="Named volume for /home/claude")
-    parser.add_argument("--docker-image", default="claude-runner", help="Base Docker image")
+    parser.add_argument("--dir", required=True,
+                        help="Pipeline directory (contains pipeline.yaml, docker-compose.yml)")
     args = parser.parse_args()
 
     workspace = os.path.abspath(args.workspace)
-    pipeline_path = args.pipeline or os.path.join(workspace, ".overnight", "pipeline.yaml")
+    pipeline_dir = os.path.abspath(args.dir)
 
     if not os.path.isdir(workspace):
         print(f"error: workspace not found: {workspace}", file=sys.stderr)
         sys.exit(1)
 
-    if not os.path.isfile(pipeline_path):
-        print(f"error: pipeline not found: {pipeline_path}", file=sys.stderr)
+    if not os.path.isdir(pipeline_dir):
+        print(f"error: pipeline directory not found: {pipeline_dir}", file=sys.stderr)
         sys.exit(1)
 
-    # Ignore signals. The stop file (.overnight/STOP) is the only control mechanism.
-    # The runner is launched from Claude Code, not a terminal.
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    pipeline_yaml = os.path.join(pipeline_dir, "pipeline.yaml")
+    if not os.path.isfile(pipeline_yaml):
+        print(f"error: pipeline.yaml not found: {pipeline_yaml}", file=sys.stderr)
+        sys.exit(1)
 
-    run_pipeline(workspace, pipeline_path, args.docker_volume, args.docker_image)
+    run_pipeline(workspace, pipeline_dir)
 
 
 if __name__ == "__main__":
