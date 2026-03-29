@@ -466,6 +466,36 @@ def make_checkpoint_filename(step_name: str, round_number: int) -> str:
     return f"checkpoint-{step_name}-{timestamp}-{round_number:03d}.md"
 
 
+COMPOSE_TEMPLATE = """\
+x-common: &common
+  build: .
+  volumes:
+    - ${{WORKSPACE}}:/workspace
+    - ${{WORKSPACE}}/.git:/workspace/.git:ro
+    - claude-home:/home/claude
+
+services:
+{services}
+volumes:
+  claude-home:
+    external: true
+    name: claude-runner-home
+"""
+
+
+def generate_compose(pipeline: PipelineConfig, output_path: str) -> None:
+    """Generate docker-compose.yml from pipeline step names."""
+    seen = set()
+    services = []
+    for step in pipeline.steps:
+        if step.name not in seen:
+            services.append(f"  {step.name}:\n    <<: *common")
+            seen.add(step.name)
+    content = COMPOSE_TEMPLATE.format(services="\n".join(services) + "\n")
+    with open(output_path, "w") as f:
+        f.write(content)
+
+
 def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
     """Load pipeline. Execute steps with GP-skeptic loop."""
     global STOPPED
@@ -475,9 +505,8 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
     compose_path = str(pipeline_dir / "docker-compose.yml")
     validate_pipeline(pipeline)
 
-    if not os.path.isfile(compose_path):
-        print(f"error: docker-compose.yml not found: {compose_path}", file=sys.stderr)
-        sys.exit(1)
+    # Generate docker-compose.yml from pipeline step names
+    generate_compose(pipeline, compose_path)
 
     # Build all images
     print("overnight: building images...")
