@@ -1,0 +1,6 @@
+docker-compose.yml
+skills/
+checkpoint-*.md
+tool-calls.jsonl
+prompt-*.md
+STOP
