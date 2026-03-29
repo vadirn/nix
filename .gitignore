@@ -6,4 +6,5 @@ __pycache__/
 .claude/.vault.config.json
 vault-query/target/
 .overnight/
+.overnight-*/
 home/claude/evals/debate/outputs/

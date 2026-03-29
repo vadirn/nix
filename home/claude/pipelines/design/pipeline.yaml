@@ -4,7 +4,7 @@ skills: [design, bench]
 
 defaults:
   model: claude-sonnet-4-20250514
-  max_rounds: 1
+  max_rounds: 3
 
 steps:
   - name: bench

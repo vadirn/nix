@@ -240,7 +240,7 @@ def test_gp_template():
     """GP prompt template renders correctly."""
     step = run.StepConfig(name="impl", prompt="Fix the auth module.")
     result = run.make_gp_prompt(
-        step, "/tmp/pipeline", "## Done\nAnalyzed files.\n",
+        step, "/workspace", "/workspace/pipelines/test", "## Done\nAnalyzed files.\n",
         "checkpoint-001.md", 3,
     )
     assert "impl" in result
@@ -248,7 +248,7 @@ def test_gp_template():
     assert "Fix the auth module." in result
     assert "Analyzed files." in result
     assert "checkpoint-001.md" in result
-    assert "/tmp/pipeline" in result
+    assert "/workspace/" in result
     print("  PASS test_gp_template")
 
 
@@ -256,7 +256,7 @@ def test_gp_after_skeptic_template():
     """GP-after-skeptic template includes both checkpoints."""
     step = run.StepConfig(name="impl", prompt="Fix auth.")
     result = run.make_gp_after_skeptic_prompt(
-        step, "/tmp/pipeline",
+        step, "/workspace", "/workspace/pipelines/test",
         "## Done\nWrote JWT code.",
         "## Feedback\nMissing token refresh.",
         "checkpoint-002.md", 4,
@@ -272,7 +272,7 @@ def test_skeptic_template():
     """Skeptic template includes diff and GP checkpoint."""
     step = run.StepConfig(name="review", prompt="Check for hardcoded secrets.", role="skeptic")
     result = run.make_skeptic_prompt(
-        step, "/tmp/pipeline",
+        step, "/workspace", "/workspace/pipelines/test",
         "## Done\nImplemented JWT.",
         "diff --git a/auth.py b/auth.py\n+SECRET='abc'",
         "checkpoint-003.md", 1,

@@ -1,6 +1,6 @@
 [
   {
-    "query": "I want to run overnight on this repo to refactor the auth module, maybe 5 iterations with opus",
+    "query": "I want to run overnight on this repo to refactor the auth module",
     "should_trigger": true
   },
   {
@@ -8,11 +8,11 @@
     "should_trigger": true
   },
   {
-    "query": "my overnight project needs eslint and node, can you make a Dockerfile for it?",
+    "query": "my overnight pipeline needs eslint and node, can you make a Dockerfile for it?",
     "should_trigger": true
   },
   {
-    "query": "I want to leave this running overnight while I sleep, it should work through the backlog of lint fixes in the repo",
+    "query": "I want to leave this running overnight while I sleep, it should work through the backlog of lint fixes",
     "should_trigger": true
   },
   {
@@ -24,11 +24,23 @@
     "should_trigger": true
   },
   {
-    "query": "write me a project.md for overnight that covers adding pagination to all our API endpoints",
+    "query": "help me write a pipeline.yaml with a GP step and a skeptic reviewer for this refactor",
     "should_trigger": true
   },
   {
-    "query": "I need to run a headless claude session in a container against my rails app, budget $10 per pass",
+    "query": "I need to run a headless claude session in a container against my rails app",
+    "should_trigger": true
+  },
+  {
+    "query": "create a docker-compose.yml for my overnight pipeline with separate images per step",
+    "should_trigger": true
+  },
+  {
+    "query": "stop the overnight run, something went wrong",
+    "should_trigger": true
+  },
+  {
+    "query": "запусти овернайт на этом репо, пусть поработает пока я сплю",
     "should_trigger": true
   },
   {
@@ -61,6 +73,14 @@
   },
   {
     "query": "run this script in the background and let me know when it's done",
+    "should_trigger": false
+  },
+  {
+    "query": "review this pull request and leave comments",
+    "should_trigger": false
+  },
+  {
+    "query": "write a docker-compose.yml for my postgres and redis services",
     "should_trigger": false
   }
 ]

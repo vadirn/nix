@@ -101,6 +101,27 @@ def validate_pipeline(pipeline: PipelineConfig) -> None:
 # Section 2: Prompt templates
 # ---------------------------------------------------------------------------
 
+CHECKPOINT_FORMAT = """
+## Checkpoint format
+
+Write the checkpoint file with YAML frontmatter:
+
+```
+---
+status: STEP_COMPLETE
+step: {step_name}
+round: {round_number}
+---
+
+## Done
+What was accomplished.
+
+## Next
+What remains (if IN_PROGRESS).
+```
+
+Status must be exactly one of: STEP_COMPLETE, STEP_IN_PROGRESS, STEP_FAILED."""
+
 GP_TEMPLATE = """\
 You are running as an autonomous agent.
 Step: "{step_name}", round {round_number}.
@@ -112,11 +133,12 @@ Step: "{step_name}", round {round_number}.
 {prev_checkpoint}
 
 ## Instructions
-- Work autonomously. Write checkpoint to {pipeline_dir}/{checkpoint_filename}.
+- Work autonomously. Write checkpoint to {checkpoint_path}.
 - Set status STEP_COMPLETE when your task is finished.
 - Set status STEP_IN_PROGRESS with clear ## Next items when work remains.
 - Set status STEP_FAILED when blocked and cannot proceed.
-- The orchestrator handles git commits. Focus on code changes and checkpoint."""
+- The orchestrator handles git commits. Focus on code changes and checkpoint.
+{checkpoint_format}"""
 
 GP_AFTER_SKEPTIC_TEMPLATE = """\
 You are running as an autonomous agent.
@@ -133,10 +155,11 @@ Step: "{step_name}", round {round_number}.
 
 ## Instructions
 - Address each item in the reviewer feedback before proceeding.
-- Write checkpoint to {pipeline_dir}/{checkpoint_filename}.
+- Write checkpoint to {checkpoint_path}.
 - Set status STEP_COMPLETE when your task is finished.
 - Set status STEP_IN_PROGRESS with clear ## Next items when work remains.
-- Set status STEP_FAILED when blocked and cannot proceed."""
+- Set status STEP_FAILED when blocked and cannot proceed.
+{checkpoint_format}"""
 
 SKEPTIC_TEMPLATE = """\
 You are a reviewer evaluating the previous step's work.
@@ -157,7 +180,8 @@ Step: "{step_name}", round {round_number}.
 - Set STEP_IN_PROGRESS with specific, actionable feedback if revisions needed.
 - Set STEP_FAILED if the work has unrecoverable issues.
 - Be concrete: name files, functions, specific issues.
-- Write checkpoint to {pipeline_dir}/{checkpoint_filename}."""
+- Write checkpoint to {checkpoint_path}.
+{checkpoint_format}"""
 
 
 # ---------------------------------------------------------------------------
@@ -217,12 +241,19 @@ def run_round(
     compose_path: str,
 ) -> tuple[str, int]:
     """Run one claude -p invocation via docker compose. Returns (checkpoint_path, exit_code)."""
+    # Write prompt to file to avoid OS argument length limits.
+    # The file is placed in the pipeline dir (mounted into the container).
+    prompt_filename = f"prompt-{step.name}-{round_number}.md"
+    prompt_path = os.path.join(pipeline_dir, prompt_filename)
+    with open(prompt_path, "w") as f:
+        f.write(prompt)
+
     container_name = f"overnight-{step.name}-{round_number}"
     cmd = [
         "docker", "compose", "-f", compose_path,
         "run", "--rm", "--name", container_name,
         step.name,
-        "-p", prompt,
+        "-p", f"Follow the instructions in /workspace/{os.path.relpath(prompt_path, workspace)}",
         "--dangerously-skip-permissions",
         "--model", step.model,
         "--output-format", "stream-json",
@@ -245,6 +276,12 @@ def run_round(
             env={**os.environ, "WORKSPACE": workspace},
         )
         proc.wait()
+
+    # Clean up prompt file
+    try:
+        os.unlink(prompt_path)
+    except OSError:
+        pass
 
     checkpoint_path = os.path.join(pipeline_dir, checkpoint_filename)
     return checkpoint_path, proc.returncode
@@ -293,8 +330,15 @@ def commit_round(workspace: str, step_name: str, iteration: int) -> None:
 # Section 6: Prompt builders
 # ---------------------------------------------------------------------------
 
+def docker_checkpoint_path(workspace: str, pipeline_dir: str, checkpoint_filename: str) -> str:
+    """Compute the checkpoint path as seen inside Docker (/workspace/...)."""
+    rel = os.path.relpath(os.path.join(pipeline_dir, checkpoint_filename), workspace)
+    return f"/workspace/{rel}"
+
+
 def make_gp_prompt(
     step: StepConfig,
+    workspace: str,
     pipeline_dir: str,
     prev_checkpoint: str,
     checkpoint_filename: str,
@@ -305,13 +349,14 @@ def make_gp_prompt(
         round_number=round_number,
         prompt=step.prompt,
         prev_checkpoint=prev_checkpoint or "First round. No prior state.",
-        pipeline_dir=pipeline_dir,
-        checkpoint_filename=checkpoint_filename,
+        checkpoint_path=docker_checkpoint_path(workspace, pipeline_dir, checkpoint_filename),
+        checkpoint_format=CHECKPOINT_FORMAT.format(step_name=step.name, round_number=round_number),
     )
 
 
 def make_gp_after_skeptic_prompt(
     step: StepConfig,
+    workspace: str,
     pipeline_dir: str,
     gp_checkpoint: str,
     skeptic_checkpoint: str,
@@ -324,13 +369,14 @@ def make_gp_after_skeptic_prompt(
         prompt=step.prompt,
         gp_checkpoint=gp_checkpoint,
         skeptic_checkpoint=skeptic_checkpoint,
-        pipeline_dir=pipeline_dir,
-        checkpoint_filename=checkpoint_filename,
+        checkpoint_path=docker_checkpoint_path(workspace, pipeline_dir, checkpoint_filename),
+        checkpoint_format=CHECKPOINT_FORMAT.format(step_name=step.name, round_number=round_number),
     )
 
 
 def make_skeptic_prompt(
     step: StepConfig,
+    workspace: str,
     pipeline_dir: str,
     gp_checkpoint: str,
     git_diff: str,
@@ -343,8 +389,8 @@ def make_skeptic_prompt(
         prompt=step.prompt,
         gp_checkpoint=gp_checkpoint,
         git_diff=git_diff or "No changes detected.",
-        pipeline_dir=pipeline_dir,
-        checkpoint_filename=checkpoint_filename,
+        checkpoint_path=docker_checkpoint_path(workspace, pipeline_dir, checkpoint_filename),
+        checkpoint_format=CHECKPOINT_FORMAT.format(step_name=step.name, round_number=round_number),
     )
 
 
@@ -410,7 +456,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
         pre_gp_commit = get_commit_hash(workspace)
         cp_filename = make_checkpoint_filename(step.name, 1)
         prompt = make_gp_prompt(
-            step, str(pipeline_dir), prev_checkpoint_content, cp_filename, 1,
+            step, workspace, str(pipeline_dir), prev_checkpoint_content, cp_filename, 1,
         )
 
         print(f"\n=== {step.name} round 1 (gp) ===")
@@ -445,7 +491,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
 
                 cp_filename = make_checkpoint_filename(step.name, rnd)
                 prompt = make_gp_prompt(
-                    step, str(pipeline_dir), gp_content, cp_filename, rnd,
+                    step, workspace, str(pipeline_dir), gp_content, cp_filename, rnd,
                 )
 
                 print(f"\n=== {step.name} round {rnd} (gp) ===")
@@ -488,7 +534,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
             git_diff = get_diff_since(workspace, pre_gp_commit)
             cp_filename = make_checkpoint_filename(next_step.name, iteration + 1)
             prompt = make_skeptic_prompt(
-                next_step, str(pipeline_dir), gp_content, git_diff,
+                next_step, workspace, str(pipeline_dir), gp_content, git_diff,
                 cp_filename, iteration + 1,
             )
 
@@ -526,7 +572,7 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
 
             cp_filename = make_checkpoint_filename(step.name, iteration + 2)
             prompt = make_gp_after_skeptic_prompt(
-                step, str(pipeline_dir), gp_content, skeptic_content,
+                step, workspace, str(pipeline_dir), gp_content, skeptic_content,
                 cp_filename, iteration + 2,
             )
 
