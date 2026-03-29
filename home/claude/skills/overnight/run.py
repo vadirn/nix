@@ -39,6 +39,7 @@ class StepConfig:
     role: str = "gp"
     model: str = ""
     max_rounds: int = 0
+    verify_cmd: str = ""
 
 
 @dataclass
@@ -73,6 +74,7 @@ def load_pipeline(path: str) -> PipelineConfig:
             role=role,
             model=s.get("model", defaults["model"]),
             max_rounds=s.get("max_rounds", defaults["max_rounds"]),
+            verify_cmd=s.get("verify_cmd", ""),
         )
         steps.append(step)
 
@@ -390,6 +392,24 @@ def commit_round(
 # Section 6: Prompt builders
 # ---------------------------------------------------------------------------
 
+def run_verify_cmd(
+    step: StepConfig,
+    workspace: str,
+    compose_path: str,
+) -> tuple[str, int]:
+    """Run verify_cmd inside Docker and return (stdout, exit_code)."""
+    cmd = [
+        "docker", "compose", "-f", compose_path,
+        "run", "--rm", step.name,
+        "bash", "-c", step.verify_cmd,
+    ]
+    result = subprocess.run(
+        cmd, capture_output=True, text=True,
+        env={**os.environ, "WORKSPACE": workspace},
+    )
+    return result.stdout + result.stderr, result.returncode
+
+
 def docker_checkpoint_path(workspace: str, pipeline_dir: str, checkpoint_filename: str) -> str:
     """Compute the checkpoint path as seen inside Docker (/workspace/...)."""
     rel = os.path.relpath(os.path.join(pipeline_dir, checkpoint_filename), workspace)
@@ -621,6 +641,21 @@ def run_pipeline(workspace: str, pipeline_dir_arg: str) -> None:
 
             # Skeptic reviews
             git_diff = get_diff_since(workspace, pre_gp_commit)
+
+            # Run verify_cmd if present: execute script, include output
+            verify_output = ""
+            if next_step.verify_cmd:
+                print(f"overnight: running verify_cmd for '{next_step.name}'")
+                verify_output, verify_exit = run_verify_cmd(
+                    next_step, workspace, compose_path,
+                )
+                print(f"overnight: verify_cmd exit={verify_exit}")
+                git_diff = (
+                    f"## Verification Script Output (exit code {verify_exit})\n"
+                    f"```\n{verify_output.strip()}\n```\n\n"
+                    f"## Git Diff\n{git_diff}"
+                )
+
             cp_filename = make_checkpoint_filename(next_step.name, iteration + 1)
             prompt = make_skeptic_prompt(
                 next_step, workspace, str(pipeline_dir), gp_content, git_diff,

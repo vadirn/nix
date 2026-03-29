@@ -163,6 +163,7 @@ Step fields:
 | `role`       | `gp`          | `gp` or `skeptic`                      |
 | `model`      | from defaults | Model override for this step            |
 | `max_rounds` | from defaults | GP-skeptic iterations for this pair     |
+| `verify_cmd` | (none)        | Shell command run by runner before skeptic. Output passed as context |
 
 Default values: `model: claude-opus-4-6[1m]`, `max_rounds: 5`, `wait: 30`.
 
