@@ -18,8 +18,9 @@ for the text as a whole:
     remove them if logic already flows without them  // Vary sentence length and structure
 
 for each punctuation choice:
-  if important aside is parenthesized:
-    upgrade to dash  // Match punctuation to emphasis
+  if aside is parenthesized:
+    if aside has a verb: split into separate sentence  // Match punctuation to emphasis
+    else: keep parentheses  // Match punctuation to emphasis
   if two clauses need a formal link:
     use colon  // Match punctuation to emphasis
   if semicolon joins a long sentence:
@@ -80,7 +81,7 @@ Use periods, colons, or parentheses instead of em-dashes. AI-generated text lean
 
 - **Split into two sentences** when the aside carries its own idea
 - **Colon** for announcements: "here is what I mean"
-- **Parentheses** for minor asides
+- **Parentheses** for inline lists and asides under ~8 words that lack their own verb. If the aside carries a separate idea, split into a sentence.
 - **Commas** when the clause is short and unambiguous
 
-**Semicolons** link two closely related sentences when the first is short (under ~15 words). If you need a semicolon because the sentence is long, split it with a period instead.
+**Semicolons** are acceptable only as a last resort when both clauses are short (see Pass 2). If either clause is long, split with a period.
