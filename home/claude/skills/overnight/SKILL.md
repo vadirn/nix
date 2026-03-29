@@ -195,7 +195,7 @@ RUN apt-get update && apt-get install -y nodejs npm python3
 USER claude
 ```
 
-The base Dockerfile COPYs `skills/` from the build context. These are assembled by the overnight skill at launch from canonical paths.
+Per-project Dockerfiles COPY `skills/` from the build context. These are assembled by the overnight skill at launch from canonical paths.
 
 ### Checkpoint format
 

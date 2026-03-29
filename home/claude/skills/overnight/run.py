@@ -97,6 +97,10 @@ def validate_pipeline(pipeline: PipelineConfig) -> None:
             print(f"error: skeptic step '{step.name}' must follow a gp step",
                   file=sys.stderr)
             sys.exit(1)
+        if step.role == "gp" and step.verify_cmd:
+            print(f"error: verify_cmd on gp step '{step.name}' has no effect",
+                  file=sys.stderr)
+            sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
