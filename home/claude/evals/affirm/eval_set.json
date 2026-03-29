@@ -1,0 +1,82 @@
+[
+  {
+    "query": "this CLAUDE.md has too many 'do not' and 'never' statements, can you flip them to say what TO do instead?",
+    "should_trigger": true
+  },
+  {
+    "query": "remove the hedging from this prompt — all the 'might', 'consider', 'try to' stuff needs to go",
+    "should_trigger": true
+  },
+  {
+    "query": "make these instructions more direct, they're too wishy-washy",
+    "should_trigger": true
+  },
+  {
+    "query": "rewrite without 'don't' — I want every instruction stated positively",
+    "should_trigger": true
+  },
+  {
+    "query": "убери отрицания из этого текста, переформулируй позитивно",
+    "should_trigger": true
+  },
+  {
+    "query": "convert all the negative rules in this file to positive form",
+    "should_trigger": true
+  },
+  {
+    "query": "strengthen this language — cut the 'you might want to' and 'consider' and just say what to do",
+    "should_trigger": true
+  },
+  {
+    "query": "this skill file is full of 'avoid X' and 'be careful to Y', can you flip those to direct statements?",
+    "should_trigger": true
+  },
+  {
+    "query": "сделай инструкции более прямыми, убери все 'возможно' и 'стоит попробовать'",
+    "should_trigger": true
+  },
+  {
+    "query": "strip the permission framing from this doc — change 'you can' and 'feel free to' to imperatives",
+    "should_trigger": true
+  },
+  {
+    "query": "fix the grammar in this paragraph, there are some subject-verb agreement issues",
+    "should_trigger": false
+  },
+  {
+    "query": "simplify this text, it's too verbose and hard to follow",
+    "should_trigger": false
+  },
+  {
+    "query": "proofread this README and fix any typos",
+    "should_trigger": false
+  },
+  {
+    "query": "rewrite this function to be more readable",
+    "should_trigger": false
+  },
+  {
+    "query": "make this error message clearer for end users",
+    "should_trigger": false
+  },
+  {
+    "query": "edit this paragraph for concision, cut unnecessary words",
+    "should_trigger": false
+  },
+  {
+    "query": "translate these instructions from English to Russian",
+    "should_trigger": false
+  },
+  {
+    "query": "improve the tone of this email, it sounds too aggressive",
+    "should_trigger": false
+  },
+  {
+    "query": "add comments to this code explaining what each section does",
+    "should_trigger": false
+  },
+  {
+    "query": "убрать воду из этого текста, оставить только суть",
+    "should_trigger": false
+  }
+]

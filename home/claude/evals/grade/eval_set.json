@@ -1,0 +1,82 @@
+[
+  {
+    "query": "grade this decision: we're going with Postgres instead of MongoDB for the event store",
+    "should_trigger": true
+  },
+  {
+    "query": "how confident are you in that recommendation? Give me a number",
+    "should_trigger": true
+  },
+  {
+    "query": "rate your confidence that this migration plan won't break production",
+    "should_trigger": true
+  },
+  {
+    "query": "on a scale of 1 to 10 how sure are you about using server components here?",
+    "should_trigger": true
+  },
+  {
+    "query": "grade this: switching from REST to GraphQL will reduce our frontend data-fetching code by 40%",
+    "should_trigger": true
+  },
+  {
+    "query": "оцени уверенность в этом решении: переход на микросервисы сократит время деплоя",
+    "should_trigger": true
+  },
+  {
+    "query": "confidence score on whether this caching strategy will actually improve p99 latency?",
+    "should_trigger": true
+  },
+  {
+    "query": "поставь оценку этому плану, насколько он надёжный?",
+    "should_trigger": true
+  },
+  {
+    "query": "grade the claim that our test suite catches 90% of regressions before deploy",
+    "should_trigger": true
+  },
+  {
+    "query": "how solid is this architecture choice? Rate it for me",
+    "should_trigger": true
+  },
+  {
+    "query": "compare Postgres and MongoDB for our use case, what are the tradeoffs?",
+    "should_trigger": false
+  },
+  {
+    "query": "argue both sides of whether we should adopt GraphQL",
+    "should_trigger": false
+  },
+  {
+    "query": "stress-test this migration plan, find the holes",
+    "should_trigger": false
+  },
+  {
+    "query": "review this pull request and check for issues",
+    "should_trigger": false
+  },
+  {
+    "query": "analyze the performance of this query and suggest improvements",
+    "should_trigger": false
+  },
+  {
+    "query": "evaluate which CI provider we should switch to",
+    "should_trigger": false
+  },
+  {
+    "query": "what do you think about this approach? Any concerns?",
+    "should_trigger": false
+  },
+  {
+    "query": "assess the security implications of exposing this endpoint publicly",
+    "should_trigger": false
+  },
+  {
+    "query": "проанализируй этот код на предмет багов",
+    "should_trigger": false
+  },
+  {
+    "query": "is this the right testing strategy? Walk me through the pros and cons",
+    "should_trigger": false
+  }
+]
