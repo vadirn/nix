@@ -69,10 +69,16 @@ assert_deny("git branch -D end", "git branch -D")
 assert_allow("git branch -d", "git branch -d main")
 assert_allow("git branch list", "git branch --list")
 
-# git config
+# git config writes (blocked)
 assert_deny("git config user", "git config user.name foo")
 assert_deny("git config --global", "git config --global user.email x")
 assert_allow("git config in msg", "git commit -m 'fix git config issue'")
+
+# git config reads (allowed)
+assert_allow("git config --get", "git config --get user.name")
+assert_allow("git config --list", "git config --list")
+assert_allow("git config -l", "git config -l")
+assert_allow("git config --get-regexp", "git config --get-regexp sign")
 
 # git -C
 assert_deny("git -C path", "git -C /tmp status")

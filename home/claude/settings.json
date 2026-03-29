@@ -248,6 +248,7 @@
         "~/.agent-browser",
         "~/.cache",
         "~/.docker",
+        "~/.gnupg",
         "~/Documents/vault",
         "$TMPDIR"
       ]

@@ -72,7 +72,7 @@
                 "pinentry-mac"
                 "openssl-osx-ca"
                 "syncthing"
-                "tw93/tap/mole"
+
                 "dopplerhq/cli/doppler"
                 "micro"
                 "rustup"

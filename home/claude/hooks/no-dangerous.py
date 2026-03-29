@@ -17,7 +17,7 @@ GIT_RULES = [
     ("push",   None,                                    "Blocked: git push must be done manually."),
     ("reset",  ("--hard",),                             "Blocked: git reset --hard discards uncommitted changes."),
     ("branch", ("-D",),                                 "Blocked: git branch -D force-deletes without merge check."),
-    ("config", None,                                    "Blocked: git config changes persist and affect all future commits."),
+    # config is handled specially in check() — not here
 ]
 
 TOKEN_RULES = [
@@ -84,7 +84,18 @@ def check(command: str):
 
     token_set = frozenset(tokens)
 
+    CONFIG_READ_FLAGS = frozenset((
+        "--get", "--get-all", "--get-regexp", "--get-urlmatch",
+        "--list", "-l", "--show-origin", "--show-scope",
+    ))
+
     for subcmd, args in get_git_invocations(tokens):
+        # git config: allow reads, block writes
+        if subcmd == "config":
+            if not any(a in CONFIG_READ_FLAGS for a in args):
+                deny("Blocked: git config writes persist and affect all future commits.")
+            continue
+
         for rule_subcmd, required_args, message in GIT_RULES:
             if subcmd != rule_subcmd:
                 continue
