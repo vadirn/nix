@@ -1,1 +1,1 @@
-The platform team migrated the database. They added new indexes to improve query performance. QA engineers verified and dropped old tables. The team prepared a rollback plan if issues arose.
+The platform team migrated the database. They added new indexes to improve query performance. QA engineers verified the data, then dropped old tables. The team prepared a rollback plan if issues arose.
