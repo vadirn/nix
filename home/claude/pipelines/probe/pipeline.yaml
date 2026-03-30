@@ -32,9 +32,6 @@ steps:
       Create all directories as needed. Process all 3 eval cases (6 total runs).
 
       Use the bench skill for measuring elapsed time per case.
-
-  - name: grade
-    role: skeptic
-    prompt: |
+    review: |
       Run: python3 home/claude/evals/probe/grade.py
       Report pass/fail per assertion and overall score.

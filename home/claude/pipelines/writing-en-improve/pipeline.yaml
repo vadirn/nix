@@ -1,0 +1,26 @@
+name: writing-en-improve
+skills: [writing-en, bench]
+
+defaults:
+  model: claude-opus-4-6[1m]
+  max_rounds: 5
+
+steps:
+  - name: improve
+    prompt: |
+      Improve the writing-en skill to pass more eval cases.
+
+      1. Read current results: home/claude/evals/writing-en/results.json
+      2. Read failing cases and assertions from home/claude/evals/writing-en/evals.json
+      3. For each failure, read the input text and current output in home/claude/evals/writing-en/outputs/
+      4. Identify what rule is being violated or missed
+      5. Edit the pass rules in home/claude/skills/writing-en/pass-*.md
+      6. Re-run the benchmark on failing cases to verify
+
+      Do not change evals.json or grade.py. Only edit skill files.
+    review: |
+      Run: python3 home/claude/evals/writing-en/grade.py
+      Compare pass rate with previous checkpoint.
+      STEP_COMPLETE if all cases pass and no regressions.
+      STEP_IN_PROGRESS if failures remain: list each failing case and assertion.
+    review_model: claude-sonnet-4-20250514

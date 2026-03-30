@@ -1,6 +1,6 @@
-docker-compose.yml
 skills/
 checkpoint-*.md
+review-*.md
 tool-calls.jsonl
 prompt-*.md
 STOP

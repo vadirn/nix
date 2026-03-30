@@ -46,9 +46,6 @@ steps:
       Use the bench skill for measuring elapsed time per case.
       Process all 15 eval cases. Overwrite any existing output files.
       Create the outputs/ directory if needed.
-
-  - name: grade
-    role: skeptic
-    prompt: |
+    review: |
       Run: python3 home/claude/evals/writing-en/grade.py
       Report pass/fail per assertion and overall score.

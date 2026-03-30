@@ -46,9 +46,6 @@ steps:
       Используй навык bench для измерения времени.
       Обработай все 10 кейсов. Перезаписывай существующие файлы.
       Создай директорию outputs/ если нужно.
-
-  - name: grade
-    role: skeptic
-    prompt: |
+    review: |
       Run: python3 home/claude/evals/writing-ru/grade.py
       Report pass/fail per assertion and overall score.

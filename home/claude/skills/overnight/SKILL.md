@@ -11,7 +11,7 @@ description: >
 
 # Overnight
 
-Two actor types: GP (general purpose) does work, skeptic reviews it. Docker Compose handles infrastructure. pipeline.yaml handles orchestration. The runner bridges them.
+GP does work, skeptic reviews it. Steps come in (gp, skeptic) pairs. Docker Compose handles infrastructure. pipeline.yaml handles orchestration.
 
 ```
 dir = skill base directory
@@ -54,7 +54,7 @@ elif "run" or wants to launch an overnight run:
     // uv run --with pyyaml {dir}/run.py --workspace {workspace} --dir {target_dir}
 
 elif "pipeline" or wants to write a pipeline.yaml:
-    do("help user define steps with prompts and roles (gp/skeptic)")
+    do("help user define (gp, skeptic) pairs with prompts")
     do("write pipeline.yaml to the pipeline directory")
 
 elif "dockerfile" or needs per-project dependencies:
@@ -62,7 +62,7 @@ elif "dockerfile" or needs per-project dependencies:
 
 elif "progress" or "status" or wants to check results:
     checkpoints = Bash(ls {target_dir}/checkpoint-*)
-    latest = do("pick most recent checkpoint by name")
+    latest = do("pick highest-numbered checkpoint")
     Read(latest)
     do("summarize what was done, what remains")
     AskUserQuestion("Continue watching, or stop the run?")
@@ -80,9 +80,7 @@ else:
 
 ### Setup (one-time)
 
-Three steps, each requires the previous:
-
-All paths below use `{dir}` for the skill base directory. Resolve it before showing commands to the user.
+All paths below use `{dir}` for the skill base directory. Resolve it before showing commands.
 
 ```bash
 # 1. Build the image
@@ -104,14 +102,14 @@ uv run --with pyyaml {dir}/run.py --workspace ~/projects/myapp --dir .overnight
 uv run --with pyyaml {dir}/run.py --workspace . --dir pipelines/auth-refactor
 ```
 
-| Flag          | Default    | Description                                          |
-| ------------- | ---------- | ---------------------------------------------------- |
-| `--workspace` | (required) | Repo directory                                       |
-| `--dir`       | (required) | Pipeline directory (pipeline.yaml, Dockerfile)          |
-
-The runner is launched by Claude via the Bash tool. It ignores signals and runs until the pipeline completes or a stop mechanism is used (see Stopping section).
+| Flag          | Default    | Description                              |
+| ------------- | ---------- | ---------------------------------------- |
+| `--workspace` | (required) | Repo directory                           |
+| `--dir`       | (required) | Pipeline directory (pipeline.yaml, Dockerfile) |
 
 ### pipeline.yaml
+
+Steps come in (gp, skeptic) pairs. Every GP step must be followed by a skeptic step.
 
 ```yaml
 name: auth-refactor
@@ -146,14 +144,6 @@ steps:
       Check for hardcoded secrets and token expiry edge cases.
 ```
 
-Top-level fields:
-
-| Field      | Default     | Description                                |
-| ---------- | ----------- | ------------------------------------------ |
-| `name`     | `overnight` | Pipeline identifier                        |
-| `skills`   | `[]`        | Skills to copy from canonical paths at launch |
-| `defaults` | (see below) | Default values for step fields             |
-
 Step fields:
 
 | Field        | Default       | Description                             |
@@ -163,31 +153,34 @@ Step fields:
 | `role`       | `gp`          | `gp` or `skeptic`                      |
 | `model`      | from defaults | Model override for this step            |
 | `max_rounds` | from defaults | GP-skeptic iterations for this pair     |
-| `verify_cmd` | (none)        | Shell command run by runner before skeptic. Output passed as context |
+| `verify_cmd` | (none)        | Shell command run before skeptic. Output passed as context |
 
 Default values: `model: claude-opus-4-6[1m]`, `max_rounds: 5`, `wait: 30`.
 
 ### GP-skeptic workflow
 
-Steps are paired by adjacency: a skeptic step always reviews the preceding GP step.
+1. Runner runs GP. GP writes checkpoint with ## Plan and ## Progress. GP always sets status STEP_IN_PROGRESS.
+2. Runner backs up checkpoint, runs skeptic. Skeptic rewrites the checkpoint: preserves ## Plan and ## Progress, adds ## Feedback, sets final status.
+3. Runner validates skeptic preserved GP sections (restores backup if corrupted).
+4. If STEP_COMPLETE: pair done, advance to next pair.
+5. If STEP_IN_PROGRESS: GP re-runs with the checkpoint (containing feedback) as context.
+6. Repeat until skeptic approves or max_rounds reached.
 
-1. Runner runs the GP step. GP does work, writes a checkpoint.
-2. Runner runs the skeptic step. Skeptic receives the GP checkpoint (and verify_cmd output if configured).
-3. If skeptic writes STEP_COMPLETE: the pair is done. Move to the next GP step.
-4. If skeptic writes STEP_IN_PROGRESS: runner feeds the skeptic's feedback back to the GP. GP re-runs, addressing each feedback item.
-5. Repeat until skeptic approves or max_rounds is reached.
+STEP_FAILED from skeptic aborts the pipeline. GP crash (nonzero exit + no checkpoint) also aborts.
 
-`max_rounds` on the skeptic step controls how many GP-skeptic iterations are allowed. A standalone GP (no following skeptic) can self-complete.
+Checkpoint filename: `checkpoint-{NNN}.md` (global sequential counter). One file per GP-skeptic iteration, shared by both agents.
 
-STEP_FAILED from either actor aborts the pipeline immediately.
+### Checkpoint format
 
-Between pairs, the next GP receives both the previous GP's work summary and the skeptic's verdict as context.
+Defined in `checkpoint.md` (loaded by runner, included in prompts). Sections:
 
-**When to use GP vs skeptic for grade/verify steps:** Use skeptic when the reviewer should trigger GP revision on failure (iterative improvement). Use GP when the step runs a measurement script and reports results (benchmarks, eval grading). Benchmark grades report scores as-is; they don't request revision. A skeptic grade step will return STEP_IN_PROGRESS on poor scores, creating an unwanted feedback loop.
+- `## Plan`: what the agent intends to do
+- `## Progress`: what was accomplished
+- `## Feedback`: skeptic's review (added by skeptic)
+
+YAML frontmatter: `status`, `step`, `round`.
 
 ### Per-project Dockerfile
-
-When a project needs tools beyond bash/curl/git:
 
 ```dockerfile
 FROM claude-runner
@@ -197,61 +190,18 @@ RUN apt-get update && apt-get install -y nodejs npm python3
 USER claude
 ```
 
-Per-project Dockerfiles COPY `skills/` from the build context. These are assembled by the overnight skill at launch from canonical paths.
-
-### Checkpoint format
-
-Each round writes a checkpoint with YAML frontmatter + markdown body:
-
-```markdown
----
-status: STEP_IN_PROGRESS
-step: implement
-round: 3
----
-
-## Done
-...
-
-## Decisions
-...
-
-## Frictions
-...
-
-## Next
-...
-
-## Open questions
-...
-```
-
-Status values: `STEP_COMPLETE`, `STEP_IN_PROGRESS`, `STEP_FAILED`.
-
-Filename: `checkpoint-{step}-{timestamp}-{seq}.md`.
-
 ### Pipeline directory layout
 
-Versioned configs (tracked in git):
+Versioned (tracked in git):
 
 ```
-home/claude/pipelines/
-  auth-refactor/
-    pipeline.yaml
-    Dockerfile
+home/claude/pipelines/auth-refactor/
+  pipeline.yaml
+  Dockerfile
 ```
 
-Runtime artifacts (generated by runner, excluded from commits):
+Runtime artifacts (excluded from commits):
 
-```
-docker-compose.yml            # generated from pipeline.yaml step names
-skills/                       # assembled at launch
-checkpoint-*.md
-tool-calls.jsonl
-STOP
-```
-
-Suggested .gitignore for pipeline directories:
 ```
 docker-compose.yml
 skills/
@@ -260,25 +210,10 @@ tool-calls.jsonl
 STOP
 ```
 
-### How it works
-
-The runner (`run.py`) reads `pipeline.yaml`, generates `docker-compose.yml` from the step names, and builds all images via `docker compose build`. Then it executes steps:
-
-1. For a GP step: builds a prompt with the task and previous state, runs `docker compose run {step}` with the prompt
-2. Commits workspace changes outside Docker (excluding pipeline runtime artifacts)
-3. If a skeptic follows: builds a review prompt with the GP checkpoint, runs `docker compose run {skeptic}`
-4. If skeptic says IN_PROGRESS: loops back to GP with feedback
-5. If skeptic says COMPLETE: advances to the next pair
-
-Git is mounted read-only inside Docker to prevent `.git/config` corruption.
-
-The Docker volume persists `~/.claude.json` (OAuth) and `~/.claude/` (settings) across runs. The entrypoint self-heals stale claude symlinks when the volume outlives an image rebuild.
-
 ### Stopping
 
-- **Stop file**: `touch {dir}/STOP` stops after the current round (works from any terminal or Claude session)
-- **Immediate kill**: `docker kill overnight-{step}-{round}` kills the current round's container
-- **Kill everything**: `docker kill $(docker ps -q -f name=overnight) 2>/dev/null; pkill -f "run.py --workspace"` kills all overnight containers and the runner process
-- **Automatic**: skeptic writes STEP_COMPLETE for the final pair
-- **Max rounds**: each GP-skeptic pair has a configurable iteration limit
-- **Pipeline abort**: STEP_FAILED from any actor aborts the pipeline
+- **Stop file**: `touch {dir}/STOP` stops after current round
+- **Immediate kill**: `docker kill overnight-{step}-{round}`
+- **Kill everything**: `docker kill $(docker ps -q -f name=overnight) 2>/dev/null; pkill -f "run.py --workspace"`
+- **Max rounds**: configurable per pair
+- **Pipeline abort**: STEP_FAILED from skeptic aborts

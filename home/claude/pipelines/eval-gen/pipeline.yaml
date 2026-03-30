@@ -25,6 +25,10 @@ steps:
       - home/claude/evals/overnight/eval_set.json (16 entries)
 
       Produce a structured analysis in the checkpoint covering every skill.
+    review: |
+      Verify the analysis covers every skill in home/claude/skills/*/SKILL.md.
+      Check that edge case categories are specific and distinct per skill.
+      Flag any skills that were missed or have vague trigger boundaries.
     max_rounds: 2
     model: claude-sonnet-4-20250514
 
@@ -54,11 +58,18 @@ steps:
       Read each skill's SKILL.md to understand its full description and triggers.
       Create the evals/ subdirectory for a skill if it does not exist.
       Do NOT overwrite existing eval_set.json files (vault, overnight already have them).
+    review: |
+      For each generated eval_set.json, verify:
+      - Valid JSON array with correct keys (query, should_trigger)
+      - At least 16 entries: 8+ true, 8+ false
+      - True queries are natural and varied (not templated)
+      - False queries are genuinely confusable (share vocabulary with the skill)
+      - No duplicate queries across entries
+      Flag specific files and entries that need revision.
     model: claude-opus-4-6[1m]
     max_rounds: 5
 
   - name: verify
-    role: skeptic
     prompt: |
       Run the verification script:
       cd /workspace && bun -e "
@@ -87,3 +98,7 @@ steps:
       console.log('VERIFY PASSED: ' + files.length + ' eval sets validated');
       "
       Report the result.
+    review: |
+      Check the verification script output from the previous step.
+      If VERIFY PASSED: mark complete.
+      If VERIFY FAILED: list each failing file and the specific issue.
