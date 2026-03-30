@@ -22,7 +22,6 @@
           pass
           jq
           tree
-          bat
           btop
           delta
           ngrok
@@ -52,6 +51,7 @@
           enableZshIntegration = true;
         };
         lazygit.enable = true;
+        bat.enable = true;
       };
       home.activation.installClaude = config.lib.dag.entryAfter ["writeBoundary"] ''
         export PATH="${pkgs.curl}/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
@@ -77,6 +77,30 @@
       home.file.".config/lazygit/light.yml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazygit-light.yml";
       home.file.".config/micro/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/micro-settings.json";
       home.file.".config/micro/bindings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/micro-bindings.json";
+      programs.bat = {
+        config.theme = "Catppuccin Mocha";
+        themes = {
+          "Catppuccin Latte" = {
+            src = pkgs.fetchFromGitHub {
+              owner = "catppuccin";
+              repo = "bat";
+              rev = "6810349b28055dce54076712fc05fc68da4b8ec0";
+              hash = "sha256-lJapSgRVENTrbmpVyn+UQabC9fpV1G1e+CdlJ090uvg=";
+            };
+            file = "themes/Catppuccin Latte.tmTheme";
+          };
+          "Catppuccin Mocha" = {
+            src = pkgs.fetchFromGitHub {
+              owner = "catppuccin";
+              repo = "bat";
+              rev = "6810349b28055dce54076712fc05fc68da4b8ec0";
+              hash = "sha256-lJapSgRVENTrbmpVyn+UQabC9fpV1G1e+CdlJ090uvg=";
+            };
+            file = "themes/Catppuccin Mocha.tmTheme";
+          };
+        };
+      };
+
       imports = [
         ./zsh.nix
         ./tmux.nix

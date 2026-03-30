@@ -8,7 +8,7 @@
     nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew";
     home-manager.url = "github:nix-community/home-manager/release-25.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
-  };
+};
 
   outputs = inputs @ {
     self,
@@ -76,6 +76,7 @@
                 "dopplerhq/cli/doppler"
                 "micro"
                 "rustup"
+                "zig"
                 "arimxyer/tap/models"
                 "neovim"
                 "oven-sh/bun/bun"
