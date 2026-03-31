@@ -8,7 +8,7 @@
     nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew";
     home-manager.url = "github:nix-community/home-manager/release-25.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
-};
+  };
 
   outputs = inputs @ {
     self,
@@ -36,20 +36,22 @@
           }: {
             nixpkgs.config.allowUnfree = true;
 
-            environment.systemPackages = (with pkgs; [
-              yazi
-              alejandra
-              nixd
-              nodejs
-              curl
-              typst
-              uv
-              coreutils
-              delta
-              check-jsonschema
-            ]) ++ [
-              vault-query
-            ];
+            environment.systemPackages =
+              (with pkgs; [
+                yazi
+                alejandra
+                nixd
+                nodejs
+                curl
+                typst
+                uv
+                coreutils
+                delta
+                check-jsonschema
+              ])
+              ++ [
+                vault-query
+              ];
 
             environment.systemPath = [
               "/nix/var/nix/profiles/system/sw/bin"
@@ -81,6 +83,7 @@
                 "neovim"
                 "oven-sh/bun/bun"
                 "agent-browser"
+                "anomalyco/tap/opencode"
               ];
               casks = [
                 "1password-cli"
@@ -93,7 +96,6 @@
                 "pearcleaner"
                 "orbstack"
                 "bitwarden"
-
               ];
               onActivation = {
                 cleanup = "zap";

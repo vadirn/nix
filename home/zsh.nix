@@ -32,6 +32,13 @@
     };
 
     initContent = ''
+      # Restart gpg-agent if stale socket survives system reload
+      if ! gpgconf --launch gpg-agent 2>/dev/null; then
+        pkill -9 gpg-agent 2>/dev/null
+        rm -f ~/.gnupg/S.gpg-agent* ~/.gnupg/S.scdaemon ~/.gnupg/S.keyboxd ~/.gnupg/public-keys.d/*.lock 2>/dev/null
+        gpgconf --launch gpg-agent
+      fi
+
       ssh-add --apple-use-keychain ~/.ssh/github 2> /dev/null
       ssh-add --apple-use-keychain ~/.ssh/bitbucket 2> /dev/null
       ssh-add --apple-use-keychain ~/.ssh/vultr 2> /dev/null
