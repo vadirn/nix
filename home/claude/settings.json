@@ -2,7 +2,8 @@
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "ENABLE_TOOL_SEARCH": "auto:5"
+    "ENABLE_TOOL_SEARCH": "auto:5",
+    "MAX_STRUCTURED_OUTPUT_RETRIES": "3"
   },
   "includeCoAuthoredBy": false,
   "permissions": {
