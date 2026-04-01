@@ -19,6 +19,9 @@
       rebase.autosquash = true;
       rerere.enabled = true;
       core.hooksPath = "~/.config/git/hooks";
+      gpg.format = "ssh";
+      commit.gpgsign = true;
+      tag.gpgsign = true;
     };
   };
 }

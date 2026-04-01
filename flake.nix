@@ -70,8 +70,6 @@
                 "gh"
                 "ffmpeg"
                 "yt-dlp"
-                "gnupg"
-                "pinentry-mac"
                 "openssl-osx-ca"
                 "syncthing"
 
