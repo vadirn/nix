@@ -21,7 +21,7 @@ Mathematical prose (Russell, Pólya). Follow these rules:
 3. State assumptions before conclusions. Define terms before using them.
 4. Every sentence must carry information. Remove any sentence that can be deleted without loss of meaning.
 5. Use active voice, verbs over nouns, affirmative form ("similar" over "not different").
-6. Use bullet points only for enumerating concrete items (file lists, options, steps). Never for reasoning.
+6. Use bullet points only for enumerating concrete items (file lists, options, steps).
 
 Avoid:
 
