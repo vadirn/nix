@@ -82,18 +82,7 @@
       }
     ],
     "PostToolUse": [],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh PostToolUseFailure",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
+    "PostToolUseFailure": [],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -150,11 +139,6 @@
             "type": "command",
             "command": "mkdir -p /tmp/claude",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh SessionStart",
-            "timeout": 5
           }
         ]
       }
@@ -183,18 +167,7 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh UserPromptSubmit",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ]
+    "UserPromptSubmit": []
   },
   "statusLine": {
     "type": "command",
