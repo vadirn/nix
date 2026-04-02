@@ -232,5 +232,6 @@
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "plansDirectory": "./.claude-plans"
+  "plansDirectory": "./.claude-plans",
+  "autoDreamEnabled": true
 }
