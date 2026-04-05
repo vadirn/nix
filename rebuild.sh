@@ -12,7 +12,7 @@ claude plugin install playground@claude-plugins-official
 claude plugin install agent-browser@agent-browser
 
 echo "Installing global npm packages..."
-npm install -g firecrawl-cli
+npm install -g firecrawl-cli @mariozechner/pi-coding-agent
 
 echo "Collecting garbage..."
 sudo HOME=/var/root nix-collect-garbage -d
