@@ -94,6 +94,7 @@
                 "pearcleaner"
                 "orbstack"
                 "bitwarden"
+                "excalidrawz"
               ];
               onActivation = {
                 cleanup = "zap";
