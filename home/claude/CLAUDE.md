@@ -64,3 +64,7 @@ Use `gh` CLI for GitHub interactions.
 ## Plans
 
 End with unresolved questions (if any).
+
+## Memory
+
+Before saving anything to memory, suggest the save to the user (what, which type, one-line summary) and wait for confirmation. Then save.
