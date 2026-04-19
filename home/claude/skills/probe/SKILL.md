@@ -23,9 +23,15 @@ if no plan provided: AskUserQuestion("What plan or design should I probe?")
 if plan references files or codebase:
     do("read referenced files to ground questions in actual code")
 
+if ./GLOSSARY.md exists:
+    do("read ./GLOSSARY.md for terms and their definitions")
+
 // Phase 1: Map the decision tree
 do("identify all decision branches in the plan")
+if ./GLOSSARY.md exists:
+    do("flag plan terms whose usage contradicts the glossary definition; add each as a terminology branch")
 do("order branches by dependency: resolve prerequisites first")
+do("probe terminology branches before design branches that use the disputed term")
 
 // Phase 2: Walk each branch
 for each branch:
@@ -49,6 +55,13 @@ A probe question targets a specific decision point, not a vague concern. It name
 
 Weak: "Have you thought about error handling?"
 Strong: "When Redis is unreachable, do you fall back to the database (adding latency) or return a cache miss error (breaking clients that expect data)?"
+
+### Challenging against the glossary
+
+When `GLOSSARY.md` is present at CWD, treat it as shared vocabulary. If the plan uses a term in a way that contradicts its glossary definition, make that contradiction its own branch.
+
+Weak: "Your plan mentions orders."
+Strong: "`GLOSSARY.md` defines `Order` as a confirmed purchase with fixed line items, but the plan uses `order` to mean a draft cart. Which meaning stands in this plan: extend the glossary, or pick a different term for the draft state?"
 
 ### Recommended answer format
 
