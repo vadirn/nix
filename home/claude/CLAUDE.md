@@ -43,7 +43,7 @@ Avoid:
 Use conventional commit prefixes (feat, fix, chore). Short message, no body.
 
 - fix: correct broken behavior
-- chore: no user-facing behavior change (design, performance)
+- chore: no user-facing behavior change (improve design, improve performance)
 - feat: everything else
 
 ## Bash
