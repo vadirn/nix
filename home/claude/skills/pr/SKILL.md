@@ -43,9 +43,15 @@ else if ahead: Bash(git push)
 existing = Bash(gh pr view --json url,state -q '.url' 2>/dev/null)
 if existing: show URL, ask update or stop
 
-// Load PR template if available
-template = Glob("**/.github/pull_request_template.md") or Glob("**/PULL_REQUEST_TEMPLATE.md")
-if template: template_content = Read(template)
+// Load PR template
+templates = Glob(".github/PULL_REQUEST_TEMPLATE/*.md")
+if templates has multiple files:
+  AskUserQuestion: let user pick which template to use
+  template_content = Read(chosen template)
+else:
+  // Single template: check standard locations (GitHub uses first found)
+  template = Glob("**/{pull_request_template,PULL_REQUEST_TEMPLATE}.md")
+  if template: template_content = Read(first match)
 
 title, body = generate from diff and log, using template_content as body structure if available
 confirm with user: title, body, base branch, draft status
@@ -74,7 +80,7 @@ if mechanical: offer to fix, Skill(commit), Bash(git push)
 
 - **Draft by default.** Always pass `--draft`. Omit only when user says "no draft" or "ready".
 - **Title:** <70 chars, conventional style matching commit prefixes.
-- **Body:** Use repo's PR template (`.github/pull_request_template.md`) if it exists. Fill in the template sections from the diff. Fall back to `## Summary` (bullet points) + `## Test plan` (checklist) if no template found.
+- **Body:** If `.github/PULL_REQUEST_TEMPLATE/` has multiple templates, ask user to pick one. Otherwise use the single template from any standard location. Fill in template sections from the diff. Fall back to `## Summary` (bullet points) + `## Test plan` (checklist) if no template found.
 - **HEREDOC for body.** Preserves formatting:
   ```
   gh pr create --title "<title>" --body "$(cat <<'EOF'
