@@ -16,8 +16,8 @@ main() {
     # Parse model
     local model_name=$(echo "$input" | grep -o '"display_name"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
-    # Parse context window usage
-    local used_pct=$(echo "$input" | grep -o '"used_percentage"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+    # Parse context window usage (floor to integer; empty when null/absent)
+    local used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty | floor' 2>/dev/null)
 
     # Separator (dim gray)
     local sep=$(printf " \033[2;37m│\033[0m ")
@@ -63,8 +63,8 @@ main() {
     # Context % (colored by usage)
     if [[ -n "$used_pct" ]]; then
         local color="32" # green
-        [[ $used_pct -ge 40 ]] && color="33" # orange/yellow
-        [[ $used_pct -ge 60 ]] && color="31" # red
+        [[ $used_pct -ge 25 ]] && color="33" # orange/yellow
+        [[ $used_pct -ge 40 ]] && color="31" # red
         line2+=$(printf "%s\033[%sm%d%%\033[0m" "$sep" "$color" "$used_pct")
     fi
 
