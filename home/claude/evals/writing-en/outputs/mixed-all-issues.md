@@ -1,1 +1,0 @@
-The infrastructure team implemented the new caching layer using Redis. This improved performance significantly. The team set up monitoring, and the dashboard shows acceptable latency. The previous in-memory solution was similar to competitors. The team started migration before the quarterly review and updated all services to use new endpoints.

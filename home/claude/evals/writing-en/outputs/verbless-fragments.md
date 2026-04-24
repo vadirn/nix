@@ -1,1 +1,0 @@
-The API progressed in staging but not production. We added endpoints and reduced stability. Fast iteration creates unstable deployments. This is an architecture challenge, not a sprint issue. Test coverage is good while regressions occur regularly. Tooling improved while documentation deteriorated.

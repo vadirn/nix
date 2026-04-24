@@ -1,1 +1,0 @@
-The engineering team implemented the new authentication system. JWT tokens provide better security. A review committee identified remaining vulnerabilities.

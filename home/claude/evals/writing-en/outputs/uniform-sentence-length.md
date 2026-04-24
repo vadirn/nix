@@ -1,1 +1,0 @@
-The monitoring system collects metrics from all services. Dashboards display these metrics in real time. When thresholds are exceeded, alerting rules trigger notifications that PagerDuty sends to on-call engineers. Engineers then investigate the root cause of issues and document their resolutions in incident reports.

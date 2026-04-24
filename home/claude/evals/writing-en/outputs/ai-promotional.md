@@ -1,1 +1,0 @@
-Our solution uses React and GraphQL to build web applications. This approach helps developers create user-facing tools. The integration works with existing CI/CD pipelines. The platform reduces build time from 10 minutes to 2.

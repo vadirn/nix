@@ -1,1 +1,0 @@
-We use this framework for development. The team starts testing three weeks before deployment. Stop the old service and start the new one.
