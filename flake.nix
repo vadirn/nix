@@ -95,6 +95,7 @@
                 "orbstack"
                 "codex"
                 "codex-app"
+                "basecamp/tap/basecamp-cli"
               ];
               onActivation = {
                 cleanup = "zap";
