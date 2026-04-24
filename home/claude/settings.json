@@ -176,13 +176,8 @@
     "command": "bash ~/.claude/statusline.sh"
   },
   "enabledPlugins": {
-    "firecrawl@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "agent-browser@agent-browser": true,
-    "playground@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "agent-browser": {

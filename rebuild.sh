@@ -5,11 +5,6 @@ sudo darwin-rebuild switch --flake ~/nix
 
 echo "Installing Claude plugins..."
 claude plugin install typescript-lsp
-claude plugin install firecrawl@claude-plugins-official
-claude plugin install skill-creator@claude-plugins-official
-claude plugin install frontend-design@claude-plugins-official
-claude plugin install playground@claude-plugins-official
-claude plugin install agent-browser@agent-browser
 
 echo "Linking skills..."
 AGENTS_SKILLS="$HOME/.agents/skills"
