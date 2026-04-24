@@ -93,8 +93,8 @@
                 "zed"
                 "pearcleaner"
                 "orbstack"
-                "bitwarden"
-                "excalidrawz"
+                "codex"
+                "codex-app"
               ];
               onActivation = {
                 cleanup = "zap";
