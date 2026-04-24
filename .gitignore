@@ -3,7 +3,7 @@ __pycache__/
 .claude-plans/
 .firecrawl/
 .claude/skills/nix
-.claude/.vault.config.json
+.vault.config.json
 vault-query/target/
 .overnight/
 .overnight-*/

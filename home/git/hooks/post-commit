@@ -3,7 +3,7 @@
 # Creates a weekly log if none exists. Fails silently on any error.
 
 append_activity() {
-  local config="$HOME/.claude/.vault.config.json"
+  local config="$HOME/.config/vault/config.json"
   [[ -f "$config" ]] || return 0
 
   local vault_root

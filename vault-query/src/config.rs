@@ -22,7 +22,7 @@ struct ProjectConfig {
 }
 
 /// Resolve vault configuration by walking up from `start_dir` for a project config,
-/// then falling back to `home_dir/.claude/.vault.config.json` for root config.
+/// then falling back to `home_dir/.config/vault/config.json` for root config.
 /// If `project_override` is given, it computes project_path from vault_root/projects_path/name.
 pub fn resolve(
     start_dir: &Path,
@@ -36,7 +36,7 @@ pub fn resolve(
     // Layer 1: Walk up from start_dir for project config
     let mut dir = start_dir.to_path_buf();
     loop {
-        let cfg_path = dir.join(".claude/.vault.config.json");
+        let cfg_path = dir.join(".vault.config.json");
         if cfg_path.is_file() {
             let content = std::fs::read_to_string(&cfg_path)
                 .with_context(|| format!("reading {}", cfg_path.display()))?;
@@ -52,7 +52,7 @@ pub fn resolve(
     }
 
     // Layer 2: Root config for vault_root and projects_path
-    let root_cfg_path = home_dir.join(".claude/.vault.config.json");
+    let root_cfg_path = home_dir.join(".config/vault/config.json");
     if root_cfg_path.is_file() {
         let content = std::fs::read_to_string(&root_cfg_path)
             .with_context(|| format!("reading {}", root_cfg_path.display()))?;
@@ -75,7 +75,7 @@ pub fn resolve(
 
     let vault_root = vault_root.context(
         "no vault config found.\n\
-         Create ~/.claude/.vault.config.json with:\n  \
+         Create ~/.config/vault/config.json with:\n  \
          { \"vault_root\": \"/absolute/path/to/vault\", \"projects_path\": \"41 projects\" }",
     )?;
 
@@ -97,15 +97,12 @@ mod tests {
 
     #[test]
     fn test_root_config() {
-        // Use fixtures dir as home_dir (it contains root.config.json)
-        // but we need to rename: the root config should be at home/.claude/.vault.config.json
-        // Instead, let's create a temp structure
         let tmp = tempfile::tempdir().unwrap();
-        let claude_dir = tmp.path().join(".claude");
-        std::fs::create_dir_all(&claude_dir).unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
         std::fs::copy(
             fixtures_dir().join("root.config.json"),
-            claude_dir.join(".vault.config.json"),
+            cfg_dir.join("config.json"),
         )
         .unwrap();
 
@@ -118,7 +115,7 @@ mod tests {
     #[test]
     fn test_project_config_walk_up() {
         let project_dir = fixtures_dir().join("project");
-        // Walk up from project dir should find .claude/.vault.config.json
+        // Walk up from project dir should find .vault.config.json
         let config = resolve(&project_dir, Path::new("/nonexistent-home"), None).unwrap();
         assert_eq!(config.vault_root, PathBuf::from("/tmp/test-vault"));
         assert_eq!(
@@ -130,11 +127,11 @@ mod tests {
     #[test]
     fn test_project_override() {
         let tmp = tempfile::tempdir().unwrap();
-        let claude_dir = tmp.path().join(".claude");
-        std::fs::create_dir_all(&claude_dir).unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
         std::fs::copy(
             fixtures_dir().join("root.config.json"),
-            claude_dir.join(".vault.config.json"),
+            cfg_dir.join("config.json"),
         )
         .unwrap();
 

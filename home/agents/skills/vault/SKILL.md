@@ -83,8 +83,8 @@ elif "log" or weekly log intent (planning, tasks, sleep):
 
 elif "validate":
     schemas = skill base directory + "/schemas"
-    root_config = "~/.claude/.vault.config.json"
-    project_config = ".claude/.vault.config.json"  // in current repo
+    root_config = "~/.config/vault/config.json"
+    project_config = ".vault.config.json"  // in current repo
 
     if root_config exists:
         Bash(check-jsonschema --schemafile <schemas>/root.config.schema.json <root_config>)
@@ -136,7 +136,7 @@ else:
 
 ### Project commands
 
-`<project> start` and `<project> save` resolve the project via `--project <name>` flag, which uses the root config (`~/.claude/.vault.config.json`) to find `<vault_root>/<projects_path>/<name>`. This works from any directory. If called from a repo with `.claude/.vault.config.json`, the local project config takes precedence unless `--project` is given.
+`<project> start` and `<project> save` resolve the project via `--project <name>` flag, which uses the root config (`~/.config/vault/config.json`) to find `<vault_root>/<projects_path>/<name>`. This works from any directory. If called from a repo with `.vault.config.json`, the local project config takes precedence unless `--project` is given.
 
 The start procedure uses `vault-query --project <name> checkpoints --view Incomplete` and `vault-query --project <name> checkpoints --view Done`. The save procedure uses `vault-query --project <name> checkpoints --view Incomplete`.
 

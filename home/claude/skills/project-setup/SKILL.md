@@ -38,7 +38,7 @@ link(vault_root):
     name = last segment of path  // e.g. "visa-agent" from "41 projects/visa-agent"
     title = infer from context.md heading or ask user
 
-    write_vault_config()    // .claude/.vault.config.json in repo
+    write_vault_config()    // .vault.config.json in repo
     write_thin_wrapper()    // .claude/skills/<name>/SKILL.md in repo
     register_in_settings()  // add Skill(<name>); skip entries already in global settings
     report linked, suggest /clear
@@ -94,7 +94,7 @@ setup(vault_root):
     write_project_note()        // from Project.md template
     write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
     write_context_md()          // context.md only (no SKILL.md, start.md, save.md — vault skill handles routing)
-    write_vault_config()        // .claude/.vault.config.json in repo
+    write_vault_config()        // .vault.config.json in repo
     write_thin_wrapper()        // .claude/skills/<name>/SKILL.md in repo (delegates to /vault)
     register_in_settings()      // add Skill(<name>), Skill(vault), Read
     report created files, suggest /clear
@@ -104,12 +104,12 @@ setup(vault_root):
 
 ### Discovering vault root (root config)
 
-1. Read `$HOME/.claude/.vault.config.json` (root config)
+1. Read `$HOME/.config/vault/config.json` (root config)
 2. If exists and has `vault_root` → use it
 3. If absent → ask user for vault_root and projects_path, then create root config.
    `projects_path` is used by vault-query for project resolution; this skill only stores it.
 
-   Write `$HOME/.claude/.vault.config.json`:
+   Write `$HOME/.config/vault/config.json`:
 
    ```json
    {
@@ -153,7 +153,7 @@ Only context.md goes in the vault project folder. The /vault skill handles routi
 
 ### Writing .vault.config.json (per-repo config)
 
-Path: `<repo>/.claude/.vault.config.json`
+Path: `<repo>/.vault.config.json`
 
 ```json
 {
@@ -166,7 +166,7 @@ Schema: `~/.claude/skills/vault/schemas/project.config.schema.json`
 
 Both values are absolute paths. `project_path` is `vault_root` joined with the vault-relative path (e.g. `41 projects/nix`).
 
-After writing, add `.claude/.vault.config.json` to `.gitignore` (it contains absolute paths). Read `.gitignore`, append the line if missing.
+After writing, add `.vault.config.json` to `.gitignore` (it contains absolute paths). Read `.gitignore`, append the line if missing.
 
 ### Writing thin wrapper skill
 
