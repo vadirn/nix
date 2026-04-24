@@ -1,0 +1,4 @@
+repo=anthropics/claude-plugins-official
+subdir=plugins/playground
+commit=020446a4294f09d9c32e60bff0c4ae8fb39205cb
+hash=e24c42717f279557811a78146032796e0b11adde8c5738be9a0a4aa0b0dbbc94

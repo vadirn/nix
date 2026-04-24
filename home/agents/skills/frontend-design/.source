@@ -1,0 +1,4 @@
+repo=anthropics/claude-plugins-official
+subdir=plugins/frontend-design
+commit=020446a4294f09d9c32e60bff0c4ae8fb39205cb
+hash=016b95190a03adf9d7d1538e2e2fe8995ef3458db7c19a581573fd13f53c5db5
