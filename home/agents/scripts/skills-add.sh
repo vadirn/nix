@@ -39,6 +39,8 @@ usage:
   skills-add <owner>/<repo> <skill>              install/update one skill
   skills-add --subdir <path> <owner>/<repo>      scan <path>/skills/*/SKILL.md
                                                  (for plugin monorepos)
+  skills-add --update                            refresh all vendored skills from upstream
+  skills-add --update <name>                     refresh one vendored skill
   skills-add --list                              print vendored skills
   skills-add --remove <name>                     remove a vendored skill
   skills-add --force <owner>/<repo> [<skill>]    overwrite local edits on update
@@ -283,6 +285,66 @@ cmd_remove() {
   log "removed: $name"
 }
 
+cmd_update() {
+  local target_name="${1:-}"
+  local src_list=""
+
+  if [ -n "$target_name" ]; then
+    local src="$SKILLS_DIR/$target_name/.source"
+    [ -f "$src" ] || die "not vendored: $target_name (missing $src)"
+    src_list="$src"
+  else
+    local s
+    for s in "$SKILLS_DIR"/*/.source; do
+      [ -f "$s" ] || continue
+      src_list="${src_list}${s}
+"
+    done
+  fi
+
+  if [ -z "$src_list" ]; then
+    log 'no vendored skills to update'
+    return 0
+  fi
+
+  # Dedup by (repo, subdir, skill) — broad installs from the same repo collapse to one invocation.
+  local seen=""
+  while IFS= read -r src; do
+    [ -n "$src" ] || continue
+    local repo subdir skill key
+    repo="$(get_source_field "$src" repo)"
+    subdir="$(get_source_field "$src" subdir)"
+    skill="$(get_source_field "$src" skill)"
+    key="$repo|$subdir|$skill"
+    case " $seen " in
+      *" $key "*) continue ;;
+    esac
+    seen="$seen $key"
+
+    local desc="$repo"
+    [ -n "$subdir" ] && desc="$desc (subdir=$subdir)"
+    [ -n "$skill" ] && desc="$desc [narrow: $skill]"
+    log "--- updating: $desc ---"
+
+    # Re-invoke self with the reconstructed args.
+    local cmd="$SCRIPT_PATH"
+    if [ "$FORCE" -eq 1 ]; then
+      cmd="$cmd --force"
+    fi
+    if [ -n "$subdir" ]; then
+      cmd="$cmd --subdir $subdir"
+    fi
+    cmd="$cmd $repo"
+    if [ -n "$skill" ]; then
+      cmd="$cmd $skill"
+    fi
+    # shellcheck disable=SC2086
+    $cmd
+  done <<EOF
+$src_list
+EOF
+}
+
 # ---- main ----
 
 [ "$#" -gt 0 ] || usage
@@ -295,6 +357,14 @@ while [ "$#" -gt 0 ]; do
     --remove)
       [ "$#" -ge 2 ] || die "--remove requires <name>"
       cmd_remove "$2"
+      exit 0
+      ;;
+    --update)
+      if [ "$#" -ge 2 ] && [ "${2#--}" = "$2" ]; then
+        cmd_update "$2"
+      else
+        cmd_update ""
+      fi
       exit 0
       ;;
     --force)
