@@ -37,7 +37,7 @@ else:
 
 // Phase 2: Generate designs (parallel sub-agents)
 (parallel) for each constraint in constraints[:count]:
-    Agent("design <topic> under constraint: <constraint>")
+    spawn_subagent("design <topic> under constraint: <constraint>")
     do("output: signature, usage example, what it hides, tradeoffs")
 
 // Phase 3: Present designs

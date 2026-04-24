@@ -18,14 +18,14 @@ lang = do("detect language from topic, or parse lang= parameter")
 rounds = do("parse rounds= parameter, default 7")
 
 // Research phase (parallel)
-results_for = Skill(firecrawl:search "evidence arguments for: <topic>")
-results_against = Skill(firecrawl:search "evidence arguments against: <topic>")
-results_data = Skill(firecrawl:search "statistics data <topic>")
+results_for = web_search("evidence arguments for: <topic>")
+results_against = web_search("evidence arguments against: <topic>")
+results_data = web_search("statistics data <topic>")
 
 evidence_base = do("compile search results into structured notes, discard results without concrete data")
 
 if promising URLs in results:
-    Skill(firecrawl:scrape top 2-3 URLs for deeper evidence)
+    web_scrape(top 2-3 URLs for deeper evidence)
 
 // Debate phase
 if lang == "ru":

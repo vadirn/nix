@@ -62,15 +62,20 @@
         fi
       '';
 
-      home.file.".claude/scripts/ghostty-claude-split.applescript".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/scripts/ghostty-claude-split.applescript";
-      home.file.".claude/scripts/ghostty-claude-split.sh".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/scripts/ghostty-claude-split.sh";
-      home.file.".local/bin/session-stats".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/session-stats/session-stats.py";
+      home.file.".agents/scripts/ghostty-claude-split.applescript".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/ghostty-claude-split.applescript";
+      home.file.".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/AGENTS.md";
       home.file.".local/bin/tool-stats".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/tool-stats/tool-stats.py";
       home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
-      home.file.".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/CLAUDE.md";
-      home.file.".claude/skills".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills";
       home.file.".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/hooks";
       home.file.".claude/statusline.sh".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/statusline.sh";
+
+      home.activation.buildClaudeMd = config.lib.dag.entryAfter ["writeBoundary"] ''
+        mkdir -p "$HOME/.claude"
+        cat \
+          "${homeDirectory}/nix/home/agents/AGENTS.md" \
+          "${homeDirectory}/nix/home/claude/claude-additions.md" \
+          > "$HOME/.claude/CLAUDE.md"
+      '';
       home.file.".config/git/hooks/post-commit".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/post-commit";
       home.file.".config/ghostty/config".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/ghostty-config";
       home.file.".config/lazygit/config.yml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazygit-config.yml";

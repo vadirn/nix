@@ -33,7 +33,7 @@ log = Bash(git log <default_branch>..HEAD --oneline)
 
 // Guards
 if branch == default_branch: stop, tell user to create a feature branch
-if uncommitted changes: Skill(commit), then stop
+if uncommitted changes: invoke the commit skill, then stop
 
 // Push if needed
 if no upstream: Bash(git push -u origin <branch>)
@@ -71,7 +71,7 @@ if some running: report status, suggest re-check later, stop
 // On failures
 logs = Bash(gh run view <run_id> --log-failed)
 summarize errors, categorize mechanical vs semantic
-if mechanical: offer to fix, Skill(commit), Bash(git push)
+if mechanical: offer to fix, invoke the commit skill, Bash(git push)
 ```
 
 ## Reference

@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Reasoning
 
@@ -69,9 +69,9 @@ Use conventional commit prefixes (feat, fix, chore). Short message, no body.
 
 ## Bash
 
-- Run one command at a time so permissions auto-apply.
+- Run one command at a time. Separate invocations are easier to review than chained ones.
 - Pipes (`|`) are fine when output needs filtering (`| head`, `| wc -l`, `| sort`).
-- Chained commands (`&&`, `||`, `;`) bypass the allowlist: avoid them.
+- Avoid chained commands (`&&`, `||`, `;`) when separate invocations work.
 - Quote paths with spaces using double quotes (`"path with spaces"`).
 
 ## Web
@@ -85,7 +85,3 @@ Use `gh` CLI for GitHub interactions.
 ## Plans
 
 End with unresolved questions (if any).
-
-## Memory
-
-Before saving anything to memory, suggest the save to the user (what, which type, one-line summary) and wait for confirmation. Then save.
