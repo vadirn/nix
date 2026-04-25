@@ -6,7 +6,10 @@
     "MAX_STRUCTURED_OUTPUT_RETRIES": "3",
     "CLAUDE_CODE_NO_FLICKER": "1",
     "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING": "1",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
+    "BASECAMP_NO_KEYRING": "1",
+    "BASECAMP_HINTS": "false",
+    "BASECAMP_STATS": "false"
   },
   "includeCoAuthoredBy": false,
   "permissions": {
@@ -219,6 +222,7 @@
       "allowWrite": [
         "~/.agent-browser",
         "~/.cache",
+        "~/.config/basecamp",
         "~/.docker",
         "~/.gnupg",
         "~/Documents/vault",
