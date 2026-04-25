@@ -236,5 +236,6 @@
   "effortLevel": "high",
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
-  "theme": "auto"
+  "theme": "auto",
+  "skipAutoPermissionPrompt": true
 }
