@@ -2,7 +2,7 @@
 
 # Two-line Claude Code Statusline
 # Line 1: folder │ branch │ +/-diff (repo context)
-# Line 2: model │ context%
+# Line 2: model │ context tokens
 
 
 main() {
@@ -18,6 +18,10 @@ main() {
 
     # Parse context window usage (floor to integer; empty when null/absent)
     local used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty | floor' 2>/dev/null)
+    local used_tokens=$(echo "$input" | jq -r '
+        if (.context_window.used_percentage and .context_window.context_window_size)
+        then (.context_window.used_percentage * .context_window.context_window_size / 100 | floor)
+        else empty end' 2>/dev/null)
 
     # Separator (dim gray)
     local sep=$(printf " \033[2;37m│\033[0m ")
@@ -60,12 +64,13 @@ main() {
     model_short="${model_short/ Opus/}"
     local line2=$(printf "\033[34m%s\033[0m" "$model_short")
 
-    # Context % (colored by usage)
-    if [[ -n "$used_pct" ]]; then
+    # Context tokens in K (colored by token count)
+    if [[ -n "$used_tokens" ]]; then
+        local used_k=$((used_tokens / 1000))
         local color="32" # green
-        [[ $used_pct -ge 25 ]] && color="33" # orange/yellow
-        [[ $used_pct -ge 40 ]] && color="31" # red
-        line2+=$(printf "%s\033[%sm%d%%\033[0m" "$sep" "$color" "$used_pct")
+        [[ $used_k -ge 90 ]] && color="33" # orange/yellow
+        [[ $used_k -ge 160 ]] && color="31" # red
+        line2+=$(printf "%s\033[%sm%dk\033[0m" "$sep" "$color" "$used_k")
     fi
 
     # Output both lines
