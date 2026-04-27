@@ -16,11 +16,15 @@ main() {
     # Parse model
     local model_name=$(echo "$input" | grep -o '"display_name"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
-    # Parse context window usage (floor to integer; empty when null/absent)
-    local used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty | floor' 2>/dev/null)
+    # Parse context window usage from current_usage (matches /context):
+    # input_tokens + cache_creation_input_tokens + cache_read_input_tokens.
+    # current_usage is null before the first API call.
     local used_tokens=$(echo "$input" | jq -r '
-        if (.context_window.used_percentage and .context_window.context_window_size)
-        then (.context_window.used_percentage * .context_window.context_window_size / 100 | floor)
+        .context_window.current_usage as $u |
+        if $u then
+            ($u.input_tokens // 0)
+            + ($u.cache_creation_input_tokens // 0)
+            + ($u.cache_read_input_tokens // 0)
         else empty end' 2>/dev/null)
 
     # Separator (dim gray)
