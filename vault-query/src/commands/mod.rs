@@ -14,5 +14,6 @@ pub mod query;
 pub mod resolve;
 pub mod search;
 pub mod tags;
+pub mod tracks;
 pub mod unresolved;
 pub mod xp;

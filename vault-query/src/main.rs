@@ -119,6 +119,17 @@ enum Commands {
         #[arg(long, default_value = "table")]
         format: output::Format,
     },
+    /// Query project tracks
+    Tracks {
+        /// View name (Active, Open, Paused, Done, Abandoned, Superseded, All, Stats)
+        #[arg(long, default_value = "Active")]
+        view: String,
+        /// Output format
+        #[arg(long, default_value = "table")]
+        format: output::Format,
+    },
+    /// Initialize Tracks.base in the current project
+    TracksInit,
     /// Find and read a note/card/reference/checkpoint by name
     Get {
         /// Name fragment to resolve
@@ -250,6 +261,14 @@ fn main() -> Result<()> {
         Commands::Checkpoints { view, format } => {
             let cfg = resolve_config(&cli)?;
             commands::checkpoints::run(&cfg, view, *format)
+        }
+        Commands::Tracks { view, format } => {
+            let cfg = resolve_config(&cli)?;
+            commands::tracks::run(&cfg, view, *format)
+        }
+        Commands::TracksInit => {
+            let cfg = resolve_config(&cli)?;
+            commands::tracks::init(&cfg)
         }
         Commands::Get { fragment } => {
             let vault_root = resolve_vault_root(&cli)?;

@@ -6,18 +6,16 @@ description: >
   for later (creates a reference in 10 references/), distilling a concept or takeaway from something they read/watched
   (creates a card in 20 cards/), writing down an original idea, observation, or synthesis connecting multiple concepts
   (creates a note in 30 notes/), searching or browsing what they know about a topic, quizzing or testing recall on
-  saved concepts, listing or filtering cards by tag, checking project status or open checkpoints, reading a specific
-  checkpoint by name or date, listing active or current projects ("which projects am I working on", "project status
-  overview", "what are my open projects"). Also handles explicit /vault commands (search, card, note, reference, review,
-  cards, projects, start, save, validate). XP/streak reports use `vault-query xp`. Also triggers on weekly log
-  operations: adding tasks to backlog ("добавь в бэклог", "backlog"), planning tasks for the week, completing tasks,
-  tracking sleep, or any mention of weekly planning, task lists, or activity log. Triggers on session save/checkpoint:
-  "wrapping up", "save what we did", "log what we accomplished", "save our progress", "end of session", "save session",
-  "we finished X and still need to do Y", resuming or saving progress on a project. EXCLUDES: editing specific
-  Obsidian markdown files directly (callout blocks, formatting, syntax), Obsidian app features (kanban boards, canvas
-  files, graph view, plugins, settings, UI configuration), editing .base files, creating canvas files, or general web
-  search. The distinction: vault skill manages *what you know* (saving, finding, reviewing knowledge). Raw markdown
-  editing and Obsidian app configuration are outside this skill's scope.
+  saved concepts, listing or filtering cards by tag, checking project status, listing active or current projects
+  ("which projects am I working on", "project status overview", "what are my open projects"). Also handles explicit
+  /vault commands (search, card, note, reference, review, cards, projects, validate). XP/streak reports use
+  `vault-query xp`. Also triggers on weekly log operations: adding tasks to backlog ("добавь в бэклог", "backlog"),
+  planning tasks for the week, completing tasks, tracking sleep, or any mention of weekly planning, task lists, or
+  activity log. EXCLUDES: editing specific Obsidian markdown files directly (callout blocks, formatting, syntax),
+  Obsidian app features (kanban boards, canvas files, graph view, plugins, settings, UI configuration), editing .base
+  files, creating canvas files, or general web search. Track read/save and session save/checkpoint phrases route to
+  the /track skill, not here. The distinction: vault skill manages *what you know* (saving, finding, reviewing
+  knowledge). Raw markdown editing and Obsidian app configuration are outside this skill's scope.
 ---
 
 # Vault
@@ -65,15 +63,7 @@ elif "projects":
 // Project commands — load context once
 elif "<project> ...":
     project_context ??= Bash(vault-query --project <project> context)
-
-    if "start":
-        Read(dir/references/project-start.md)
-        do("follow start procedure")
-    elif "save":
-        Read(dir/references/project-save.md)
-        do("follow save procedure")
-    else:
-        do("answer using project context, checkpoints, or search as needed")
+    do("answer using project context, search as needed")
 
 elif "log" or weekly log intent (planning, tasks, sleep):
     Read(dir/references/log-weekly.md)
@@ -94,7 +84,7 @@ elif "validate":
         do("tell user no config files found")
     do("report validation results")
 
-elif user mentions a note/card/reference/checkpoint by name:
+elif user mentions a note/card/reference/checkpoint/track by name:
     result = Bash(vault-query get <fragment>)
     if single match: do("summarize content")
     elif multiple matches: AskUserQuestion("which one?")
@@ -116,7 +106,8 @@ else:
 | note       | `30 notes/`                 | Original thinking, connects ideas across sources        |
 | goal       | `41 projects/`              | High-level aspiration with success criteria             |
 | project    | `41 projects/<project>/`    | Concrete deliverable linked to a goal                   |
-| checkpoint | `41 projects/<project>/`    | Session snapshot. Tracks progress, decisions, frictions |
+| checkpoint | `41 projects/<project>/`    | Session snapshot (legacy). Replaced by `track`.         |
+| track      | `41 projects/<project>/`    | Rolling per-project work artifact (Direction, Decisions, Backlog, Log) |
 | weekly-log | `41 projects/block-buster/` | Weekly plan/tasks/activity log for gamified tracking    |
 
 ### vault-query subcommands
@@ -125,8 +116,10 @@ else:
 | ------------------------------ | ---------------------------------------------- | --------------- |
 | `config`                       | Print resolved config JSON                     | No              |
 | `context`                      | Print project context.md                       | Yes             |
-| `checkpoints [--view <view>]`  | Query checkpoints (All/Incomplete/Done/Stats)  | Yes             |
-| `get <fragment>`               | Find and read a note/card/reference/checkpoint | No              |
+| `checkpoints [--view <view>]`  | Query checkpoints (All/Incomplete/Done/Stats), legacy | Yes      |
+| `tracks [--view <view>]`       | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC | Yes |
+| `tracks-init`                  | Create Tracks.base in the current project     | Yes             |
+| `get <fragment>`               | Find and read a note/card/reference/checkpoint/track | No        |
 | `search <query>`               | BM25 full-text search (--regex for grep mode)  | No              |
 | `projects [--view <view>]`     | List active projects                           | No              |
 | `cards`                        | List all cards with metadata                   | No              |
@@ -136,8 +129,4 @@ else:
 
 ### Project commands
 
-`<project> start` and `<project> save` resolve the project via `--project <name>` flag, which uses the root config (`~/.config/vault/config.json`) to find `<vault_root>/<projects_path>/<name>`. This works from any directory. If called from a repo with `.vault.config.json`, the local project config takes precedence unless `--project` is given.
-
-The start procedure uses `vault-query --project <name> checkpoints --view Incomplete` and `vault-query --project <name> checkpoints --view Done`. The save procedure uses `vault-query --project <name> checkpoints --view Incomplete`.
-
-For generic `<project> <question>`, use `vault-query --project <name> checkpoints` or `vault-query search <terms>` as needed.
+Track operations are handled by the /track skill. For generic `<project> <question>`, use `vault-query --project <name> context` or `vault-query search <terms>` as needed.
