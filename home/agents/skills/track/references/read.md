@@ -5,7 +5,7 @@
 ```
 results = Bash(vault-query tracks --view Active --format json)
 
-if results errors with "no files match the filters":
+if results is empty (parsed JSON is []):
     do("tell user: no Active tracks in this project; suggest /track save to create one")
 elif results has one row:
     cfg = Bash(vault-query config)
@@ -40,8 +40,7 @@ The slug is the file name with the `track-` prefix removed: `track-checkpoint-re
 
 ### Empty result handling
 
-When no rows match, vault-query exits with status 1 and prints `Error: no files match the filters` to stderr — it does
-not return an empty JSON array. Treat that error as the empty case; do not parse it as failure.
+When no rows match, vault-query exits 0 and prints `[]`. Parse the JSON and branch on `results.length == 0`.
 
 ### Resolving the project
 

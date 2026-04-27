@@ -3,9 +3,7 @@
 ## Pseudocode
 
 ```
-active = Bash(vault-query tracks --view Active --format json)
-if active errored with "no files match the filters":
-    active = []
+active = Bash(vault-query tracks --view Active --format json)  // [] when no rows match
 
 cfg = Bash(vault-query config)             // gives vault_root, project_path
 options = [for t in active: { label: t.Track, description: t.Status + " · " + t.Description }] + [{ label: "new", description: "create a new track" }]
@@ -60,9 +58,8 @@ does not do this; use Bash with `mv`.
 
 ### Empty-result handling
 
-`vault-query tracks --view Active --format json` exits with status 1 and prints `Error: no files match the filters`
-to stderr when no rows match — it does not return an empty JSON array. Treat that as zero active tracks (the picker
-becomes "new" only).
+`vault-query tracks --view Active --format json` exits 0 and prints `[]` when no rows match. Parse the JSON; an
+empty array means the picker becomes "new" only.
 
 ### Log entry format
 
