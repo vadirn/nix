@@ -31,9 +31,18 @@ pub fn parse_weekly_logs(log_dir: &Path) -> Result<LogData> {
     let task_re = Regex::new(r"^\s*- \[x\] \((\d{4}-\d{2}-\d{2})\)").unwrap();
     let wikilink_re = Regex::new(r"\[\[([^\]|]*)\]\]").unwrap();
 
-    let mut log_files: Vec<_> = std::fs::read_dir(log_dir)
-        .into_iter()
-        .flatten()
+    let entries = match std::fs::read_dir(log_dir) {
+        Ok(it) => it,
+        Err(e) => {
+            eprintln!(
+                "warning: cannot read log dir {} ({})",
+                log_dir.display(),
+                e
+            );
+            return Ok(data);
+        }
+    };
+    let mut log_files: Vec<_> = entries
         .filter_map(|e| e.ok())
         .filter(|e| {
             let name = e.file_name().to_string_lossy().to_string();

@@ -161,28 +161,18 @@ fn resolve_vault_root(cli: &Cli) -> Result<PathBuf> {
     if let Some(ref vr) = cli.vault_root {
         return Ok(vr.clone());
     }
-    let home = dirs_home()?;
-    let cwd = std::env::current_dir()?;
-    let cfg = config::resolve(&cwd, &home, cli.project.as_deref())?;
-    Ok(cfg.vault_root)
+    Ok(resolve_config(cli)?.vault_root)
 }
 
 fn resolve_config(cli: &Cli) -> Result<config::ResolvedConfig> {
-    if let Some(ref vr) = cli.vault_root {
-        let projects_path = None;
-        let project_path = cli
-            .project
-            .as_ref()
-            .map(|name| vr.join("41 projects").join(name));
-        return Ok(config::ResolvedConfig {
-            vault_root: vr.clone(),
-            projects_path,
-            project_path,
-        });
-    }
     let home = dirs_home()?;
     let cwd = std::env::current_dir()?;
-    config::resolve(&cwd, &home, cli.project.as_deref())
+    config::resolve(
+        &cwd,
+        &home,
+        cli.project.as_deref(),
+        cli.vault_root.as_deref(),
+    )
 }
 
 fn dirs_home() -> Result<PathBuf> {

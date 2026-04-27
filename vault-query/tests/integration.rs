@@ -396,3 +396,50 @@ fn test_list_empty_folder() {
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
 }
+
+#[test]
+fn test_query_empty_result_json_is_array() {
+    // An empty filter result must succeed (exit 0) and emit an empty JSON array.
+    // Callers (e.g. the track skill) branch on this output rather than on stderr text.
+    let tmp = tempfile::tempdir().unwrap();
+    let base_path = tmp.path().join("Empty.base");
+    std::fs::write(
+        &base_path,
+        r#"filters:
+  and:
+    - type == "no-such-type-anywhere"
+properties:
+  file.name:
+    displayName: Name
+views:
+  - type: table
+    name: All
+    order:
+      - file.name
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .args([
+            "query",
+            base_path.to_str().unwrap(),
+            "--view",
+            "All",
+            "--format",
+            "json",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert!(parsed.is_array());
+    assert_eq!(parsed.as_array().unwrap().len(), 0);
+}

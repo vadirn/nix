@@ -27,17 +27,42 @@ pub fn parse(content: &str) -> Result<Option<BTreeMap<String, Value>>> {
 }
 
 /// Return the content body after frontmatter (stripping the YAML block).
+/// Accepts both LF and CRLF line endings.
 pub fn body(content: &str) -> &str {
     let trimmed = content.trim_start_matches('\u{feff}');
     if !trimmed.starts_with("---") {
         return content;
     }
-    if let Some(end) = trimmed[3..].find("\n---") {
-        let after = end + 3 + 4; // skip past "\n---"
-        if after < trimmed.len() {
-            return &trimmed[after..];
+    let bytes = trimmed.as_bytes();
+
+    // Skip the opening "---" line up to and including its trailing newline.
+    let mut i = 3;
+    while i < bytes.len() && bytes[i] != b'\n' {
+        i += 1;
+    }
+    if i == bytes.len() {
+        return content;
+    }
+    i += 1;
+
+    // Scan subsequent lines for a closing "---" delimiter, mirroring `parse()`.
+    while i < bytes.len() {
+        let line_start = i;
+        while i < bytes.len() && bytes[i] != b'\n' {
+            i += 1;
         }
-        return "";
+        let line_end = if i > line_start && bytes[i - 1] == b'\r' {
+            i - 1
+        } else {
+            i
+        };
+        if trimmed[line_start..line_end].trim() == "---" {
+            return if i < bytes.len() { &trimmed[i..] } else { "" };
+        }
+        if i == bytes.len() {
+            break;
+        }
+        i += 1;
     }
     content
 }
@@ -152,4 +177,44 @@ mod tests {
         assert!(!contains_any(&fm, "status", &["done"]));
     }
 
+    #[test]
+    fn test_body_lf() {
+        let content = "---\nfoo: 1\n---\nbody text\n";
+        // Original behavior: body slice starts at the newline immediately after closing "---".
+        assert_eq!(body(content), "\nbody text\n");
+    }
+
+    #[test]
+    fn test_body_crlf() {
+        let content = "---\r\nfoo: 1\r\n---\r\nbody text\r\n";
+        // CRLF must produce an equivalent body slice (newline-prefixed remainder).
+        assert_eq!(body(content), "\nbody text\r\n");
+    }
+
+    #[test]
+    fn test_body_crlf_mixed() {
+        // CRLF for frontmatter delimiters, LF inside body — must still find the closing line.
+        let content = "---\r\nfoo: 1\r\n---\r\nfirst\nsecond\n";
+        assert_eq!(body(content), "\nfirst\nsecond\n");
+    }
+
+    #[test]
+    fn test_body_no_frontmatter() {
+        let content = "# Just a heading\n\nSome text.";
+        assert_eq!(body(content), content);
+    }
+
+    #[test]
+    fn test_body_no_closing_delimiter() {
+        let content = "---\nfoo: 1\nbody without close\n";
+        assert_eq!(body(content), content);
+    }
+
+    #[test]
+    fn test_body_dashes_inside_line() {
+        // "---bar" is not a closing delimiter even though the original substring search
+        // would have falsely matched it.
+        let content = "---\nfoo: 1\n---bar\nreal body\n---\nafter\n";
+        assert_eq!(body(content), "\nafter\n");
+    }
 }

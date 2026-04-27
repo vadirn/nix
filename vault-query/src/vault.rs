@@ -61,7 +61,10 @@ pub fn scan(root: &Path) -> Result<Vec<VaultFile>> {
         }
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
-            Err(_) => continue,
+            Err(e) => {
+                eprintln!("warning: skipping {} ({})", path.display(), e);
+                continue;
+            }
         };
         let fm = match frontmatter::parse(&content) {
             Ok(Some(fm)) => fm,

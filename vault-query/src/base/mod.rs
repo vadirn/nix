@@ -139,7 +139,7 @@ fn extract_formulas(content: &str) -> (BTreeMap<String, String>, String) {
     let mut in_formulas = false;
 
     for line in content.lines() {
-        if line == "formulas:" || line.starts_with("formulas:") && line.trim() == "formulas:" {
+        if line.trim_end() == "formulas:" {
             in_formulas = true;
             continue;
         }
