@@ -1,17 +1,19 @@
 use anyhow::Result;
 use chrono::{Datelike, NaiveDate, Weekday};
 use regex::Regex;
+use serde_yaml::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::config::ResolvedConfig;
+use crate::frontmatter;
+use crate::vault;
 
 pub fn run(cfg: &ResolvedConfig, year_override: Option<i32>) -> Result<()> {
     let today = chrono::Local::now().date_naive();
     let year = year_override.unwrap_or(today.year());
-    let log_dir = cfg.vault_root.join("41 projects/block-buster");
 
-    let data = parse_weekly_logs(&log_dir)?;
+    let data = parse_weekly_logs(&cfg.vault_root)?;
     let (_streak, day_streak) = compute_streak(&data.sleep_dates, today);
     let calendar = render_calendar(year, &data, &day_streak, today);
     println!("{}", calendar);
@@ -25,46 +27,30 @@ pub struct LogData {
     pub sleep_dates: HashSet<String>,
 }
 
-pub fn parse_weekly_logs(log_dir: &Path) -> Result<LogData> {
+pub fn parse_weekly_logs(vault_root: &Path) -> Result<LogData> {
     let mut data = LogData::default();
 
     let task_re = Regex::new(r"^\s*- \[x\] \((\d{4}-\d{2}-\d{2})\)").unwrap();
     let wikilink_re = Regex::new(r"\[\[([^\]|]*)\]\]").unwrap();
 
-    let entries = match std::fs::read_dir(log_dir) {
-        Ok(it) => it,
-        Err(e) => {
-            eprintln!(
-                "warning: cannot read log dir {} ({})",
-                log_dir.display(),
-                e
-            );
-            return Ok(data);
-        }
-    };
-    let mut log_files: Vec<_> = entries
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            let name = e.file_name().to_string_lossy().to_string();
-            name.ends_with(".md")
-                && name
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_digit())
+    let files = vault::scan(vault_root)?;
+    let mut weekly_logs: Vec<&vault::VaultFile> = files
+        .iter()
+        .filter(|f| {
+            frontmatter::get_display(&f.frontmatter, "type") == "weekly-log"
+                && frontmatter::get_bool(&f.frontmatter, "template") != Some(true)
         })
-        .map(|e| e.path())
         .collect();
-    log_files.sort();
+    weekly_logs.sort_by(|a, b| a.name.cmp(&b.name));
 
-    for path in &log_files {
-        let text = std::fs::read_to_string(path)?;
-
-        // Parse frontmatter for week and sleep
-        let (week_id, sleep_dates) = parse_frontmatter(&text);
+    for file in &weekly_logs {
+        let text = &file.content;
+        let week_id = frontmatter::get_display(&file.frontmatter, "week");
+        let sleep_dates = sleep_dates(&file.frontmatter);
 
         // Tasks: +1 each
         let mut done_links = Vec::new();
-        for line in section_lines(&text, "Tasks") {
+        for line in section_lines(text, "Tasks") {
             if let Some(caps) = task_re.captures(&line) {
                 let date = caps[1].to_string();
                 *data.day_tasks.entry(date).or_insert(0) += 1;
@@ -75,7 +61,7 @@ pub fn parse_weekly_logs(log_dir: &Path) -> Result<LogData> {
         }
 
         // Backlog: -1 each
-        for line in section_lines(&text, "Backlog") {
+        for line in section_lines(text, "Backlog") {
             if let Some(caps) = task_re.captures(&line) {
                 let date = caps[1].to_string();
                 *data.day_tasks.entry(date).or_insert(0) -= 1;
@@ -83,7 +69,7 @@ pub fn parse_weekly_logs(log_dir: &Path) -> Result<LogData> {
         }
 
         // Coverage bonus
-        let projects: Vec<String> = section_lines(&text, "Projects")
+        let projects: Vec<String> = section_lines(text, "Projects")
             .iter()
             .flat_map(|line| wikilink_re.captures_iter(line))
             .map(|caps| caps[1].to_string())
@@ -99,41 +85,23 @@ pub fn parse_weekly_logs(log_dir: &Path) -> Result<LogData> {
             }
         }
 
-        // Sleep dates
         data.sleep_dates.extend(sleep_dates);
     }
 
     Ok(data)
 }
 
-fn parse_frontmatter(text: &str) -> (String, Vec<String>) {
-    let mut week_id = String::new();
-    let mut sleep_dates = Vec::new();
-
-    let parts: Vec<&str> = text.splitn(3, "---").collect();
-    if parts.len() >= 3 {
-        if let Ok(yaml) = serde_yaml::from_str::<serde_yaml::Value>(parts[1]) {
-            if let Some(w) = yaml.get("week") {
-                week_id = match w {
-                    serde_yaml::Value::String(s) => s.clone(),
-                    _ => w.as_str().unwrap_or("").to_string(),
-                };
-            }
-            if let Some(serde_yaml::Value::Sequence(arr)) = yaml.get("sleep") {
-                for item in arr {
-                    let s = match item {
-                        serde_yaml::Value::String(s) => s.clone(),
-                        _ => item.as_str().unwrap_or("").to_string(),
-                    };
-                    if !s.is_empty() {
-                        sleep_dates.push(s);
-                    }
-                }
-            }
-        }
+fn sleep_dates(fm: &std::collections::BTreeMap<String, Value>) -> Vec<String> {
+    match fm.get("sleep") {
+        Some(Value::Sequence(arr)) => arr
+            .iter()
+            .filter_map(|v| match v {
+                Value::String(s) if !s.is_empty() => Some(s.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
     }
-
-    (week_id, sleep_dates)
 }
 
 fn section_lines(text: &str, heading: &str) -> Vec<String> {
@@ -380,12 +348,21 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_frontmatter_sleep() {
-        let text = "---\nweek: 2026-W10\nsleep:\n  - 2026-03-02\n  - 2026-03-03\n---\n# Body\n";
-        let (week, sleep) = parse_frontmatter(text);
-        assert_eq!(week, "2026-W10");
-        assert_eq!(sleep.len(), 2);
-        assert!(sleep.contains(&"2026-03-02".to_string()));
+    fn test_sleep_dates() {
+        let mut fm = std::collections::BTreeMap::new();
+        fm.insert(
+            "sleep".to_string(),
+            Value::Sequence(vec![
+                Value::String("2026-03-02".to_string()),
+                Value::String("2026-03-03".to_string()),
+                Value::String("".to_string()),
+                Value::Null,
+            ]),
+        );
+        let dates = sleep_dates(&fm);
+        assert_eq!(dates.len(), 2);
+        assert!(dates.contains(&"2026-03-02".to_string()));
+        assert!(dates.contains(&"2026-03-03".to_string()));
     }
 
     #[test]
@@ -393,6 +370,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let log_content = "\
 ---
+type: weekly-log
 week: 2026-W10
 sleep: []
 ---
@@ -420,6 +398,7 @@ sleep: []
         let tmp = tempfile::tempdir().unwrap();
         let log_content = "\
 ---
+type: weekly-log
 week: 2026-W10
 sleep: []
 ---
@@ -441,6 +420,7 @@ sleep: []
         let tmp = tempfile::tempdir().unwrap();
         let log_content = "\
 ---
+type: weekly-log
 week: 2026-W10
 sleep: []
 ---

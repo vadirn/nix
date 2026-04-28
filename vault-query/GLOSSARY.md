@@ -158,9 +158,9 @@ Example: the Active view in `Tracks.base` lists open and paused tracks sorted by
 
 ## WeeklyLog
 
-A markdown file in `41 projects/block-buster/` whose filename starts with a digit and ends with `.md`, with frontmatter containing `week` (ISO week string e.g. `2026-W12`), `sleep` (date sequence), and `start` / `end` date strings. Contains `## Projects`, `## Tasks`, and `## Backlog` sections used by XP computation.
+A markdown file with `type: weekly-log` in its frontmatter; carries `week` (ISO week string, e.g. `2026-W12`), `sleep` (date sequence), and `start` / `end` date strings. Folder placement (`41 projects/block-buster/`) and filename shape (`YYYY-wNN.md`) are convention only — classification is by `type`. Contains `## Projects`, `## Tasks`, and `## Backlog` sections used by XP computation. The `vault-query xp` command is the sole consumer; no dedicated listing subcommand is exposed.
 
-Example: `2026-W17.md` covers 2026-04-27 through 2026-05-03.
+Example: `2026-W17.md` carries `type: weekly-log` and covers 2026-04-27 through 2026-05-03.
 
 ## Relations & Invariants
 
@@ -178,9 +178,7 @@ The Streak value displayed to the user is uncapped; the per-day position weight 
 
 Level equals integer-divided total XP for the calendar year being viewed by 50; it is computed per year, not lifetime.
 
-Card, Note, Checkpoint, Track, and the project note are disjoint subtypes of VaultFile, partitioned on a single basis: the frontmatter `type` value (`card`, `note`, `checkpoint`, `track`, `project`). Folder placement (`20 cards/`, `30 notes/`, project folders) is convention only at the entity level — the type axis alone determines membership. The `vault-query cards` and `vault-query notes` subcommands list by `type` vault-wide; the `vault-query checkpoints` and `vault-query tracks` subcommands list by `type` AND `file.inFolder(<current project>)` because their per-project base files embed the folder clause. The folder restriction is a property of those two commands, not of the entity definitions.
-
-WeeklyLog is classified by a separate axis from `type`: a markdown file is a WeeklyLog iff its path is under `41 projects/block-buster/` and its filename starts with an ASCII digit and ends with `.md` (`commands/xp.rs:12`, `:48–53`). The `type` frontmatter field is not consulted for WeeklyLog membership. The `type`-based partition above does not cover WeeklyLog; the two classifications are independent (a single file could in principle satisfy both, though by current convention WeeklyLog files carry no `type:` field).
+Card, Note, Checkpoint, Track, WeeklyLog, and the project note are disjoint subtypes of VaultFile, partitioned on a single basis: the frontmatter `type` value (`card`, `note`, `checkpoint`, `track`, `weekly-log`, `project`). Folder placement (`20 cards/`, `30 notes/`, `41 projects/block-buster/`, project folders) is convention only at the entity level — the type axis alone determines membership. The `vault-query cards` and `vault-query notes` subcommands list by `type` vault-wide; the `vault-query checkpoints` and `vault-query tracks` subcommands list by `type` AND `file.inFolder(<current project>)` because their per-project base files embed the folder clause. The folder restriction is a property of those two commands, not of the entity definitions. WeeklyLog has no dedicated listing subcommand: `vault-query xp` is its sole consumer and selects files by `type == "weekly-log"` AND `template != true` (`commands/xp.rs::parse_weekly_logs`).
 
 A VaultFile marked `template: true` is a template, not an instance: it carries the `type:` of its target so instantiation produces a properly-typed file, and is excluded from type-based listings.
 
