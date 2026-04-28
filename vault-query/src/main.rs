@@ -266,11 +266,11 @@ fn main() -> Result<()> {
         }
         Commands::Cards => {
             let vault_root = resolve_vault_root(&cli)?;
-            commands::list::run(&vault_root, "20 cards", &["reference".to_string()])
+            commands::list::run_by_type(&vault_root, "card", &["reference".to_string()])
         }
         Commands::Notes => {
             let vault_root = resolve_vault_root(&cli)?;
-            commands::list::run(&vault_root, "30 notes", &[])
+            commands::list::run_by_type(&vault_root, "note", &[])
         }
         Commands::Projects { view } => {
             let cfg = resolve_config(&cli)?;
