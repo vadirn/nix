@@ -33,7 +33,7 @@ else:
 
     proposed_edits = {
       decisions:  do("session decisions to append as numbered items, or [] if none"),
-      backlog:    do("new backlog items to append as `[ ] N. ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
+      backlog:    do("new backlog items to append as `[ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
       log_entry:  "### " + new_entry_number + ". " + <today> + " — " + title + "\n\n" + narrative,
       updated:    <today>,
     }
@@ -73,7 +73,7 @@ grep for `^### ([0-9]+)\.` in the `## Log` section, take the max, add one.
 
 - Numbered, append-only.
 - Resolved items get `[x]` marked in place — never delete, never renumber.
-- New items get appended as `[ ] N. <text>` where N is the next available integer (length of list + 1).
+- New items get appended as `[ ] (N). <text>` where N is the next available integer (length of list + 1). The parentheses prevent Obsidian from rendering the leading number as a markdown ordered-list item, which would re-number the line.
 
 ### Decisions conventions
 
