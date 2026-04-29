@@ -16,8 +16,7 @@ if selected == "new":
     template = Read(<cfg.vault_root>/templates/Track.md)
     project_wikilink = do("read <cfg.project_path>/context.md and copy 'Project note: [[...]]' wikilink")
     track_path = <cfg.project_path>/track-<slug>.md
-    do("instantiate template: set type=track, slug=<slug>, description=<description>, status=open,
-        project=<project_wikilink>, created=<today>, updated=<today>;
+    do("instantiate template: set frontmatter per ### Frontmatter;
         leave Direction empty for the user to fill, leave Glossary baseline intact,
         keep Files of interest / Decisions / Backlog / Log empty")
     Bash("write atomically: write content to <track_path>.tmp, then mv <track_path>.tmp <track_path>")
@@ -60,6 +59,21 @@ does not do this; use Bash with `mv`.
 
 `vault-query tracks --view Active --format json` exits 0 and prints `[]` when no rows match. Parse the JSON; an
 empty array means the picker becomes "new" only.
+
+### Frontmatter
+
+Read `templates/Track.md` for structure. Required fields, in order:
+
+- `type` — always `track`
+- `slug` — kebab-case, matches the filename suffix (`track-<slug>.md`)
+- `description` — 1-sentence summary, the same value shown by the resume picker
+- `status` — one of `open` / `paused` / `done` / `abandoned` / `superseded`. Set to `open` on creation.
+- `project` — wikilink copied from `<project_path>/context.md` line `Project note: [[...]]`
+- `created` — ISO date (`YYYY-MM-DD`). Set on creation; never changed.
+- `updated` — ISO date. Bumped to `<today>` on every save.
+
+No other fields. Drop the template's `template: true` line; replace the `status:` multi-value picker list with the
+chosen single value. Quote any value containing double quotes with single quotes.
 
 ### Log entry format
 
