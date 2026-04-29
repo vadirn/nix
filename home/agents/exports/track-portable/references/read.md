@@ -44,8 +44,8 @@ ask "what should we do with this track?"
 ### Resolving repo root
 
 `git rev-parse --show-toplevel` returns the absolute path of the working tree root. Outside a git repo it
-exits non-zero; fall back to `pwd`. Tracks live in `<root>/.tracks/`. Do not search parent directories
-above the repo root — each repo carries its own `.tracks/`.
+exits non-zero; fall back to `pwd`. Tracks live in `<root>/.tracks/`. Stay inside the resolved repo root —
+each repo carries its own `.tracks/`.
 
 ### Frontmatter parsing
 
@@ -57,15 +57,15 @@ Fields used: `slug`, `description`, `status`, `updated`. A missing `status` fiel
 
 A track is Active when `status` is not one of `done`, `closed`, `archived`. The intent matches the
 vault-coupled skill's Active view: anything still in motion. Treat unknown statuses (e.g. `paused`,
-`waiting`) as Active — surface them in the picker so the user can decide.
+`waiting`) as Active — surface them in the picker so the user decides.
 
 ### Empty state
 
 If `.tracks/` does not exist, or contains no `track-*.md` files, tell the user and offer `/track save`
-to create the first one. Do not auto-create the directory on read.
+to create the first one. Leave directory creation to the save path.
 
 ### Presenting a track
 
 Read the whole body. The latest Log entry (highest `### N.` heading) is the current snapshot. Direction,
 Glossary, and Files of interest are stable across sessions. Decisions and Backlog are append-only — read
-all entries; don't treat older items as stale.
+all entries; treat older items as still in force.

@@ -33,17 +33,19 @@ else:
     proposed_edits = {
       decisions:  do("session decisions to append as numbered items, or [] if none"),
       backlog:    do("new backlog items to append as `[ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
+      glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; NEVER modify or remove existing rows, especially pinned (`†`) rows"),
       log_entry:  "### " + new_entry_number + ". " + <today> + " — " + title + "\n\n" + narrative,
       updated:    <today>,
     }
 
     AskUserQuestion("apply these edits to <track_path>?", show=proposed_edits)
     if approved:
-        do("compose updated body: append decisions to ## Decisions, apply backlog edits to ## Backlog, append log_entry to ## Log, set frontmatter updated:")
+        do("compose updated body: append decisions to ## Decisions, apply backlog edits to ## Backlog, append glossary rows to ## Glossary table, append log_entry to ## Log, set frontmatter updated:")
         Bash("write atomically: write new body to <track_path>.tmp, then mv <track_path>.tmp <track_path>")
 
 graduation:
     do("review session for CLAUDE.md / skills / vault candidates; present as suggestions, let user decide")
+    do("skip /commit suggestion — the track is vault content propagated by Obsidian Sync; suggest commit only if changes landed inside `.claude/` or `.scripts/`, or the user explicitly asked")
     do("suggest /clear")
 ```
 
@@ -94,12 +96,34 @@ grep for `^### ([0-9]+)\.` in the `## Log` section, take the max, add one.
 Numbered, append-only. Each decision: a short title, then the rationale. Never delete; if reversed, append a new
 decision that supersedes the prior one and reference it.
 
+### Glossary conventions
+
+The Glossary is a 2-column markdown table: `| Term | Definition |`. Two row classes:
+
+- **Pinned rows** — Term ends with `†` (e.g. `Track†`, `Decision†`). Never edit, never remove, never re-order.
+  The template seeds eight pinned rows describing the track's own conventions; they document the format inside
+  every track so a cold reader doesn't have to consult the skill.
+- **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default; refining a
+  definition is done by appending a new row with the sharpened wording rather than rewording in place. The old
+  row stays so the history of a term's understanding is recoverable.
+
+Surface every Glossary change in the `proposed_edits` confirmation step. Silent rewrites are the failure mode
+this section exists to prevent.
+
 ### Resolving paths
 
 `vault-query config` prints JSON with `vault_root` and `project_path`. Use these to:
 - find `<vault_root>/templates/Track.md`
 - find `<project_path>/track-<slug>.md`
 - read `<project_path>/context.md` for the project wikilink (`Project note: [[...]]` line)
+
+### Skip /commit after save
+
+Tracks live in `<vault_root>/41 projects/<project>/track-<slug>.md` — vault content propagated by Obsidian
+Sync, not git. After a track save, skip the `/commit` suggestion. Exceptions: changes that landed inside
+`.claude/` or `.scripts/` (confirm with `git status`), or the user explicitly asked. A `/commit` prompt
+after every track save adds friction the user has to dismiss and risks staging files `.gitignore` would
+refuse anyway. Mirrors the rule in `home/agents/skills/vault/references/post-edit.md`.
 
 ### Importance filter for the Log narrative
 

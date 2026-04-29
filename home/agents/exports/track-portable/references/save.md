@@ -45,13 +45,14 @@ else:
     proposed_edits = {
       decisions:  do("session decisions to append as numbered items, or [] if none"),
       backlog:    do("new backlog items to append as `[ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
+      glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; NEVER modify or remove existing rows, especially pinned (`†`) rows"),
       log_entry:  "### " + new_entry_number + ". " + today + " — " + title + "\n\n" + narrative,
       updated:    today,
     }
 
     AskUserQuestion("apply these edits to <track_path>?", show=proposed_edits)
     if approved:
-        do("compose updated body: append decisions to ## Decisions, apply backlog edits to ## Backlog, append log_entry to ## Log, set frontmatter updated:")
+        do("compose updated body: append decisions to ## Decisions, apply backlog edits to ## Backlog, append glossary rows to ## Glossary table, append log_entry to ## Log, set frontmatter updated:")
         Bash("write atomically: write new body to <track_path>.tmp, then mv <track_path>.tmp <track_path>")
 
 graduation:
@@ -72,8 +73,8 @@ config. Substitute `__SLUG__`, `__DESCRIPTION__`, and `__DATE__` (replace all) b
 
 A partial write to a track file leaves the rolling history corrupted. Make saves crash-safe by writing
 to a sibling temp file and renaming it over the target:
-`printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"`. The Write tool does not do this; use
-Bash with `mv`.
+`printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"`. Use Bash with `mv` for the rename;
+the Write tool lacks the temp-file step.
 
 ### Empty-result handling
 
@@ -109,11 +110,25 @@ add one.
 Numbered, append-only. Each decision: a short title, then the rationale. Never delete; if reversed,
 append a new decision that supersedes the prior one and reference it by number.
 
+### Glossary conventions
+
+The Glossary is a 2-column markdown table: `| Term | Definition |`. Two row classes:
+
+- **Pinned rows** — Term ends with `†` (e.g. `Track†`, `Decisions†`). Never edit, never remove, never
+  re-order. The template seeds five pinned rows describing the track's own conventions; they document
+  the format inside every track so a cold reader doesn't have to consult the skill.
+- **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default; refine a
+  definition by appending a new row with the sharpened wording. The old row stays so the history of a
+  term's understanding is recoverable.
+
+Surface every Glossary change in the `proposed_edits` confirmation step. Silent rewrites are the failure
+mode this section exists to prevent.
+
 ### Frontmatter parsing and rewrite
 
 Read the first 20 lines to parse the leading `---`-delimited block. Fields used: `slug`, `description`,
 `status`, `updated`. When saving, only the `updated:` line changes. Rewrite by string replacement on
-that single line; do not regenerate the whole frontmatter — preserve unknown fields the user may have
+that single line; leave the rest of the frontmatter intact, including any unknown fields the user has
 added.
 
 ### Importance filter for the Log narrative

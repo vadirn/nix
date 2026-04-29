@@ -6,7 +6,7 @@ Rules to apply after creating or editing any vault file (cards, notes, reference
 
 The vault is a git repo, but `.gitignore` allowlists only a small subset (`.gitignore`, `.claude/`, `.scripts/`). Everything else is managed by Obsidian Sync.
 
-Do not proactively suggest `/commit` after editing vault content. Cards, notes, references, tracks, and weekly logs reach other devices through Obsidian Sync; they do not need a git commit. The exceptions:
+Skip the `/commit` suggestion after editing vault content. Cards, notes, references, tracks, and weekly logs reach other devices through Obsidian Sync; Sync alone is enough. The exceptions:
 
 - Edits landed inside `.claude/` or `.scripts/` (confirm with `git status` if unsure).
 - The user explicitly asked to commit.
