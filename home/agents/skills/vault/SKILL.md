@@ -33,15 +33,18 @@ if "search <query>":
 
 elif "card" or "card <topic>":
     Read(dir/references/card.md)
-    do("follow card creation/editing process")
+    Read(dir/references/post-edit.md)
+    do("follow card creation/editing process; apply post-edit etiquette before wrapping")
 
 elif "note" or "note <topic>":
     Read(dir/references/note.md)
-    do("follow note creation/editing process")
+    Read(dir/references/post-edit.md)
+    do("follow note creation/editing process; apply post-edit etiquette before wrapping")
 
 elif "reference" or "reference <topic>":
     Read(dir/references/reference.md)
-    do("follow reference creation/editing process")
+    Read(dir/references/post-edit.md)
+    do("follow reference creation/editing process; apply post-edit etiquette before wrapping")
 
 elif "review":
     Read(dir/references/review.md)
@@ -67,9 +70,10 @@ elif "<project> ...":
 
 elif "log" or weekly log intent (planning, tasks, sleep):
     Read(dir/references/log-weekly.md)
+    Read(dir/references/post-edit.md)
     week_file = Bash(vault-query log)
     log = Read(week_file)
-    do("show current week's log, ask what user wants to do")
+    do("show current week's log, ask what user wants to do; apply post-edit etiquette before wrapping if log was edited")
 
 elif "validate":
     schemas = skill base directory + "/schemas"
