@@ -1,0 +1,200 @@
+use std::collections::HashSet;
+
+use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
+use crate::wikilink;
+
+pub struct DanglingReference;
+
+impl Rule for DanglingReference {
+    fn name(&self) -> &'static str {
+        "dangling-reference"
+    }
+
+    fn category(&self) -> Category {
+        Category::Structural
+    }
+
+    fn default_severity(&self) -> Severity {
+        Severity::Warn
+    }
+
+    fn check(&self, ctx: &LintContext) -> Vec<Finding> {
+        let mut cited: HashSet<String> = HashSet::new();
+        for card in &ctx.cards {
+            if let Some(value) = card.frontmatter.get("reference") {
+                collect_cited(value, &mut cited);
+            }
+        }
+
+        let mut findings = Vec::new();
+        for reference in &ctx.references {
+            if !cited.contains(&reference.name.to_lowercase()) {
+                findings.push(Finding {
+                    rule: self.name(),
+                    severity: self.default_severity(),
+                    file: reference.path.clone(),
+                    message: format!(
+                        "reference '{}' is not cited by any card",
+                        reference.name
+                    ),
+                    data: None,
+                });
+            }
+        }
+        findings
+    }
+}
+
+fn collect_cited(value: &serde_yaml::Value, into: &mut HashSet<String>) {
+    match value {
+        serde_yaml::Value::String(s) => {
+            for link in wikilink::extract(s) {
+                let name = wikilink::resolve_name(&link.target).to_lowercase();
+                into.insert(name);
+            }
+        }
+        serde_yaml::Value::Sequence(items) => {
+            for item in items {
+                collect_cited(item, into);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::lint::rule::LintContext;
+    use serde_yaml::Value;
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    fn card_file(name: &str, reference_field: Option<Value>) -> crate::vault::VaultFile {
+        let mut fm = BTreeMap::new();
+        fm.insert("type".to_string(), Value::String("card".to_string()));
+        if let Some(v) = reference_field {
+            fm.insert("reference".to_string(), v);
+        }
+        crate::vault::VaultFile {
+            name: name.to_string(),
+            path: PathBuf::from(format!("/vault/20 cards/{}.md", name)),
+            frontmatter: fm,
+            ..Default::default()
+        }
+    }
+
+    fn reference_file(name: &str) -> crate::vault::VaultFile {
+        let mut fm = BTreeMap::new();
+        fm.insert("type".to_string(), Value::String("reference".to_string()));
+        crate::vault::VaultFile {
+            name: name.to_string(),
+            path: PathBuf::from(format!("/vault/10 references/{}.md", name)),
+            frontmatter: fm,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn dangling_reference_scalar_wikilink_not_cited() {
+        // Card has a reference field with no wikilink; the reference is dangling.
+        let ref_foo = reference_file("Foo");
+        let card = card_file("Card", Some(Value::String("".to_string())));
+        let files = vec![ref_foo, card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files);
+
+        let findings = DanglingReference.check(&ctx);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, "dangling-reference");
+        assert_eq!(
+            findings[0].file,
+            PathBuf::from("/vault/10 references/Foo.md")
+        );
+    }
+
+    #[test]
+    fn dangling_reference_scalar_wikilink_cited() {
+        // Card cites reference via wikilink with folder prefix.
+        let ref_foo = reference_file("Foo");
+        let card = card_file(
+            "Card",
+            Some(Value::String("[[10 references/Foo]]".to_string())),
+        );
+        let files = vec![ref_foo, card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files);
+
+        let findings = DanglingReference.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn dangling_reference_yaml_list_partial_citation() {
+        // Two references; only Foo is cited, Bar is not.
+        let ref_foo = reference_file("Foo");
+        let ref_bar = reference_file("Bar");
+        let card = card_file(
+            "Card",
+            Some(Value::Sequence(vec![Value::String("[[Foo]]".to_string())])),
+        );
+        let files = vec![ref_foo, ref_bar, card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files);
+
+        let findings = DanglingReference.check(&ctx);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(
+            findings[0].file,
+            PathBuf::from("/vault/10 references/Bar.md")
+        );
+    }
+
+    #[test]
+    fn dangling_reference_bare_form_no_folder_prefix() {
+        // Wikilink without folder prefix; resolve_name strips path and lowercases.
+        let ref_foo = reference_file("Foo");
+        let card = card_file("Card", Some(Value::String("[[Foo]]".to_string())));
+        let files = vec![ref_foo, card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files);
+
+        let findings = DanglingReference.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn dangling_reference_nested_list() {
+        // Nested sequence; recursive walk must reach the inner string.
+        let ref_foo = reference_file("Foo");
+        let card = card_file(
+            "Card",
+            Some(Value::Sequence(vec![Value::Sequence(vec![
+                Value::String("[[Foo]]".to_string()),
+            ])])),
+        );
+        let files = vec![ref_foo, card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files);
+
+        let findings = DanglingReference.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn dangling_reference_card_without_reference_field() {
+        // Card has no reference field at all; the reference is dangling.
+        let ref_foo = reference_file("Foo");
+        let card = card_file("Card", None);
+        let files = vec![ref_foo, card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files);
+
+        let findings = DanglingReference.check(&ctx);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(
+            findings[0].message,
+            "reference 'Foo' is not cited by any card"
+        );
+    }
+}
