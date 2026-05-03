@@ -4,6 +4,7 @@ pub fn built_in_rules() -> Vec<Box<dyn Rule>> {
     vec![
         Box::new(super::rules::dangling_reference::DanglingReference),
         Box::new(super::rules::orphan_card::OrphanCard),
+        Box::new(super::rules::reference_not_wikilink::ReferenceNotWikilink),
     ]
 }
 
