@@ -64,6 +64,15 @@ enum Commands {
     Orphans,
     /// Find unresolved wikilinks
     Unresolved,
+    /// Run vault-wide lint rules
+    Lint {
+        /// Output format
+        #[arg(long, default_value = "text")]
+        format: commands::lint::format::LintFormat,
+        /// Override a rule's severity, e.g. --rule orphan-card=error (repeatable)
+        #[arg(long, value_name = "NAME=SEVERITY")]
+        rule: Vec<String>,
+    },
     /// Full-text search (BM25 ranked by default, regex with --regex)
     Search {
         /// Search query
@@ -209,6 +218,14 @@ fn main() -> Result<()> {
         Commands::Unresolved => {
             let vault_root = resolve_vault_root(&cli)?;
             commands::unresolved::run(&vault_root)
+        }
+        Commands::Lint { format, rule } => {
+            let cfg = resolve_config(&cli)?;
+            let exit = commands::lint::run(&cfg, *format, rule)?;
+            if exit != 0 {
+                std::process::exit(exit);
+            }
+            Ok(())
         }
         Commands::Search {
             query,
