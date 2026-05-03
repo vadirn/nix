@@ -57,7 +57,7 @@ lowercase() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 get_source_field() {
   local file="$1" key="$2"
   [ -f "$file" ] || return 0
-  grep "^${key}=" "$file" 2>/dev/null | head -n1 | cut -d= -f2-
+  grep "^${key}=" "$file" 2>/dev/null | head -n1 | cut -d= -f2- || true
 }
 
 # Deterministic hash of a skill tree, excluding the .source sidecar.
@@ -350,22 +350,34 @@ EOF
 [ "$#" -gt 0 ] || usage
 
 # Parse flags (composable, any order) until we hit the positional repo spec.
+# Subcommands (--list, --remove, --update) are deferred so flags like --force
+# can appear before OR after them.
+SUBCMD=""
+SUBCMD_ARG=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) usage ;;
-    --list)    cmd_list; exit 0 ;;
+    --list)
+      [ -z "$SUBCMD" ] || die "conflicting subcommands: --$SUBCMD and --list"
+      SUBCMD="list"
+      shift
+      ;;
     --remove)
+      [ -z "$SUBCMD" ] || die "conflicting subcommands: --$SUBCMD and --remove"
       [ "$#" -ge 2 ] || die "--remove requires <name>"
-      cmd_remove "$2"
-      exit 0
+      SUBCMD="remove"
+      SUBCMD_ARG="$2"
+      shift 2
       ;;
     --update)
+      [ -z "$SUBCMD" ] || die "conflicting subcommands: --$SUBCMD and --update"
+      SUBCMD="update"
       if [ "$#" -ge 2 ] && [ "${2#--}" = "$2" ]; then
-        cmd_update "$2"
+        SUBCMD_ARG="$2"
+        shift 2
       else
-        cmd_update ""
+        shift
       fi
-      exit 0
       ;;
     --force)
       FORCE=1
@@ -385,6 +397,12 @@ while [ "$#" -gt 0 ]; do
     *)  break ;;
   esac
 done
+
+case "$SUBCMD" in
+  list)   cmd_list; exit 0 ;;
+  remove) cmd_remove "$SUBCMD_ARG"; exit 0 ;;
+  update) cmd_update "$SUBCMD_ARG"; exit 0 ;;
+esac
 
 [ "$#" -ge 1 ] || usage
 
