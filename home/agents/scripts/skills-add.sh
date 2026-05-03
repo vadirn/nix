@@ -67,7 +67,7 @@ content_hash() {
   [ -d "$dir" ] || { printf ''; return; }
   (
     cd "$dir"
-    find . -type f ! -name .source | LC_ALL=C sort | while IFS= read -r f; do
+    find . -type f ! -name '.*' | LC_ALL=C sort | while IFS= read -r f; do
       printf '%s\n' "$f"
       cat "$f"
     done
@@ -198,7 +198,7 @@ install_skill() {
   local target="$SKILLS_DIR/$name"
   local source_file="$target/.source"
 
-  if [ -e "$target" ] && [ ! -f "$source_file" ]; then
+  if [ -e "$target" ] && [ ! -f "$source_file" ] && [ ! -f "$target/.diff" ]; then
     die "refuses to clobber $target (exists without .source — not vendored by skills-add)"
   fi
 
@@ -226,11 +226,25 @@ install_skill() {
   fi
 
   mkdir -p "$SKILLS_DIR"
+  local stashed_diff=""
+  if [ -f "$target/.diff" ]; then
+    stashed_diff="$CLEANUP_ROOT/diff-$name"
+    cp "$target/.diff" "$stashed_diff"
+  fi
   rm -rf "$target"
   mkdir -p "$target"
 
   # Copy src_dir contents into target, preserving dotfiles. tar pipe works on both GNU and BSD.
   (cd "$src_dir" && tar cf - .) | (cd "$target" && tar xf -)
+
+  if [ -n "$stashed_diff" ]; then
+    cp "$stashed_diff" "$target/.diff"
+    if ! ( cd "$target" && git apply "$target/.diff" ) 2>"$CLEANUP_ROOT/apply-err"; then
+      log "patch failed for $name — upstream may have changed under the diff:"
+      log "$(cat "$CLEANUP_ROOT/apply-err")"
+      die "fix or remove $target/.diff and re-run"
+    fi
+  fi
 
   local new_hash
   new_hash="$(content_hash "$target")"
@@ -275,6 +289,9 @@ cmd_remove() {
   local target="$SKILLS_DIR/$name"
   local src="$target/.source"
   [ -f "$src" ] || die "not vendored: $name (missing $src)"
+  if [ -f "$target/.diff" ]; then
+    log "warning: removing $name also drops $target/.diff — recover from git if uncommitted"
+  fi
   rm -rf "$target"
   local link
   for link in "$CLAUDE_SKILLS/$name" "$AGENTS_SKILLS/$name"; do
