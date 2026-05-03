@@ -239,7 +239,7 @@ install_skill() {
 
   if [ -n "$stashed_diff" ]; then
     cp "$stashed_diff" "$target/.diff"
-    if ! ( cd "$target" && git apply "$target/.diff" ) 2>"$CLEANUP_ROOT/apply-err"; then
+    if ! patch -p1 -d "$target" --no-backup-if-mismatch <"$target/.diff" >"$CLEANUP_ROOT/apply-err" 2>&1; then
       log "patch failed for $name — upstream may have changed under the diff:"
       log "$(cat "$CLEANUP_ROOT/apply-err")"
       die "fix or remove $target/.diff and re-run"
