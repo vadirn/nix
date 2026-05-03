@@ -15,13 +15,13 @@ pub struct LintConfig {
 /// Only rules explicitly set by config or CLI appear in the output; the dispatcher
 /// fills in defaults from each rule's `default_severity()` for anything absent.
 ///
-/// `known_rules` is used as a typo-guard: any name that does not appear there is
-/// an error, both from config and from CLI overrides.
+/// Rule names are validated against the real registry (via `registry::rule_names()`);
+/// any name that does not appear there is an error, both from config and from CLI overrides.
 pub fn effective_severities(
     config: Option<&LintConfig>,
     cli_overrides: &[String],
-    known_rules: &[&'static str],
 ) -> Result<BTreeMap<String, Severity>> {
+    let known_rules = super::registry::rule_names();
     let mut result: BTreeMap<String, Severity> = BTreeMap::new();
 
     // Layer 1: root config entries
@@ -80,8 +80,6 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    const TEST_RULES: &[&str] = &["orphan-card", "broken-wikilink"];
-
     fn config_with(rules: &[(&str, Severity)]) -> LintConfig {
         let mut map = BTreeMap::new();
         for (name, sev) in rules {
@@ -97,7 +95,7 @@ mod tests {
     #[test]
     fn effective_root_only() {
         let cfg = config_with(&[("orphan-card", Severity::Warn)]);
-        let result = effective_severities(Some(&cfg), &[], TEST_RULES).unwrap();
+        let result = effective_severities(Some(&cfg), &[]).unwrap();
         assert_eq!(result.get("orphan-card"), Some(&Severity::Warn));
         assert_eq!(result.len(), 1);
     }
@@ -106,7 +104,7 @@ mod tests {
     fn effective_cli_overrides_root_per_key() {
         let cfg = config_with(&[("orphan-card", Severity::Warn)]);
         let cli = vec!["orphan-card=error".to_string()];
-        let result = effective_severities(Some(&cfg), &cli, TEST_RULES).unwrap();
+        let result = effective_severities(Some(&cfg), &cli).unwrap();
         assert_eq!(result.get("orphan-card"), Some(&Severity::Error));
         assert_eq!(result.len(), 1);
     }
@@ -114,7 +112,7 @@ mod tests {
     #[test]
     fn effective_cli_unknown_rule_errors() {
         let cli = vec!["does-not-exist=warn".to_string()];
-        let err = effective_severities(None, &cli, TEST_RULES).unwrap_err();
+        let err = effective_severities(None, &cli).unwrap_err();
         assert!(
             format!("{:#}", err).contains("does-not-exist"),
             "error must mention the unknown rule name"
@@ -124,7 +122,7 @@ mod tests {
     #[test]
     fn effective_config_unknown_rule_errors() {
         let cfg = config_with(&[("does-not-exist", Severity::Warn)]);
-        let err = effective_severities(Some(&cfg), &[], TEST_RULES).unwrap_err();
+        let err = effective_severities(Some(&cfg), &[]).unwrap_err();
         assert!(
             format!("{:#}", err).contains("does-not-exist"),
             "error must mention the unknown rule name"
@@ -134,7 +132,7 @@ mod tests {
     #[test]
     fn effective_cli_unknown_severity_errors() {
         let cli = vec!["orphan-card=info".to_string()];
-        let err = effective_severities(None, &cli, TEST_RULES).unwrap_err();
+        let err = effective_severities(None, &cli).unwrap_err();
         let msg = format!("{:#}", err);
         assert!(
             msg.contains("info"),
@@ -146,7 +144,7 @@ mod tests {
     #[test]
     fn effective_cli_malformed_errors() {
         let cli = vec!["no-equals-sign".to_string()];
-        let err = effective_severities(None, &cli, TEST_RULES).unwrap_err();
+        let err = effective_severities(None, &cli).unwrap_err();
         assert!(
             format!("{:#}", err).contains("no-equals-sign"),
             "error must echo the malformed string"
