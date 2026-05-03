@@ -2,17 +2,22 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
+use crate::commands::lint::config::LintConfig;
+
 #[derive(Debug, Clone)]
 pub struct ResolvedConfig {
     pub vault_root: PathBuf,
     pub projects_path: Option<String>,
     pub project_path: Option<PathBuf>,
+    pub lint: Option<LintConfig>,
 }
 
 #[derive(Deserialize)]
 struct RootConfig {
     vault_root: String,
     projects_path: String,
+    #[serde(default)]
+    lint: Option<LintConfig>,
 }
 
 #[derive(Deserialize)]
@@ -35,6 +40,7 @@ pub fn resolve(
     let mut vault_root: Option<PathBuf> = None;
     let mut project_path: Option<PathBuf> = None;
     let mut projects_path: Option<String> = None;
+    let mut lint_config: Option<LintConfig> = None;
 
     // Layer 1: Walk up from start_dir for project config (skipped when vault_root is overridden)
     if vault_root_override.is_none() {
@@ -67,6 +73,7 @@ pub fn resolve(
             vault_root = Some(PathBuf::from(&rc.vault_root));
         }
         projects_path = Some(rc.projects_path);
+        lint_config = rc.lint;
     }
 
     // Layer 3: --vault-root takes precedence over both prior layers
@@ -95,6 +102,7 @@ pub fn resolve(
         vault_root,
         projects_path,
         project_path,
+        lint: lint_config,
     })
 }
 
@@ -227,5 +235,52 @@ mod tests {
             config.project_path,
             Some(PathBuf::from("/cli/vault/41 projects/foo"))
         );
+    }
+
+    #[test]
+    fn lint_block_round_trips_through_resolved_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{
+                "vault_root": "/tmp/test-vault",
+                "projects_path": "41 projects",
+                "lint": {
+                    "rules": {
+                        "orphan-card": "warn",
+                        "broken-wikilink": "error"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None).unwrap();
+        let lint = config.lint.expect("lint block should be present");
+        assert_eq!(
+            lint.rules.get("orphan-card"),
+            Some(&crate::commands::lint::rule::Severity::Warn)
+        );
+        assert_eq!(
+            lint.rules.get("broken-wikilink"),
+            Some(&crate::commands::lint::rule::Severity::Error)
+        );
+    }
+
+    #[test]
+    fn lint_block_absent_gives_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{"vault_root": "/tmp/test-vault", "projects_path": "41 projects"}"#,
+        )
+        .unwrap();
+
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None).unwrap();
+        assert!(config.lint.is_none());
     }
 }
