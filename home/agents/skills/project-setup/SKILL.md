@@ -1,6 +1,6 @@
 ---
 name: project-setup
-description: Sets up project-as-a-skill for any project. Use "link" to connect an existing skill folder. Use without arguments (or "new") to create a full project from scratch. Use whenever the user wants to set up a new project, initialize project tracking in Obsidian, link a vault folder to a repo, create checkpoint tracking, or scaffold project skills.
+description: Sets up project-as-a-skill for any project. Use "link" to connect an existing skill folder. Use without arguments (or "new") to create a full project from scratch. Use whenever the user wants to set up a new project, initialize project tracking in Obsidian, link a vault folder to a repo, or scaffold project skills.
 ---
 
 # Setup Project
@@ -17,7 +17,7 @@ if command == "link":
 elif command == "check-permissions":
     check_permissions(vault_root)
 else:
-    setup(vault_root)  // handles "already exists" via duplicate check
+    setup(vault_root)
 ```
 
 ## Link command
@@ -28,20 +28,21 @@ Links an existing vault project folder to the current repo.
 
 ```
 link(vault_root):
-    path = ask "Vault path?" (e.g. "41 projects/visa-agent")
+    path = AskUserQuestion("Vault path? e.g. 41 projects/visa-agent")
     target = "<vault_root>/<path>"
 
-    if target/context.md does not exist:
-        error "No context.md found at <target>. Use /project-setup new to create one."
-        return
+    // Guard
+    if not Read(target/context.md):
+        do("report missing context.md, suggest /project-setup new")
+        stop
 
-    name = last segment of path  // e.g. "visa-agent" from "41 projects/visa-agent"
-    title = infer from context.md heading or ask user
+    name = do("take last path segment as kebab-case skill name")
+    title = do("infer from context.md heading; AskUserQuestion if missing")
 
-    write_vault_config()    // .vault.config.json in repo
-    write_thin_wrapper()    // .claude/skills/<name>/SKILL.md in repo
-    register_in_settings()  // add Skill(<name>); skip entries already in global settings
-    report linked, suggest /clear
+    write_vault_config()
+    write_thin_wrapper()
+    register_in_settings()
+    do("report linked, suggest /clear")
 ```
 
 ## Check-permissions command
@@ -52,24 +53,26 @@ Verifies a project skill has the right entries in `.claude/settings.local.json`.
 
 ```
 check_permissions(vault_root):
-    name = ask "Which project skill?" or infer from context
+    name = do("infer from context, else AskUserQuestion('which project skill?')")
     skill_dir = ".claude/skills/<name>"
-    if skill_dir does not exist:
-        error "No skill named <name>. Run /project-setup link first."
-        return
 
-    real_dir = resolve symlinks of skill_dir  // realpath
-    path = relative path of real_dir within vault_root
+    // Guard
+    if not exists(skill_dir):
+        do("report no such skill, suggest /project-setup link")
+        stop
 
-    settings_file = .claude/settings.local.json
-    Read(settings_file)
+    real_dir = Bash(realpath <skill_dir>)
+    path = do("compute real_dir relative to vault_root")
+
+    settings = Read(.claude/settings.local.json)
     expected_skill = "Skill(<name>)"
     expected_read = "Read(<vault_root>/<path>/**)"
-    missing = items from [expected_skill, expected_read] not in allow list
+    missing = do("items from [expected_skill, expected_read] not in settings allow list")
+
     if missing:
-        add missing to allow list, report added
+        do("add missing to allow list, report added")
     else:
-        report all present
+        do("report all present")
 ```
 
 ## Setup command (default)
@@ -81,23 +84,24 @@ Creates the full project-as-a-skill structure for a new project.
 ```
 setup(vault_root):
     inputs = collect(path, name, title, description, result)
-    check_duplicates(vault_root, inputs)  // covers "already set up" case, offers to link instead
+    check_duplicates(vault_root, inputs)
 
     target = "<vault_root>/<path>"
-    if target/SKILL.md exists:
-        ask "Skill files already exist. Link instead?" (yes/no)
-        if yes:
-            link(vault_root)  // reuse link flow
-            return
 
-    mkdir target
-    write_project_note()        // from Project.md template
-    write_checkpoints_base()    // via Bash cat (oxfmt mangles .base)
-    write_context_md()          // context.md only (no SKILL.md, start.md, save.md — vault skill handles routing)
-    write_vault_config()        // .vault.config.json in repo
-    write_thin_wrapper()        // .claude/skills/<name>/SKILL.md in repo (delegates to /vault)
-    register_in_settings()      // add Skill(<name>), Skill(vault), Read
-    report created files, suggest /clear
+    // Offer to link if already initialised
+    if exists(target/SKILL.md):
+        answer = AskUserQuestion("Skill files already exist. Link instead?")
+        if answer == "yes":
+            link(vault_root)
+            stop
+
+    Bash(mkdir -p <target>)
+    write_project_note()
+    write_context_md()
+    write_vault_config()
+    write_thin_wrapper()
+    register_in_settings()
+    do("report created files, suggest /clear")
 ```
 
 ## Reference
@@ -140,11 +144,6 @@ Ask the user:
 Path: `<vault_root>/<path>/<Title>.md`
 Template: `<vault_root>/templates/Project.md`. Fill frontmatter (`result`, `status: in progress`). Replace `<path>` placeholders in body. Replace description comment with real description.
 
-### Writing Checkpoints.base
-
-Path: `<vault_root>/<path>/Checkpoints.base`
-Write via Bash `cat` (oxfmt mangles YAML in `.base` files). See template below.
-
 ### Writing context.md
 
 In `<vault_root>/<path>/context.md`. Substitute `<path>`, `<title>`, `<description>`, `<result>`. See context.md template.
@@ -186,12 +185,6 @@ Skip if already in global settings:
 
 - `Skill(vault)`, `Read` — usually already allowed globally
 
-## Checkpoints.base template
-
-Substitute `<path>` with the actual vault path before writing. Write via Bash `cat`, because oxfmt mangles `.base` files.
-
-Template: `Read(dir/templates/checkpoints-base.yaml)`. Replace all `<path>` occurrences with the actual vault path.
-
 ## Thin wrapper template
 
 Per-repo convenience skill at `<repo>/.claude/skills/<name>/SKILL.md`. Substitute `<name>`, `<title>`.
@@ -220,7 +213,6 @@ Per-project context. Substitute `<path>`, `<title>`, `<description>`, `<result>`
 <description>
 
 - Project note: [[<path>/<title>]]
-- Checkpoints: `<path>/`
 
 ## Result
 
@@ -239,4 +231,3 @@ Per-project context. Substitute `<path>`, `<title>`, `<description>`, `<result>`
 
 - `/clear` or restart is required after setup for the new skill to load.
 - The generated files live in the vault. Wikilinks work. The user adds project-specific context to context.md.
-- Write and query checkpoints via `/vault`.

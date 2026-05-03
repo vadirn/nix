@@ -19,12 +19,6 @@ for src in "$HOME/nix/home/agents/skills/"*/; do
   ln -sfn "$src" "$CLAUDE_SKILLS/$name"
 done
 
-for src in "$HOME/nix/home/claude/skills/"*/; do
-  [ -d "$src" ] || continue
-  name=$(basename "$src")
-  ln -sfn "$src" "$CLAUDE_SKILLS/$name"
-done
-
 if [ -d "$HOME/.claude/plugins/cache" ]; then
   find "$HOME/.claude/plugins/cache" -mindepth 3 -maxdepth 5 -type d -name skills | while read -r dir; do
     for skill in "$dir"/*/; do

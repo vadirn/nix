@@ -64,7 +64,6 @@
 
       home.file.".agents/scripts/ghostty-claude-split.applescript".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/ghostty-claude-split.applescript";
       home.file.".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/AGENTS.md";
-      home.file.".local/bin/tool-stats".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/skills/tool-stats/tool-stats.py";
       home.file.".local/bin/skills-add".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/skills-add.sh";
       home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
       home.file.".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/hooks";
