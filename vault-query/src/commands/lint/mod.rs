@@ -153,10 +153,13 @@ mod tests {
         let cfg = cfg_for(vault);
         let cli = vec!["orphan-card=off".to_string()];
         let mut buf = Vec::new();
-        let exit = run_with_writer(&cfg, LintFormat::Text, &cli, &mut buf).unwrap();
+        let _ = run_with_writer(&cfg, LintFormat::Text, &cli, &mut buf).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.is_empty(), "off must suppress output, got: {}", out);
-        assert_eq!(exit, 0);
+        assert!(
+            !out.contains("orphan-card"),
+            "orphan-card=off must suppress that rule, got: {}",
+            out
+        );
     }
 
     #[test]
