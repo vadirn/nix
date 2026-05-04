@@ -2,6 +2,7 @@ use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use unicode_normalization::UnicodeNormalization;
 
 static WIKILINK_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\[([^\]|]+)(?:\|([^\]]*))?\]\]").unwrap());
@@ -130,6 +131,23 @@ pub fn resolve_name(target: &str) -> &str {
     let without_anchor = target.split('#').next().unwrap_or(target);
     let last_segment = without_anchor.rsplit('/').next().unwrap_or(without_anchor);
     last_segment.strip_suffix(".md").unwrap_or(last_segment)
+}
+
+/// NFKC-normalize `s` and fold typographic quotes to ASCII equivalents.
+///
+/// Applies NFKC decomposition (which collapses U+00A0 NO-BREAK SPACE to U+0020,
+/// ligatures, compatibility forms, etc.), then maps U+2018/2019 (curly single
+/// quotes) to `'` and U+201C/201D (curly double quotes) to `"`, then lowercases.
+/// Used by lint rules that compare wikilink targets against on-disk filenames.
+pub(crate) fn normalize(s: &str) -> String {
+    s.nfkc()
+        .map(|c| match c {
+            '\u{2018}' | '\u{2019}' => '\'',
+            '\u{201C}' | '\u{201D}' => '"',
+            _ => c,
+        })
+        .flat_map(|c| c.to_lowercase())
+        .collect()
 }
 
 /// Strip wikilink syntax from a string, keeping display text.

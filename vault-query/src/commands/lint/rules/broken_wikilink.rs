@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
 use crate::vault;
 use crate::wikilink;
+use crate::wikilink::normalize;
 
 pub struct BrokenWikilink;
 
@@ -21,11 +22,11 @@ impl Rule for BrokenWikilink {
     }
 
     fn check(&self, ctx: &LintContext) -> Vec<Finding> {
-        let known: HashSet<String> = ctx.files.iter().map(|f| f.name.to_lowercase()).collect();
+        let known: HashSet<String> = ctx.files.iter().map(|f| normalize(&f.name)).collect();
 
-        // Build a lowercase basename index for asset bare-name lookups.
+        // Build a normalized basename index for asset bare-name lookups.
         let asset_basenames: HashSet<String> =
-            ctx.assets.iter().map(|a| a.name.to_lowercase()).collect();
+            ctx.assets.iter().map(|a| normalize(&a.name)).collect();
 
         let mut findings = Vec::new();
         for file in ctx.files {
@@ -53,11 +54,11 @@ impl Rule for BrokenWikilink {
                                 .unwrap_or(false)
                         })
                     } else {
-                        // Bare name: look up lowercase basename.
-                        asset_basenames.contains(&link.target.to_lowercase())
+                        // Bare name: look up normalized basename.
+                        asset_basenames.contains(&normalize(&link.target))
                     }
                 } else {
-                    let resolved = wikilink::resolve_name(&link.target).to_lowercase();
+                    let resolved = normalize(wikilink::resolve_name(&link.target));
                     known.contains(&resolved)
                 };
 
@@ -319,5 +320,45 @@ mod tests {
         let data = findings[0].data.as_ref().unwrap();
         assert_eq!(data["target"], "Missing.png");
         assert_eq!(data["line"], 3);
+    }
+
+    // --- Unicode normalization tests ---
+
+    #[test]
+    fn broken_wikilink_curly_apostrophe_matches_straight() {
+        // File on disk uses a straight ASCII apostrophe (U+0027) in its name;
+        // the wikilink uses a curly apostrophe (U+2019).  normalize() folds the
+        // typographic variant so the link resolves and produces zero findings.
+        let target = plain_file("Karpathy's gist", "/vault/Karpathy's gist.md", "");
+        let src = plain_file(
+            "Src",
+            "/vault/Src.md",
+            "[[Karpathy\u{2019}s gist]]",
+        );
+        let files = vec![target, src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = BrokenWikilink.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn broken_wikilink_nbsp_matches_space() {
+        // File on disk uses a regular space (U+0020) in its name; the wikilink
+        // uses a no-break space (U+00A0).  NFKC folds NBSP into a plain space
+        // so the link resolves and produces zero findings.
+        let target = plain_file("Two words", "/vault/Two words.md", "");
+        let src = plain_file(
+            "Src",
+            "/vault/Src.md",
+            "[[Two\u{00A0}words]]",
+        );
+        let files = vec![target, src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = BrokenWikilink.check(&ctx);
+        assert_eq!(findings.len(), 0);
     }
 }

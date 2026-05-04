@@ -1,23 +1,10 @@
 use std::collections::HashSet;
 
-use unicode_normalization::UnicodeNormalization;
-
 use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
 use crate::wikilink;
+use crate::wikilink::normalize;
 
 pub struct DanglingReference;
-
-// NFKC + curly→ASCII fold so typographic variants (U+2019, U+00A0) match plain ASCII filenames.
-fn normalize(s: &str) -> String {
-    s.nfkc()
-        .map(|c| match c {
-            '\u{2018}' | '\u{2019}' => '\'',
-            '\u{201C}' | '\u{201D}' => '"',
-            _ => c,
-        })
-        .flat_map(|c| c.to_lowercase())
-        .collect()
-}
 
 impl Rule for DanglingReference {
     fn name(&self) -> &'static str {
