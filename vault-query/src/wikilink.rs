@@ -127,4 +127,116 @@ mod tests {
         assert_eq!(links[2].target, "C");
         assert_eq!(links[2].line, 3);
     }
+
+    // --- Failing tests: fenced code block suppression ---
+
+    #[test]
+    fn test_extract_skips_wikilink_in_backtick_fence() {
+        let links = extract("```\n[[Note]]\n```");
+        assert_eq!(links.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_skips_wikilink_in_tilde_fence() {
+        let links = extract("~~~\n[[Note]]\n~~~");
+        assert_eq!(links.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_skips_wikilink_in_fenced_bash_info_string() {
+        let links = extract("```bash\n[[ -z $VAR ]] && echo hi\n```");
+        assert_eq!(links.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_skips_bash_array_syntax_in_fence() {
+        let content = "```bash\nif [[ \"$result\" == *\"text\"* ]]; then\n  echo ok\nfi\n```";
+        let links = extract(content);
+        assert_eq!(links.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_yields_wikilink_after_fence() {
+        let content = "```\n[[Skip]]\n```\n[[Keep]]";
+        let links = extract(content);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].target, "Keep");
+    }
+
+    #[test]
+    fn test_extract_line_number_correct_after_fence() {
+        // "```\n[[Skip]]\n```\n[[Keep]]": fence is lines 1-3, [[Keep]] is on line 4.
+        let content = "```\n[[Skip]]\n```\n[[Keep]]";
+        let links = extract(content);
+        assert_eq!(links[0].line, 4);
+    }
+
+    // --- Failing tests: inline code span suppression ---
+
+    #[test]
+    fn test_extract_skips_wikilink_in_single_backtick_span() {
+        let links = extract("See `[[wikilink]]` for details.");
+        assert_eq!(links.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_skips_wikilink_in_double_backtick_span() {
+        let links = extract("See ``[[wikilink]]`` for details.");
+        assert_eq!(links.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_yields_wikilink_outside_backtick_span() {
+        let content = "`[[Skip]]` and [[Keep]]";
+        let links = extract(content);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].target, "Keep");
+    }
+
+    // --- Failing tests: YAML frontmatter suppression ---
+
+    #[test]
+    fn test_extract_skips_wikilink_in_frontmatter_yaml_string() {
+        let content = "---\nfrictions:\n  - \"[[ -z $VAR ]] guard\"\n---\n[[Real]]";
+        let links = extract(content);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].target, "Real");
+    }
+
+    // --- Failing tests: CRLF and frontmatter line-offset arithmetic ---
+
+    #[test]
+    fn test_extract_handles_crlf_content() {
+        let content = "line1\r\nline2 [[Note]]\r\nline3";
+        let links = extract(content);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].target, "Note");
+        assert_eq!(links[0].line, 2);
+    }
+
+    #[test]
+    fn test_extract_frontmatter_line_offset() {
+        // 5-line frontmatter block:
+        //   line 1: ---
+        //   line 2: title: Foo
+        //   line 3: tags:
+        //   line 4:   - a
+        //   line 5: ---
+        //   line 6: [[Body]]
+        //
+        // frontmatter::body() returns "\n[[Body]]" (starts at the \n after closing ---).
+        // The rewritten extract will feed body() to the parser and add a frontmatter_line_offset
+        // equal to the number of newlines before the body slice. Those 5 newlines (one per
+        // frontmatter line) plus the leading \n in the body slice shift [[Body]] to line 6.
+        let content = "---\ntitle: Foo\ntags:\n  - a\n---\n[[Body]]";
+        let links = extract(content);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].target, "Body");
+        // body() returns "\n[[Body]]"; within that slice [[Body]] is on line 2 (1-based).
+        // frontmatter_line_offset = 5 (newlines in content before the body slice starts).
+        // Reported line = offset + line-within-body = 5 + 1 = 6... but body slice starts
+        // with \n so [[Body]] appears on line 2 of the body slice, offset adds 4 (newlines
+        // before the \n that begins the body). Either way the expected absolute line is 6.
+        assert_eq!(links[0].line, 6);
+    }
 }
