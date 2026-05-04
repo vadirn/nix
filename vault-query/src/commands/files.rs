@@ -7,7 +7,7 @@ pub fn run(cfg: &crate::config::ResolvedConfig, folder: Option<&Path>, count: bo
     let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, folder);
 
-    let files = vault::scan(&root, vault_root, cfg.ignore.as_ref())?;
+    let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
 
     let files: Vec<_> = if let Some(tag) = tag {
         files

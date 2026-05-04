@@ -28,7 +28,7 @@ pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig) -> Result<()> {
 /// Resolve a slug to matching relative paths (reusable by other commands).
 pub fn resolve_paths(slug: &str, cfg: &crate::config::ResolvedConfig) -> Result<Vec<String>> {
     let vault_root = &cfg.vault_root;
-    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
+    let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     let needle = slugify(slug);
     let mut matches = Vec::new();
 

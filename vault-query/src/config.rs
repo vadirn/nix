@@ -11,7 +11,7 @@ pub struct ResolvedConfig {
     pub projects_path: Option<String>,
     pub project_path: Option<PathBuf>,
     pub lint: Option<LintConfig>,
-    pub ignore: Option<VaultIgnore>,
+    pub ignore: VaultIgnore,
 }
 
 #[derive(Deserialize)]
@@ -38,7 +38,7 @@ pub fn resolve(
     home_dir: &Path,
     project_override: Option<&str>,
     vault_root_override: Option<&Path>,
-    respect_ignore: bool,
+    respect_user_patterns: bool,
 ) -> Result<ResolvedConfig> {
     let mut vault_root: Option<PathBuf> = None;
     let mut project_path: Option<PathBuf> = None;
@@ -101,11 +101,7 @@ pub fn resolve(
          { \"vault_root\": \"/absolute/path/to/vault\", \"projects_path\": \"41 projects\" }",
     )?;
 
-    let ignore = if respect_ignore {
-        vault_ignore::load(&vault_root)?
-    } else {
-        None
-    };
+    let ignore = vault_ignore::load(&vault_root, respect_user_patterns)?;
 
     Ok(ResolvedConfig {
         vault_root,
@@ -324,6 +320,7 @@ mod tests {
     #[test]
     fn test_resolve_respects_ignore_when_true() {
         let (vault_dir, home_dir) = make_vault_with_vaultignore();
+        let user_pattern = std::path::PathBuf::from("excluded");
         let config = resolve(
             Path::new("/nonexistent"),
             home_dir.path(),
@@ -333,14 +330,15 @@ mod tests {
         )
         .unwrap();
         assert!(
-            config.ignore.is_some(),
-            "expected ignore to be loaded when respect_ignore=true"
+            config.ignore.patterns.contains(&user_pattern),
+            "expected user pattern to be loaded when respect_user_patterns=true"
         );
     }
 
     #[test]
     fn test_resolve_ignores_vaultignore_when_false() {
         let (vault_dir, home_dir) = make_vault_with_vaultignore();
+        let user_pattern = std::path::PathBuf::from("excluded");
         let config = resolve(
             Path::new("/nonexistent"),
             home_dir.path(),
@@ -350,8 +348,16 @@ mod tests {
         )
         .unwrap();
         assert!(
-            config.ignore.is_none(),
-            "expected ignore to be None when respect_ignore=false"
+            !config.ignore.patterns.contains(&user_pattern),
+            "expected user pattern to be absent when respect_user_patterns=false"
+        );
+        // Only defaults (.git, .vaultignore) should be present.
+        assert_eq!(
+            config.ignore.patterns,
+            vec![
+                std::path::PathBuf::from(".git"),
+                std::path::PathBuf::from(".vaultignore"),
+            ]
         );
     }
 }

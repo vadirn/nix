@@ -27,7 +27,7 @@ fn run_bm25(query: &str, cfg: &crate::config::ResolvedConfig, subfolder: Option<
     let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root, vault_root, cfg.ignore.as_ref())?;
+    let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
 
     // Build schema
     let mut schema_builder = Schema::builder();
@@ -127,7 +127,7 @@ fn run_regex(
 
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root, vault_root, cfg.ignore.as_ref())?;
+    let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
 
     for file in &files {
         let lines: Vec<&str> = file.content.lines().collect();

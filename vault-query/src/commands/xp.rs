@@ -33,7 +33,7 @@ pub fn parse_weekly_logs(cfg: &ResolvedConfig) -> Result<LogData> {
     let task_re = Regex::new(r"^\s*- \[x\] \((\d{4}-\d{2}-\d{2})\)").unwrap();
     let wikilink_re = Regex::new(r"\[\[([^\]|]*)\]\]").unwrap();
 
-    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
+    let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     let mut weekly_logs: Vec<&vault::VaultFile> = files
         .iter()
         .filter(|f| {
@@ -342,7 +342,7 @@ mod tests {
             projects_path: None,
             project_path: None,
             lint: None,
-            ignore: None,
+            ignore: crate::vault_ignore::VaultIgnore::from_patterns(vec![]),
         }
     }
 

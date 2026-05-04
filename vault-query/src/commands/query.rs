@@ -25,7 +25,7 @@ pub fn run(base_path: &Path, view_name: &str, cfg: &crate::config::ResolvedConfi
         })?
         .clone();
 
-    let all_files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
+    let all_files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
 
     let mut filtered = filter::apply(
         &all_files,

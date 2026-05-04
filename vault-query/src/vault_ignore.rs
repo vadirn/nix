@@ -5,29 +5,41 @@ use std::path::{Path, PathBuf};
 /// A set of vault-relative path prefixes that should be excluded from scans.
 #[derive(Debug, Clone)]
 pub struct VaultIgnore {
-    patterns: Vec<PathBuf>,
+    pub(crate) patterns: Vec<PathBuf>,
 }
 
-/// Read `<vault_root>/.vaultignore` and return a `VaultIgnore` if the file exists.
+fn default_patterns() -> Vec<PathBuf> {
+    vec![PathBuf::from(".git"), PathBuf::from(".vaultignore")]
+}
+
+/// Load exclusion patterns for `vault_root`.
+///
+/// Always starts with the built-in defaults (`.git` and `.vaultignore`).
+/// If `respect_user_patterns` is true, also reads `<vault_root>/.vaultignore`.
+/// A missing user file is silently ignored; other read errors propagate.
 ///
 /// Syntax: one path prefix per line, `#` comments, blank lines ignored.
 /// Trailing `/` is stripped so `.claude/` and `.claude` produce the same pattern.
-pub fn load(vault_root: &Path) -> Result<Option<VaultIgnore>> {
-    let path = vault_root.join(".vaultignore");
-    let text = match fs::read_to_string(&path) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.into()),
-    };
+pub fn load(vault_root: &Path, respect_user_patterns: bool) -> Result<VaultIgnore> {
+    let mut patterns = default_patterns();
 
-    let patterns = text
-        .lines()
-        .map(|l| l.trim())
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(|l| PathBuf::from(l.trim_end_matches('/')))
-        .collect();
+    if respect_user_patterns {
+        let path = vault_root.join(".vaultignore");
+        let text = match fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => return Err(e.into()),
+        };
 
-    Ok(Some(VaultIgnore { patterns }))
+        patterns.extend(
+            text.lines()
+                .map(|l| l.trim())
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .map(|l| PathBuf::from(l.trim_end_matches('/'))),
+        );
+    }
+
+    Ok(VaultIgnore { patterns })
 }
 
 impl VaultIgnore {
@@ -57,10 +69,31 @@ mod tests {
     }
 
     #[test]
-    fn load_returns_none_when_absent() {
+    fn load_returns_defaults_when_absent() {
         let dir = TempDir::new().unwrap();
-        let result = load(dir.path()).unwrap();
-        assert!(result.is_none());
+        let ignore = load(dir.path(), true).unwrap();
+        assert!(ignore.excludes(Path::new(".git/foo.md")));
+        assert!(ignore.excludes(Path::new(".vaultignore")));
+        assert!(!ignore.excludes(Path::new("notes/meeting.md")));
+    }
+
+    #[test]
+    fn load_returns_only_defaults_when_respect_user_patterns_false() {
+        let dir = TempDir::new().unwrap();
+        make_vaultignore(&dir, "extras/\n");
+        let ignore = load(dir.path(), false).unwrap();
+        assert!(!ignore.excludes(Path::new("extras/foo.md")));
+        assert!(ignore.excludes(Path::new(".git/foo.md")));
+    }
+
+    #[test]
+    fn load_merges_defaults_and_user_patterns() {
+        let dir = TempDir::new().unwrap();
+        make_vaultignore(&dir, "extras/\n");
+        let ignore = load(dir.path(), true).unwrap();
+        assert!(ignore.excludes(Path::new("extras/foo.md")));
+        assert!(ignore.excludes(Path::new(".git/foo.md")));
+        assert!(ignore.excludes(Path::new(".vaultignore")));
     }
 
     #[test]
@@ -70,10 +103,15 @@ mod tests {
             &dir,
             "# this is a comment\n\n.claude\n# another comment\n.claude-plans\n",
         );
-        let ignore = load(dir.path()).unwrap().unwrap();
+        let ignore = load(dir.path(), true).unwrap();
         assert_eq!(
             ignore.patterns,
-            vec![PathBuf::from(".claude"), PathBuf::from(".claude-plans")]
+            vec![
+                PathBuf::from(".git"),
+                PathBuf::from(".vaultignore"),
+                PathBuf::from(".claude"),
+                PathBuf::from(".claude-plans"),
+            ]
         );
     }
 
@@ -81,11 +119,16 @@ mod tests {
     fn load_normalizes_trailing_slashes() {
         let dir = TempDir::new().unwrap();
         make_vaultignore(&dir, ".claude/\n.claude-plans/\n");
-        let ignore = load(dir.path()).unwrap().unwrap();
+        let ignore = load(dir.path(), true).unwrap();
         // Trailing slash stripped: same as writing without slash.
         assert_eq!(
             ignore.patterns,
-            vec![PathBuf::from(".claude"), PathBuf::from(".claude-plans")]
+            vec![
+                PathBuf::from(".git"),
+                PathBuf::from(".vaultignore"),
+                PathBuf::from(".claude"),
+                PathBuf::from(".claude-plans"),
+            ]
         );
     }
 

@@ -12,7 +12,7 @@ fn strip_md(s: &str) -> &str {
 
 pub fn run(slug: &str, cfg: &crate::config::ResolvedConfig) -> Result<bool> {
     let vault_root = &cfg.vault_root;
-    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
+    let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     let needle = slugify(slug);
     let mut found = false;
 

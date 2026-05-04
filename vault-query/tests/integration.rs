@@ -14,12 +14,13 @@ fn fixture_dir() -> PathBuf {
 }
 
 fn cfg_for(vault_root: &Path) -> ResolvedConfig {
+    let ignore = vault_query::vault_ignore::load(vault_root, false).unwrap();
     ResolvedConfig {
         vault_root: vault_root.to_path_buf(),
         projects_path: None,
         project_path: None,
         lint: None,
-        ignore: None,
+        ignore,
     }
 }
 

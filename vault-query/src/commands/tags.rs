@@ -6,7 +6,7 @@ use crate::vault;
 
 pub fn run(cfg: &crate::config::ResolvedConfig, sort: &str) -> Result<()> {
     let vault_root = &cfg.vault_root;
-    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
+    let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     let mut tag_counts: BTreeMap<String, usize> = BTreeMap::new();
 
     for file in &files {
