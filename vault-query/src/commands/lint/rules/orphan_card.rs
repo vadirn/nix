@@ -76,7 +76,7 @@ mod tests {
         let card = card_file("Foo", "/vault/20 cards/Foo.md");
         let files = vec![card];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = OrphanCard.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -90,7 +90,7 @@ mod tests {
         let linker = linker_file("Bar", "Foo");
         let files = vec![card, linker];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = OrphanCard.check(&ctx);
         assert_eq!(findings.len(), 0);
@@ -101,7 +101,7 @@ mod tests {
         let reference = reference_file("OrphanRef", "/vault/10 references/OrphanRef.md");
         let files = vec![reference];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = OrphanCard.check(&ctx);
         assert_eq!(findings.len(), 0);
@@ -113,7 +113,7 @@ mod tests {
         let card_b = card_file("Beta", "/vault/20 cards/Beta.md");
         let files = vec![card_a, card_b];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = OrphanCard.check(&ctx);
         assert_eq!(findings.len(), 2);

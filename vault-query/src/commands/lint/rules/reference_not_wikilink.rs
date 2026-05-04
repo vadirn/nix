@@ -90,7 +90,7 @@ mod tests {
     fn run(card: crate::vault::VaultFile) -> Vec<Finding> {
         let files = vec![card];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
         ReferenceNotWikilink.check(&ctx)
     }
 

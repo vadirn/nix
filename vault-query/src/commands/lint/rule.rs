@@ -33,6 +33,7 @@ pub trait Rule: Send + Sync {
 pub struct LintContext<'a> {
     pub vault_root: &'a std::path::Path,
     pub files: &'a [crate::vault::VaultFile],
+    pub assets: Vec<crate::vault::VaultAsset>,
     pub cards: Vec<&'a crate::vault::VaultFile>,
     pub references: Vec<&'a crate::vault::VaultFile>,
     pub notes: Vec<&'a crate::vault::VaultFile>,
@@ -40,7 +41,11 @@ pub struct LintContext<'a> {
 }
 
 impl<'a> LintContext<'a> {
-    pub fn build(vault_root: &'a std::path::Path, files: &'a [crate::vault::VaultFile]) -> Self {
+    pub fn build(
+        vault_root: &'a std::path::Path,
+        files: &'a [crate::vault::VaultFile],
+        assets: &[crate::vault::VaultAsset],
+    ) -> Self {
         let mut cards = Vec::new();
         let mut references = Vec::new();
         let mut notes = Vec::new();
@@ -60,6 +65,7 @@ impl<'a> LintContext<'a> {
         LintContext {
             vault_root,
             files,
+            assets: assets.to_vec(),
             cards,
             references,
             notes,
@@ -114,7 +120,7 @@ mod tests {
             make_file("no-type", None),
         ];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         assert_eq!(ctx.cards.len(), 1);
         assert_eq!(ctx.cards[0].name, "card-one");
@@ -156,7 +162,7 @@ mod tests {
 
         let files: Vec<crate::vault::VaultFile> = vec![];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
         assert!(Noop.check(&ctx).is_empty());
     }
 }

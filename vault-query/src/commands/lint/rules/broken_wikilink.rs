@@ -67,7 +67,7 @@ mod tests {
         let src = plain_file("Src", "/vault/Src.md", "See [[Foo]].");
         let files = vec![foo, bar, src];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = BrokenWikilink.check(&ctx);
         assert_eq!(findings.len(), 0);
@@ -80,7 +80,7 @@ mod tests {
         let src = plain_file("Src", "/vault/Src.md", "[[Quux]]");
         let files = vec![foo, bar, src];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = BrokenWikilink.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -96,7 +96,7 @@ mod tests {
         let src = plain_file("Src", "/vault/Src.md", "[[Quux]] and [[Quux]] again");
         let files = vec![src];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = BrokenWikilink.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -108,7 +108,7 @@ mod tests {
         let src_b = plain_file("SrcB", "/vault/SrcB.md", "[[Quux]]");
         let files = vec![src_a, src_b];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = BrokenWikilink.check(&ctx);
         assert_eq!(findings.len(), 2);
@@ -120,7 +120,7 @@ mod tests {
         let src = plain_file("Src", "/vault/Src.md", "[[path/to/Bar]]");
         let files = vec![bar, src];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         // resolve_name("path/to/Bar") == "Bar", so this must resolve cleanly.
         let findings = BrokenWikilink.check(&ctx);
@@ -133,7 +133,7 @@ mod tests {
         let src = plain_file("Src", "/vault/Src.md", "[[path/to/Quux]]");
         let files = vec![bar, src];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = BrokenWikilink.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -149,7 +149,7 @@ mod tests {
         let src = plain_file("Src", "/vault/Src.md", "[[Foo|Display]]");
         let files = vec![foo, src];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = BrokenWikilink.check(&ctx);
         assert_eq!(findings.len(), 0);
@@ -160,7 +160,7 @@ mod tests {
         let src = plain_file("Src", "/vault/Src.md", "line 1\nline 2\n[[Quux]]\n");
         let files = vec![src];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = BrokenWikilink.check(&ctx);
         assert_eq!(findings.len(), 1);

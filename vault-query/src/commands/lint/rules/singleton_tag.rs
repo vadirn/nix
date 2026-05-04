@@ -132,7 +132,7 @@ mod tests {
         let foo = file_with_tags("Foo", "/vault/Foo.md", &["unique"]);
         let files = vec![foo];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = SingletonTag.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -148,7 +148,7 @@ mod tests {
         let bar = file_with_tags("Bar", "/vault/Bar.md", &["common"]);
         let files = vec![foo, bar];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = SingletonTag.check(&ctx);
         assert_eq!(findings.len(), 0);
@@ -159,7 +159,7 @@ mod tests {
         let foo = file_with_tags("Foo", "/vault/Foo.md", &["a", "b", "c"]);
         let files = vec![foo];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = SingletonTag.check(&ctx);
         assert_eq!(findings.len(), 3);
@@ -187,7 +187,7 @@ mod tests {
         let bar = file_with_tags("Bar", "/vault/Bar.md", &["common"]);
         let files = vec![foo, bar];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = SingletonTag.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -210,7 +210,7 @@ mod tests {
         );
         let files = vec![reference];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = SingletonTag.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -227,7 +227,7 @@ mod tests {
         let foo = file_no_tags("Foo", "/vault/Foo.md");
         let files = vec![foo];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = SingletonTag.check(&ctx);
         assert_eq!(findings.len(), 0);

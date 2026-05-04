@@ -102,7 +102,7 @@ mod tests {
         let card = card_file("Card", Some(Value::String("".to_string())));
         let files = vec![ref_foo, card];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = DanglingReference.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -123,7 +123,7 @@ mod tests {
         );
         let files = vec![ref_foo, card];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = DanglingReference.check(&ctx);
         assert_eq!(findings.len(), 0);
@@ -140,7 +140,7 @@ mod tests {
         );
         let files = vec![ref_foo, ref_bar, card];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = DanglingReference.check(&ctx);
         assert_eq!(findings.len(), 1);
@@ -157,7 +157,7 @@ mod tests {
         let card = card_file("Card", Some(Value::String("[[Foo]]".to_string())));
         let files = vec![ref_foo, card];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = DanglingReference.check(&ctx);
         assert_eq!(findings.len(), 0);
@@ -175,7 +175,7 @@ mod tests {
         );
         let files = vec![ref_foo, card];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = DanglingReference.check(&ctx);
         assert_eq!(findings.len(), 0);
@@ -188,7 +188,7 @@ mod tests {
         let card = card_file("Card", None);
         let files = vec![ref_foo, card];
         let root = PathBuf::from("/vault");
-        let ctx = LintContext::build(&root, &files);
+        let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = DanglingReference.check(&ctx);
         assert_eq!(findings.len(), 1);

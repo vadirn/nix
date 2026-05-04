@@ -31,7 +31,8 @@ pub fn run_with_writer<W: Write>(
     out: &mut W,
 ) -> Result<i32> {
     let files = crate::vault::scan(&cfg.vault_root, &cfg.vault_root, Some(&cfg.ignore))?;
-    let ctx = LintContext::build(&cfg.vault_root, &files);
+    let assets = crate::vault::scan_assets(&cfg.vault_root, &cfg.vault_root, Some(&cfg.ignore))?;
+    let ctx = LintContext::build(&cfg.vault_root, &files, &assets);
 
     let overrides = effective_severities(cfg.lint.as_ref(), cli_rules)?;
 
