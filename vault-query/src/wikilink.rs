@@ -1,7 +1,6 @@
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use regex::Regex;
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::LazyLock;
 
 static WIKILINK_RE: LazyLock<Regex> =
@@ -122,11 +121,15 @@ fn collect_text_spans(body: &str) -> Vec<std::ops::Range<usize>> {
 }
 
 /// Resolve a wikilink target to a note name (last path component, no extension).
+///
+/// Steps:
+/// 1. Strip any `#anchor` suffix (covers both `#Heading` and `#^block-ref`).
+/// 2. Take the last `/`-separated segment (strip folder prefix).
+/// 3. Strip a trailing `.md` extension if present; leave all other dots intact.
 pub fn resolve_name(target: &str) -> &str {
-    let path = Path::new(target);
-    path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(target)
+    let without_anchor = target.split('#').next().unwrap_or(target);
+    let last_segment = without_anchor.rsplit('/').next().unwrap_or(without_anchor);
+    last_segment.strip_suffix(".md").unwrap_or(last_segment)
 }
 
 /// Strip wikilink syntax from a string, keeping display text.
@@ -237,6 +240,54 @@ mod tests {
     fn test_resolve_name() {
         assert_eq!(resolve_name("41 projects/nix/Nix"), "Nix");
         assert_eq!(resolve_name("Simple"), "Simple");
+    }
+
+    // --- TDD: resolve_name with dots, anchors, and path components ---
+
+    #[test]
+    fn test_resolve_name_dot_in_filename_rebase() {
+        assert_eq!(
+            resolve_name("rebase.updateRefs auto-moves branch pointers"),
+            "rebase.updateRefs auto-moves branch pointers"
+        );
+    }
+
+    #[test]
+    fn test_resolve_name_dot_in_filename_validation() {
+        assert_eq!(resolve_name("Validation v0.4"), "Validation v0.4");
+    }
+
+    #[test]
+    fn test_resolve_name_dot_in_filename_cyrillic() {
+        assert_eq!(
+            resolve_name("A. Общеутвердительное суждение"),
+            "A. Общеутвердительное суждение"
+        );
+    }
+
+    #[test]
+    fn test_resolve_name_dot_in_filename_tilde_domain() {
+        assert_eq!(resolve_name("~vadirn.io"), "~vadirn.io");
+    }
+
+    #[test]
+    fn test_resolve_name_heading_anchor() {
+        assert_eq!(resolve_name("Note#Some Heading"), "Note");
+    }
+
+    #[test]
+    fn test_resolve_name_block_ref_anchor() {
+        assert_eq!(resolve_name("Note#^block-ref-id"), "Note");
+    }
+
+    #[test]
+    fn test_resolve_name_path_with_md_extension() {
+        assert_eq!(resolve_name("20 cards/Foo.md"), "Foo");
+    }
+
+    #[test]
+    fn test_resolve_name_md_extension() {
+        assert_eq!(resolve_name("Foo.md"), "Foo");
     }
 
     #[test]
