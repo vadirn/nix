@@ -1,16 +1,12 @@
 use std::collections::HashMap;
 
-use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
+use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 
 pub struct SingletonTag;
 
 impl Rule for SingletonTag {
     fn name(&self) -> &'static str {
         "singleton-tag"
-    }
-
-    fn category(&self) -> Category {
-        Category::Structural
     }
 
     fn default_severity(&self) -> Severity {

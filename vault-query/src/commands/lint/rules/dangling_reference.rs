@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
+use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 use crate::wikilink;
 use crate::wikilink::normalize;
 
@@ -9,10 +9,6 @@ pub struct DanglingReference;
 impl Rule for DanglingReference {
     fn name(&self) -> &'static str {
         "dangling-reference"
-    }
-
-    fn category(&self) -> Category {
-        Category::Structural
     }
 
     fn default_severity(&self) -> Severity {

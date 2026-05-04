@@ -1,14 +1,10 @@
-use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
+use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 
 pub struct OrphanCard;
 
 impl Rule for OrphanCard {
     fn name(&self) -> &'static str {
         "orphan-card"
-    }
-
-    fn category(&self) -> Category {
-        Category::Structural
     }
 
     fn default_severity(&self) -> Severity {

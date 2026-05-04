@@ -1,4 +1,4 @@
-use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
+use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 use crate::frontmatter;
 
 pub struct UntaggedCard;
@@ -6,10 +6,6 @@ pub struct UntaggedCard;
 impl Rule for UntaggedCard {
     fn name(&self) -> &'static str {
         "untagged-card"
-    }
-
-    fn category(&self) -> Category {
-        Category::Structural
     }
 
     fn default_severity(&self) -> Severity {

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
+use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 use crate::vault;
 use crate::wikilink;
 use crate::wikilink::normalize;
@@ -11,10 +11,6 @@ pub struct BrokenWikilink;
 impl Rule for BrokenWikilink {
     fn name(&self) -> &'static str {
         "broken-wikilink"
-    }
-
-    fn category(&self) -> Category {
-        Category::Structural
     }
 
     fn default_severity(&self) -> Severity {

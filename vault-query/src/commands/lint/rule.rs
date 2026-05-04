@@ -8,11 +8,6 @@ pub enum Severity {
     Error,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Category {
-    Structural,
-    Content,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Finding {
@@ -25,7 +20,6 @@ pub struct Finding {
 
 pub trait Rule: Send + Sync {
     fn name(&self) -> &'static str;
-    fn category(&self) -> Category;
     fn default_severity(&self) -> Severity;
     fn check(&self, ctx: &LintContext) -> Vec<Finding>;
 }
@@ -36,7 +30,6 @@ pub struct LintContext<'a> {
     pub assets: Vec<crate::vault::VaultAsset>,
     pub cards: Vec<&'a crate::vault::VaultFile>,
     pub references: Vec<&'a crate::vault::VaultFile>,
-    pub notes: Vec<&'a crate::vault::VaultFile>,
     pub backlink_index: HashMap<String, Vec<String>>,
 }
 
@@ -48,14 +41,12 @@ impl<'a> LintContext<'a> {
     ) -> Self {
         let mut cards = Vec::new();
         let mut references = Vec::new();
-        let mut notes = Vec::new();
 
         for file in files {
             let type_val = crate::frontmatter::get_display(&file.frontmatter, "type");
             match type_val.as_str() {
                 "card" => cards.push(file),
                 "reference" => references.push(file),
-                "note" => notes.push(file),
                 _ => {}
             }
         }
@@ -68,7 +59,6 @@ impl<'a> LintContext<'a> {
             assets: assets.to_vec(),
             cards,
             references,
-            notes,
             backlink_index,
         }
     }
@@ -116,7 +106,6 @@ mod tests {
         let files = vec![
             make_file("card-one", Some("card")),
             make_file("ref-one", Some("reference")),
-            make_file("note-one", Some("note")),
             make_file("no-type", None),
         ];
         let root = PathBuf::from("/vault");
@@ -128,15 +117,11 @@ mod tests {
         assert_eq!(ctx.references.len(), 1);
         assert_eq!(ctx.references[0].name, "ref-one");
 
-        assert_eq!(ctx.notes.len(), 1);
-        assert_eq!(ctx.notes[0].name, "note-one");
-
         // no-type file must not appear in any bucket
         let all_bucketed: Vec<&str> = ctx
             .cards
             .iter()
             .chain(ctx.references.iter())
-            .chain(ctx.notes.iter())
             .map(|f| f.name.as_str())
             .collect();
         assert!(!all_bucketed.contains(&"no-type"));
@@ -148,9 +133,6 @@ mod tests {
         impl Rule for Noop {
             fn name(&self) -> &'static str {
                 "noop"
-            }
-            fn category(&self) -> Category {
-                Category::Structural
             }
             fn default_severity(&self) -> Severity {
                 Severity::Warn

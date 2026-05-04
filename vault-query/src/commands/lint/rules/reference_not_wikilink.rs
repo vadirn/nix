@@ -1,4 +1,4 @@
-use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
+use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 use crate::wikilink;
 
 pub struct ReferenceNotWikilink;
@@ -6,10 +6,6 @@ pub struct ReferenceNotWikilink;
 impl Rule for ReferenceNotWikilink {
     fn name(&self) -> &'static str {
         "reference-not-wikilink"
-    }
-
-    fn category(&self) -> Category {
-        Category::Structural
     }
 
     fn default_severity(&self) -> Severity {
