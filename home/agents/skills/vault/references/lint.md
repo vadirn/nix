@@ -81,9 +81,9 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
     "severity": "error",
     "file": "20 cards/Foo.md",
     "message": "wikilink target 'path/to/Bar' does not resolve",
-    "data": { "target": "path/to/Bar" }
+    "data": { "target": "path/to/Bar", "line": 12 }
   }
 ]
 ```
 
-`file` is vault-relative. `data.target` for `broken-wikilink` is the **raw** wikilink target verbatim (including any path prefix); call `wikilink::resolve_name` yourself if you want the bare note name.
+`file` is vault-relative. `data.target` for `broken-wikilink` is the **raw** wikilink target verbatim (including any path prefix); call `wikilink::resolve_name` yourself if you want the bare note name. `data.line` is the 1-based source line of the offending `[[...]]`.
