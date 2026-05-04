@@ -23,12 +23,12 @@ Diff review playgrounds display git diffs with syntax highlighting. Users click 
 
 ## Control types for diff review
 
-| Feature | Control | Behavior |
-|---|---|---|
-| Line commenting | Click any diff line | Opens textarea below the line |
-| Comment indicator | Badge on commented lines | Shows which lines have feedback |
-| Save/Cancel | Buttons in comment box | Persist or discard comment |
-| Copy prompt | Button in prompt panel | Copies all comments to clipboard |
+| Feature           | Control                  | Behavior                         |
+| ----------------- | ------------------------ | -------------------------------- |
+| Line commenting   | Click any diff line      | Opens textarea below the line    |
+| Comment indicator | Badge on commented lines | Shows which lines have feedback  |
+| Save/Cancel       | Buttons in comment box   | Persist or discard comment       |
+| Copy prompt       | Button in prompt panel   | Copies all comments to clipboard |
 
 ## Diff rendering
 
@@ -45,21 +45,21 @@ const diffData = [
           { type: "context", oldNum: 41, newNum: 41, content: "unchanged line" },
           { type: "deletion", oldNum: 42, newNum: null, content: "removed line" },
           { type: "addition", oldNum: null, newNum: 42, content: "added line" },
-        ]
-      }
-    ]
-  }
+        ],
+      },
+    ],
+  },
 ];
 ```
 
 ## Line type styling
 
-| Type | Background | Text Color | Prefix |
-|---|---|---|---|
-| `context` | transparent | default | ` ` (space) |
-| `addition` | green tint (#dafbe1 light / rgba(46,160,67,0.15) dark) | green (#1a7f37 light / #7ee787 dark) | `+` |
-| `deletion` | red tint (#ffebe9 light / rgba(248,81,73,0.15) dark) | red (#cf222e light / #f85149 dark) | `-` |
-| `hunk-header` | blue tint (#ddf4ff light) | blue (#0969da light) | `@@` |
+| Type          | Background                                             | Text Color                           | Prefix      |
+| ------------- | ------------------------------------------------------ | ------------------------------------ | ----------- |
+| `context`     | transparent                                            | default                              | ` ` (space) |
+| `addition`    | green tint (#dafbe1 light / rgba(46,160,67,0.15) dark) | green (#1a7f37 light / #7ee787 dark) | `+`         |
+| `deletion`    | red tint (#ffebe9 light / rgba(248,81,73,0.15) dark)   | red (#cf222e light / #f85149 dark)   | `-`         |
+| `hunk-header` | blue tint (#ddf4ff light)                              | blue (#0969da light)                 | `@@`        |
 
 ## Comment system
 
@@ -70,14 +70,12 @@ const comments = {}; // { lineId: commentText }
 
 function selectLine(lineId, lineEl) {
   // Deselect previous
-  document.querySelectorAll('.diff-line.selected').forEach(el =>
-    el.classList.remove('selected'));
-  document.querySelectorAll('.comment-box.active').forEach(el =>
-    el.classList.remove('active'));
+  document.querySelectorAll(".diff-line.selected").forEach((el) => el.classList.remove("selected"));
+  document.querySelectorAll(".comment-box.active").forEach((el) => el.classList.remove("active"));
 
   // Select new
-  lineEl.classList.add('selected');
-  document.getElementById(`comment-box-${lineId}`).classList.add('active');
+  lineEl.classList.add("selected");
+  document.getElementById(`comment-box-${lineId}`).classList.add("active");
 }
 
 function saveComment(lineId) {
@@ -104,13 +102,14 @@ function updatePromptOutput() {
   const commentKeys = Object.keys(comments);
 
   if (commentKeys.length === 0) {
-    promptContent.innerHTML = '<span class="no-comments">Click on any line to add a comment...</span>';
+    promptContent.innerHTML =
+      '<span class="no-comments">Click on any line to add a comment...</span>';
     return;
   }
 
-  let output = 'Code Review Comments:\n\n';
+  let output = "Code Review Comments:\n\n";
 
-  commentKeys.forEach(lineId => {
+  commentKeys.forEach((lineId) => {
     const lineEl = document.querySelector(`[data-line-id="${lineId}"]`);
     const file = lineEl.dataset.file;
     const lineNum = lineEl.dataset.lineNum;
@@ -130,11 +129,13 @@ function updatePromptOutput() {
 Store metadata on each line element for prompt generation:
 
 ```html
-<div class="diff-line addition"
-     data-line-id="0-1-5"
-     data-file="src/utils/handler.py"
-     data-line-num="45"
-     data-content="subagent_id = tracker.register()">
+<div
+  class="diff-line addition"
+  data-line-id="0-1-5"
+  data-file="src/utils/handler.py"
+  data-line-num="45"
+  data-content="subagent_id = tracker.register()"
+></div>
 ```
 
 ## Pre-populating with real data
@@ -151,16 +152,36 @@ Support both light and dark modes:
 
 ```css
 /* Light mode */
-body { background: #f6f8fa; color: #1f2328; }
-.file-card { background: #ffffff; border: 1px solid #d0d7de; }
-.diff-line.addition { background: #dafbe1; }
-.diff-line.deletion { background: #ffebe9; }
+body {
+  background: #f6f8fa;
+  color: #1f2328;
+}
+.file-card {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+}
+.diff-line.addition {
+  background: #dafbe1;
+}
+.diff-line.deletion {
+  background: #ffebe9;
+}
 
 /* Dark mode */
-body { background: #0d1117; color: #c9d1d9; }
-.file-card { background: #161b22; border: 1px solid #30363d; }
-.diff-line.addition { background: rgba(46, 160, 67, 0.15); }
-.diff-line.deletion { background: rgba(248, 81, 73, 0.15); }
+body {
+  background: #0d1117;
+  color: #c9d1d9;
+}
+.file-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+}
+.diff-line.addition {
+  background: rgba(46, 160, 67, 0.15);
+}
+.diff-line.deletion {
+  background: rgba(248, 81, 73, 0.15);
+}
 ```
 
 ## Interactive features

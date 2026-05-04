@@ -27,12 +27,12 @@ ask "what should we do with this track?"
 
 `vault-query tracks --view Active --format json` returns one object per row, keyed by display name:
 
-| Key           | Source                            |
-| ------------- | --------------------------------- |
-| `Track`       | File name (without `.md`)         |
-| `Status`      | Frontmatter `status`              |
-| `Description` | Frontmatter `description`         |
-| `Updated`     | Frontmatter `updated` (ISO date)  |
+| Key           | Source                           |
+| ------------- | -------------------------------- |
+| `Track`       | File name (without `.md`)        |
+| `Status`      | Frontmatter `status`             |
+| `Description` | Frontmatter `description`        |
+| `Updated`     | Frontmatter `updated` (ISO date) |
 
 Rows are already sorted by `updated` DESC.
 

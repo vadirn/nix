@@ -27,10 +27,10 @@ else:
 
 ## Reference
 
-| File                  | Purpose                                                              |
-| --------------------- | -------------------------------------------------------------------- |
-| `references/read.md`  | Resume a track. Lists Active tracks, picks one, presents the body.   |
-| `references/save.md`  | Save session work into an existing track or create a new one.        |
+| File                 | Purpose                                                            |
+| -------------------- | ------------------------------------------------------------------ |
+| `references/read.md` | Resume a track. Lists Active tracks, picks one, presents the body. |
+| `references/save.md` | Save session work into an existing track or create a new one.      |
 
 Tracks live in the vault at `<vault_root>/41 projects/<project>/track-<slug>.md`. The vault skill handles discovery
 (`/vault track <fragment>`); this skill handles the read/save loop.

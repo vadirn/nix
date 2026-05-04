@@ -37,7 +37,7 @@ ELAPSED=$(echo "$(date +%s.%N) - $START" | bc)
 ### Meta file format
 
 ```json
-{"elapsed_seconds": 12.3}
+{ "elapsed_seconds": 12.3 }
 ```
 
 Save alongside the output file with `.meta.json` extension.

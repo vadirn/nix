@@ -38,11 +38,13 @@ When the user asks for an interactive playground, explorer, or visual tool for a
 Keep a single state object. Every control writes to it, every render reads from it.
 
 ```javascript
-const state = { /* all configurable values */ };
+const state = {
+  /* all configurable values */
+};
 
 function updateAll() {
   renderPreview(); // update the visual
-  updatePrompt();  // rebuild the prompt text
+  updatePrompt(); // rebuild the prompt text
 }
 // Every control calls updateAll() on change
 ```
@@ -59,10 +61,10 @@ function updatePrompt() {
   }
 
   // Use qualitative language alongside numbers
-  if (state.shadowBlur > 16) parts.push('a pronounced shadow');
-  else if (state.shadowBlur > 0) parts.push('a subtle shadow');
+  if (state.shadowBlur > 16) parts.push("a pronounced shadow");
+  else if (state.shadowBlur > 0) parts.push("a subtle shadow");
 
-  prompt.textContent = `Update the card to use ${parts.join(', ')}.`;
+  prompt.textContent = `Update the card to use ${parts.join(", ")}.`;
 }
 ```
 

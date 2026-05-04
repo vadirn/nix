@@ -18,14 +18,14 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 
 ## Rules
 
-| Rule                       | Default | What it flags                                                          |
-| -------------------------- | ------- | ---------------------------------------------------------------------- |
-| `orphan-card`              | warn    | Card with zero inbound wikilinks                                       |
-| `dangling-reference`       | warn    | Reference not cited by any card's `reference:` frontmatter             |
-| `reference-not-wikilink`   | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL)      |
-| `broken-wikilink`          | error   | `[[target]]` does not resolve to any vault file                        |
-| `untagged-card`            | warn    | Card with missing or empty `tags:` array                               |
-| `singleton-tag`            | warn    | Tag appearing in exactly one file (typo heuristic)                     |
+| Rule                     | Default | What it flags                                                     |
+| ------------------------ | ------- | ----------------------------------------------------------------- |
+| `orphan-card`            | warn    | Card with zero inbound wikilinks                                  |
+| `dangling-reference`     | warn    | Reference not cited by any card's `reference:` frontmatter        |
+| `reference-not-wikilink` | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL) |
+| `broken-wikilink`        | error   | `[[target]]` does not resolve to any vault file                   |
+| `untagged-card`          | warn    | Card with missing or empty `tags:` array                          |
+| `singleton-tag`          | warn    | Tag appearing in exactly one file (typo heuristic)                |
 
 ## Excluding files
 
@@ -90,14 +90,14 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 
 ### `data` per rule
 
-| Rule                       | `data` shape                                |
-| -------------------------- | ------------------------------------------- |
-| `orphan-card`              | `null`                                      |
-| `dangling-reference`       | `null`                                      |
-| `reference-not-wikilink`   | `{ "value": <string> }`                     |
-| `broken-wikilink`          | `{ "target": <string>, "line": <number> }`  |
-| `untagged-card`            | `null`                                      |
-| `singleton-tag`            | `{ "tag": <string> }`                       |
+| Rule                     | `data` shape                               |
+| ------------------------ | ------------------------------------------ |
+| `orphan-card`            | `null`                                     |
+| `dangling-reference`     | `null`                                     |
+| `reference-not-wikilink` | `{ "value": <string> }`                    |
+| `broken-wikilink`        | `{ "target": <string>, "line": <number> }` |
+| `untagged-card`          | `null`                                     |
+| `singleton-tag`          | `{ "tag": <string> }`                      |
 
 - `reference-not-wikilink.data.value` is the raw `reference:` frontmatter value that failed to parse as a wikilink (e.g. a bare URL).
 - `broken-wikilink.data.target` is the **raw** wikilink target verbatim (including any path prefix); call `wikilink::resolve_name` yourself if you want the bare note name. `broken-wikilink.data.line` is the 1-based source line of the offending `[[...]]`.

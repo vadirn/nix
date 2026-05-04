@@ -113,6 +113,7 @@ this section exists to prevent.
 ### Resolving paths
 
 `vault-query config` prints JSON with `vault_root` and `project_path`. Use these to:
+
 - find `<vault_root>/templates/Track.md`
 - find `<project_path>/track-<slug>.md`
 - read `<project_path>/context.md` for the project wikilink (`Project note: [[...]]` line)
@@ -128,11 +129,13 @@ refuse anyway. Mirrors the rule in `home/agents/skills/vault/references/post-edi
 ### Importance filter for the Log narrative
 
 Include in the Log entry:
+
 - Outcomes a fresh agent would need to continue the work.
-- Decisions made (also written to ## Decisions, but the Log captures *why now*).
+- Decisions made (also written to ## Decisions, but the Log captures _why now_).
 - Frictions encountered that aren't yet resolved (route to ## Backlog if actionable).
 
 Exclude:
+
 - Process noise ("we discussed", "we tried X then Y") unless the path itself is the lesson.
 - Stylistic exploration that didn't change the outcome.
 - Content with a permanent home elsewhere (link to it instead).
