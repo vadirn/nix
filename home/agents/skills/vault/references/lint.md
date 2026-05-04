@@ -86,4 +86,19 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 ]
 ```
 
-`file` is vault-relative. `data.target` for `broken-wikilink` is the **raw** wikilink target verbatim (including any path prefix); call `wikilink::resolve_name` yourself if you want the bare note name. `data.line` is the 1-based source line of the offending `[[...]]`.
+`file` is vault-relative. The top-level keys (`rule`, `severity`, `file`, `message`, `data`) are stable across rules; `data` is per-rule.
+
+### `data` per rule
+
+| Rule                       | `data` shape                                |
+| -------------------------- | ------------------------------------------- |
+| `orphan-card`              | `null`                                      |
+| `dangling-reference`       | `null`                                      |
+| `reference-not-wikilink`   | `{ "value": <string> }`                     |
+| `broken-wikilink`          | `{ "target": <string>, "line": <number> }`  |
+| `untagged-card`            | `null`                                      |
+| `singleton-tag`            | `{ "tag": <string> }`                       |
+
+- `reference-not-wikilink.data.value` is the raw `reference:` frontmatter value that failed to parse as a wikilink (e.g. a bare URL).
+- `broken-wikilink.data.target` is the **raw** wikilink target verbatim (including any path prefix); call `wikilink::resolve_name` yourself if you want the bare note name. `broken-wikilink.data.line` is the 1-based source line of the offending `[[...]]`.
+- `singleton-tag.data.tag` is the tag string that appears in exactly one file across the corpus.

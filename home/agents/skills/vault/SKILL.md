@@ -134,7 +134,7 @@ else:
 | `cards`                        | List all cards with metadata                   | No              |
 | `notes`                        | List all notes with metadata                   | No              |
 | `log [DATE\|WEEK\|last\|next]` | Open or create weekly log                      | No              |
-| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card, broken-wikilink, dangling-reference, etc. | Yes |
+| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card, dangling-reference, reference-not-wikilink, broken-wikilink, untagged-card, singleton-tag | Yes |
 | `xp [YEAR]`                    | XP report: calendar, streak, level             | No              |
 
 ### Project commands
