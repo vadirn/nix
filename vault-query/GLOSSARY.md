@@ -82,7 +82,7 @@ Example: `vault-query notes` returns every `.md` whose frontmatter has `type: no
 
 A vault file whose lowercased filename stem does not appear as a key in the backlink index — i.e. no other `.md` contains a `[[...]]` link whose resolved name matches it.
 
-Example: a freshly created note with no inbound wikilinks shows up in `vault-query orphans`.
+Example: a freshly created card with no inbound wikilinks is reported by `vault-query lint --rule orphan-card=error`.
 
 ## Project
 
@@ -142,7 +142,7 @@ Example: `track-vault-query-logic-check.md` carries `type: track` and is listed 
 
 A `[[wikilink]]` whose resolved name (lowercased file stem) does not match any existing vault file's lowercased stem. Collected across all files and reported as distinct target strings.
 
-Example: `[[NotARealNote]]` in any file shows up in `vault-query unresolved`.
+Example: `[[NotARealNote]]` in any file is reported by `vault-query lint --rule broken-wikilink=error` (default severity is `error`).
 
 ## VaultFile
 

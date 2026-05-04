@@ -60,10 +60,6 @@ enum Commands {
         /// Path to the .md file
         file: PathBuf,
     },
-    /// Find orphan files (no incoming links)
-    Orphans,
-    /// Find unresolved wikilinks
-    Unresolved,
     /// Run vault-wide lint rules
     Lint {
         /// Output format
@@ -210,14 +206,6 @@ fn main() -> Result<()> {
         Commands::Backlinks { file } => {
             let vault_root = resolve_vault_root(&cli)?;
             commands::backlinks::run(file, &vault_root)
-        }
-        Commands::Orphans => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::orphans::run(&vault_root)
-        }
-        Commands::Unresolved => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::unresolved::run(&vault_root)
         }
         Commands::Lint { format, rule } => {
             let cfg = resolve_config(&cli)?;
