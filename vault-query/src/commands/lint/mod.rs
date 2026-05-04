@@ -143,6 +143,19 @@ mod tests {
         }
     }
 
+    fn cfg_for_with_ignore(
+        vault: &std::path::Path,
+        ignore: crate::vault_ignore::VaultIgnore,
+    ) -> crate::config::ResolvedConfig {
+        crate::config::ResolvedConfig {
+            vault_root: vault.to_path_buf(),
+            projects_path: None,
+            project_path: None,
+            lint: None,
+            ignore: Some(ignore),
+        }
+    }
+
     #[test]
     fn dispatcher_emits_orphan_card_with_vault_relative_path() {
         let tmp = tempfile::tempdir().unwrap();
@@ -389,5 +402,38 @@ mod tests {
         let out = String::from_utf8(buf).unwrap();
 
         assert!(out.is_empty(), "summary must be empty for empty vault, got: {:?}", out);
+    }
+
+    #[test]
+    fn test_lint_respects_vaultignore() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = tmp.path();
+
+        // A card under 20 cards/ that links to a non-existent file (triggers broken-wikilink).
+        write_card(
+            vault,
+            "20 cards",
+            "note",
+            "---\ntype: card\n---\n[[nonexistent-target]]",
+        );
+
+        // An orphan card under excluded/ that would trigger orphan-card if not ignored.
+        write_card(vault, "excluded", "orphan", "---\ntype: card\n---\n");
+
+        // Build VaultIgnore that excludes the `excluded` folder.
+        let ignore = crate::vault_ignore::VaultIgnore::from_patterns(vec![
+            std::path::PathBuf::from("excluded"),
+        ]);
+        let cfg = cfg_for_with_ignore(vault, ignore);
+
+        let mut buf = Vec::new();
+        run_with_writer(&cfg, LintFormat::Text, &["broken-wikilink=warn".to_string()], &mut buf).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+
+        assert!(
+            !out.contains("excluded/orphan.md"),
+            "output must not mention excluded/orphan.md, got: {}",
+            out
+        );
     }
 }

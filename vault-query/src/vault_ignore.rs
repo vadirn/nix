@@ -38,6 +38,12 @@ impl VaultIgnore {
             .iter()
             .any(|p| vault_relative == p || vault_relative.starts_with(p))
     }
+
+    /// Construct a `VaultIgnore` directly from a list of path patterns.
+    /// Intended for tests; keeps visibility minimal.
+    pub(crate) fn from_patterns(patterns: Vec<PathBuf>) -> Self {
+        VaultIgnore { patterns }
+    }
 }
 
 #[cfg(test)]

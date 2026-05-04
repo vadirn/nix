@@ -113,9 +113,39 @@ pub fn scan(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vault_ignore::VaultIgnore;
+    use tempfile::TempDir;
 
     fn fixture_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vault")
+    }
+
+    /// Build a temp vault with `keep.md` at root and `excluded/skip.md` in a subfolder.
+    fn build_simple_vault() -> TempDir {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("keep.md"), "# keep\n").unwrap();
+        std::fs::create_dir_all(root.join("excluded")).unwrap();
+        std::fs::write(root.join("excluded/skip.md"), "# skip\n").unwrap();
+        tmp
+    }
+
+    #[test]
+    fn test_scan_with_ignore_skips_matched_files() {
+        let tmp = build_simple_vault();
+        let dir = tmp.path();
+        let ignore = VaultIgnore::from_patterns(vec![PathBuf::from("excluded")]);
+        let files = scan(dir, dir, Some(&ignore)).unwrap();
+        assert_eq!(files.len(), 1, "expected only keep.md, got: {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
+        assert!(files[0].name == "keep", "expected keep.md, got: {}", files[0].name);
+    }
+
+    #[test]
+    fn test_scan_with_none_returns_all_files() {
+        let tmp = build_simple_vault();
+        let dir = tmp.path();
+        let files = scan(dir, dir, None).unwrap();
+        assert_eq!(files.len(), 2, "expected both files, got: {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
     }
 
     #[test]

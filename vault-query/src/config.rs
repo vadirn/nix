@@ -297,4 +297,61 @@ mod tests {
         let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
         assert!(config.lint.is_none());
     }
+
+    /// Build a temp vault root containing a `.vaultignore` with one pattern,
+    /// and a separate home dir with a valid root config pointing elsewhere.
+    /// The vault root is supplied via `vault_root_override` so `resolve` reads
+    /// the `.vaultignore` from the temp vault rather than the config's path.
+    fn make_vault_with_vaultignore() -> (tempfile::TempDir, tempfile::TempDir) {
+        // vault_dir: the actual vault root with a .vaultignore
+        let vault_dir = tempfile::tempdir().unwrap();
+        std::fs::write(vault_dir.path().join(".vaultignore"), "excluded/\n").unwrap();
+
+        // home_dir: a home directory with a root config (vault_root points somewhere,
+        // but we override it via vault_root_override, so the path doesn't need to exist)
+        let home_dir = tempfile::tempdir().unwrap();
+        let cfg_dir = home_dir.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{"vault_root": "/tmp/irrelevant", "projects_path": "41 projects"}"#,
+        )
+        .unwrap();
+
+        (vault_dir, home_dir)
+    }
+
+    #[test]
+    fn test_resolve_respects_ignore_when_true() {
+        let (vault_dir, home_dir) = make_vault_with_vaultignore();
+        let config = resolve(
+            Path::new("/nonexistent"),
+            home_dir.path(),
+            None,
+            Some(vault_dir.path()),
+            true,
+        )
+        .unwrap();
+        assert!(
+            config.ignore.is_some(),
+            "expected ignore to be loaded when respect_ignore=true"
+        );
+    }
+
+    #[test]
+    fn test_resolve_ignores_vaultignore_when_false() {
+        let (vault_dir, home_dir) = make_vault_with_vaultignore();
+        let config = resolve(
+            Path::new("/nonexistent"),
+            home_dir.path(),
+            None,
+            Some(vault_dir.path()),
+            false,
+        )
+        .unwrap();
+        assert!(
+            config.ignore.is_none(),
+            "expected ignore to be None when respect_ignore=false"
+        );
+    }
 }
