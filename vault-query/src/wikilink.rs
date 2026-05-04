@@ -1,3 +1,4 @@
+use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
@@ -15,24 +16,109 @@ pub struct Wikilink {
 }
 
 /// Extract all wikilinks from content.
+///
+/// Uses pulldown-cmark to walk Markdown events, so wikilinks inside fenced
+/// code blocks and inline code spans are suppressed.  YAML frontmatter is
+/// stripped first via `frontmatter::body`.
+///
+/// Pulldown-cmark fragments `[[target]]` into multiple consecutive `Event::Text`
+/// events (`[`, `[`, `target`, `]`, `]`) because `[[...]]` is not standard
+/// Markdown link syntax.  The strategy is to collect contiguous non-code text
+/// byte ranges from the parsed body, then run the regex against `&body[range]`
+/// so the full wikilink is visible in one pass.
 pub fn extract(content: &str) -> Vec<Wikilink> {
-    let mut last_offset: usize = 0;
-    let mut current_line: u32 = 1;
+    let body = crate::frontmatter::body(content);
+
+    // Byte offset of body within content (body is a substring of content).
+    let body_byte_start = body.as_ptr() as usize - content.as_ptr() as usize;
+
+    // Precompute newline byte positions in the FULL content for O(log n) line lookup.
+    // Because absolute_offset is relative to the start of content (not body), the
+    // partition_point result already accounts for frontmatter lines.
+    let newlines: Vec<usize> = content
+        .bytes()
+        .enumerate()
+        .filter_map(|(i, b)| if b == b'\n' { Some(i) } else { None })
+        .collect();
+
+    // Collect contiguous non-code text spans as byte ranges into `body`.
+    // Adjacent text events are merged so that `[[target]]` — which cmark splits
+    // into '[', '[', 'target', ']', ']' — appears whole when we run the regex.
+    let text_spans = collect_text_spans(body);
+
     let mut result = Vec::new();
-    for cap in WIKILINK_RE.captures_iter(content) {
-        let start = cap.get(0).unwrap().start();
-        current_line += content[last_offset..start]
-            .bytes()
-            .filter(|&b| b == b'\n')
-            .count() as u32;
-        last_offset = start;
-        result.push(Wikilink {
-            target: cap[1].to_string(),
-            alias: cap.get(2).map(|m| m.as_str().to_string()),
-            line: current_line,
-        });
+
+    for span in text_spans {
+        let text = &body[span.clone()];
+        for cap in WIKILINK_RE.captures_iter(text) {
+            let match_start = cap.get(0).unwrap().start();
+            // Body-relative byte offset of the match start.
+            let body_relative_offset = span.start + match_start;
+            // Absolute byte offset within content.
+            let absolute_offset = body_byte_start + body_relative_offset;
+            // 1-based line number via binary search over newline positions in
+            // the full content. All frontmatter newlines are already counted.
+            let line =
+                newlines.partition_point(|&n| n < absolute_offset) as u32 + 1;
+            result.push(Wikilink {
+                target: cap[1].to_string(),
+                alias: cap.get(2).map(|m| m.as_str().to_string()),
+                line,
+            });
+        }
     }
+
     result
+}
+
+/// Walk pulldown-cmark events for `body` and return a list of byte ranges that
+/// correspond to non-code text.  Adjacent `Event::Text` ranges are merged so
+/// that wikilinks split across multiple text events appear as a single span.
+fn collect_text_spans(body: &str) -> Vec<std::ops::Range<usize>> {
+    let mut spans: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut in_code_depth: u32 = 0;
+    // The range of the currently-open merged text span (None if no span open).
+    let mut current: Option<std::ops::Range<usize>> = None;
+
+    for (event, range) in Parser::new(body).into_offset_iter() {
+        match event {
+            Event::Start(Tag::CodeBlock(_)) => {
+                if let Some(span) = current.take() {
+                    spans.push(span);
+                }
+                in_code_depth += 1;
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                in_code_depth = in_code_depth.saturating_sub(1);
+            }
+            Event::Text(_) if in_code_depth == 0 => {
+                // Merge this text event into the current open span if contiguous.
+                match current {
+                    Some(ref mut open) if open.end == range.start => {
+                        open.end = range.end;
+                    }
+                    _ => {
+                        if let Some(span) = current.take() {
+                            spans.push(span);
+                        }
+                        current = Some(range);
+                    }
+                }
+            }
+            _ if in_code_depth == 0 => {
+                // Any non-text event (SoftBreak, HardBreak, Start/End tags, Code, …)
+                // breaks the continuity of the text span.
+                if let Some(span) = current.take() {
+                    spans.push(span);
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(span) = current.take() {
+        spans.push(span);
+    }
+    spans
 }
 
 /// Resolve a wikilink target to a note name (last path component, no extension).
