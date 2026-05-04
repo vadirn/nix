@@ -11,6 +11,7 @@ static WIKILINK_RE: LazyLock<Regex> =
 pub struct Wikilink {
     pub target: String, // the link target (path or name)
     pub alias: Option<String>, // display alias if present
+    pub line: u32, // 1-based line number where the link appears (0 = unset)
 }
 
 /// Extract all wikilinks from content.
@@ -20,6 +21,7 @@ pub fn extract(content: &str) -> Vec<Wikilink> {
         .map(|cap| Wikilink {
             target: cap[1].to_string(),
             alias: cap.get(2).map(|m| m.as_str().to_string()),
+            line: 0,
         })
         .collect()
 }
