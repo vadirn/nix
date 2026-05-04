@@ -3,10 +3,11 @@ use std::path::Path;
 
 use crate::{frontmatter, vault};
 
-pub fn run(vault_root: &Path, folder: Option<&Path>, count: bool, tag: Option<&str>) -> Result<()> {
+pub fn run(cfg: &crate::config::ResolvedConfig, folder: Option<&Path>, count: bool, tag: Option<&str>) -> Result<()> {
+    let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, folder);
 
-    let files = vault::scan(&root)?;
+    let files = vault::scan(&root, vault_root, cfg.ignore.as_ref())?;
 
     let files: Vec<_> = if let Some(tag) = tag {
         files

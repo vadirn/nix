@@ -7,7 +7,8 @@ use crate::base::view;
 use crate::output::{self, Format};
 use crate::vault;
 
-pub fn run(base_path: &Path, view_name: &str, vault_root: &Path, format: Format) -> Result<()> {
+pub fn run(base_path: &Path, view_name: &str, cfg: &crate::config::ResolvedConfig, format: Format) -> Result<()> {
+    let vault_root = &cfg.vault_root;
     let base_file = base::parse(base_path)?;
 
     let target_view = base_file
@@ -24,7 +25,7 @@ pub fn run(base_path: &Path, view_name: &str, vault_root: &Path, format: Format)
         })?
         .clone();
 
-    let all_files = vault::scan(vault_root)?;
+    let all_files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
 
     let mut filtered = filter::apply(
         &all_files,

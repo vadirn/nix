@@ -13,5 +13,5 @@ pub fn run(cfg: &ResolvedConfig, view: &str, format: Format) -> Result<()> {
     if !base_path.is_file() {
         bail!("no Checkpoints.base in {}", project_path.display());
     }
-    super::query::run(&base_path, view, &cfg.vault_root, format)
+    super::query::run(&base_path, view, cfg, format)
 }

@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// A set of vault-relative path prefixes that should be excluded from scans.
+#[derive(Debug, Clone)]
 pub struct VaultIgnore {
     patterns: Vec<PathBuf>,
 }

@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::frontmatter;
+use crate::vault_ignore::VaultIgnore;
 
 /// A parsed markdown file with its frontmatter and metadata.
 #[derive(Debug, Clone, Default)]
@@ -48,9 +49,17 @@ pub fn resolve_root(vault_root: &Path, subfolder: Option<&Path>) -> PathBuf {
 }
 
 /// Scan a directory for .md files and parse their frontmatter.
-pub fn scan(root: &Path) -> Result<Vec<VaultFile>> {
+///
+/// - `walk_root`: the directory to walk (may be a subfolder of the vault).
+/// - `vault_root`: the vault root used to compute vault-relative paths for ignore matching.
+/// - `ignore`: optional ignore filter; if `Some`, files whose vault-relative path is excluded are skipped.
+pub fn scan(
+    walk_root: &Path,
+    vault_root: &Path,
+    ignore: Option<&VaultIgnore>,
+) -> Result<Vec<VaultFile>> {
     let mut files = Vec::new();
-    for entry in WalkDir::new(root)
+    for entry in WalkDir::new(walk_root)
         .follow_links(true)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -58,6 +67,12 @@ pub fn scan(root: &Path) -> Result<Vec<VaultFile>> {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("md") {
             continue;
+        }
+        let vault_relative = path.strip_prefix(vault_root).unwrap_or(path);
+        if let Some(ig) = ignore {
+            if ig.excludes(vault_relative) {
+                continue;
+            }
         }
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
@@ -106,7 +121,7 @@ mod tests {
     #[test]
     fn test_scan_fixtures() {
         let dir = fixture_dir();
-        let files = scan(&dir).unwrap();
+        let files = scan(&dir, &dir, None).unwrap();
         assert!(files.len() >= 3);
 
         let checkpoints: Vec<_> = files
@@ -119,7 +134,7 @@ mod tests {
     #[test]
     fn test_in_folder() {
         let dir = fixture_dir();
-        let files = scan(&dir).unwrap();
+        let files = scan(&dir, &dir, None).unwrap();
         let f = files.iter().find(|f| f.name == "checkpoint-001").unwrap();
         assert!(f.in_folder("41 projects/nix", &dir));
         assert!(!f.in_folder("20 cards", &dir));

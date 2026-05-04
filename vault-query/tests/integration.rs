@@ -1,15 +1,26 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use vault_query::commands;
 use vault_query::base;
 use vault_query::base::filter;
 use vault_query::base::formula;
 use vault_query::base::view;
+use vault_query::config::ResolvedConfig;
 use vault_query::frontmatter;
 use vault_query::vault;
 
 fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vault")
+}
+
+fn cfg_for(vault_root: &Path) -> ResolvedConfig {
+    ResolvedConfig {
+        vault_root: vault_root.to_path_buf(),
+        projects_path: None,
+        project_path: None,
+        lint: None,
+        ignore: None,
+    }
 }
 
 #[test]
@@ -32,7 +43,7 @@ fn test_scan_skips_bad_frontmatter() {
     let bad_file = dir.join("bad-frontmatter.md");
     std::fs::write(&bad_file, "---\nkey: value: nested: bad\n---\nBody\n").unwrap();
 
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
     // Should not crash, just skip the bad file's frontmatter
     assert!(files.iter().any(|f| f.name == "bad-frontmatter"));
 
@@ -43,7 +54,7 @@ fn test_scan_skips_bad_frontmatter() {
 #[test]
 fn test_scan_and_filter() {
     let dir = fixture_dir();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
     let checkpoints: Vec<_> = files
         .iter()
         .filter(|f| f.get_property("type") == "checkpoint")
@@ -56,7 +67,7 @@ fn test_apply_filters() {
     let dir = fixture_dir();
     let base_path = dir.join("41 projects/nix/Checkpoints.base");
     let base = base::parse(&base_path).unwrap();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
 
     // Base filters: type == "checkpoint" AND file.inFolder("41 projects/nix")
     let empty_filters = base::FilterSet::default();
@@ -69,7 +80,7 @@ fn test_incomplete_view_filter() {
     let dir = fixture_dir();
     let base_path = dir.join("41 projects/nix/Checkpoints.base");
     let base = base::parse(&base_path).unwrap();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
 
     let incomplete_view = base.views.iter().find(|v| v.name == "Incomplete").unwrap();
     let filtered = filter::apply(&files, &base.filters, &incomplete_view.filters, &dir);
@@ -82,7 +93,7 @@ fn test_view_all_sorted_desc() {
     let dir = fixture_dir();
     let base_path = dir.join("41 projects/nix/Checkpoints.base");
     let base = base::parse(&base_path).unwrap();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
     let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir);
@@ -100,7 +111,7 @@ fn test_view_all_sorted_desc() {
 #[test]
 fn test_formulas() {
     let dir = fixture_dir();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
     let cp2 = files.iter().find(|f| f.name == "checkpoint-002").unwrap();
 
     // cost_per_line: if(lines_written > 0, (cost_usd / lines_written).round(3), "")
@@ -117,7 +128,7 @@ fn test_graduation_queue_or_filter() {
     let dir = fixture_dir();
     let base_path = dir.join("41 projects/nix/Checkpoints.base");
     let base = base::parse(&base_path).unwrap();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
 
     let grad_view = base
         .views
@@ -134,7 +145,7 @@ fn test_stats_view_summaries() {
     let dir = fixture_dir();
     let base_path = dir.join("41 projects/nix/Checkpoints.base");
     let base = base::parse(&base_path).unwrap();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
     let stats_view = base.views.iter().find(|v| v.name == "Stats").unwrap().clone();
 
     let mut filtered = filter::apply(&files, &base.filters, &stats_view.filters, &dir);
@@ -153,7 +164,7 @@ fn test_json_output() {
     let dir = fixture_dir();
     let base_path = dir.join("41 projects/nix/Checkpoints.base");
     let base = base::parse(&base_path).unwrap();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
     let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir);
@@ -170,7 +181,7 @@ fn test_tsv_output() {
     let dir = fixture_dir();
     let base_path = dir.join("41 projects/nix/Checkpoints.base");
     let base = base::parse(&base_path).unwrap();
-    let files = vault::scan(&dir).unwrap();
+    let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
     let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir);
@@ -206,28 +217,28 @@ fn test_wikilinks() {
 #[test]
 fn test_resolve_full_path_slug() {
     let dir = fixture_dir();
-    let found = commands::resolve::run("41-projects/nix/checkpoint-001", &dir).unwrap();
+    let found = commands::resolve::run("41-projects/nix/checkpoint-001", &cfg_for(&dir)).unwrap();
     assert!(found);
 }
 
 #[test]
 fn test_resolve_bare_name() {
     let dir = fixture_dir();
-    let found = commands::resolve::run("checkpoint-001", &dir).unwrap();
+    let found = commands::resolve::run("checkpoint-001", &cfg_for(&dir)).unwrap();
     assert!(found);
 }
 
 #[test]
 fn test_resolve_space_and_case() {
     let dir = fixture_dir();
-    let found = commands::resolve::run("impureim-sandwich", &dir).unwrap();
+    let found = commands::resolve::run("impureim-sandwich", &cfg_for(&dir)).unwrap();
     assert!(found);
 }
 
 #[test]
 fn test_resolve_no_match() {
     let dir = fixture_dir();
-    let found = commands::resolve::run("nonexistent-file", &dir).unwrap();
+    let found = commands::resolve::run("nonexistent-file", &cfg_for(&dir)).unwrap();
     assert!(!found);
 }
 
@@ -235,7 +246,7 @@ fn test_resolve_no_match() {
 fn test_resolve_boundary_safety() {
     let dir = fixture_dir();
     // "point-001" should NOT match "checkpoint-001" because there's no `/` boundary
-    let found = commands::resolve::run("point-001", &dir).unwrap();
+    let found = commands::resolve::run("point-001", &cfg_for(&dir)).unwrap();
     assert!(!found);
 }
 

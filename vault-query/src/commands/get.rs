@@ -1,12 +1,12 @@
 use anyhow::Result;
-use std::path::Path;
 
 use crate::vault;
 
 
 
-pub fn run(fragment: &str, vault_root: &Path) -> Result<()> {
-    let paths = resolve_paths(fragment, vault_root)?;
+pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig) -> Result<()> {
+    let vault_root = &cfg.vault_root;
+    let paths = resolve_paths(fragment, cfg)?;
 
     if paths.is_empty() {
         eprintln!("No matches for '{}'", fragment);
@@ -26,8 +26,9 @@ pub fn run(fragment: &str, vault_root: &Path) -> Result<()> {
 }
 
 /// Resolve a slug to matching relative paths (reusable by other commands).
-pub fn resolve_paths(slug: &str, vault_root: &Path) -> Result<Vec<String>> {
-    let files = vault::scan(vault_root)?;
+pub fn resolve_paths(slug: &str, cfg: &crate::config::ResolvedConfig) -> Result<Vec<String>> {
+    let vault_root = &cfg.vault_root;
+    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
     let needle = slugify(slug);
     let mut matches = Vec::new();
 

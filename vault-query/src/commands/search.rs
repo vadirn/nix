@@ -11,22 +11,23 @@ use crate::{frontmatter, vault};
 
 pub fn run(
     query: &str,
-    vault_root: &Path,
+    cfg: &crate::config::ResolvedConfig,
     context: usize,
     subfolder: Option<&Path>,
     regex_mode: bool,
     limit: usize,
 ) -> Result<()> {
     if regex_mode {
-        return run_regex(query, vault_root, context, subfolder);
+        return run_regex(query, cfg, context, subfolder);
     }
-    run_bm25(query, vault_root, subfolder, limit)
+    run_bm25(query, cfg, subfolder, limit)
 }
 
-fn run_bm25(query: &str, vault_root: &Path, subfolder: Option<&Path>, limit: usize) -> Result<()> {
+fn run_bm25(query: &str, cfg: &crate::config::ResolvedConfig, subfolder: Option<&Path>, limit: usize) -> Result<()> {
+    let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root)?;
+    let files = vault::scan(&root, vault_root, cfg.ignore.as_ref())?;
 
     // Build schema
     let mut schema_builder = Schema::builder();
@@ -117,15 +118,16 @@ fn run_bm25(query: &str, vault_root: &Path, subfolder: Option<&Path>, limit: usi
 
 fn run_regex(
     query: &str,
-    vault_root: &Path,
+    cfg: &crate::config::ResolvedConfig,
     context: usize,
     subfolder: Option<&Path>,
 ) -> Result<()> {
+    let vault_root = &cfg.vault_root;
     let re = Regex::new(query)?;
 
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root)?;
+    let files = vault::scan(&root, vault_root, cfg.ignore.as_ref())?;
 
     for file in &files {
         let lines: Vec<&str> = file.content.lines().collect();

@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 use crate::commands::lint::config::LintConfig;
+use crate::vault_ignore::{self, VaultIgnore};
 
 #[derive(Debug, Clone)]
 pub struct ResolvedConfig {
@@ -10,6 +11,7 @@ pub struct ResolvedConfig {
     pub projects_path: Option<String>,
     pub project_path: Option<PathBuf>,
     pub lint: Option<LintConfig>,
+    pub ignore: Option<VaultIgnore>,
 }
 
 #[derive(Deserialize)]
@@ -36,6 +38,7 @@ pub fn resolve(
     home_dir: &Path,
     project_override: Option<&str>,
     vault_root_override: Option<&Path>,
+    respect_ignore: bool,
 ) -> Result<ResolvedConfig> {
     let mut vault_root: Option<PathBuf> = None;
     let mut project_path: Option<PathBuf> = None;
@@ -98,11 +101,18 @@ pub fn resolve(
          { \"vault_root\": \"/absolute/path/to/vault\", \"projects_path\": \"41 projects\" }",
     )?;
 
+    let ignore = if respect_ignore {
+        vault_ignore::load(&vault_root)?
+    } else {
+        None
+    };
+
     Ok(ResolvedConfig {
         vault_root,
         projects_path,
         project_path,
         lint: lint_config,
+        ignore,
     })
 }
 
@@ -126,7 +136,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None).unwrap();
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
         assert_eq!(config.vault_root, PathBuf::from("/tmp/test-vault"));
         assert_eq!(config.projects_path.as_deref(), Some("41 projects"));
         assert!(config.project_path.is_none());
@@ -136,7 +146,7 @@ mod tests {
     fn test_project_config_walk_up() {
         let project_dir = fixtures_dir().join("project");
         // Walk up from project dir should find .vault.config.json
-        let config = resolve(&project_dir, Path::new("/nonexistent-home"), None, None).unwrap();
+        let config = resolve(&project_dir, Path::new("/nonexistent-home"), None, None, true).unwrap();
         assert_eq!(config.vault_root, PathBuf::from("/tmp/test-vault"));
         assert_eq!(
             config.project_path,
@@ -155,7 +165,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = resolve(Path::new("/nonexistent"), tmp.path(), Some("nix"), None).unwrap();
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), Some("nix"), None, true).unwrap();
         assert_eq!(
             config.project_path,
             Some(PathBuf::from("/tmp/test-vault/41 projects/nix"))
@@ -169,6 +179,7 @@ mod tests {
             Path::new("/nonexistent-home"),
             None,
             None,
+            true,
         );
         assert!(result.is_err());
         assert!(result
@@ -184,6 +195,7 @@ mod tests {
             Path::new("/nonexistent-home"),
             Some("nix"),
             None,
+            true,
         );
         assert!(result.is_err());
     }
@@ -209,6 +221,7 @@ mod tests {
             tmp.path(),
             Some("foo"),
             Some(&override_root),
+            true,
         )
         .unwrap();
         assert_eq!(config.vault_root, override_root);
@@ -227,6 +240,7 @@ mod tests {
             Path::new("/nonexistent-home"),
             Some("foo"),
             Some(Path::new("/cli/vault")),
+            true,
         )
         .unwrap();
         assert_eq!(config.vault_root, PathBuf::from("/cli/vault"));
@@ -257,7 +271,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None).unwrap();
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
         let lint = config.lint.expect("lint block should be present");
         assert_eq!(
             lint.rules.get("orphan-card"),
@@ -280,7 +294,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None).unwrap();
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
         assert!(config.lint.is_none());
     }
 }

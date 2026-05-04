@@ -1,12 +1,12 @@
 use anyhow::Result;
 use serde_yaml::Value;
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use crate::vault;
 
-pub fn run(vault_root: &Path, sort: &str) -> Result<()> {
-    let files = vault::scan(vault_root)?;
+pub fn run(cfg: &crate::config::ResolvedConfig, sort: &str) -> Result<()> {
+    let vault_root = &cfg.vault_root;
+    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
     let mut tag_counts: BTreeMap<String, usize> = BTreeMap::new();
 
     for file in &files {

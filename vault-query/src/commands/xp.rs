@@ -3,7 +3,6 @@ use chrono::{Datelike, NaiveDate, Weekday};
 use regex::Regex;
 use serde_yaml::Value;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 
 use crate::config::ResolvedConfig;
 use crate::frontmatter;
@@ -13,7 +12,7 @@ pub fn run(cfg: &ResolvedConfig, year_override: Option<i32>) -> Result<()> {
     let today = chrono::Local::now().date_naive();
     let year = year_override.unwrap_or(today.year());
 
-    let data = parse_weekly_logs(&cfg.vault_root)?;
+    let data = parse_weekly_logs(cfg)?;
     let (_streak, day_streak) = compute_streak(&data.sleep_dates, today);
     let calendar = render_calendar(year, &data, &day_streak, today);
     println!("{}", calendar);
@@ -27,13 +26,14 @@ pub struct LogData {
     pub sleep_dates: HashSet<String>,
 }
 
-pub fn parse_weekly_logs(vault_root: &Path) -> Result<LogData> {
+pub fn parse_weekly_logs(cfg: &ResolvedConfig) -> Result<LogData> {
+    let vault_root = &cfg.vault_root;
     let mut data = LogData::default();
 
     let task_re = Regex::new(r"^\s*- \[x\] \((\d{4}-\d{2}-\d{2})\)").unwrap();
     let wikilink_re = Regex::new(r"\[\[([^\]|]*)\]\]").unwrap();
 
-    let files = vault::scan(vault_root)?;
+    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
     let mut weekly_logs: Vec<&vault::VaultFile> = files
         .iter()
         .filter(|f| {
@@ -336,6 +336,16 @@ mod tests {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
     }
 
+    fn cfg_for(vault: &std::path::Path) -> ResolvedConfig {
+        ResolvedConfig {
+            vault_root: vault.to_path_buf(),
+            projects_path: None,
+            project_path: None,
+            lint: None,
+            ignore: None,
+        }
+    }
+
     #[test]
     fn test_section_lines() {
         let text = "---\nweek: 2026-W10\n---\n## Tasks\n- [x] (2026-03-02) task1\n- [ ] task2\n## Backlog\n- [x] (2026-03-03) old\n";
@@ -388,7 +398,8 @@ sleep: []
 ";
         std::fs::write(tmp.path().join("2026-w10.md"), log_content).unwrap();
 
-        let data = parse_weekly_logs(tmp.path()).unwrap();
+        let cfg = cfg_for(tmp.path());
+        let data = parse_weekly_logs(&cfg).unwrap();
         assert_eq!(data.day_tasks.get("2026-03-02"), Some(&2));
         assert_eq!(data.day_tasks.get("2026-03-03"), Some(&-1));
     }
@@ -410,7 +421,8 @@ sleep: []
 ";
         std::fs::write(tmp.path().join("2026-w10.md"), log_content).unwrap();
 
-        let data = parse_weekly_logs(tmp.path()).unwrap();
+        let cfg = cfg_for(tmp.path());
+        let data = parse_weekly_logs(&cfg).unwrap();
         // Bonus should land on Monday of W11 (2026-03-09)
         assert_eq!(data.day_bonus.get("2026-03-09"), Some(&1));
     }
@@ -433,7 +445,8 @@ sleep: []
 ";
         std::fs::write(tmp.path().join("2026-w10.md"), log_content).unwrap();
 
-        let data = parse_weekly_logs(tmp.path()).unwrap();
+        let cfg = cfg_for(tmp.path());
+        let data = parse_weekly_logs(&cfg).unwrap();
         assert!(data.day_bonus.is_empty());
     }
 

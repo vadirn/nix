@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::path::Path;
 
 use crate::frontmatter;
 use crate::vault::{self, VaultFile};
@@ -7,8 +6,9 @@ use crate::wikilink;
 
 /// List markdown files in a folder with frontmatter metadata.
 /// Output format: `title — description [tags] (field: value)`
-pub fn run(vault_root: &Path, folder: &str, fields: &[String]) -> Result<()> {
-    let files = vault::scan(vault_root)?;
+pub fn run(cfg: &crate::config::ResolvedConfig, folder: &str, fields: &[String]) -> Result<()> {
+    let vault_root = &cfg.vault_root;
+    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
     let matching: Vec<&VaultFile> = files
         .iter()
         .filter(|f| f.in_folder(folder, vault_root))
@@ -21,8 +21,9 @@ pub fn run(vault_root: &Path, folder: &str, fields: &[String]) -> Result<()> {
 /// Folder placement is irrelevant; the `type` key is the authoritative classifier.
 /// Files marked `template: true` are excluded — templates carry the same `type`
 /// as their instances but are not themselves instances.
-pub fn run_by_type(vault_root: &Path, type_value: &str, fields: &[String]) -> Result<()> {
-    let files = vault::scan(vault_root)?;
+pub fn run_by_type(cfg: &crate::config::ResolvedConfig, type_value: &str, fields: &[String]) -> Result<()> {
+    let vault_root = &cfg.vault_root;
+    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
     let matching: Vec<&VaultFile> = files
         .iter()
         .filter(|f| {

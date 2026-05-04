@@ -7,7 +7,7 @@ pub fn run(cfg: &ResolvedConfig, view: &str) -> Result<()> {
     let base_path = cfg.vault_root.join("90 bases/Projects.base");
 
     if base_path.is_file() {
-        return super::query::run(&base_path, view, &cfg.vault_root, Format::Table);
+        return super::query::run(&base_path, view, cfg, Format::Table);
     }
 
     // Fallback: file listing

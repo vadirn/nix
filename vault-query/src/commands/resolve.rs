@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::path::Path;
 
 use crate::vault;
 
@@ -11,8 +10,9 @@ fn strip_md(s: &str) -> &str {
     s.strip_suffix(".md").unwrap_or(s)
 }
 
-pub fn run(slug: &str, vault_root: &Path) -> Result<bool> {
-    let files = vault::scan(vault_root)?;
+pub fn run(slug: &str, cfg: &crate::config::ResolvedConfig) -> Result<bool> {
+    let vault_root = &cfg.vault_root;
+    let files = vault::scan(vault_root, vault_root, cfg.ignore.as_ref())?;
     let needle = slugify(slug);
     let mut found = false;
 

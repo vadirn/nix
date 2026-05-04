@@ -8,6 +8,7 @@ mod config;
 mod frontmatter;
 mod output;
 mod vault;
+mod vault_ignore;
 mod wikilink;
 
 #[derive(Parser)]
@@ -19,6 +20,9 @@ struct Cli {
     /// Project name (resolves to vault_root/projects_path/name)
     #[arg(long, global = true)]
     project: Option<String>,
+    /// Disable .vaultignore filtering
+    #[arg(long, global = true)]
+    no_ignore: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -162,13 +166,6 @@ enum Commands {
     },
 }
 
-fn resolve_vault_root(cli: &Cli) -> Result<PathBuf> {
-    if let Some(ref vr) = cli.vault_root {
-        return Ok(vr.clone());
-    }
-    Ok(resolve_config(cli)?.vault_root)
-}
-
 fn resolve_config(cli: &Cli) -> Result<config::ResolvedConfig> {
     let home = dirs_home()?;
     let cwd = std::env::current_dir()?;
@@ -177,6 +174,7 @@ fn resolve_config(cli: &Cli) -> Result<config::ResolvedConfig> {
         &home,
         cli.project.as_deref(),
         cli.vault_root.as_deref(),
+        !cli.no_ignore,
     )
 }
 
@@ -194,18 +192,18 @@ fn main() -> Result<()> {
             view,
             format,
         } => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::query::run(base_path, view, &vault_root, *format)
+            let cfg = resolve_config(&cli)?;
+            commands::query::run(base_path, view, &cfg, *format)
         }
         Commands::Properties { file, format } => commands::properties::run(file, *format),
         Commands::Tags { sort } => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::tags::run(&vault_root, sort)
+            let cfg = resolve_config(&cli)?;
+            commands::tags::run(&cfg, sort)
         }
         Commands::Links { file } => commands::links::run(file),
         Commands::Backlinks { file } => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::backlinks::run(file, &vault_root)
+            let cfg = resolve_config(&cli)?;
+            commands::backlinks::run(file, &cfg)
         }
         Commands::Lint { format, rule } => {
             let cfg = resolve_config(&cli)?;
@@ -222,28 +220,28 @@ fn main() -> Result<()> {
             regex,
             limit,
         } => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::search::run(query, &vault_root, *context, path.as_deref(), *regex, *limit)
+            let cfg = resolve_config(&cli)?;
+            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit)
         }
         Commands::Resolve { slug } => {
-            let vault_root = resolve_vault_root(&cli)?;
-            let found = commands::resolve::run(slug, &vault_root)?;
+            let cfg = resolve_config(&cli)?;
+            let found = commands::resolve::run(slug, &cfg)?;
             if !found {
                 std::process::exit(1);
             }
             Ok(())
         }
         Commands::List { folder, fields } => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::list::run(&vault_root, folder, fields)
+            let cfg = resolve_config(&cli)?;
+            commands::list::run(&cfg, folder, fields)
         }
         Commands::Files {
             folder,
             count,
             tag,
         } => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::files::run(&vault_root, folder.as_deref(), *count, tag.as_deref())
+            let cfg = resolve_config(&cli)?;
+            commands::files::run(&cfg, folder.as_deref(), *count, tag.as_deref())
         }
         Commands::Config => {
             let cfg = resolve_config(&cli)?;
@@ -266,16 +264,16 @@ fn main() -> Result<()> {
             commands::tracks::init(&cfg)
         }
         Commands::Get { fragment } => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::get::run(fragment, &vault_root)
+            let cfg = resolve_config(&cli)?;
+            commands::get::run(fragment, &cfg)
         }
         Commands::Cards => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::list::run_by_type(&vault_root, "card", &["reference".to_string()])
+            let cfg = resolve_config(&cli)?;
+            commands::list::run_by_type(&cfg, "card", &["reference".to_string()])
         }
         Commands::Notes => {
-            let vault_root = resolve_vault_root(&cli)?;
-            commands::list::run_by_type(&vault_root, "note", &[])
+            let cfg = resolve_config(&cli)?;
+            commands::list::run_by_type(&cfg, "note", &[])
         }
         Commands::Projects { view } => {
             let cfg = resolve_config(&cli)?;
