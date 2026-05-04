@@ -37,7 +37,7 @@ impl Rule for BrokenWikilink {
                     severity: self.default_severity(),
                     file: file.path.clone(),
                     message: format!("wikilink target '{}' does not resolve", link.target),
-                    data: Some(serde_json::json!({ "target": link.target })),
+                    data: Some(serde_json::json!({ "target": link.target, "line": link.line })),
                 });
             }
         }
@@ -88,6 +88,7 @@ mod tests {
         assert!(findings[0].message.contains("'Quux'"));
         let data = findings[0].data.as_ref().unwrap();
         assert_eq!(data["target"], "Quux");
+        assert_eq!(data["line"], 1);
     }
 
     #[test]
@@ -139,6 +140,7 @@ mod tests {
         let data = findings[0].data.as_ref().unwrap();
         // data.target must be the raw input, not the resolved stem.
         assert_eq!(data["target"], "path/to/Quux");
+        assert_eq!(data["line"], 1);
     }
 
     #[test]
@@ -151,6 +153,20 @@ mod tests {
 
         let findings = BrokenWikilink.check(&ctx);
         assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn broken_wikilink_finding_carries_line_number_for_multiline_body() {
+        let src = plain_file("Src", "/vault/Src.md", "line 1\nline 2\n[[Quux]]\n");
+        let files = vec![src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files);
+
+        let findings = BrokenWikilink.check(&ctx);
+        assert_eq!(findings.len(), 1);
+        let data = findings[0].data.as_ref().unwrap();
+        assert_eq!(data["target"], "Quux");
+        assert_eq!(data["line"], 3);
     }
 
     #[test]
