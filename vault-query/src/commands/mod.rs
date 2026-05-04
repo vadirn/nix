@@ -1,6 +1,5 @@
 pub mod backlinks;
 pub mod lint;
-pub mod checkpoints;
 pub mod config_cmd;
 pub mod context;
 pub mod files;

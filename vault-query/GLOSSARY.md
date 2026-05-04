@@ -26,9 +26,9 @@ Example: `vault-query cards` returns every `.md` whose frontmatter has `type: ca
 
 ## Checkpoint
 
-A markdown note with `type: checkpoint` in its frontmatter; tracked with a `done` boolean and optional `decisions` / `frictions` sequence fields. Folder placement is convention only — classification is by `type`. The `vault-query checkpoints` command (separate from the entity itself) is project-scoped: it reads `Checkpoints.base` from the current project, and that base file adds a `file.inFolder("<project>")` clause to the type predicate so the command lists only checkpoints inside the resolved project. Vault-wide listing of all checkpoints by `type` is not exposed by a dedicated subcommand.
+A markdown note with `type: checkpoint` in its frontmatter; tracked with a `done` boolean and optional `decisions` / `frictions` sequence fields. Folder placement is convention only — classification is by `type`. To list checkpoints for a project, use `vault-query query <project>/Checkpoints.base` with the desired view; that base file adds a `file.inFolder("<project>")` clause to the type predicate.
 
-Example: a project's `checkpoint-2026-04-28.md` carries `type: checkpoint` and records what was decided that day; `vault-query checkpoints` from inside that project lists it.
+Example: a project's `checkpoint-2026-04-28.md` carries `type: checkpoint` and records what was decided that day.
 
 ## Coverage bonus (XP)
 
@@ -178,7 +178,7 @@ The Streak value displayed to the user is uncapped; the per-day position weight 
 
 Level equals integer-divided total XP for the calendar year being viewed by 50; it is computed per year, not lifetime.
 
-Card, Note, Checkpoint, Track, WeeklyLog, and the project note are disjoint subtypes of VaultFile, partitioned on a single basis: the frontmatter `type` value (`card`, `note`, `checkpoint`, `track`, `weekly-log`, `project`). Folder placement (`20 cards/`, `30 notes/`, `41 projects/block-buster/`, project folders) is convention only at the entity level — the type axis alone determines membership. The `vault-query cards` and `vault-query notes` subcommands list by `type` vault-wide; the `vault-query checkpoints` and `vault-query tracks` subcommands list by `type` AND `file.inFolder(<current project>)` because their per-project base files embed the folder clause. The folder restriction is a property of those two commands, not of the entity definitions. WeeklyLog has no dedicated listing subcommand: `vault-query xp` is its sole consumer and selects files by `type == "weekly-log"` AND `template != true` (`commands/xp.rs::parse_weekly_logs`).
+Card, Note, Checkpoint, Track, WeeklyLog, and the project note are disjoint subtypes of VaultFile, partitioned on a single basis: the frontmatter `type` value (`card`, `note`, `checkpoint`, `track`, `weekly-log`, `project`). Folder placement (`20 cards/`, `30 notes/`, `41 projects/block-buster/`, project folders) is convention only at the entity level — the type axis alone determines membership. The `vault-query cards` and `vault-query notes` subcommands list by `type` vault-wide; `vault-query tracks` lists by `type` AND `file.inFolder(<current project>)` because `Tracks.base` embeds the folder clause. The folder restriction is a property of that command, not of the entity definition. Checkpoints have no dedicated subcommand: use `vault-query query <project>/Checkpoints.base` to query them via the base file. WeeklyLog has no dedicated listing subcommand: `vault-query xp` is its sole consumer and selects files by `type == "weekly-log"` AND `template != true` (`commands/xp.rs::parse_weekly_logs`).
 
 A VaultFile marked `template: true` is a template, not an instance: it carries the `type:` of its target so instantiation produces a properly-typed file, and is excluded from type-based listings.
 

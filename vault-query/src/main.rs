@@ -119,15 +119,6 @@ enum Commands {
     Config,
     /// Print project context.md
     Context,
-    /// Query project checkpoints
-    Checkpoints {
-        /// View name (All, Incomplete, Done, Stats)
-        #[arg(long, default_value = "All")]
-        view: String,
-        /// Output format
-        #[arg(long, default_value = "table")]
-        format: output::Format,
-    },
     /// Query project tracks
     Tracks {
         /// View name (Active, Open, Paused, Done, Abandoned, Superseded, All, Stats)
@@ -250,10 +241,6 @@ fn main() -> Result<()> {
         Commands::Context => {
             let cfg = resolve_config(&cli)?;
             commands::context::run(&cfg)
-        }
-        Commands::Checkpoints { view, format } => {
-            let cfg = resolve_config(&cli)?;
-            commands::checkpoints::run(&cfg, view, *format)
         }
         Commands::Tracks { view, format } => {
             let cfg = resolve_config(&cli)?;

@@ -126,7 +126,6 @@ else:
 | ------------------------------ | ---------------------------------------------- | --------------- |
 | `config`                       | Print resolved config JSON                     | No              |
 | `context`                      | Print project context.md                       | Yes             |
-| `checkpoints [--view <view>]`  | Query checkpoints (All/Incomplete/Done/Stats), legacy | Yes      |
 | `tracks [--view <view>]`       | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC | Yes |
 | `tracks-init`                  | Create Tracks.base in the current project     | Yes             |
 | `get <fragment>`               | Find and read a note/card/reference/checkpoint/track | No        |
