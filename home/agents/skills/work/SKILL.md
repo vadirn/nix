@@ -70,6 +70,8 @@ do("list unresolved backlog items as open questions")
 
 Three fixed sections: `## Task` / `## Context` / `## Return`. The Return section restates the four-section response shape and routes any multi-step needs from the subagent into Backlog instead of /work.
 
+Phrase directives affirmatively. Apply the `/affirm` convention as you write — it tightens output. "Edit only `rules/<name>.rs`" beats "do NOT modify ANY other file": the positive form is narrower and defines done.
+
 Template:
 
 ```
