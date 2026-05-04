@@ -53,6 +53,7 @@ impl VaultIgnore {
 
     /// Construct a `VaultIgnore` directly from a list of path patterns.
     /// Intended for tests; keeps visibility minimal.
+    #[cfg(test)]
     pub(crate) fn from_patterns(patterns: Vec<PathBuf>) -> Self {
         VaultIgnore { patterns }
     }
