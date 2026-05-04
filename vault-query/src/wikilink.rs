@@ -11,19 +11,28 @@ static WIKILINK_RE: LazyLock<Regex> =
 pub struct Wikilink {
     pub target: String, // the link target (path or name)
     pub alias: Option<String>, // display alias if present
-    pub line: u32, // 1-based line number where the link appears (0 = unset)
+    pub line: u32, // 1-based line number where the link appears
 }
 
 /// Extract all wikilinks from content.
 pub fn extract(content: &str) -> Vec<Wikilink> {
-    WIKILINK_RE
-        .captures_iter(content)
-        .map(|cap| Wikilink {
+    let mut last_offset: usize = 0;
+    let mut current_line: u32 = 1;
+    let mut result = Vec::new();
+    for cap in WIKILINK_RE.captures_iter(content) {
+        let start = cap.get(0).unwrap().start();
+        current_line += content[last_offset..start]
+            .bytes()
+            .filter(|&b| b == b'\n')
+            .count() as u32;
+        last_offset = start;
+        result.push(Wikilink {
             target: cap[1].to_string(),
             alias: cap.get(2).map(|m| m.as_str().to_string()),
-            line: 0,
-        })
-        .collect()
+            line: current_line,
+        });
+    }
+    result
 }
 
 /// Resolve a wikilink target to a note name (last path component, no extension).
@@ -104,5 +113,18 @@ mod tests {
     fn test_resolve_name() {
         assert_eq!(resolve_name("41 projects/nix/Nix"), "Nix");
         assert_eq!(resolve_name("Simple"), "Simple");
+    }
+
+    #[test]
+    fn test_extract_tracks_line() {
+        let content = "line1 [[A]]\nline2 stuff\nline3 [[B]] and [[C]]";
+        let links = extract(content);
+        assert_eq!(links.len(), 3);
+        assert_eq!(links[0].target, "A");
+        assert_eq!(links[0].line, 1);
+        assert_eq!(links[1].target, "B");
+        assert_eq!(links[1].line, 3);
+        assert_eq!(links[2].target, "C");
+        assert_eq!(links[2].line, 3);
     }
 }
