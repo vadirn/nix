@@ -107,35 +107,40 @@ else:
 
 ## Reference
 
-### Note types
+### Glossary
 
-| Type       | Folder                      | Purpose                                                 |
-| ---------- | --------------------------- | ------------------------------------------------------- |
-| reference  | `10 references/`            | Pointer to external source. Raw capture, no analysis    |
-| card       | `20 cards/`                 | Distilled atomic concept from a reference               |
-| note       | `30 notes/`                 | Original thinking, connects ideas across sources        |
-| goal       | `41 projects/`              | High-level aspiration with success criteria             |
-| project    | `41 projects/<project>/`    | Concrete deliverable linked to a goal                   |
-| checkpoint | `41 projects/<project>/`    | Session snapshot (legacy). Replaced by `track`.         |
-| track      | `41 projects/<project>/`    | Rolling per-project work artifact (Direction, Decisions, Backlog, Log) |
-| weekly-log | `41 projects/block-buster/` | Weekly plan/tasks/activity log for gamified tracking    |
+Vault entities, each defined by what sets it apart from adjacent ones.
+
+| Term                                      | Definition                                                                                                                                                                                                                                                                        | Location                                |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Inbox                                     | Captured-but-unsorted item awaiting triage. Distinct from a reference: an inbox item is raw capture; a reference is captured _and_ classified with `reference-type` and tags.                                                                                                     | `00 inbox/`                             |
+| Reference                                 | Pointer to an external source (article, book, video, talk). Captured and classified with `reference-type` and tags, no analysis. Distinct from a card: a reference holds the source, a card holds the idea drawn from it.                                                         | `10 references/`                        |
+| Card                                      | One atomic concept distilled from one or more references, in your own words. Backlinks via the `reference:` field. Distinct from a note: a card holds one idea, a note connects ideas.                                                                                            | `20 cards/`                             |
+| Note                                      | Original thinking, free-form. Stands alone or connects ideas across cards and references; carries no `reference:` field. Distinct from a card: notes synthesise, cards atomise.                                                                                                   | `30 notes/`                             |
+| Goal                                      | High-level aspiration with success criteria. Nests via the `goal:` field on a child goal. Distinct from a project: the goal is the _why_, the project is a deliverable that advances it.                                                                                          | `41 projects/`                          |
+| Project                                   | Concrete deliverable linked to a goal. Has `result`, `status`, optional `deadline`. Single file, or a subfolder when work fans out. Distinct from a track: the project is the unit of intent, the track is the unit of working memory across sessions.                            | `41 projects/<project>/`                |
+| Project context                           | Stable per-project framing (purpose, conventions, links) read by `vault-query --project <name> context`. Distinct from a track: context is durable framing, a track is rolling state.                                                                                             | `41 projects/<project>/context.md`      |
+| Track                                     | Rolling per-project work artifact (sections: Direction, Decisions, Backlog, Log). One file per ongoing line of work, appended across sessions. Owned by the `/track` skill. Distinct from a checkpoint: a track accumulates state in place; a checkpoint was a one-shot snapshot. | `41 projects/<project>/track-<slug>.md` |
+| Checkpoint _(legacy — replaced by track)_ | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain readable via `vault-query get`.                                                                                                                        | `41 projects/<project>/`                |
+| Weekly log                                | ISO-week file with Focus, Tasks, Backlog, Activity sections. Tasks wikilink to projects; Activity is auto-appended by a git post-commit hook. Distinct from a track: a weekly log spans all projects for one week, a track spans one project across all weeks.                    | `41 projects/block-buster/YYYY-wWW.md`  |
+| Base                                      | Obsidian Base file — a saved cross-vault query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query.                                                                                                           | `90 bases/`                             |
 
 ### vault-query subcommands
 
-| Command                        | Description                                    | Requires config |
-| ------------------------------ | ---------------------------------------------- | --------------- |
-| `config`                       | Print resolved config JSON                     | No              |
-| `context`                      | Print project context.md                       | Yes             |
-| `tracks [--view <view>]`       | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC | Yes |
-| `tracks-init`                  | Create Tracks.base in the current project     | Yes             |
-| `get <fragment>`               | Find and read a note/card/reference/checkpoint/track | No        |
-| `search <query>`               | BM25 full-text search (--regex for grep mode)  | No              |
-| `projects [--view <view>]`     | List active projects                           | No              |
-| `cards`                        | List all cards with metadata                   | No              |
-| `notes`                        | List all notes with metadata                   | No              |
-| `log [DATE\|WEEK\|last\|next]` | Open or create weekly log                      | No              |
-| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card, dangling-reference, reference-not-wikilink, broken-wikilink, untagged-card, singleton-tag | Yes |
-| `xp [YEAR]`                    | XP report: calendar, streak, level             | No              |
+| Command                            | Description                                                                                                             | Requires config |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `config`                           | Print resolved config JSON                                                                                              | No              |
+| `context`                          | Print project context.md                                                                                                | Yes             |
+| `tracks [--view <view>]`           | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC                             | Yes             |
+| `tracks-init`                      | Create Tracks.base in the current project                                                                               | Yes             |
+| `get <fragment>`                   | Find and read a note/card/reference/checkpoint/track                                                                    | No              |
+| `search <query>`                   | BM25 full-text search (--regex for grep mode)                                                                           | No              |
+| `projects [--view <view>]`         | List active projects                                                                                                    | No              |
+| `cards`                            | List all cards with metadata                                                                                            | No              |
+| `notes`                            | List all notes with metadata                                                                                            | No              |
+| `log [DATE\|WEEK\|last\|next]`     | Open or create weekly log                                                                                               | No              |
+| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card, dangling-reference, reference-not-wikilink, broken-wikilink, untagged-card, singleton-tag | Yes             |
+| `xp [YEAR]`                        | XP report: calendar, streak, level                                                                                      | No              |
 
 ### Project commands
 
