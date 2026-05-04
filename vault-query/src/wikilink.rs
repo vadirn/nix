@@ -150,6 +150,7 @@ pub fn build_backlink_index(
 ) -> HashMap<String, Vec<String>> {
     let mut index: HashMap<String, Vec<String>> = HashMap::new();
     for file in files {
+        // Collect wikilinks from the Markdown body.
         let links = extract(&file.content);
         for link in links {
             let target_name = resolve_name(&link.target).to_lowercase();
@@ -158,8 +159,45 @@ pub fn build_backlink_index(
                 .or_default()
                 .push(file.name.clone());
         }
+        // Collect wikilinks from every YAML frontmatter scalar value.
+        for value in file.frontmatter.values() {
+            collect_frontmatter_wikilinks(value, &file.name, &mut index);
+        }
     }
     index
+}
+
+/// Recursively walk a `serde_yaml::Value` and merge any wikilinks found in
+/// string scalars into `index`.  This mirrors the `collect_cited` helper in
+/// `dangling_reference.rs` but writes into the backlink index instead of a set.
+fn collect_frontmatter_wikilinks(
+    value: &serde_yaml::Value,
+    source_name: &str,
+    index: &mut HashMap<String, Vec<String>>,
+) {
+    match value {
+        serde_yaml::Value::String(s) => {
+            for link in extract(s) {
+                let target_name = resolve_name(&link.target).to_lowercase();
+                index
+                    .entry(target_name)
+                    .or_default()
+                    .push(source_name.to_string());
+            }
+        }
+        serde_yaml::Value::Sequence(items) => {
+            for item in items {
+                collect_frontmatter_wikilinks(item, source_name, index);
+            }
+        }
+        serde_yaml::Value::Mapping(map) => {
+            for (_key, val) in map {
+                collect_frontmatter_wikilinks(val, source_name, index);
+            }
+        }
+        // Bool, Number, Null, Tagged — nothing to extract.
+        _ => {}
+    }
 }
 
 #[cfg(test)]
@@ -287,6 +325,118 @@ mod tests {
         let links = extract(content);
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].target, "Real");
+    }
+
+    // --- Tests: backlink index includes frontmatter wikilinks ---
+
+    fn make_file(
+        name: &str,
+        content: &str,
+        frontmatter: std::collections::BTreeMap<String, serde_yaml::Value>,
+    ) -> crate::vault::VaultFile {
+        crate::vault::VaultFile {
+            name: name.to_string(),
+            path: std::path::PathBuf::from(format!("/vault/{}.md", name)),
+            frontmatter,
+            content: content.to_string(),
+            ctime: None,
+        }
+    }
+
+    #[test]
+    fn test_backlink_index_includes_frontmatter_wikilink() {
+        // File A has no body wikilinks; its frontmatter contains `project: "[[B]]"`.
+        // Expect index["b"] to contain "A".
+        let mut fm = std::collections::BTreeMap::new();
+        fm.insert(
+            "project".to_string(),
+            serde_yaml::Value::String("[[B]]".to_string()),
+        );
+        let file_a = make_file("A", "no links here", fm);
+        let index = build_backlink_index(&[file_a]);
+        let entry = index.get("b").expect("expected \"b\" in backlink index");
+        assert!(entry.contains(&"A".to_string()), "expected A in index[\"b\"]");
+    }
+
+    #[test]
+    fn test_backlink_index_frontmatter_array() {
+        // File A's frontmatter has `references: ["[[B]]", "[[C]]"]`.
+        // Expect both index["b"] and index["c"] to contain "A".
+        let mut fm = std::collections::BTreeMap::new();
+        fm.insert(
+            "references".to_string(),
+            serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::String("[[B]]".to_string()),
+                serde_yaml::Value::String("[[C]]".to_string()),
+            ]),
+        );
+        let file_a = make_file("A", "", fm);
+        let index = build_backlink_index(&[file_a]);
+        assert!(
+            index.get("b").map_or(false, |v| v.contains(&"A".to_string())),
+            "expected A in index[\"b\"]"
+        );
+        assert!(
+            index.get("c").map_or(false, |v| v.contains(&"A".to_string())),
+            "expected A in index[\"c\"]"
+        );
+    }
+
+    #[test]
+    fn test_backlink_index_combines_body_and_frontmatter() {
+        // File A body links to [[B]]; frontmatter has `project: "[[C]]"`.
+        // Both index["b"] and index["c"] must contain "A".
+        let mut fm = std::collections::BTreeMap::new();
+        fm.insert(
+            "project".to_string(),
+            serde_yaml::Value::String("[[C]]".to_string()),
+        );
+        let file_a = make_file("A", "See [[B]] for details.", fm);
+        let index = build_backlink_index(&[file_a]);
+        assert!(
+            index.get("b").map_or(false, |v| v.contains(&"A".to_string())),
+            "expected A in index[\"b\"]"
+        );
+        assert!(
+            index.get("c").map_or(false, |v| v.contains(&"A".to_string())),
+            "expected A in index[\"c\"]"
+        );
+    }
+
+    #[test]
+    fn test_backlink_index_ignores_non_wikilink_strings() {
+        // Frontmatter has plain text; no spurious index entries should appear.
+        let mut fm = std::collections::BTreeMap::new();
+        fm.insert(
+            "description".to_string(),
+            serde_yaml::Value::String("just text".to_string()),
+        );
+        let file_a = make_file("A", "", fm);
+        let index = build_backlink_index(&[file_a]);
+        // The index should be empty (no wikilinks anywhere).
+        assert!(index.is_empty(), "expected empty index, got: {:?}", index);
+    }
+
+    #[test]
+    fn test_backlink_index_handles_nested_yaml() {
+        // Frontmatter has `meta: { project: "[[B]]" }`.
+        // The recursive walk must reach the inner string.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert(
+            serde_yaml::Value::String("project".to_string()),
+            serde_yaml::Value::String("[[B]]".to_string()),
+        );
+        let mut fm = std::collections::BTreeMap::new();
+        fm.insert(
+            "meta".to_string(),
+            serde_yaml::Value::Mapping(inner),
+        );
+        let file_a = make_file("A", "", fm);
+        let index = build_backlink_index(&[file_a]);
+        assert!(
+            index.get("b").map_or(false, |v| v.contains(&"A".to_string())),
+            "expected A in index[\"b\"] via nested YAML walk"
+        );
     }
 
     // --- Failing tests: CRLF and frontmatter line-offset arithmetic ---
