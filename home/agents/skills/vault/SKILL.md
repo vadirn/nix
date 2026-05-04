@@ -75,6 +75,11 @@ elif "log" or weekly log intent (planning, tasks, sleep):
     log = Read(week_file)
     do("show current week's log, ask what user wants to do; apply post-edit etiquette before wrapping if log was edited")
 
+elif "lint":
+    Read(dir/references/lint.md)
+    Bash(vault-query lint [--format <text|json|summary>] [--rule <name>=<severity>]...)
+    do("present findings; suggest interactive fixes via /vault card, /vault reference, etc.")
+
 elif "validate":
     schemas = skill base directory + "/schemas"
     root_config = "~/.config/vault/config.json"
@@ -129,6 +134,7 @@ else:
 | `cards`                        | List all cards with metadata                   | No              |
 | `notes`                        | List all notes with metadata                   | No              |
 | `log [DATE\|WEEK\|last\|next]` | Open or create weekly log                      | No              |
+| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card, broken-wikilink, dangling-reference, etc. | Yes |
 | `xp [YEAR]`                    | XP report: calendar, streak, level             | No              |
 
 ### Project commands
