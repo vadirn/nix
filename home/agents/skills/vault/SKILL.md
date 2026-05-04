@@ -77,7 +77,8 @@ elif "log" or weekly log intent (planning, tasks, sleep):
 
 elif "lint":
     Read(dir/references/lint.md)
-    Bash(vault-query lint [--format <text|json|summary>] [--rule <name>=<severity>]...)
+    Bash(vault-query lint [--format <text|json|summary>] [--rule <name>=<severity>] [--no-ignore]...)
+    // .vaultignore at vault root excludes paths from all vault-query commands; --no-ignore disables it
     do("present findings; suggest interactive fixes via /vault card, /vault reference, etc.")
 
 elif "validate":

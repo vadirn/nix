@@ -27,6 +27,33 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `untagged-card`            | warn    | Card with missing or empty `tags:` array                               |
 | `singleton-tag`            | off     | Tag appearing in exactly one file (typo heuristic; opt-in)             |
 
+## Excluding files
+
+Place a `.vaultignore` file at `<vault_root>/.vaultignore`. Vault loads it once per invocation; there are no nested ignore files.
+
+Syntax: one vault-relative path prefix per line, `/` separators. Lines starting with `#` are comments; blank lines are ignored. A trailing `/` is optional and normalized away.
+
+```
+# Tooling and scratch
+.claude/
+.claude-plans/
+.git/
+
+# Single file
+20 cards/draft.md
+```
+
+Matching is path-component-aware. The pattern `.claude` matches `.claude/foo.md` and all descendants. It does not match `.claude-plans/foo.md`: the boundary falls at a component separator, so a shared string prefix to a sibling is safe.
+
+To disable the ignore list for a single invocation, pass `--no-ignore`. The flag is global and works on every `vault-query` subcommand.
+
+```sh
+vault-query lint --no-ignore           # see findings across all files
+vault-query search "foo" --no-ignore   # search ignores .vaultignore
+```
+
+**Backlink-graph effect.** Ignored files are invisible to lint's backlink index. A card that links to an ignored file will still trigger `broken-wikilink`, because the target does not resolve in the visible file set. This is by design: excluding a file from lint means lint has no record of it as a valid link target.
+
 ## Tips
 
 - **`broken-wikilink` defaults to `error`.** A bare `vault-query lint` exits 1 if the vault contains any broken wikilink. Override with `--rule broken-wikilink=warn` for a soft check, or set the severity in `~/.config/vault/config.json` under `lint.rules`.
