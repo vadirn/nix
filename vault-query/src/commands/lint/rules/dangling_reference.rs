@@ -1,9 +1,23 @@
 use std::collections::HashSet;
 
+use unicode_normalization::UnicodeNormalization;
+
 use crate::commands::lint::rule::{Category, Finding, LintContext, Rule, Severity};
 use crate::wikilink;
 
 pub struct DanglingReference;
+
+// NFKC + curly→ASCII fold so typographic variants (U+2019, U+00A0) match plain ASCII filenames.
+fn normalize(s: &str) -> String {
+    s.nfkc()
+        .map(|c| match c {
+            '\u{2018}' | '\u{2019}' => '\'',
+            '\u{201C}' | '\u{201D}' => '"',
+            _ => c,
+        })
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
 
 impl Rule for DanglingReference {
     fn name(&self) -> &'static str {
@@ -28,7 +42,7 @@ impl Rule for DanglingReference {
 
         let mut findings = Vec::new();
         for reference in &ctx.references {
-            if !cited.contains(&reference.name.to_lowercase()) {
+            if !cited.contains(&normalize(&reference.name)) {
                 findings.push(Finding {
                     rule: self.name(),
                     severity: self.default_severity(),
@@ -49,7 +63,7 @@ fn collect_cited(value: &serde_yaml::Value, into: &mut HashSet<String>) {
     match value {
         serde_yaml::Value::String(s) => {
             for link in wikilink::extract(s) {
-                let name = wikilink::resolve_name(&link.target).to_lowercase();
+                let name = normalize(wikilink::resolve_name(&link.target));
                 into.insert(name);
             }
         }
@@ -172,6 +186,42 @@ mod tests {
             Some(Value::Sequence(vec![Value::Sequence(vec![
                 Value::String("[[Foo]]".to_string()),
             ])])),
+        );
+        let files = vec![ref_foo, card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = DanglingReference.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn dangling_reference_curly_apostrophe_matches_straight() {
+        // Card cites the reference with a curly apostrophe (U+2019) where the
+        // on-disk filename uses a straight ASCII apostrophe (U+0027).
+        // normalize() folds the typographic variant so the citation lands.
+        let ref_foo = reference_file("Karpathy's gist");
+        let card = card_file(
+            "Card",
+            Some(Value::String("[[Karpathy\u{2019}s gist]]".to_string())),
+        );
+        let files = vec![ref_foo, card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = DanglingReference.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn dangling_reference_nbsp_matches_space() {
+        // Card cites the reference with a no-break space (U+00A0) where the
+        // on-disk filename uses a regular space (U+0020).  NFKC folds NBSP
+        // into a plain space, so the citation lands.
+        let ref_foo = reference_file("Two words");
+        let card = card_file(
+            "Card",
+            Some(Value::String("[[Two\u{00A0}words]]".to_string())),
         );
         let files = vec![ref_foo, card];
         let root = PathBuf::from("/vault");

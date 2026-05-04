@@ -13,6 +13,7 @@ serde_json = "1"
 serde_yaml = "0.9"
 chrono = "0.4"
 tantivy = "0.22"
+unicode-normalization = "0.1"
 walkdir = "2"
 
 [dev-dependencies]
