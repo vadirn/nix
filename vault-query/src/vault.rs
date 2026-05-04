@@ -110,6 +110,64 @@ pub fn scan(
 }
 
 
+/// Asset file extensions recognized by the vault (no leading dots, lowercased).
+pub const ASSET_EXTENSIONS: &[&str] = &[
+    "png", "jpeg", "jpg", "gif", "svg", "pdf", "canvas", "base", "tldraw",
+];
+
+/// A non-markdown asset file tracked in the vault.
+#[derive(Debug, Clone)]
+pub struct VaultAsset {
+    /// Absolute path to the asset file.
+    pub path: PathBuf,
+    /// Basename including extension, e.g. `"Project scope.png"`.
+    pub name: String,
+}
+
+/// Scan a directory for asset files (see [`ASSET_EXTENSIONS`]).
+///
+/// - `walk_root`: the directory to walk (may be a subfolder of the vault).
+/// - `vault_root`: the vault root used to compute vault-relative paths for ignore matching.
+/// - `ignore`: optional ignore filter; if `Some`, files whose vault-relative path is excluded are skipped.
+pub fn scan_assets(
+    walk_root: &Path,
+    vault_root: &Path,
+    ignore: Option<&VaultIgnore>,
+) -> Result<Vec<VaultAsset>> {
+    let mut assets = Vec::new();
+    for entry in WalkDir::new(walk_root)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase());
+        let ext = match ext {
+            Some(e) if ASSET_EXTENSIONS.contains(&e.as_str()) => e,
+            _ => continue,
+        };
+        let _ = ext;
+        let vault_relative = path.strip_prefix(vault_root).unwrap_or(path);
+        if let Some(ig) = ignore {
+            if ig.excludes(vault_relative) {
+                continue;
+            }
+        }
+        let name = path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        assets.push(VaultAsset {
+            path: path.to_path_buf(),
+            name,
+        });
+    }
+    Ok(assets)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,5 +226,72 @@ mod tests {
         let f = files.iter().find(|f| f.name == "checkpoint-001").unwrap();
         assert!(f.in_folder("41 projects/nix", &dir));
         assert!(!f.in_folder("20 cards", &dir));
+    }
+
+    // --- scan_assets tests ---
+
+    #[test]
+    fn test_scan_assets_finds_png_and_base() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("assets")).unwrap();
+        std::fs::write(root.join("assets/Foo.png"), b"").unwrap();
+        std::fs::create_dir_all(root.join("41 projects/nix")).unwrap();
+        std::fs::write(root.join("41 projects/nix/Checkpoints.base"), b"").unwrap();
+
+        let mut assets = scan_assets(root, root, None).unwrap();
+        assets.sort_by(|a, b| a.name.cmp(&b.name));
+
+        assert_eq!(assets.len(), 2, "expected 2 assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+
+        let foo = assets.iter().find(|a| a.name == "Foo.png").expect("Foo.png not found");
+        assert_eq!(foo.path, root.join("assets/Foo.png"));
+
+        let base = assets.iter().find(|a| a.name == "Checkpoints.base").expect("Checkpoints.base not found");
+        assert_eq!(base.path, root.join("41 projects/nix/Checkpoints.base"));
+    }
+
+    #[test]
+    fn test_scan_assets_skips_md() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("note.md"), "# note\n").unwrap();
+
+        let assets = scan_assets(root, root, None).unwrap();
+        assert!(assets.is_empty(), "expected no assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_scan_assets_skips_unknown_extension() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("file.xyz"), b"").unwrap();
+
+        let assets = scan_assets(root, root, None).unwrap();
+        assert!(assets.is_empty(), "expected no assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_scan_assets_skips_ignored() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("ignored")).unwrap();
+        std::fs::write(root.join("ignored/Bar.png"), b"").unwrap();
+
+        let ignore = VaultIgnore::from_patterns(vec![PathBuf::from("ignored")]);
+        let assets = scan_assets(root, root, Some(&ignore)).unwrap();
+        assert!(assets.is_empty(), "expected Bar.png to be ignored, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_scan_assets_handles_no_ignore() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("image.jpg"), b"").unwrap();
+        std::fs::write(root.join("note.md"), "# note\n").unwrap();
+
+        let assets = scan_assets(root, root, None).unwrap();
+        assert_eq!(assets.len(), 1, "expected only image.jpg, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert_eq!(assets[0].name, "image.jpg");
     }
 }
