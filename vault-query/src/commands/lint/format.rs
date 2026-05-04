@@ -4,7 +4,10 @@
 pub enum LintFormat {
     /// One line per finding: `[severity] rule  file: message`
     Text,
-    // Json and Summary land in Step 6.
+    /// JSON array of finding objects with stable top-level keys.
+    Json,
+    /// One line per rule that fired: `<rule>: <count>`, sorted by rule name.
+    Summary,
 }
 
 impl Default for LintFormat {
