@@ -14,7 +14,7 @@ impl Rule for SingletonTag {
     }
 
     fn default_severity(&self) -> Severity {
-        Severity::Off
+        Severity::Warn
     }
 
     fn check(&self, ctx: &LintContext) -> Vec<Finding> {
@@ -196,8 +196,8 @@ mod tests {
     }
 
     #[test]
-    fn default_severity_is_off() {
-        assert_eq!(SingletonTag.default_severity(), Severity::Off);
+    fn default_severity_is_warn() {
+        assert_eq!(SingletonTag.default_severity(), Severity::Warn);
     }
 
     #[test]

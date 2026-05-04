@@ -7,7 +7,7 @@ vault-query lint                              # text digest, default
 vault-query lint --format json                # JSON array of findings
 vault-query lint --format summary             # counts per rule
 vault-query lint --rule orphan-card=error     # promote a rule (repeatable)
-vault-query lint --rule singleton-tag=warn    # opt into a default-off rule
+vault-query lint --rule singleton-tag=error   # promote singleton-tag to error
 ```
 
 ## When to Use
@@ -25,7 +25,7 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `reference-not-wikilink`   | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL)      |
 | `broken-wikilink`          | error   | `[[target]]` does not resolve to any vault file                        |
 | `untagged-card`            | warn    | Card with missing or empty `tags:` array                               |
-| `singleton-tag`            | off     | Tag appearing in exactly one file (typo heuristic; opt-in)             |
+| `singleton-tag`            | warn    | Tag appearing in exactly one file (typo heuristic)                     |
 
 ## Excluding files
 
@@ -59,7 +59,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 
 - **`broken-wikilink` defaults to `error`.** A bare `vault-query lint` exits 1 if the vault contains any broken wikilink. Override with `--rule broken-wikilink=warn` for a soft check, or set the severity in `~/.config/vault/config.json` under `lint.rules`.
 
-- **`singleton-tag` is off by default.** Enable it explicitly when triaging tag drift: `vault-query lint --rule singleton-tag=warn`. Legitimate underused tags trip it, so it's an opt-in heuristic for hand review, not a CI gate.
+- **`singleton-tag` defaults to `warn`.** It fires on tags used in exactly one file. Promote to `error` or demote to `off` via `--rule singleton-tag=<severity>` or via `lint.rules` in the root config.
 
 - **`dangling-reference` does not check the wikilink target's `type:`.** A card with `reference: [[20 cards/Foo]]` (pointing at another card, not a `type: reference` file) suppresses the dangling check. The companion `reference-not-wikilink` rule covers the related miss where the `reference:` value is a non-wikilink string.
 
