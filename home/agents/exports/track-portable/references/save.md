@@ -44,7 +44,7 @@ else:
 
     proposed_edits = {
       decisions:  do("session decisions to append as numbered items, or [] if none"),
-      backlog:    do("new backlog items to append as `[ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
+      backlog:    do("new backlog items to append as `- [ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
       glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; NEVER modify or remove existing rows, especially pinned (`†`) rows"),
       log_entry:  "### " + new_entry_number + ". " + today + " — " + title + "\n\n" + narrative,
       updated:    today,
@@ -101,7 +101,7 @@ add one.
 
 - Numbered, append-only.
 - Resolved items get `[x]` marked in place — never delete, never renumber.
-- New items get appended as `[ ] (N). <text>` where N is the next available integer (length of list + 1).
+- New items get appended as `- [ ] (N). <text>` where N is the next available integer (length of list + 1).
   The parentheses prevent Markdown renderers (notably Obsidian) from re-numbering the line as an
   ordered-list item.
 
