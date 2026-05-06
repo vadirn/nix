@@ -16,7 +16,7 @@ The Obsidian vault at `~/Documents/vault` stores knowledge as interconnected mar
 
 ## Schemas
 
-- **Reference**: `type: reference`, `description`, `tags`, `reference-type` (Web/Book)
+- **Reference**: `type: reference`, `description`, `tags`
 - **Card**: `type: card`, `description`, `tags`, `reference` (wikilink to source)
 - **Note**: `type: note`, `description`, `tags` (optional)
 - **Project**: `type: project`, `result`, `status` (in progress/done/paused)
