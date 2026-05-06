@@ -11,19 +11,18 @@ References are raw captures. They contain the source link and metadata, not your
    - `Glob` for exact filename match in `10 references/`
    - `Bash(vault-query search "<title>" -n 5 --files)` — near-duplicates by meaning
    - If matches found, present them and ask whether to proceed or edit existing
-3. Pick `reference-type`: `Web` or `Book`. YouTube, articles, talks — all `Web`.
+3. Pick a template that fits the source: `Web.md` (URL — articles, YouTube, talks), `Book.md` (book with authors/publisher), `Conversation.md` (LLM dialogue or NotebookLM notebook — body holds an extract, not a transcript). If nothing fits, use `Reference.md`.
 4. Pick tags: run `vault-query tags --vault-root <vault_root> --sort count` to get the live tag list, pick from it. Fall back to the tag tree in CLAUDE.md if vault-query is unavailable. Ask if ambiguous.
 5. Write a 1-sentence `description`
 6. Create the file in `10 references/`
 
 ## Frontmatter
 
-Read `templates/Web.md` or `templates/Book.md` based on reference type.
+Read the chosen template (`templates/Web.md`, `templates/Book.md`, `templates/Conversation.md`, or `templates/Reference.md`).
 
 - `type` — always `reference`
 - `description` — 1 sentence describing what this source is about
 - `tags` — from CLAUDE.md tag tree
-- `reference-type` — `Web` or `Book`
 - For Books, also: `authors`, `published`, `publisher`
 
 If a value contains double quotes, wrap it in single quotes: `description: '"Use X" does Y'`
@@ -37,6 +36,7 @@ Use the source title as filename. Keep the original language.
 - Web: the URL on its own line
 - YouTube: `![](url)` — renders as embedded player in Obsidian
 - Book: `> [!Abstract]` callout with brief contents
+- Conversation: `> [!Info]` provenance callout (model, date, prompt) + `## Key points` extract. Add `## Quotes` or `## Sources` only when relevant.
 
 ## Example
 
@@ -48,8 +48,6 @@ type: reference
 description: Type-driven design — parsing input into well-typed structures replaces runtime type checking
 tags:
   - Тема/Dev/Code
-reference-type:
-  - Web
 ---
 
 https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/
@@ -60,7 +58,7 @@ https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/
 When asked to edit or enrich an existing reference:
 
 1. Read the file
-2. Check what's missing: `description`, `tags`, `reference-type`
+2. Check what's missing: `description`, `tags`
 3. Fill in missing fields. Don't touch existing body content.
 4. If tags exist but don't match the CLAUDE.md tag tree, suggest corrections.
 

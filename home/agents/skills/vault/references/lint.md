@@ -18,14 +18,16 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 
 ## Rules
 
-| Rule                     | Default | What it flags                                                     |
-| ------------------------ | ------- | ----------------------------------------------------------------- |
-| `orphan-card`            | warn    | Card with zero inbound wikilinks                                  |
-| `dangling-reference`     | warn    | Reference not cited by any card's `reference:` frontmatter        |
-| `reference-not-wikilink` | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL) |
-| `broken-wikilink`        | error   | `[[target]]` does not resolve to any vault file                   |
-| `untagged-card`          | warn    | Card with missing or empty `tags:` array                          |
-| `singleton-tag`          | warn    | Tag appearing in exactly one file (typo heuristic)                |
+| Rule                     | Default | What it flags                                                                                        |
+| ------------------------ | ------- | ---------------------------------------------------------------------------------------------------- |
+| `orphan-card`            | warn    | Card with zero inbound wikilinks                                                                     |
+| `dangling-reference`     | warn    | Reference not cited by any card's `reference:` frontmatter                                           |
+| `reference-not-wikilink` | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL)                                    |
+| `broken-wikilink`        | error   | `[[target]]` does not resolve to any vault file                                                      |
+| `untagged-card`          | warn    | Card with missing or empty `tags:` array                                                             |
+| `untagged-reference`     | warn    | Reference with missing or empty `tags:` array (TODO — impl pending vault-query source access)        |
+| `undescribed-reference`  | warn    | Reference with missing or empty `description:` field (TODO — impl pending vault-query source access) |
+| `singleton-tag`          | warn    | Tag appearing in exactly one file (typo heuristic)                                                   |
 
 ## Excluding files
 
