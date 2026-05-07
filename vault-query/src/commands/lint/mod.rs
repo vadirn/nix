@@ -218,7 +218,11 @@ mod tests {
         write_card(vault, "20 cards", "Foo", "---\ntype: card\n---\n");
 
         let cfg = cfg_for(vault);
-        let cli = vec!["orphan-card=error".to_string()];
+        let cli = vec![
+            "orphan-card=error".to_string(),
+            "missing-required-field=off".to_string(),
+            "untagged-card=off".to_string(),
+        ];
         let mut buf = Vec::new();
         let _ = run_with_writer(&cfg, LintFormat::Text, &cli, &mut buf).unwrap();
         let out = String::from_utf8(buf).unwrap();
