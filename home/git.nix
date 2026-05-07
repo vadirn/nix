@@ -2,20 +2,9 @@
   programs.git = {
     enable = true;
     lfs.enable = true;
-    userName = "Vadim Kotov";
-    userEmail = "vadim@vadirn.io";
-    delta = {
-      enable = true;
-      options = {
-        navigate = true;
-        line-numbers = true;
-        features = "catppuccin-mocha";
-      };
-    };
-    includes = [
-      { path = "~/nix/home/catppuccin-delta.gitconfig"; }
-    ];
-    extraConfig = {
+    settings = {
+      user.name = "Vadim Kotov";
+      user.email = "vadim@vadirn.io";
       core.editor = "nvim";
       core.hooksPath = "~/.config/git/hooks";
       init.defaultBranch = "main";
@@ -28,6 +17,18 @@
       gpg.format = "ssh";
       commit.gpgsign = true;
       tag.gpgsign = true;
+    };
+    includes = [
+      { path = "~/nix/home/catppuccin-delta.gitconfig"; }
+    ];
+  };
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+    options = {
+      navigate = true;
+      line-numbers = true;
+      features = "catppuccin-mocha";
     };
   };
 }

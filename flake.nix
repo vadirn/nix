@@ -2,11 +2,11 @@
   description = "Darwin system flake";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    nix-darwin.url = "github:LnL7/nix-darwin/nix-darwin-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nix-darwin.url = "github:LnL7/nix-darwin/nix-darwin-25.11";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
-    nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew/a5409abd0d5013d79775d3419bcac10eacb9d8c5";
-    home-manager.url = "github:nix-community/home-manager/release-25.05";
+    nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew/aeb2069920";
+    home-manager.url = "github:nix-community/home-manager/release-25.11";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -139,6 +139,9 @@
               enable = true;
               enableRosetta = true;
               user = "vadim";
+              extraEnv = {
+                HOMEBREW_NO_INSTALL_FROM_API = "1";
+              };
             };
           }
           home-manager.darwinModules.home-manager
