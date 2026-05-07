@@ -1,9 +1,9 @@
 gui:
   theme:
     activeBorderColor:
-    - green
+      - green
     selectedLineBgColor:
-    - '#bcc0cc'
+      - '#bcc0cc'
 git:
-  paging:
-    pager: delta --features=catppuccin-latte --paging=never
+  pagers:
+    - pager: delta --features=catppuccin-latte --paging=never

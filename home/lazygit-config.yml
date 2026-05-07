@@ -1,11 +1,11 @@
 gui:
   theme:
     activeBorderColor:
-    - green
+      - green
     selectedLineBgColor:
-    - '#585b70'
+      - '#585b70'
 git:
-  paging:
-    pager: delta --features=catppuccin-mocha --paging=never
+  pagers:
+    - pager: delta --features=catppuccin-mocha --paging=never
 os:
   editPreset: micro
