@@ -48,8 +48,8 @@ while plan has unresolved steps:
         do("ingest response semantically: append Decisions to plan; collect Backlog items as end-of-orchestration questions (promote to a plan step only when the orchestrator explicitly chooses); surface Recap to user")
 
         if auto_commits_enabled and step is tagged 'write' and do("response reports any modified files"):
-            commit_brief = do("write a brief whose ## Task invokes the commit skill on the just-completed step; ## Context inlines the step's Recap and Modified files; ## Return restates the four-section response contract")
-            commit_response = spawn_subagent(commit_brief)  // sequential, subagent_type general-purpose
+            commit_brief = do("write a one-line ## Task ('Run /commit on the just-completed step's changes'); ## Context inlines the step's Recap and Modified files; ## Return restates the four-section response contract")
+            commit_response = spawn_subagent(commit_brief)  // sequential, subagent_type commit-runner
             if commit_response is error:
                 choice = AskUserQuestion("commit subagent failed; retry, skip this step's commit, or stop orchestration?")
                 do("act on choice; skipping leaves the working tree dirty going into the next step")
@@ -118,7 +118,7 @@ Choose `subagent_type` by the step's tag:
 
 - **`read` step → `Explore` agent type.** Tool-restricted: Edit, Write, NotebookEdit are absent. Enforcement is at the tool layer, not via brief instruction. Explore reads excerpts rather than whole files — fits parallel discovery (find X / where Y / which files reference Z); whole-module review still happens as a single sequential `general-purpose` step.
 - **`write` step → `general-purpose` agent type.** Full read/write/edit/bash access. Always sequential.
-- **Commit subagent → `general-purpose` agent type.** Sequential. Needs full access to invoke the `commit` skill, run git, and handle pre-commit hook outcomes.
+- **Commit subagent → `commit-runner` agent type.** Sequential. Narrow toolset (`Bash`, `Read`, `Skill`) and a static system prompt that forces invocation of the `/commit` skill — keeps message style consistent across orchestrations. The brief can be one line because the agent's prompt carries the rest.
 
 `spawn_subagents` is used only for batches of independent `read` steps. Write steps stay sequential. If an `Explore` subagent fails because it tried to use a missing write tool, the failure handler offers "rerun as general-purpose" as the modify option.
 
@@ -138,7 +138,7 @@ At orchestration start, the orchestrator spawns a setup subagent to report git p
 - Inside git, clean tree → auto-commits enabled. Each step that produces file changes ends with a commit subagent.
 - Inside git, dirty tree → ask the user: commit existing changes first (delegated to the `commit` skill in a subagent), proceed with auto-commits disabled, or abort. After committing existing changes, re-check posture; a clean tree enables auto-commits.
 
-The commit subagent's brief invokes the existing `commit` skill on the just-completed step's changes. The `commit` skill handles staging, conventional-prefix message generation (short, no body), and pre-commit hook failures. The orchestrator gets back the SHA and message in the subagent's Recap; nothing else enters orchestrator context.
+The commit subagent runs as the `commit-runner` agent type, whose static system prompt forces invocation of the `/commit` skill on the just-completed step's changes. The orchestrator's brief is one line; the agent's narrow toolset (`Bash`, `Read`, `Skill`) and procedural prompt carry the rest. The `commit` skill handles staging, conventional-prefix message generation (short, no body), and pre-commit hook failures. The orchestrator gets back the SHA and message in the subagent's Recap; nothing else enters orchestrator context.
 
 If a commit subagent fails (e.g. a pre-commit hook failure the `commit` skill can't auto-fix), surface the failure and ask retry / skip this step's commit / stop orchestration. Skipping leaves the working tree dirty into the next step; subsequent commits will include the skipped step's changes.
 
