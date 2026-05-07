@@ -39,18 +39,24 @@ fn test_parse_base_file() {
 }
 
 #[test]
-fn test_scan_skips_bad_frontmatter() {
-    let dir = fixture_dir();
-    // Create a file with bad YAML frontmatter
+fn test_scan_captures_frontmatter_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
     let bad_file = dir.join("bad-frontmatter.md");
     std::fs::write(&bad_file, "---\nkey: value: nested: bad\n---\nBody\n").unwrap();
 
-    let files = vault::scan(&dir, &dir, None).unwrap();
-    // Should not crash, just skip the bad file's frontmatter
-    assert!(files.iter().any(|f| f.name == "bad-frontmatter"));
-
-    // Clean up
-    std::fs::remove_file(&bad_file).unwrap();
+    let files = vault::scan(dir, dir, None).unwrap();
+    let bad = files
+        .iter()
+        .find(|f| f.name == "bad-frontmatter")
+        .expect("bad-frontmatter file present in scan");
+    // Frontmatter is empty so other rules treat it as untyped, but the parse error is captured
+    // for the invalid-frontmatter lint rule.
+    assert!(bad.frontmatter.is_empty());
+    assert!(
+        bad.frontmatter_error.is_some(),
+        "expected frontmatter_error to be populated"
+    );
 }
 
 #[test]

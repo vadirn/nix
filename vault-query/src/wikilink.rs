@@ -407,6 +407,7 @@ mod tests {
             name: name.to_string(),
             path: std::path::PathBuf::from(format!("/vault/{}.md", name)),
             frontmatter,
+            frontmatter_error: None,
             content: content.to_string(),
             ctime: None,
         }

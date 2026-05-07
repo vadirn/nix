@@ -14,6 +14,9 @@ pub struct VaultFile {
     pub path: PathBuf,
     pub name: String, // filename without extension
     pub frontmatter: BTreeMap<String, Value>,
+    /// Frontmatter parse error message if YAML parsing failed; `None` on success or absent block.
+    /// When `Some`, `frontmatter` is empty so other rules treat the file as untyped.
+    pub frontmatter_error: Option<String>,
     pub content: String,
     pub ctime: Option<std::time::SystemTime>,
 }
@@ -81,17 +84,10 @@ pub fn scan(
                 continue;
             }
         };
-        let fm = match frontmatter::parse(&content) {
-            Ok(Some(fm)) => fm,
-            Ok(None) => BTreeMap::new(),
-            Err(e) => {
-                eprintln!(
-                    "warning: skipping {} (bad frontmatter: {})",
-                    path.display(),
-                    e
-                );
-                BTreeMap::new()
-            }
+        let (fm, frontmatter_error) = match frontmatter::parse(&content) {
+            Ok(Some(fm)) => (fm, None),
+            Ok(None) => (BTreeMap::new(), None),
+            Err(e) => (BTreeMap::new(), Some(e.to_string())),
         };
         let name = path
             .file_stem()
@@ -102,6 +98,7 @@ pub fn scan(
             path: path.to_path_buf(),
             name,
             frontmatter: fm,
+            frontmatter_error,
             content,
             ctime,
         });
