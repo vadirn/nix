@@ -13,9 +13,9 @@ fn required_fields(type_val: &str) -> Option<&'static [&'static str]> {
         "card" => Some(&["description", "tags", "reference"]),
         "note" => Some(&["description", "tags"]),
         "reference" => Some(&["description", "tags"]),
-        "project" => Some(&["result", "status", "deadline", "goal"]),
+        "project" => Some(&["result", "status", "goal"]),
         "track" => Some(&["slug", "description", "status", "project", "created", "updated"]),
-        "checkpoint" => Some(&["description"]),
+        "checkpoint" => Some(&[]),
         "weekly-log" => Some(&["week", "start", "end", "sleep"]),
         "goal" => Some(&["description", "tags"]),
         _ => None,
@@ -194,6 +194,65 @@ mod tests {
                 ("tags", Value::Sequence(vec![])),
                 ("reference", Value::String(String::new())),
             ],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn project_requires_result_status_goal_not_deadline() {
+        // deadline was dropped; result, status, goal remain required.
+        let file = make_file(
+            "MyProject",
+            "/vault/41 projects/my-project/my-project.md",
+            &[
+                ("type", Value::String("project".into())),
+                ("result", Value::String("done".into())),
+                ("status", Value::String("active".into())),
+                ("goal", Value::String("ship it".into())),
+                // deadline intentionally absent — must not produce a finding
+            ],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn project_missing_required_fields_emits_three_findings() {
+        let file = make_file(
+            "BareProject",
+            "/vault/41 projects/bare/bare.md",
+            &[("type", Value::String("project".into()))],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        assert_eq!(findings.len(), 3);
+
+        let messages: Vec<&str> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert!(messages.contains(&"project file is missing required field 'result'"));
+        assert!(messages.contains(&"project file is missing required field 'status'"));
+        assert!(messages.contains(&"project file is missing required field 'goal'"));
+        assert!(!messages.contains(&"project file is missing required field 'deadline'"));
+    }
+
+    #[test]
+    fn checkpoint_has_no_required_fields() {
+        // description was dropped from checkpoint; any checkpoint should produce no findings.
+        let file = make_file(
+            "MyCheckpoint",
+            "/vault/41 projects/nix/checkpoint-20260507.md",
+            &[("type", Value::String("checkpoint".into()))],
         );
         let files = vec![file];
         let root = PathBuf::from("/vault");
