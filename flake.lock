@@ -3,16 +3,16 @@
     "brew-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1776478798,
-        "narHash": "sha256-ERStG27tf83VbCfYMxtDSs+sa8FUMJ/3jSu/QfX9rKE=",
+        "lastModified": 1778146321,
+        "narHash": "sha256-HeBwuJmuBioZHyZqDOcf7W/xsMFupSD583v6I5Cl7a8=",
         "owner": "Homebrew",
         "repo": "brew",
-        "rev": "3aae056b8d072624255bc8fd27febb7f327b2265",
+        "rev": "af835384ac574f76025adb38b292b04cecee1f1f",
         "type": "github"
       },
       "original": {
         "owner": "Homebrew",
-        "ref": "5.1.7",
+        "ref": "5.1.10",
         "repo": "brew",
         "type": "github"
       }
@@ -35,6 +35,86 @@
         "owner": "nix-community",
         "ref": "release-25.11",
         "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "homebrew-anomalyco-tap": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1778113990,
+        "narHash": "sha256-G65RT9al5pn7T00RFM5ZZtRHFnckJLfiQY8tF9MsJe4=",
+        "owner": "anomalyco",
+        "repo": "homebrew-tap",
+        "rev": "fb38e1942667692f154088d7cdf9ee5ded2c68c7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "anomalyco",
+        "repo": "homebrew-tap",
+        "type": "github"
+      }
+    },
+    "homebrew-arimxyer-tap": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1773070734,
+        "narHash": "sha256-V1VznCYDrc0j2YjfegTp5SqVWiSDN5cGrFsM61q/QbM=",
+        "owner": "arimxyer",
+        "repo": "homebrew-tap",
+        "rev": "1daeacf8b9ce9fab009e99f64808b2673fecf589",
+        "type": "github"
+      },
+      "original": {
+        "owner": "arimxyer",
+        "repo": "homebrew-tap",
+        "type": "github"
+      }
+    },
+    "homebrew-basecamp-tap": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1774556252,
+        "narHash": "sha256-7ogbPJNAGYSIcB1mqNWlGAGAScK1Fwn7ypbyli4rGM4=",
+        "owner": "basecamp",
+        "repo": "homebrew-tap",
+        "rev": "bc7a916b1525c25d0331ce305bc6db6d3c31758a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "basecamp",
+        "repo": "homebrew-tap",
+        "type": "github"
+      }
+    },
+    "homebrew-dopplerhq-cli": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776893968,
+        "narHash": "sha256-fmbMp/cuUP+o59+ACJWMgBnXtsJVBh3PFO1vmkaLkxk=",
+        "owner": "dopplerhq",
+        "repo": "homebrew-cli",
+        "rev": "b79f7846877f20ab728f2e4267ee1a1e5b4e4e69",
+        "type": "github"
+      },
+      "original": {
+        "owner": "dopplerhq",
+        "repo": "homebrew-cli",
+        "type": "github"
+      }
+    },
+    "homebrew-oven-sh-bun": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776672599,
+        "narHash": "sha256-+x+cKq6hA/Lo7EVBxEEvnrT7HMvO6ukYa6XPBn8SJpE=",
+        "owner": "oven-sh",
+        "repo": "homebrew-bun",
+        "rev": "b628c1e4c7c4469dbc1d2f98f23531ff7aa6b5d7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oven-sh",
+        "repo": "homebrew-bun",
         "type": "github"
       }
     },
@@ -97,6 +177,11 @@
     "root": {
       "inputs": {
         "home-manager": "home-manager",
+        "homebrew-anomalyco-tap": "homebrew-anomalyco-tap",
+        "homebrew-arimxyer-tap": "homebrew-arimxyer-tap",
+        "homebrew-basecamp-tap": "homebrew-basecamp-tap",
+        "homebrew-dopplerhq-cli": "homebrew-dopplerhq-cli",
+        "homebrew-oven-sh-bun": "homebrew-oven-sh-bun",
         "nix-darwin": "nix-darwin",
         "nix-homebrew": "nix-homebrew",
         "nixpkgs": "nixpkgs"

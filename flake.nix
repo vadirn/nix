@@ -5,7 +5,32 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     nix-darwin.url = "github:LnL7/nix-darwin/nix-darwin-25.11";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
-    nix-homebrew.url = "github:zhaofengli-wip/nix-homebrew/aeb2069920";
+    nix-homebrew = {
+      url = "github:zhaofengli-wip/nix-homebrew/aeb2069920";
+      inputs.brew-src.url = "github:Homebrew/brew/5.1.10";
+    };
+
+    homebrew-dopplerhq-cli = {
+      url = "github:dopplerhq/homebrew-cli";
+      flake = false;
+    };
+    homebrew-arimxyer-tap = {
+      url = "github:arimxyer/homebrew-tap";
+      flake = false;
+    };
+    homebrew-oven-sh-bun = {
+      url = "github:oven-sh/homebrew-bun";
+      flake = false;
+    };
+    homebrew-anomalyco-tap = {
+      url = "github:anomalyco/homebrew-tap";
+      flake = false;
+    };
+    homebrew-basecamp-tap = {
+      url = "github:basecamp/homebrew-tap";
+      flake = false;
+    };
+
     home-manager.url = "github:nix-community/home-manager/release-25.11";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
   };
@@ -16,6 +41,7 @@
     nix-darwin,
     nix-homebrew,
     home-manager,
+    ...
   }: let
     system = "aarch64-darwin";
     vault-query = nixpkgs.legacyPackages.${system}.rustPlatform.buildRustPackage {
@@ -139,11 +165,19 @@
               enable = true;
               enableRosetta = true;
               user = "vadim";
-              extraEnv = {
-                HOMEBREW_NO_INSTALL_FROM_API = "1";
+              mutableTaps = false;
+              taps = {
+                "dopplerhq/homebrew-cli" = inputs.homebrew-dopplerhq-cli;
+                "arimxyer/homebrew-tap" = inputs.homebrew-arimxyer-tap;
+                "oven-sh/homebrew-bun" = inputs.homebrew-oven-sh-bun;
+                "anomalyco/homebrew-tap" = inputs.homebrew-anomalyco-tap;
+                "basecamp/homebrew-tap" = inputs.homebrew-basecamp-tap;
               };
             };
           }
+          ({config, ...}: {
+            homebrew.taps = builtins.attrNames config.nix-homebrew.taps;
+          })
           home-manager.darwinModules.home-manager
           (import ./home {
             username = "vadim";
