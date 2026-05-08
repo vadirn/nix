@@ -1,10 +1,8 @@
 ---
 name: pr
 description: >
-  Create pull requests and check CI status. Use when the user says "create pr", "open pr",
-  "make a pr", "pr", "сделай PR", "открой PR", "пулл реквест", "check ci", "why is ci failing",
-  "pr status", "are checks passing", "что с CI", "проверь CI". Also use when the user finishes
-  work and wants to open a PR.
+  Create pull requests and check CI status. Triggers: /pr, "create pr", "open pr", "сделай PR",
+  "пулл реквест", "check ci", "why is ci failing", "pr status", "проверь CI".
 ---
 
 # PR

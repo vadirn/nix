@@ -1,9 +1,8 @@
 ---
 name: grade
 description: >
-  Grade a decision, recommendation, or claim on a 1-10 confidence scale with structured reasoning.
-  Use when user invokes /grade or explicitly asks to grade or rate confidence in a specific decision.
-  Grade requires a concrete claim to evaluate. Open questions go to debate, plan stress-testing goes to probe.
+  Grade a decision/recommendation/claim on a 1-10 confidence scale. Use on /grade or "rate confidence in X".
+  Open questions → /debate; plan stress-test → /probe.
 ---
 
 # Grade

@@ -1,6 +1,6 @@
 ---
 name: project-setup
-description: Scaffolds a vault project folder and points the current repo at it via .vault.config.json. Use whenever the user wants to set up a new project, initialize project tracking in Obsidian, or connect a repo to a vault project folder.
+description: Scaffold a vault project folder and link the current repo via .vault.config.json. Use on /project-setup or "set up a new project".
 ---
 
 # Setup Project

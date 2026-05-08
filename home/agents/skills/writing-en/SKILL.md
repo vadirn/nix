@@ -1,6 +1,6 @@
 ---
 name: writing-en
-description: Writes and edits English text for clarity and concision. Removes nominalizations, passive voice, filler, and AI patterns. Use when writing documentation, README, commit messages, UI text, reports, emails, or when asked to simplify text, cut fluff, or check for plain language.
+description: Edit English text for clarity. Removes passive voice, filler, AI patterns. Use on /writing-en, "simplify text", "cut fluff".
 ---
 
 # Clear Writing in English

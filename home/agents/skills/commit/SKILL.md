@@ -1,10 +1,8 @@
 ---
 name: commit
 description: >
-  Stage and commit changes with a conventional commit message. Use when the user says "commit",
-  "let's commit", "коммит", "закоммить", "сохрани изменения", "зафиксируй", "save changes",
-  or asks to create a git commit. Also use when the user finished a task and wants to wrap up
-  with a commit. Do NOT use for amending, rebasing, or pushing — only for creating new commits.
+  Stage and commit changes with a conventional commit message. Triggers: /commit, "commit", "коммит",
+  "закоммить", "сохрани изменения". For new commits only — skip for amend/rebase/push.
 ---
 
 # Commit
