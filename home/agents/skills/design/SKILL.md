@@ -1,11 +1,9 @@
 ---
 name: design
 description: >
-  Generate multiple radically different designs for a module, interface, data model,
-  or system using parallel sub-agents. Use when user invokes /design or wants to
-  explore options, see alternative approaches, "design it twice", compare different
-  architectures, or asks "what are my options for". Do NOT use for comparing existing
-  options (that's debate) or stress-testing a chosen design (that's probe).
+  Generate multiple radically different designs for a module, interface, or system using parallel
+  subagents. Triggers: /design, "design it twice", "what are my options for", "compare architectures".
+  Skip when comparing existing options (use /debate) or stress-testing one plan (use /probe).
 ---
 
 # Design

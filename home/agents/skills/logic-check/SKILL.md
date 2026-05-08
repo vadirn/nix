@@ -1,14 +1,9 @@
 ---
 name: logic-check
 description: >
-  Проверяет текст на логическую правильность по учебнику логики Виноградова и Кузьмина (1954).
-  Находит нарушения четырёх законов логики, шести правил доказательства, правил определения и
-  деления, путаницу гипотезы с доказанным утверждением. Используй когда просят проверить логику,
-  проверить рассуждение, найти логические ошибки, проверить аргументацию, разобрать тезис, или
-  когда видишь /logic-check. Also use when the user asks to check the logic, check the reasoning,
-  check the argument, find logical errors, find logical fallacies, audit an argument, or evaluate
-  the soundness of a claim. Works on Russian and English text — the report is emitted in the
-  same language as the input.
+  Проверка текста на логические ошибки по Виноградову/Кузьмину: законы логики, правила доказательства,
+  определения и деления. Use to check reasoning, find fallacies, audit an argument. Triggers:
+  /logic-check, "проверь логику", "check the reasoning". Output language matches input (RU/EN).
 model: claude-opus-4-7
 ---
 

@@ -1,14 +1,9 @@
 ---
 name: work
 description: >
-  Orchestrate a multi-step task by delegating filesystem, shell, and bulk-output
-  work to fresh subagents, keeping the orchestrator session small. Use when the
-  user invokes /work <task>, says "orchestrate this", "delegate this work", or
-  "work on this in subagents". Skip for one-shot questions answerable from
-  context, single-file edits without exploration, tasks the user has already
-  broken into atomic steps and is driving manually, and the ambient "let's
-  work on X" / "start working on X" phrasings — those phrases trigger
-  over-eagerly.
+  Orchestrate a multi-step task by delegating to fresh subagents, keeping the orchestrator session small.
+  Triggers: /work <task>, "orchestrate this", "delegate this work". Skip one-shot questions, single-file
+  edits, and the ambient "let's work on X" / "start working on X" phrasing.
 ---
 
 # Work

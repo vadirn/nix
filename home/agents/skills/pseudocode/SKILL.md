@@ -1,11 +1,9 @@
 ---
 name: pseudocode
 description: >
-  Convert freeform workflow instructions into structured pseudocode for Claude Code skills.
-  Use when writing or rewriting SKILL.md files, when the user says "write pseudocode",
-  "convert to pseudocode", "make this a skill", or when refactoring skill instructions
-  from prose to structured form. Also use when reviewing existing skill pseudocode for
-  consistency with conventions.
+  Convert freeform workflow text into structured pseudocode for SKILL.md files. Triggers: /pseudocode,
+  "write pseudocode", "convert to pseudocode", "make this a skill", or refactoring skill instructions
+  from prose.
 ---
 
 # Pseudocode

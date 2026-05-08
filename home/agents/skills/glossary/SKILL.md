@@ -1,13 +1,9 @@
 ---
 name: glossary
 description: >
-  Bootstrap and maintain a project GLOSSARY.md that defines domain-specific terms.
-  Use when user invokes /glossary, asks to build a glossary, document domain
-  vocabulary, extract key concepts, write up the jargon, define project terms,
-  disambiguate terminology, or asks "what does X mean in this codebase" or
-  "what are the main entities in this code". Use this proactively when the
-  user discusses domain concepts or encounters ambiguous terminology, even if
-  they don't ask for a glossary explicitly.
+  Bootstrap and maintain a project GLOSSARY.md of domain terms. Triggers: /glossary, "build a glossary",
+  "document the jargon", "define project terms", "what does X mean in this codebase". Use proactively
+  when the user discusses ambiguous domain terminology.
 ---
 
 # Glossary

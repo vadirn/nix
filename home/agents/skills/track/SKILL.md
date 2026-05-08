@@ -1,13 +1,10 @@
 ---
 name: track
 description: >
-  Read or save a per-project track — the rolling handoff file in `41 projects/<project>/track-<slug>.md`.
-  Triggers on explicit `/track` and `/track save` commands. Also triggers on session save/checkpoint phrases:
-  "wrapping up", "save what we did", "log what we accomplished", "save our progress", "end of session",
-  "save session", "we finished X and still need to do Y". Triggers on resume phrases: "what was I working on",
-  "where did we leave off", "continue where I left off", "pick up the track". Track creation, status changes,
-  Decisions/Backlog/Log edits, atomic write to disk all live here. Excludes: editing arbitrary track markdown
-  (use the file editor directly), creating non-track artifacts (cards/notes/references — those route to /vault).
+  Read or save a per-project rolling handoff file at `41 projects/<project>/track-<slug>.md`.
+  Triggers: `/track`, save phrases ("wrapping up", "save session", "end of session"), resume phrases
+  ("what was I working on", "where did we leave off"). Non-track artifacts (cards/notes/references)
+  route to /vault.
 ---
 
 # Track
