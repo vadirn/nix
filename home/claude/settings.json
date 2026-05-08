@@ -231,6 +231,7 @@
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
+  "skillListingBudgetFraction": 0.015,
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
   "theme": "auto",
