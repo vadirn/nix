@@ -14,6 +14,9 @@ impl Rule for OrphanCard {
     fn check(&self, ctx: &LintContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for card in &ctx.cards {
+            if is_folder_index(card) {
+                continue;
+            }
             let name_lower = card.name.to_lowercase();
             if !ctx.backlink_index.contains_key(&name_lower) {
                 findings.push(Finding {
@@ -27,6 +30,21 @@ impl Rule for OrphanCard {
         }
         findings
     }
+}
+
+fn is_folder_index(card: &crate::vault::VaultFile) -> bool {
+    let Some(stem) = card.name.strip_prefix('~') else {
+        return false;
+    };
+    let Some(parent) = card
+        .path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+    else {
+        return false;
+    };
+    parent == stem
 }
 
 #[cfg(test)]
@@ -101,6 +119,28 @@ mod tests {
 
         let findings = OrphanCard.check(&ctx);
         assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn folder_index_card_emits_no_finding() {
+        let card = card_file("~Foo", "/vault/20 cards/Foo/~Foo.md");
+        let files = vec![card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = OrphanCard.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn loose_tilde_card_without_matching_folder_still_emits_finding() {
+        let card = card_file("~loose", "/vault/20 cards/~loose.md");
+        let files = vec![card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = OrphanCard.check(&ctx);
+        assert_eq!(findings.len(), 1);
     }
 
     #[test]

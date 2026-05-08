@@ -20,7 +20,7 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 
 | Rule                     | Default | What it flags                                                                     |
 | ------------------------ | ------- | --------------------------------------------------------------------------------- |
-| `orphan-card`            | warn    | Card with zero inbound wikilinks                                                  |
+| `orphan-card`            | warn    | Card with zero inbound wikilinks (excludes folder-index cards: `<X>/~<X>.md`)     |
 | `dangling-reference`     | warn    | Reference not cited by any card's `reference:` frontmatter                        |
 | `reference-not-wikilink` | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL)                 |
 | `broken-wikilink`        | error   | `[[target]]` does not resolve to any vault file                                   |
