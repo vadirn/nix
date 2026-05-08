@@ -1,4 +1,4 @@
 repo=anthropics/claude-plugins-official
 subdir=plugins/skill-creator
-commit=b392f51899343f35a203260a4b344803de236d13
-hash=cce91c9afca81683c275e6447fb33057aae598058e29222f7b9684943a47b905
+commit=76b35e91d1c99c090b1a08dade53bcc5e352c1b2
+hash=f5c624ef093760607a544bc0f64a61d3760c4e97f758cfe0922dc4e8a5459ca4
