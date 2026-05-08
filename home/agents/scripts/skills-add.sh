@@ -43,6 +43,8 @@ usage:
   skills-add --update <name>                     refresh one vendored skill
   skills-add --list                              print vendored skills
   skills-add --remove <name>                     remove a vendored skill
+  skills-add --diff                              regenerate .diff patch for all vendored skills
+  skills-add --diff <name>                       regenerate .diff patch for one vendored skill
   skills-add --force <owner>/<repo> [<skill>]    overwrite local edits on update
 
 flags are composable before the repo spec: --force and --subdir both accepted.
@@ -75,7 +77,7 @@ content_hash() {
 }
 
 clone_upstream() {
-  local repo="$1"
+  local repo="$1" want_sha="${2:-}"
   local dir="$CLEANUP_ROOT/clone"
   rm -rf "$dir"
   if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
@@ -84,6 +86,15 @@ clone_upstream() {
   else
     git clone --depth=1 --quiet "https://github.com/$repo" "$dir" \
       || die "git clone https://github.com/$repo failed"
+  fi
+  if [ -n "$want_sha" ]; then
+    local got_sha
+    got_sha="$(git -C "$dir" rev-parse HEAD)"
+    if [ "$got_sha" != "$want_sha" ]; then
+      git -C "$dir" fetch --quiet --depth=1 origin "$want_sha" 2>/dev/null \
+        || die "git fetch $want_sha from $repo failed (SHA not fetchable — re-run skills-add to update the pinned commit)"
+      git -C "$dir" checkout --quiet FETCH_HEAD
+    fi
   fi
   git -C "$dir" rev-parse HEAD
 }
@@ -362,6 +373,176 @@ $src_list
 EOF
 }
 
+# diff_one_skill <name> <tmp_dir> <sha>
+# Regenerates .diff for <name> against the upstream tree at <tmp_dir>
+# (already cloned at <sha>), then recomputes hash= in .source.
+diff_one_skill() {
+  local name="$1" tmp="$2" sha="$3"
+  local skill_dir="$SKILLS_DIR/$name"
+  local source_file="$skill_dir/.source"
+  [ -f "$source_file" ] || die "not vendored: $name (missing $source_file)"
+
+  local repo subdir narrow_skill
+  repo="$(get_source_field "$source_file" repo)"
+  subdir="$(get_source_field "$source_file" subdir)"
+  narrow_skill="$(get_source_field "$source_file" skill)"
+
+  local scan_out upstream_dir
+  scan_out="$(scan_layout "$tmp" "$repo" "$subdir")"
+
+  # Find the upstream directory for this skill.
+  # For narrow installs scan_layout may return multiple entries; match by name.
+  upstream_dir=""
+  while IFS=$'\t' read -r raw_name dir; do
+    [ -n "$raw_name" ] || continue
+    local lname
+    lname="$(lowercase "$raw_name")"
+    if [ -n "$narrow_skill" ]; then
+      local lnarrow
+      lnarrow="$(lowercase "$narrow_skill")"
+      if [ "$lname" = "$lnarrow" ]; then
+        upstream_dir="$dir"
+        break
+      fi
+    else
+      if [ "$lname" = "$name" ]; then
+        upstream_dir="$dir"
+        break
+      fi
+    fi
+  done <<EOF
+$scan_out
+EOF
+
+  if [ -z "$upstream_dir" ]; then
+    die "could not locate $name in upstream $repo"
+  fi
+
+  local upstream_skill_md="$upstream_dir/SKILL.md"
+  [ -f "$upstream_skill_md" ] || die "SKILL.md not found at $upstream_skill_md"
+
+  local local_skill_md="$skill_dir/SKILL.md"
+  [ -f "$local_skill_md" ] || die "local SKILL.md not found at $local_skill_md"
+
+  local diff_out diff_file="$skill_dir/.diff"
+  diff_out="$(diff -u --label a/SKILL.md --label b/SKILL.md "$upstream_skill_md" "$local_skill_md" || true)"
+
+  if [ -z "$diff_out" ]; then
+    # No difference between upstream and local.
+    if [ -f "$diff_file" ]; then
+      rm -f "$diff_file"
+      log "diff: $name — removed stale .diff (local now matches upstream @ ${sha:0:7})"
+    else
+      log "diff: $name — no changes (upstream @ ${sha:0:7})"
+    fi
+  else
+    # Write fresh .diff with git-style header.
+    local had_diff=0
+    [ -f "$diff_file" ] && had_diff=1
+    { printf 'diff --git a/SKILL.md b/SKILL.md\n'; printf '%s\n' "$diff_out"; } > "$diff_file"
+    if [ "$had_diff" -eq 1 ]; then
+      log "diff: $name — updated .diff (upstream @ ${sha:0:7})"
+    else
+      log "diff: $name — wrote new .diff (upstream @ ${sha:0:7})"
+    fi
+  fi
+
+  # Recompute hash after any .diff write/removal and update .source.
+  local new_hash
+  new_hash="$(content_hash "$skill_dir")"
+  awk -v new_hash="$new_hash" '
+    /^hash=/ { print "hash=" new_hash; next }
+    { print }
+  ' "$source_file" > "$source_file.tmp"
+  mv "$source_file.tmp" "$source_file"
+}
+
+cmd_diff() {
+  local target_name="${1:-}"
+
+  if [ -n "$target_name" ]; then
+    local src="$SKILLS_DIR/$target_name/.source"
+    [ -f "$src" ] || die "not vendored: $target_name (missing $src)"
+    local repo commit
+    repo="$(get_source_field "$src" repo)"
+    commit="$(get_source_field "$src" commit)"
+    local sha
+    sha="$(clone_upstream "$repo" "$commit")"
+    diff_one_skill "$target_name" "$CLEANUP_ROOT/clone" "$sha"
+    return 0
+  fi
+
+  # Batch mode: dedup clones by (repo, commit) pair.
+  local any=0 src name
+  # First pass: collect all (name, repo, commit) tuples.
+  local skill_list=""
+  for src in "$SKILLS_DIR"/*/.source; do
+    [ -f "$src" ] || continue
+    any=1
+    name="$(basename "$(dirname "$src")")"
+    local repo commit
+    repo="$(get_source_field "$src" repo)"
+    commit="$(get_source_field "$src" commit)"
+    skill_list="${skill_list}${name}	${repo}	${commit}
+"
+  done
+
+  if [ "$any" -eq 0 ]; then
+    log 'no vendored skills'
+    return 0
+  fi
+
+  # Second pass: clone once per (repo, commit), then process each skill.
+  local seen_keys="" clone_idx=0
+  while IFS=$'\t' read -r sname srepo scommit; do
+    [ -n "$sname" ] || continue
+    local key="${srepo}|${scommit}"
+    local cache_dir="$CLEANUP_ROOT/diff-clone-${clone_idx}"
+
+    # Check if we already have a clone for this (repo, commit).
+    local cached_dir=""
+    local k i=0
+    while IFS=$'\t' read -r k d; do
+      [ -n "$k" ] || continue
+      if [ "$k" = "$key" ]; then
+        cached_dir="$d"
+        break
+      fi
+      i=$((i + 1))
+    done <<EOF2
+$seen_keys
+EOF2
+
+    if [ -z "$cached_dir" ]; then
+      # New (repo, commit) pair — clone into a fresh directory.
+      # clone_upstream always uses $CLEANUP_ROOT/clone; copy it out after cloning.
+      local actual_sha
+      actual_sha="$(clone_upstream "$srepo" "$scommit")"
+      cp -r "$CLEANUP_ROOT/clone" "$cache_dir"
+      seen_keys="${seen_keys}${key}	${cache_dir}	${actual_sha}
+"
+      clone_idx=$((clone_idx + 1))
+      cached_dir="$cache_dir"
+    fi
+
+    # Retrieve the sha for this cache entry.
+    local entry_sha=""
+    while IFS=$'\t' read -r k d s; do
+      [ -n "$k" ] || continue
+      if [ "$k" = "$key" ]; then
+        entry_sha="$s"
+        break
+      fi
+    done <<EOF3
+$seen_keys
+EOF3
+
+    diff_one_skill "$sname" "$cached_dir" "$entry_sha"
+  done <<EOF
+$skill_list
+EOF
+}
+
 # ---- main ----
 
 [ "$#" -gt 0 ] || usage
@@ -396,6 +577,16 @@ while [ "$#" -gt 0 ]; do
         shift
       fi
       ;;
+    --diff)
+      [ -z "$SUBCMD" ] || die "conflicting subcommands: --$SUBCMD and --diff"
+      SUBCMD="diff"
+      if [ "$#" -ge 2 ] && [ "${2#--}" = "$2" ]; then
+        SUBCMD_ARG="$2"
+        shift 2
+      else
+        shift
+      fi
+      ;;
     --force)
       FORCE=1
       shift
@@ -419,6 +610,7 @@ case "$SUBCMD" in
   list)   cmd_list; exit 0 ;;
   remove) cmd_remove "$SUBCMD_ARG"; exit 0 ;;
   update) cmd_update "$SUBCMD_ARG"; exit 0 ;;
+  diff)   cmd_diff "$SUBCMD_ARG"; exit 0 ;;
 esac
 
 [ "$#" -ge 1 ] || usage
