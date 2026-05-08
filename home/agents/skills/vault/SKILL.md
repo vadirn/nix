@@ -1,21 +1,12 @@
 ---
 name: vault
 description: >
-  Personal knowledge management in an Obsidian vault. Use this skill whenever the user wants to save, find, review,
-  or organize knowledge — even if they don't say "vault" or "Obsidian". Triggers on: saving a link/article/video/book
-  for later (creates a reference in 10 references/), distilling a concept or takeaway from something they read/watched
-  (creates a card in 20 cards/), writing down an original idea, observation, or synthesis connecting multiple concepts
-  (creates a note in 30 notes/), searching or browsing what they know about a topic, quizzing or testing recall on
-  saved concepts, listing or filtering cards by tag, checking project status, listing active or current projects
-  ("which projects am I working on", "project status overview", "what are my open projects"). Also handles explicit
-  /vault commands (search, card, note, reference, review, cards, projects, validate). XP/streak reports use
-  `vault-query xp`. Also triggers on weekly log operations: adding tasks to backlog ("добавь в бэклог", "backlog"),
-  planning tasks for the week, completing tasks, tracking sleep, or any mention of weekly planning, task lists, or
-  activity log. EXCLUDES: editing specific Obsidian markdown files directly (callout blocks, formatting, syntax),
-  Obsidian app features (kanban boards, canvas files, graph view, plugins, settings, UI configuration), editing .base
-  files, creating canvas files, or general web search. Track read/save and session save/checkpoint phrases route to
-  the /track skill, not here. The distinction: vault skill manages *what you know* (saving, finding, reviewing
-  knowledge). Raw markdown editing and Obsidian app configuration are outside this skill's scope.
+  Personal knowledge management in an Obsidian vault. Use whenever the user wants to save, find, review, or organize
+  knowledge, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into
+  cards, writing original notes, searching or quizzing saved content, listing active projects ("what am I working
+  on"), explicit /vault commands, weekly-log operations (backlog/бэклог, planning, completing tasks, sleep). Excludes
+  raw markdown edits, Obsidian app features (kanban, canvas, plugins, .base), web search. Session-handoff phrases
+  route to /track.
 ---
 
 # Vault
