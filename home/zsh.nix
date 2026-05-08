@@ -49,9 +49,14 @@
       lg() {
         local cfg="$HOME/.config/lazygit/config.yml"
         if [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" != "Dark" ]]; then
-          cfg="$cfg,$HOME/.config/lazygit/light.yml"
+          cfg="$HOME/.config/lazygit/light.yml"
         fi
-        LG_CONFIG_FILE="$cfg" lazygit "$@"
+        export LAZYGIT_NEW_DIR_FILE=~/.lazygit/newdir
+        LG_CONFIG_FILE="$cfg" command lazygit "$@"
+        if [ -f $LAZYGIT_NEW_DIR_FILE ]; then
+          cd "$(cat $LAZYGIT_NEW_DIR_FILE)"
+          rm -f $LAZYGIT_NEW_DIR_FILE > /dev/null
+        fi
       }
       alias y='yazi'
       alias v='nvim'

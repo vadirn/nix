@@ -7,3 +7,5 @@ gui:
 git:
   pagers:
     - pager: delta --features=catppuccin-latte --paging=never
+os:
+  editPreset: micro

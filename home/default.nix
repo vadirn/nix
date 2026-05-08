@@ -50,7 +50,10 @@
           enable = true;
           enableZshIntegration = true;
         };
-        lazygit.enable = true;
+        lazygit = {
+          enable = true;
+          enableZshIntegration = false;
+        };
         bat.enable = true;
       };
       home.activation.installClaude = config.lib.dag.entryAfter ["writeBoundary"] ''
