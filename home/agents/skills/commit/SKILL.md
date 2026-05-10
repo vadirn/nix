@@ -31,10 +31,8 @@ message = "<prefix>: <message>"
 if needs_confirmation:
     AskUserQuestion: show prefix, message, staged files
 
-Bash(git commit -m "$(cat <<'EOF'
-<prefix>: <message>
-EOF
-)")
+Write($TMPDIR/commit.txt, "<prefix>: <message>")
+Bash(git commit -F $TMPDIR/commit.txt)
 
 Bash(git status)
 ```
@@ -59,6 +57,15 @@ Examples:
 - Focus on WHY, not WHAT
 - No body, no scope unless disambiguation needed
 - Match recent commit style from log
+
+### Write the message to a file
+
+Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the message to `$TMPDIR/commit.txt` and pass `-F`:
+
+```
+Write($TMPDIR/commit.txt, "<prefix>: <message>")
+Bash(git commit -F $TMPDIR/commit.txt)
+```
 
 ## Rules
 

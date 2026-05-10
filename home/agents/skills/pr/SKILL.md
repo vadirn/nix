@@ -30,71 +30,82 @@ diff = Bash(git diff <default_branch>...HEAD)
 log = Bash(git log <default_branch>..HEAD --oneline)
 
 // Guards
-if branch == default_branch: stop, tell user to create a feature branch
-if uncommitted changes: invoke the commit skill, then stop
+if branch == default_branch: stop, ask user to create a feature branch
+if uncommitted changes in status: Skill(commit), then stop
 
-// Push if needed
+// Push
 if no upstream: Bash(git push -u origin <branch>)
 else if ahead: Bash(git push)
 
-// Check for existing PR
+// Existing PR
 existing = Bash(gh pr view --json url,state -q '.url' 2>/dev/null)
-if existing: show URL, ask update or stop
+if existing: show URL, AskUserQuestion("update or stop?")
 
-// Load PR template
-templates = Glob(".github/PULL_REQUEST_TEMPLATE/*.md")
-if templates has multiple files:
-  AskUserQuestion: let user pick which template to use
-  template_content = Read(chosen template)
+// Template (GitHub's resolution order)
+multi = Glob(".github/PULL_REQUEST_TEMPLATE/*.md")
+if multi has multiple files:
+  chosen = AskUserQuestion("pick a template")
+  template_content = Read(chosen)
 else:
-  // Single template: check standard locations (GitHub uses first found)
-  template = Glob("**/{pull_request_template,PULL_REQUEST_TEMPLATE}.md")
-  if template: template_content = Read(first match)
+  for path in [".github/pull_request_template.md", "docs/pull_request_template.md", "pull_request_template.md"]:
+    if Read(path) succeeds: template_content = result; break
+  if no template_content:
+    for path in [".github/PULL_REQUEST_TEMPLATE.md", "docs/PULL_REQUEST_TEMPLATE.md", "PULL_REQUEST_TEMPLATE.md"]:
+      if Read(path) succeeds: template_content = result; break
 
-title, body = generate from diff and log, using template_content as body structure if available
-confirm with user: title, body, base branch, draft status
-Bash(gh pr create --title "<title>" --body "$(cat <<'EOF' ... EOF)" --draft)
+title = do("generate title from diff and log")
+if template_content:
+  body = do("fill template_content placeholders from diff and log; preserve every heading, emoji, and section verbatim")
+else:
+  body = do("write ## Summary bullets and ## Test plan checklist from diff and log")
+
+AskUserQuestion("confirm title, body, base branch, draft status")
+Write($TMPDIR/pr.md, body)
+Bash(gh pr create --title "<title>" --body-file $TMPDIR/pr.md --draft)
 show PR URL
 ```
 
 ## Check flow
 
 ```
-pr = parse #N from command, or Bash(gh pr view --json number -q '.number')
-checks = Bash(gh pr checks [<pr>])
+pr = do("parse #N from command") or Bash(gh pr view --json number -q '.number')
+checks = Bash(gh pr checks <pr>)
 
-if all pass: report success, stop
-if some running: report status, suggest re-check later, stop
+// Guards
+if all checks pass: report success, stop
+if some checks running: report status, suggest re-check later, stop
 
-// On failures
+// Failures
 logs = Bash(gh run view <run_id> --log-failed)
-summarize errors, categorize mechanical vs semantic
-if mechanical: offer to fix, invoke the commit skill, Bash(git push)
+do("summarize errors, classify each as mechanical or semantic")
+if any mechanical:
+  AskUserQuestion("auto-fix mechanical failures?")
+  Skill(commit)
+  Bash(git push)
 ```
 
 ## Reference
 
 ### PR creation details
 
-- **Draft by default.** Always pass `--draft`. Omit only when user says "no draft" or "ready".
+- **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready".
 - **Title:** <70 chars, conventional style matching commit prefixes.
-- **Body:** If `.github/PULL_REQUEST_TEMPLATE/` has multiple templates, ask user to pick one. Otherwise use the single template from any standard location. Fill in template sections from the diff. Fall back to `## Summary` (bullet points) + `## Test plan` (checklist) if no template found.
-- **HEREDOC for body.** Preserves formatting:
+- **Body:** When a PR template exists, the body MUST be that template with placeholders filled in. Keep every heading, emoji, and section verbatim — preserve original names, order, and section count. Resolution order matches GitHub's: `.github/PULL_REQUEST_TEMPLATE/*.md` (multi — ask which), then single-template at `.github/pull_request_template.md` → `docs/pull_request_template.md` → `pull_request_template.md` (and uppercase variants). Fall back to `## Summary` (bullets) + `## Test plan` (checklist) only when the repo has no template file.
+- **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `$TMPDIR/pr.md` and pass `--body-file`:
   ```
-  gh pr create --title "<title>" --body "$(cat <<'EOF'
-  <body>
-  EOF
-  )"
+  Write($TMPDIR/pr.md, body)
+  Bash(gh pr create --title "<title>" --body-file $TMPDIR/pr.md --draft)
   ```
-- **Confirm before creating.** Show title and body. Skip only when user provided explicit title+body.
+  Use `gh pr edit --body-file` for updates to an existing PR.
+- **Confirm before creating.** Show title and body. Skip the confirmation only when the user supplied an explicit title and body.
 
 ### CI check details
 
 - Show 3-5 key error lines per failure, link to full run.
 - **Mechanical failures** (lint/format/types): offer to auto-fix, commit with `fix:` prefix, push.
-- **Semantic failures** (tests/infra): diagnose and explain only.
+- **Semantic failures** (tests/infra): diagnose and explain.
 
 ## Rules
 
-- **Separate git commands.** Chained commands (`&&`, `;`) bypass the permissions allowlist.
-- **Auto-detect base branch.** Use `gh repo view`. Ask only when detection fails.
+- **Run git commands separately.** Chained commands (`&&`, `;`) bypass the permissions allowlist.
+- **Auto-detect base branch.** Use `gh repo view`. Ask the user only when detection fails.
