@@ -31,8 +31,8 @@ message = "<prefix>: <message>"
 if needs_confirmation:
     AskUserQuestion: show prefix, message, staged files
 
-Write($TMPDIR/commit.txt, "<prefix>: <message>")
-Bash(git commit -F $TMPDIR/commit.txt)
+Write(/tmp/claude/commit.txt, "<prefix>: <message>")
+Bash(git commit -F /tmp/claude/commit.txt)
 
 Bash(git status)
 ```
@@ -60,11 +60,11 @@ Examples:
 
 ### Write the message to a file
 
-Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the message to `$TMPDIR/commit.txt` and pass `-F`:
+Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the message to `/tmp/claude/commit.txt` and pass `-F`:
 
 ```
-Write($TMPDIR/commit.txt, "<prefix>: <message>")
-Bash(git commit -F $TMPDIR/commit.txt)
+Write(/tmp/claude/commit.txt, "<prefix>: <message>")
+Bash(git commit -F /tmp/claude/commit.txt)
 ```
 
 ## Rules

@@ -73,6 +73,11 @@
         eza "''${args[@]}" | less -FRNX
       }
 
+      tmpclean() {
+        local days="''${1:-7}"
+        find /tmp/claude* -mtime +"$days" -type f -delete 2>/dev/null
+      }
+
       cl() { claude --continue || claude; }
       cln() { claude; }
     '';
