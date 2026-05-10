@@ -1,11 +1,8 @@
-#!/bin/bash
-# Nudge WebSearch/WebFetch toward the firecrawl-cli skill.
-# CLAUDE.md: "Use firecrawl for web search and fetching. Fall back to
-# WebFetch/WebSearch only if firecrawl fails."
-INPUT=$(cat)
-TOOL=$(echo "$INPUT" | jq -r '.tool_name')
+#!/usr/bin/env bash
+# Block WebSearch/WebFetch and route to the firecrawl-cli skill.
+set -euo pipefail
 
-REASON="Prefer the firecrawl-cli skill for web fetch/search (firecrawl-search for queries, firecrawl-scrape for URLs). Fall back to ${TOOL} only after firecrawl fails; when retrying, state the firecrawl error explicitly so the user can see why."
+REASON="WebSearch and WebFetch are blocked. Use the firecrawl-cli skill instead (firecrawl-search for queries, firecrawl-scrape for URLs)."
 
 jq -n --arg reason "$REASON" '{
   "hookSpecificOutput": {

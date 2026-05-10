@@ -142,7 +142,7 @@
         ]
       },
       {
-        "matcher": "WebSearch|WebFetch",
+        "matcher": "^(WebSearch|WebFetch)$",
         "hooks": [
           {
             "type": "command",
