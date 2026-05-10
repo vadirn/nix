@@ -62,6 +62,7 @@ else:
 AskUserQuestion("confirm title, body, base branch, draft status")
 Write(/tmp/claude/pr.md, body)
 Bash(gh pr create --title "<title>" --body-file /tmp/claude/pr.md --draft)
+Bash(rm -f /tmp/claude/pr.md)
 show PR URL
 ```
 
@@ -91,10 +92,11 @@ if any mechanical:
 - **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready".
 - **Title:** <70 chars, conventional style matching commit prefixes.
 - **Body:** When a PR template exists, the body MUST be that template with placeholders filled in. Keep every heading, emoji, and section verbatim — preserve original names, order, and section count. Resolution order matches GitHub's: `.github/PULL_REQUEST_TEMPLATE/*.md` (multi — ask which), then single-template at `.github/pull_request_template.md` → `docs/pull_request_template.md` → `pull_request_template.md` (and uppercase variants). Fall back to `## Summary` (bullets) + `## Test plan` (checklist) only when the repo has no template file.
-- **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `/tmp/claude/pr.md` and pass `--body-file`:
+- **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `/tmp/claude/pr.md`, pass `--body-file`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read):
   ```
   Write(/tmp/claude/pr.md, body)
   Bash(gh pr create --title "<title>" --body-file /tmp/claude/pr.md --draft)
+  Bash(rm -f /tmp/claude/pr.md)
   ```
   Use `gh pr edit --body-file` for updates to an existing PR.
 - **Confirm before creating.** Show title and body. Skip the confirmation only when the user supplied an explicit title and body.

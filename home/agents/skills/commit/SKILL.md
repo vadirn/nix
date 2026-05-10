@@ -33,6 +33,7 @@ if needs_confirmation:
 
 Write(/tmp/claude/commit.txt, "<prefix>: <message>")
 Bash(git commit -F /tmp/claude/commit.txt)
+Bash(rm -f /tmp/claude/commit.txt)
 
 Bash(git status)
 ```
@@ -60,11 +61,12 @@ Examples:
 
 ### Write the message to a file
 
-Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the message to `/tmp/claude/commit.txt` and pass `-F`:
+Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the message to `/tmp/claude/commit.txt`, pass `-F`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read):
 
 ```
 Write(/tmp/claude/commit.txt, "<prefix>: <message>")
 Bash(git commit -F /tmp/claude/commit.txt)
+Bash(rm -f /tmp/claude/commit.txt)
 ```
 
 ## Rules
