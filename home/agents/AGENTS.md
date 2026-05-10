@@ -61,7 +61,7 @@ Avoid:
 
 ## Commits
 
-Use conventional commit prefixes (feat, fix, chore). Short message, no body.
+Use the `/commit` skill to create commits. Use conventional commit prefixes (feat, fix, chore). Short message, no body.
 
 - fix: correct broken behavior
 - chore: no user-facing behavior change (improve design, improve performance)
@@ -76,11 +76,11 @@ Use conventional commit prefixes (feat, fix, chore). Short message, no body.
 
 ## Web
 
-Use `firecrawl` for web search and fetching. Fall back to WebFetch/WebSearch only if firecrawl fails.
+Use the `firecrawl-cli` skill for web search and fetching (it routes to `firecrawl-search`, `firecrawl-scrape`, etc.). WebSearch and WebFetch are blocked. To download a file, use `curl -L -o "$TMPDIR/<name>" <url>`. firecrawl extracts markdown; it does not save binaries.
 
 ## GitHub
 
-Use `gh` CLI for GitHub interactions.
+Use `gh` CLI for GitHub interactions. Use the `/pr` skill to create pull requests.
 
 ## Plans
 
