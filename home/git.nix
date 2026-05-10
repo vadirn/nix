@@ -2,6 +2,12 @@
   programs.git = {
     enable = true;
     lfs.enable = true;
+    ignores = [
+      "**/.claude/settings.local.json"
+      "**/.vault.config.json"
+      "**/.claude-plans/"
+      "**/.firecrawl/"
+    ];
     settings = {
       user.name = "Vadim Kotov";
       user.email = "vadim@vadirn.io";
