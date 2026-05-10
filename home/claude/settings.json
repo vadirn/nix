@@ -1,4 +1,5 @@
 {
+  "skillListingBudgetFraction": 0.015,
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
@@ -132,6 +133,15 @@
             "command": "bash ~/.claude/hooks/no-secrets-read.sh"
           }
         ]
+      },
+      {
+        "matcher": "WebSearch|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/prefer-firecrawl.sh"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -231,7 +241,6 @@
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
-  "skillListingBudgetFraction": 0.015,
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
   "theme": "auto",
