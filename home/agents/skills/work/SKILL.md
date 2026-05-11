@@ -20,7 +20,7 @@ if do("orchestration is already in progress from a prior /work in this session")
     do("merge <task> into the existing plan as additional steps; tag each new step 'read' or 'write'")
 else:
     plan = do("draft a numbered step list from <task>; tag each step 'read' (no file edits) or 'write' (creates or edits files); hold in session context only")
-    auto_commits_enabled = do("establish git posture via a setup subagent; see Reference: Git posture and auto-commits")
+    auto_commits_enabled = do("establish git posture (including a dedicated branch) via setup subagents; see Reference: Git posture and auto-commits")
     do("present plan to user")
 
 // Orchestration loop
@@ -127,11 +127,12 @@ Surface the error and the brief to the user; ask retry / modify / skip. Require 
 
 ### Git posture and auto-commits
 
-At orchestration start, the orchestrator spawns a setup subagent to report git posture: `in_git` (bool) and `dirty` (bool, plus modified-file list if true). The orchestrator never runs git itself.
+At orchestration start, the orchestrator spawns a setup subagent to report git posture: `in_git` (bool), `dirty` (bool, plus modified-file list if true), and whether the current branch is the repo's default branch (main/master). The orchestrator never runs git itself.
 
 - Outside a git working tree → auto-commits disabled. No commits during orchestration.
-- Inside git, clean tree → auto-commits enabled. Each step that produces file changes ends with a commit subagent.
-- Inside git, dirty tree → ask the user: commit existing changes first (delegated to the `commit` skill in a subagent), proceed with auto-commits disabled, or abort. After committing existing changes, re-check posture; a clean tree enables auto-commits.
+- Inside git, clean tree, off the default branch → auto-commits enabled. The current branch is the working branch; multiple `/work` invocations may share it (one track can spin off several tasks on the same branch).
+- Inside git, clean tree, on the default branch → spawn a subagent to create and switch to a non-default branch (any reasonable name, collision-safe; a short slug from `<task>` is a fine default). Then enable auto-commits. Orchestration commits never land on main/master.
+- Inside git, dirty tree → ask the user: commit existing changes first (delegated to the `commit` skill in a subagent), proceed with auto-commits disabled, or abort. After committing existing changes, re-check posture; if clean and on the default branch, create a non-default branch; then enable auto-commits.
 
 The commit subagent runs as the `commit-runner` agent type, whose static system prompt forces invocation of the `/commit` skill on the just-completed step's changes. The orchestrator's brief is one line; the agent's narrow toolset (`Bash`, `Read`, `Skill`) and procedural prompt carry the rest. The `commit` skill handles staging, conventional-prefix message generation (short, no body), and pre-commit hook failures. The orchestrator gets back the SHA and message in the subagent's Recap; nothing else enters orchestrator context.
 
