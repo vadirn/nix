@@ -42,15 +42,58 @@ Bash(git status)
 
 ### Prefix selection
 
-- **feat** = new functionality or capability
-- **fix** = corrects broken behavior
-- **chore** = no user-facing behavior change (refactor, perf, deps, config, docs)
+**Contract** = what the code promises its outermost audience: end-users for a product, callers for a library.
+
+In the contract:
+
+- Inputs accepted, outputs produced, errors raised, externally-visible side effects.
+- Type signatures (in typed languages).
+- Documented behavior, plus behavior that tests, types, or other callsites in this repo rely on.
+- Implicit safety promises every system makes: no data leaks, no crashes on malformed input, no privilege escalation.
+
+Not in the contract: speed, memory use, internal structure, log/metric/trace format (unless documented as a stability surface).
+
+Ask three questions in order; stop at the first "yes":
+
+1. Was the contract violated before this change, and now honored? → `fix`
+2. Does this change the contract (add, alter, or remove what's promised)? → `feat`
+3. Otherwise → `chore`
+
+`chore` is the default — most changes (refactor, perf, deps, config, internal docs, tests, migrations, i18n) sit below the contract line. `feat` and `fix` are reserved for changes that cross it, so they carry information: a `feat` commit means callers might need to react; a `fix` commit means a promise that was being violated is now honored.
+
+**One concern per commit.** If a change crosses the contract line in multiple ways, split it.
+
+**Scope carries visibility.** When a `chore` is operationally significant, use scope to signal it: `chore(perf): ...`, `chore(migration): ...`, `chore(i18n): ...`. In a repo with multiple contract surfaces (library + CLI, or monorepo packages), use scope to indicate which surface changed: `feat(sdk): ...`, `feat(ui): ...`.
 
 Examples:
 
-- "added retry logic to API client" → `feat: add retry logic to API client`
-- "typo in error message" → `fix: correct typo in API error message`
-- "extracted helper, no behavior change" → `chore: extract request helper from API client`
+*Contract changes (`feat`):*
+
+- "add retry logic to API client" — new promise → `feat`
+- "remove deprecated /v1 endpoint" — contract narrowed → `feat`
+- "drop deprecated `orders.legacy_status` column" — `feat(migration)`
+- "tighten return type from `any` to `User`" — type signature is part of the contract → `feat`
+
+*Contract repairs (`fix`):*
+
+- "fix typo in error message" — error text is part of the contract → `fix`
+- "patch credential-leak in token handler" — implicit safety promise was violated → `fix`
+- "correct wrong example in public API docs" — public docs are the contract → `fix`
+
+*Below the contract (`chore`):*
+
+- "extract request helper" — contract unchanged → `chore`
+- "cache user lookup, 50ms → 2ms" — speed isn't in the contract → `chore(perf)`
+- "page was 30s, now 1s; resolves slowness ticket" — same → `chore(perf)`
+- "add concurrent index on `orders.user_id`" — backward-compatible migration → `chore(migration)`
+- "add Korean translations" — localization is below the contract → `chore(i18n)`
+- "polish internal README" — internal docs aren't the contract → `chore`
+- "bump dependency, no API impact" → `chore`
+- "add unit test for existing behavior" → `chore`
+
+*Special:*
+
+- Reverts: apply the three-question test to what the revert undoes. Reverting a buggy release → `fix`. Pulling a feature → `feat`.
 
 ### Message style
 
