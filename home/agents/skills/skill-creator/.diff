@@ -39,7 +39,7 @@ diff --git a/SKILL.md b/SKILL.md
  Claude reads only the relevant reference file.
  
  #### Principle of Lack of Surprise
-@@ -117,18 +121,26 @@
+@@ -117,21 +121,29 @@
  Prefer using the imperative form in instructions.
  
  **Defining output formats** - You can do it like this:
@@ -65,7 +65,11 @@ diff --git a/SKILL.md b/SKILL.md
 +
  **Example 1:**
  Input: Added user authentication with JWT tokens
- Output: feat(auth): implement JWT-based authentication
+-Output: feat(auth): implement JWT-based authentication
++Output: feat: implement JWT-based authentication
+ ```
+ 
+ ### Writing Style
 @@ -182,6 +194,7 @@
  ```
  

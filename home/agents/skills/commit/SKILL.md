@@ -16,25 +16,28 @@ diff = Bash(git diff)
 staged = Bash(git diff --cached)
 log = Bash(git log --oneline -5)
 
-if no changes: tell user "Nothing to commit.", stop
+// Guards
+if no changes in status: do("say 'Nothing to commit.'"), stop
 
-// Analyze changes, pick ONE prefix: feat | fix | chore
-// Stage files by name (`git add file1 file2`)
-// Skip secrets (.env, credentials, tokens); warn if found
-// If user targets a subset ("commit the refactor"), stage only those
+// Stage
+files = do("pick files to stage; warn and exclude secrets (.env, credentials, tokens); honor user subset like 'commit the refactor'")
+Bash(git add <files>)
 
-// Draft message: short single line, lowercase after prefix, focus on WHY
-message = "<prefix>: <message>"
+// Draft
+prefix = do("pick one of feat | fix | chore by the three-question contract test")
+message = do("draft '<prefix>: <why>', short single lowercase line, state the WHY")
 
-// Confirm when ambiguous (mixed changes, unclear prefix, secrets detected)
-// Skip confirmation when: single logical change, clear prefix, no secrets
-if needs_confirmation:
-    AskUserQuestion: show prefix, message, staged files
+// Confirm when ambiguous
+needs_confirmation = do("true if mixed changes, unclear prefix, or secrets detected")
+if needs_confirmation: AskUserQuestion("prefix: <prefix> | message: <message> | files: <files>")
 
+// Commit
 Write(/tmp/claude/commit.txt, "<prefix>: <message>")
+Bash(mktemp /tmp/claude/commit-nonce.XXXXXX)
 Bash(git commit -F /tmp/claude/commit.txt)
 Bash(rm -f /tmp/claude/commit.txt)
 
+// Verify
 Bash(git status)
 ```
 
@@ -51,7 +54,7 @@ In the contract:
 - Documented behavior, plus behavior that tests, types, or other callsites in this repo rely on.
 - Implicit safety promises every system makes: no data leaks, no crashes on malformed input, no privilege escalation.
 
-Not in the contract: speed, memory use, internal structure, log/metric/trace format (unless documented as a stability surface).
+Outside the contract: speed, memory use, internal structure, log/metric/trace format (unless documented as a stability surface).
 
 Ask three questions in order; stop at the first "yes":
 
@@ -63,15 +66,13 @@ Ask three questions in order; stop at the first "yes":
 
 **One concern per commit.** If a change crosses the contract line in multiple ways, split it.
 
-**Scope carries visibility.** When a `chore` is operationally significant, use scope to signal it: `chore(perf): ...`, `chore(migration): ...`, `chore(i18n): ...`. In a repo with multiple contract surfaces (library + CLI, or monorepo packages), use scope to indicate which surface changed: `feat(sdk): ...`, `feat(ui): ...`.
-
-Examples:
+Prefix-selection examples (these illustrate which prefix to choose, not message style):
 
 *Contract changes (`feat`):*
 
 - "add retry logic to API client" — new promise → `feat`
 - "remove deprecated /v1 endpoint" — contract narrowed → `feat`
-- "drop deprecated `orders.legacy_status` column" — `feat(migration)`
+- "drop deprecated `orders.legacy_status` column" → `feat`
 - "tighten return type from `any` to `User`" — type signature is part of the contract → `feat`
 
 *Contract repairs (`fix`):*
@@ -83,38 +84,37 @@ Examples:
 *Below the contract (`chore`):*
 
 - "extract request helper" — contract unchanged → `chore`
-- "cache user lookup, 50ms → 2ms" — speed isn't in the contract → `chore(perf)`
-- "page was 30s, now 1s; resolves slowness ticket" — same → `chore(perf)`
-- "add concurrent index on `orders.user_id`" — backward-compatible migration → `chore(migration)`
-- "add Korean translations" — localization is below the contract → `chore(i18n)`
-- "polish internal README" — internal docs aren't the contract → `chore`
+- "cache user lookup, 50ms → 2ms" — speed sits below the contract line → `chore`
+- "page was 30s, now 1s; resolves slowness ticket" — same → `chore`
+- "add concurrent index on `orders.user_id`" — backward-compatible migration → `chore`
+- "add Korean translations" — localization sits below the contract line → `chore`
+- "polish internal README" — internal docs sit below the contract line → `chore`
 - "bump dependency, no API impact" → `chore`
 - "add unit test for existing behavior" → `chore`
 
 *Special:*
 
-- Reverts: apply the three-question test to what the revert undoes. Reverting a buggy release → `fix`. Pulling a feature → `feat`.
+- Reverts: apply the three-question test to the revert's effect on the contract. Reverting a buggy release restores a violated promise → `fix`. Pulling a feature narrows the contract → `feat`.
 
 ### Message style
 
 - Short single line, lowercase after prefix
-- Focus on WHY, not WHAT
-- No body, no scope unless disambiguation needed
-- Match recent commit style from log
+- State the WHY; the diff already shows the WHAT
+- Plain `<prefix>: ...` form only; no body, no scope. Match recent log only for tone and length, not for scope or body
 
-### Write the message to a file
+WHY vs WHAT:
 
-Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the message to `/tmp/claude/commit.txt`, pass `-F`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read):
+- `chore: extract request helper` — WHAT. Better: `chore: deduplicate retry/backoff between API clients`
+- `fix: typo in error message` — WHAT. Better: `fix: error text referenced removed flag, confusing users`
+- `feat: add retry logic to API client` — WHAT. Better: `feat: retry transient API failures so callers don't see flakes`
 
-```
-Write(/tmp/claude/commit.txt, "<prefix>: <message>")
-Bash(git commit -F /tmp/claude/commit.txt)
-Bash(rm -f /tmp/claude/commit.txt)
-```
+### Why the message goes through a file
+
+Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Passing `-F /tmp/claude/commit.txt` sidesteps the shell entirely. The file is deleted after the commit so the next run's `Write` sees a fresh path (the `Write` tool refuses to overwrite an existing file without a prior `Read`). The `mktemp` line creates the nonce that the global pre-commit hook requires — the hook expects a `/tmp/claude/commit-nonce.*` file less than 60 seconds old and deletes it on consume.
 
 ## Rules
 
 - **Separate git commands.** Chained commands (`&&`, `;`) bypass the permissions allowlist.
 - **Commit only.** Pushing is a separate user decision.
-- **Preserve history.** Only amend when user explicitly asks.
+- **Preserve history.** Amend only when the user explicitly asks.
 - **Run hooks.** If a hook fails, fix the issue, re-stage, create a fresh commit.

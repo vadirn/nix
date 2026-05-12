@@ -79,6 +79,7 @@
         ROOT="${homeDirectory}/nix" bash "${homeDirectory}/nix/home/claude/build-claude-md.sh"
       '';
       home.file.".config/git/hooks/post-commit".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/post-commit";
+      home.file.".config/git/hooks/pre-commit".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/pre-commit";
       home.file.".config/ghostty/config".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/ghostty-config";
       home.file.".config/lazygit/config.yml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazygit-config.yml";
       home.file.".config/lazygit/light.yml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazygit-light.yml";

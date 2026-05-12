@@ -35,6 +35,14 @@ append_activity() {
 
   local entry="- ${today}-${time} [${repo}] ${msg}"
 
+  local sentinel="/tmp/claude/commit-via-skill"
+  if [[ -f "$sentinel" ]]; then
+    entry="${entry} [via-skill]"
+    rm -f "$sentinel" 2>/dev/null
+  elif [[ "${CLAUDECODE:-}" == "1" ]]; then
+    entry="${entry} [manual]"
+  fi
+
   # Find ## Activity section
   if ! grep -q '^## Activity' "$log_file"; then
     return 0

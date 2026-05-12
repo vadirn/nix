@@ -120,6 +120,10 @@
           {
             "type": "command",
             "command": "python3 ~/.claude/hooks/pipe-allow.py"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/require-pr-nonce.sh"
           }
         ]
       },

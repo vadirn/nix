@@ -143,7 +143,7 @@ ALWAYS use this exact template:
 
 **Example 1:**
 Input: Added user authentication with JWT tokens
-Output: feat(auth): implement JWT-based authentication
+Output: feat: implement JWT-based authentication
 ```
 
 ### Writing Style
