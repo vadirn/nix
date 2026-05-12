@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Enforces nonce-based commit gating for Claude Code (/commit skill).
+# Manual terminal commits are always allowed (CLAUDECODE not set).
+set -euo pipefail
+
+# Gate: only enforce when running inside Claude Code.
+[[ "${CLAUDECODE:-}" == "1" ]] || exit 0
+
+# Kill-switch: per-invocation bypass.
+[[ "${SKIP_COMMIT_NONCE:-}" == "1" ]] && exit 0
+
+# Rebase exemption: nonce pre-emission is fragile during interactive/non-interactive rebases.
+git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
+if [[ -d "${git_dir}/rebase-merge" || -d "${git_dir}/rebase-apply" ]]; then
+  exit 0
+fi
+
+# Locate all nonce files, newest first.
+nonce_dir="/tmp/claude"
+mapfile -t nonces < <(find "$nonce_dir" -maxdepth 1 -name 'commit-nonce.*' -print 2>/dev/null | while IFS= read -r f; do printf '%s %s\n' "$(stat -f %m "$f" 2>/dev/null)" "$f"; done | sort -rn | awk '{print $2}')
+
+if [[ ${#nonces[@]} -eq 0 ]]; then
+  cat >&2 <<'MSG'
+pre-commit: commit blocked — no nonce file found in /tmp/claude/commit-nonce.*
+
+  This repo requires commits to go through the /commit skill, which creates
+  the nonce automatically. If you intentionally want to bypass this once, run:
+
+    SKIP_COMMIT_NONCE=1 git commit ...
+MSG
+  exit 1
+fi
+
+newest="${nonces[0]}"
+now=$(date +%s)
+mtime=$(stat -f %m "$newest" 2>/dev/null) || {
+  echo "pre-commit: could not stat nonce file; denying commit" >&2
+  exit 1
+}
+
+age=$(( now - mtime ))
+if (( age >= 60 )); then
+  echo "pre-commit: commit blocked — nonce '$(basename "$newest")' is ${age}s old (limit: 60s). Run /commit again." >&2
+  exit 1
+fi
+
+# Consume all nonce files (clean up leftovers from races or prior runs).
+for f in "${nonces[@]}"; do
+  rm -f "$f"
+done
+
+# Drop sentinel for post-commit to tag weekly-log entry as [via-skill].
+mkdir -p "$nonce_dir"
+touch "${nonce_dir}/commit-via-skill"
+
+exit 0
