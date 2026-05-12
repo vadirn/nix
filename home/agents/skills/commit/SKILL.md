@@ -32,6 +32,7 @@ if needs_confirmation:
     AskUserQuestion: show prefix, message, staged files
 
 Write(/tmp/claude/commit.txt, "<prefix>: <message>")
+Bash(mktemp /tmp/claude/commit-nonce.XXXXXX)
 Bash(git commit -F /tmp/claude/commit.txt)
 Bash(rm -f /tmp/claude/commit.txt)
 
@@ -104,10 +105,11 @@ Examples:
 
 ### Write the message to a file
 
-Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the message to `/tmp/claude/commit.txt`, pass `-F`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read):
+Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the message to `/tmp/claude/commit.txt`, pass `-F`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read). Create the nonce file immediately before committing — the global pre-commit hook requires a `/tmp/claude/commit-nonce.*` file less than 60 seconds old and deletes it on consume.
 
 ```
 Write(/tmp/claude/commit.txt, "<prefix>: <message>")
+Bash(mktemp /tmp/claude/commit-nonce.XXXXXX)
 Bash(git commit -F /tmp/claude/commit.txt)
 Bash(rm -f /tmp/claude/commit.txt)
 ```
