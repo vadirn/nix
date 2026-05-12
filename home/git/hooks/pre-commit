@@ -17,7 +17,7 @@ fi
 
 # Locate all nonce files, newest first.
 nonce_dir="/tmp/claude"
-mapfile -t nonces < <(find "$nonce_dir" -maxdepth 1 -name 'commit-nonce.*' -print 2>/dev/null | while IFS= read -r f; do printf '%s %s\n' "$(stat -f %m "$f" 2>/dev/null)" "$f"; done | sort -rn | awk '{print $2}')
+mapfile -t nonces < <(find "$nonce_dir" -maxdepth 1 -name 'commit-nonce.*' -print 2>/dev/null | while IFS= read -r f; do printf '%s %s\n' "$(stat --format=%Y "$f" 2>/dev/null)" "$f"; done | sort -rn | awk '{print $2}')
 
 if [[ ${#nonces[@]} -eq 0 ]]; then
   cat >&2 <<'MSG'
@@ -33,7 +33,7 @@ fi
 
 newest="${nonces[0]}"
 now=$(date +%s)
-mtime=$(stat -f %m "$newest" 2>/dev/null) || {
+mtime=$(stat --format=%Y "$newest" 2>/dev/null) || {
   echo "pre-commit: could not stat nonce file; denying commit" >&2
   exit 1
 }
