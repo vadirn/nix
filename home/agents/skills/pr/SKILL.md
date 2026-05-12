@@ -61,6 +61,7 @@ else:
 
 AskUserQuestion("confirm title, body, base branch, draft status")
 Write(/tmp/claude/pr.md, body)
+Bash(mktemp /tmp/claude/pr-nonce.XXXXXX)
 Bash(gh pr create --title "<title>" --body-file /tmp/claude/pr.md --draft)
 Bash(rm -f /tmp/claude/pr.md)
 show PR URL
@@ -95,9 +96,11 @@ if any mechanical:
 - **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `/tmp/claude/pr.md`, pass `--body-file`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read):
   ```
   Write(/tmp/claude/pr.md, body)
+  Bash(mktemp /tmp/claude/pr-nonce.XXXXXX)
   Bash(gh pr create --title "<title>" --body-file /tmp/claude/pr.md --draft)
   Bash(rm -f /tmp/claude/pr.md)
   ```
+  The `mktemp` step creates the nonce file consumed by the `require-pr-nonce.sh` PreToolUse hook.
   Use `gh pr edit --body-file` for updates to an existing PR.
 - **Confirm before creating.** Show title and body. Skip the confirmation only when the user supplied an explicit title and body.
 
