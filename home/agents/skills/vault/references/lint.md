@@ -24,6 +24,7 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `dangling-reference`     | warn    | Reference not cited by any card's `reference:` frontmatter                        |
 | `reference-not-wikilink` | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL)                 |
 | `broken-wikilink`        | error   | `[[target]]` does not resolve to any vault file                                   |
+| `duplicate-h1`           | warn    | First non-blank body line is `# <basename>`, duplicating the implicit page title. |
 | `invalid-frontmatter`    | error   | YAML frontmatter fails to parse                                                   |
 | `untagged-card`          | warn    | Card with missing or empty `tags:` array                                          |
 | `missing-required-field` | warn    | File missing a required frontmatter field for its `type:` (one finding per field) |
@@ -98,6 +99,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `dangling-reference`     | `null`                                     |
 | `reference-not-wikilink` | `{ "value": <string> }`                    |
 | `broken-wikilink`        | `{ "target": <string>, "line": <number> }` |
+| `duplicate-h1`           | `null`                                     |
 | `invalid-frontmatter`    | `{ "error": <string> }`                    |
 | `untagged-card`          | `null`                                     |
 | `missing-required-field` | `null`                                     |
