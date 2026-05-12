@@ -64,15 +64,13 @@ Ask three questions in order; stop at the first "yes":
 
 **One concern per commit.** If a change crosses the contract line in multiple ways, split it.
 
-**Scope carries visibility.** When a `chore` is operationally significant, use scope to signal it: `chore(perf): ...`, `chore(migration): ...`, `chore(i18n): ...`. In a repo with multiple contract surfaces (library + CLI, or monorepo packages), use scope to indicate which surface changed: `feat(sdk): ...`, `feat(ui): ...`.
-
 Examples:
 
 *Contract changes (`feat`):*
 
 - "add retry logic to API client" — new promise → `feat`
 - "remove deprecated /v1 endpoint" — contract narrowed → `feat`
-- "drop deprecated `orders.legacy_status` column" — `feat(migration)`
+- "drop deprecated `orders.legacy_status` column" → `feat`
 - "tighten return type from `any` to `User`" — type signature is part of the contract → `feat`
 
 *Contract repairs (`fix`):*
@@ -84,10 +82,10 @@ Examples:
 *Below the contract (`chore`):*
 
 - "extract request helper" — contract unchanged → `chore`
-- "cache user lookup, 50ms → 2ms" — speed isn't in the contract → `chore(perf)`
-- "page was 30s, now 1s; resolves slowness ticket" — same → `chore(perf)`
-- "add concurrent index on `orders.user_id`" — backward-compatible migration → `chore(migration)`
-- "add Korean translations" — localization is below the contract → `chore(i18n)`
+- "cache user lookup, 50ms → 2ms" — speed isn't in the contract → `chore`
+- "page was 30s, now 1s; resolves slowness ticket" — same → `chore`
+- "add concurrent index on `orders.user_id`" — backward-compatible migration → `chore`
+- "add Korean translations" — localization is below the contract → `chore`
 - "polish internal README" — internal docs aren't the contract → `chore`
 - "bump dependency, no API impact" → `chore`
 - "add unit test for existing behavior" → `chore`
@@ -100,7 +98,7 @@ Examples:
 
 - Short single line, lowercase after prefix
 - Focus on WHY, not WHAT
-- No body, no scope unless disambiguation needed
+- No body, no scope — plain `<prefix>: ...` form only
 - Match recent commit style from log
 
 ### Write the message to a file
