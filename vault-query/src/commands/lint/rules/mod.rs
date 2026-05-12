@@ -1,5 +1,6 @@
 pub mod broken_wikilink;
 pub mod dangling_reference;
+pub mod duplicate_h1;
 pub mod invalid_frontmatter;
 pub mod missing_required_field;
 pub mod orphan_card;
