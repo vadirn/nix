@@ -5,7 +5,7 @@
    *    | '_ \| \ \/ /    *
         | | | | |>  <       .
    .    |_| |_|_/_/\_\  *
-              aarch64-darwin
+         aarch64-darwin
 ```
 
 Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and a Rust CLI for querying an Obsidian vault.
