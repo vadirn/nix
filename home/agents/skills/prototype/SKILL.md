@@ -49,7 +49,7 @@ A prototype is one of two things and never both at once. It is **investigation**
 
 Every prototype answers one of four design questions (Houde & Hill 1997): **role** (how does the thing fit into a user's life), **look-and-feel** (what does interaction feel like), **implementation** (does the technique work), **integration** (do the pieces talk). Name the dimension before picking a method.
 
-What to keep: build a thin slice and grow it. Brooks's 1995 retraction (*Mythical Man-Month* 20th anniversary, ch. 19) replaced "plan to throw one away" with this rule. Throwaway lives at the spike layer. A tracer bullet is lean but complete production code, not a facade (Hunt & Thomas 1999).
+What to keep: build a thin slice and grow it. Brooks's 1995 retraction (*Mythical Man-Month* 20th anniversary, ch. 19) replaced "plan to throw one away" with this rule. The "grow it" rule binds the retained methods (tracer bullet, walking skeleton); spikes are still discarded. A tracer bullet is lean but complete production code, not a facade (Hunt & Thomas 1999).
 
 If the user cannot state a design question after `references/find-goal.md`, the work is vibing rather than prototyping. Stop the skill and handle the vibing outside it; this skill does not operate that stance.
 
