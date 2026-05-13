@@ -104,7 +104,7 @@ Rules:
 - The `expected` field is the behaviour, not the exact string. "Should refuse and explain why" is a valid expectation.
 - The `notes` field carries the reason the case is in the set. Without notes the eval rots as the prompt evolves.
 - A case that flickers between pass and fail across runs is a signal, not noise. Record the flicker explicitly.
-- The prompt converges when ten consecutive runs hold pass rate stable. Until then the prototype is not done.
+- The prompt converges when pass rate varies by less than 5% across ten consecutive runs over the full case set. Until then the prototype is not done.
 
 ## RFC / RFD
 

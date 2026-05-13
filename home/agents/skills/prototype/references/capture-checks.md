@@ -6,7 +6,7 @@ Run these checks before filing the capture artifact (memo, ADR, eval set, RFC). 
 
 Confidence: <1-10>. Biggest risk that could lower this grade: <one sentence>.
 
-A grade below 6 means the prototype did not actually answer the question. Either extend the time-box once with written justification, or rephrase the question and run again.
+A grade below 6 is a signal that the question may not be answered. A partial answer under time pressure is a valid outcome; a low-confidence grade reported as a clean answer is not. Consider whether to extend the time-box once with written justification, rephrase the question and run again, or proceed and document the partial result explicitly.
 
 ## Falsification
 

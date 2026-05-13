@@ -24,7 +24,7 @@ The shape of the task list depends on what the artifact said.
 
 The spike answered "yes". The next prototype or the next feature is now plausible. Tasks:
 
-1. Strike the spike workspace from the build (`rm -rf _spikes/<slug>` or delete the branch). Owner: spike author.
+1. Archive (tag the branch as `spike/<slug>-archived` and delete the working copy) or delete the workspace (`rm -rf _spikes/<slug>` or delete the branch). Ask the user which; default is delete for cheap-to-reproduce spikes. Owner: spike author.
 2. Open the design for the production version, informed by the spike but not built on it. Owner: feature lead.
 3. Write the acceptance test for the production version. Owner: feature lead. Acceptance: a test exists that fails until the feature is built.
 4. If the spike surfaced unknowns the production design must address, list each as a separate task with its own owner.
@@ -59,7 +59,7 @@ The prompt is not converged. Tasks:
 
 1. Name the failure modes the current prompt cannot handle. Owner: prompt author. Acceptance: a list of two to five named failure modes.
 2. For each failure mode, add cases to `evals/<slug>/cases.jsonl` that exercise it. Owner: prompt author.
-3. Iterate the prompt against the expanded set. Owner: prompt author. Acceptance: pass rate stable across ten consecutive runs.
+3. Iterate the prompt against the expanded set. Owner: prompt author. Acceptance: pass rate varies by less than 5% across ten consecutive runs over the full case set.
 4. When converged, file the prompt as a retained artifact and move to the retained branch.
 
 ### Eval set, status = converged
