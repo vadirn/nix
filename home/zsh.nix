@@ -80,6 +80,7 @@
 
       cl() { claude --continue || claude; }
       cln() { claude; }
+      clw() { claude --worktree "wt-$(date +%Y-%m-%d-%H-%M-%S)"; }
 
       git-cleanup() {
         echo '--- pruning stale remote-tracking refs ---'
