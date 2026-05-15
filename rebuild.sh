@@ -3,6 +3,12 @@ set -euo pipefail
 
 sudo darwin-rebuild switch --flake ~/nix
 
+# Workaround for https://github.com/orgs/Homebrew/discussions/6258:
+# `brew bundle install --upgrade` (run by nix-darwin) does not reliably upgrade
+# outdated formulae. Run a real `brew upgrade` afterwards.
+echo "Upgrading outdated brew formulae..."
+brew upgrade --formula
+
 echo "Installing Claude plugins..."
 claude plugin install typescript-lsp
 
