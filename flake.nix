@@ -108,6 +108,7 @@
                 "oven-sh/bun/bun"
                 "agent-browser"
                 "anomalyco/tap/opencode"
+                "portless"
               ];
               casks = [
                 "1password-cli"
