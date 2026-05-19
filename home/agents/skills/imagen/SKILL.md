@@ -48,7 +48,7 @@ if script reports no image:
 
 ## Notes
 
-- Output images land in `~/Pictures/imagen/` (or `$IMAGEN_DIR` if set).
+- Output images land in `~/Pictures/imagen/` (or `$IMAGEN_DIR` if set). The file extension (`.png`, `.jpg`, `.webp`) reflects the format the model actually returned; most models currently return JPEG.
 - The API key (`GEMINI_API_KEY`) is injected by `doppler run` and never appears on a command line.
 - The curl call lives inside the script, so the `no-network-abuse` hook (which blocks visible
   `curl --data`) does not fire.

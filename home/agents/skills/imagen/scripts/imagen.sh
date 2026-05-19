@@ -201,14 +201,16 @@ trap 'rm -f "$CURL_CONFIG" "$BODY_FILE"' EXIT
 PARTS_JSON="$(jq -n --arg text "$PROMPT" '[{"text": $text}]')"
 
 # Append inline_data parts for each source image
-for i in "${!SOURCES[@]+"${!SOURCES[@]}"}"; do
-  src="${SOURCES[$i]}"
-  mime="${SOURCE_MIMES[$i]}"
-  b64="$(base64 < "$src" | tr -d '\n')"
-  PARTS_JSON="$(printf '%s' "$PARTS_JSON" \
-    | jq --arg mime "$mime" --arg data "$b64" \
-        '. += [{"inline_data": {"mime_type": $mime, "data": $data}}]')"
-done
+if [[ ${#SOURCES[@]} -gt 0 ]]; then
+  for i in "${!SOURCES[@]}"; do
+    src="${SOURCES[$i]}"
+    mime="${SOURCE_MIMES[$i]}"
+    b64="$(base64 < "$src" | tr -d '\n')"
+    PARTS_JSON="$(printf '%s' "$PARTS_JSON" \
+      | jq --arg mime "$mime" --arg data "$b64" \
+          '. += [{"inline_data": {"mime_type": $mime, "data": $data}}]')"
+  done
+fi
 
 # Build generationConfig.imageConfig
 if [[ "$SUPPORTS_IMAGE_SIZE" -eq 1 ]]; then
@@ -284,19 +286,27 @@ run_draft() {
     return 1
   fi
 
-  # Decode image
+  # Extract mimeType from the first inlineData part; fall back to image/png
+  local mime_type
+  mime_type="$(jq -r '[.candidates[0].content.parts[]? | select(.inlineData)] | first | .inlineData.mimeType // "image/png"' "$resp_file" 2>/dev/null || echo "image/png")"
+
+  # Decode image bytes into a temp file; the caller will rename to the correct extension
+  local img_tmp
+  img_tmp="$(mktemp)"
   jq -r '[.candidates[0].content.parts[]? | select(.inlineData)] | first | .inlineData.data' "$resp_file" \
-    | base64 --decode >"$out_file" 2>/dev/null
+    | base64 --decode >"$img_tmp" 2>/dev/null
 
   # Capture usage metadata
   local usage
   usage="$(jq -c '.usageMetadata // {}' "$resp_file" 2>/dev/null || echo '{}')"
 
-  printf 'OK\t%s\t%s\t%s\n' "$draft_num" "$out_file" "$usage" >"$result_file"
+  printf 'OK\t%s\t%s\t%s\t%s\t%s\n' "$draft_num" "$img_tmp" "$out_file" "$usage" "$mime_type" >"$result_file"
   rm -f "$resp_file"
 }
 
-# Determine output file paths upfront
+# Determine intended output paths upfront (extension will be corrected after API response)
+# For --out PATH, the user's path is used verbatim.
+# For auto-generated paths, .png is a placeholder; the final extension is set after decoding.
 declare -a DRAFT_OUT_FILES=()
 for ((i=1; i<=DRAFTS; i++)); do
   if [[ -n "$OUT_PATH" ]]; then
@@ -322,6 +332,19 @@ done
 wait
 
 # ---------------------------------------------------------------------------
+# Map MIME type to file extension
+# ---------------------------------------------------------------------------
+mime_to_ext() {
+  local mime="$1"
+  case "$mime" in
+    image/png)  echo "png" ;;
+    image/jpeg) echo "jpg" ;;
+    image/webp) echo "webp" ;;
+    *)          echo "png" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # Collect results
 # ---------------------------------------------------------------------------
 FIRST_USAGE='{}'
@@ -336,9 +359,23 @@ for ((i=1; i<=DRAFTS; i++)); do
   status="$(cut -f1 "$result_file")"
   case "$status" in
     OK)
-      out="$(cut -f3 "$result_file")"
-      usage="$(cut -f4 "$result_file")"
-      SUCCESSFUL_OUTPUTS+=("$out")
+      img_tmp="$(cut -f3 "$result_file")"
+      intended_out="$(cut -f4 "$result_file")"
+      usage="$(cut -f5 "$result_file")"
+      mime_type="$(cut -f6 "$result_file")"
+
+      # For auto-generated paths, replace the placeholder .png extension with
+      # the correct one derived from the API's reported mimeType.
+      # For explicit --out PATH, honor the user's path verbatim.
+      if [[ -n "$OUT_PATH" ]]; then
+        final_out="$intended_out"
+      else
+        ext="$(mime_to_ext "$mime_type")"
+        final_out="${intended_out%.png}.${ext}"
+      fi
+
+      mv "$img_tmp" "$final_out"
+      SUCCESSFUL_OUTPUTS+=("$final_out")
       if [[ "$FIRST_USAGE" == '{}' ]]; then
         FIRST_USAGE="$usage"
       fi
@@ -369,7 +406,11 @@ fi
 # ---------------------------------------------------------------------------
 # Log (one JSON line)
 # ---------------------------------------------------------------------------
-SOURCES_JSON="$(printf '%s\n' "${SOURCES[@]+"${SOURCES[@]}"}" | jq -R . | jq -s .)"
+if [[ ${#SOURCES[@]} -gt 0 ]]; then
+  SOURCES_JSON="$(printf '%s\n' "${SOURCES[@]}" | jq -R . | jq -s .)"
+else
+  SOURCES_JSON='[]'
+fi
 OUTPUTS_JSON="$(printf '%s\n' "${SUCCESSFUL_OUTPUTS[@]}" | jq -R . | jq -s .)"
 ISO_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
