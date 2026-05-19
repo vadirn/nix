@@ -231,7 +231,8 @@
         "files.pythonhosted.org",
         "api.doppler.com",
         "cli.doppler.com",
-        "generativelanguage.googleapis.com"
+        "generativelanguage.googleapis.com",
+        "*.localhost"
       ],
       "allowManagedDomainsOnly": false,
       "allowAllUnixSockets": true

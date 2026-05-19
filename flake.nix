@@ -120,8 +120,6 @@
                 "zed"
                 "pearcleaner"
                 "orbstack"
-                "codex"
-                "codex-app"
                 "basecamp/tap/basecamp-cli"
               ];
               onActivation = {
@@ -136,8 +134,6 @@
               dock.persistent-apps = [
                 "/Applications/Ghostty.app"
                 "/Applications/Claude.app"
-                "/Applications/Codex.app"
-                "/Applications/Gemini.app"
                 "/Applications/MacWhisper.app"
                 "/Applications/OrbStack.app"
                 "/Applications/Obsidian.app"

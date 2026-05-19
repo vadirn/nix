@@ -24,8 +24,4 @@ pi install https://github.com/davebcn87/pi-autoresearch
 echo "Collecting garbage..."
 sudo HOME=/var/root nix-collect-garbage -d
 
-if [[ ! -d "/Applications/Gemini.app" && ! -d "$HOME/Applications/Gemini.app" ]]; then
-    echo "Gemini.app not found. Install manually from: https://gemini.google/mac/"
-fi
-
 echo "Done."

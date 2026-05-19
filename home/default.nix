@@ -67,7 +67,6 @@
       '';
 
       home.file.".agents/scripts/ghostty-claude-split.applescript".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/ghostty-claude-split.applescript";
-      home.file.".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/AGENTS.md";
       home.file.".local/bin/skills-add".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/skills-add.sh";
       home.file.".local/bin/build-claude-md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/build-claude-md.sh";
       home.file.".local/bin/sync-agents".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/sync-agents.sh";
