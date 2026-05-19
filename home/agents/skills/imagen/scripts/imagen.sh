@@ -236,29 +236,29 @@ ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:gener
 # Build JSON body (reused across drafts — all drafts share the same request)
 # ---------------------------------------------------------------------------
 
-# Build parts array: start with the text part
-PARTS_JSON="$(jq -n --arg text "$PROMPT" '[{"text": $text}]')"
+# Build the parts array in one pass: the text part, then one inline_data part
+# per source image. Emitting each part as a JSON line and slurping once avoids
+# re-parsing the (potentially large) accumulating array on every source.
+PARTS_JSON="$(
+  {
+    jq -cn --arg text "$PROMPT" '{text: $text}'
+    if [[ ${#SOURCES[@]} -gt 0 ]]; then
+      for i in "${!SOURCES[@]}"; do
+        b64="$(base64 < "${SOURCES[$i]}" | tr -d '\n')"
+        jq -cn --arg mime "${SOURCE_MIMES[$i]}" --arg data "$b64" \
+          '{inline_data: {mime_type: $mime, data: $data}}'
+      done
+    fi
+  } | jq -cs '.'
+)"
 
-# Append inline_data parts for each source image
-if [[ ${#SOURCES[@]} -gt 0 ]]; then
-  for i in "${!SOURCES[@]}"; do
-    src="${SOURCES[$i]}"
-    mime="${SOURCE_MIMES[$i]}"
-    b64="$(base64 < "$src" | tr -d '\n')"
-    PARTS_JSON="$(printf '%s' "$PARTS_JSON" \
-      | jq --arg mime "$mime" --arg data "$b64" \
-          '. += [{"inline_data": {"mime_type": $mime, "data": $data}}]')"
-  done
-fi
-
-# Build generationConfig.imageConfig
-if [[ "$SUPPORTS_IMAGE_SIZE" -eq 1 ]]; then
-  IMAGE_CONFIG="$(jq -n --arg aspect "$ASPECT" --arg size "$RESOLUTION" \
-    '{"aspectRatio": $aspect, "imageSize": $size}')"
-else
-  IMAGE_CONFIG="$(jq -n --arg aspect "$ASPECT" \
-    '{"aspectRatio": $aspect}')"
-fi
+# imageSize is included only for models that accept it; gemini-2.5-flash-image
+# rejects it.
+IMAGE_CONFIG="$(jq -n --arg aspect "$ASPECT" --arg size "$RESOLUTION" \
+  --argjson withSize "$SUPPORTS_IMAGE_SIZE" \
+  'if $withSize == 1
+   then {aspectRatio: $aspect, imageSize: $size}
+   else {aspectRatio: $aspect} end')"
 
 jq -n \
   --argjson parts "$PARTS_JSON" \
@@ -335,7 +335,7 @@ run_draft() {
   local img_tmp
   img_tmp="$(mktemp -p "$RESULTS_DIR")"
   jq -r '[.candidates[0].content.parts[]? | select(.inlineData)] | first | .inlineData.data' "$resp_file" \
-    | base64 --decode >"$img_tmp" 2>/dev/null
+    | base64 -d >"$img_tmp" 2>/dev/null
 
   # Capture usage metadata
   local usage
@@ -400,13 +400,14 @@ for ((i=1; i<=DRAFTS; i++)); do
     continue
   fi
 
-  status="$(cut -f1 "$result_file")"
+  # Each result file is a single tab-separated line:
+  #   OK   <draft> <img_tmp> <out_file> <usage> <mime_type>
+  #   FAIL <draft> <message>   (also NOIMG)
+  IFS=$'\t' read -r status _ field3 field4 usage mime_type < "$result_file"
   case "$status" in
     OK)
-      img_tmp="$(cut -f3 "$result_file")"
-      intended_out="$(cut -f4 "$result_file")"
-      usage="$(cut -f5 "$result_file")"
-      mime_type="$(cut -f6 "$result_file")"
+      img_tmp="$field3"
+      intended_out="$field4"
 
       # For auto-generated paths, replace the placeholder .png extension with
       # the correct one derived from the API's reported mimeType.
@@ -440,8 +441,7 @@ for ((i=1; i<=DRAFTS; i++)); do
       fi
       ;;
     FAIL|NOIMG)
-      msg="$(cut -f3- "$result_file")"
-      echo "ERROR draft $i: $msg" >&2
+      echo "ERROR draft $i: $field3" >&2
       FAILED_DRAFTS+=("$i")
       ;;
     *)
@@ -469,11 +469,11 @@ fi
 # Log (one JSON line)
 # ---------------------------------------------------------------------------
 if [[ ${#SOURCES[@]} -gt 0 ]]; then
-  SOURCES_JSON="$(printf '%s\n' "${SOURCES[@]}" | jq -R . | jq -s .)"
+  SOURCES_JSON="$(printf '%s\n' "${SOURCES[@]}" | jq -Rn '[inputs]')"
 else
   SOURCES_JSON='[]'
 fi
-OUTPUTS_JSON="$(printf '%s\n' "${SUCCESSFUL_OUTPUTS[@]}" | jq -R . | jq -s .)"
+OUTPUTS_JSON="$(printf '%s\n' "${SUCCESSFUL_OUTPUTS[@]}" | jq -Rn '[inputs]')"
 ISO_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 jq -cn \
