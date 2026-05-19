@@ -36,6 +36,7 @@
           enable = true;
           enableZshIntegration = true;
           enableBashIntegration = true;
+          defaultCommand = "rg --files --hidden --glob '!.git'";
         };
         direnv = {
           enable = true;

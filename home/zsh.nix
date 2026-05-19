@@ -82,6 +82,16 @@
       cln() { claude; }
       clw() { claude --worktree "wt-$(date +%Y-%m-%d-%H-%M-%S)"; }
 
+      fif() {
+        local rg='rg --column --line-number --no-heading --color=always --smart-case'
+        fzf --ansi --disabled --query "''${1:-}" \
+            --bind "start:reload:''${rg} {q}" \
+            --bind "change:reload:''${rg} {q}" \
+            --delimiter : \
+            --preview 'rg --pretty --context 3 -- {q} {1} 2>/dev/null || cat {1}' \
+            --bind 'enter:become(nvim +{2} -- {1})'
+      }
+
       git-cleanup() {
         echo '--- pruning stale remote-tracking refs ---'
         git remote prune origin
