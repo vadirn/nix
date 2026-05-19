@@ -4,6 +4,12 @@
 #                             [--aspect A] [--resolution R] [--name S] [--out PATH]
 set -uo pipefail
 
+# Require bash >= 4.3 (for wait -n)
+if [[ "${BASH_VERSINFO[0]}" -lt 4 ]] || [[ "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -lt 3 ]]; then
+  echo "ERROR: bash >= 4.3 is required (this script uses 'wait -n'); found ${BASH_VERSION}" >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------
@@ -181,7 +187,7 @@ if [[ -z "$NAME_SLUG" ]]; then
 fi
 [[ -z "$NAME_SLUG" ]] && NAME_SLUG="image"
 
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)-$$"
 
 LOG_FILE="${IMAGEN_DIR}/log.jsonl"
 
@@ -197,7 +203,7 @@ fi
 CURL_CONFIG="$(mktemp)"
 BODY_FILE="$(mktemp)"
 RESULTS_DIR="$(mktemp -d)"
-trap 'rm -f "$CURL_CONFIG" "$BODY_FILE"; rm -rf "$RESULTS_DIR"' EXIT
+trap 'rm -f "$CURL_CONFIG" "$BODY_FILE"; rm -rf "$RESULTS_DIR"' EXIT INT TERM
 
 # Write key to the curl config file; never expose it in argv
 chmod 600 "$CURL_CONFIG"
@@ -249,7 +255,6 @@ jq -n \
 # ---------------------------------------------------------------------------
 declare -a SUCCESSFUL_OUTPUTS=()
 declare -a FAILED_DRAFTS=()
-declare -a USAGE_METADATA=()
 
 # Each draft runs in a subshell; results are communicated via temp files
 
@@ -416,6 +421,9 @@ done
 # ---------------------------------------------------------------------------
 success_count="${#SUCCESSFUL_OUTPUTS[@]}"
 echo "${success_count}/${DRAFTS} drafts generated"
+if [[ "${#FAILED_DRAFTS[@]}" -gt 0 ]]; then
+  echo "failed drafts: ${FAILED_DRAFTS[*]}"
+fi
 
 if [[ "$success_count" -eq 0 ]]; then
   echo "ERROR: no images were generated" >&2
