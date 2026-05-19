@@ -1,24 +1,14 @@
 ---
 name: pr
 description: >
-  Create pull requests and check CI status. Triggers: /pr, "create pr", "open pr", "сделай PR",
-  "пулл реквест", "check ci", "why is ci failing", "pr status", "проверь CI".
+  Create pull requests. Triggers: /pr, "create pr", "open pr", "draft pr",
+  "сделай PR", "оформи PR", "пулл реквест". Skip for inspecting an existing
+  PR's state, comments, or CI — those are plain `gh` commands (see Reference).
 ---
 
 # PR
 
-Create pull requests and check CI status.
-
-```
-command = user's command after /pr
-
-if command == "check" or starts with "check" or asks about CI/checks:
-    check_flow(command)
-else:
-    create_flow(command)
-```
-
-## Create flow
+Create a pull request from the current branch.
 
 ```
 // Gather state (parallel)
@@ -30,7 +20,7 @@ diff = Bash(git diff <default_branch>...HEAD)
 log = Bash(git log <default_branch>..HEAD --oneline)
 
 // Guards
-if branch == default_branch: stop, ask user to create a feature branch
+if branch == default_branch: stop, ask user to create a feature branch (see /git-branch)
 if uncommitted changes in status: Skill(commit), then stop
 
 // Push
@@ -67,25 +57,6 @@ Bash(rm -f /tmp/claude/pr.md)
 show PR URL
 ```
 
-## Check flow
-
-```
-pr = do("parse #N from command") or Bash(gh pr view --json number -q '.number')
-checks = Bash(gh pr checks <pr>)
-
-// Guards
-if all checks pass: report success, stop
-if some checks running: report status, suggest re-check later, stop
-
-// Failures
-logs = Bash(gh run view <run_id> --log-failed)
-do("summarize errors, classify each as mechanical or semantic")
-if any mechanical:
-  AskUserQuestion("auto-fix mechanical failures?")
-  Skill(commit)
-  Bash(git push)
-```
-
 ## Reference
 
 ### PR creation details
@@ -104,13 +75,20 @@ if any mechanical:
   Use `gh pr edit --body-file` for updates to an existing PR.
 - **Confirm before creating.** Show title and body. Skip the confirmation only when the user supplied an explicit title and body.
 
-### CI check details
+### Inspecting an existing PR
 
-- Show 3-5 key error lines per failure, link to full run.
-- **Mechanical failures** (lint/format/types): offer to auto-fix, commit with `fix:` prefix, push.
-- **Semantic failures** (tests/infra): diagnose and explain.
+Checking a PR's state, comments, or CI sits outside this skill's workflow — run `gh` directly. `<pr>` is a number, URL, or branch; omit it to act on the PR for the current branch.
+
+- **State and metadata:** `gh pr view <pr>` — title, body, state, labels, reviewers. Add `--json state,mergeable,reviewDecision,statusCheckRollup` for a machine-readable summary.
+- **CI checks:** `gh pr checks <pr>` — one line per check with pass/fail/pending. `gh pr checks <pr> --watch` blocks until checks settle.
+- **A failing run's logs:** `gh run view <run-id> --log-failed` — only the failed steps. Get `<run-id>` from the `gh pr checks` output.
+- **Review comments and threads:** `gh pr view <pr> --comments` — issue comments plus review threads in one stream.
+- **The diff:** `gh pr diff <pr>`.
+
+When CI fails: classify each failure as mechanical (lint, format, types — fixable by editing and re-pushing) or semantic (tests, infrastructure — needs diagnosis). Fix mechanical failures with a `fix:` commit via the /commit skill, then `git push`.
 
 ## Rules
 
 - **Run git commands separately.** Chained commands (`&&`, `;`) bypass the permissions allowlist.
 - **Auto-detect base branch.** Use `gh repo view`. Ask the user only when detection fails.
+- **Commit first when the tree is dirty.** Route uncommitted changes through the /commit skill first.
