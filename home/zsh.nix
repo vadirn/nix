@@ -103,10 +103,12 @@
 
       # Launch Chrome with the DevTools Protocol exposed on :9222. The separate
       # user-data-dir forces a fresh instance — Chrome will not open a debug
-      # port on a profile that is already running.
+      # port on a profile that is already running. The explicit IPv4 address
+      # keeps Chrome off [::1]; CDP clients (agent-browser) probe 127.0.0.1.
       chrome() {
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
           --remote-debugging-port=9222 \
+          --remote-debugging-address=127.0.0.1 \
           --user-data-dir="/tmp/chrome-debug" "$@" >/dev/null 2>&1 &!
       }
     '';
