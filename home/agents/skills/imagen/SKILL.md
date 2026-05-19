@@ -49,6 +49,8 @@ if script reports no image:
 ## Notes
 
 - Output images land in `~/Pictures/imagen/` (or `$IMAGEN_DIR` if set). The file extension (`.png`, `.jpg`, `.webp`) reflects the format the model actually returned; most models currently return JPEG.
+- Only `~/Pictures/imagen` is on the sandbox write allowlist. Pointing `$IMAGEN_DIR` or `--out` outside it requires adding a matching entry to `home/claude/settings.json`, otherwise writes fail under the sandbox.
+- `--out` honors the path verbatim; it does not adjust the extension to match the returned format. The script warns to stderr on a mismatch.
 - The API key (`GEMINI_API_KEY`) is injected by `doppler run` and never appears on a command line.
 - The curl call lives inside the script, so the `no-network-abuse` hook (which blocks visible
   `curl --data`) does not fire.

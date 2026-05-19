@@ -189,7 +189,7 @@ fi
 # Output directory and filename slug
 # ---------------------------------------------------------------------------
 IMAGEN_DIR="${IMAGEN_DIR:-$HOME/Pictures/imagen}"
-mkdir -p "$IMAGEN_DIR"
+mkdir -p "$IMAGEN_DIR" || { echo "ERROR: cannot create output directory: $IMAGEN_DIR" >&2; exit 1; }
 
 # Ensure the parent directory of an explicit --out path exists
 if [[ -n "$OUT_PATH" ]]; then
@@ -411,10 +411,16 @@ for ((i=1; i<=DRAFTS; i++)); do
       # For auto-generated paths, replace the placeholder .png extension with
       # the correct one derived from the API's reported mimeType.
       # For explicit --out PATH, honor the user's path verbatim.
+      ext="$(mime_to_ext "$mime_type")"
       if [[ -n "$OUT_PATH" ]]; then
         final_out="$intended_out"
+        # Warn if the --out extension disagrees with the returned format.
+        out_ext="$(printf '%s' "${intended_out##*.}" | tr '[:upper:]' '[:lower:]')"
+        [[ "$out_ext" == "jpeg" ]] && out_ext="jpg"
+        if [[ "$out_ext" != "$ext" ]]; then
+          echo "WARNING draft $i: --out extension does not match returned format ($mime_type); file kept at $final_out" >&2
+        fi
       else
-        ext="$(mime_to_ext "$mime_type")"
         final_out="${intended_out%.png}.${ext}"
       fi
 
