@@ -120,17 +120,17 @@ if [[ -z "$PROMPT" ]]; then
   exit 1
 fi
 
-if [[ -n "$OUT_PATH" && "$DRAFTS" -ne 1 ]]; then
-  echo "ERROR: --out is only valid with --drafts 1" >&2
-  exit 1
-fi
-
 # Validate drafts
 case "$DRAFTS" in
   ''|*[!0-9]*) echo "ERROR: --drafts must be a positive integer" >&2; exit 1 ;;
 esac
 if [[ "$DRAFTS" -eq 0 ]]; then
   echo "ERROR: --drafts must be a positive integer" >&2
+  exit 1
+fi
+
+if [[ -n "$OUT_PATH" && "$DRAFTS" -ne 1 ]]; then
+  echo "ERROR: --out is only valid with --drafts 1" >&2
   exit 1
 fi
 
@@ -175,7 +175,7 @@ if [[ -z "$NAME_SLUG" ]]; then
   NAME_SLUG="$(printf '%s' "$PROMPT" \
     | tr '[:upper:]' '[:lower:]' \
     | tr -cs 'a-z0-9' '-' \
-    | sed 's/-\+/-/g; s/^-//; s/-$//' \
+    | sed 's/^-//; s/-$//' \
     | cut -c1-40 \
     | sed 's/-$//')"
 fi
@@ -195,7 +195,7 @@ fi
 
 # Allocate all temp paths up front so a single trap covers them all
 CURL_CONFIG="$(mktemp)"
-BODY_FILE="$(mktemp --suffix=.json)"
+BODY_FILE="$(mktemp)"
 RESULTS_DIR="$(mktemp -d)"
 trap 'rm -f "$CURL_CONFIG" "$BODY_FILE"; rm -rf "$RESULTS_DIR"' EXIT
 
@@ -259,7 +259,7 @@ run_draft() {
   local result_file="${RESULTS_DIR}/draft-${draft_num}"
 
   local resp_file
-  resp_file="$(mktemp)"
+  resp_file="$(mktemp -p "$RESULTS_DIR")"
 
   local http_code
   http_code="$(curl -s --max-time 180 --connect-timeout 20 \
@@ -302,7 +302,7 @@ run_draft() {
 
   # Decode image bytes into a temp file; the caller will rename to the correct extension
   local img_tmp
-  img_tmp="$(mktemp)"
+  img_tmp="$(mktemp -p "$RESULTS_DIR")"
   jq -r '[.candidates[0].content.parts[]? | select(.inlineData)] | first | .inlineData.data' "$resp_file" \
     | base64 --decode >"$img_tmp" 2>/dev/null
 
@@ -384,7 +384,16 @@ for ((i=1; i<=DRAFTS; i++)); do
         final_out="${intended_out%.png}.${ext}"
       fi
 
-      mv "$img_tmp" "$final_out"
+      if [[ ! -s "$img_tmp" ]]; then
+        echo "ERROR draft $i: image decode produced an empty file" >&2
+        FAILED_DRAFTS+=("$i")
+        continue
+      fi
+      if ! mv "$img_tmp" "$final_out"; then
+        echo "ERROR draft $i: failed to move image to $final_out" >&2
+        FAILED_DRAFTS+=("$i")
+        continue
+      fi
       SUCCESSFUL_OUTPUTS+=("$final_out")
       if [[ "$FIRST_USAGE" == '{}' ]]; then
         FIRST_USAGE="$usage"
