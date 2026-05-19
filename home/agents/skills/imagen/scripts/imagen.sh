@@ -125,6 +125,15 @@ if [[ -n "$OUT_PATH" && "$DRAFTS" -ne 1 ]]; then
   exit 1
 fi
 
+# Validate drafts
+case "$DRAFTS" in
+  ''|*[!0-9]*) echo "ERROR: --drafts must be a positive integer" >&2; exit 1 ;;
+esac
+if [[ "$DRAFTS" -eq 0 ]]; then
+  echo "ERROR: --drafts must be a positive integer" >&2
+  exit 1
+fi
+
 # Validate resolution
 case "$RESOLUTION" in
   512|1K|2K|4K) ;;
@@ -170,8 +179,9 @@ if [[ -z "$NAME_SLUG" ]]; then
     | cut -c1-40 \
     | sed 's/-$//')"
 fi
+[[ -z "$NAME_SLUG" ]] && NAME_SLUG="image"
 
-TIMESTAMP="$(date +%H%M%S)"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
 LOG_FILE="${IMAGEN_DIR}/log.jsonl"
 
@@ -183,19 +193,21 @@ if [[ -z "${GEMINI_API_KEY:-}" ]]; then
   exit 1
 fi
 
-# Write key to a temp curl config file; never expose it in argv
+# Allocate all temp paths up front so a single trap covers them all
 CURL_CONFIG="$(mktemp)"
+BODY_FILE="$(mktemp --suffix=.json)"
+RESULTS_DIR="$(mktemp -d)"
+trap 'rm -f "$CURL_CONFIG" "$BODY_FILE"; rm -rf "$RESULTS_DIR"' EXIT
+
+# Write key to the curl config file; never expose it in argv
 chmod 600 "$CURL_CONFIG"
 printf 'header = "x-goog-api-key: %s"\n' "$GEMINI_API_KEY" >"$CURL_CONFIG"
-trap 'rm -f "$CURL_CONFIG"' EXIT
 
 ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
 
 # ---------------------------------------------------------------------------
 # Build JSON body (reused across drafts — all drafts share the same request)
 # ---------------------------------------------------------------------------
-BODY_FILE="$(mktemp --suffix=.json)"
-trap 'rm -f "$CURL_CONFIG" "$BODY_FILE"' EXIT
 
 # Build parts array: start with the text part
 PARTS_JSON="$(jq -n --arg text "$PROMPT" '[{"text": $text}]')"
@@ -240,8 +252,6 @@ declare -a FAILED_DRAFTS=()
 declare -a USAGE_METADATA=()
 
 # Each draft runs in a subshell; results are communicated via temp files
-RESULTS_DIR="$(mktemp -d)"
-trap 'rm -f "$CURL_CONFIG" "$BODY_FILE"; rm -rf "$RESULTS_DIR"' EXIT
 
 run_draft() {
   local draft_num="$1"
@@ -322,10 +332,10 @@ done
 in_flight=0
 for ((i=1; i<=DRAFTS; i++)); do
   run_draft "$i" "${DRAFT_OUT_FILES[$((i-1))]}" &
-  ((in_flight++)) || true
+  ((in_flight++))
   if [[ "$in_flight" -ge 2 ]]; then
     wait -n 2>/dev/null || wait
-    ((in_flight--)) || true
+    ((in_flight--))
   fi
 done
 # Wait for any remaining background jobs
