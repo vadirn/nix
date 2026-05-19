@@ -23,10 +23,11 @@ Positional:
   <prompt>           Required image description (quoted string).
 
 Options:
-  --source <path>    Image file to edit/compose/reference. Repeatable.
-  --drafts N         Number of images to generate (default: 1).
+  --source <path>    Image file to edit/compose/reference. Repeatable, up to 10.
+  --drafts N         Number of images to generate, 1-8 (default: 1).
   --model M          Model name (default: gemini-3.1-flash-image-preview).
-  --aspect A         Aspect ratio, e.g. 1:1, 16:9, 9:16, 4:3, 3:4 (default: 1:1).
+  --aspect A         Aspect ratio: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4,
+                     9:16, 16:9, 21:9 (default: 1:1).
   --resolution R     Output resolution: 512, 1K, 2K, 4K (default: 512).
                      Not supported by gemini-2.5-flash-image.
   --name S           Output filename slug (default: slugified first ~5 prompt words).
@@ -134,6 +135,10 @@ if [[ "$DRAFTS" -eq 0 ]]; then
   echo "ERROR: --drafts must be a positive integer" >&2
   exit 1
 fi
+if [[ "$DRAFTS" -gt 8 ]]; then
+  echo "ERROR: --drafts must be 8 or fewer" >&2
+  exit 1
+fi
 
 if [[ -n "$OUT_PATH" && "$DRAFTS" -ne 1 ]]; then
   echo "ERROR: --out is only valid with --drafts 1" >&2
@@ -146,7 +151,17 @@ case "$RESOLUTION" in
   *) echo "ERROR: --resolution must be one of: 512, 1K, 2K, 4K" >&2; exit 1 ;;
 esac
 
+# Validate aspect ratio
+case "$ASPECT" in
+  1:1|2:3|3:2|3:4|4:3|4:5|5:4|9:16|16:9|21:9) ;;
+  *) echo "ERROR: --aspect must be one of: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9" >&2; exit 1 ;;
+esac
+
 # Validate source files and detect MIME types
+if [[ ${#SOURCES[@]} -gt 10 ]]; then
+  echo "ERROR: at most 10 --source images are supported (got ${#SOURCES[@]})" >&2
+  exit 1
+fi
 declare -a SOURCE_MIMES=()
 for src in "${SOURCES[@]+"${SOURCES[@]}"}"; do
   if [[ ! -f "$src" ]]; then
@@ -175,6 +190,12 @@ fi
 # ---------------------------------------------------------------------------
 IMAGEN_DIR="${IMAGEN_DIR:-$HOME/Pictures/imagen}"
 mkdir -p "$IMAGEN_DIR"
+
+# Ensure the parent directory of an explicit --out path exists
+if [[ -n "$OUT_PATH" ]]; then
+  out_parent="$(dirname "$OUT_PATH")"
+  mkdir -p "$out_parent" || { echo "ERROR: cannot create output directory: $out_parent" >&2; exit 1; }
+fi
 
 if [[ -z "$NAME_SLUG" ]]; then
   # Slugify first ~5 words of the prompt
@@ -279,7 +300,9 @@ run_draft() {
   if [[ "$http_code" != "200" ]]; then
     local err_msg
     err_msg="$(jq -r '.error.message // "unknown error"' "$resp_file" 2>/dev/null || echo "unknown error")"
-    printf 'FAIL\t%s\t%s\n' "$draft_num" "HTTP ${http_code}: ${err_msg}" >"$result_file"
+    # Collapse newlines/tabs — the result file is parsed as a single TSV line
+    err_msg="$(printf '%s' "HTTP ${http_code}: ${err_msg}" | tr '\n\t' '  ')"
+    printf 'FAIL\t%s\t%s\n' "$draft_num" "$err_msg" >"$result_file"
     rm -f "$resp_file"
     return 1
   fi
@@ -296,7 +319,10 @@ run_draft() {
     finish_reason="$(jq -r '.candidates[0].finishReason // ""' "$resp_file" 2>/dev/null || echo "")"
     local feedback
     feedback="$(jq -r '.promptFeedback // "" | if . == "" then "" else "promptFeedback: \(tojson)" end' "$resp_file" 2>/dev/null || echo "")"
-    printf 'NOIMG\t%s\t%s\n' "$draft_num" "${text_content} [finishReason: ${finish_reason}] ${feedback}" >"$result_file"
+    local noimg_msg
+    # Collapse newlines/tabs — the result file is parsed as a single TSV line
+    noimg_msg="$(printf '%s' "${text_content} [finishReason: ${finish_reason}] ${feedback}" | tr '\n\t' '  ')"
+    printf 'NOIMG\t%s\t%s\n' "$draft_num" "$noimg_msg" >"$result_file"
     rm -f "$resp_file"
     return 1
   fi
@@ -337,10 +363,13 @@ done
 in_flight=0
 for ((i=1; i<=DRAFTS; i++)); do
   run_draft "$i" "${DRAFT_OUT_FILES[$((i-1))]}" &
-  ((in_flight++))
+  ((in_flight++)) || true
   if [[ "$in_flight" -ge 2 ]]; then
-    wait -n 2>/dev/null || wait
-    ((in_flight--))
+    # wait -n blocks until one job exits; ignore its exit status — a failed
+    # draft returns non-zero, and `|| wait` would otherwise drain all jobs
+    # and break the concurrency bound.
+    wait -n 2>/dev/null || true
+    ((in_flight--)) || true
   fi
 done
 # Wait for any remaining background jobs
