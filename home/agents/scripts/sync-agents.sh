@@ -10,7 +10,6 @@ ROOT="${ROOT:-$HOME/nix}"
 
 # Format: "<path-under-$HOME>|<path-under-$ROOT>"
 LINKS=(
-  ".codex/AGENTS.md|home/agents/AGENTS.md"
   ".agents/scripts/ghostty-claude-split.applescript|home/agents/scripts/ghostty-claude-split.applescript"
   ".local/bin/skills-add|home/agents/scripts/skills-add.sh"
   ".local/bin/build-claude-md|home/claude/build-claude-md.sh"
