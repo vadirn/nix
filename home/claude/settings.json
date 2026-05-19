@@ -244,6 +244,7 @@
         "~/.docker",
         "~/.gnupg",
         "~/Documents/vault",
+        "~/Pictures/imagen",
         "$TMPDIR"
       ]
     },
