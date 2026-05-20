@@ -12,7 +12,21 @@ Generate or edit images via Google Gemini image models.
 
 ```
 // Gather
-intent = do("understand what the user wants to create or edit")
+intent      = do("understand what the user wants to create or edit")
+transparent = do("""
+  Set true if the user asked for a transparent / alpha / cut-out / no-background image,
+  or for an icon / sticker / sprite / logo with no background. Otherwise false.
+""")
+
+// Transparency: announce the workaround before invoking
+if transparent:
+  do("""
+    Tell the user, in one sentence, that Gemini image models cannot emit a native
+    transparent PNG — asked for one, they paint a grey-and-white checkerboard as
+    opaque pixels — so this skill paints the subject on a flat chroma-key green
+    (#00ff00) background and keys the green out programmatically with ffmpeg.
+    Mention that any genuinely green parts of the subject will be keyed out too.
+  """)
 
 // Expand prompt
 prompt = do("""
@@ -21,6 +35,18 @@ prompt = do("""
   painting / 3-D render / etc.), camera angle or lens, mood, and the image's purpose.
   If the image must contain readable text, name the exact words verbatim.
   The paragraph is the value passed to the script as the first positional argument.
+
+  If transparent is true:
+    - Do NOT use the words "transparent", "transparency", "alpha", "checkerboard",
+      "no background", or "PNG" in the prompt — these trigger the painted-checkerboard
+      failure mode.
+    - Do NOT use green anywhere on the subject; pick non-green colours for the subject
+      explicitly when relevant.
+    - Append this background directive verbatim as the final sentence:
+        "The entire background must be a single flat, fully saturated pure green of
+         hex colour #00ff00 (R=0, G=255, B=0) filling every pixel that is not part of
+         the subject; do not draw any pattern, gradient, shadow, or other colour in
+         the background."
 """)
 
 // Choose flags
@@ -33,13 +59,28 @@ model_flag   = do("--model only when the user explicitly overrides the default")
 // Invoke (replace <skill-dir> with this skill's base directory at invocation time)
 Bash(doppler run -p claude-code -c std --no-fallback -- bash <skill-dir>/scripts/imagen.sh "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag])
 
+// Post-process: key the green out (only when transparent)
+if transparent:
+  for each "image: <src_path>" line the script emitted:
+    dst_path = src_path with extension replaced by ".png"
+    // colorkey removes the green; despill cleans the residual green fringe
+    // (JPEG chroma subsampling bleeds green into edge pixels). Tuned on a
+    // red-apple test: 0 green-tinted pixels after this chain.
+    Bash(ffmpeg -hide_banner -loglevel error -y -i "<src_path>" \
+           -vf "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba" \
+           "<dst_path>")
+    if dst_path != src_path:
+      Bash(rm -f "<src_path>")
+    replace the path emitted to the user with dst_path
+
 // Relay output
-do("print each 'image: ...' path the script emitted so the user can see or copy them")
+do("print each final 'image: ...' path so the user can see or copy them")
 do("note the log path the script printed")
 
 // Iterate
 if user wants to refine or upscale:
   do("call the script again with a chosen output path as --source and adjusted flags")
+  do("when iterating on a transparent image, re-run the green-key post-process step")
 
 // Refusals
 if script reports no image:
@@ -56,3 +97,26 @@ if script reports no image:
   `curl --data`) does not fire.
 - `gemini-2.5-flash-image` does not accept `--resolution`; the script warns and ignores it.
 - Default model: `gemini-3.1-flash-image-preview`.
+
+### Transparency via chroma-key
+
+Gemini image models cannot emit a native alpha channel. Asked for a "transparent background", they paint a grey-and-white checkerboard — the *icon* for transparency — as opaque pixels (confirmed by Google docs / community reports). The skill works around this entirely outside the script:
+
+1. Detect the transparency request (`transparent = true`).
+2. Tell the user up front that chroma-keying is used and that green parts of the subject will be keyed out too.
+3. Append a flat `#00ff00` background directive to the prompt (without ever using the word "transparent").
+4. After the script returns the image, run `ffmpeg` with `colorkey` plus `despill` to set alpha to 0 on the green and clean the JPEG chroma fringe.
+
+The keying command (also embedded in the workflow above):
+
+```
+ffmpeg -i in.jpg \
+  -vf "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba" \
+  out.png
+```
+
+- `colorkey=0x00ff00:0.30:0.20` — sets alpha to 0 where pixels are within 30% of pure green, feathering edges over a 20% blend window.
+- `despill=type=green:mix=0.5` — subtracts green spill from edge pixels; without this, JPEG chroma subsampling leaves a visible green halo around the subject.
+- `format=rgba` — forces an alpha channel on output (PNG `color_type=6`).
+
+Tuned on a red-apple test: this chain produces 0 green-tinted edge pixels. If the subject has fine hair / fur / glass and edges look chewed, raise the `despill` `mix` to `0.7` and the colorkey `blend` to `0.25` for softer edges.
