@@ -40,7 +40,7 @@
         eval "$(zoxide init --cmd cd zsh)"
       fi
 
-      export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"
+      export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.bun/bin:$HOME/.npm-global/bin:$PATH"
 
       _set_tab_title() { print -Pn "\e]0;%1~\a" }
       precmd_functions+=(_set_tab_title)

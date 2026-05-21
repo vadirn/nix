@@ -1,0 +1,6 @@
+[install]
+exact = true
+# Ad-hoc installs must be at least 7 days old (supply-chain guard).
+# install-globals.sh bypasses this with --minimum-release-age=0 since its
+# pins are reviewed deliberately.
+minimumReleaseAge = 604800
