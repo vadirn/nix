@@ -1,0 +1,51 @@
+diff --git a/SKILL.md b/SKILL.md
+--- a/SKILL.md
++++ b/SKILL.md
+@@ -32,10 +32,10 @@
+ 
+ ### Step 1. Search Use Cases
+ 
+-Search with an action-oriented query summarizing what you want to achieve using the `search` command. Run `modern-web-guidance` directly with `npx`.
++Search with an action-oriented query summarizing what you want to achieve using the `search` command. The `modern-web-guidance` binary is installed globally via bun (see `home/bun/install-globals.sh` in the dotfiles repo).
+ 
+ ```sh
+-npx -y modern-web-guidance@latest search "<query>" --skill-version 2026_05_16-c5e7870
++modern-web-guidance search "<query>" --skill-version 2026_05_16-c5e7870
+ ```
+ 
+ **Example Output**:
+@@ -62,7 +62,7 @@
+ 
+ > **Note**: If search results are vague, return no matches, or show low similarity scores, run the `list` command to browse all guides:
+ > ```sh
+-> npx -y modern-web-guidance@latest list
++> modern-web-guidance list
+ > ```
+ 
+ ---
+@@ -72,21 +72,18 @@
+ Once you have a relevant `id` from the search results, call this script using the `retrieve` command to get the full guide. You can pass multiple IDs separated by commas.
+ 
+ ```sh
+-npx -y modern-web-guidance@latest retrieve "<id>"
++modern-web-guidance retrieve "<id>"
+ ```
+ 
+ 
+ **Example Output**:
+ `The markdown content of the guide describing implementation steps...`
+ 
+-## Using npx
++## Runtime notes
+ 
+--   IMPORTANT: on Windows, using `npx` may fail. Use `npx.cmd ...` instead.
+--   Network access is required for fetching npm packages needed by the task.
+--   If the `npx -y modern-web-guidance…` command hangs, you may be offline. Try running again in offline
+-    mode: `npx --offline …`.
++-   The CLI is installed globally via `bun install -g modern-web-guidance@<pinned-version>` (see `home/bun/install-globals.sh`). No network call at invocation time.
+ -   The `--skill-version` flag is used to determine if this SKILL.md is out of date. If it is, a warning
+-    message is logged to stderr.
++    message is logged to stderr. Bump the global install when the vendored skill is refreshed via `skills-add --update modern-web-guidance`.
+ 
+ ## Guidelines
+ 

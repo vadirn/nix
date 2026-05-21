@@ -74,6 +74,7 @@
       home.file.".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/hooks";
       home.file.".claude/agents".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/agents";
       home.file.".claude/statusline.sh".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/statusline.sh";
+      home.file.".bunfig.toml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/bun/bunfig.toml";
 
       home.activation.buildClaudeMd = config.lib.dag.entryAfter ["writeBoundary"] ''
         ROOT="${homeDirectory}/nix" bash "${homeDirectory}/nix/home/claude/build-claude-md.sh"

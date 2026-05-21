@@ -15,8 +15,8 @@ claude plugin install typescript-lsp
 echo "Syncing agents..."
 bash "$HOME/nix/home/agents/scripts/sync-agents.sh"
 
-echo "Installing global npm packages..."
-npm install -g firecrawl-cli @mariozechner/pi-coding-agent
+echo "Installing global bun packages..."
+bash "$HOME/nix/home/bun/install-globals.sh"
 
 echo "Installing pi plugins..."
 pi install https://github.com/davebcn87/pi-autoresearch
