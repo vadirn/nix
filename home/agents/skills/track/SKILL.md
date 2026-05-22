@@ -9,7 +9,7 @@ description: >
 
 # Track
 
-Rolling per-project work artifact. One file per ongoing line of work. Updated across many sessions.
+Rolling per-project work artifact. One file per effort, updated across the many sessions it spans.
 
 ```
 dir = skill base directory
