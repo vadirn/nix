@@ -240,6 +240,7 @@
     "filesystem": {
       "allowWrite": [
         "~/.agent-browser",
+        "~/.bun",
         "~/.cache",
         "~/.config/basecamp",
         "~/.docker",
