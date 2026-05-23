@@ -104,7 +104,6 @@
                 "rustup"
                 "zig"
                 "arimxyer/tap/models"
-                "neovim"
                 "oven-sh/bun/bun"
                 "agent-browser"
                 "anomalyco/tap/opencode"

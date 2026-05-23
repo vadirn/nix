@@ -116,6 +116,7 @@
         ./git.nix
         ./starship.nix
         ./yazi.nix
+        ./nvim/nvim.nix
       ];
     };
   };
