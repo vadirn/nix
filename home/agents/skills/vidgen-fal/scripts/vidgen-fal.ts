@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * vidgen-fal.ts — generate a WebM loop (+ MP4 source) via fal.ai Kling video
+ * vidgen-fal.ts — generate a WebM loop (+ optional MP4 source) via fal.ai Kling video
  *
  * Usage:
  *   bun <skill-dir>/scripts/vidgen-fal.ts --prompt "<text>" [flags]
@@ -12,7 +12,8 @@
 
 import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
-import { mkdirSync, writeFileSync, appendFileSync } from "fs";
+import { unlinkSync, appendFileSync } from "fs";
+import { mkdirSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import { homedir } from "os";
@@ -24,13 +25,28 @@ const ENDPOINT_STANDARD = "fal-ai/kling-video/v1.6/standard/text-to-video";
 const ENDPOINT_PRO      = "fal-ai/kling-video/v1.6/pro/text-to-video";
 
 // ---------------------------------------------------------------------------
+// Tilde expansion — only ~/path or bare ~ (not ~user/path)
+// ---------------------------------------------------------------------------
+function expandTilde(p: string): string {
+  if (p === "~" || p.startsWith("~/")) {
+    return p.replace(/^~/, process.env.HOME ?? homedir());
+  }
+  if (p.startsWith("~")) {
+    console.error(`ERROR: --out: ~user form not supported; use ~/path or an absolute path`);
+    process.exit(1);
+  }
+  return p;
+}
+
+// ---------------------------------------------------------------------------
 // Usage
 // ---------------------------------------------------------------------------
 function usage(): void {
   console.log(`\
 Usage: vidgen-fal.ts --prompt "<text>" [OPTIONS]
 
-Generate a WebM loop (and MP4 source) via fal.ai Kling video.
+Generate a WebM loop via fal.ai Kling video. The MP4 source is deleted after a
+successful WebM encode (use --keep-mp4 to retain it).
 The ffmpeg pipeline runs locally: scale + VP9 encode → WebM. The WebM loops
 natively in HTML5 video with <video loop autoplay muted playsinline>.
 
@@ -44,8 +60,9 @@ Options:
   --negative-prompt <text>   Negative prompt (default: "blur, distort, and low quality").
   --pro                      Use the pro tier endpoint (higher quality, ~$0.49/5s).
   --no-webm                  Skip WebM stage; keep MP4 only.
-  --scale <number>           Width in pixels for WebM output (default: 640). Height is
-                             computed automatically to preserve aspect ratio.
+  --keep-mp4                 Retain the source MP4 alongside the WebM (deleted by default).
+  --scale <number>           Width in pixels for WebM output (default: 640). Must be a
+                             positive even integer. Height is computed automatically.
   --webm-crf <number>        VP9 quality, 0–63 (default: 32). Lower = larger/better.
   -h, --help                 Show this help and exit.
 
@@ -73,6 +90,7 @@ const { values } = parseArgs({
     "negative-prompt":{ type: "string" },
     pro:              { type: "boolean", default: false },
     "no-webm":        { type: "boolean", default: false },
+    "keep-mp4":       { type: "boolean", default: false },
     scale:            { type: "string" },
     "webm-crf":       { type: "string" },
     help:             { type: "boolean", default: false, short: "h" },
@@ -131,10 +149,14 @@ if (!(VALID_ASPECT_RATIOS as readonly string[]).includes(aspectRatioArg)) {
 }
 const ASPECT_RATIO = aspectRatioArg as AspectRatio;
 
-// --cfg-scale: float 0–1
+// --cfg-scale: strict float 0–1 (no trailing garbage accepted)
 const cfgScaleArg = values["cfg-scale"] ?? "0.5";
+if (!/^\d+(\.\d+)?$/.test(cfgScaleArg)) {
+  console.error(`ERROR: --cfg-scale must be a number between 0 and 1 (got '${cfgScaleArg}')`);
+  process.exit(1);
+}
 const cfgScaleParsed = parseFloat(cfgScaleArg);
-if (isNaN(cfgScaleParsed) || cfgScaleParsed < 0 || cfgScaleParsed > 1) {
+if (cfgScaleParsed < 0 || cfgScaleParsed > 1) {
   console.error(`ERROR: --cfg-scale must be a number between 0 and 1 (got '${cfgScaleArg}')`);
   process.exit(1);
 }
@@ -143,21 +165,30 @@ const CFG_SCALE = cfgScaleParsed;
 // --negative-prompt: pass through verbatim; use Kling's documented default if not supplied
 const NEGATIVE_PROMPT = values["negative-prompt"] ?? "blur, distort, and low quality";
 
-const DO_WEBM = !values["no-webm"];
+const DO_WEBM   = !values["no-webm"];
+const KEEP_MP4  = values["keep-mp4"] ?? false;
 
-// --scale: integer width in pixels for WebM output
+// --scale: positive even integer width in pixels for WebM output
 const scaleArg = values.scale ?? "640";
+if (!/^\d+$/.test(scaleArg)) {
+  console.error(`ERROR: --scale must be a positive even integer (got '${scaleArg}')`);
+  process.exit(1);
+}
 const scaleParsed = parseInt(scaleArg, 10);
-if (isNaN(scaleParsed) || scaleParsed <= 0) {
-  console.error(`ERROR: --scale must be a positive integer (got '${scaleArg}')`);
+if (scaleParsed <= 0 || scaleParsed % 2 !== 0) {
+  console.error(`ERROR: --scale must be a positive even integer (got '${scaleArg}')`);
   process.exit(1);
 }
 const SCALE = scaleParsed;
 
-// --webm-crf: integer 0–63
+// --webm-crf: strict integer 0–63
 const webmCrfArg = values["webm-crf"] ?? "32";
+if (!/^\d+$/.test(webmCrfArg)) {
+  console.error(`ERROR: --webm-crf must be an integer between 0 and 63 (got '${webmCrfArg}')`);
+  process.exit(1);
+}
 const webmCrfParsed = parseInt(webmCrfArg, 10);
-if (isNaN(webmCrfParsed) || webmCrfParsed < 0 || webmCrfParsed > 63) {
+if (webmCrfParsed < 0 || webmCrfParsed > 63) {
   console.error(`ERROR: --webm-crf must be an integer between 0 and 63 (got '${webmCrfArg}')`);
   process.exit(1);
 }
@@ -165,10 +196,8 @@ const WEBM_CRF = webmCrfParsed;
 
 // Output directory (default: ~/Pictures/vidgen).
 const OUT_DIR = values.out
-  ? values.out.replace(/^~/, process.env.HOME ?? homedir())
+  ? expandTilde(values.out)
   : `${process.env.HOME ?? homedir()}/Pictures/vidgen`;
-
-mkdirSync(OUT_DIR, { recursive: true });
 
 const TIMESTAMP = new Date()
   .toISOString()
@@ -182,6 +211,15 @@ const LOG_FILE = join(OUT_DIR, "log.jsonl");
 // ---------------------------------------------------------------------------
 function ffmpeg(args: string[]): void {
   const result = spawnSync("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+  if (result.error) {
+    throw new Error(
+      `ffmpeg could not be spawned: ${result.error.message} (is ffmpeg installed and on PATH?)`
+    );
+  }
+  if (result.signal) {
+    const stderr = result.stderr?.toString() ?? "";
+    throw new Error(`ffmpeg killed by signal ${result.signal}:\n${stderr}`);
+  }
   if (result.status !== 0) {
     const stderr = result.stderr?.toString() ?? "";
     throw new Error(`ffmpeg failed (exit ${result.status}):\n${stderr}`);
@@ -192,6 +230,8 @@ function ffmpeg(args: string[]): void {
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
+  mkdirSync(OUT_DIR, { recursive: true });
+
   const startMs = Date.now();
 
   // Call fal Kling endpoint.
@@ -207,10 +247,9 @@ async function main(): Promise<void> {
       cfg_scale: CFG_SCALE,
     },
     logs: false,
-  }) as { data?: { video?: { url?: string } }; video?: { url?: string } };
+  }) as { data?: { video?: { url?: string } } };
 
-  // fal.subscribe wraps the response in result.data; keep result.video.url as fallback.
-  const videoUrl = result.data?.video?.url ?? (result as { video?: { url?: string } }).video?.url;
+  const videoUrl = result.data?.video?.url;
   if (!videoUrl) {
     throw new Error(
       `No video URL in response: ${JSON.stringify(result).slice(0, 500)}`
@@ -220,13 +259,12 @@ async function main(): Promise<void> {
   // Download MP4.
   const mp4Path = join(OUT_DIR, `vidgen-${TIMESTAMP}.mp4`);
   console.log(`Downloading MP4…`);
-  const resp = await fetch(videoUrl);
+  const resp = await fetch(videoUrl, { signal: AbortSignal.timeout(120_000) });
   if (!resp.ok) throw new Error(`Failed to download ${videoUrl}: ${resp.status} ${resp.statusText}`);
-  const buf = await resp.arrayBuffer();
-  writeFileSync(mp4Path, Buffer.from(buf));
+  await Bun.write(mp4Path, resp);
   console.log(`video: ${mp4Path}`);
 
-  const outputPaths: string[] = [mp4Path];
+  const outputPaths: string[] = [];
   let webmPath: string | undefined;
 
   if (DO_WEBM) {
@@ -234,6 +272,8 @@ async function main(): Promise<void> {
     // -b:v 0 puts libvpx-vp9 into true CRF mode.
     // -row-mt 1 enables multi-threaded row encoding.
     // -an strips audio (Kling MP4 has none, but explicit insurance).
+    // -pix_fmt yuv420p ensures browser (Safari) compatibility.
+    // -g 1 -keyint_min 1: every frame is a keyframe so the loop boundary is clean.
     webmPath = join(OUT_DIR, `vidgen-${TIMESTAMP}.webm`);
     console.log(`Encoding WebM…`);
     ffmpeg([
@@ -243,12 +283,23 @@ async function main(): Promise<void> {
       "-crf", String(WEBM_CRF),
       "-b:v", "0",
       "-row-mt", "1",
+      "-pix_fmt", "yuv420p",
+      "-g", "1", "-keyint_min", "1",
       "-an",
       webmPath,
     ]);
 
     outputPaths.push(webmPath);
     console.log(`webm: ${webmPath}`);
+
+    if (!KEEP_MP4) {
+      try { unlinkSync(mp4Path); } catch { /* best-effort */ }
+    } else {
+      outputPaths.unshift(mp4Path);
+      console.log(`mp4: ${mp4Path}`);
+    }
+  } else {
+    outputPaths.push(mp4Path);
   }
 
   const elapsedMs = Date.now() - startMs;
@@ -263,6 +314,7 @@ async function main(): Promise<void> {
     cfg_scale: CFG_SCALE,
     negative_prompt: NEGATIVE_PROMPT,
     webm: DO_WEBM,
+    keep_mp4: KEEP_MP4,
     outputs: outputPaths,
     elapsed_ms: elapsedMs,
   };

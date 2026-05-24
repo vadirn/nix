@@ -1,9 +1,9 @@
 ---
 name: vidgen-fal
 description: >
-  The fal.ai worker for video generation — produces a Kling-rendered MP4 plus a
-  small palette-free WebM loop (default 640px wide, ~1–3 MB for a 5s clip) encoded
-  with VP9. The WebM loops natively in HTML5 video with no special encoding required.
+  The fal.ai worker for video generation — produces a Kling-rendered WebM loop
+  (default 640px wide, ~1–3 MB for a 5s clip) encoded with VP9. The source MP4
+  is deleted after a successful WebM encode unless --keep-mp4 is passed. The WebM loops natively in HTML5 video with no special encoding required.
   Targets Kling v1.6 by default (standard tier); pass --pro for the pro tier. No
   router hub exists today; invoke this skill directly.
   Triggers: /vidgen-fal, "generate a video", "make a looping video", "animate this",
@@ -44,7 +44,8 @@ Pass the file path directly — `bun run` is not used because it would interpret
 | `--negative-prompt <text>` | `blur, distort, and low quality` | Negative prompt passed verbatim to Kling. |
 | `--pro` | off | Switch to the pro tier endpoint. |
 | `--no-webm` | off | Skip the ffmpeg WebM stage; keep the MP4 only. |
-| `--scale <number>` | `640` | Width in pixels for the WebM output. Height is computed automatically to preserve aspect ratio. |
+| `--keep-mp4` | off | Retain the source MP4 alongside the WebM. By default the MP4 is deleted after a successful WebM encode. |
+| `--scale <number>` | `640` | Width in pixels for the WebM output. Must be a positive even integer. Height is computed automatically. |
 | `--webm-crf <number>` | `32` | VP9 quality, 0–63. Lower = larger file / better quality. Out-of-range values are rejected. |
 
 ## Workflow
@@ -68,7 +69,8 @@ negative_flag     = do("--negative-prompt '<text>' to override default")
 pro_flag          = do("--pro if user asks for higher quality or if standard output is unsatisfactory")
 out_flag          = do("--out <dir> when the user specifies an output path")
 webm_flag         = do("--no-webm only if user explicitly wants MP4 only")
-scale_flag        = do("--scale <n> to override the default 640px width (e.g. --scale 480 for smaller output)")
+scale_flag        = do("--scale <n> to override the default 640px width (must be even, e.g. --scale 480 for smaller output)")
+keep_mp4_flag     = do("--keep-mp4 if the user wants the source MP4 retained alongside the WebM")
 crf_flag          = do("--webm-crf <n> to override the default quality (e.g. --webm-crf 28 for higher quality)")
 
 // Invoke  (pipeline: fal call → MP4 → ffmpeg (scale + VP9) → WebM)
@@ -76,7 +78,7 @@ Bash(doppler run -p claude-code -c std --no-fallback -- \
   bun ~/.claude/skills/vidgen-fal/scripts/vidgen-fal.ts \
   --prompt "<prompt>" \
   [duration_flag] [aspect_flag] [cfg_flag] [negative_flag] [pro_flag] \
-  [out_flag] [webm_flag] [scale_flag] [crf_flag])
+  [out_flag] [webm_flag] [scale_flag] [crf_flag] [keep_mp4_flag])
 
 // Relay output
 do("print the 'video: ...' and 'webm: ...' paths so the user can open them")
@@ -97,4 +99,4 @@ do("note the log path and elapsed time if emitted")
 
 **FAL_KEY** is injected by `doppler run -p claude-code -c std --no-fallback`. It is never passed on the command line.
 
-**Output files.** The script emits `vidgen-<timestamp>.mp4` and (when `--no-webm` is not set) `vidgen-<timestamp>.webm` into `~/Pictures/vidgen/` (created automatically) or the directory given by `--out`. A `log.jsonl` entry is appended per run.
+**Output files.** The script emits `vidgen-<timestamp>.webm` into `~/Pictures/vidgen/` (created automatically) or the directory given by `--out`. The intermediate MP4 is deleted after a successful WebM encode; pass `--keep-mp4` to retain it. When `--no-webm` is set, only the MP4 is kept. A `log.jsonl` entry is appended per run.
