@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * vidgen-fal.ts — generate a WebM loop (+ optional MP4 source) via fal.ai Kling video
+ * vidgen-fal.ts — generate a Kling MP4 (+ optional WebM transcode) via fal.ai
  *
  * Usage:
  *   bun <skill-dir>/scripts/vidgen-fal.ts --prompt "<text>" [flags]
@@ -12,7 +12,7 @@
 
 import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
-import { unlinkSync, appendFileSync } from "fs";
+import { appendFileSync } from "fs";
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
@@ -45,10 +45,9 @@ function usage(): void {
   console.log(`\
 Usage: vidgen-fal.ts --prompt "<text>" [OPTIONS]
 
-Generate a WebM loop via fal.ai Kling video. The MP4 source is deleted after a
-successful WebM encode (use --keep-mp4 to retain it).
-The ffmpeg pipeline runs locally: scale + VP9 encode → WebM. The WebM loops
-natively in HTML5 video with <video loop autoplay muted playsinline>.
+Generate an MP4 via fal.ai Kling video. The MP4 is always kept as the master
+output. Pass --webm to also encode a WebM loop alongside it (VP9, default 640px
+wide). Both files are emitted on stdout when --webm is set.
 
 Options:
   --prompt <text>            Required. Text description of the video to generate.
@@ -59,11 +58,12 @@ Options:
   --cfg-scale <0-1>          Prompt adherence, 0–1 float (default: 0.5).
   --negative-prompt <text>   Negative prompt (default: "blur, distort, and low quality").
   --pro                      Use the pro tier endpoint (higher quality, ~$0.49/5s).
-  --no-webm                  Skip WebM stage; keep MP4 only.
-  --keep-mp4                 Retain the source MP4 alongside the WebM (deleted by default).
+  --webm                     Also encode a WebM loop (VP9) alongside the MP4.
   --scale <number>           Width in pixels for WebM output (default: 640). Must be a
                              positive even integer. Height is computed automatically.
+                             Has no effect unless --webm is set.
   --webm-crf <number>        VP9 quality, 0–63 (default: 32). Lower = larger/better.
+                             Has no effect unless --webm is set.
   -h, --help                 Show this help and exit.
 
 Environment:
@@ -89,8 +89,7 @@ const { values } = parseArgs({
     "cfg-scale":      { type: "string" },
     "negative-prompt":{ type: "string" },
     pro:              { type: "boolean", default: false },
-    "no-webm":        { type: "boolean", default: false },
-    "keep-mp4":       { type: "boolean", default: false },
+    webm:             { type: "boolean", default: false },
     scale:            { type: "string" },
     "webm-crf":       { type: "string" },
     help:             { type: "boolean", default: false, short: "h" },
@@ -165,8 +164,7 @@ const CFG_SCALE = cfgScaleParsed;
 // --negative-prompt: pass through verbatim; use Kling's documented default if not supplied
 const NEGATIVE_PROMPT = values["negative-prompt"] ?? "blur, distort, and low quality";
 
-const DO_WEBM   = !values["no-webm"];
-const KEEP_MP4  = values["keep-mp4"] ?? false;
+const DO_WEBM = values.webm ?? false;
 
 // --scale: positive even integer width in pixels for WebM output
 const scaleArg = values.scale ?? "640";
@@ -193,6 +191,16 @@ if (webmCrfParsed < 0 || webmCrfParsed > 63) {
   process.exit(1);
 }
 const WEBM_CRF = webmCrfParsed;
+
+// Warn if --scale or --webm-crf were explicitly supplied without --webm
+if (!DO_WEBM) {
+  if (values.scale !== undefined) {
+    console.warn(`WARNING: --scale has no effect unless --webm is set`);
+  }
+  if (values["webm-crf"] !== undefined) {
+    console.warn(`WARNING: --webm-crf has no effect unless --webm is set`);
+  }
+}
 
 // Output directory (default: ~/Pictures/vidgen).
 const OUT_DIR = values.out
@@ -256,7 +264,7 @@ async function main(): Promise<void> {
     );
   }
 
-  // Download MP4.
+  // Download MP4 — always kept as the master output.
   const mp4Path = join(OUT_DIR, `vidgen-${TIMESTAMP}.mp4`);
   console.log(`Downloading MP4…`);
   const resp = await fetch(videoUrl, { signal: AbortSignal.timeout(120_000) });
@@ -264,7 +272,7 @@ async function main(): Promise<void> {
   await Bun.write(mp4Path, resp);
   console.log(`video: ${mp4Path}`);
 
-  const outputPaths: string[] = [];
+  const outputPaths: string[] = [mp4Path];
   let webmPath: string | undefined;
 
   if (DO_WEBM) {
@@ -291,15 +299,6 @@ async function main(): Promise<void> {
 
     outputPaths.push(webmPath);
     console.log(`webm: ${webmPath}`);
-
-    if (!KEEP_MP4) {
-      try { unlinkSync(mp4Path); } catch { /* best-effort */ }
-    } else {
-      outputPaths.unshift(mp4Path);
-      console.log(`mp4: ${mp4Path}`);
-    }
-  } else {
-    outputPaths.push(mp4Path);
   }
 
   const elapsedMs = Date.now() - startMs;
@@ -314,7 +313,6 @@ async function main(): Promise<void> {
     cfg_scale: CFG_SCALE,
     negative_prompt: NEGATIVE_PROMPT,
     webm: DO_WEBM,
-    keep_mp4: KEEP_MP4,
     outputs: outputPaths,
     elapsed_ms: elapsedMs,
   };

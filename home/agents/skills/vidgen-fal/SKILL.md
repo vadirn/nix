@@ -1,9 +1,9 @@
 ---
 name: vidgen-fal
 description: >
-  The fal.ai worker for video generation — produces a Kling-rendered WebM loop
-  (default 640px wide, ~1–3 MB for a 5s clip) encoded with VP9. The source MP4
-  is deleted after a successful WebM encode unless --keep-mp4 is passed. The WebM loops natively in HTML5 video with no special encoding required.
+  The fal.ai worker for video generation — produces a Kling-rendered MP4 as the
+  master output (always kept). Pass --webm to also encode a VP9 WebM loop
+  alongside it (default 640px wide, ~1–3 MB for a 5s clip).
   Targets Kling v1.6 by default (standard tier); pass --pro for the pro tier. No
   router hub exists today; invoke this skill directly.
   Triggers: /vidgen-fal, "generate a video", "make a looping video", "animate this",
@@ -13,7 +13,7 @@ description: >
 
 # vidgen-fal
 
-This skill is a direct-call fal.ai video worker. It calls a Kling v1.6 endpoint, downloads the MP4, then runs a local ffmpeg pipeline — scale + VP9 encode — to produce a WebM that loops natively in HTML5 video. No router hub exists today; the user chose this as a direct-call worker.
+This skill is a direct-call fal.ai video worker. It calls a Kling v1.6 endpoint, downloads the MP4 (always kept as the master), then optionally runs a local ffmpeg pipeline — scale + VP9 encode — to produce a WebM alongside it. Pass `--webm` to opt into the WebM transcode. No router hub exists today; the user chose this as a direct-call worker.
 
 ## Models
 
@@ -43,10 +43,9 @@ Pass the file path directly — `bun run` is not used because it would interpret
 | `--cfg-scale <0–1>` | `0.5` | Prompt adherence (float). Values outside 0–1 are rejected. |
 | `--negative-prompt <text>` | `blur, distort, and low quality` | Negative prompt passed verbatim to Kling. |
 | `--pro` | off | Switch to the pro tier endpoint. |
-| `--no-webm` | off | Skip the ffmpeg WebM stage; keep the MP4 only. |
-| `--keep-mp4` | off | Retain the source MP4 alongside the WebM. By default the MP4 is deleted after a successful WebM encode. |
-| `--scale <number>` | `640` | Width in pixels for the WebM output. Must be a positive even integer. Height is computed automatically. |
-| `--webm-crf <number>` | `32` | VP9 quality, 0–63. Lower = larger file / better quality. Out-of-range values are rejected. |
+| `--webm` | off | Also encode a WebM loop (VP9) alongside the MP4. Both files are kept and emitted. |
+| `--scale <number>` | `640` | Width in pixels for the WebM output. Must be a positive even integer. Height is computed automatically. Has no effect unless `--webm` is set. |
+| `--webm-crf <number>` | `32` | VP9 quality, 0–63. Lower = larger file / better quality. Out-of-range values are rejected. Has no effect unless `--webm` is set. |
 
 ## Workflow
 
@@ -68,26 +67,34 @@ cfg_flag          = do("--cfg-scale <n> only if user wants tighter (closer to 1)
 negative_flag     = do("--negative-prompt '<text>' to override default")
 pro_flag          = do("--pro if user asks for higher quality or if standard output is unsatisfactory")
 out_flag          = do("--out <dir> when the user specifies an output path")
-webm_flag         = do("--no-webm only if user explicitly wants MP4 only")
+webm_flag         = do("--webm if user wants a WebM loop encoded alongside the MP4 (default: MP4 only)")
 scale_flag        = do("--scale <n> to override the default 640px width (must be even, e.g. --scale 480 for smaller output)")
-keep_mp4_flag     = do("--keep-mp4 if the user wants the source MP4 retained alongside the WebM")
 crf_flag          = do("--webm-crf <n> to override the default quality (e.g. --webm-crf 28 for higher quality)")
 
-// Invoke  (pipeline: fal call → MP4 → ffmpeg (scale + VP9) → WebM)
+// Invoke  (pipeline: fal call → MP4 kept; if --webm: ffmpeg scale + VP9 → WebM also kept)
 Bash(doppler run -p claude-code -c std --no-fallback -- \
   bun ~/.claude/skills/vidgen-fal/scripts/vidgen-fal.ts \
   --prompt "<prompt>" \
   [duration_flag] [aspect_flag] [cfg_flag] [negative_flag] [pro_flag] \
-  [out_flag] [webm_flag] [scale_flag] [crf_flag] [keep_mp4_flag])
+  [out_flag] [webm_flag] [scale_flag] [crf_flag])
 
 // Relay output
-do("print the 'video: ...' and 'webm: ...' paths so the user can open them")
+do("print the 'video: ...' path so the user can open it")
+do("if --webm was set, also print the 'webm: ...' path")
 do("note the log path and elapsed time if emitted")
 ```
 
 ## Notes
 
-**Source fps.** Kling v1.6 standard renders at 24 fps at 1280×720 (confirmed via smoke test on a real output). The WebM transcode scales the video to the target width while preserving aspect ratio and native frame rate.
+**Source fps.** Kling v1.6 standard renders at 24 fps at 1280×720 (confirmed via smoke test on a real output).
+
+**MP4 as master.** The MP4 from Kling is always kept. It is the highest-quality output and serves as the source for any downstream transcode. Pass `--webm` to produce a WebM alongside it.
+
+**FAL_KEY** is injected by `doppler run -p claude-code -c std --no-fallback`. It is never passed on the command line.
+
+**Output files.** The script emits `vidgen-<timestamp>.mp4` into `~/Pictures/vidgen/` (created automatically) or the directory given by `--out`. When `--webm` is set, a matching `.webm` is also produced in the same directory. A `log.jsonl` entry is appended per run.
+
+### If you opt into --webm
 
 **WebM size.** A 5s source at 24 fps × 1280×720 scaled to 640×360 with VP9 crf 32 produces roughly 1–3 MB. Compare that to the 144 MB GIF the same source produced — WebM is the practical format for looping video in HTML5 contexts.
 
@@ -95,8 +102,10 @@ do("note the log path and elapsed time if emitted")
 
 **Tuning levers.** Use `--scale 480` to cut size further at the cost of resolution. Use `--webm-crf 36` to reduce file size at the cost of visible compression artifacts. Use `--webm-crf 24` for higher quality at a larger file size. `--scale` and `--webm-crf` are independent.
 
-**MP4 only.** Pass `--no-webm` if you just want the raw MP4 from Kling without any local transcoding.
+### Convert MP4 to WebM later
 
-**FAL_KEY** is injected by `doppler run -p claude-code -c std --no-fallback`. It is never passed on the command line.
+If you have the MP4 and want to produce a WebM after the fact, use the same pipeline the script runs internally:
 
-**Output files.** The script emits `vidgen-<timestamp>.webm` into `~/Pictures/vidgen/` (created automatically) or the directory given by `--out`. The intermediate MP4 is deleted after a successful WebM encode; pass `--keep-mp4` to retain it. When `--no-webm` is set, only the MP4 is kept. A `log.jsonl` entry is appended per run.
+```bash
+ffmpeg -i in.mp4 -vf scale=640:-2 -c:v libvpx-vp9 -crf 32 -b:v 0 -row-mt 1 -pix_fmt yuv420p -g 1 -keyint_min 1 -an out.webm
+```
