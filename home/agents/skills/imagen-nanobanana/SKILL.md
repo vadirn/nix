@@ -62,24 +62,10 @@ model_flag           = do("--model only when the user explicitly overrides the d
 chroma_key_flag      = do("--transparent --cutout colorkey when chroma_key is true; omit otherwise")
 
 // Invoke (replace <skill-dir> with this skill's base directory at invocation time)
-Bash(doppler run -p claude-code -c std --no-fallback -- bash <skill-dir>/scripts/imagen.sh "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag] [chroma_key_flag])
+Bash(doppler run -p claude-code -c std --no-fallback -- bun <skill-dir>/scripts/imagen-nanobanana.ts "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag] [chroma_key_flag])
 // chroma_key_flag expands to: --transparent --cutout colorkey
-
-// Post-process: key the green out (only when chroma_key and cutout != none)
-if chroma_key:
-  for each "image: <src_path>" line the script emitted:
-    base      = src_path without its extension  // e.g. /path/to/name
-    alpha_path = base + "-alpha.png"             // sibling file: name-alpha.png
-    // colorkey removes the green; despill cleans the residual green fringe
-    // (JPEG chroma subsampling bleeds green into edge pixels). Tuned on a
-    // red-apple test: 0 green-tinted pixels after this chain.
-    // src_path (e.g. name.jpg) is PRESERVED. Only the alpha sibling is written.
-    Bash(ffmpeg -hide_banner -loglevel error -y -i "<src_path>" \
-           -vf "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba" \
-           "<alpha_path>")
-    emit to the user:
-      image: <src_path>
-      alpha: <alpha_path>
+// The script handles the ffmpeg colorkey step in-process and emits both
+// "image: <raw_path>" and "alpha: <alpha_path>" lines on stdout.
 
 // Relay output
 do("print each 'image: ...' and 'alpha: ...' path so the user can see or copy them")
@@ -101,7 +87,7 @@ if script reports no image:
 - Only `~/Pictures/imagen` is on the sandbox write allowlist. Pointing `$IMAGEN_DIR` or `--out` outside it requires adding a matching entry to `home/claude/settings.json`, otherwise writes fail under the sandbox.
 - `--out` honors the path verbatim; it does not adjust the extension to match the returned format. The script warns to stderr on a mismatch.
 - The API key (`GEMINI_API_KEY`) is injected by `doppler run` and never appears on a command line.
-- The curl call lives inside the script, so the `no-network-abuse` hook (which blocks visible `curl --data`) does not fire.
+- The fetch call runs in-process inside the script, so the `no-network-abuse` hook (which blocks visible `curl --data`) does not fire.
 - `gemini-2.5-flash-image` does not accept `--resolution`; the script warns and ignores it.
 - Default model: `gemini-3.1-flash-image-preview`.
 - Default resolution: `2K`. Pass `--resolution 512` for cheap draft runs.
@@ -115,8 +101,8 @@ Gemini image models cannot emit a native alpha channel. Asked for a "transparent
 2. Tell the user up front that chroma-keying is used and that green parts of the subject will be keyed out too.
 3. Append a flat `#00ff00` background directive to the prompt (without ever using the word "transparent").
 4. Pass `--transparent --cutout colorkey` to the script to signal the mode.
-5. After the script returns the image, run `ffmpeg` with `colorkey` plus `despill` to write `<base>-alpha.png` as a sibling file. The original generated file (e.g. `name.jpg`) is always preserved.
-6. Emit both `image: name.jpg` and `alpha: name-alpha.png` to the user.
+5. The script generates the image and immediately runs `ffmpeg` with `colorkey` plus `despill` in-process to write `<base>-alpha.png` as a sibling file. The original generated file (e.g. `name.jpg`) is always preserved.
+6. The script emits both `image: name.jpg` and `alpha: name-alpha.png` on stdout — no post-process step needed from the workflow.
 
 Pass `--cutout none` to skip the ffmpeg step and keep only the raw green-plate image.
 
