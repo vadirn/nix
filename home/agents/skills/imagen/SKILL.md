@@ -1,122 +1,76 @@
 ---
 name: imagen
 description: >
-  Generate images with Google's Nano Banana (Gemini) models. Triggers: /imagen,
-  "generate an image", "create a picture", "make an image", «нарисуй», «сгенерируй картинку».
-  Edit or restyle existing images by passing them as --source. Skip for non-image tasks.
+  Router hub for image generation. Triggers: /imagen, "generate an image", "create a picture",
+  "make an image", «нарисуй», «сгенерируй картинку». Dispatches to either imagen-nanobanana
+  (Google Nano Banana / Gemini, direct API) or imagen-fal (Kling O1 + BiRefNet via fal.ai)
+  based on prompt characteristics — invoke the worker skills directly only when you need to
+  pin a provider.
 ---
 
 # imagen
 
-Generate or edit images via Google Gemini image models.
+This skill is a router only — it has no script of its own. It reads the user's prompt, matches it against the decision table below, and invokes the appropriate worker skill via the `Skill` tool. Both workers (`imagen-nanobanana`, `imagen-fal`) remain explicitly callable when the user wants to pin a provider.
+
+## Routing decision table
+
+| Signal | Worker | Why |
+|---|---|---|
+| Text inside image (sign, label, UI mock, readable words) | `imagen-nanobanana` | Nano Banana is strong at typography; Kling O1 is explicitly weak at text rendering. |
+| Numerical / logical reasoning (chart, infographic, diagram, math) | `imagen-nanobanana` | Nano Banana has stronger reasoning needed to place data correctly. |
+| 4+ reference images, multi-reference remix | `imagen-fal` | Kling O1 accepts up to 10 reference images; Nano Banana does not support multi-ref. |
+| Cinematic / anime / stylised artistic composition | `imagen-fal` | Declared Kling strength per provider documentation. |
+| Transparent background requested | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG; chroma-key (the nanobanana path via `--chroma-key-fallback`) is reserved for hard-edged subjects only. |
+| Default / ambiguous | `imagen-nanobanana` | Cheaper for the common case — see cost rationale below. |
+
+## Dispatch
 
 ```
-// Gather
-intent      = do("understand what the user wants to create or edit")
-transparent = do("""
-  Set true if the user asked for a transparent / alpha / cut-out / no-background image,
-  or for an icon / sticker / sprite / logo with no background. Otherwise false.
-""")
+// Read intent
+intent      = do("understand what the user wants to create")
+prompt_args = do("collect any flags the user specified: --source, --drafts, --model, --aspect, --resolution, --name, --out, --transparent")
 
-// Transparency: announce the workaround before invoking
-if transparent:
-  do("""
-    Tell the user, in one sentence, that Gemini image models cannot emit a native
-    transparent PNG — asked for one, they paint a grey-and-white checkerboard as
-    opaque pixels — so this skill paints the subject on a flat chroma-key green
-    (#00ff00) background and keys the green out programmatically with ffmpeg.
-    Mention that any genuinely green parts of the subject will be keyed out too.
-  """)
+// Match signals (in priority order)
+transparent_requested = do("true if user asked for transparent / alpha / cut-out / no background")
+ref_count             = do("count of --source images the user provided; 0 if none")
+text_in_image         = do("true if the final image must contain readable text: signs, labels, UI mockups")
+reasoning_image       = do("true if the image requires numerical layout: charts, infographics, math diagrams")
+cinematic_or_anime    = do("true if the prompt is primarily cinematic, anime, or highly stylised artistic composition")
 
-// Expand prompt
-prompt = do("""
-  Rewrite the user's request as a full descriptive paragraph — not a keyword list.
-  Cover: subject, composition, lighting, colour palette, style (photography / illustration /
-  painting / 3-D render / etc.), camera angle or lens, mood, and the image's purpose.
-  If the image must contain readable text, name the exact words verbatim.
-  The paragraph is the value passed to the script as the first positional argument.
+// Route: prefer Kling for refs / transparent; otherwise nanobanana
+if transparent_requested OR ref_count >= 4:
+  worker = "imagen-fal"
+else if text_in_image OR reasoning_image:
+  worker = "imagen-nanobanana"
+else if cinematic_or_anime:
+  worker = "imagen-fal"
+else:
+  worker = "imagen-nanobanana"   // default: cheaper
 
-  If transparent is true:
-    - Do NOT use the words "transparent", "transparency", "alpha", "checkerboard",
-      "no background", or "PNG" in the prompt — these trigger the painted-checkerboard
-      failure mode.
-    - Do NOT use green anywhere on the subject; pick non-green colours for the subject
-      explicitly when relevant.
-    - Append this background directive verbatim as the final sentence:
-        "The entire background must be a single flat, fully saturated pure green of
-         hex colour #00ff00 (R=0, G=255, B=0) filling every pixel that is not part of
-         the subject; do not draw any pattern, gradient, shadow, or other colour in
-         the background."
-""")
+// Inject worker-specific transparency flag from natural-language signal
+if transparent_requested:
+  if worker == "imagen-fal" AND "--transparent" not in prompt_args:
+    prompt_args = prompt_args + " --transparent"
+  else if worker == "imagen-nanobanana" AND "--chroma-key-fallback" not in prompt_args:
+    prompt_args = prompt_args + " --chroma-key-fallback"
 
-// Choose flags
-source_flags = do("--source <path> for each image the user referenced or a prior output to iterate on")
-drafts_flag  = do("--drafts 3 or 4 when the user wants options; omit (default 1) otherwise")
-aspect_flag  = do("--aspect <ratio> when the user specifies dimensions or orientation")
-res_flag     = do("--resolution 512 for cheap drafts; bump to 1K or 2K once the user picks a keeper")
-model_flag   = do("--model only when the user explicitly overrides the default")
-
-// Invoke (replace <skill-dir> with this skill's base directory at invocation time)
-Bash(doppler run -p claude-code -c std --no-fallback -- bash <skill-dir>/scripts/imagen.sh "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag])
-
-// Post-process: key the green out (only when transparent)
-if transparent:
-  for each "image: <src_path>" line the script emitted:
-    dst_path = src_path with extension replaced by ".png"
-    // colorkey removes the green; despill cleans the residual green fringe
-    // (JPEG chroma subsampling bleeds green into edge pixels). Tuned on a
-    // red-apple test: 0 green-tinted pixels after this chain.
-    Bash(ffmpeg -hide_banner -loglevel error -y -i "<src_path>" \
-           -vf "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba" \
-           "<dst_path>")
-    if dst_path != src_path:
-      Bash(rm -f "<src_path>")
-    replace the path emitted to the user with dst_path
-
-// Relay output
-do("print each final 'image: ...' path so the user can see or copy them")
-do("note the log path the script printed")
-
-// Iterate
-if user wants to refine or upscale:
-  do("call the script again with a chosen output path as --source and adjusted flags")
-  do("when iterating on a transparent image, re-run the green-key post-process step")
-
-// Refusals
-if script reports no image:
-  do("relay the returned safety or model text honestly; do not retry automatically")
+// Invoke — args passed through verbatim; both workers accept the same flag shape.
+if worker == "imagen-nanobanana":
+  Skill(skill: "imagen-nanobanana", args: "<prompt> [prompt_args]")
+else:
+  Skill(skill: "imagen-fal", args: "<prompt> [prompt_args]")
 ```
 
-## Notes
+If multiple signals match: prefer `imagen-fal` when any of ≥4 refs or transparent is present; fall through to `imagen-nanobanana` otherwise.
 
-- Output images land in `~/Pictures/imagen/` (or `$IMAGEN_DIR` if set). The file extension (`.png`, `.jpg`, `.webp`) reflects the format the model actually returned; most models currently return JPEG.
-- Only `~/Pictures/imagen` is on the sandbox write allowlist. Pointing `$IMAGEN_DIR` or `--out` outside it requires adding a matching entry to `home/claude/settings.json`, otherwise writes fail under the sandbox.
-- `--out` honors the path verbatim; it does not adjust the extension to match the returned format. The script warns to stderr on a mismatch.
-- The API key (`GEMINI_API_KEY`) is injected by `doppler run` and never appears on a command line.
-- The curl call lives inside the script, so the `no-network-abuse` hook (which blocks visible
-  `curl --data`) does not fire.
-- `gemini-2.5-flash-image` does not accept `--resolution`; the script warns and ignores it.
-- Default model: `gemini-3.1-flash-image-preview`.
+## Capability gaps
 
-### Transparency via chroma-key
+- `kling-v3-omni` is not on fal — the hub cannot route to it today. Inform the user and defer.
+- Character-consistent series (`kling-v3-omni` `series_amount`) is not supported today because v3-omni is not hosted on fal. Both workers treat `num_images > 1` as independent variants, not a coherent series.
+- Kling on fal splits text-to-image (`fal-ai/kling-image/v3/text-to-image`) and image-to-image (`fal-ai/kling-image/o1`, requires `--source`) across separate endpoints. `imagen-fal` auto-picks based on whether `--source` is provided.
+- 4K resolution: Kling O1 on fal tops out at 2K (per fal's hosted variant). 4K output requires direct Kling, which is not implemented.
+- Nano Banana via fal: `fal-ai/nano-banana-2` and `fal-ai/nano-banana-pro` exist on fal but cost 3–10× direct Google API billing. The hub routes Nano Banana work to `imagen-nanobanana` (direct Google) by default. Explicit `--model fal-ai/nano-banana-2` passed to `imagen-fal` is the override when a user wants fal's predictable per-image pricing instead.
 
-Gemini image models cannot emit a native alpha channel. Asked for a "transparent background", they paint a grey-and-white checkerboard — the *icon* for transparency — as opaque pixels (confirmed by Google docs / community reports). The skill works around this entirely outside the script:
+## Cost rationale
 
-1. Detect the transparency request (`transparent = true`).
-2. Tell the user up front that chroma-keying is used and that green parts of the subject will be keyed out too.
-3. Append a flat `#00ff00` background directive to the prompt (without ever using the word "transparent").
-4. After the script returns the image, run `ffmpeg` with `colorkey` plus `despill` to set alpha to 0 on the green and clean the JPEG chroma fringe.
-
-The keying command (also embedded in the workflow above):
-
-```
-ffmpeg -i in.jpg \
-  -vf "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba" \
-  out.png
-```
-
-- `colorkey=0x00ff00:0.30:0.20` — sets alpha to 0 where pixels are within 30% of pure green, feathering edges over a 20% blend window.
-- `despill=type=green:mix=0.5` — subtracts green spill from edge pixels; without this, JPEG chroma subsampling leaves a visible green halo around the subject.
-- `format=rgba` — forces an alpha channel on output (PNG `color_type=6`).
-
-Tuned on a red-apple test: this chain produces 0 green-tinted edge pixels. If the subject has fine hair / fur / glass and edges look chewed, raise the `despill` `mix` to `0.7` and the colorkey `blend` to `0.25` for softer edges.
+Asymmetric pricing drives the asymmetric architecture. fal charges 0% markup on Kling O1 ($0.028/image), so Kling work routes through fal; fal charges 3–10× markup on Nano Banana relative to the direct Google API, so Nano Banana work routes direct to Google via `imagen-nanobanana`. The hybrid keeps the cheapest path for each provider and makes `imagen-nanobanana` the sensible default for ambiguous prompts where either provider could work.
