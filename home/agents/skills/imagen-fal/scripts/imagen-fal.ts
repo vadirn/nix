@@ -12,7 +12,7 @@
 
 import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
-import { existsSync, mkdirSync, writeFileSync, renameSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync, renameSync, appendFileSync, unlinkSync } from "fs";
 import { join, extname, basename } from "path";
 
 // ---------------------------------------------------------------------------
@@ -22,7 +22,9 @@ function usage(): void {
   console.log(`\
 Usage: imagen-fal.ts "<prompt>" [OPTIONS]
 
-Generate images via fal.ai-hosted models (default: fal-ai/kling-image/o1).
+Generate images via fal.ai-hosted models.
+Auto-selects fal-ai/kling-image/v3/text-to-image (t2i) when --source is absent,
+fal-ai/kling-image/o1 (i2i) when --source is supplied. --model overrides both.
 
 Positional:
   <prompt>               Required image description (quoted string).
@@ -30,7 +32,7 @@ Positional:
 Options:
   --source <paths>       Comma-separated reference image paths for multi-ref (up to 10).
   --drafts <N>           Number of variant images (default: 1).
-  --model <id>           Model ID (default: fal-ai/kling-image/o1).
+  --model <id>           Model ID override (auto-selected if omitted; see above).
   --aspect <ratio>       Aspect ratio, e.g. 1:1, 16:9, 4:3.
   --resolution <1k|2k|4k>
                          Output resolution. fal Kling supports 1k and 2k; 4k is not
@@ -105,9 +107,34 @@ fal.config({ credentials: FAL_KEY });
 const HAS_SOURCES = Boolean(values.source && values.source.trim());
 const MODEL       = values.model
   ?? (HAS_SOURCES ? "fal-ai/kling-image/o1" : "fal-ai/kling-image/v3/text-to-image");
-const DRAFTS_RAW  = parseInt(values.drafts ?? "1", 10);
+
+// Validate explicit --model override against --source presence.
+// kling-image/o1 is image-to-image (requires --source).
+// kling-image/v3/text-to-image is text-to-image (rejects image_urls).
+if (values.model) {
+  const isI2I = MODEL.includes("kling-image/o1");
+  const isT2I = MODEL.includes("text-to-image");
+  if (isI2I && !HAS_SOURCES) {
+    console.error(`ERROR: --model ${MODEL} is image-to-image and requires --source`);
+    process.exit(1);
+  }
+  if (isT2I && HAS_SOURCES) {
+    console.error(`ERROR: --model ${MODEL} is text-to-image; remove --source or pick an i2i model`);
+    process.exit(1);
+  }
+}
+const draftsArg = values.drafts ?? "1";
+if (!/^[0-9]+$/.test(draftsArg)) {
+  console.error(`ERROR: --drafts must be a positive integer (got '${draftsArg}')`);
+  process.exit(1);
+}
+const DRAFTS_RAW  = parseInt(draftsArg, 10);
 const DRAFTS      = isNaN(DRAFTS_RAW) || DRAFTS_RAW < 1 ? 1 : DRAFTS_RAW;
-const ASPECT      = values.aspect     ?? "1:1";
+if (DRAFTS > 9) {
+  console.error("ERROR: --drafts must be 9 or fewer (Kling API limit)");
+  process.exit(1);
+}
+const ASPECT      = values.aspect ?? (HAS_SOURCES ? "auto" : "1:1");
 const TRANSPARENT = values.transparent ?? false;
 
 // Resolution: map user-facing 1k/2k/4k to fal Kling image_size presets.
@@ -145,7 +172,7 @@ if (!NAME_SLUG) {
 const TIMESTAMP = new Date()
   .toISOString()
   .replace(/[-:T]/g, "")
-  .replace(/\.\d+Z$/, "");
+  .replace(/\.\d+Z$/, "") + `-${process.pid}`;
 
 const LOG_FILE = join(OUT_DIR, "log.jsonl");
 
@@ -211,9 +238,13 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
       operating_resolution: "2048x2048",
     },
     logs: false,
-  }) as { data: { image: { url: string } } };
-
-  const alphaUrl: string = result.data.image.url;
+  });
+  const alphaUrl = (result as { data?: { image?: { url?: string } } })?.data?.image?.url;
+  if (!alphaUrl) {
+    throw new Error(
+      `BiRefNet returned unexpected response shape: ${JSON.stringify(result).slice(0, 500)}`
+    );
+  }
   // Download alpha PNG; replace the original file.
   const tmpBase = imagePath.replace(/\.[^.]+$/, "-birefnet-tmp");
   const tmpPath = await downloadImage(alphaUrl, tmpBase);
@@ -222,9 +253,6 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
   renameSync(tmpPath, finalPath);
   // Remove the original non-alpha file if it differs from finalPath.
   if (imagePath !== finalPath && existsSync(imagePath)) {
-    try { Bun.file(imagePath); } catch { /* ignore */ }
-    // Use fs unlink via shell — Bun.file() doesn't delete; use the bun way:
-    const { unlinkSync } = await import("fs");
     try { unlinkSync(imagePath); } catch { /* best-effort */ }
   }
   console.log(`  [BiRefNet] saved alpha PNG: ${finalPath}`);
@@ -277,7 +305,12 @@ async function main(): Promise<void> {
     let savedPath = await downloadImage(img.url, destBase);
 
     if (TRANSPARENT) {
-      savedPath = await applyBiRefNet(savedPath);
+      try {
+        savedPath = await applyBiRefNet(savedPath);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`WARNING draft ${i + 1}: BiRefNet failed (${msg}); keeping opaque image`);
+      }
     }
 
     savedPaths.push(savedPath);
@@ -307,10 +340,8 @@ async function main(): Promise<void> {
   // Append to log file (one JSON line).
   const logLine = JSON.stringify(logRecord) + "\n";
   try {
-    const existing = existsSync(LOG_FILE) ? Bun.file(LOG_FILE).toString() : "";
-    writeFileSync(LOG_FILE, existing + logLine);
+    appendFileSync(LOG_FILE, logLine);
   } catch {
-    // Non-fatal: log write failure should not break the output.
     console.warn(`WARNING: could not write to log file: ${LOG_FILE}`);
   }
 
