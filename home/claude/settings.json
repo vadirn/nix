@@ -10,7 +10,8 @@
     "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
     "BASECAMP_NO_KEYRING": "1",
     "BASECAMP_HINTS": "false",
-    "BASECAMP_STATS": "false"
+    "BASECAMP_STATS": "false",
+    "CLAUDE_CODE_WORKFLOWS": "1"
   },
   "includeCoAuthoredBy": false,
   "permissions": {

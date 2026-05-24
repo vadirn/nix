@@ -1,31 +1,35 @@
 ---
-name: imagen
+name: imagen-nanobanana
 description: >
-  Generate images with Google's Nano Banana (Gemini) models. Triggers: /imagen,
-  "generate an image", "create a picture", "make an image", «нарисуй», «сгенерируй картинку».
-  Edit or restyle existing images by passing them as --source. Skip for non-image tasks.
+  The Google Nano Banana (Gemini) worker for the /imagen hub — use directly only to pin the provider.
+  Triggers: /imagen-nanobanana, explicit mentions of "Nano Banana", "Gemini image", or "use Nano Banana".
+  Edit or restyle existing images by passing them as --source. Skip for non-image tasks and for
+  ambiguous image requests (those route through the /imagen hub).
 ---
 
-# imagen
+# imagen-nanobanana
+
+This skill is the explicit Nano Banana (Google Gemini) worker. The hub skill `imagen` handles routing for ambiguous prompts; invoke this skill directly only when you need to pin the provider to Nano Banana.
 
 Generate or edit images via Google Gemini image models.
 
 ```
 // Gather
-intent      = do("understand what the user wants to create or edit")
-transparent = do("""
+intent     = do("understand what the user wants to create or edit")
+chroma_key = do("""
   Set true if the user asked for a transparent / alpha / cut-out / no-background image,
   or for an icon / sticker / sprite / logo with no background. Otherwise false.
 """)
 
-// Transparency: announce the workaround before invoking
-if transparent:
+// Chroma-key: announce the workaround before invoking
+if chroma_key:
   do("""
     Tell the user, in one sentence, that Gemini image models cannot emit a native
     transparent PNG — asked for one, they paint a grey-and-white checkerboard as
     opaque pixels — so this skill paints the subject on a flat chroma-key green
     (#00ff00) background and keys the green out programmatically with ffmpeg.
     Mention that any genuinely green parts of the subject will be keyed out too.
+    Mention that --chroma-key-fallback activates this mode.
   """)
 
 // Expand prompt
@@ -36,7 +40,7 @@ prompt = do("""
   If the image must contain readable text, name the exact words verbatim.
   The paragraph is the value passed to the script as the first positional argument.
 
-  If transparent is true:
+  If chroma_key is true:
     - Do NOT use the words "transparent", "transparency", "alpha", "checkerboard",
       "no background", or "PNG" in the prompt — these trigger the painted-checkerboard
       failure mode.
@@ -50,17 +54,18 @@ prompt = do("""
 """)
 
 // Choose flags
-source_flags = do("--source <path> for each image the user referenced or a prior output to iterate on")
-drafts_flag  = do("--drafts 3 or 4 when the user wants options; omit (default 1) otherwise")
-aspect_flag  = do("--aspect <ratio> when the user specifies dimensions or orientation")
-res_flag     = do("--resolution 512 for cheap drafts; bump to 1K or 2K once the user picks a keeper")
-model_flag   = do("--model only when the user explicitly overrides the default")
+source_flags         = do("--source <path> for each image the user referenced or a prior output to iterate on")
+drafts_flag          = do("--drafts 3 or 4 when the user wants options; omit (default 1) otherwise")
+aspect_flag          = do("--aspect <ratio> when the user specifies dimensions or orientation")
+res_flag             = do("--resolution 512 for cheap drafts; bump to 1K or 2K once the user picks a keeper")
+model_flag           = do("--model only when the user explicitly overrides the default")
+chroma_key_flag      = do("--chroma-key-fallback when chroma_key is true; omit otherwise")
 
 // Invoke (replace <skill-dir> with this skill's base directory at invocation time)
-Bash(doppler run -p claude-code -c std --no-fallback -- bash <skill-dir>/scripts/imagen.sh "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag])
+Bash(doppler run -p claude-code -c std --no-fallback -- bash <skill-dir>/scripts/imagen.sh "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag] [chroma_key_flag])
 
-// Post-process: key the green out (only when transparent)
-if transparent:
+// Post-process: key the green out (only when chroma_key)
+if chroma_key:
   for each "image: <src_path>" line the script emitted:
     dst_path = src_path with extension replaced by ".png"
     // colorkey removes the green; despill cleans the residual green fringe
@@ -80,7 +85,7 @@ do("note the log path the script printed")
 // Iterate
 if user wants to refine or upscale:
   do("call the script again with a chosen output path as --source and adjusted flags")
-  do("when iterating on a transparent image, re-run the green-key post-process step")
+  do("when iterating on a chroma-key image, re-run the green-key post-process step")
 
 // Refusals
 if script reports no image:
@@ -93,19 +98,19 @@ if script reports no image:
 - Only `~/Pictures/imagen` is on the sandbox write allowlist. Pointing `$IMAGEN_DIR` or `--out` outside it requires adding a matching entry to `home/claude/settings.json`, otherwise writes fail under the sandbox.
 - `--out` honors the path verbatim; it does not adjust the extension to match the returned format. The script warns to stderr on a mismatch.
 - The API key (`GEMINI_API_KEY`) is injected by `doppler run` and never appears on a command line.
-- The curl call lives inside the script, so the `no-network-abuse` hook (which blocks visible
-  `curl --data`) does not fire.
+- The curl call lives inside the script, so the `no-network-abuse` hook (which blocks visible `curl --data`) does not fire.
 - `gemini-2.5-flash-image` does not accept `--resolution`; the script warns and ignores it.
 - Default model: `gemini-3.1-flash-image-preview`.
 
-### Transparency via chroma-key
+### Transparency via chroma-key (`--chroma-key-fallback`)
 
 Gemini image models cannot emit a native alpha channel. Asked for a "transparent background", they paint a grey-and-white checkerboard — the *icon* for transparency — as opaque pixels (confirmed by Google docs / community reports). The skill works around this entirely outside the script:
 
-1. Detect the transparency request (`transparent = true`).
+1. Detect the transparency request (`chroma_key = true`).
 2. Tell the user up front that chroma-keying is used and that green parts of the subject will be keyed out too.
 3. Append a flat `#00ff00` background directive to the prompt (without ever using the word "transparent").
-4. After the script returns the image, run `ffmpeg` with `colorkey` plus `despill` to set alpha to 0 on the green and clean the JPEG chroma fringe.
+4. Pass `--chroma-key-fallback` to the script to signal the mode.
+5. After the script returns the image, run `ffmpeg` with `colorkey` plus `despill` to set alpha to 0 on the green and clean the JPEG chroma fringe.
 
 The keying command (also embedded in the workflow above):
 
