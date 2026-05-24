@@ -20,7 +20,7 @@ This skill is a router only — it has no script of its own. It reads the user's
 | Numerical / logical reasoning (chart, infographic, diagram, math) | `imagen-nanobanana` | Nano Banana has stronger reasoning needed to place data correctly. |
 | 4+ reference images, multi-reference remix | `imagen-fal` | Kling O1 accepts up to 10 reference images; Nano Banana does not support multi-ref. |
 | Consistent series (2+ matching images in one call) | `imagen-fal` | Kling O1 supports `series_amount` up to 9; nanobanana generates independently. |
-| Cinematic / anime / stylised artistic composition | `imagen-fal` | Declared Kling O1 strength per provider documentation. |
+| Cinematic / anime / stylised artistic composition | `imagen-fal` | Declared Kling strength per provider documentation. |
 | Transparent background requested | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG; chroma-key (the nanobanana path via `--chroma-key-fallback`) is reserved for hard-edged subjects only. |
 | Default / ambiguous | `imagen-nanobanana` | Cheaper for the common case — see cost rationale below. |
 
@@ -62,6 +62,7 @@ If multiple signals match: prefer `imagen-fal` when any of ≥4 refs, series, or
 ## Capability gaps
 
 - `kling-v3-omni` is not on fal — the hub cannot route to it today. Inform the user and defer.
+- Kling on fal splits text-to-image (`fal-ai/kling-image/v3/text-to-image`) and image-to-image (`fal-ai/kling-image/o1`, requires `--source`) across separate endpoints. `imagen-fal` auto-picks based on whether `--source` is provided.
 - 4K resolution: Kling O1 on fal tops out at 2K (per fal's hosted variant). 4K output requires direct Kling, which is not implemented.
 - Nano Banana via fal: `fal-ai/nano-banana-2` and `fal-ai/nano-banana-pro` exist on fal but cost 3–10× direct Google API billing. The hub routes Nano Banana work to `imagen-nanobanana` (direct Google) by default. Explicit `--model fal-ai/nano-banana-2` passed to `imagen-fal` is the override when a user wants fal's predictable per-image pricing instead.
 

@@ -3,11 +3,11 @@
  * imagen-fal.ts — generate images via fal.ai-hosted models (default: Kling Image O1)
  *
  * Usage:
- *   bun run imagen-fal.ts "<prompt>" [flags]
+ *   bun <skill-dir>/scripts/imagen-fal.ts "<prompt>" [flags]
  *
  * Invoked through doppler so FAL_KEY is present in env:
  *   doppler run -p claude-code -c std --no-fallback -- \
- *     bun --cwd <skill-dir>/scripts run imagen-fal.ts "<prompt>" [flags]
+ *     bun <skill-dir>/scripts/imagen-fal.ts "<prompt>" [flags]
  */
 
 import { fal } from "@fal-ai/client";
@@ -46,7 +46,7 @@ Environment:
 
 Example:
   doppler run -p claude-code -c std --no-fallback -- \\
-    bun --cwd <skill-dir>/scripts run imagen-fal.ts \\
+    bun <skill-dir>/scripts/imagen-fal.ts \\
     "A cinematic samurai in rain, Kling style" --aspect 16:9 --drafts 3
 `);
 }
@@ -99,7 +99,12 @@ fal.config({ credentials: FAL_KEY });
 // ---------------------------------------------------------------------------
 // Resolve options
 // ---------------------------------------------------------------------------
-const MODEL       = values.model      ?? "fal-ai/kling-image/o1";
+// Kling on fal splits text-to-image from image-to-image into separate endpoints.
+// Auto-pick: refs supplied → kling-image/o1 (i2i, requires image_urls);
+// no refs → kling-image/v3/text-to-image (t2i). User --model overrides both.
+const HAS_SOURCES = Boolean(values.source && values.source.trim());
+const MODEL       = values.model
+  ?? (HAS_SOURCES ? "fal-ai/kling-image/o1" : "fal-ai/kling-image/v3/text-to-image");
 const DRAFTS_RAW  = parseInt(values.drafts ?? "1", 10);
 const DRAFTS      = isNaN(DRAFTS_RAW) || DRAFTS_RAW < 1 ? 1 : DRAFTS_RAW;
 const ASPECT      = values.aspect     ?? "1:1";
@@ -118,27 +123,6 @@ if (!["1k", "2k"].includes(RESOLUTION)) {
   console.error(`ERROR: --resolution must be one of: 1k, 2k, 4k`);
   process.exit(1);
 }
-
-// Map resolution to pixel dimensions for image_size.
-const RESOLUTION_PX: Record<string, number> = { "1k": 1024, "2k": 2048 };
-const PX = RESOLUTION_PX[RESOLUTION]!;
-
-// Compute image_size from aspect ratio and resolution.
-// aspect format: "W:H", e.g. "16:9".
-function computeImageSize(aspect: string, px: number): { width: number; height: number } {
-  const parts = aspect.split(":");
-  const w = parseInt(parts[0] ?? "1", 10);
-  const h = parseInt(parts[1] ?? "1", 10);
-  if (!w || !h) return { width: px, height: px };
-  // Scale so the longer dimension equals px.
-  if (w >= h) {
-    return { width: px, height: Math.round((px * h) / w) };
-  } else {
-    return { width: Math.round((px * w) / h), height: px };
-  }
-}
-
-const IMAGE_SIZE = computeImageSize(ASPECT, PX);
 
 // Output directory.
 const OUT_DIR = values.out
@@ -222,14 +206,14 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
   const result = await fal.subscribe("fal-ai/birefnet/v2", {
     input: {
       image_url: imageUrl,
-      model: "General",
+      model: "General Use (Heavy)",
       refine_foreground: true,
-      operating_resolution: 2048,
+      operating_resolution: "2048x2048",
     },
     logs: false,
-  }) as { image: { url: string } };
+  }) as { data: { image: { url: string } } };
 
-  const alphaUrl: string = result.image.url;
+  const alphaUrl: string = result.data.image.url;
   // Download alpha PNG; replace the original file.
   const tmpBase = imagePath.replace(/\.[^.]+$/, "-birefnet-tmp");
   const tmpPath = await downloadImage(alphaUrl, tmpBase);
@@ -259,25 +243,28 @@ async function main(): Promise<void> {
   const savedPaths: string[] = [];
   const startMs = Date.now();
 
-  // Build fal input. Use the SDK's permissive typing via unknown cast.
+  // Build fal input. Kling Image O1 schema:
+  //   prompt (required), image_urls (required for i2i — flat string array),
+  //   resolution ("1K"|"2K"|"4K"), aspect_ratio (enum string), num_images (1-9).
+  // image_size is a Flux/SDXL convention; Kling rejects it.
   const input: Record<string, unknown> = {
     prompt,
     num_images: DRAFTS,
-    image_size: IMAGE_SIZE,
+    resolution: RESOLUTION.toUpperCase(),
   };
   if (ASPECT) input.aspect_ratio = ASPECT;
   if (referenceUrls.length > 0) {
-    // Kling multi-ref: array of objects with url field.
-    input.reference_images = referenceUrls.map((url) => ({ url }));
+    // Kling multi-ref: flat array of URL strings (NOT objects).
+    input.image_urls = referenceUrls;
   }
 
   console.log(`Generating ${DRAFTS} image(s) via ${MODEL}…`);
   const result = await fal.subscribe(MODEL, {
     input,
     logs: false,
-  }) as { images: Array<{ url: string; content_type?: string }> };
+  }) as { data: { images: Array<{ url: string; content_type?: string }> } };
 
-  const images = result.images ?? [];
+  const images = result.data?.images ?? [];
   if (images.length === 0) {
     console.error("ERROR: fal returned no images");
     process.exit(1);
@@ -351,5 +338,10 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   console.error("ERROR:", err instanceof Error ? err.message : String(err));
+  // fal SDK ValidationError carries the offending fields in .body — surface them.
+  const body = (err as { body?: unknown })?.body;
+  if (body !== undefined) {
+    console.error("DETAIL:", typeof body === "string" ? body : JSON.stringify(body, null, 2));
+  }
   process.exit(1);
 });
