@@ -1,0 +1,11 @@
+{
+  "name": "imagen-fal-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "run": "bun run"
+  },
+  "dependencies": {
+    "@fal-ai/client": "1.10.1"
+  }
+}
