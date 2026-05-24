@@ -20,7 +20,7 @@ This skill is a router only — it has no script of its own. It reads the user's
 | Numerical / logical reasoning (chart, infographic, diagram, math) | `imagen-nanobanana` | Nano Banana has stronger reasoning needed to place data correctly. |
 | 4+ reference images, multi-reference remix | `imagen-fal` | Kling O1 accepts up to 10 reference images; Nano Banana does not support multi-ref. |
 | Cinematic / anime / stylised artistic composition | `imagen-fal` | Declared Kling strength per provider documentation. |
-| Transparent background requested | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG; chroma-key (the nanobanana path via `--chroma-key-fallback`) is reserved for hard-edged subjects only. |
+| Transparent background requested | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG sibling. Chroma-key (the nanobanana path via `--transparent --cutout colorkey`) is reserved for hard-edged subjects. |
 | Default / ambiguous | `imagen-nanobanana` | Cheaper for the common case — see cost rationale below. |
 
 ## Dispatch
@@ -50,9 +50,9 @@ else:
 // Inject worker-specific transparency flag from natural-language signal
 if transparent_requested:
   if worker == "imagen-fal" AND "--transparent" not in prompt_args:
-    prompt_args = prompt_args + " --transparent"
-  else if worker == "imagen-nanobanana" AND "--chroma-key-fallback" not in prompt_args:
-    prompt_args = prompt_args + " --chroma-key-fallback"
+    prompt_args = prompt_args + " --transparent"   // default cutout is birefnet on fal
+  else if worker == "imagen-nanobanana" AND "--transparent" not in prompt_args:
+    prompt_args = prompt_args + " --transparent --cutout colorkey"
 
 // Invoke — args passed through verbatim; both workers accept the same flag shape.
 if worker == "imagen-nanobanana":
