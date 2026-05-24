@@ -2,6 +2,7 @@
 # imagen.sh — generate images via Google Gemini image models
 # Usage: imagen.sh "<prompt>" [--source <img>]... [--drafts N] [--model M]
 #                             [--aspect A] [--resolution R] [--name S] [--out PATH]
+#                             [--transparent] [--cutout <colorkey|none>]
 #                             [--chroma-key-fallback]
 set -uo pipefail
 
@@ -29,15 +30,19 @@ Options:
   --model M          Model name (default: gemini-3.1-flash-image-preview).
   --aspect A         Aspect ratio: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4,
                      9:16, 16:9, 21:9 (default: 1:1).
-  --resolution R     Output resolution: 512, 1K, 2K, 4K (default: 512).
+  --resolution R     Output resolution: 512, 1K, 2K, 4K (default: 2K).
                      Not supported by gemini-2.5-flash-image.
   --name S           Output filename slug (default: slugified first ~5 prompt words).
   --out PATH         Explicit output path. Valid only with --drafts 1.
-  --chroma-key-fallback
-                     Signal that the caller will post-process the output with ffmpeg
+  --transparent      Signal that the caller will post-process the output with ffmpeg
                      chroma-key to achieve transparency. The script accepts and logs
                      the flag but performs no keying itself — the SKILL.md workflow
                      runs the ffmpeg step after the script exits.
+                     Default --cutout when --transparent is set: colorkey.
+  --cutout MODE      Cutout mode: colorkey (ffmpeg chroma-key) or none (skip cutout).
+                     Only meaningful when --transparent is also set.
+  --chroma-key-fallback
+                     Deprecated alias for --transparent --cutout colorkey.
   -h, --help         Show this help and exit.
 
 Environment:
@@ -58,11 +63,13 @@ SOURCES=()
 DRAFTS=1
 MODEL="gemini-3.1-flash-image-preview"
 ASPECT="1:1"
-RESOLUTION="512"
+RESOLUTION="2K"
 NAME_SLUG=""
 OUT_PATH=""
 RESOLUTION_EXPLICIT=0
 CHROMA_KEY_FALLBACK=0
+TRANSPARENT=0
+CUTOUT=""
 
 if [[ $# -eq 0 ]]; then
   usage
@@ -117,8 +124,20 @@ while [[ $# -gt 0 ]]; do
       OUT_PATH="$2"
       shift 2
       ;;
+    --transparent)
+      TRANSPARENT=1
+      shift
+      ;;
+    --cutout)
+      [[ $# -lt 2 ]] && { echo "ERROR: --cutout requires a value (colorkey|none)" >&2; exit 1; }
+      CUTOUT="$2"
+      shift 2
+      ;;
     --chroma-key-fallback)
+      echo "WARNING: --chroma-key-fallback is deprecated; use --transparent --cutout colorkey instead" >&2
       CHROMA_KEY_FALLBACK=1
+      TRANSPARENT=1
+      CUTOUT="colorkey"
       shift
       ;;
     *)
@@ -161,6 +180,17 @@ case "$RESOLUTION" in
   512|1K|2K|4K) ;;
   *) echo "ERROR: --resolution must be one of: 512, 1K, 2K, 4K" >&2; exit 1 ;;
 esac
+
+# Apply --transparent default for --cutout and validate
+if [[ "$TRANSPARENT" -eq 1 && -z "$CUTOUT" ]]; then
+  CUTOUT="colorkey"
+fi
+if [[ -n "$CUTOUT" ]]; then
+  case "$CUTOUT" in
+    colorkey|none) ;;
+    *) echo "ERROR: --cutout must be one of: colorkey, none" >&2; exit 1 ;;
+  esac
+fi
 
 # Validate aspect ratio
 case "$ASPECT" in
@@ -494,11 +524,14 @@ jq -cn \
   --arg aspect "$ASPECT" \
   --arg resolution "$RESOLUTION" \
   --argjson chromaKeyFallback "$CHROMA_KEY_FALLBACK" \
+  --argjson transparent "$TRANSPARENT" \
+  --arg cutout "$CUTOUT" \
   --argjson sources "$SOURCES_JSON" \
   --argjson outputs "$OUTPUTS_JSON" \
   --argjson usage "$FIRST_USAGE" \
   '{ts: $ts, prompt: $prompt, model: $model, aspect: $aspect,
     resolution: $resolution, chroma_key_fallback: ($chromaKeyFallback == 1),
+    transparent: ($transparent == 1), cutout: $cutout,
     sources: $sources, outputs: $outputs, usage: $usage}' \
   >>"$LOG_FILE"
 
