@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * vidgen-fal.ts — generate a looped GIF (+ MP4 source) via fal.ai video models
+ * vidgen-fal.ts — generate a looped GIF (+ MP4 source) via fal.ai Kling video
  *
  * Usage:
  *   bun <skill-dir>/scripts/vidgen-fal.ts --prompt "<text>" [flags]
@@ -15,6 +15,13 @@ import { parseArgs } from "util";
 import { mkdirSync, writeFileSync, appendFileSync, existsSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
+import { homedir } from "os";
+
+// ---------------------------------------------------------------------------
+// Endpoints
+// ---------------------------------------------------------------------------
+const ENDPOINT_STANDARD = "fal-ai/kling-video/v1.6/standard/text-to-video";
+const ENDPOINT_PRO      = "fal-ai/kling-video/v1.6/pro/text-to-video";
 
 // ---------------------------------------------------------------------------
 // Usage
@@ -23,18 +30,21 @@ function usage(): void {
   console.log(`\
 Usage: vidgen-fal.ts --prompt "<text>" [OPTIONS]
 
-Generate a seamless looped GIF (and MP4 source) via fal.ai AnimateDiff.
+Generate a seamless looped GIF (and MP4 source) via fal.ai Kling video.
 The ffmpeg pipeline runs locally: pingpong reverse-concat → palettegen → paletteuse.
 
 Options:
-  --prompt <text>      Required. Text description of the video to generate.
-  --out <dir>          Output directory (default: cwd).
-  --frames <n>         Number of frames to generate (default: 16, max 32).
-  --fps <n>            Frames per second (default: 8, max 16).
-  --endpoint <id>      fal endpoint ID (default: fal-ai/fast-animatediff/text-to-video).
-  --no-gif             Skip GIF stage; keep MP4 only.
-  --no-pingpong        Single-pass MP4 → GIF; skip reverse-concat step.
-  -h, --help           Show this help and exit.
+  --prompt <text>            Required. Text description of the video to generate.
+  --out <dir>                Output directory (default: ~/Pictures/vidgen).
+  --duration <5|10>          Clip length in seconds (default: 5).
+  --aspect-ratio <16:9|9:16|1:1>
+                             Aspect ratio (default: 16:9).
+  --cfg-scale <0-1>          Prompt adherence, 0–1 float (default: 0.5).
+  --negative-prompt <text>   Negative prompt (default: "blur, distort, and low quality").
+  --pro                      Use the pro tier endpoint (higher quality, ~$0.49/5s).
+  --no-gif                   Skip GIF stage; keep MP4 only.
+  --no-pingpong              Single-pass MP4 → GIF; skip reverse-concat step.
+  -h, --help                 Show this help and exit.
 
 Environment:
   FAL_KEY              fal.ai API key (inject via doppler run -p claude-code -c std).
@@ -52,14 +62,16 @@ Example:
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
-    prompt:        { type: "string" },
-    out:           { type: "string" },
-    frames:        { type: "string" },
-    fps:           { type: "string" },
-    endpoint:      { type: "string" },
-    "no-gif":      { type: "boolean", default: false },
-    "no-pingpong": { type: "boolean", default: false },
-    help:          { type: "boolean", default: false, short: "h" },
+    prompt:           { type: "string" },
+    out:              { type: "string" },
+    duration:         { type: "string" },
+    "aspect-ratio":   { type: "string" },
+    "cfg-scale":      { type: "string" },
+    "negative-prompt":{ type: "string" },
+    pro:              { type: "boolean", default: false },
+    "no-gif":         { type: "boolean", default: false },
+    "no-pingpong":    { type: "boolean", default: false },
+    help:             { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: false,
 });
@@ -93,29 +105,47 @@ fal.config({ credentials: FAL_KEY });
 // ---------------------------------------------------------------------------
 // Resolve options
 // ---------------------------------------------------------------------------
-const ENDPOINT = values.endpoint ?? "fal-ai/fast-animatediff/text-to-video";
+const ENDPOINT = values.pro ? ENDPOINT_PRO : ENDPOINT_STANDARD;
 
-const framesArg = values.frames ?? "16";
-if (!/^[0-9]+$/.test(framesArg)) {
-  console.error(`ERROR: --frames must be a positive integer (got '${framesArg}')`);
+// --duration: string enum "5" | "10"
+const VALID_DURATIONS = ["5", "10"] as const;
+type Duration = typeof VALID_DURATIONS[number];
+const durationArg = values.duration ?? "5";
+if (!(VALID_DURATIONS as readonly string[]).includes(durationArg)) {
+  console.error(`ERROR: --duration must be "5" or "10" (got '${durationArg}')`);
   process.exit(1);
 }
-const NUM_FRAMES = Math.min(parseInt(framesArg, 10) || 16, 32);
+const DURATION = durationArg as Duration;
 
-const fpsArg = values.fps ?? "8";
-if (!/^[0-9]+$/.test(fpsArg)) {
-  console.error(`ERROR: --fps must be a positive integer (got '${fpsArg}')`);
+// --aspect-ratio: string enum
+const VALID_ASPECT_RATIOS = ["16:9", "9:16", "1:1"] as const;
+type AspectRatio = typeof VALID_ASPECT_RATIOS[number];
+const aspectRatioArg = values["aspect-ratio"] ?? "16:9";
+if (!(VALID_ASPECT_RATIOS as readonly string[]).includes(aspectRatioArg)) {
+  console.error(`ERROR: --aspect-ratio must be one of 16:9, 9:16, 1:1 (got '${aspectRatioArg}')`);
   process.exit(1);
 }
-const FPS = Math.min(parseInt(fpsArg, 10) || 8, 16);
+const ASPECT_RATIO = aspectRatioArg as AspectRatio;
+
+// --cfg-scale: float 0–1
+const cfgScaleArg = values["cfg-scale"] ?? "0.5";
+const cfgScaleParsed = parseFloat(cfgScaleArg);
+if (isNaN(cfgScaleParsed) || cfgScaleParsed < 0 || cfgScaleParsed > 1) {
+  console.error(`ERROR: --cfg-scale must be a number between 0 and 1 (got '${cfgScaleArg}')`);
+  process.exit(1);
+}
+const CFG_SCALE = cfgScaleParsed;
+
+// --negative-prompt: pass through verbatim; use Kling's documented default if not supplied
+const NEGATIVE_PROMPT = values["negative-prompt"] ?? "blur, distort, and low quality";
 
 const DO_GIF      = !values["no-gif"];
 const DO_PINGPONG = !values["no-pingpong"];
 
-// Output directory (default: cwd).
+// Output directory (default: ~/Pictures/vidgen).
 const OUT_DIR = values.out
-  ? values.out.replace(/^~/, process.env.HOME ?? "~")
-  : process.cwd();
+  ? values.out.replace(/^~/, process.env.HOME ?? homedir())
+  : `${process.env.HOME ?? homedir()}/Pictures/vidgen`;
 
 mkdirSync(OUT_DIR, { recursive: true });
 
@@ -143,20 +173,22 @@ function ffmpeg(args: string[]): void {
 async function main(): Promise<void> {
   const startMs = Date.now();
 
-  // Call fal endpoint.
-  // AnimateDiff real param names (from schema): prompt, num_frames, fps, video_size,
-  // negative_prompt, num_inference_steps, guidance_scale, seed.
+  // Call fal Kling endpoint.
+  // Kling v1.6 params: prompt, duration (str enum), aspect_ratio (str enum),
+  // negative_prompt, cfg_scale (float 0–1).
   console.log(`Generating video via ${ENDPOINT}…`);
   const result = await fal.subscribe(ENDPOINT, {
     input: {
       prompt: PROMPT,
-      num_frames: NUM_FRAMES,
-      fps: FPS,
+      duration: DURATION,
+      aspect_ratio: ASPECT_RATIO,
+      negative_prompt: NEGATIVE_PROMPT,
+      cfg_scale: CFG_SCALE,
     },
     logs: false,
   }) as { data?: { video?: { url?: string } }; video?: { url?: string } };
 
-  // AnimateDiff wraps output in result.data.video.url when using fal.subscribe.
+  // fal.subscribe wraps the response in result.data; keep result.video.url as fallback.
   const videoUrl = result.data?.video?.url ?? (result as { video?: { url?: string } }).video?.url;
   if (!videoUrl) {
     throw new Error(
@@ -191,28 +223,25 @@ async function main(): Promise<void> {
       gifSource = pingpongPath;
     }
 
-    // Step B: generate palette.
+    // Step B: generate palette from source fps (no fps override — mirror source rate).
     const palettePath = join(OUT_DIR, `vidgen-${TIMESTAMP}-palette.png`);
     console.log(`Generating palette…`);
     ffmpeg([
       "-y", "-i", gifSource,
-      "-vf", `fps=${FPS},palettegen=stats_mode=full`,
+      "-vf", "palettegen=stats_mode=full",
       palettePath,
     ]);
 
-    // Step C: encode GIF.
+    // Step C: encode GIF at source fps (no fps override).
     const gifPath = join(OUT_DIR, `vidgen-${TIMESTAMP}.gif`);
     console.log(`Encoding GIF…`);
     ffmpeg([
       "-y", "-i", gifSource, "-i", palettePath,
-      "-lavfi", `fps=${FPS}[v];[v][1:v]paletteuse=dither=sierra2_4a`,
+      "-lavfi", "[0:v][1:v]paletteuse=dither=sierra2_4a",
       gifPath,
     ]);
 
     // Clean up intermediate files (pingpong MP4, palette PNG).
-    if (DO_PINGPONG && existsSync(join(OUT_DIR, `vidgen-${TIMESTAMP}-pingpong.mp4`))) {
-      try { Bun.file(join(OUT_DIR, `vidgen-${TIMESTAMP}-pingpong.mp4`)); } catch { /* ignore */ }
-    }
     try {
       const { unlinkSync } = await import("fs");
       if (existsSync(palettePath)) unlinkSync(palettePath);
@@ -233,8 +262,10 @@ async function main(): Promise<void> {
     ts: new Date().toISOString(),
     prompt: PROMPT,
     endpoint: ENDPOINT,
-    num_frames: NUM_FRAMES,
-    fps: FPS,
+    duration: DURATION,
+    aspect_ratio: ASPECT_RATIO,
+    cfg_scale: CFG_SCALE,
+    negative_prompt: NEGATIVE_PROMPT,
     gif: DO_GIF,
     pingpong: DO_PINGPONG,
     outputs: outputPaths,
@@ -259,8 +290,9 @@ async function main(): Promise<void> {
         path: p,
         endpoint: ENDPOINT,
         prompt: PROMPT,
-        num_frames: NUM_FRAMES,
-        fps: FPS,
+        duration: DURATION,
+        aspect_ratio: ASPECT_RATIO,
+        cfg_scale: CFG_SCALE,
       }) + "\n"
     );
   }
