@@ -12,8 +12,8 @@
 
 import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
-import { existsSync, mkdirSync, writeFileSync, renameSync, appendFileSync, unlinkSync } from "fs";
-import { join, extname, basename } from "path";
+import { existsSync, mkdirSync, writeFileSync, renameSync, appendFileSync } from "fs";
+import { join, basename } from "path";
 
 // ---------------------------------------------------------------------------
 // Usage
@@ -35,12 +35,17 @@ Options:
   --model <id>           Model ID override (auto-selected if omitted; see above).
   --aspect <ratio>       Aspect ratio, e.g. 1:1, 16:9, 4:3.
   --resolution <1k|2k|4k>
-                         Output resolution. fal Kling supports 1k and 2k; 4k is not
-                         available on fal and will be capped to 2k with a warning.
+                         Output resolution (default: 2k). fal Kling supports 1k and 2k;
+                         4k is not available on fal and will be capped to 2k with a warning.
   --name <slug>          Output filename prefix (default: slugified prompt).
   --out <dir>            Output directory (default: ~/Pictures/imagen).
-  --transparent          Run BiRefNet v2 after generation to remove background;
-                         saves alpha PNG in place of the generated file.
+  --transparent          Run BiRefNet v2 after generation to remove background.
+                         Saves the alpha result as a sibling <base>-alpha.png; the
+                         original Kling PNG is kept. Controlled by --cutout.
+  --cutout <birefnet|none>
+                         Controls the cutout step when --transparent is set.
+                         birefnet (default): run BiRefNet v2 and write <base>-alpha.png.
+                         none: skip BiRefNet; only the raw Kling PNG is saved.
   -h, --help             Show this help and exit.
 
 Environment:
@@ -67,6 +72,7 @@ const { values, positionals } = parseArgs({
     name:        { type: "string" },
     out:         { type: "string" },
     transparent: { type: "boolean", default: false },
+    cutout:      { type: "string" },
     help:        { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: true,
@@ -137,11 +143,20 @@ if (DRAFTS > 9) {
 const ASPECT      = values.aspect ?? (HAS_SOURCES ? "auto" : "1:1");
 const TRANSPARENT = values.transparent ?? false;
 
+// --cutout: controls whether BiRefNet runs when --transparent is set.
+// Accepted values: "birefnet" (default) or "none".
+const cutoutRaw = (values.cutout ?? (TRANSPARENT ? "birefnet" : "none")).toLowerCase();
+if (!["birefnet", "none"].includes(cutoutRaw)) {
+  console.error(`ERROR: --cutout must be one of: birefnet, none (got '${values.cutout}')`);
+  process.exit(1);
+}
+const CUTOUT = cutoutRaw as "birefnet" | "none";
+
 // Resolution: map user-facing 1k/2k/4k to fal Kling image_size presets.
 // fal Kling supports square_hd (1k) and square (512), but for rectangular
 // we derive the image_size object from aspect + resolution.
 // If user passes 4k, warn and cap to 2k.
-let RESOLUTION = (values.resolution ?? "1k").toLowerCase();
+let RESOLUTION = (values.resolution ?? "2k").toLowerCase();
 if (RESOLUTION === "4k") {
   console.warn("WARNING: 4k resolution is not supported on fal Kling; capping to 2k.");
   RESOLUTION = "2k";
@@ -253,18 +268,14 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
       `BiRefNet returned unexpected response shape: ${JSON.stringify(result).slice(0, 500)}`
     );
   }
-  // Download alpha PNG; replace the original file.
-  const tmpBase = imagePath.replace(/\.[^.]+$/, "-birefnet-tmp");
+  // Download alpha PNG to a sibling <base>-alpha.png; keep the original.
+  const alphaBase = imagePath.replace(/\.[^.]+$/, "-alpha");
+  const tmpBase = `${alphaBase}-birefnet-tmp`;
   const tmpPath = await downloadImage(alphaUrl, tmpBase);
-  // Replace: rename tmpPath → original path with .png extension.
-  const finalPath = imagePath.replace(/\.[^.]+$/, ".png");
-  renameSync(tmpPath, finalPath);
-  // Remove the original non-alpha file if it differs from finalPath.
-  if (imagePath !== finalPath && existsSync(imagePath)) {
-    try { unlinkSync(imagePath); } catch { /* best-effort */ }
-  }
-  console.log(`  [BiRefNet] saved alpha PNG: ${finalPath}`);
-  return finalPath;
+  const alphaPath = `${alphaBase}.png`;
+  renameSync(tmpPath, alphaPath);
+  console.log(`  [BiRefNet] saved alpha PNG: ${alphaPath}`);
+  return alphaPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,19 +321,21 @@ async function main(): Promise<void> {
     const img = images[i]!;
     const suffix = DRAFTS > 1 ? `-${i + 1}` : "";
     const destBase = join(OUT_DIR, `${NAME_SLUG}-${TIMESTAMP}${suffix}`);
-    let savedPath = await downloadImage(img.url, destBase);
+    const rawPath = await downloadImage(img.url, destBase);
 
-    if (TRANSPARENT) {
+    savedPaths.push(rawPath);
+    console.log(`image: ${rawPath}`);
+
+    if (TRANSPARENT && CUTOUT === "birefnet") {
       try {
-        savedPath = await applyBiRefNet(savedPath);
+        const alphaPath = await applyBiRefNet(rawPath);
+        savedPaths.push(alphaPath);
+        console.log(`alpha: ${alphaPath}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WARNING draft ${i + 1}: BiRefNet failed (${msg}); keeping opaque image`);
+        console.warn(`WARNING draft ${i + 1}: BiRefNet failed (${msg}); keeping opaque image only`);
       }
     }
-
-    savedPaths.push(savedPath);
-    console.log(`image: ${savedPath}`);
   }
 
   const elapsedMs = Date.now() - startMs;
@@ -339,9 +352,9 @@ async function main(): Promise<void> {
     sources: values.source ? values.source.split(",").map((p) => p.trim()) : [],
     outputs: savedPaths,
     elapsed_ms: elapsedMs,
-    // Cost estimate: Kling O1 ~$0.028/image + BiRefNet ~$0.003/image when transparent.
+    // Cost estimate: Kling O1 ~$0.028/image + BiRefNet ~$0.003/image when cutout ran.
     cost_estimate_usd: parseFloat(
-      (images.length * (0.028 + (TRANSPARENT ? 0.003 : 0))).toFixed(4)
+      (images.length * (0.028 + (TRANSPARENT && CUTOUT === "birefnet" ? 0.003 : 0))).toFixed(4)
     ),
   };
 
@@ -360,15 +373,19 @@ async function main(): Promise<void> {
   );
 
   // Emit one JSON-lines record per saved file (task acceptance criterion).
+  const birefnetRan = TRANSPARENT && CUTOUT === "birefnet";
   for (const p of savedPaths) {
+    const isAlpha = p.endsWith("-alpha.png");
     process.stdout.write(
       JSON.stringify({
         path: p,
+        kind: isAlpha ? "alpha" : "raw",
         model: MODEL,
         transparent: TRANSPARENT,
+        cutout: CUTOUT,
         prompt,
         cost_estimate_usd: parseFloat(
-          (0.028 + (TRANSPARENT ? 0.003 : 0)).toFixed(4)
+          (0.028 + (birefnetRan && !isAlpha ? 0.003 : 0)).toFixed(4)
         ),
       }) + "\n"
     );
