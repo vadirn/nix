@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * vidgen-fal.ts — generate a looped GIF (+ MP4 source) via fal.ai Kling video
+ * vidgen-fal.ts — generate a WebM loop (+ MP4 source) via fal.ai Kling video
  *
  * Usage:
  *   bun <skill-dir>/scripts/vidgen-fal.ts --prompt "<text>" [flags]
@@ -12,7 +12,7 @@
 
 import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
-import { mkdirSync, writeFileSync, appendFileSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, appendFileSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import { homedir } from "os";
@@ -30,8 +30,9 @@ function usage(): void {
   console.log(`\
 Usage: vidgen-fal.ts --prompt "<text>" [OPTIONS]
 
-Generate a seamless looped GIF (and MP4 source) via fal.ai Kling video.
-The ffmpeg pipeline runs locally: pingpong reverse-concat → palettegen → paletteuse.
+Generate a WebM loop (and MP4 source) via fal.ai Kling video.
+The ffmpeg pipeline runs locally: scale + VP9 encode → WebM. The WebM loops
+natively in HTML5 video with <video loop autoplay muted playsinline>.
 
 Options:
   --prompt <text>            Required. Text description of the video to generate.
@@ -42,8 +43,10 @@ Options:
   --cfg-scale <0-1>          Prompt adherence, 0–1 float (default: 0.5).
   --negative-prompt <text>   Negative prompt (default: "blur, distort, and low quality").
   --pro                      Use the pro tier endpoint (higher quality, ~$0.49/5s).
-  --no-gif                   Skip GIF stage; keep MP4 only.
-  --no-pingpong              Single-pass MP4 → GIF; skip reverse-concat step.
+  --no-webm                  Skip WebM stage; keep MP4 only.
+  --scale <number>           Width in pixels for WebM output (default: 640). Height is
+                             computed automatically to preserve aspect ratio.
+  --webm-crf <number>        VP9 quality, 0–63 (default: 32). Lower = larger/better.
   -h, --help                 Show this help and exit.
 
 Environment:
@@ -69,8 +72,9 @@ const { values } = parseArgs({
     "cfg-scale":      { type: "string" },
     "negative-prompt":{ type: "string" },
     pro:              { type: "boolean", default: false },
-    "no-gif":         { type: "boolean", default: false },
-    "no-pingpong":    { type: "boolean", default: false },
+    "no-webm":        { type: "boolean", default: false },
+    scale:            { type: "string" },
+    "webm-crf":       { type: "string" },
     help:             { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: false,
@@ -139,8 +143,25 @@ const CFG_SCALE = cfgScaleParsed;
 // --negative-prompt: pass through verbatim; use Kling's documented default if not supplied
 const NEGATIVE_PROMPT = values["negative-prompt"] ?? "blur, distort, and low quality";
 
-const DO_GIF      = !values["no-gif"];
-const DO_PINGPONG = !values["no-pingpong"];
+const DO_WEBM = !values["no-webm"];
+
+// --scale: integer width in pixels for WebM output
+const scaleArg = values.scale ?? "640";
+const scaleParsed = parseInt(scaleArg, 10);
+if (isNaN(scaleParsed) || scaleParsed <= 0) {
+  console.error(`ERROR: --scale must be a positive integer (got '${scaleArg}')`);
+  process.exit(1);
+}
+const SCALE = scaleParsed;
+
+// --webm-crf: integer 0–63
+const webmCrfArg = values["webm-crf"] ?? "32";
+const webmCrfParsed = parseInt(webmCrfArg, 10);
+if (isNaN(webmCrfParsed) || webmCrfParsed < 0 || webmCrfParsed > 63) {
+  console.error(`ERROR: --webm-crf must be an integer between 0 and 63 (got '${webmCrfArg}')`);
+  process.exit(1);
+}
+const WEBM_CRF = webmCrfParsed;
 
 // Output directory (default: ~/Pictures/vidgen).
 const OUT_DIR = values.out
@@ -206,53 +227,28 @@ async function main(): Promise<void> {
   console.log(`video: ${mp4Path}`);
 
   const outputPaths: string[] = [mp4Path];
+  let webmPath: string | undefined;
 
-  if (DO_GIF) {
-    // Determine the source for palette/encode steps.
-    let gifSource = mp4Path;
-
-    if (DO_PINGPONG) {
-      // Step A: reverse-concat into a pingpong MP4.
-      const pingpongPath = join(OUT_DIR, `vidgen-${TIMESTAMP}-pingpong.mp4`);
-      console.log(`Running ffmpeg pingpong…`);
-      ffmpeg([
-        "-y", "-i", mp4Path,
-        "-filter_complex", "[0]reverse[r];[0][r]concat=n=2:v=1",
-        "-an", pingpongPath,
-      ]);
-      gifSource = pingpongPath;
-    }
-
-    // Step B: generate palette from source fps (no fps override — mirror source rate).
-    const palettePath = join(OUT_DIR, `vidgen-${TIMESTAMP}-palette.png`);
-    console.log(`Generating palette…`);
+  if (DO_WEBM) {
+    // Encode WebM (VP9) at target width, preserving aspect ratio.
+    // -b:v 0 puts libvpx-vp9 into true CRF mode.
+    // -row-mt 1 enables multi-threaded row encoding.
+    // -an strips audio (Kling MP4 has none, but explicit insurance).
+    webmPath = join(OUT_DIR, `vidgen-${TIMESTAMP}.webm`);
+    console.log(`Encoding WebM…`);
     ffmpeg([
-      "-y", "-i", gifSource,
-      "-vf", "palettegen=stats_mode=full",
-      palettePath,
+      "-y", "-i", mp4Path,
+      "-vf", `scale=${SCALE}:-2`,
+      "-c:v", "libvpx-vp9",
+      "-crf", String(WEBM_CRF),
+      "-b:v", "0",
+      "-row-mt", "1",
+      "-an",
+      webmPath,
     ]);
 
-    // Step C: encode GIF at source fps (no fps override).
-    const gifPath = join(OUT_DIR, `vidgen-${TIMESTAMP}.gif`);
-    console.log(`Encoding GIF…`);
-    ffmpeg([
-      "-y", "-i", gifSource, "-i", palettePath,
-      "-lavfi", "[0:v][1:v]paletteuse=dither=sierra2_4a",
-      gifPath,
-    ]);
-
-    // Clean up intermediate files (pingpong MP4, palette PNG).
-    try {
-      const { unlinkSync } = await import("fs");
-      if (existsSync(palettePath)) unlinkSync(palettePath);
-      if (DO_PINGPONG) {
-        const ppPath = join(OUT_DIR, `vidgen-${TIMESTAMP}-pingpong.mp4`);
-        if (existsSync(ppPath)) unlinkSync(ppPath);
-      }
-    } catch { /* best-effort cleanup */ }
-
-    outputPaths.push(gifPath);
-    console.log(`gif: ${gifPath}`);
+    outputPaths.push(webmPath);
+    console.log(`webm: ${webmPath}`);
   }
 
   const elapsedMs = Date.now() - startMs;
@@ -266,8 +262,7 @@ async function main(): Promise<void> {
     aspect_ratio: ASPECT_RATIO,
     cfg_scale: CFG_SCALE,
     negative_prompt: NEGATIVE_PROMPT,
-    gif: DO_GIF,
-    pingpong: DO_PINGPONG,
+    webm: DO_WEBM,
     outputs: outputPaths,
     elapsed_ms: elapsedMs,
   };
@@ -283,7 +278,7 @@ async function main(): Promise<void> {
 
   // Emit one JSON-lines record per output file.
   for (const p of outputPaths) {
-    const ext = p.endsWith(".gif") ? "gif" : "video";
+    const ext = p.endsWith(".webm") ? "webm" : "video";
     process.stdout.write(
       JSON.stringify({
         type: ext,
