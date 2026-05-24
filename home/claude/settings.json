@@ -252,6 +252,7 @@
         "~/.gnupg",
         "~/Documents/vault",
         "~/Pictures/imagen",
+        "~/Pictures/vidgen",
         "$TMPDIR"
       ]
     },
