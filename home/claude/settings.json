@@ -233,6 +233,10 @@
         "api.doppler.com",
         "cli.doppler.com",
         "generativelanguage.googleapis.com",
+        "fal.run",
+        "*.fal.run",
+        "*.fal.media",
+        "*.fal.ai",
         "*.localhost"
       ],
       "allowManagedDomainsOnly": false,
