@@ -40,7 +40,7 @@ vidgen-fal --prompt "fox running" --webm  # opt in to WebM transcode
 # Transparency (unified: green-plate prompt + cutout step)
 imagen-nanobanana "a fox" --transparent                  # default cutout: colorkey
 imagen-fal       "a fox" --transparent                   # default cutout: birefnet
-imagen-fal       "a fox" --transparent --cutout colorkey # override
+imagen-fal       "a fox" --transparent --cutout birefnet # explicit default
 imagen-fal       "a fox" --transparent --cutout none     # keep raw green-plate
 ```
 
