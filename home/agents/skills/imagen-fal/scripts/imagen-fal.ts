@@ -473,7 +473,7 @@ async function main(): Promise<void> {
     aspect: ASPECT,
     resolution: RESOLUTION,
     drafts_requested: DRAFTS,
-    drafts_completed: images.length,
+    drafts_completed: savedPaths.length,
     transparent: TRANSPARENT,
     sources: values.source ? values.source.split(",").map((p) => p.trim()) : [],
     outputs: savedPaths,
