@@ -72,6 +72,10 @@ Options:
                          Controls the cutout step when --transparent is set.
                          birefnet (default): run BiRefNet v2 and write <base>-alpha.png.
                          none: skip BiRefNet; only the raw Kling PNG is saved.
+  --dry-run              Resolve all options and MIME types, print the request payload as
+                         JSON, then exit without making any API call. No FAL_KEY needed.
+                         Useful for inspecting the resolved request before spending
+                         API quota, and as a test hook for the magic-byte MIME path.
   -h, --help             Show this help and exit.
 
 Environment:
@@ -99,6 +103,7 @@ const { values, positionals } = parseArgs({
     out:         { type: "string" },
     transparent: { type: "boolean", default: false },
     cutout:      { type: "string" },
+    "dry-run":   { type: "boolean", default: false },
     help:        { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: true,
@@ -116,11 +121,13 @@ if (!prompt) {
   process.exit(1);
 }
 
+const DRY_RUN = values["dry-run"] ?? false;
+
 // ---------------------------------------------------------------------------
-// FAL_KEY — fail fast unless we are just printing help
+// FAL_KEY — fail fast unless we are just printing help or doing a dry-run
 // ---------------------------------------------------------------------------
 const FAL_KEY = process.env.FAL_KEY;
-if (!FAL_KEY) {
+if (!FAL_KEY && !DRY_RUN) {
   console.error(
     "ERROR: FAL_KEY is not set.\n" +
     "Inject it via: doppler run -p claude-code -c std --no-fallback --"
@@ -128,7 +135,9 @@ if (!FAL_KEY) {
   process.exit(1);
 }
 
-fal.config({ credentials: FAL_KEY });
+if (FAL_KEY) {
+  fal.config({ credentials: FAL_KEY });
+}
 
 // ---------------------------------------------------------------------------
 // Resolve options
@@ -228,31 +237,87 @@ const TIMESTAMP = new Date()
 const LOG_FILE = join(OUT_DIR, "log.jsonl");
 
 // ---------------------------------------------------------------------------
-// Source images: upload to fal storage
+// Magic-byte MIME sniff (verbatim from imagen-nanobanana.ts for symmetry)
 // ---------------------------------------------------------------------------
-async function uploadSources(sourceArg: string): Promise<string[]> {
+// Backlog: extract sniff + dry-run to a shared lib/ when a third worker adopts this pattern.
+async function sniffSourceMimes(sourceArg: string): Promise<{ resolved: string[]; mimes: string[] }> {
   const paths = sourceArg.split(",").map((p) => p.trim()).filter(Boolean);
-  if (paths.length === 0) return [];
+  if (paths.length === 0) return { resolved: [], mimes: [] };
   if (paths.length > 10) {
     console.error(`ERROR: at most 10 --source images are supported (got ${paths.length})`);
     process.exit(1);
   }
 
-  const urls: string[] = [];
+  const VALID_MIMES = ["image/png", "image/jpeg", "image/webp"];
+  const resolved: string[] = [];
+  const mimes: string[] = [];
+
   for (const p of paths) {
-    const resolved = p.startsWith("~") ? expandTilde(p) : p;
-    if (!existsSync(resolved)) {
-      console.error(`ERROR: source file not found: ${resolved}`);
+    const r = p.startsWith("~") ? expandTilde(p) : p;
+    if (!existsSync(r)) {
+      console.error(`ERROR: source file not found: ${r}`);
       process.exit(1);
     }
-    const meta = await Bun.file(resolved).image().metadata();
-    console.log(`Uploading ${basename(resolved)} to fal storage…`);
+
+    // Magic-byte sniff (primary), fall back to extension/Bun type
+    const headBuf = await Bun.file(r).arrayBuffer();
+    const head = new Uint8Array(headBuf.byteLength > 12 ? headBuf.slice(0, 12) : headBuf);
+    let magicMime: string | null = null;
+    if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) {
+      magicMime = "image/png";
+    } else if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
+      magicMime = "image/jpeg";
+    } else if (
+      head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
+      head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
+    ) {
+      magicMime = "image/webp";
+    } else if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38) {
+      magicMime = "image/gif";
+    }
+
+    // Extension/Bun fallback
+    const bunFile = Bun.file(r);
+    const bunMime = bunFile.type || "application/octet-stream";
+    const extLower = r.toLowerCase();
+    let extMime: string | null = null;
+    if (extLower.endsWith(".png")) extMime = "image/png";
+    else if (extLower.endsWith(".jpg") || extLower.endsWith(".jpeg")) extMime = "image/jpeg";
+    else if (extLower.endsWith(".webp")) extMime = "image/webp";
+    else if (VALID_MIMES.includes(bunMime)) extMime = bunMime;
+
+    const detectedMime = magicMime ?? extMime;
+    if (!detectedMime) {
+      console.error(`ERROR: unsupported file type for source: ${r} (detected: ${bunMime})`);
+      process.exit(1);
+    }
+    if (magicMime && extMime && magicMime !== extMime) {
+      console.error(`WARNING: magic-byte MIME (${magicMime}) disagrees with extension MIME (${extMime}) for: ${r}`);
+    }
+
+    resolved.push(r);
+    mimes.push(detectedMime);
+  }
+
+  return { resolved, mimes };
+}
+
+// ---------------------------------------------------------------------------
+// Source images: upload to fal storage
+// ---------------------------------------------------------------------------
+async function uploadSources(resolvedPaths: string[], mimes: string[]): Promise<string[]> {
+  const urls: string[] = [];
+  for (let i = 0; i < resolvedPaths.length; i++) {
+    const r = resolvedPaths[i]!;
+    const mime = mimes[i]!;
+    const meta = await Bun.file(r).image().metadata();
+    console.log(`Uploading ${basename(r)} to fal storage…`);
     let blob: Blob;
     if (meta.width <= 2048 && meta.height <= 2048) {
-      const file = Bun.file(resolved);
-      blob = new Blob([await file.arrayBuffer()], { type: file.type || "image/png" });
+      const file = Bun.file(r);
+      blob = new Blob([await file.arrayBuffer()], { type: mime });
     } else {
-      const bytes = await Bun.file(resolved).image().resize(2048, 2048, { fit: "inside" }).webp({ quality: 85 }).bytes();
+      const bytes = await Bun.file(r).image().resize(2048, 2048, { fit: "inside" }).webp({ quality: 85 }).bytes();
       console.log(`  (shrunk ${meta.width}x${meta.height} -> 2048-box webp)`);
       blob = new Blob([bytes], { type: "image/webp" });
     }
@@ -318,9 +383,33 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
+  // Resolve source paths and sniff MIMEs (runs even in --dry-run).
+  const { resolved: resolvedSources, mimes: sourceMimes } = values.source
+    ? await sniffSourceMimes(values.source)
+    : { resolved: [], mimes: [] };
+
+  // ---------------------------------------------------------------------------
+  // --dry-run: print resolved request payload and exit (no API call)
+  // ---------------------------------------------------------------------------
+  if (DRY_RUN) {
+    const payload = {
+      model: MODEL,
+      drafts: DRAFTS,
+      aspect: ASPECT,
+      resolution: RESOLUTION.toUpperCase(),
+      transparent: TRANSPARENT,
+      cutout: CUTOUT,
+      sources: resolvedSources,
+      source_mimes: sourceMimes,
+      prompt,
+    };
+    process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
+    process.exit(0);
+  }
+
   // Upload reference images if provided.
-  const referenceUrls: string[] = values.source
-    ? await uploadSources(values.source)
+  const referenceUrls: string[] = resolvedSources.length > 0
+    ? await uploadSources(resolvedSources, sourceMimes)
     : [];
 
   const savedPaths: string[] = [];
