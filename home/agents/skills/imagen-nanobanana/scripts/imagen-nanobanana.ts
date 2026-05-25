@@ -12,7 +12,7 @@
 
 import { parseArgs } from "util";
 import { existsSync, mkdirSync, writeFileSync, appendFileSync } from "fs";
-import { join, dirname, basename } from "path";
+import { join, dirname } from "path";
 import os from "os";
 
 // ---------------------------------------------------------------------------
@@ -170,9 +170,14 @@ if (!["colorkey", "none"].includes(cutoutRaw)) {
 const CUTOUT = cutoutRaw as "colorkey" | "none";
 
 // Validate source files
-const SOURCES: string[] = (values.source ?? []).map((p) =>
-  p.startsWith("~") ? p.replace(/^~([^/]*)/, (_, u) => u ? join(os.homedir(), "..", u) : os.homedir()) : p
-);
+const SOURCES: string[] = (values.source ?? []).map((p) => {
+  if (p.startsWith("~/") || p === "~") return p.replace(/^~/, os.homedir());
+  if (p.startsWith("~")) {
+    console.error(`ERROR: ~user/ form not supported (got '${p}'); use absolute paths`);
+    process.exit(1);
+  }
+  return p;
+});
 if (SOURCES.length > 10) {
   console.error(`ERROR: at most 10 --source images are supported (got ${SOURCES.length})`);
   process.exit(1);
@@ -222,15 +227,10 @@ for (const src of SOURCES) {
 
 // Output directory
 function expandTilde(p: string): string {
-  if (p.startsWith("~/") || p === "~") {
-    return p.replace(/^~/, os.homedir());
-  }
-  // ~username form
+  if (p.startsWith("~/") || p === "~") return p.replace(/^~/, os.homedir());
   if (p.startsWith("~")) {
-    const slash = p.indexOf("/");
-    const username = slash === -1 ? p.slice(1) : p.slice(1, slash);
-    const rest = slash === -1 ? "" : p.slice(slash);
-    return join(os.homedir(), "..", username) + rest;
+    console.error(`ERROR: ~user/ form not supported (got '${p}'); use absolute paths`);
+    process.exit(1);
   }
   return p;
 }
