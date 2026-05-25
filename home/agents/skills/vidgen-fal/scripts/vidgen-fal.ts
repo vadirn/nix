@@ -369,6 +369,9 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   console.error("ERROR:", err instanceof Error ? err.message : String(err));
+  if (err instanceof Error && err.stack) {
+    console.error(err.stack);
+  }
   const body = (err as { body?: unknown })?.body;
   if (body !== undefined) {
     console.error("DETAIL:", typeof body === "string" ? body : JSON.stringify(body, null, 2));

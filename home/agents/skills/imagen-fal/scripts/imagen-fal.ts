@@ -431,6 +431,9 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   console.error("ERROR:", err instanceof Error ? err.message : String(err));
+  if (err instanceof Error && err.stack) {
+    console.error(err.stack);
+  }
   // fal SDK ValidationError carries the offending fields in .body — surface them.
   const body = (err as { body?: unknown })?.body;
   if (body !== undefined) {
