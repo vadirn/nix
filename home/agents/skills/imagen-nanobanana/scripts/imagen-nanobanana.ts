@@ -44,6 +44,10 @@ Options:
                          colorkey (default): run ffmpeg colorkey+despill and write
                          <base>-alpha.png sibling. none: skip; keep raw image only.
   --chroma-key-fallback  Deprecated alias for --transparent --cutout colorkey.
+  --dry-run              Resolve all options and MIME types, print the request payload as
+                         JSON, then exit without making any API call. No GEMINI_API_KEY
+                         needed. Useful for inspecting the resolved request before spending
+                         API quota, and as a test hook for the magic-byte MIME path.
   -h, --help             Show this help and exit.
 
 Environment:
@@ -73,6 +77,7 @@ const { values, positionals } = parseArgs({
     transparent:          { type: "boolean", default: false },
     cutout:               { type: "string" },
     "chroma-key-fallback": { type: "boolean", default: false },
+    "dry-run":            { type: "boolean", default: false },
     help:                 { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: true,
@@ -101,11 +106,13 @@ if (!prompt) {
   process.exit(1);
 }
 
+const DRY_RUN = values["dry-run"] ?? false;
+
 // ---------------------------------------------------------------------------
-// GEMINI_API_KEY — fail fast
+// GEMINI_API_KEY — fail fast (skipped in --dry-run)
 // ---------------------------------------------------------------------------
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-if (!GEMINI_API_KEY) {
+if (!GEMINI_API_KEY && !DRY_RUN) {
   console.error(
     "ERROR: GEMINI_API_KEY is not set.\n" +
     "Inject it via: doppler run -p claude-code -c std --no-fallback --"
@@ -228,6 +235,25 @@ for (const src of SOURCES) {
     console.error(`WARNING: magic-byte MIME (${magicMime}) disagrees with extension MIME (${extMime}) for: ${src}`);
   }
   SOURCE_MIMES.push(detectedMime);
+}
+
+// ---------------------------------------------------------------------------
+// --dry-run: print resolved request payload and exit (no API call)
+// ---------------------------------------------------------------------------
+if (DRY_RUN) {
+  const payload = {
+    model: MODEL,
+    drafts: DRAFTS,
+    aspect: ASPECT,
+    resolution: RESOLUTION_API,
+    transparent: TRANSPARENT,
+    cutout: CUTOUT,
+    sources: SOURCES,
+    source_mimes: SOURCE_MIMES,
+    prompt,
+  };
+  process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
+  process.exit(0);
 }
 
 // Output directory
