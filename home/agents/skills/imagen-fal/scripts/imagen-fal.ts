@@ -194,9 +194,17 @@ async function uploadSources(sourceArg: string): Promise<string[]> {
       console.error(`ERROR: source file not found: ${resolved}`);
       process.exit(1);
     }
-    const file = Bun.file(resolved);
-    const blob = new Blob([await file.arrayBuffer()], { type: file.type || "image/png" });
+    const meta = await Bun.file(resolved).image().metadata();
     console.log(`Uploading ${basename(resolved)} to fal storage…`);
+    let blob: Blob;
+    if (meta.width <= 2048 && meta.height <= 2048) {
+      const file = Bun.file(resolved);
+      blob = new Blob([await file.arrayBuffer()], { type: file.type || "image/png" });
+    } else {
+      const bytes = await Bun.file(resolved).image().resize(2048, 2048, { fit: "inside" }).webp({ quality: 85 }).bytes();
+      console.log(`  (shrunk ${meta.width}x${meta.height} -> 2048-box webp)`);
+      blob = new Blob([bytes], { type: "image/webp" });
+    }
     const url = await fal.storage.upload(blob);
     urls.push(url);
   }
