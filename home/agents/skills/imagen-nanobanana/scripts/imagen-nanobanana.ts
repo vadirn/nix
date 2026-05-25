@@ -169,6 +169,11 @@ if (!["colorkey", "none"].includes(cutoutRaw)) {
 }
 const CUTOUT = cutoutRaw as "colorkey" | "none";
 
+// Warn if --cutout was explicitly supplied without --transparent
+if (!TRANSPARENT && values.cutout !== undefined) {
+  console.warn(`WARNING: --cutout has no effect unless --transparent is set`);
+}
+
 // Validate source files
 const SOURCES: string[] = (values.source ?? []).map((p) => {
   if (p.startsWith("~/") || p === "~") return p.replace(/^~/, os.homedir());

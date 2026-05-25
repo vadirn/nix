@@ -182,6 +182,11 @@ if (!["birefnet", "none"].includes(cutoutRaw)) {
 }
 const CUTOUT = cutoutRaw as "birefnet" | "none";
 
+// Warn if --cutout was explicitly supplied without --transparent
+if (!TRANSPARENT && values.cutout !== undefined) {
+  console.warn(`WARNING: --cutout has no effect unless --transparent is set`);
+}
+
 // Resolution: map user-facing 1k/2k/4k to fal Kling image_size presets.
 // fal Kling supports square_hd (1k) and square (512), but for rectangular
 // we derive the image_size object from aspect + resolution.
