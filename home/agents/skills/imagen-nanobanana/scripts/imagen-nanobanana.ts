@@ -11,9 +11,10 @@
  */
 
 import { parseArgs } from "util";
-import { existsSync, mkdirSync, writeFileSync, appendFileSync } from "fs";
+import { mkdirSync, writeFileSync, appendFileSync } from "fs";
 import { join, dirname } from "path";
 import os from "os";
+import { expandTilde, sniffSourceMimes, dryRunExit } from "../../_shared/scripts/media-utils.ts";
 
 // ---------------------------------------------------------------------------
 // Usage
@@ -181,67 +182,14 @@ if (!TRANSPARENT && values.cutout !== undefined) {
   console.warn(`WARNING: --cutout has no effect unless --transparent is set`);
 }
 
-// Validate source files
-const SOURCES: string[] = (values.source ?? []).map((p) => {
-  if (p.startsWith("~/") || p === "~") return p.replace(/^~/, os.homedir());
-  if (p.startsWith("~")) {
-    console.error(`ERROR: ~user/ form not supported (got '${p}'); use absolute paths`);
-    process.exit(1);
-  }
-  return p;
-});
-if (SOURCES.length > 10) {
-  console.error(`ERROR: at most 10 --source images are supported (got ${SOURCES.length})`);
-  process.exit(1);
-}
-const VALID_MIMES = ["image/png", "image/jpeg", "image/webp"];
-const SOURCE_MIMES: string[] = [];
-for (const src of SOURCES) {
-  if (!existsSync(src)) {
-    console.error(`ERROR: source file not found: ${src}`);
-    process.exit(1);
-  }
-  // Fix N3: magic-byte sniff (primary), fall back to extension/Bun type
-  const headBuf = await Bun.file(src).arrayBuffer();
-  const head = new Uint8Array(headBuf.byteLength > 12 ? headBuf.slice(0, 12) : headBuf);
-  let magicMime: string | null = null;
-  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) {
-    magicMime = "image/png";
-  } else if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
-    magicMime = "image/jpeg";
-  } else if (
-    head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
-    head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
-  ) {
-    magicMime = "image/webp";
-  } else if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38) {
-    magicMime = "image/gif";
-  }
-  // Extension/Bun fallback
-  const bunFile = Bun.file(src);
-  const bunMime = bunFile.type || "application/octet-stream";
-  const extLower = src.toLowerCase();
-  let extMime: string | null = null;
-  if (extLower.endsWith(".png")) extMime = "image/png";
-  else if (extLower.endsWith(".jpg") || extLower.endsWith(".jpeg")) extMime = "image/jpeg";
-  else if (extLower.endsWith(".webp")) extMime = "image/webp";
-  else if (VALID_MIMES.includes(bunMime)) extMime = bunMime;
-  const detectedMime = magicMime ?? extMime;
-  if (!detectedMime) {
-    console.error(`ERROR: unsupported file type for source: ${src} (detected: ${bunMime})`);
-    process.exit(1);
-  }
-  if (magicMime && extMime && magicMime !== extMime) {
-    console.error(`WARNING: magic-byte MIME (${magicMime}) disagrees with extension MIME (${extMime}) for: ${src}`);
-  }
-  SOURCE_MIMES.push(detectedMime);
-}
+// Validate source files — Fix N3: magic-byte sniff via shared helper
+const { resolved: SOURCES, mimes: SOURCE_MIMES } = await sniffSourceMimes(values.source ?? []);
 
 // ---------------------------------------------------------------------------
 // --dry-run: print resolved request payload and exit (no API call)
 // ---------------------------------------------------------------------------
 if (DRY_RUN) {
-  const payload = {
+  dryRunExit({
     model: MODEL,
     drafts: DRAFTS,
     aspect: ASPECT,
@@ -251,21 +199,10 @@ if (DRY_RUN) {
     sources: SOURCES,
     source_mimes: SOURCE_MIMES,
     prompt,
-  };
-  process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
-  process.exit(0);
+  });
 }
 
 // Output directory
-function expandTilde(p: string): string {
-  if (p.startsWith("~/") || p === "~") return p.replace(/^~/, os.homedir());
-  if (p.startsWith("~")) {
-    console.error(`ERROR: ~user/ form not supported (got '${p}'); use absolute paths`);
-    process.exit(1);
-  }
-  return p;
-}
-
 const IMAGEN_DIR = process.env.IMAGEN_DIR
   ? expandTilde(process.env.IMAGEN_DIR)
   : join(os.homedir(), "Pictures", "imagen");

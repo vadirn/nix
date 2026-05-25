@@ -12,9 +12,10 @@
 
 import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
-import { existsSync, mkdirSync, writeFileSync, renameSync, appendFileSync } from "fs";
+import { mkdirSync, writeFileSync, renameSync, appendFileSync } from "fs";
 import { join, basename } from "path";
 import os from "node:os";
+import { expandTilde, sniffSourceMimes, dryRunExit } from "../../_shared/scripts/media-utils.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -29,16 +30,6 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   } finally {
     if (timer) clearTimeout(timer);
   }
-}
-
-function expandTilde(p: string): string {
-  if (p === "~") return os.homedir();
-  if (p.startsWith("~/")) return join(os.homedir(), p.slice(2));
-  if (p.startsWith("~")) {
-    console.error(`ERROR: ~user/ form not supported (got '${p}'); use absolute paths`);
-    process.exit(1);
-  }
-  return p;
 }
 
 // ---------------------------------------------------------------------------
@@ -237,72 +228,6 @@ const TIMESTAMP = new Date()
 const LOG_FILE = join(OUT_DIR, "log.jsonl");
 
 // ---------------------------------------------------------------------------
-// Magic-byte MIME sniff (verbatim from imagen-nanobanana.ts for symmetry)
-// ---------------------------------------------------------------------------
-// Backlog: extract sniff + dry-run to a shared lib/ when a third worker adopts this pattern.
-async function sniffSourceMimes(sourceArg: string): Promise<{ resolved: string[]; mimes: string[] }> {
-  const paths = sourceArg.split(",").map((p) => p.trim()).filter(Boolean);
-  if (paths.length === 0) return { resolved: [], mimes: [] };
-  if (paths.length > 10) {
-    console.error(`ERROR: at most 10 --source images are supported (got ${paths.length})`);
-    process.exit(1);
-  }
-
-  const VALID_MIMES = ["image/png", "image/jpeg", "image/webp"];
-  const resolved: string[] = [];
-  const mimes: string[] = [];
-
-  for (const p of paths) {
-    const r = p.startsWith("~") ? expandTilde(p) : p;
-    if (!existsSync(r)) {
-      console.error(`ERROR: source file not found: ${r}`);
-      process.exit(1);
-    }
-
-    // Magic-byte sniff (primary), fall back to extension/Bun type
-    const headBuf = await Bun.file(r).arrayBuffer();
-    const head = new Uint8Array(headBuf.byteLength > 12 ? headBuf.slice(0, 12) : headBuf);
-    let magicMime: string | null = null;
-    if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) {
-      magicMime = "image/png";
-    } else if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
-      magicMime = "image/jpeg";
-    } else if (
-      head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
-      head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
-    ) {
-      magicMime = "image/webp";
-    } else if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38) {
-      magicMime = "image/gif";
-    }
-
-    // Extension/Bun fallback
-    const bunFile = Bun.file(r);
-    const bunMime = bunFile.type || "application/octet-stream";
-    const extLower = r.toLowerCase();
-    let extMime: string | null = null;
-    if (extLower.endsWith(".png")) extMime = "image/png";
-    else if (extLower.endsWith(".jpg") || extLower.endsWith(".jpeg")) extMime = "image/jpeg";
-    else if (extLower.endsWith(".webp")) extMime = "image/webp";
-    else if (VALID_MIMES.includes(bunMime)) extMime = bunMime;
-
-    const detectedMime = magicMime ?? extMime;
-    if (!detectedMime) {
-      console.error(`ERROR: unsupported file type for source: ${r} (detected: ${bunMime})`);
-      process.exit(1);
-    }
-    if (magicMime && extMime && magicMime !== extMime) {
-      console.error(`WARNING: magic-byte MIME (${magicMime}) disagrees with extension MIME (${extMime}) for: ${r}`);
-    }
-
-    resolved.push(r);
-    mimes.push(detectedMime);
-  }
-
-  return { resolved, mimes };
-}
-
-// ---------------------------------------------------------------------------
 // Source images: upload to fal storage
 // ---------------------------------------------------------------------------
 async function uploadSources(resolvedPaths: string[], mimes: string[]): Promise<string[]> {
@@ -384,15 +309,16 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
   // Resolve source paths and sniff MIMEs (runs even in --dry-run).
-  const { resolved: resolvedSources, mimes: sourceMimes } = values.source
-    ? await sniffSourceMimes(values.source)
-    : { resolved: [], mimes: [] };
+  const sourcePaths = values.source
+    ? values.source.split(",").map((p) => p.trim()).filter(Boolean)
+    : [];
+  const { resolved: resolvedSources, mimes: sourceMimes } = await sniffSourceMimes(sourcePaths);
 
   // ---------------------------------------------------------------------------
   // --dry-run: print resolved request payload and exit (no API call)
   // ---------------------------------------------------------------------------
   if (DRY_RUN) {
-    const payload = {
+    dryRunExit({
       model: MODEL,
       drafts: DRAFTS,
       aspect: ASPECT,
@@ -402,9 +328,7 @@ async function main(): Promise<void> {
       sources: resolvedSources,
       source_mimes: sourceMimes,
       prompt,
-    };
-    process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
-    process.exit(0);
+    });
   }
 
   // Upload reference images if provided.
