@@ -120,12 +120,11 @@ const MODEL = values.model ?? "gemini-3.1-flash-image-preview";
 const SUPPORTS_IMAGE_SIZE = MODEL !== "gemini-2.5-flash-image";
 
 const draftsArg = values.drafts ?? "1";
-if (!/^\d+$/.test(draftsArg)) {
+if (!/^\d+$/.test(draftsArg) || parseInt(draftsArg, 10) < 1) {
   console.error(`ERROR: --drafts must be a positive integer (got '${draftsArg}')`);
   process.exit(1);
 }
-const draftsRaw = parseInt(draftsArg, 10);
-const DRAFTS = isNaN(draftsRaw) || draftsRaw < 1 ? 1 : draftsRaw;
+const DRAFTS = parseInt(draftsArg, 10);
 if (DRAFTS > 8) {
   console.error("ERROR: --drafts must be 8 or fewer");
   process.exit(1);
@@ -185,20 +184,38 @@ for (const src of SOURCES) {
     console.error(`ERROR: source file not found: ${src}`);
     process.exit(1);
   }
-  // Detect MIME from extension (Bun file type detection)
+  // Fix N3: magic-byte sniff (primary), fall back to extension/Bun type
+  const headBuf = await Bun.file(src).arrayBuffer();
+  const head = new Uint8Array(headBuf.byteLength > 12 ? headBuf.slice(0, 12) : headBuf);
+  let magicMime: string | null = null;
+  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) {
+    magicMime = "image/png";
+  } else if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
+    magicMime = "image/jpeg";
+  } else if (
+    head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
+    head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
+  ) {
+    magicMime = "image/webp";
+  } else if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38) {
+    magicMime = "image/gif";
+  }
+  // Extension/Bun fallback
   const bunFile = Bun.file(src);
-  const mime = bunFile.type || "application/octet-stream";
-  // For images, Bun may not detect; fall back to extension
-  const ext = src.toLowerCase();
-  let detectedMime = mime;
-  if (!VALID_MIMES.includes(mime)) {
-    if (ext.endsWith(".png")) detectedMime = "image/png";
-    else if (ext.endsWith(".jpg") || ext.endsWith(".jpeg")) detectedMime = "image/jpeg";
-    else if (ext.endsWith(".webp")) detectedMime = "image/webp";
-    else {
-      console.error(`ERROR: unsupported file type for source: ${src} (detected: ${mime})`);
-      process.exit(1);
-    }
+  const bunMime = bunFile.type || "application/octet-stream";
+  const extLower = src.toLowerCase();
+  let extMime: string | null = null;
+  if (extLower.endsWith(".png")) extMime = "image/png";
+  else if (extLower.endsWith(".jpg") || extLower.endsWith(".jpeg")) extMime = "image/jpeg";
+  else if (extLower.endsWith(".webp")) extMime = "image/webp";
+  else if (VALID_MIMES.includes(bunMime)) extMime = bunMime;
+  const detectedMime = magicMime ?? extMime;
+  if (!detectedMime) {
+    console.error(`ERROR: unsupported file type for source: ${src} (detected: ${bunMime})`);
+    process.exit(1);
+  }
+  if (magicMime && extMime && magicMime !== extMime) {
+    console.error(`WARNING: magic-byte MIME (${magicMime}) disagrees with extension MIME (${extMime}) for: ${src}`);
   }
   SOURCE_MIMES.push(detectedMime);
 }
@@ -269,7 +286,7 @@ function mimeToExt(mime: string): string {
 // Single-draft API call
 // ---------------------------------------------------------------------------
 type DraftResult =
-  | { ok: true; data: Buffer; mime: string }
+  | { ok: true; data: Buffer; mime: string; usageMetadata: Record<string, unknown> }
   | { ok: false; error: string };
 
 async function runDraft(): Promise<DraftResult> {
@@ -356,7 +373,16 @@ async function runDraft(): Promise<DraftResult> {
   const mime = inlineData.mimeType ?? "image/png";
   const data = inlineData.data ?? "";
 
-  return { ok: true, data: Buffer.from(data, "base64"), mime };
+  // Fix N1: reject empty payloads
+  if (data === "" || Buffer.from(data, "base64").length === 0) {
+    return { ok: false, error: "empty image data from API" };
+  }
+
+  // Fix N5: capture usageMetadata
+  const usageMetadata =
+    ((json as { usageMetadata?: Record<string, unknown> })?.usageMetadata) ?? {};
+
+  return { ok: true, data: Buffer.from(data, "base64"), mime, usageMetadata };
 }
 
 // ---------------------------------------------------------------------------
@@ -383,6 +409,11 @@ async function applyColorkey(imagePath: string): Promise<string> {
 
   if (exitCode !== 0) {
     throw new Error(`ffmpeg exited with code ${exitCode}: ${stderrText.trim()}`);
+  }
+
+  // Fix N2: verify ffmpeg actually wrote the output file
+  if (!existsSync(alphaPath)) {
+    throw new Error(`ffmpeg exited 0 but produced no file at ${alphaPath}`);
   }
 
   console.log(`  [colorkey] saved alpha PNG: ${alphaPath}`);
@@ -436,6 +467,9 @@ async function main(): Promise<void> {
     return { i, result };
   });
 
+  // Fix N5: keep the first non-empty usageMetadata (matches shell FIRST_USAGE behaviour)
+  let firstUsage: Record<string, unknown> = {};
+
   let successCount = 0;
   for (const { i, result } of draftResults) {
     if (!result.ok) {
@@ -463,6 +497,11 @@ async function main(): Promise<void> {
     savedPaths.push(finalPath);
     console.log(`image: ${finalPath}`);
     successCount++;
+
+    // Fix N5: record first non-empty usageMetadata
+    if (Object.keys(firstUsage).length === 0 && Object.keys(result.usageMetadata).length > 0) {
+      firstUsage = result.usageMetadata;
+    }
 
     if (TRANSPARENT && CUTOUT === "colorkey") {
       try {
@@ -497,8 +536,9 @@ async function main(): Promise<void> {
     transparent: TRANSPARENT,
     cutout: CUTOUT,
     sources: SOURCES,
-    outputs: savedPaths.filter((p) => !p.endsWith("-alpha.png")),
+    outputs: savedPaths,
     elapsed_ms: elapsedMs,
+    usage: firstUsage,
   };
 
   const logLine = JSON.stringify(logRecord) + "\n";
