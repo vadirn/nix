@@ -14,6 +14,32 @@ import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
 import { existsSync, mkdirSync, writeFileSync, renameSync, appendFileSync } from "fs";
 import { join, basename } from "path";
+import os from "node:os";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function expandTilde(p: string): string {
+  if (p === "~") return os.homedir();
+  if (p.startsWith("~/")) return join(os.homedir(), p.slice(2));
+  if (p.startsWith("~")) {
+    console.error(`ERROR: ~user/ form not supported (got '${p}'); use absolute paths`);
+    process.exit(1);
+  }
+  return p;
+}
 
 // ---------------------------------------------------------------------------
 // Usage
@@ -130,14 +156,18 @@ if (values.model) {
   }
 }
 const draftsArg = values.drafts ?? "1";
-if (!/^[0-9]+$/.test(draftsArg)) {
+if (!/^[0-9]+$/.test(draftsArg) || parseInt(draftsArg, 10) < 1) {
   console.error(`ERROR: --drafts must be a positive integer (got '${draftsArg}')`);
   process.exit(1);
 }
-const DRAFTS_RAW  = parseInt(draftsArg, 10);
-const DRAFTS      = isNaN(DRAFTS_RAW) || DRAFTS_RAW < 1 ? 1 : DRAFTS_RAW;
+const DRAFTS = parseInt(draftsArg, 10);
 if (DRAFTS > 9) {
   console.error("ERROR: --drafts must be 9 or fewer (Kling API limit)");
+  process.exit(1);
+}
+const VALID_ASPECTS_FAL = new Set(["16:9","9:16","1:1","4:3","3:4","3:2","2:3","21:9","auto"]);
+if (values.aspect && !VALID_ASPECTS_FAL.has(values.aspect)) {
+  console.error(`ERROR: --aspect must be one of: ${[...VALID_ASPECTS_FAL].join(", ")} (got '${values.aspect}')`);
   process.exit(1);
 }
 const ASPECT      = values.aspect ?? (HAS_SOURCES ? "auto" : "1:1");
@@ -168,8 +198,8 @@ if (!["1k", "2k"].includes(RESOLUTION)) {
 
 // Output directory.
 const OUT_DIR = values.out
-  ? values.out.replace(/^~/, process.env.HOME ?? "~")
-  : join(process.env.HOME ?? "~", "Pictures", "imagen");
+  ? expandTilde(values.out)
+  : join(os.homedir(), "Pictures", "imagen");
 
 mkdirSync(OUT_DIR, { recursive: true });
 
@@ -204,7 +234,7 @@ async function uploadSources(sourceArg: string): Promise<string[]> {
 
   const urls: string[] = [];
   for (const p of paths) {
-    const resolved = p.startsWith("~") ? p.replace(/^~/, process.env.HOME ?? "~") : p;
+    const resolved = p.startsWith("~") ? expandTilde(p) : p;
     if (!existsSync(resolved)) {
       console.error(`ERROR: source file not found: ${resolved}`);
       process.exit(1);
@@ -253,7 +283,7 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
   const imageUrl = await fal.storage.upload(blob);
 
   console.log(`  [BiRefNet] running background removal…`);
-  const result = await fal.subscribe("fal-ai/birefnet/v2", {
+  const result = await withTimeout(fal.subscribe("fal-ai/birefnet/v2", {
     input: {
       image_url: imageUrl,
       model: "General Use (Heavy)",
@@ -261,20 +291,20 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
       operating_resolution: "2048x2048",
     },
     logs: false,
-  });
+  }), 120_000, "fal.subscribe(BiRefNet)");
   const alphaUrl = (result as { data?: { image?: { url?: string } } })?.data?.image?.url;
   if (!alphaUrl) {
     throw new Error(
       `BiRefNet returned unexpected response shape: ${JSON.stringify(result).slice(0, 500)}`
     );
   }
-  // Download alpha PNG to a sibling <base>-alpha.png; keep the original.
-  const alphaBase = imagePath.replace(/\.[^.]+$/, "-alpha");
-  const tmpBase = `${alphaBase}-birefnet-tmp`;
-  const tmpPath = await downloadImage(alphaUrl, tmpBase);
-  const alphaPath = `${alphaBase}.png`;
+  // Download alpha image to a sibling <base>-alpha.<ext>; keep the original.
+  const alphaBase = imagePath.replace(/\.[^.]+$/, "");
+  const tmpPath = await downloadImage(alphaUrl, `${alphaBase}-birefnet-tmp`);
+  const ext = tmpPath.slice(tmpPath.lastIndexOf("."));  // e.g. ".png", ".webp"
+  const alphaPath = `${alphaBase}-alpha${ext}`;
   renameSync(tmpPath, alphaPath);
-  console.log(`  [BiRefNet] saved alpha PNG: ${alphaPath}`);
+  console.log(`  [BiRefNet] saved alpha image: ${alphaPath}`);
   return alphaPath;
 }
 
@@ -306,10 +336,10 @@ async function main(): Promise<void> {
   }
 
   console.log(`Generating ${DRAFTS} image(s) via ${MODEL}…`);
-  const result = await fal.subscribe(MODEL, {
+  const result = await withTimeout(fal.subscribe(MODEL, {
     input,
     logs: false,
-  }) as { data: { images: Array<{ url: string; content_type?: string }> } };
+  }), 180_000, "fal.subscribe(Kling)") as { data: { images: Array<{ url: string; content_type?: string }> } };
 
   const images = result.data?.images ?? [];
   if (images.length === 0) {
@@ -375,7 +405,7 @@ async function main(): Promise<void> {
   // Emit one JSON-lines record per saved file (task acceptance criterion).
   const birefnetRan = TRANSPARENT && CUTOUT === "birefnet";
   for (const p of savedPaths) {
-    const isAlpha = p.endsWith("-alpha.png");
+    const isAlpha = /-alpha\.[^.]+$/.test(p);
     process.stdout.write(
       JSON.stringify({
         path: p,
@@ -385,7 +415,7 @@ async function main(): Promise<void> {
         cutout: CUTOUT,
         prompt,
         cost_estimate_usd: parseFloat(
-          (0.028 + (birefnetRan && !isAlpha ? 0.003 : 0)).toFixed(4)
+          (isAlpha ? (birefnetRan ? 0.003 : 0) : 0.028).toFixed(4)
         ),
       }) + "\n"
     );
