@@ -12,8 +12,7 @@
 
 import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
-import { appendFileSync } from "fs";
-import { mkdirSync } from "fs";
+import { appendFileSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import { homedir } from "os";
@@ -235,6 +234,21 @@ function ffmpeg(args: string[]): void {
 }
 
 // ---------------------------------------------------------------------------
+// Timeout helper
+// ---------------------------------------------------------------------------
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
@@ -246,16 +260,20 @@ async function main(): Promise<void> {
   // Kling v1.6 params: prompt, duration (str enum), aspect_ratio (str enum),
   // negative_prompt, cfg_scale (float 0–1).
   console.log(`Generating video via ${ENDPOINT}…`);
-  const result = await fal.subscribe(ENDPOINT, {
-    input: {
-      prompt: PROMPT,
-      duration: DURATION,
-      aspect_ratio: ASPECT_RATIO,
-      negative_prompt: NEGATIVE_PROMPT,
-      cfg_scale: CFG_SCALE,
-    },
-    logs: false,
-  }) as { data?: { video?: { url?: string } } };
+  const result = await withTimeout(
+    fal.subscribe(ENDPOINT, {
+      input: {
+        prompt: PROMPT,
+        duration: DURATION,
+        aspect_ratio: ASPECT_RATIO,
+        negative_prompt: NEGATIVE_PROMPT,
+        cfg_scale: CFG_SCALE,
+      },
+      logs: false,
+    }),
+    300_000,
+    "fal.subscribe(Kling video)",
+  ) as { data?: { video?: { url?: string } } };
 
   const videoUrl = result.data?.video?.url;
   if (!videoUrl) {
@@ -269,7 +287,12 @@ async function main(): Promise<void> {
   console.log(`Downloading MP4…`);
   const resp = await fetch(videoUrl, { signal: AbortSignal.timeout(120_000) });
   if (!resp.ok) throw new Error(`Failed to download ${videoUrl}: ${resp.status} ${resp.statusText}`);
-  await Bun.write(mp4Path, resp);
+  try {
+    await Bun.write(mp4Path, resp);
+  } catch (err) {
+    try { unlinkSync(mp4Path); } catch {}  // best-effort cleanup; ignore if file never existed
+    throw err;
+  }
   console.log(`video: ${mp4Path}`);
 
   const outputPaths: string[] = [mp4Path];
