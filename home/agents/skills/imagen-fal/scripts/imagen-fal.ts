@@ -222,7 +222,8 @@ if (!NAME_SLUG) {
 const TIMESTAMP = new Date()
   .toISOString()
   .replace(/[-:T]/g, "")
-  .replace(/\.\d+Z$/, "") + `-${process.pid}`;
+  .replace(/\.\d+Z$/, "")
+  .replace(/^(\d{8})(\d{6})$/, "$1-$2") + `-${process.pid}`;
 
 const LOG_FILE = join(OUT_DIR, "log.jsonl");
 
