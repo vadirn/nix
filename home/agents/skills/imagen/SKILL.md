@@ -20,7 +20,7 @@ This skill is a router only — it has no script of its own. It reads the user's
 | Numerical / logical reasoning (chart, infographic, diagram, math) | `imagen-nanobanana` | Nano Banana has stronger reasoning needed to place data correctly. |
 | 4+ reference images, multi-reference remix | `imagen-fal` | Kling O1 accepts up to 10 reference images; Nano Banana does not support multi-ref. |
 | Cinematic / anime / stylised artistic composition | `imagen-fal` | Declared Kling strength per provider documentation. |
-| Transparent background requested | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG; chroma-key (the nanobanana path via `--chroma-key-fallback`) is reserved for hard-edged subjects only. |
+| Transparent background requested (no text) | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG sibling. If text-in-image is also requested, routes to nanobanana instead; user runs a separate `--transparent --cutout colorkey` pass on the Gemini output to get transparency. |
 | Default / ambiguous | `imagen-nanobanana` | Cheaper for the common case — see cost rationale below. |
 
 ## Dispatch
@@ -37,11 +37,13 @@ text_in_image         = do("true if the final image must contain readable text: 
 reasoning_image       = do("true if the image requires numerical layout: charts, infographics, math diagrams")
 cinematic_or_anime    = do("true if the prompt is primarily cinematic, anime, or highly stylised artistic composition")
 
-// Route: prefer Kling for refs / transparent; otherwise nanobanana
-if transparent_requested OR ref_count >= 4:
+// Route: text fidelity first, then transparency/refs, then style, then default
+if text_in_image OR reasoning_image:
+  worker = "imagen-nanobanana"   // Kling cannot render text reliably; wins even when transparent_requested
+  // note: if transparent_requested is also true, instruct the user to run a separate
+  //   --transparent --cutout colorkey pass on the Gemini output to obtain transparency
+else if transparent_requested OR ref_count >= 4:
   worker = "imagen-fal"
-else if text_in_image OR reasoning_image:
-  worker = "imagen-nanobanana"
 else if cinematic_or_anime:
   worker = "imagen-fal"
 else:
@@ -50,9 +52,9 @@ else:
 // Inject worker-specific transparency flag from natural-language signal
 if transparent_requested:
   if worker == "imagen-fal" AND "--transparent" not in prompt_args:
-    prompt_args = prompt_args + " --transparent"
-  else if worker == "imagen-nanobanana" AND "--chroma-key-fallback" not in prompt_args:
-    prompt_args = prompt_args + " --chroma-key-fallback"
+    prompt_args = prompt_args + " --transparent"   // default cutout is birefnet on fal
+  else if worker == "imagen-nanobanana" AND "--transparent" not in prompt_args:
+    prompt_args = prompt_args + " --transparent --cutout colorkey"
 
 // Invoke — args passed through verbatim; both workers accept the same flag shape.
 if worker == "imagen-nanobanana":
@@ -61,7 +63,7 @@ else:
   Skill(skill: "imagen-fal", args: "<prompt> [prompt_args]")
 ```
 
-If multiple signals match: prefer `imagen-fal` when any of ≥4 refs or transparent is present; fall through to `imagen-nanobanana` otherwise.
+If multiple signals match: `text_in_image` or `reasoning_image` takes highest priority and always routes to `imagen-nanobanana`, even when `transparent_requested` is also true. `transparent_requested` or ≥4 refs routes to `imagen-fal` only when no text signal is present.
 
 ## Capability gaps
 

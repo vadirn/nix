@@ -29,7 +29,7 @@ if chroma_key:
     opaque pixels — so this skill paints the subject on a flat chroma-key green
     (#00ff00) background and keys the green out programmatically with ffmpeg.
     Mention that any genuinely green parts of the subject will be keyed out too.
-    Mention that --chroma-key-fallback activates this mode.
+    Mention that --transparent --cutout colorkey activates this mode.
   """)
 
 // Expand prompt
@@ -57,29 +57,18 @@ prompt = do("""
 source_flags         = do("--source <path> for each image the user referenced or a prior output to iterate on")
 drafts_flag          = do("--drafts 3 or 4 when the user wants options; omit (default 1) otherwise")
 aspect_flag          = do("--aspect <ratio> when the user specifies dimensions or orientation")
-res_flag             = do("--resolution 512 for cheap drafts; bump to 1K or 2K once the user picks a keeper")
+res_flag             = do("--resolution 512 for cheap drafts; omit to use default 2K for final output")
 model_flag           = do("--model only when the user explicitly overrides the default")
-chroma_key_flag      = do("--chroma-key-fallback when chroma_key is true; omit otherwise")
+chroma_key_flag      = do("--transparent --cutout colorkey when chroma_key is true; omit otherwise")
 
 // Invoke (replace <skill-dir> with this skill's base directory at invocation time)
-Bash(doppler run -p claude-code -c std --no-fallback -- bash <skill-dir>/scripts/imagen.sh "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag] [chroma_key_flag])
-
-// Post-process: key the green out (only when chroma_key)
-if chroma_key:
-  for each "image: <src_path>" line the script emitted:
-    dst_path = src_path with extension replaced by ".png"
-    // colorkey removes the green; despill cleans the residual green fringe
-    // (JPEG chroma subsampling bleeds green into edge pixels). Tuned on a
-    // red-apple test: 0 green-tinted pixels after this chain.
-    Bash(ffmpeg -hide_banner -loglevel error -y -i "<src_path>" \
-           -vf "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba" \
-           "<dst_path>")
-    if dst_path != src_path:
-      Bash(rm -f "<src_path>")
-    replace the path emitted to the user with dst_path
+Bash(doppler run -p claude-code -c std --no-fallback -- bun <skill-dir>/scripts/imagen-nanobanana.ts "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag] [chroma_key_flag])
+// chroma_key_flag expands to: --transparent --cutout colorkey
+// The script handles the ffmpeg colorkey step in-process and emits both
+// "image: <raw_path>" and "alpha: <alpha_path>" lines on stdout.
 
 // Relay output
-do("print each final 'image: ...' path so the user can see or copy them")
+do("print each 'image: ...' and 'alpha: ...' path so the user can see or copy them")
 do("note the log path the script printed")
 
 // Iterate
@@ -98,26 +87,33 @@ if script reports no image:
 - Only `~/Pictures/imagen` is on the sandbox write allowlist. Pointing `$IMAGEN_DIR` or `--out` outside it requires adding a matching entry to `home/claude/settings.json`, otherwise writes fail under the sandbox.
 - `--out` honors the path verbatim; it does not adjust the extension to match the returned format. The script warns to stderr on a mismatch.
 - The API key (`GEMINI_API_KEY`) is injected by `doppler run` and never appears on a command line.
-- The curl call lives inside the script, so the `no-network-abuse` hook (which blocks visible `curl --data`) does not fire.
+- The fetch call runs in-process inside the script, so the `no-network-abuse` hook (which blocks visible `curl --data`) does not fire.
 - `gemini-2.5-flash-image` does not accept `--resolution`; the script warns and ignores it.
 - Default model: `gemini-3.1-flash-image-preview`.
+- Default resolution: `2K`. Pass `--resolution 512` for cheap draft runs.
+- For lossless archival, re-encode the JPEG yourself: `ffmpeg -i in.jpg out.png` or `magick in.jpg out.png`. The skill keeps the format the model returned.
 
-### Transparency via chroma-key (`--chroma-key-fallback`)
+### Transparency via chroma-key (`--transparent`, `--cutout`)
 
 Gemini image models cannot emit a native alpha channel. Asked for a "transparent background", they paint a grey-and-white checkerboard — the *icon* for transparency — as opaque pixels (confirmed by Google docs / community reports). The skill works around this entirely outside the script:
 
 1. Detect the transparency request (`chroma_key = true`).
 2. Tell the user up front that chroma-keying is used and that green parts of the subject will be keyed out too.
 3. Append a flat `#00ff00` background directive to the prompt (without ever using the word "transparent").
-4. Pass `--chroma-key-fallback` to the script to signal the mode.
-5. After the script returns the image, run `ffmpeg` with `colorkey` plus `despill` to set alpha to 0 on the green and clean the JPEG chroma fringe.
+4. Pass `--transparent --cutout colorkey` to the script to signal the mode.
+5. The script generates the image and immediately runs `ffmpeg` with `colorkey` plus `despill` in-process to write `<base>-alpha.png` as a sibling file. The original generated file (e.g. `name.jpg`) is always preserved.
+6. The script emits both `image: name.jpg` and `alpha: name-alpha.png` on stdout — no post-process step needed from the workflow.
+
+Pass `--cutout none` to skip the ffmpeg step and keep only the raw green-plate image.
+
+`--chroma-key-fallback` is a **deprecated** alias for `--transparent --cutout colorkey`; the script prints a deprecation warning to stderr when it sees it.
 
 The keying command (also embedded in the workflow above):
 
 ```
 ffmpeg -i in.jpg \
   -vf "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba" \
-  out.png
+  out-alpha.png
 ```
 
 - `colorkey=0x00ff00:0.30:0.20` — sets alpha to 0 where pixels are within 30% of pure green, feathering edges over a 20% blend window.
