@@ -337,6 +337,7 @@ async function main(): Promise<void> {
     : [];
 
   const savedPaths: string[] = [];
+  let masterCount = 0;
   const startMs = Date.now();
 
   // Build fal input. Kling Image O1 schema:
@@ -373,6 +374,7 @@ async function main(): Promise<void> {
     const rawPath = await downloadImage(img.url, destBase);
 
     savedPaths.push(rawPath);
+    masterCount++;
     console.log(`image: ${rawPath}`);
 
     if (TRANSPARENT && CUTOUT === "birefnet") {
@@ -397,7 +399,7 @@ async function main(): Promise<void> {
     aspect: ASPECT,
     resolution: RESOLUTION,
     drafts_requested: DRAFTS,
-    drafts_completed: savedPaths.length,
+    drafts_completed: masterCount,
     transparent: TRANSPARENT,
     sources: values.source ? values.source.split(",").map((p) => p.trim()) : [],
     outputs: savedPaths,
