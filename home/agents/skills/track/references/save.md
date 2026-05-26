@@ -31,7 +31,7 @@ else:
     narrative = do("draft narrative paragraph: outcomes a fresh agent would need; exclude process, exploration noise, content with a permanent home elsewhere")
 
     proposed_edits = {
-      decisions:  do("session decisions to append as numbered items, or [] if none"),
+      decisions:  do("session decisions to append as numbered items, or [] if none; if any existing decision was reversed or overridden this session, also wrap its title and rationale in ~~strike-through~~ in place and reference it from the new superseding decision"),
       backlog:    do("new backlog items to append as `- [ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
       glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; NEVER modify or remove existing rows, especially pinned (`※`) rows"),
       log_entry:  "### " + new_entry_number + ". " + <today> + " — " + title + "\n\n" + narrative,
@@ -93,8 +93,16 @@ grep for `^### ([0-9]+)\.` in the `## Log` section, take the max, add one.
 
 ### Decisions conventions
 
-Numbered, append-only. Each decision: a short title, then the rationale. Never delete; if reversed, append a new
-decision that supersedes the prior one and reference it.
+Numbered, append-only. Each decision: a short title, then the rationale. Never delete.
+
+When a decision is reversed or overridden:
+
+1. Append a new decision that supersedes the prior one and references it by number (e.g. `supersedes (3)`).
+2. In the same edit, wrap the superseded decision's title and rationale in `~~…~~` strike-through so a cold
+   reader sees at a glance that it no longer holds. Keep the number and the text intact — strike-through marks
+   it obsolete without erasing the history.
+
+Surface both the new decision and the strike-through edit in the `proposed_edits` confirmation step.
 
 ### Glossary conventions
 
