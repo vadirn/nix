@@ -15,6 +15,7 @@
   },
   "includeCoAuthoredBy": false,
   "permissions": {
+    "defaultMode": "auto",
     "allow": [
       "Skill(writing-ru)",
       "Skill(writing-en)",
