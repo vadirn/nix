@@ -32,7 +32,7 @@ Fix term meanings before use. Each row holds one sense throughout this skill.
 | Time-box              | A duration with a hard stop. Expiry forces an explicit choice: extend with justification, decide, or abandon.        |
 | Capture artifact      | The document produced by the prototype: memo, ADR, eval set, or RFC. The prototype is not done until this is filed. |
 | Spike                 | Throwaway implementation prototype, minutes to days scale, isolated from production code (Beck 1999).                |
-| Tracer bullet         | Retained end-to-end slice, lean but complete production code, not a facade (Hunt & Thomas 1999). The term is used elsewhere (in TDD contexts) to mean the first end-to-end test cycle; in this skill it denotes the prototype method, not a single test cycle. |
+| Tracer bullet         | Retained end-to-end slice, lean but complete production code, not a facade (Hunt & Thomas 1999).                     |
 | Walking skeleton      | Retained thin end-to-end implementation that touches every architectural layer (Cockburn 2004).                      |
 | Wizard of Oz          | Throwaway role prototype: the agent produces the session plan; a human runs the sessions (Kelley 1984).              |
 | Prompt-as-prototype   | First-step LLM prototype: iterate the prompt against an eval set before RAG, tools, or fine-tuning.                  |

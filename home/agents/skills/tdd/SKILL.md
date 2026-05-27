@@ -53,8 +53,8 @@ Rules:
 
 - Write ONE failing test (RED)
 - Write minimal code to pass it (GREEN)
-- First cycle is a tracer bullet — proves the path works end to end
-- **⏸ Stop after tracer bullet.** Show result, confirm direction before continuing.
+- First cycle is a thin-path test cycle — proves the path works end to end
+- **⏸ Stop after the thin-path test cycle.** Show result, confirm direction before continuing.
 - Wait for the current test to pass before writing the next one
 - Keep implementation focused on the current test only
 
