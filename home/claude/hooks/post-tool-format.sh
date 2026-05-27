@@ -25,6 +25,9 @@
 
 set -uo pipefail
 
+# shellcheck source=lib/detect-pm.sh
+source "$(dirname "$0")/lib/detect-pm.sh"
+
 INPUT=$(cat)
 # Newline-delimited so paths with spaces (e.g. vault's "35 experiments/") survive.
 { IFS= read -r FILE; } < <(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')
@@ -71,23 +74,11 @@ resolve_js_formatter() {
   printf '%s\noxfmt\n' "${saw_pkg:-$(dirname "$file")}"
 }
 
-detect_pm() {
-  local root=$1
-  if [ -f "$root/bun.lock" ] || [ -f "$root/bun.lockb" ]; then
-    echo bun
-  elif [ -f "$root/pnpm-lock.yaml" ]; then
-    echo pnpm
-  elif [ -f "$root/yarn.lock" ]; then
-    echo yarn
-  else
-    echo npm
-  fi
-}
-
 run_format_file() {
   local root=$1 file=$2
   local pm
   pm=$(detect_pm "$root")
+  pm="${pm:-npm}"
   # npm needs `--` to forward args to the script; bun/pnpm/yarn don't.
   case "$pm" in
     npm) (cd "$root" && npm run format:file -- "$file" >&2) || true ;;
