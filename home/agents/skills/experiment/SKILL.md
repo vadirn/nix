@@ -68,9 +68,21 @@ else:
 tags = do("suggest 1–3 kebab-case tags from: tool-behavior, config, performance,
     api, cli, format, nix, shell; add none if no clear fit")
 
-// Write record
-Write(<vault_root>/35 experiments/<filename>)
-// Record shape: see ## Reference → Record template
+// Instantiate from the vault template (authoritative source of body shape)
+template = Read(<vault_root>/templates/Experiment.md)
+record = do("instantiate template:
+    - drop the `template: true` line
+    - replace the `verdict:` multi-value picker list with the single chosen verdict
+    - set description, date, project (omit line if null), tags (omit line if empty)
+    - replace the bracketed placeholder in each body section ([Claim], [Method],
+      [Execution], [Verdict], [Open]) with the corresponding content
+    - leave the ## Glossary section's empty table intact unless the user surfaced
+      domain-specific terms during the experiment, in which case append them as
+      un-pinned rows (bold-Term reserved for pinned anchors)
+    - drop the ## Open section entirely if there are no unresolved questions")
+record_path = <vault_root>/35 experiments/<filename>
+Bash("write atomically: write record to <record_path>.tmp, then mv <record_path>.tmp <record_path>")
+// Record shape: see ## Reference → Record template (mirrors templates/Experiment.md)
 
 // Auto-link to active track (v1 scope)
 if project_wikilink is not null:
@@ -104,6 +116,8 @@ if project_wikilink is not null:
 ## Reference
 
 ### Record template
+
+The authoritative template lives in the vault at `<vault_root>/templates/Experiment.md` (read by Step 5 via `vault-query config`). The shape below mirrors that file; update both if either changes.
 
 ```markdown
 ---
