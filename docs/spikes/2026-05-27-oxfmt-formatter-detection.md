@@ -1,3 +1,5 @@
+> **Superseded.** The iteration-2 design (manifest + `devDependencies`) described here was replaced by the `scripts["format:file"]` opt-in convention — see Decision 13 in `track-claude-code-tooling.md`. The production hook (`home/claude/hooks/post-tool-format.sh`) now reads `scripts["format:file"]` from `package.json` instead of probing `devDependencies`. The walk-up-with-inheritance shape is preserved; the formatter source changed. This document remains as the historical record of how the design evolved.
+
 # Does marker-file detection in `post-tool-format.sh`, combined with skipping on `Edit`, eliminate version drift, Edit-round-trip breakage, and silent opinion imposition?
 
 Date: 2026-05-27
