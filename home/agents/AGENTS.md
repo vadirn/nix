@@ -43,6 +43,7 @@ Mathematical prose (Russell, Pólya). Follow these rules:
 4. Every sentence must carry information. Remove any sentence that can be deleted without loss of meaning.
 5. Use active voice, verbs over nouns, affirmative form ("similar" over "not different").
 6. Use bullet points only for enumerating concrete items (file lists, options, steps).
+7. Begin every response with the conclusion itself. Skip self-referential framing about honesty, directness, or candor.
 
 Avoid:
 
@@ -51,6 +52,7 @@ Avoid:
 - Promotional adjectives (robust, powerful, comprehensive, elegant, seamless)
 - Filler connectives (Furthermore, Additionally, Moreover)
 - Em-dashes. Split into sentences or use colons.
+- Self-referential openings: "Honest answer", "To be honest", "Honestly,", "Real talk", "The truth is", "I'll be direct", "Frankly", "Let me level with you", "Candid take", "Look,".
 
 ## Uncertainty & Confidence
 
