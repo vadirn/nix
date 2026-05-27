@@ -44,11 +44,16 @@
     ...
   }: let
     system = "aarch64-darwin";
+    # Use cargoHash (fetchCargoVendor) instead of cargoLock.lockFile
+    # (importCargoLock). The latter fetches each crate via raw curl, and
+    # crates.io's legacy /api/v1 endpoint 403s on curl's default User-Agent.
+    # fetchCargoVendor runs `cargo vendor` inside the FOD; cargo's own UA is
+    # accepted.
     vault-query = nixpkgs.legacyPackages.${system}.rustPlatform.buildRustPackage {
       pname = "vault-query";
       version = "0.1.0";
       src = ./vault-query;
-      cargoLock.lockFile = ./vault-query/Cargo.lock;
+      cargoHash = "sha256-yAjiNHuZm3TDMTzk2TYnBGv5+vsn6gFaNbmg6HcWEmo=";
     };
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:
