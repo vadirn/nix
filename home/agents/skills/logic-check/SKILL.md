@@ -147,6 +147,7 @@ Use these names when emitting the report. Pick the column that matches the outpu
 | Деление по разным основаниям           | Cross-division                              |
 | Скачок в делении                       | Skip in division                            |
 | Гипотеза vs доказанное                 | Hypothesis vs proven claim                  |
+| Доказательство                         | Proof                                       |
 | Неправомерное обращение                | Illicit conversion                          |
 
 ### Что не считать нарушением / What not to flag
