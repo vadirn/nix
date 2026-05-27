@@ -8,7 +8,7 @@ description: >
   "PoC", "proof of concept", "is X feasible", "explore Y approach", "tracer bullet",
   "walking skeleton", "vibe-code this", "quick demo of"; Russian: «прототип», «спайк», «прощупать»,
   «по-быстрому накидать». Skip on feature work with a known design, bug fixes, refactors, or
-  production code paths — prototypes resolve open questions, not closed ones.
+  production code paths; prototypes resolve open questions, not closed ones.
 version: 0.1
 ---
 

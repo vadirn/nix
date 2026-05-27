@@ -4,7 +4,7 @@ description: >
   Router hub for image generation. Triggers: /imagen, "generate an image", "create a picture",
   "make an image", «нарисуй», «сгенерируй картинку». Dispatches to either imagen-nanobanana
   (Google Nano Banana / Gemini, direct API) or imagen-fal (Kling O1 + BiRefNet via fal.ai)
-  based on prompt characteristics — invoke the worker skills directly only when you need to
+  based on prompt characteristics; invoke the worker skills directly only when you need to
   pin a provider.
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: imagen-nanobanana
 description: >
-  The Google Nano Banana (Gemini) worker for the /imagen hub — use directly only to pin the provider.
+  The Google Nano Banana (Gemini) worker for the /imagen hub; use directly only to pin the provider.
   Triggers: /imagen-nanobanana, explicit mentions of "Nano Banana", "Gemini image", or "use Nano Banana".
   Edit or restyle existing images by passing them as --source. Skip for non-image tasks and for
   ambiguous image requests (those route through the /imagen hub).
