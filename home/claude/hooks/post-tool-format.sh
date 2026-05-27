@@ -80,6 +80,11 @@ run_format_file() {
   pm=$(detect_pm "$root")
   pm="${pm:-npm}"
   # npm needs `--` to forward args to the script; bun/pnpm/yarn don't.
+  # Gotcha: bun resets TMPDIR for the spawned format:file subprocess to the
+  # macOS user-temp (/private/var/folders/.../T/) rather than inheriting this
+  # hook's TMPDIR. A script using $TMPDIR for caching or trace logs writes
+  # there, not into the Claude session scratch dir. Access is allowed (the
+  # macOS user-temp is sandbox-writable), but the files survive the session.
   case "$pm" in
     npm) (cd "$root" && npm run format:file -- "$file" >&2) || true ;;
     *) (cd "$root" && "$pm" run format:file "$file" >&2) || true ;;
