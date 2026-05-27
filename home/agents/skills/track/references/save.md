@@ -33,7 +33,7 @@ else:
     proposed_edits = {
       decisions:  do("session decisions to append as numbered items, or [] if none; if any existing decision was reversed or overridden this session, also wrap its title and rationale in ~~strike-through~~ in place and reference it from the new superseding decision"),
       backlog:    do("new backlog items to append as `- [ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
-      glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; NEVER modify or remove existing rows, especially pinned (`※`) rows"),
+      glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; NEVER modify or remove existing rows, especially pinned (bolded-Term) rows"),
       log_entry:  "### " + new_entry_number + ". " + <today> + " — " + title + "\n\n" + narrative,
       updated:    <today>,
     }
@@ -108,7 +108,7 @@ Surface both the new decision and the strike-through edit in the `proposed_edits
 
 The Glossary is a 2-column markdown table: `| Term | Definition |`. Two row classes:
 
-- **Pinned rows** — Term ends with `※` (e.g. `Track※`, `Decision※`). Never edit, never remove, never re-order.
+- **Pinned rows** — Term is bolded (e.g. **Track**, **Decision**). Never edit, never remove, never re-order.
   The template seeds eight pinned rows describing the track's own conventions; they document the format inside
   every track so a cold reader doesn't have to consult the skill.
 - **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default; refining a

@@ -139,6 +139,8 @@ enum Commands {
     Cards,
     /// List all notes with metadata
     Notes,
+    /// List all experiments with metadata
+    Experiments,
     /// List active projects
     Projects {
         /// View name for base query
@@ -261,6 +263,10 @@ fn main() -> Result<()> {
         Commands::Notes => {
             let cfg = resolve_config(&cli)?;
             commands::list::run_by_type(&cfg, "note", &[])
+        }
+        Commands::Experiments => {
+            let cfg = resolve_config(&cli)?;
+            commands::list::run_by_type(&cfg, "experiment", &[])
         }
         Commands::Projects { view } => {
             let cfg = resolve_config(&cli)?;
