@@ -13,7 +13,6 @@ If the change is mechanical and applies the same transform N times, write a code
 
 - **ast-grep**: first choice. Pattern matching by AST node, 20+ languages, no compile step.
 - **jscodeshift**: when the transform needs JS/TS-specific AST APIs (type annotations, JSX, import reshuffling).
-- **comby**: when the pattern crosses language constructs ast-grep cannot match.
 
 ## Procedure
 

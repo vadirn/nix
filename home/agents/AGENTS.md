@@ -71,7 +71,6 @@ Use these CLI tools through the Bash tool. Prefer them over manual code reading 
 - **knip**: dead code report. Run `knip --reporter compact` in a JS/TS project.
 - **madge --circular**: circular dependency report.
 - **jscodeshift**: run codemods. Always pass `--dry` first and review the diff before applying.
-- **comby**: cross-language structural rewrite when ast-grep cannot express the pattern.
 
 For any refactor that touches more than 20 files, write a codemod first. ast-grep handles most cases. jscodeshift handles JS/TS-specific AST work. Test the codemod against three sample files before running it over the whole tree.
 
