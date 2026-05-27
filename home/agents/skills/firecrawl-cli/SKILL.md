@@ -70,7 +70,7 @@ For detailed command reference, run `firecrawl <command> --help`.
 
 - Use `scrape` first. It handles static pages and JS-rendered SPAs.
 - Use `scrape` + `interact` when you need to interact with a page, such as clicking buttons, filling out forms, navigating through a complex site, infinite scroll, or when scrape fails to grab all the content you need.
-- Never use interact for web searches - use `search` instead.
+- Use search for web searches.
 
 **Avoid redundant fetches:**
 
@@ -107,7 +107,7 @@ Naming conventions:
 .firecrawl/{site}-{path}.md
 ```
 
-Never read entire output files at once. Use `grep`, `head`, or incremental reads:
+Read output files incrementally with `grep`, `head`, or offset reads:
 
 ```bash
 wc -l .firecrawl/file.md && head -50 .firecrawl/file.md

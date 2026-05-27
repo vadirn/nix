@@ -1,7 +1,7 @@
 diff --git a/SKILL.md b/SKILL.md
 --- a/SKILL.md
 +++ b/SKILL.md
-@@ -1,6 +1,6 @@
+@@ -1,13 +1,13 @@
  ---
  name: playground
 -description: Creates interactive HTML playgrounds — self-contained single-file explorers that let users configure something visually through controls, see a live preview, and copy out a prompt. Use when the user asks to make a playground, explorer, or interactive tool for a topic.
@@ -9,6 +9,14 @@ diff --git a/SKILL.md b/SKILL.md
  ---
  
  # Playground Builder
+ 
+ A playground is a self-contained HTML file with interactive controls on one side, a live preview on the other, and a prompt output at the bottom with a copy button. The user adjusts controls, explores visually, then copies the generated prompt back into Claude.
+ 
+-## When to use this skill
++## When to use
+ 
+ When the user asks for an interactive playground, explorer, or visual tool for a topic — especially when the input space is large, visual, or structural and hard to express as plain text.
+ 
 @@ -38,11 +38,13 @@
  Keep a single state object. Every control writes to it, every render reads from it.
  

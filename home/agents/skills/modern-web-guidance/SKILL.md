@@ -1,7 +1,7 @@
 ---
 name: modern-web-guidance
 description: |
-  Search tool for modern web development best practices. MANDATORY: Execute FIRST for all HTML/CSS and clientside JS tasks. Do NOT skip — web APIs evolve rapidly and training weights contain obsolete patterns.
+  Search tool for modern web development best practices. MANDATORY: Execute first for all HTML/CSS and clientside JS tasks. Web APIs evolve faster than training data, so check the local guides before implementing.
 
   Trigger immediately for:
   - UI/Layout: Modals, dialogs, popovers, Glassmorphism/backdrop-filters, anchor positioning, container queries, `:has()`, `:user-valid`.
@@ -89,7 +89,7 @@ modern-web-guidance retrieve "<id>"
 
 -   Always search **first** to find the most relevant guides.
 -   These guides are usually framework-agnostic; adapt them correctly to your setup.
--   Do not hallucinate guides or ignore them; they represent the preferred local standard for the user's project.
+-   Use only guides returned by the search command; they represent the preferred local standard.
 
 
 ## Interpreting Browser Support & Fallbacks
