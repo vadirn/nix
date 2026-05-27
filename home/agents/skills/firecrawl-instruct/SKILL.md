@@ -79,5 +79,5 @@ firecrawl scrape "https://app.example.com" --profile my-app --no-save-changes
 ## See also
 
 - [firecrawl-scrape](../firecrawl-scrape/SKILL.md) — try scrape first, escalate to instruct only when needed
-- [firecrawl-search](../firecrawl-search/SKILL.md) — for web searches (never use instruct for searching)
+- [firecrawl-search](../firecrawl-search/SKILL.md) — use for web searches
 - [firecrawl-agent](../firecrawl-agent/SKILL.md) — AI-powered extraction (less manual control)
