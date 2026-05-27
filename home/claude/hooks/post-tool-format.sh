@@ -110,13 +110,6 @@ case "$ext" in
     command -v alejandra >/dev/null 2>&1 || exit 0
     alejandra --quiet "$FILE" >&2 || true
     ;;
-  sh | bash | zsh)
-    command -v shfmt >/dev/null 2>&1 || exit 0
-    # shfmt defaults to tab indent + case-not-indented. Existing convention
-    # in this repo (and most readable shell) is 2-space + case-indented:
-    # -i 2 (2-space) -ci (switch case body indented).
-    shfmt -i 2 -ci -w "$FILE" >&2 || true
-    ;;
   *) ;;
 esac
 

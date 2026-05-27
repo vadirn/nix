@@ -27,7 +27,6 @@
           ngrok
           ruby
           ast-grep
-          shfmt
         ];
       };
       programs = {
