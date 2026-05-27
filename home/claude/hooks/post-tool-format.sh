@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # PostToolUse hook: format the file just written.
 #
-# Skips Edit/MultiEdit globally to prevent the Edit-round-trip failure (a
-# formatter reflowing the file between two Edits in one turn makes the second
-# Edit's old_string fail to match).
+# Wired to the Write matcher only (see settings.json). Edit/MultiEdit are
+# intentionally excluded to prevent the Edit-round-trip failure: a formatter
+# reflowing the file between two Edits in one turn makes the second Edit's
+# old_string fail to match.
 #
 # JS/TS/JSON + web + markdown branch (extensions oxfmt handles natively):
 #   - Walks up looking for a package.json that defines a `format:file` script
@@ -25,14 +26,11 @@
 set -uo pipefail
 
 INPUT=$(cat)
-read -r TOOL FILE < <(printf '%s' "$INPUT" | jq -r '"\(.tool_name // "") \(.tool_input.file_path // "")"')
+# Newline-delimited so paths with spaces (e.g. vault's "35 experiments/") survive.
+{ IFS= read -r FILE; } < <(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')
 
 [ -n "$FILE" ] || exit 0
 [ -f "$FILE" ] || exit 0
-
-case "$TOOL" in
-  Edit|MultiEdit) exit 0 ;;
-esac
 
 ext="${FILE##*.}"
 
@@ -40,9 +38,10 @@ manifest_has_format_file() {
   jq -e '.scripts."format:file"' "$1" >/dev/null 2>&1
 }
 
-# Walk up from $1 looking for the formatter to use. Yields "<root_dir> <tool>"
-# where tool is "script" (project's format:file), "deno", or "oxfmt". A
-# package.json without format:file does NOT terminate the walk —
+# Walk up from $1 looking for the formatter to use. Emits two lines —
+# <root_dir>\n<tool> — where tool is "script" (project's format:file),
+# "deno", or "oxfmt". Newline-delimited so root paths with spaces survive.
+# A package.json without format:file does NOT terminate the walk —
 # workspace-root scripts are inherited. Always emits something: oxfmt is the
 # universal fallback (no-manifest scratch files included). The root value is
 # meaningful for "script" and "deno"; for "oxfmt" it's only kept for trace.
@@ -53,13 +52,13 @@ resolve_js_formatter() {
   while :; do
     if [ -f "$dir/package.json" ]; then
       if manifest_has_format_file "$dir/package.json"; then
-        printf '%s script\n' "$dir"
+        printf '%s\nscript\n' "$dir"
         return
       fi
       [ -z "$saw_pkg" ] && saw_pkg=$dir
     elif [ -f "$dir/deno.json" ] || [ -f "$dir/deno.jsonc" ]; then
       if [ -z "$saw_pkg" ]; then
-        printf '%s deno\n' "$dir"
+        printf '%s\ndeno\n' "$dir"
         return
       fi
     fi
@@ -69,32 +68,37 @@ resolve_js_formatter() {
     esac
     dir=$(dirname "$dir")
   done
-  printf '%s oxfmt\n' "${saw_pkg:-$(dirname "$file")}"
+  printf '%s\noxfmt\n' "${saw_pkg:-$(dirname "$file")}"
 }
 
 detect_pm() {
   local root=$1
-  if [ -f "$root/bun.lock" ] || [ -f "$root/bun.lockb" ]; then echo bun
-  elif [ -f "$root/pnpm-lock.yaml" ]; then echo pnpm
-  elif [ -f "$root/yarn.lock" ]; then echo yarn
-  else echo npm
+  if [ -f "$root/bun.lock" ] || [ -f "$root/bun.lockb" ]; then
+    echo bun
+  elif [ -f "$root/pnpm-lock.yaml" ]; then
+    echo pnpm
+  elif [ -f "$root/yarn.lock" ]; then
+    echo yarn
+  else
+    echo npm
   fi
 }
 
 run_format_file() {
   local root=$1 file=$2
-  local pm; pm=$(detect_pm "$root")
+  local pm
+  pm=$(detect_pm "$root")
   case "$pm" in
-    bun)  (cd "$root" && bun run format:file "$file" >&2) || true ;;
+    bun) (cd "$root" && bun run format:file "$file" >&2) || true ;;
     pnpm) (cd "$root" && pnpm run format:file "$file" >&2) || true ;;
     yarn) (cd "$root" && yarn run format:file "$file" >&2) || true ;;
-    npm)  (cd "$root" && npm run format:file -- "$file" >&2) || true ;;
+    npm) (cd "$root" && npm run format:file -- "$file" >&2) || true ;;
   esac
 }
 
 case "$ext" in
-  ts|tsx|js|jsx|mjs|cjs|json|jsonc|md|html|css)
-    read -r root tool <<<"$(resolve_js_formatter "$FILE")"
+  ts | tsx | js | jsx | mjs | cjs | json | jsonc | md | html | css)
+    { IFS= read -r root && IFS= read -r tool; } < <(resolve_js_formatter "$FILE")
     [ -n "$root" ] || exit 0
     case "$tool" in
       script) run_format_file "$root" "$FILE" ;;
@@ -117,18 +121,14 @@ case "$ext" in
     command -v alejandra >/dev/null 2>&1 || exit 0
     alejandra --quiet "$FILE" >&2 || true
     ;;
-  sh|bash|zsh)
+  sh | bash | zsh)
     command -v shfmt >/dev/null 2>&1 || exit 0
     # shfmt defaults to tab indent + case-not-indented. Existing convention
     # in this repo (and most readable shell) is 2-space + case-indented:
     # -i 2 (2-space) -ci (switch case body indented).
     shfmt -i 2 -ci -w "$FILE" >&2 || true
     ;;
-  rs)
-    # rustfmt runs on save via the editor; running it here causes loops.
-    ;;
-  *)
-    ;;
+  *) ;;
 esac
 
 exit 0

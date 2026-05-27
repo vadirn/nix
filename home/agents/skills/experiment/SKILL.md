@@ -74,34 +74,30 @@ Write(<vault_root>/35 experiments/<filename>)
 // Auto-link to active track (v1 scope)
 if project_wikilink is not null:
     tracks = Bash(vault-query tracks --view Active --format json)
-    // exits 0 with [] if no active tracks
+    // Returns [] when the project has no active tracks; errors with "no project
+    // resolved" when no .vault.config.json is found above cwd. The
+    // project_wikilink guard above already rules out the error case.
 
+    // Pick a track or skip
     if tracks is empty (parsed JSON is []):
-        // skip silently
+        track_path = null
     elif tracks has exactly one row:
-        active_track = tracks[0]
-        track_path = <cfg.project_path>/<active_track.Track>.md
+        track_path = <cfg.project_path>/<tracks[0].Track>.md
+    else:
+        options = [for t in tracks: { label: t.Track, description: t.Status + " · " + t.Description }]
+        selected = AskUserQuestion("Multiple active tracks. Which one should this experiment link to?
+            (or skip to link none)", options, singleSelect=true, allowSkip=true)
+        track_path = skipped ? null : <cfg.project_path>/<selected.Track>.md
+
+    // Append the link
+    if track_path is not null:
         do("Read(track_path)")
         do("locate or create '## Experiments' section: it belongs after '## Decisions'
             and before '## Backlog'; if the section is absent, insert a blank '## Experiments'
             heading in that position")
         link_line = "- [[35 experiments/<date>-<slug>|<claim summary>]] — <verdict>"
-        do("append link_line under ## Experiments")
-        Bash("write updated track atomically:
-            printf %s '$content' > '$track_path.tmp' && mv '$track_path.tmp' '$track_path'")
-    else:
-        // multiple active tracks — ask
-        options = [for t in tracks: { label: t.Track, description: t.Status + " · " + t.Description }]
-        selected = AskUserQuestion("Multiple active tracks. Which one should this experiment link to?
-            (or skip to link none)", options, singleSelect=true, allowSkip=true)
-        if not skipped:
-            track_path = <cfg.project_path>/<selected.Track>.md
-            do("Read(track_path)")
-            do("locate or create '## Experiments' section after '## Decisions' and before '## Backlog'")
-            link_line = "- [[35 experiments/<date>-<slug>|<claim summary>]] — <verdict>"
-            do("append link_line under ## Experiments")
-            Bash("write updated track atomically:
-                printf %s '$content' > '$track_path.tmp' && mv '$track_path.tmp' '$track_path'")
+        do("append link_line under ## Experiments, producing <updated_content>")
+        Bash("printf '%s' \"$updated_content\" > \"$track_path.tmp\" && mv \"$track_path.tmp\" \"$track_path\"")
 ```
 
 ## Reference

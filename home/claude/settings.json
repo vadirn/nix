@@ -95,7 +95,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "^Write$",
         "hooks": [
           {
             "type": "command",

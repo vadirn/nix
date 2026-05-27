@@ -27,25 +27,22 @@ if [ -f package.json ] && jq -e '.scripts.verify' package.json >/dev/null 2>&1; 
     exit 2
   fi
   case "$pm" in
-    bun)  bun run verify ;;
-    pnpm) pnpm run verify ;;
-    yarn) yarn verify ;;
-    npm)  npm run verify ;;
+    bun)  bun run verify || exit 2 ;;
+    pnpm) pnpm run verify || exit 2 ;;
+    yarn) yarn run verify || exit 2 ;;
+    npm)  npm run verify || exit 2 ;;
   esac
-  rc=$?
-  [ $rc -eq 0 ] && exit 0 || exit 2
+  exit 0
 fi
 
 if [ -f Makefile ] && grep -Eq '^verify:' Makefile; then
-  make verify
-  rc=$?
-  [ $rc -eq 0 ] && exit 0 || exit 2
+  make verify || exit 2
+  exit 0
 fi
 
 if [ -x scripts/verify.sh ]; then
-  ./scripts/verify.sh
-  rc=$?
-  [ $rc -eq 0 ] && exit 0 || exit 2
+  ./scripts/verify.sh || exit 2
+  exit 0
 fi
 
 exit 0
