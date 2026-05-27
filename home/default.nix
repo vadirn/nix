@@ -28,6 +28,7 @@
           ruby
           ast-grep
           comby
+          shfmt
         ];
       };
       programs = {

@@ -11,18 +11,21 @@ set -uo pipefail
 # it; consume so the pipe does not stay open.
 cat >/dev/null
 
-# Detect package manager from lockfile.
+# Detect package manager from lockfile. Empty stdout = no lockfile.
 pkg_manager() {
   if [ -f bun.lock ] || [ -f bun.lockb ]; then echo bun
   elif [ -f pnpm-lock.yaml ]; then echo pnpm
   elif [ -f yarn.lock ]; then echo yarn
   elif [ -f package-lock.json ]; then echo npm
-  else echo npm
   fi
 }
 
 if [ -f package.json ] && jq -e '.scripts.verify' package.json >/dev/null 2>&1; then
   pm=$(pkg_manager)
+  if [ -z "$pm" ]; then
+    echo "stop-verify: package.json defines scripts.verify but no lockfile found (bun.lock, bun.lockb, pnpm-lock.yaml, yarn.lock, package-lock.json). Commit a lockfile or remove the verify script." >&2
+    exit 2
+  fi
   case "$pm" in
     bun)  bun run verify ;;
     pnpm) pnpm run verify ;;

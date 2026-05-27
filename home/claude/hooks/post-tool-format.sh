@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
-# PostToolUse hook: format the file just written or edited.
+# PostToolUse hook: format the file just written.
 #
-# JS/TS/JSON branch (designed in docs/spikes/2026-05-27-oxfmt-formatter-detection.md):
-#   - Skips Edit/MultiEdit to prevent Edit-round-trip failures.
-#   - Walks up for a project manifest (package.json, deno.json), bounded by
-#     .git, $HOME, or filesystem root. No manifest = no formatting.
-#   - For package.json: reads devDependencies/dependencies; picks biome >
-#     prettier > dprint, or falls back to global oxfmt when no JS formatter
-#     is declared. Prefers ./node_modules/.bin/<bin> over global binaries.
-#   - For deno.json: runs `deno fmt`.
+# Skips Edit/MultiEdit globally to prevent the Edit-round-trip failure (a
+# formatter reflowing the file between two Edits in one turn makes the second
+# Edit's old_string fail to match).
+#
+# JS/TS/JSON + web + markdown branch (extensions oxfmt handles natively):
+#   - Walks up looking for a package.json that defines a `format:file` script
+#     (convention: takes one path arg, formats that file in place). The walk
+#     is bounded by .git, $HOME, or filesystem root. Workspace-root scripts
+#     are inherited — a sub-package without `format:file` does NOT terminate
+#     the walk.
+#   - When found, runs it via the detected package manager (bun > pnpm >
+#     yarn > npm) from the manifest's dir.
+#   - For deno.json: runs `deno fmt` at the nearest deno root.
+#   - Universal fallback: global oxfmt on the file. Runs when no ancestor
+#     defines `format:file`, including the no-manifest case (scratch files,
+#     vault .md, etc.). Easy to spot when oxfmt's defaults diverge from
+#     project style — that's the cue to add `format:file`.
 #
 # Never blocks: failures go to stderr so Claude can see and decide.
 # Exit 0 always.
@@ -16,75 +25,88 @@
 set -uo pipefail
 
 INPUT=$(cat)
-TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
-FILE=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty')
+read -r TOOL FILE < <(printf '%s' "$INPUT" | jq -r '"\(.tool_name // "") \(.tool_input.file_path // "")"')
 
 [ -n "$FILE" ] || exit 0
 [ -f "$FILE" ] || exit 0
 
+case "$TOOL" in
+  Edit|MultiEdit) exit 0 ;;
+esac
+
 ext="${FILE##*.}"
 
-find_js_project_root() {
-  local dir
-  dir=$(dirname "$1")
+manifest_has_format_file() {
+  jq -e '.scripts."format:file"' "$1" >/dev/null 2>&1
+}
+
+# Walk up from $1 looking for the formatter to use. Yields "<root_dir> <tool>"
+# where tool is "script" (project's format:file), "deno", or "oxfmt". A
+# package.json without format:file does NOT terminate the walk —
+# workspace-root scripts are inherited. Always emits something: oxfmt is the
+# universal fallback (no-manifest scratch files included). The root value is
+# meaningful for "script" and "deno"; for "oxfmt" it's only kept for trace.
+resolve_js_formatter() {
+  local file=$1
+  local dir saw_pkg=""
+  dir=$(dirname "$file")
   while :; do
-    if [ -f "$dir/package.json" ] || [ -f "$dir/deno.json" ] || [ -f "$dir/deno.jsonc" ]; then
-      printf '%s\n' "$dir"
-      return
+    if [ -f "$dir/package.json" ]; then
+      if manifest_has_format_file "$dir/package.json"; then
+        printf '%s script\n' "$dir"
+        return
+      fi
+      [ -z "$saw_pkg" ] && saw_pkg=$dir
+    elif [ -f "$dir/deno.json" ] || [ -f "$dir/deno.jsonc" ]; then
+      if [ -z "$saw_pkg" ]; then
+        printf '%s deno\n' "$dir"
+        return
+      fi
     fi
-    [ -d "$dir/.git" ] && return
-    [ "$dir" = "${HOME:-/nonexistent}" ] && return
-    [ "$dir" = "/" ] && return
+    [ -e "$dir/.git" ] && break
+    case "$dir" in
+      "" | . | / | "${HOME:-/nonexistent}") break ;;
+    esac
     dir=$(dirname "$dir")
   done
+  printf '%s oxfmt\n' "${saw_pkg:-$(dirname "$file")}"
 }
 
-identify_js_formatter() {
-  local pkg=$1
-  if jq -e '(.devDependencies["@biomejs/biome"] // .dependencies["@biomejs/biome"]) // empty' "$pkg" >/dev/null 2>&1; then
-    printf 'biome\n'; return
+detect_pm() {
+  local root=$1
+  if [ -f "$root/bun.lock" ] || [ -f "$root/bun.lockb" ]; then echo bun
+  elif [ -f "$root/pnpm-lock.yaml" ]; then echo pnpm
+  elif [ -f "$root/yarn.lock" ]; then echo yarn
+  else echo npm
   fi
-  if jq -e '(.devDependencies.prettier // .dependencies.prettier) // empty' "$pkg" >/dev/null 2>&1; then
-    printf 'prettier\n'; return
-  fi
-  if jq -e '(.devDependencies.dprint // .dependencies.dprint) // empty' "$pkg" >/dev/null 2>&1; then
-    printf 'dprint\n'; return
-  fi
-  printf 'oxfmt\n'
 }
 
-run_local_or_global() {
-  local root=$1 bin=$2
-  shift 2
-  if [ -x "$root/node_modules/.bin/$bin" ]; then
-    (cd "$root" && "./node_modules/.bin/$bin" "$@" >&2) || true
-  elif command -v "$bin" >/dev/null 2>&1; then
-    (cd "$root" && "$bin" "$@" >&2) || true
-  fi
+run_format_file() {
+  local root=$1 file=$2
+  local pm; pm=$(detect_pm "$root")
+  case "$pm" in
+    bun)  (cd "$root" && bun run format:file "$file" >&2) || true ;;
+    pnpm) (cd "$root" && pnpm run format:file "$file" >&2) || true ;;
+    yarn) (cd "$root" && yarn run format:file "$file" >&2) || true ;;
+    npm)  (cd "$root" && npm run format:file -- "$file" >&2) || true ;;
+  esac
 }
 
 case "$ext" in
-  ts|tsx|js|jsx|mjs|cjs|json|jsonc)
-    case "$TOOL" in
-      Edit|MultiEdit) exit 0 ;;
-    esac
-    root=$(find_js_project_root "$FILE")
+  ts|tsx|js|jsx|mjs|cjs|json|jsonc|md|html|css)
+    read -r root tool <<<"$(resolve_js_formatter "$FILE")"
     [ -n "$root" ] || exit 0
-    if [ -f "$root/package.json" ]; then
-      tool=$(identify_js_formatter "$root/package.json")
-      case "$tool" in
-        biome)    run_local_or_global "$root" biome    format --write "$FILE" ;;
-        prettier) run_local_or_global "$root" prettier --write "$FILE" ;;
-        dprint)   run_local_or_global "$root" dprint   fmt "$FILE" ;;
-        oxfmt)
-          command -v oxfmt >/dev/null 2>&1 || exit 0
-          oxfmt "$FILE" >&2 || true
-          ;;
-      esac
-    elif [ -f "$root/deno.json" ] || [ -f "$root/deno.jsonc" ]; then
-      command -v deno >/dev/null 2>&1 || exit 0
-      (cd "$root" && deno fmt "$FILE" >&2) || true
-    fi
+    case "$tool" in
+      script) run_format_file "$root" "$FILE" ;;
+      deno)
+        command -v deno >/dev/null 2>&1 || exit 0
+        (cd "$root" && deno fmt "$FILE" >&2) || true
+        ;;
+      oxfmt)
+        command -v oxfmt >/dev/null 2>&1 || exit 0
+        oxfmt "$FILE" >&2 || true
+        ;;
+    esac
     ;;
   py)
     command -v ruff >/dev/null 2>&1 || exit 0
@@ -94,6 +116,13 @@ case "$ext" in
   nix)
     command -v alejandra >/dev/null 2>&1 || exit 0
     alejandra --quiet "$FILE" >&2 || true
+    ;;
+  sh|bash|zsh)
+    command -v shfmt >/dev/null 2>&1 || exit 0
+    # shfmt defaults to tab indent + case-not-indented. Existing convention
+    # in this repo (and most readable shell) is 2-space + case-indented:
+    # -i 2 (2-space) -ci (switch case body indented).
+    shfmt -i 2 -ci -w "$FILE" >&2 || true
     ;;
   rs)
     # rustfmt runs on save via the editor; running it here causes loops.
