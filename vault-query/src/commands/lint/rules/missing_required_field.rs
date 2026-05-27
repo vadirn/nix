@@ -15,6 +15,7 @@ fn required_fields(type_val: &str) -> Option<&'static [&'static str]> {
         "reference" => Some(&["description", "tags"]),
         "project" => Some(&["result", "status", "goal"]),
         "track" => Some(&["slug", "description", "status", "project", "created", "updated"]),
+        "experiment" => Some(&["description", "verdict", "date"]),
         "checkpoint" => Some(&[]),
         "weekly-log" => Some(&["week", "start", "end", "sleep"]),
         "goal" => Some(&["description", "tags"]),

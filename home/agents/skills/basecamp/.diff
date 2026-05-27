@@ -1,7 +1,7 @@
 diff --git a/SKILL.md b/SKILL.md
 --- a/SKILL.md
 +++ b/SKILL.md
-@@ -1,10 +1,7 @@
+@@ -1,75 +1,7 @@
  ---
  name: basecamp
  description: |
@@ -9,11 +9,76 @@ diff --git a/SKILL.md b/SKILL.md
 -  messages, files, schedule, check-ins, timeline, recordings, templates, webhooks,
 -  subscriptions, lineup, chat, gauges, assignments, notifications, and accounts.
 -  Use for ANY Basecamp question or action.
+-triggers:
+-  # Direct invocations
+-  - basecamp
+-  - /basecamp
+-  # Resource actions
+-  - basecamp todo
+-  - basecamp project
+-  - basecamp card
+-  - basecamp chat
+-  - basecamp campfire
+-  - basecamp message
+-  - basecamp file
+-  - basecamp document
+-  - basecamp schedule
+-  - basecamp checkin
+-  - basecamp check-in
+-  - basecamp timeline
+-  - basecamp template
+-  - basecamp webhook
+-  - basecamp gauge
+-  - basecamp assignment
+-  - basecamp notification
+-  - basecamp account
+-  # Common actions
+-  - link to basecamp
+-  - track in basecamp
+-  - post to basecamp
+-  - comment on basecamp
+-  - complete todo
+-  - mark done
+-  - create todo
+-  - move card
+-  - download file
+-  # Search and discovery
+-  - search basecamp
+-  - find in basecamp
+-  - look up basecamp
+-  - check basecamp
+-  - list basecamp
+-  - show basecamp
+-  - get from basecamp
+-  - fetch from basecamp
+-  # Questions
+-  - can I basecamp
+-  - how do I basecamp
+-  - what's in basecamp
+-  - what basecamp
+-  - does basecamp
+-  # My work
+-  - my todos
+-  - my tasks
+-  - my schedule
+-  - my basecamp
+-  - assigned to me
+-  - my assignments
+-  - my notifications
+-  - overdue todos
+-  - upcoming events
+-  - project gauge
+-  - project progress
+-  # URLs
+-  - 3.basecamp.com
+-  - basecampapi.com
+-  - https://3.basecamp.com/
+-invocable: true
 +  Interact with Basecamp via CLI: projects, todos, cards, messages, schedule, files. Use for any Basecamp action.
- triggers:
-   # Direct invocations
-   - basecamp
-@@ -90,20 +87,20 @@
+ argument-hint: "[action] [args...]"
+ ---
+ 
+@@ -90,20 +22,20 @@
     - **`[@Name](person:ID)`** — one API call, resolves person ID to SGID via pingable set
     - **`@sgid:VALUE`** — inline SGID embed for pipeline composability
     - **`@Name` / `@First.Last`** — fuzzy name resolution (may be ambiguous)
@@ -42,7 +107,7 @@ diff --git a/SKILL.md b/SKILL.md
  
  Always pass `--json` or `--md` explicitly — auto-detection depends on config and may not produce the format you expect. Use `--md` when composing reports, summarizing data, or displaying results inline. `--agent` is for headless integration scripts.
  
-@@ -118,10 +115,19 @@
+@@ -118,10 +50,19 @@
  ```
  
  ```json
@@ -66,7 +131,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```
  
  Walk the tree: start at `basecamp --agent --help` for top-level commands, then drill into any subcommand. Commands include `notes` with domain-specific agent hints (e.g., "Cards do NOT support --assignee filtering").
-@@ -146,50 +152,50 @@
+@@ -146,50 +87,50 @@
  
  > **Note:** Most queries require project scope (via `--in <project>` or `.basecamp/config.json`). Cross-project exceptions: `basecamp reports assigned`, `basecamp assignments`, `basecamp reports overdue`, `basecamp reports schedule`, `basecamp recordings <type>`, `basecamp notifications`, `basecamp gauges list`.
  
@@ -161,7 +226,7 @@ diff --git a/SKILL.md b/SKILL.md
  
  ## URL Parsing
  
-@@ -202,6 +208,7 @@
+@@ -202,6 +143,7 @@
  Returns: `account_id`, `project_id`, `type`, `recording_id`, `comment_id` (from fragment).
  
  **URL patterns:**
@@ -169,7 +234,7 @@ diff --git a/SKILL.md b/SKILL.md
  - `/buckets/27/messages/123` - Message 123 in project 27
  - `/buckets/27/messages/123#__recording_456` - Comment 456 on message 123
  - `/buckets/27/card_tables/cards/789` - Card 789
-@@ -212,6 +219,7 @@
+@@ -212,6 +154,7 @@
  - `/buckets/27/schedule_entries/404` - Schedule entry 404
  
  **Replying to comments:**
@@ -177,7 +242,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  # Comments are flat - reply to the parent recording_id, not the comment_id
  basecamp url parse "https://...messages/123#__recording_456" --json
-@@ -355,6 +363,7 @@
+@@ -355,6 +298,7 @@
  the download command.
  
  **Step 1: Fetch the recording and check for attachments**
@@ -185,7 +250,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  basecamp todos show <id> --json
  # Response includes description_attachments when attachments are present
-@@ -363,6 +372,7 @@
+@@ -363,6 +307,7 @@
  ```
  
  **Step 2 (one-shot): Download attachments with the show command**
@@ -193,7 +258,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  # --download-attachments fetches + downloads in one shot
  basecamp todos show <id> --download-attachments --json
-@@ -371,6 +381,7 @@
+@@ -371,6 +316,7 @@
  ```
  
  **Step 2 (two-step alternative): Download separately**
@@ -201,7 +266,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  # Download all at once (shows progress on stderr)
  basecamp attachments download <id> --out /tmp/attachments
-@@ -468,6 +479,7 @@
+@@ -468,6 +414,7 @@
  **Limitation:** Basecamp does not track when cards are moved between columns. The `updated_at` field updates on any modification and cannot reliably indicate when a card was completed.
  
  **Card Steps (checklists):**
@@ -209,7 +274,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  basecamp cards steps <card_id> --in <project>     # List steps
  basecamp cards step create "Step" --card <id> --in <project>
-@@ -476,6 +488,7 @@
+@@ -476,6 +423,7 @@
  ```
  
  **Column management:**
@@ -217,7 +282,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  basecamp cards column show <id> --in <project>
  basecamp cards column create "Name" --in <project>
-@@ -602,6 +615,7 @@
+@@ -602,6 +550,7 @@
  **Status filtering:** By default, only `active` recordings are returned. Use `--status archived` or `--status trashed` to query other statuses. You may need separate queries to get complete data (e.g., active + archived).
  
  **Status management:**
@@ -225,7 +290,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  basecamp recordings trash <id> --in <project>     # Move to trash
  basecamp recordings archive <id> --in <project>   # Archive
-@@ -773,6 +787,7 @@
+@@ -773,6 +722,7 @@
  ```
  
  **Per-repo config:** `.basecamp/config.json`
@@ -233,7 +298,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```json
  {
    "project_id": "12345",
-@@ -781,6 +796,7 @@
+@@ -781,6 +731,7 @@
  ```
  
  **Initialize:**
@@ -241,7 +306,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  basecamp config init
  basecamp config set project_id <id>
-@@ -800,6 +816,7 @@
+@@ -800,6 +751,7 @@
  ```
  
  **Check context:**
@@ -249,7 +314,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  cat .basecamp/config.json 2>/dev/null || echo "No project configured"
  ```
-@@ -809,6 +826,7 @@
+@@ -809,6 +761,7 @@
  ## Error Handling
  
  **General diagnostics:**
@@ -257,7 +322,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  basecamp doctor --json                            # Check CLI health, auth, connectivity
  ```
-@@ -816,6 +834,7 @@
+@@ -816,6 +769,7 @@
  **Rate limiting (429):** The CLI handles backoff automatically. If you see 429 errors, reduce request frequency.
  
  **Authentication errors:**
@@ -265,7 +330,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  basecamp auth status                              # Check auth
  basecamp auth login                               # Re-authenticate
-@@ -824,6 +843,7 @@
+@@ -824,6 +778,7 @@
  ```
  
  **Network errors / localhost URLs:**
@@ -273,7 +338,7 @@ diff --git a/SKILL.md b/SKILL.md
  ```bash
  # Check for dev config
  cat ~/.config/basecamp/config.json
-@@ -832,12 +852,14 @@
+@@ -832,12 +787,14 @@
  ```
  
  **Not found errors:**
@@ -288,7 +353,7 @@ diff --git a/SKILL.md b/SKILL.md
  - `basecamp todo "Buy milk"` (not `--content`)
  - `basecamp card "New feature"` (not `--title`)
  - `basecamp message "Subject" "Body"` (not `--subject`)
-@@ -887,17 +909,17 @@
+@@ -887,17 +844,17 @@
  
  ## Exit Codes
  

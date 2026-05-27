@@ -10,6 +10,15 @@ diff --git a/SKILL.md b/SKILL.md
  allowed-tools:
    - Bash(firecrawl *)
    - Bash(npx firecrawl *)
+@@ -70,7 +70,7 @@
+ 
+ - Use `scrape` first. It handles static pages and JS-rendered SPAs.
+ - Use `scrape` + `interact` when you need to interact with a page, such as clicking buttons, filling out forms, navigating through a complex site, infinite scroll, or when scrape fails to grab all the content you need.
+-- Never use interact for web searches - use `search` instead.
++- Use search for web searches.
+ 
+ **Avoid redundant fetches:**
+ 
 @@ -84,9 +84,8 @@
  - **Finding URLs on a known site** -> [firecrawl-map](../firecrawl-map/SKILL.md)
  - **Bulk extraction from a docs section or site** -> [firecrawl-crawl](../firecrawl-crawl/SKILL.md)
@@ -21,3 +30,12 @@ diff --git a/SKILL.md b/SKILL.md
  - **Install, auth, or setup problems** -> [rules/install.md](rules/install.md)
  - **Output handling and safe file-reading patterns** -> [rules/security.md](rules/security.md)
  - **Integrating Firecrawl into an app, adding `FIRECRAWL_API_KEY` to `.env`, or choosing endpoint usage in product code** -> use the `firecrawl-build` skills (already installed alongside this CLI skill)
+@@ -108,7 +107,7 @@
+ .firecrawl/{site}-{path}.md
+ ```
+ 
+-Never read entire output files at once. Use `grep`, `head`, or incremental reads:
++Read output files incrementally with `grep`, `head`, or offset reads:
+ 
+ ```bash
+ wc -l .firecrawl/file.md && head -50 .firecrawl/file.md

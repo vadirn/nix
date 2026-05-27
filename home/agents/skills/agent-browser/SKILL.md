@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: Real-browser automation CLI for local dev — page-content access, screenshots, Electron app automation. For web fetching/scraping prefer firecrawl.
+description: Real-browser automation CLI for local dev: page-content access, screenshots, Electron app automation. For web fetching/scraping prefer firecrawl.
 allowed-tools: Bash(agent-browser:*), Bash(npx agent-browser:*)
 hidden: true
 ---

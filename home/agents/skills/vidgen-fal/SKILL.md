@@ -1,7 +1,7 @@
 ---
 name: vidgen-fal
 description: >
-  The fal.ai worker for video generation — produces a Kling-rendered MP4 as the
+  The fal.ai worker for video generation; produces a Kling-rendered MP4 as the
   master output (always kept). Pass --webm to also encode a VP9 WebM loop
   alongside it (default 640px wide, ~1–3 MB for a 5s clip).
   Targets Kling v1.6 by default (standard tier); pass --pro for the pro tier. No

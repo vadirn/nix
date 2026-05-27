@@ -1,0 +1,29 @@
+# Glossary
+
+Rows whose **Term** is bolded are pinned: text, position, and presence are fixed. Append project-specific terms beneath the baseline as un-pinned rows; refine an existing un-pinned term by appending a new row with the sharpened wording.
+
+| Term                       | Definition                                                                                                                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skill**                  | A directory under `home/agents/skills/<name>/` with `SKILL.md`, registered via symlinks into `~/.claude/skills/`; the harness reads its frontmatter `description:` to auto-route invocations. |
+| **Hub**                    | A router-style skill (e.g. `/imagen`, `/firecrawl`) that dispatches to one of several worker skills based on user intent.                                                                     |
+| **Worker**                 | A skill that performs the actual operation and is dispatched to from a hub; can also be invoked directly.                                                                                     |
+| **Router**                 | Synonym for hub.                                                                                                                                                                              |
+| **Subagent**               | A fresh Agent invocation spawned by the orchestrator with a self-contained brief; carries no prior session context.                                                                           |
+| **Orchestrator**           | The /work-mode parent session that plans, delegates, and ingests subagent responses.                                                                                                          |
+| **Brief**                  | The three-section message (Task / Context / Return) handed to a subagent.                                                                                                                     |
+| **Progressive disclosure** | Convention where a skill's SKILL.md is concise; deep content lives in `references/*.md` files loaded only when the skill is invoked.                                                          |
+| **Trigger eval**           | A benchmark that exercises a skill's `description:` against synthetic user prompts to measure auto-routing accuracy.                                                                          |
+| **Eval set**               | A JSONL file of test cases with expected behavior, used to validate prompts or skills.                                                                                                        |
+| **Baseline run**           | Initial eval run before tuning, against which subsequent runs are compared.                                                                                                                   |
+| **Hook**                   | A Claude Code lifecycle event handler registered in `settings.json` (PreToolUse, PostToolUse, SessionStart, Stop).                                                                            |
+| **Description budget**     | The finite total length of all registered skills' `description:` fields, which ship into every conversation's system prompt; pushes some skills to keep frontmatter minimal.                  |
+| **BiRefNet**               | Image segmentation model used by `imagen-fal` to produce alpha mattes from Kling output.                                                                                                      |
+| **Kling**                  | Image / video generation models from Kuaishou, hosted on fal.ai (`kling-v1.6`, `kling-o1`, `kling-v3`).                                                                                       |
+| **Nano Banana**            | Google's Gemini Image model, accessed directly (not via fal) by `imagen-nanobanana`.                                                                                                          |
+| **fal.ai**                 | Third-party model hosting platform; backs imagen-fal, vidgen-fal.                                                                                                                             |
+| **FAL_KEY**                | Environment variable holding the fal.ai API key, sourced via doppler.                                                                                                                         |
+| **doppler**                | Secrets manager that injects env vars into shell sessions (used for FAL_KEY and other credentials).                                                                                           |
+| **ast-grep**               | AST-aware structural search-and-rewrite CLI (`sg`); backs the `/codemod` skill.                                                                                                               |
+| **jscodeshift**            | JS/TS-specific codemod runner (Facebook); fallback when ast-grep doesn't cover a transform.                                                                                                   |
+| **chroma-key**             | Green-screen masking technique used by `imagen-nanobanana` to produce alpha PNGs from JPEG output.                                                                                            |
+| **SGID**                   | Basecamp's signed global ID format used by `basecamp` for referencing recordings, attachments, comments.                                                                                      |

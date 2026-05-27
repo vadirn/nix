@@ -304,6 +304,26 @@ fn test_list_extra_fields_strip_wikilinks() {
     assert!(!imp_line.contains("(reference:"), "empty field should be omitted: {}", imp_line);
 }
 
+#[test]
+fn test_experiments_lists_by_type() {
+    let output = Command::new(cargo_bin())
+        .args(["experiments", "--vault-root", fixture_dir().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("2026-05-27-foo-bar-baz"))
+        .expect(&format!("expected experiment fixture in output: {}", stdout));
+    assert!(
+        line.contains("Sample experiment for integration tests"),
+        "missing description: {}",
+        line
+    );
+    assert!(line.contains("[testing, fixture]"), "missing tags: {}", line);
+}
+
 // --- search command tests ---
 
 #[test]

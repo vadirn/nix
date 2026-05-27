@@ -59,6 +59,21 @@ Avoid:
 - Suggest 2-3 concrete options: search it, try a different approach, state assumptions.
 - Grade confidence 1-10 for recommendations with brief reasoning.
 
+## CLI tools
+
+Use these CLI tools through the Bash tool. Prefer them over manual code reading or web search.
+
+- **rg** (ripgrep): all text search. Faster than grep and find. Honors `.gitignore`.
+- **ast-grep** (sg): structural search and rewrite by AST pattern. Use for any rename, signature change, or call-site rewrite that crosses files. Pattern syntax: `sg -l ts -p 'console.log($A)' -r 'logger.debug($A)'`.
+- **fd**: file finding by name. Use instead of `find`.
+- **gh**: all GitHub operations. Create issues, open PRs, read comments. Saves API rate limits.
+- **jq**: any JSON parsing in pipelines.
+- **knip**: dead code report. Run `knip --reporter compact` in a JS/TS project.
+- **madge --circular**: circular dependency report.
+- **jscodeshift**: run codemods. Always pass `--dry` first and review the diff before applying.
+
+For any refactor that touches more than 20 files, write a codemod first. ast-grep handles most cases. jscodeshift handles JS/TS-specific AST work. Test the codemod against three sample files before running it over the whole tree.
+
 ## Commits
 
 Use the `/commit` skill to create commits. Use conventional commit prefixes (feat, fix, chore). Short message, no body.

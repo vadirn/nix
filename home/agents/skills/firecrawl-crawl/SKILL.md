@@ -48,7 +48,7 @@ firecrawl crawl <job-id>
 ## Tips
 
 - Always use `--wait` when you need the results immediately. Without it, crawl returns a job ID for async polling.
-- Use `--include-paths` to scope the crawl — don't crawl an entire site when you only need one section.
+- Use `--include-paths` to scope the crawl to the section you need.
 - Crawl consumes credits per page. Check `firecrawl credit-usage` before large crawls.
 
 ## See also

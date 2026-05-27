@@ -7,7 +7,7 @@ description: Create a self-contained interactive HTML playground for a topic. Us
 
 A playground is a self-contained HTML file with interactive controls on one side, a live preview on the other, and a prompt output at the bottom with a copy button. The user adjusts controls, explores visually, then copies the generated prompt back into Claude.
 
-## When to use this skill
+## When to use
 
 When the user asks for an interactive playground, explorer, or visual tool for a topic — especially when the input space is large, visual, or structural and hard to express as plain text.
 

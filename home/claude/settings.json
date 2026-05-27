@@ -93,7 +93,18 @@
         ]
       }
     ],
-    "PostToolUse": [],
+    "PostToolUse": [
+      {
+        "matcher": "^Write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/post-tool-format.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUseFailure": [],
     "PreToolUse": [
       {
@@ -176,6 +187,11 @@
             "command": "bash ~/.claude/hooks/sound.sh Stop",
             "timeout": 5,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/stop-verify.sh",
+            "timeout": 120
           }
         ]
       }

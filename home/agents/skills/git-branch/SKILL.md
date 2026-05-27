@@ -4,8 +4,7 @@ description: >
   Create a git branch with a conventional <prefix>/<slug> name, cut from an
   up-to-date default branch. Triggers: /git-branch, "new branch", "create a branch",
   "start a feature branch", "новая ветка", "создай ветку", "заведи ветку".
-  Skip for switching to an existing branch (plain `git checkout`) and for /branch,
-  which forks the conversation rather than the repository.
+  Skip for switching to an existing branch (plain `git checkout`).
 ---
 
 # Git Branch

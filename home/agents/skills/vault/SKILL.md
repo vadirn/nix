@@ -5,8 +5,8 @@ description: >
   knowledge, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into
   cards, writing original notes, searching or quizzing saved content, listing active projects ("what am I working
   on"), explicit /vault commands, weekly-log operations (backlog/бэклог, planning, completing tasks, sleep). Excludes
-  raw markdown edits, Obsidian app features (kanban, canvas, plugins, .base), web search. Session-handoff phrases
-  route to /track.
+  raw markdown edits, Obsidian app features (kanban, canvas, plugins, .base), web search.
+  Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
 ---
 
 # Vault
@@ -85,7 +85,7 @@ elif "validate":
         do("tell user no config files found")
     do("report validation results")
 
-elif user mentions a note/card/reference/checkpoint/track by name:
+elif user mentions a note/card/reference/checkpoint/track/experiment by name:
     result = Bash(vault-query get <fragment>)
     if single match: do("summarize content")
     elif multiple matches: AskUserQuestion("which one?")
@@ -112,6 +112,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | Project                                   | Concrete deliverable linked to a goal. Has `result`, `status`, optional `deadline`. Single file, or a subfolder when work fans out. Distinct from a track: the project is the unit of intent, the track is the unit of working memory across sessions.                            | `41 projects/<project>/`                |
 | Project context                           | Stable per-project framing (purpose, conventions, links) read by `vault-query --project <name> context`. Distinct from a track: context is durable framing, a track is rolling state.                                                                                             | `41 projects/<project>/context.md`      |
 | Track                                     | Rolling per-project work artifact (sections: Direction, Decisions, Backlog, Log). One file per multi-session effort, appended across the sessions it spans. Owned by the `/track` skill. Distinct from a checkpoint: a track accumulates state in place; a checkpoint was a one-shot snapshot. | `41 projects/<project>/track-<slug>.md` |
+| Experiment                                | Captured behavior test of an existing thing against a falsifiable claim. Frontmatter `type: experiment`, `verdict` (confirmed/refuted/inconclusive), `date`, optional `project` wikilink. Owned by the `/experiment` skill. Distinct from a track: an experiment is one decided question, a track is a multi-session effort. | `35 experiments/`                       |
 | Checkpoint _(legacy — replaced by track)_ | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain readable via `vault-query get`.                                                                                                                        | `41 projects/<project>/`                |
 | Weekly log                                | ISO-week file with Focus, Tasks, Backlog, Activity sections. Tasks wikilink to projects; Activity is auto-appended by a git post-commit hook. Distinct from a track: a weekly log spans all projects for one week, a track spans one project across all weeks.                    | `41 projects/block-buster/YYYY-wWW.md`  |
 | Base                                      | Obsidian Base file — a saved cross-vault query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query.                                                                                                           | `90 bases/`                             |
@@ -124,11 +125,12 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `context`                          | Print project context.md                                                                                                | Yes             |
 | `tracks [--view <view>]`           | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC                             | Yes             |
 | `tracks-init`                      | Create Tracks.base in the current project                                                                               | Yes             |
-| `get <fragment>`                   | Find and read a note/card/reference/checkpoint/track                                                                    | No              |
+| `get <fragment>`                   | Find and read a note/card/reference/checkpoint/track/experiment                                                         | No              |
 | `search <query>`                   | BM25 full-text search (--regex for grep mode)                                                                           | No              |
 | `projects [--view <view>]`         | List active projects                                                                                                    | No              |
 | `cards`                            | List all cards with metadata                                                                                            | No              |
 | `notes`                            | List all notes with metadata                                                                                            | No              |
+| `experiments`                      | List all experiments with metadata                                                                                      | No              |
 | `log [DATE\|WEEK\|last\|next]`     | Open or create weekly log                                                                                               | No              |
 | `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card, dangling-reference, reference-not-wikilink, broken-wikilink, untagged-card, singleton-tag | Yes             |
 | `xp [YEAR]`                        | XP report: calendar, streak, level                                                                                      | No              |

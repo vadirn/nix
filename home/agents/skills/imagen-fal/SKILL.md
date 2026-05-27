@@ -1,7 +1,7 @@
 ---
 name: imagen-fal
 description: >
-  The fal.ai worker for the /imagen hub — use directly only to pin the provider.
+  The fal.ai worker for the /imagen hub; use directly only to pin the provider.
   Triggers: /imagen-fal, explicit mentions of "Kling", "BiRefNet", "fal.ai image",
   or "use fal". Skip for non-image tasks, text-in-image prompts (route to
   imagen-nanobanana), and ambiguous image requests (those route through the /imagen

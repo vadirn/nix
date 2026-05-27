@@ -4,7 +4,7 @@ description: >
   Router hub for image generation. Triggers: /imagen, "generate an image", "create a picture",
   "make an image", «нарисуй», «сгенерируй картинку». Dispatches to either imagen-nanobanana
   (Google Nano Banana / Gemini, direct API) or imagen-fal (Kling O1 + BiRefNet via fal.ai)
-  based on prompt characteristics — invoke the worker skills directly only when you need to
+  based on prompt characteristics; invoke the worker skills directly only when you need to
   pin a provider.
 ---
 
@@ -20,7 +20,7 @@ This skill is a router only — it has no script of its own. It reads the user's
 | Numerical / logical reasoning (chart, infographic, diagram, math) | `imagen-nanobanana` | Nano Banana has stronger reasoning needed to place data correctly. |
 | 4+ reference images, multi-reference remix | `imagen-fal` | Kling O1 accepts up to 10 reference images; Nano Banana does not support multi-ref. |
 | Cinematic / anime / stylised artistic composition | `imagen-fal` | Declared Kling strength per provider documentation. |
-| Transparent background requested (no text) | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG sibling. If text-in-image is also requested, routes to nanobanana instead; user runs a separate `--transparent --cutout colorkey` pass on the Gemini output to get transparency. |
+| Transparent background requested (no text) | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG sibling. If text-in-image is also requested, routes to nanobanana instead; the hub auto-injects `--transparent --cutout colorkey` so the nanobanana script runs the chroma-key step in-process and emits both `image:` and `alpha:` paths — no separate user pass required. |
 | Default / ambiguous | `imagen-nanobanana` | Cheaper for the common case — see cost rationale below. |
 
 ## Dispatch
@@ -40,8 +40,8 @@ cinematic_or_anime    = do("true if the prompt is primarily cinematic, anime, or
 // Route: text fidelity first, then transparency/refs, then style, then default
 if text_in_image OR reasoning_image:
   worker = "imagen-nanobanana"   // Kling cannot render text reliably; wins even when transparent_requested
-  // note: if transparent_requested is also true, instruct the user to run a separate
-  //   --transparent --cutout colorkey pass on the Gemini output to obtain transparency
+  // note: if transparent_requested is also true, the hub auto-injects
+  //   --transparent --cutout colorkey below; no user action needed
 else if transparent_requested OR ref_count >= 4:
   worker = "imagen-fal"
 else if cinematic_or_anime:

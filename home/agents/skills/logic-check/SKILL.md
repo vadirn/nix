@@ -4,7 +4,6 @@ description: >
   Проверка текста на логические ошибки по Виноградову/Кузьмину: законы логики, правила доказательства,
   определения и деления. Use to check reasoning, find fallacies, audit an argument. Triggers:
   /logic-check, "проверь логику", "check the reasoning". Output language matches input (RU/EN).
-model: claude-opus-4-7
 ---
 
 # Проверка логики / Logic check
@@ -147,6 +146,7 @@ Use these names when emitting the report. Pick the column that matches the outpu
 | Деление по разным основаниям           | Cross-division                              |
 | Скачок в делении                       | Skip in division                            |
 | Гипотеза vs доказанное                 | Hypothesis vs proven claim                  |
+| Доказательство                         | Proof                                       |
 | Неправомерное обращение                | Illicit conversion                          |
 
 ### Что не считать нарушением / What not to flag

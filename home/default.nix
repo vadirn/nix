@@ -26,6 +26,7 @@
           delta
           ngrok
           ruby
+          ast-grep
         ];
       };
       programs = {

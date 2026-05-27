@@ -3,7 +3,7 @@ name: pr
 description: >
   Create pull requests. Triggers: /pr, "create pr", "open pr", "draft pr",
   "сделай PR", "оформи PR", "пулл реквест". Skip for inspecting an existing
-  PR's state, comments, or CI — those are plain `gh` commands (see Reference).
+  PR's state, comments, or CI; those are plain `gh` commands (see Reference).
 ---
 
 # PR
