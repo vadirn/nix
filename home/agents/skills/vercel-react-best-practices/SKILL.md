@@ -1,10 +1,6 @@
 ---
 name: vercel-react-best-practices
 description: React/Next.js performance guidelines from Vercel. Use when reviewing or optimizing React/Next.js code.
-license: MIT
-metadata:
-  author: vercel
-  version: "1.0.0"
 ---
 
 # Vercel React Best Practices
