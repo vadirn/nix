@@ -26,12 +26,7 @@ if [ -f package.json ] && jq -e '.scripts.verify' package.json >/dev/null 2>&1; 
     echo "stop-verify: package.json defines scripts.verify but no lockfile found (bun.lock, bun.lockb, pnpm-lock.yaml, yarn.lock, package-lock.json). Commit a lockfile or remove the verify script." >&2
     exit 2
   fi
-  case "$pm" in
-    bun)  bun run verify || exit 2 ;;
-    pnpm) pnpm run verify || exit 2 ;;
-    yarn) yarn run verify || exit 2 ;;
-    npm)  npm run verify || exit 2 ;;
-  esac
+  "$pm" run verify || exit 2
   exit 0
 fi
 

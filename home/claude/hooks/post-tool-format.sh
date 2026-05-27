@@ -88,18 +88,16 @@ run_format_file() {
   local root=$1 file=$2
   local pm
   pm=$(detect_pm "$root")
+  # npm needs `--` to forward args to the script; bun/pnpm/yarn don't.
   case "$pm" in
-    bun) (cd "$root" && bun run format:file "$file" >&2) || true ;;
-    pnpm) (cd "$root" && pnpm run format:file "$file" >&2) || true ;;
-    yarn) (cd "$root" && yarn run format:file "$file" >&2) || true ;;
     npm) (cd "$root" && npm run format:file -- "$file" >&2) || true ;;
+    *) (cd "$root" && "$pm" run format:file "$file" >&2) || true ;;
   esac
 }
 
 case "$ext" in
   ts | tsx | js | jsx | mjs | cjs | json | jsonc | md | html | css)
     { IFS= read -r root && IFS= read -r tool; } < <(resolve_js_formatter "$FILE")
-    [ -n "$root" ] || exit 0
     case "$tool" in
       script) run_format_file "$root" "$FILE" ;;
       deno)
