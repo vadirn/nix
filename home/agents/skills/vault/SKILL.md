@@ -5,8 +5,8 @@ description: >
   knowledge, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into
   cards, writing original notes, searching or quizzing saved content, listing active projects ("what am I working
   on"), explicit /vault commands, weekly-log operations (backlog/бэклог, planning, completing tasks, sleep). Excludes
-  raw markdown edits, Obsidian app features (kanban, canvas, plugins, .base), web search. Session-handoff phrases
-  route to /track.
+  raw markdown edits, Obsidian app features (kanban, canvas, plugins, .base), web search.
+  Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
 ---
 
 # Vault

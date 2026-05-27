@@ -3,6 +3,7 @@ name: grade
 description: >
   Grade a decision/recommendation/claim on a 1-10 confidence scale. Use on /grade or "rate confidence in X".
   Open questions → /debate; plan stress-test → /probe.
+  Skip when the claim is empirically testable by running a command (use /experiment).
 ---
 
 # Grade
