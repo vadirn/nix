@@ -34,7 +34,8 @@ do("restate: claim, method, and expected verdict shape (e.g. exit code, output t
     file diff, timing); ask user to confirm or correct")
 
 // Step 3 — Execute
-do("run the method; record raw output verbatim")
+do("run the method in the smallest reproducible sandbox — see ## Reference → Sandbox choice;
+    record raw output verbatim")
 
 // Step 4 — Verdict classification
 verdict = do("classify the outcome as one of: confirmed / refuted / inconclusive;
@@ -154,6 +155,24 @@ Examples:
 
 - Fails: "does oxfmt work" — no method can decide this; restate as a specific predicate.
 - Passes: "oxfmt 0.52.0 reformats `.md` files in place producing valid GFM" — a specific version, a specific file type, a specific output criterion; a second run on a twin system with `.md` files lacking valid GFM could refute it.
+
+### Sandbox choice
+
+Use the smallest sandbox that still answers the question without contaminating the host (or being contaminated by it). Reproducibility from the record alone — months later, possibly on a different machine — is the criterion that promotes Docker; without that need, lighter runners are usually right.
+
+**Cascade, first match wins:**
+
+1. **Host itself under test?** (Claude Code, hooks, nix config, macOS APIs, the editor) → **host execution**. Record the host runtime version (commit SHA, nix-darwin generation, settings.json state) in the Method field — a re-run after an update silently tests a different thing otherwise.
+2. **Writes that persist outside `$TMPDIR` and are shared across sessions?** (`~/.config`, `~/.cache`, `~/.npm`, `~/Library/`, Keychain, `launchctl`, OS packages) → **Docker**. Containment is the point. If the claim is platform-specific, Docker on macOS gives a Linux verdict — note the scope in the Verdict field.
+3. **Will the record be re-run from cold storage later?** (months out, different machine, future Claude session) → **Docker** with a pinned image tag (`node:22.11.0`, never `:latest`). Reproducibility is the real reason.
+4. **Otherwise — single-process, user-level, contained to `$TMPDIR`, one-shot verdict** → lightest available runner:
+   - npm-native binary → `bunx --bun <pkg>@<version>` (the `bunfig.toml` 7-day minimum-release-age guard applies; pass `--minimum-release-age=0` and document it in the Method field if the pin is fresher).
+   - nixpkgs derivation → `nix run nixpkgs#<pkg>`.
+   - Neither registry has the tool → host execution, Method field notes the experiment is not portable to a clean machine.
+
+Experiments needing network access, GPU, privileged syscalls, multi-process orchestration, or persistent volumes across runs sit outside this cascade — Docker with capability-specific flags, documented in the Method field.
+
+Whichever runner is chosen, the Execution field captures the exact invocation verbatim so the experiment is reproducible from the record alone.
 
 ### Auto-link rule
 
