@@ -60,21 +60,21 @@ If the user cannot state a design question after `references/find-goal.md`, the 
 
 ```
 // Elicit the four declarations — refuse to proceed if any is missing
-question = parse from arguments or ask the user
+question = <args>.question or AskUserQuestion("What is the one-sentence design question?")
 if question describes a closed problem (bug, refactor, known feature): stop, redirect to ordinary work
 if question cannot be named:
     Read(references/find-goal.md)
     do("apply the find-goal workflow to extract a one-sentence design question")
     if still no question: stop, recommend writing a problem statement first
 
-intent = parse from arguments or ask
+intent = <args>.intent or AskUserQuestion("Throwaway or retained?")
 if user is undecided: intent = "throwaway"
 
-timebox = parse from arguments or ask
-capture = parse from arguments, or derive from intent (throwaway → memo, retained → adr)
+timebox = <args>.timebox or AskUserQuestion("Time-box duration (e.g. 30m, 2h, 1d)?")
+capture = <args>.capture or (intent == "throwaway" ? "memo" : "adr")
 if intent == "throwaway" and capture == "adr": stop, ask user to resolve the intent/capture conflict
 if intent == "retained"  and capture == "memo": stop, ask user to resolve the intent/capture conflict
-variants = parse from arguments, default 1
+variants = <args>.variants or 1
 
 // Pick the method from the matrix in Reference
 method = lookup(question, intent) in the method matrix
@@ -103,9 +103,16 @@ artifact = do("draft <capture> using the matching template")
 Read(references/capture-checks.md)
 do("apply each check in references/capture-checks.md to the artifact; record the filled-in templates inline")
 
-if capture == "memo":    Bash(mkdir -p docs/spikes), then Write(docs/spikes/<date>-<slug>.md)
-if capture == "adr":     Bash(mkdir -p docs/adr),    then Write(docs/adr/<NNNN>-<slug>.md)
-if capture == "evalset": Write(evals/<slug>/cases.jsonl) and Write(evals/<slug>/prompt.md)
+date = Bash(date +%Y-%m-%d)
+if capture == "memo":
+    Bash(mkdir -p docs/spikes)
+    Write(docs/spikes/<date>-<slug>.md)
+if capture == "adr":
+    Bash(mkdir -p docs/adr)
+    Write(docs/adr/<NNNN>-<slug>.md)
+if capture == "evalset":
+    Write(evals/<slug>/cases.jsonl)
+    Write(evals/<slug>/prompt.md)
 if capture == "rfc":     Write(docs/rfc/<NNNN>-<slug>.md)
 
 // Followup

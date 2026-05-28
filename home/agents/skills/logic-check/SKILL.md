@@ -17,7 +17,7 @@ description: >
 ## Процедура
 
 ```
-text = parse text from arguments or conversation context
+text = <args> or conversation context
 if text is a file path: text = Read(<path>)
 if no text provided: AskUserQuestion("какой текст или файл проверить? / which text or file to check?"), then stop
 

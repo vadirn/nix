@@ -1,15 +1,14 @@
 ---
-name: experiment-portable
+name: experiment
 description: >
   Test an existing thing's behavior against a falsifiable claim and capture the result as a
   standalone Markdown record in the current working directory. Self-contained — no vault, no
-  external templates, no project linking. Triggers: /experiment-portable, "portable experiment",
-  "run a quick experiment here", "test this claim and save a local report". Skip when building
-  a new artifact (use /prototype), interrogating plan logic (use /probe), or rating confidence
-  in a recommendation (use /grade).
+  external templates, no project linking. Triggers: /experiment, "run an experiment",
+  "test this claim", "verify whether", "does X actually", "check if X works", "is X true",
+  "falsifiable claim".
 ---
 
-# Experiment (portable)
+# Experiment
 
 ## Parameters
 
@@ -17,49 +16,39 @@ description: >
 - `out_dir` (optional): directory to write the record into. Default `./experiments`.
 
 ```
-// Step 1 — Claim gate
-claim = parse from <args> or AskUserQuestion("State the claim to test. One sentence, falsifiable.")
+// Claim gate
+claim = <args> or AskUserQuestion("State the claim to test. One sentence, falsifiable.")
+falsifiable = do("apply Falsifiability test — see Reference")
+if not falsifiable: do("explain why and stop; suggest a sharpened restatement if possible")
 
-// Falsifiability test: "the same method on twin systems wouldn't produce the same verdict"
-// A claim passes if a specific method applied to a second identical system could yield a
-// different result — i.e., the outcome is not predetermined by definition or wording alone.
-falsifiable = do("apply the falsifiability test: would the same method on twin systems
-    be capable of producing the opposite verdict? yes → proceed; no → stop")
-if not falsifiable:
-    do("stop with explanation: the claim is not falsifiable because [reason];
-        suggest a sharpened restatement if possible")
-
-// Step 2 — Method declaration
+// Method
 method = AskUserQuestion("Describe the method: the exact command, query, or procedure
     that will decide the verdict. One sentence.")
-do("restate: claim, method, and expected verdict shape (e.g. exit code, output text,
-    file diff, timing); ask user to confirm or correct")
+do("restate claim, method, and expected verdict shape (exit code, output text, diff, timing);
+    ask user to confirm or correct")
 
-// Step 3 — Execute
-do("run the method in the smallest reproducible sandbox — see ## Reference → Sandbox choice;
+// Execute
+do("run the method in the smallest reproducible sandbox — see Reference §Sandbox choice;
     record raw output verbatim")
 
-// Step 4 — Verdict classification
-verdict = do("classify the outcome as one of: confirmed / refuted / inconclusive;
-    write one paragraph: what was observed, what it means for the claim, any caveats")
+// Verdict
+verdict = do("classify the outcome as confirmed / refuted / inconclusive; write one paragraph:
+    what was observed, what it means for the claim, any caveats")
 
-// Step 5 — Capture
-out_dir = parse from <args> or "./experiments"
-Bash("mkdir -p <out_dir>")
+// Capture
+out_dir = <args> or "./experiments"
+Bash(mkdir -p <out_dir>)
 
-// Build slug from claim: kebab-case, 3–6 words capturing the predicate
-slug = do("derive slug from claim, kebab-case, 3–6 words, e.g.
-    'oxfmt 0.52.0 reformats .md in place' → 'oxfmt-reformats-md-in-place'")
-date = today in YYYY-MM-DD format
-filename = <date>-<slug>.md
-record_path = <out_dir>/<filename>
+slug = do("derive kebab-case slug from claim, 3–6 words capturing the predicate")
+date = Bash(date +%Y-%m-%d)
+record_path = <out_dir>/<date>-<slug>.md
 
 description_line = do("one-line summary of the claim, ≤ 80 chars")
 tags = do("suggest 1–3 kebab-case tags from: tool-behavior, config, performance,
     api, cli, format, nix, shell; omit the tags line if no clear fit")
 
-// Instantiate from the embedded template (see ## Reference → Record template)
-record = do("instantiate the embedded record template:
+// Build record
+record = do("instantiate the embedded record template — see Reference §Record template:
     - fill frontmatter: type, description, verdict, date, tags (omit tags line if empty)
     - fill each body section (## Claim, ## Method, ## Execution, ## Verdict, ## Open)
       with the corresponding content under its heading
@@ -68,7 +57,8 @@ record = do("instantiate the embedded record template:
       un-pinned rows below them (bold-Term reserved for pinned anchors)
     - drop the ## Open section entirely if there are no unresolved questions")
 
-Bash("write atomically: write record to <record_path>.tmp, then mv <record_path>.tmp <record_path>")
+Bash(write <record> to <record_path>.tmp)
+Bash(mv <record_path>.tmp <record_path>)
 do("report the absolute path of the written file to the user")
 ```
 
@@ -140,10 +130,7 @@ Use the smallest sandbox that still answers the question without contaminating t
 1. **Host itself under test?** (the editor, hooks, OS config, system APIs) → **host execution**. Record the host runtime version in the Method field — a re-run after an update silently tests a different thing otherwise.
 2. **Writes that persist outside `$TMPDIR` and are shared across sessions?** (`~/.config`, `~/.cache`, `~/.npm`, `~/Library/`, Keychain, `launchctl`, OS packages) → **Docker**. Containment is the point. If the claim is platform-specific, Docker on macOS gives a Linux verdict — note the scope in the Verdict field.
 3. **Will the record be re-run from cold storage later?** (months out, different machine, future session) → **Docker** with a pinned image tag (`node:22.11.0`, never `:latest`). Reproducibility is the real reason.
-4. **Otherwise — single-process, user-level, contained to `$TMPDIR`, one-shot verdict** → lightest available runner:
-   - npm-native binary → `bunx --bun <pkg>@<version>`.
-   - nixpkgs derivation → `nix run nixpkgs#<pkg>`.
-   - Neither registry has the tool → host execution, Method field notes the experiment is not portable to a clean machine.
+4. **Otherwise — single-process, user-level, contained to `$TMPDIR`, one-shot verdict** → lightest available runner or host execution; the Method field notes the experiment is not portable to a clean machine.
 
 Experiments needing network access, GPU, privileged syscalls, multi-process orchestration, or persistent volumes across runs sit outside this cascade — Docker with capability-specific flags, documented in the Method field.
 

@@ -33,8 +33,7 @@ if existing: show URL, AskUserQuestion("update or stop?")
 
 // Template (deterministic resolution via pr-template)
 out = Bash(pr-template)
-// First line is the mode marker; remainder is content or paths.
-mode = first line of out, stripped of "MODE: " prefix    // single | multi | default
+mode = first line of out, stripped of "MODE: " prefix    // single | multi | default — see Reference §PR creation details
 rest = lines after the first
 
 if mode == "multi":

@@ -63,9 +63,7 @@ chroma_key_flag      = do("--transparent --cutout colorkey when chroma_key is tr
 
 // Invoke (replace <skill-dir> with this skill's base directory at invocation time)
 Bash(doppler run -p claude-code -c std --no-fallback -- bun <skill-dir>/scripts/imagen-nanobanana.ts "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag] [chroma_key_flag])
-// chroma_key_flag expands to: --transparent --cutout colorkey
-// The script handles the ffmpeg colorkey step in-process and emits both
-// "image: <raw_path>" and "alpha: <alpha_path>" lines on stdout.
+// chroma_key_flag = --transparent --cutout colorkey — see Reference §Transparency via chroma-key
 
 // Relay output
 do("print each 'image: ...' and 'alpha: ...' path so the user can see or copy them")

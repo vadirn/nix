@@ -59,7 +59,7 @@ elif "<project> ...":
     project_context ??= Bash(vault-query --project <project> context)
     do("answer using project context, search as needed")
 
-elif "log" or weekly log intent (planning, tasks, sleep):
+elif "log" or weekly log intent:
     Read(dir/references/log-weekly.md)
     Read(dir/references/post-edit.md)
     week_file = Bash(vault-query log)

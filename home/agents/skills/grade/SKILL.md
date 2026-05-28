@@ -16,7 +16,7 @@ Evaluate a decision, recommendation, or claim on a 1-10 confidence scale.
 - `mode=quick|detailed|auto` (optional): Force output mode. Default: auto (simple claims get quick, complex decisions get detailed).
 
 ```
-claim = parse claim from arguments or conversation context
+claim = <arguments or conversation context>
 if no claim provided: AskUserQuestion("What decision or recommendation should I grade?")
 
 // Determine mode

@@ -17,39 +17,38 @@ Generate radically different designs, then compare. Based on Ousterhout's "Desig
 - `count=3`: Number of designs to generate (minimum 3)
 
 ```
-topic = parse from arguments or conversation context
+topic = <topic> from arguments or conversation context
 if no topic: AskUserQuestion("What should I design?")
 
-domain = parse domain= parameter, or auto-detect from topic
-count = parse count= parameter, default 3
+domain = <domain> parameter, or do("auto-detect from topic")
+count = <count> parameter, default 3
 
-// Phase 1: Determine constraints
+// Determine constraints
 if domain == "general" or auto-detect fails:
     do("probe user: what problem does this solve? who are the callers?")
     do("probe user: what are the key operations? any constraints?")
     do("probe user: what should be hidden inside vs exposed?")
-    do("derive constraint set from answers")
-    constraints = derived constraints
+    constraints = do("derive constraint set from answers")
 else:
-    constraints = load predefined set for domain
+    constraints = do("load predefined set for domain — see Reference §Predefined constraint sets")
 
-// Phase 2: Generate designs (parallel sub-agents)
+// Generate designs (parallel sub-agents)
 (parallel) for each constraint in constraints[:count]:
     spawn_subagent("design <topic> under constraint: <constraint>")
     do("output: signature, usage example, what it hides, tradeoffs")
 
-// Phase 3: Present designs
+// Present designs
 for each design:
     do("show interface signature or schema")
     do("show usage example from caller's perspective")
     do("explain what complexity this design hides internally")
     do("name the tradeoffs explicitly")
 
-// Phase 4: Compare
+// Compare
 do("compare designs on: simplicity, generality, depth, ease of correct use")
 do("highlight where designs diverge most")
 
-// Phase 5: Synthesize
+// Synthesize
 do("recommend which design fits best, or how to combine insights")
 do("suggest /probe to stress-test the chosen design")
 ```
