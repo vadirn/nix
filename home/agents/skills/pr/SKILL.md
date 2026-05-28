@@ -31,23 +31,20 @@ else if ahead: Bash(git push)
 existing = Bash(gh pr view --json url,state -q '.url' 2>/dev/null)
 if existing: show URL, AskUserQuestion("update or stop?")
 
-// Template (GitHub's resolution order)
-multi = Glob(".github/PULL_REQUEST_TEMPLATE/*.md")
-if multi has multiple files:
-  chosen = AskUserQuestion("pick a template")
-  template_content = Read(chosen)
+// Template (deterministic resolution via pr-template)
+out = Bash(pr-template)
+// First line is the mode marker; remainder is content or paths.
+mode = first line of out, stripped of "MODE: " prefix    // single | multi | default
+rest = lines after the first
+
+if mode == "multi":
+  chosen = AskUserQuestion("pick a template", options = rest)
+  template_content = Read(<git-root>/chosen)
 else:
-  for path in [".github/pull_request_template.md", "docs/pull_request_template.md", "pull_request_template.md"]:
-    if Read(path) succeeds: template_content = result; break
-  if no template_content:
-    for path in [".github/PULL_REQUEST_TEMPLATE.md", "docs/PULL_REQUEST_TEMPLATE.md", "PULL_REQUEST_TEMPLATE.md"]:
-      if Read(path) succeeds: template_content = result; break
+  template_content = rest    // single or default — both deliver content directly
 
 title = do("generate conventional commit-style title: '<prefix>: <message>' (see /commit skill for prefix and message rules)")
-if template_content:
-  body = do("fill template_content placeholders from diff and log; preserve every heading, emoji, and section verbatim")
-else:
-  body = do("write ## Summary bullets and ## Test plan checklist from diff and log")
+body = do("fill template_content placeholders from diff and log; preserve every heading, emoji, and section verbatim")
 
 AskUserQuestion("confirm title, body, base branch, draft status")
 Write(/tmp/claude/pr.md, body)
@@ -63,7 +60,7 @@ show PR URL
 
 - **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready".
 - **Title:** matches the /commit skill's conventions — `<prefix>: <message>`, lowercase after prefix, <70 chars, focus on WHY. The PR title becomes the commit message on squash-and-merge, so the same prefix selection (feat/fix/chore) and message style apply.
-- **Body:** When a PR template exists, the body MUST be that template with placeholders filled in. Keep every heading, emoji, and section verbatim — preserve original names, order, and section count. Resolution order matches GitHub's: `.github/PULL_REQUEST_TEMPLATE/*.md` (multi — ask which), then single-template at `.github/pull_request_template.md` → `docs/pull_request_template.md` → `pull_request_template.md` (and uppercase variants). Fall back to `## Summary` (bullets) + `## Test plan` (checklist) only when the repo has no template file.
+- **Body:** Always start from a template — never freeform. The `pr-template` script (at `home/agents/scripts/pr-template.sh`) resolves which template to use and prints one of three modes on its first line: `MODE: single` (full template content follows), `MODE: multi` (one repo-relative `.md` path per line — ask the user which), or `MODE: default` (the colocated `pr-template.md` default follows; used when the repo ships no template). In every mode the resulting body MUST keep the template's headings, emoji, and section count verbatim; only the placeholder content gets filled in from the diff and log.
 - **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `/tmp/claude/pr.md`, pass `--body-file`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read):
   ```
   Write(/tmp/claude/pr.md, body)
