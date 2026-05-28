@@ -16,31 +16,31 @@ Rewrite instructions as direct positive statements. Remove hedging.
 - `text` (required): The text to rewrite. Inline text, file path, or conversation context.
 
 ```
-text = parse text from arguments or conversation context
+text = <args> or conversation context
 if no text provided: AskUserQuestion("What text should I rewrite?")
 
-// Pass 1: Flip negatives
+// Flip negatives
 do("find sentences with 'do not', 'don't', 'never', 'avoid', 'no', 'not'")
 do("rewrite each to state the desired behavior directly")
 
-// Pass 2: Collapse double negatives
+// Collapse double negatives
 do("find double negatives: 'not uncommon', 'not unlikely', 'not insignificant', 'not without'")
 do("replace with the direct positive: 'common', 'likely', 'significant', 'with'")
 
-// Pass 3: Remove hedging
+// Remove hedging
 do("find hedging words: 'might', 'perhaps', 'consider', 'try to', 'should probably', 'it seems', 'be careful to', 'make sure to', 'ensure that'")
 do("replace each with direct instructions")
 
-// Pass 4: Strip permission framing
+// Strip permission framing
 do("find permission patterns: 'you can', 'you may', 'feel free to', 'you are allowed to'")
 do("replace with imperative: 'use X' instead of 'you can use X'")
 
-// Pass 5: Remove vacuous conditionals
+// Remove vacuous conditionals
 do("find 'if applicable', 'when appropriate', 'as needed', 'where possible'")
 do("if the condition is always true in context, remove it")
 do("if the condition is genuinely conditional, leave it")
 
-// Pass 6: Verify
+// Verify
 do("check that meaning is preserved — positive framing changes phrasing, not intent")
 do("check that scale descriptions and genuine uncertainty markers are left intact")
 

@@ -39,9 +39,7 @@ cinematic_or_anime    = do("true if the prompt is primarily cinematic, anime, or
 
 // Route: text fidelity first, then transparency/refs, then style, then default
 if text_in_image OR reasoning_image:
-  worker = "imagen-nanobanana"   // Kling cannot render text reliably; wins even when transparent_requested
-  // note: if transparent_requested is also true, the hub auto-injects
-  //   --transparent --cutout colorkey below; no user action needed
+  worker = "imagen-nanobanana"   // text fidelity wins; --transparent auto-injected below if needed
 else if transparent_requested OR ref_count >= 4:
   worker = "imagen-fal"
 else if cinematic_or_anime:

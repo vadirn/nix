@@ -16,10 +16,10 @@ start_var = Bash(date +%s.%N)
 do("the work to measure")
 
 // After the work
-elapsed = Bash(echo "$(date +%s.%N) - {start_var}" | bc)
+elapsed = Bash(echo "$(date +%s.%N) - <start_var>" | bc)
 
 // Save timing
-Write("{output_path}.meta.json", {"elapsed_seconds": elapsed})
+Write(<output_path>.meta.json, {"elapsed_seconds": elapsed})
 ```
 
 ## Reference

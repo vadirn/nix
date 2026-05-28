@@ -19,7 +19,7 @@ Bootstrap and maintain a glossary as a 2-column Markdown table (`| Term | Defini
 ```
 if --inline:
     target = stdout
-    existing_table = parse from the file the caller names (or empty)
+    existing_table = <the file the caller names> (or empty)
 elif ./GLOSSARY.md exists:
     target = ./GLOSSARY.md
     existing_table = parse the existing 2-col table from ./GLOSSARY.md

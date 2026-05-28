@@ -15,49 +15,34 @@ description: >
 - `claim` (required): one falsifiable sentence naming the behavior under test.
 
 ```
-// Step 1 — Claim gate
-claim = parse from <args> or AskUserQuestion("State the claim to test. One sentence, falsifiable.")
+// Claim gate
+claim = <args> or AskUserQuestion("State the claim to test. One sentence, falsifiable.")
+falsifiable = do("apply Falsifiability test — see Reference")
+if not falsifiable: do("explain why and stop; suggest a sharpened restatement if possible")
 
-// Falsifiability test: "the same method on twin systems wouldn't produce the same verdict"
-// A claim passes if a specific method applied to a second identical system could yield a
-// different result — i.e., the outcome is not predetermined by definition or wording alone.
-falsifiable = do("apply the falsifiability test: would the same method on twin systems
-    be capable of producing the opposite verdict? yes → proceed; no → stop")
-if not falsifiable:
-    do("stop with explanation: the claim is not falsifiable because [reason];
-        suggest a sharpened restatement if possible")
-
-// Step 2 — Method declaration
+// Method
 method = AskUserQuestion("Describe the method: the exact command, query, or procedure
     that will decide the verdict. One sentence.")
-do("restate: claim, method, and expected verdict shape (e.g. exit code, output text,
-    file diff, timing); ask user to confirm or correct")
+do("restate claim, method, and expected verdict shape (exit code, output text, diff, timing);
+    ask user to confirm or correct")
 
-// Step 3 — Execute
-do("run the method in the smallest reproducible sandbox — see ## Reference → Sandbox choice;
+// Execute
+do("run the method in the smallest reproducible sandbox — see Reference §Sandbox choice;
     record raw output verbatim")
 
-// Step 4 — Verdict classification
-verdict = do("classify the outcome as one of: confirmed / refuted / inconclusive;
-    write one paragraph: what was observed, what it means for the claim, any caveats")
+// Verdict
+verdict = do("classify the outcome as confirmed / refuted / inconclusive; write one paragraph:
+    what was observed, what it means for the claim, any caveats")
 
-// Step 5 — Capture
-
-// Resolve vault root
+// Capture
 cfg = Bash(vault-query config)
-// cfg → { vault_root, project_path? }
-// If vault-query errors (no vault configured), surface the error and skip the capture step
-
+if cfg errors: do("surface 'no vault configured' and skip Capture")
 vault_root = cfg.vault_root
 Bash(mkdir -p "<vault_root>/35 experiments")
 
-// Build slug from claim: kebab-case, 3–6 words capturing the predicate
-slug = do("derive slug from claim, kebab-case, 3–6 words, e.g.
-    'oxfmt 0.52.0 reformats .md in place' → 'oxfmt-reformats-md-in-place'")
-date = today in YYYY-MM-DD format
-filename = <date>-<slug>.md
+slug = do("derive kebab-case slug from claim, 3–6 words capturing the predicate")
+date = Bash(date +%Y-%m-%d)
 
-// Build optional frontmatter fields
 description_line = do("one-line summary of the claim, ≤ 80 chars")
 if cfg contains project_path:
     project_wikilink = do("read <cfg.project_path>/context.md and copy the '[[...]]'
@@ -66,9 +51,9 @@ else:
     project_wikilink = null
 
 tags = do("suggest 1–3 kebab-case tags from: tool-behavior, config, performance,
-    api, cli, format, nix, shell; add none if no clear fit")
+    api, cli, format, nix, shell; omit the tags line if no clear fit")
 
-// Instantiate from the vault template (authoritative source of body shape)
+// Build record — see Reference §Record template
 template = Read(<vault_root>/templates/Experiment.md)
 record = do("instantiate template:
     - drop the `template: true` line
@@ -80,19 +65,15 @@ record = do("instantiate template:
       verbatim; append domain-specific terms that surfaced during the experiment as
       un-pinned rows below them (bold-Term reserved for pinned anchors)
     - drop the ## Open section entirely if there are no unresolved questions")
-record_path = <vault_root>/35 experiments/<filename>
-Bash("write atomically: write record to <record_path>.tmp, then mv <record_path>.tmp <record_path>")
-// Record shape: see ## Reference → Record template (mirrors templates/Experiment.md)
+record_path = <vault_root>/35 experiments/<date>-<slug>.md
+Bash(write <record> to <record_path>.tmp)
+Bash(mv <record_path>.tmp <record_path>)
 
-// Auto-link to active track (v1 scope)
+// Auto-link to active track
 if project_wikilink is not null:
     tracks = Bash(vault-query tracks --view Active --format json)
-    // Returns [] when the project has no active tracks; errors with "no project
-    // resolved" when no .vault.config.json is found above cwd. The
-    // project_wikilink guard above already rules out the error case.
 
-    // Pick a track or skip
-    if tracks is empty (parsed JSON is []):
+    if tracks is empty:
         track_path = null
     elif tracks has exactly one row:
         track_path = <cfg.project_path>/<tracks[0].Track>.md
@@ -102,15 +83,13 @@ if project_wikilink is not null:
             (or skip to link none)", options, singleSelect=true, allowSkip=true)
         track_path = skipped ? null : <cfg.project_path>/<selected.Track>.md
 
-    // Append the link
     if track_path is not null:
-        do("Read(track_path)")
-        do("locate or create '## Experiments' section: it belongs after '## Decisions'
-            and before '## Backlog'; if the section is absent, insert a blank '## Experiments'
-            heading in that position")
+        track_content = Read(<track_path>)
+        do("locate or create '## Experiments' section — see Reference §Auto-link rule for position")
         link_line = "- [[35 experiments/<date>-<slug>|<claim summary>]] — <verdict>"
-        do("append link_line under ## Experiments, producing <updated_content>")
-        Bash("printf '%s' \"$updated_content\" > \"$track_path.tmp\" && mv \"$track_path.tmp\" \"$track_path\"")
+        updated_content = do("append link_line under ## Experiments in <track_content>")
+        Bash(write <updated_content> to <track_path>.tmp)
+        Bash(mv <track_path>.tmp <track_path>)
 ```
 
 ## Reference

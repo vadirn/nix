@@ -17,7 +17,7 @@ Systematic interrogation of a plan or design. Walk every decision branch, pose h
 - `depth=shallow|deep`: How many branches to explore (default: deep)
 
 ```
-plan = parse plan from arguments or conversation context
+plan = <args> or conversation context
 if no plan provided: AskUserQuestion("What plan or design should I probe?")
 
 if plan references files or codebase:
