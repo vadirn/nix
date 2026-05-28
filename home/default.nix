@@ -71,6 +71,7 @@
       home.file.".local/bin/skills-add".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/skills-add.sh";
       home.file.".local/bin/build-claude-md".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/build-claude-md.sh";
       home.file.".local/bin/sync-agents".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/sync-agents.sh";
+      home.file.".local/bin/pr-template".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/pr-template.sh";
       home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
       home.file.".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/hooks";
       home.file.".claude/agents".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/agents";

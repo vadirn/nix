@@ -14,6 +14,7 @@ LINKS=(
   ".local/bin/skills-add|home/agents/scripts/skills-add.sh"
   ".local/bin/build-claude-md|home/claude/build-claude-md.sh"
   ".local/bin/sync-agents|home/agents/scripts/sync-agents.sh"
+  ".local/bin/pr-template|home/agents/scripts/pr-template.sh"
   ".claude/settings.json|home/claude/settings.json"
   ".claude/hooks|home/claude/hooks"
   ".claude/agents|home/agents/agents"
