@@ -6,7 +6,7 @@ set -euo pipefail
 [[ "${CLAUDECODE:-}" == "1" ]] || exit 0
 
 # Kill-switch: per-invocation bypass.
-[[ "${SKIP_COMMIT_NONCE:-}" == "1" ]] && exit 0
+[[ "${SKIP_COMMIT_GATE:-}" == "1" ]] && exit 0
 
 # Rebase exemption: nonce pre-emission is fragile during interactive/non-interactive rebases.
 git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
@@ -25,7 +25,7 @@ commit-msg: commit blocked — no /tmp/claude/commit.txt found.
   the message file the hook verifies against. If you intentionally want
   to bypass this once, run:
 
-    SKIP_COMMIT_NONCE=1 git commit ...
+    SKIP_COMMIT_GATE=1 git commit ...
 MSG
   exit 1
 fi
