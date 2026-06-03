@@ -33,7 +33,6 @@ if needs_confirmation: AskUserQuestion("prefix: <prefix> | message: <message> | 
 
 // Commit
 Write(/tmp/claude/commit.txt, "<prefix>: <message>")
-Bash(mktemp /tmp/claude/commit-nonce.XXXXXX)
 Bash(git commit -F /tmp/claude/commit.txt)
 Bash(rm -f /tmp/claude/commit.txt)
 
@@ -110,7 +109,7 @@ WHY vs WHAT:
 
 ### Why the message goes through a file
 
-Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Passing `-F /tmp/claude/commit.txt` sidesteps the shell entirely. The file is deleted after the commit so the next run's `Write` sees a fresh path (the `Write` tool refuses to overwrite an existing file without a prior `Read`). The `mktemp` line creates the nonce that the global pre-commit hook requires — the hook expects a `/tmp/claude/commit-nonce.*` file less than 60 seconds old and deletes it on consume.
+Messages can contain `!` (e.g. `fix: handle invalid input!`) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Passing `-F /tmp/claude/commit.txt` sidesteps the shell entirely. The file is deleted after the commit so the next run's `Write` sees a fresh path (the `Write` tool refuses to overwrite an existing file without a prior `Read`). The file also serves as proof of skill use: the global `commit-msg` hook reads it and refuses the commit unless its content matches what git received as the commit message. There is no separate nonce file and no time window. The hook deletes `commit.txt` on success, so the same artifact validates exactly one commit.
 
 ## Rules
 

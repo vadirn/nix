@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Enforces commit-artifact gating for Claude Code (/commit skill). Manual terminal commits are always allowed (CLAUDECODE not set).
+set -euo pipefail
+
+# Gate: only enforce when running inside Claude Code.
+[[ "${CLAUDECODE:-}" == "1" ]] || exit 0
+
+# Kill-switch: per-invocation bypass.
+[[ "${SKIP_COMMIT_NONCE:-}" == "1" ]] && exit 0
+
+# Rebase exemption: nonce pre-emission is fragile during interactive/non-interactive rebases.
+git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
+if [[ -d "${git_dir}/rebase-merge" || -d "${git_dir}/rebase-apply" ]]; then
+  exit 0
+fi
+
+artifact="/tmp/claude/commit.txt"
+commit_msg_file="$1"   # commit-msg hook receives COMMIT_EDITMSG path as $1
+
+if [[ ! -f "$artifact" ]]; then
+  cat >&2 <<'MSG'
+commit-msg: commit blocked — no /tmp/claude/commit.txt found.
+
+  This repo requires commits to go through the /commit skill, which writes
+  the message file the hook verifies against. If you intentionally want
+  to bypass this once, run:
+
+    SKIP_COMMIT_NONCE=1 git commit ...
+MSG
+  exit 1
+fi
+
+# Strip trailing whitespace on both sides — git normalizes COMMIT_EDITMSG
+# (strips trailing newline), and the Write tool may or may not append one.
+# perl slurps the file and strips trailing whitespace (portable; avoids GNU sed -z).
+skill_msg=$(perl -e 'my $s = do { local $/; open(my $f, "<", $ARGV[0]) or die; <$f> }; $s =~ s/\s+$//; print $s' "$artifact")
+git_msg=$(perl -e 'my $s = do { local $/; open(my $f, "<", $ARGV[0]) or die; <$f> }; $s =~ s/\s+$//; print $s' "$commit_msg_file")
+
+if [[ "$skill_msg" != "$git_msg" ]]; then
+  echo "commit-msg: commit blocked — /tmp/claude/commit.txt does not match commit message." >&2
+  echo "  skill drafted: $(printf '%.200s' "$skill_msg")" >&2
+  echo "  git received:  $(printf '%.200s' "$git_msg")" >&2
+  echo "  Re-run /commit to align." >&2
+  exit 1
+fi
+
+# Consume artifact on success.
+rm -f "$artifact"
+
+# Drop sentinel for post-commit to tag weekly-log entry as [via-skill].
+mkdir -p "$(dirname "$artifact")"
+touch "/tmp/claude/commit-via-skill"
+
+exit 0
