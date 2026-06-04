@@ -8,7 +8,7 @@ set -euo pipefail
 # Kill-switch: per-invocation bypass.
 [[ "${SKIP_COMMIT_GATE:-}" == "1" ]] && exit 0
 
-# Rebase exemption: nonce pre-emission is fragile during interactive/non-interactive rebases.
+# Rebase exemption: replayed commit messages won't match a freshly-drafted /tmp/claude/commit.txt.
 git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
 if [[ -d "${git_dir}/rebase-merge" || -d "${git_dir}/rebase-apply" ]]; then
   exit 0
@@ -44,11 +44,12 @@ if [[ "$skill_msg" != "$git_msg" ]]; then
   exit 1
 fi
 
-# Consume artifact on success.
-rm -f "$artifact"
-
-# Drop sentinel for post-commit to tag weekly-log entry as [via-skill].
-mkdir -p "$(dirname "$artifact")"
-touch "/tmp/claude/commit-via-skill"
+# Consume artifact and drop the post-commit sentinel — best-effort, must not
+# fail the commit after the message has already validated.
+{
+  rm -f "$artifact"
+  mkdir -p "$(dirname "$artifact")"
+  touch "/tmp/claude/commit-via-skill"
+} 2>/dev/null || true
 
 exit 0
