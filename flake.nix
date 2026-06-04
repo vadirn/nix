@@ -125,7 +125,6 @@
                 "pearcleaner"
                 "orbstack"
                 "basecamp/tap/basecamp-cli"
-                "busycal"
               ];
               onActivation = {
                 cleanup = "zap";
