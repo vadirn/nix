@@ -7,11 +7,14 @@
 # entirely (hooks only fire inside Claude Code).
 set -euo pipefail
 
+# Gate: only enforce when running inside Claude Code (PreToolUse already implies this; this is parity with commit-msg).
+[[ "${CLAUDECODE:-}" == "1" ]] || exit 0
+
 INPUT=$(cat)
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command')
 
-# Pass through anything that is not a gh pr create invocation.
-if ! printf '%s' "$COMMAND" | grep -Eq '(^|[[:space:];|&])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
+# Match only commands that START with `gh pr create` (after optional leading whitespace) — single-command scope; substring mentions in `echo`, `grep`, etc. are passed through.
+if ! printf '%s' "$COMMAND" | grep -Eq '^[[:space:]]*gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
   exit 0
 fi
 
@@ -31,12 +34,12 @@ deny() {
 
 ARTIFACT="/tmp/claude/pr.md"
 
-# Extract the --body-file argument (supports both `--body-file PATH` and `--body-file=PATH`).
+# Extract the --body-file argument (supports both `--body-file PATH` and `--body-file=PATH`), returning the LAST match to mirror gh's last-wins flag semantics.
 BODY_FILE=$(printf '%s' "$COMMAND" | perl -ne '
-  if (/--body-file[= ]("([^"]*)"|'"'"'([^'"'"']*)'"'"'|(\S+))/) {
-    print $2 // $3 // $4;
-    exit;
+  while (/--body-file[= ]("([^"]*)"|'"'"'([^'"'"']*)'"'"'|(\S+))/g) {
+    $last = $2 // $3 // $4;
   }
+  END { print $last if defined $last; }
 ')
 
 if [[ -z "$BODY_FILE" ]]; then
