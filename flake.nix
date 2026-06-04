@@ -125,6 +125,7 @@
                 "pearcleaner"
                 "orbstack"
                 "basecamp/tap/basecamp-cli"
+                "busycal"
               ];
               onActivation = {
                 cleanup = "zap";
@@ -142,7 +143,7 @@
                 "/Applications/OrbStack.app"
                 "/Applications/Obsidian.app"
                 "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app"
-                "/System/Applications/Calendar.app"
+                "/Applications/BusyCal.app"
                 "/System/Applications/Mail.app"
               ];
               dock.tilesize = 72;

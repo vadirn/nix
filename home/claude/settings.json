@@ -15,7 +15,6 @@
   },
   "includeCoAuthoredBy": false,
   "permissions": {
-    "defaultMode": "auto",
     "allow": [
       "Skill(writing-ru)",
       "Skill(writing-en)",
@@ -77,7 +76,8 @@
       "Bash(echo *)",
       "Read"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "auto"
   },
   "enableAllProjectMcpServers": true,
   "hooks": {
@@ -136,7 +136,7 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/require-pr-nonce.sh"
+            "command": "bash ~/.claude/hooks/require-pr-body-file.sh"
           }
         ]
       },
