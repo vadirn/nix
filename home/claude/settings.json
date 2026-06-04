@@ -136,7 +136,7 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/require-pr-nonce.sh"
+            "command": "bash ~/.claude/hooks/require-pr-body-file.sh"
           }
         ]
       },

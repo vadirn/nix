@@ -47,7 +47,6 @@ body = do("fill template_content placeholders from diff and log; preserve every 
 
 AskUserQuestion("confirm title, body, base branch, draft status")
 Write(/tmp/claude/pr.md, body)
-Bash(mktemp /tmp/claude/pr-nonce.XXXXXX)
 Bash(gh pr create --title "<title>" --body-file /tmp/claude/pr.md --draft)
 Bash(rm -f /tmp/claude/pr.md)
 show PR URL
@@ -63,11 +62,10 @@ show PR URL
 - **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `/tmp/claude/pr.md`, pass `--body-file`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read):
   ```
   Write(/tmp/claude/pr.md, body)
-  Bash(mktemp /tmp/claude/pr-nonce.XXXXXX)
   Bash(gh pr create --title "<title>" --body-file /tmp/claude/pr.md --draft)
   Bash(rm -f /tmp/claude/pr.md)
   ```
-  The `mktemp` step creates the nonce file consumed by the `require-pr-nonce.sh` PreToolUse hook.
+  The body file also serves as proof of skill use: the `require-pr-body-file.sh` PreToolUse hook refuses `gh pr create` unless it points `--body-file` at `/tmp/claude/pr.md` and that file exists. Because gh reads the body straight from the file, the artifact IS the body — no separate nonce or time window. The skill deletes the file after the gh call, so the same artifact gates exactly one PR.
   Use `gh pr edit --body-file` for updates to an existing PR.
 - **Confirm before creating.** Show title and body. Skip the confirmation only when the user supplied an explicit title and body.
 
