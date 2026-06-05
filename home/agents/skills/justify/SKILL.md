@@ -43,7 +43,7 @@ if mode == text:
 
 // Independence — authorship decides the auditor, not who launches the skill
 authored_here = do("did this agent produce the target in this session: a diff I just wrote, this session's own actions, or a file I wrote that is now passed by path?")
-if authored_here: do("run the test in a fresh auditor subagent; pass it the element list, the test, the session's stated goals and requirements, and any asserted grounds — all marked as claims to test against the artifact, not as facts; this agent orchestrates and presents, it does not grade its own work")
+if authored_here: do("run the test in a fresh auditor subagent; pass it the element list, the test, the session's stated goals and requirements, and any asserted grounds — all marked as claims to test against the artifact, not as facts; this agent only orchestrates and presents, the subagent is the sole grader")
 else: do("run the test inline; the target is external, so this agent is already independent of it")
 
 // The test — per element
@@ -57,7 +57,7 @@ for each element:
         purpose or ground undeterminable -> ask
 
 // Reconcile cuts
-do("re-test every cut against the guardrails in Reference: What not to cut; demote any with a real ground back to keep")
+do("re-test every cut against the guardrails in Reference: What to keep; demote any with a real ground back to keep")
 do("then cascade: cut any kept element whose only logical ground was an element now marked cut; repeat until the set is stable")
 
 // Output
@@ -112,23 +112,23 @@ knowledge the diff does not show). Never-isolate returns a warm audit that laund
 choices. Match the auditor to the authorship. To force a quick inline check on your own work despite the
 warmth, ask for it and read the result as non-independent.
 
-### What not to cut
+### What to keep
 
 A real ground is a sufficient reason even when nothing in the diff visibly depends on the element.
-Demote these back to keep:
+Keep these:
 
 - **Defensive correctness with a reachable trigger.** `if conn is None: raise` is justified when a
-  caller can reach it before connecting. Cut it only when the bad input cannot occur on any path.
+  caller can reach it before connecting. Cut it only when the bad input is unreachable on every path.
 - **External contract.** A field or method shape a framework, API, or serializer demands, even when
   your own code never reads it directly. Name the specific framework, API version, or schema that
   requires it; an unnamed contract is not a sufficient reason, so the verdict stays cut or ask.
 - **Readability scaffolding.** A named intermediate or small helper whose purpose is clarity. Faster
-  comprehension is a real ground; do not trade it for line count.
+  comprehension is a real ground; keep it even when it costs a few lines.
 - **Declared-throwaway code.** Spikes and prototypes the user marked exploratory (see /prototype). Their
   goal is to answer a question, not to survive.
 - **Test coverage.** A test's real ground is the behavior it guards, not whether anything depends on it.
-- **Generated and vendored code.** Lockfiles, codegen output, and build artifacts are justified by their
-  generator and inputs, not line by line. Audit the generator config, not the generated lines.
+- **Generated and vendored code.** Lockfiles, codegen output, and build artifacts are justified as a
+  whole by their generator and inputs. Audit the generator config rather than the generated lines.
 
 ### Examples
 
