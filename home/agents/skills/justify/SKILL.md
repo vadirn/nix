@@ -32,6 +32,7 @@ else: mode = diff
 // Enumerate discrete elements
 if mode == diff:
     diff = Bash(git diff HEAD)
+    if the project is JS/TS: do("run knip --reporter compact first to clear mechanically-dead code")
     do("enumerate each added, changed, or deleted element: function, class, abstraction layer, dependency, config key, conditional branch, flag, parameter, test, assertion")
     do("for a deletion, audit the removal itself: did it have a sufficient reason, and does anything kept still depend on the removed element?")
 if mode == actions:
@@ -41,12 +42,12 @@ if mode == text:
     if target is source code: do("enumerate code elements as in diff mode")
     else: do("enumerate each discrete prose element: step, requirement, claim, section, option")
 
-// Independence — authorship decides the auditor, not who launches the skill
+// Independence
 authored_here = do("did this agent produce the target in this session: a diff I just wrote, this session's own actions, or a file I wrote that is now passed by path?")
-if authored_here: do("run the test in a fresh auditor subagent; pass it the element list, the test, the session's stated goals and requirements, and any asserted grounds — all marked as claims to test against the artifact, not as facts; this agent only orchestrates and presents, the subagent is the sole grader")
+if authored_here: do("dispatch a fresh auditor subagent as sole grader; pass the element list, the test, and the session's goals and asserted grounds as claims to verify against the artifact, not as facts; this agent only orchestrates and presents")
 else: do("run the test inline; the target is external, so this agent is already independent of it")
 
-// The test — per element
+// The test
 for each element:
     purpose = do("state the element's claimed purpose; if none is discoverable, set purpose = none")
     logical_ground = do("does anything actually depend on it; does removing it break a stated requirement?")
@@ -132,15 +133,8 @@ Keep these:
 
 ### Examples
 
-**Cut (failed real ground).** `retryWrapper()` around a startup config read. Purpose: "survive flaky
-I/O." A local read on startup has no transient failure mode, so there is nothing to retry. → cut; call
-the read directly.
-
 **Ask (undeterminable logical ground).** A `--verbose` flag added in the diff, with no code branching on
 it. → ask: "Is `--verbose` wiring for planned work, or a leftover? Nothing consumes it yet."
-
-**Keep (guardrail).** `if user is None: return 401` in a request handler. An unauthenticated request can
-reach it. → keep; defensive code with a reachable trigger is justified.
 
 **Cut (redundant action).** A second `npm install` after one already succeeded, with no lockfile change
 between. The tree was already complete. → cut.
@@ -160,15 +154,3 @@ between. The tree was already complete. → cut.
 
 <N> checked · <K> to cut · <A> to clarify · <rest> justified.
 ```
-
-### Boundaries with sibling skills
-
-- **/simplify** assumes the code should exist and proposes a smaller form. Justify questions whether it
-  should exist at all. On a plan or an action transcript, justify covers ground simplify does not.
-- **/probe** interrogates a plan's decisions for soundness ("is this the right choice?"). Justify
-  interrogates elements for necessity ("does this need to exist?"). A decision can be sound and still unnecessary.
-- **/code-review** hunts bugs and broad cleanups. Justify runs one axis: sufficient reason to exist.
-- **knip** finds what nothing references — mechanical dead code. Justify finds what is referenced but
-  whose reference chain has no real ground. Run knip first, then justify.
-- **/logic-check** audits an argument's reasoning. Justify audits an artifact's necessity — same
-  principle, different object.
