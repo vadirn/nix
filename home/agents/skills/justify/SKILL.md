@@ -17,31 +17,33 @@ Whatever cannot supply both is dead weight, carried at the cost of every future 
 
 ## Parameters
 
-- `target` (optional): What to audit. Inline text, a file path, the word `actions`, or empty. Empty
-  defaults to the working-tree diff. Conversation context is used when it carries the plan.
+- `target` (optional): What to audit. Inline text, a file path, the word `actions` (or `transcript`),
+  or empty. Empty defaults to the working-tree diff. Conversation context is used when it carries the plan.
 
 ```
 target = <args> or working-tree diff
 if no args and the working-tree diff is empty: AskUserQuestion("Nothing staged or unstaged to audit. Justify this session's actions, or a plan/file path?"), then stop
 
 // Resolve the mode
-if target in {"actions","transcript","steps"}: mode = actions
+if target in {"actions","transcript"}: mode = actions
 else if target is a file path, inline prose, or a plan in context: mode = text
 else: mode = diff
 
 // Enumerate discrete elements
 if mode == diff:
     diff = Bash(git diff HEAD)
-    do("enumerate each added or changed element in diff: function, class, abstraction layer, dependency, config key, conditional branch, flag, parameter")
+    do("enumerate each added, changed, or deleted element: function, class, abstraction layer, dependency, config key, conditional branch, flag, parameter, test, assertion")
+    do("for a deletion, audit the removal itself: did it have a sufficient reason, and does anything kept still depend on the removed element?")
 if mode == actions:
     do("enumerate each discrete action in the recent transcript: command run, file written, tool call, workflow step")
 if mode == text:
     if target is a file path: target = Read(<path>)
-    do("enumerate each discrete element: step, requirement, claim, section, option")
+    if target is source code: do("enumerate code elements as in diff mode")
+    else: do("enumerate each discrete prose element: step, requirement, claim, section, option")
 
 // Independence — authorship decides the auditor, not who launches the skill
-authored_here = do("did this agent produce the target in this session: a diff I just wrote, or this session's own actions?")
-if authored_here: do("run the test in a fresh auditor subagent; pass it the element list, the test, and any asserted grounds marked as claims to test, not facts; this agent orchestrates and presents, it does not grade its own work")
+authored_here = do("did this agent produce the target in this session: a diff I just wrote, this session's own actions, or a file I wrote that is now passed by path?")
+if authored_here: do("run the test in a fresh auditor subagent; pass it the element list, the test, the session's stated goals and requirements, and any asserted grounds — all marked as claims to test against the artifact, not as facts; this agent orchestrates and presents, it does not grade its own work")
 else: do("run the test inline; the target is external, so this agent is already independent of it")
 
 // The test — per element
@@ -54,8 +56,9 @@ for each element:
         a ground fails                   -> cut
         purpose or ground undeterminable -> ask
 
-// Demote over-eager cuts
+// Reconcile cuts
 do("re-test every cut against the guardrails in Reference: What not to cut; demote any with a real ground back to keep")
+do("then cascade: cut any kept element whose only logical ground was an element now marked cut; repeat until the set is stable")
 
 // Output
 do("emit the verdict table; cuts and asks first, kept elements summarized by count")
@@ -98,6 +101,8 @@ and re-endorses those rationalizations on a warm re-read. So authorship, not the
 
 - Authored by this agent this session (a just-written diff, this session's actions): dispatch a fresh
   auditor. It reconstructs each purpose from the artifact alone and tests asserted grounds skeptically.
+  Hand it the session's goals as claims to verify against the artifact, never as settled facts, so it
+  has the real grounds to test without inheriting the author's rationalizations.
 - Authored by the user or already in the tree (a pasted plan, legacy code): audit inline. This agent
   did not write it, so it is already independent; isolating it would discard the conversation context
   that supplies legitimate real grounds.
@@ -115,12 +120,15 @@ Demote these back to keep:
 - **Defensive correctness with a reachable trigger.** `if conn is None: raise` is justified when a
   caller can reach it before connecting. Cut it only when the bad input cannot occur on any path.
 - **External contract.** A field or method shape a framework, API, or serializer demands, even when
-  your own code never reads it directly.
+  your own code never reads it directly. Name the specific framework, API version, or schema that
+  requires it; an unnamed contract is not a sufficient reason, so the verdict stays cut or ask.
 - **Readability scaffolding.** A named intermediate or small helper whose purpose is clarity. Faster
   comprehension is a real ground; do not trade it for line count.
 - **Declared-throwaway code.** Spikes and prototypes the user marked exploratory (see /prototype). Their
   goal is to answer a question, not to survive.
 - **Test coverage.** A test's real ground is the behavior it guards, not whether anything depends on it.
+- **Generated and vendored code.** Lockfiles, codegen output, and build artifacts are justified by their
+  generator and inputs, not line by line. Audit the generator config, not the generated lines.
 
 ### Examples
 
