@@ -21,6 +21,7 @@ fn cfg_for(vault_root: &Path) -> ResolvedConfig {
         projects_path: None,
         project_path: None,
         lint: None,
+        consult: None,
         ignore,
     }
 }

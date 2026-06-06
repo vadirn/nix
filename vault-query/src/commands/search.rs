@@ -305,6 +305,7 @@ mod tests {
             projects_path: None,
             project_path: None,
             lint: None,
+            consult: None,
             ignore,
         }
     }

@@ -5,12 +5,121 @@ use std::path::{Path, PathBuf};
 use crate::commands::lint::config::LintConfig;
 use crate::vault_ignore::{self, VaultIgnore};
 
+// ---------------------------------------------------------------------------
+// ConsultConfig
+// ---------------------------------------------------------------------------
+
+fn default_consult_types() -> Vec<String> {
+    vec![
+        "card".to_string(),
+        "note".to_string(),
+        "reference".to_string(),
+        "experiment".to_string(),
+    ]
+}
+
+fn default_token_budget() -> usize {
+    8000
+}
+
+fn default_per_doc_token_cap() -> usize {
+    2000
+}
+
+fn default_coverage_fraction() -> f32 {
+    // PROVISIONAL — calibrate against the Backlog 7 eval set before treating as tuned.
+    0.5
+}
+
+fn default_elbow_k() -> f32 {
+    // PROVISIONAL — calibrate against the Backlog 7 eval set before treating as tuned.
+    2.0
+}
+
+fn default_ambient_coverage_fraction() -> f32 {
+    // PROVISIONAL — calibrate against the Backlog 7 eval set before treating as tuned.
+    0.66
+}
+
+fn default_ambient_elbow_k() -> f32 {
+    // PROVISIONAL — calibrate against the Backlog 7 eval set before treating as tuned.
+    3.0
+}
+
+/// Configuration for the `consult` command (Decision 5).
+///
+/// A missing or partial `[consult]` block in the root config is valid; every
+/// field falls back to a serde default so the block is fully optional.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConsultConfig {
+    /// Default corpus scope by frontmatter `type` (Decision 13).
+    /// Override at the call site with `--types`.
+    #[serde(default = "default_consult_types")]
+    pub types: Vec<String>,
+
+    /// Total token budget for packed bodies (Decision 15).
+    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    #[serde(default = "default_token_budget")]
+    pub token_budget: usize,
+
+    /// Skip any single document whose body exceeds this token estimate (Decision 15).
+    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    #[serde(default = "default_per_doc_token_cap")]
+    pub per_doc_token_cap: usize,
+
+    /// Deliberate-mode coverage gate: the top document must match at least this
+    /// fraction of the query's content terms (Decision 12).
+    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    #[serde(default = "default_coverage_fraction")]
+    pub coverage_fraction: f32,
+
+    /// Deliberate-mode elbow gate: the top score must be at least k× the median
+    /// of the returned set (Decision 12).
+    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    #[serde(default = "default_elbow_k")]
+    pub elbow_k: f32,
+
+    /// Stricter `--ambient` coverage fraction (Decision 18).
+    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    #[serde(default = "default_ambient_coverage_fraction")]
+    pub ambient_coverage_fraction: f32,
+
+    /// Stricter `--ambient` elbow multiplier (Decision 18).
+    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    #[serde(default = "default_ambient_elbow_k")]
+    pub ambient_elbow_k: f32,
+
+    /// Optional absolute-score backstop; `None` means no hard floor (Decision 12).
+    #[serde(default)]
+    pub threshold: Option<f32>,
+}
+
+impl Default for ConsultConfig {
+    fn default() -> Self {
+        Self {
+            types: default_consult_types(),
+            token_budget: default_token_budget(),
+            per_doc_token_cap: default_per_doc_token_cap(),
+            coverage_fraction: default_coverage_fraction(),
+            elbow_k: default_elbow_k(),
+            ambient_coverage_fraction: default_ambient_coverage_fraction(),
+            ambient_elbow_k: default_ambient_elbow_k(),
+            threshold: None,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ResolvedConfig / RootConfig
+// ---------------------------------------------------------------------------
+
 #[derive(Debug, Clone)]
 pub struct ResolvedConfig {
     pub vault_root: PathBuf,
     pub projects_path: Option<String>,
     pub project_path: Option<PathBuf>,
     pub lint: Option<LintConfig>,
+    pub consult: Option<ConsultConfig>,
     pub ignore: VaultIgnore,
 }
 
@@ -20,6 +129,8 @@ struct RootConfig {
     projects_path: String,
     #[serde(default)]
     lint: Option<LintConfig>,
+    #[serde(default)]
+    consult: Option<ConsultConfig>,
 }
 
 #[derive(Deserialize)]
@@ -44,6 +155,7 @@ pub fn resolve(
     let mut project_path: Option<PathBuf> = None;
     let mut projects_path: Option<String> = None;
     let mut lint_config: Option<LintConfig> = None;
+    let mut consult_config: Option<ConsultConfig> = None;
 
     // Layer 1: Walk up from start_dir for project config (skipped when vault_root is overridden)
     if vault_root_override.is_none() {
@@ -77,6 +189,7 @@ pub fn resolve(
         }
         projects_path = Some(rc.projects_path);
         lint_config = rc.lint;
+        consult_config = rc.consult;
     }
 
     // Layer 3: --vault-root takes precedence over both prior layers
@@ -108,6 +221,7 @@ pub fn resolve(
         projects_path,
         project_path,
         lint: lint_config,
+        consult: consult_config,
         ignore,
     })
 }
@@ -359,5 +473,67 @@ mod tests {
                 std::path::PathBuf::from(".vaultignore"),
             ]
         );
+    }
+
+    #[test]
+    fn consult_block_absent_gives_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{"vault_root": "/tmp/test-vault", "projects_path": "41 projects"}"#,
+        )
+        .unwrap();
+
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
+        assert!(config.consult.is_none());
+    }
+
+    #[test]
+    fn consult_block_absent_defaults_are_correct() {
+        // When no [consult] block is present, the Default impl must yield the documented defaults.
+        let defaults = ConsultConfig::default();
+        assert_eq!(defaults.types, vec!["card", "note", "reference", "experiment"]);
+        assert_eq!(defaults.token_budget, 8000);
+        assert_eq!(defaults.per_doc_token_cap, 2000);
+        assert!((defaults.coverage_fraction - 0.5).abs() < f32::EPSILON);
+        assert!((defaults.elbow_k - 2.0).abs() < f32::EPSILON);
+        assert!((defaults.ambient_coverage_fraction - 0.66).abs() < 1e-4);
+        assert!((defaults.ambient_elbow_k - 3.0).abs() < f32::EPSILON);
+        assert!(defaults.threshold.is_none());
+    }
+
+    #[test]
+    fn consult_block_partial_overrides_one_field() {
+        // A partial [consult] block (only token_budget set) must override just that field;
+        // all other fields fall back to their serde defaults.
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{
+                "vault_root": "/tmp/test-vault",
+                "projects_path": "41 projects",
+                "consult": {
+                    "token_budget": 4000
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
+        let consult = config.consult.expect("consult block should be present");
+        // The overridden field:
+        assert_eq!(consult.token_budget, 4000);
+        // Everything else stays at defaults:
+        assert_eq!(consult.types, vec!["card", "note", "reference", "experiment"]);
+        assert_eq!(consult.per_doc_token_cap, 2000);
+        assert!((consult.coverage_fraction - 0.5).abs() < f32::EPSILON);
+        assert!((consult.elbow_k - 2.0).abs() < f32::EPSILON);
+        assert!((consult.ambient_coverage_fraction - 0.66).abs() < 1e-4);
+        assert!((consult.ambient_elbow_k - 3.0).abs() < f32::EPSILON);
+        assert!(consult.threshold.is_none());
     }
 }
