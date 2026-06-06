@@ -59,6 +59,23 @@
           rm -f $LAZYGIT_NEW_DIR_FILE > /dev/null
         fi
       }
+
+      lt() {
+        local theme=catppuccin-mocha
+        [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" != "Dark" ]] && theme=catppuccin-latte
+        local tmp selected rc
+        tmp=$(mktemp "''${TMPDIR:-/tmp}/lazyworktree.selection.XXXXXX") || return 1
+        command lazyworktree --theme "$theme" --output-selection="$tmp" "$@"
+        rc=$?
+        if [[ -s "$tmp" ]]; then
+          selected=$(<"$tmp")
+          [[ -n "$selected" && -d "$selected" ]] && cd "$selected"
+        fi
+        rm -f "$tmp"
+        return $rc
+      }
+      (( $+functions[compdef] )) && compdef lt=lazyworktree
+
       alias y='yazi'
       alias v='nvim'
 

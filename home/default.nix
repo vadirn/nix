@@ -27,6 +27,7 @@
           ngrok
           ruby
           ast-grep
+          (callPackage ./lazyworktree.nix {})
         ];
       };
       programs = {
@@ -86,6 +87,7 @@
       home.file.".config/ghostty/config".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/ghostty-config";
       home.file.".config/lazygit/config.yml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazygit-config.yml";
       home.file.".config/lazygit/light.yml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazygit-light.yml";
+      home.file.".config/lazyworktree/config.yaml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazyworktree-config.yaml";
       home.file.".config/micro/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/micro-settings.json";
       home.file.".config/micro/bindings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/micro-bindings.json";
       programs.bat = {
