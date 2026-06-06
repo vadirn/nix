@@ -4,7 +4,7 @@ use std::path::Path;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
-use tantivy::tokenizer::TextAnalyzer;
+use tantivy::tokenizer::{Language, RemoveLongFilter, Stemmer, TextAnalyzer};
 use tantivy::{doc, Index, IndexWriter, SnippetGenerator};
 
 use crate::{frontmatter, vault};
@@ -53,11 +53,13 @@ fn run_bm25(query: &str, cfg: &crate::config::ResolvedConfig, subfolder: Option<
     // Build in-RAM index
     let index = Index::create_in_ram(schema);
 
-    // Register a simple tokenizer for title boosting
+    // Register the English analysis chain: tokenize → drop long tokens → lowercase → stem
     index.tokenizers().register(
         "default",
         TextAnalyzer::builder(tantivy::tokenizer::SimpleTokenizer::default())
+            .filter(RemoveLongFilter::limit(40))
             .filter(tantivy::tokenizer::LowerCaser)
+            .filter(Stemmer::new(Language::English))
             .build(),
     );
 
