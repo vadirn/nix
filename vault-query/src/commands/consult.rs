@@ -108,6 +108,29 @@ struct Hit {
 }
 
 // ---------------------------------------------------------------------------
+// Query sanitization
+// ---------------------------------------------------------------------------
+
+/// Replace Tantivy query-syntax metacharacters with spaces so that natural-
+/// language queries containing `:`, `+`, `-`, `(`, `)`, `^`, `~`, `"`, `*`,
+/// `?`, `[`, `]`, `{`, `}`, `\`, `!` are treated as plain term searches
+/// rather than triggering Tantivy's query parser syntax.
+///
+/// This is applied in the consult query path (ambient hook feeds raw user
+/// prompts) and in the search BM25 path so that neither silently returns
+/// zero results on a colon-containing query.
+pub(crate) fn sanitize_query(query: &str) -> String {
+    query
+        .chars()
+        .map(|c| match c {
+            ':' | '+' | '-' | '(' | ')' | '^' | '~' | '"' | '*' | '?' | '[' | ']' | '{'
+            | '}' | '\\' | '!' => ' ',
+            other => other,
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Core BM25 retrieval over an arbitrary file slice
 // ---------------------------------------------------------------------------
 
@@ -179,8 +202,13 @@ fn bm25_rank(files: &[&VaultFile], vault_root: &Path, query: &str, limit: usize)
     let mut query_parser = QueryParser::for_index(&index, vec![title_field, body_field]);
     query_parser.set_field_boost(title_field, 2.0);
 
-    // QueryParser can fail on queries with only special chars; return empty on error.
-    let parsed = match query_parser.parse_query(query) {
+    // Sanitize metacharacters before handing the query to Tantivy's parser so
+    // that natural-language queries (e.g. "structure the workflow: plan first")
+    // are treated as literal term searches rather than query syntax.
+    let sanitized = sanitize_query(query);
+
+    // QueryParser can still fail on queries with only special chars; return empty on error.
+    let parsed = match query_parser.parse_query(&sanitized) {
         Ok(p) => p,
         Err(_) => return Ok(vec![]),
     };
@@ -974,6 +1002,62 @@ mod tests {
             matches!(result, ConsultOutcome::Abstain { .. }),
             "expected Abstain when no files are in scope"
         );
+    }
+
+    // --- Test 11: sanitize_query strips metacharacters ---
+
+    #[test]
+    fn sanitize_query_replaces_metacharacters() {
+        assert_eq!(sanitize_query("structure the workflow: plan first"), "structure the workflow  plan first");
+        assert_eq!(sanitize_query("retry - backoff"), "retry   backoff");
+        assert_eq!(sanitize_query("title:value"), "title value");
+        assert_eq!(sanitize_query("no specials here"), "no specials here");
+    }
+
+    // --- Test 12: colon-containing query still retrieves matching doc ---
+
+    #[test]
+    fn colon_query_retrieves_matching_doc() {
+        // A query like "workflow: plan first" used to mis-parse and return empty.
+        // After sanitization it should find a doc containing those terms.
+        let relevant = make_vault_file(
+            "Workflow Planning",
+            "card",
+            "A good workflow starts with planning. Plan your work first, then execute. \
+             Structured workflows reduce cognitive load and improve throughput.",
+        );
+        let unrelated = make_vault_file(
+            "Database Indexes",
+            "card",
+            "Indexes speed up database lookups. B-tree and hash indexes serve different access patterns.",
+        );
+
+        let files = vec![relevant, unrelated];
+        let scope = vec!["card".to_string()];
+        let config = default_config();
+
+        let (result, _diag) = run_consult(
+            "workflow: plan first",
+            &files,
+            &vault_root(),
+            &scope,
+            &config,
+            ConsultMode::Deliberate,
+        )
+        .unwrap();
+
+        match result {
+            ConsultOutcome::Selected { docs, .. } => {
+                assert!(!docs.is_empty(), "expected at least one doc for colon query");
+                assert_eq!(
+                    docs[0].title, "Workflow Planning",
+                    "expected Workflow Planning to be top result"
+                );
+            }
+            ConsultOutcome::Abstain { reason, .. } => {
+                panic!("expected ANSWER for colon query, got ABSTAIN: {}", reason);
+            }
+        }
     }
 
     // --- Test 10: near_misses contain matched_terms ---

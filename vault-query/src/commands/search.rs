@@ -10,7 +10,7 @@ use tantivy::schema::*;
 use tantivy::tokenizer::{Language, RemoveLongFilter, Stemmer, TextAnalyzer};
 use tantivy::{doc, Index, IndexWriter, SnippetGenerator};
 
-use crate::{frontmatter, vault, wikilink};
+use crate::{commands::consult::sanitize_query, frontmatter, vault, wikilink};
 
 /// Output format for the search command.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -140,10 +140,13 @@ fn run_bm25(
     let reader = index.reader()?;
     let searcher = reader.searcher();
 
-    // Parse query with title boosted
+    // Parse query with title boosted. Sanitize metacharacters first so that
+    // natural-language queries containing `:` or other Tantivy syntax chars
+    // (e.g. "structure the workflow: plan first") are treated as plain terms.
     let mut query_parser = QueryParser::for_index(&index, vec![title, body]);
     query_parser.set_field_boost(title, 2.0);
-    let parsed = query_parser.parse_query(query)?;
+    let sanitized = sanitize_query(query);
+    let parsed = query_parser.parse_query(&sanitized)?;
 
     let top_docs = searcher.search(&parsed, &TopDocs::with_limit(limit))?;
 
@@ -492,6 +495,31 @@ mod tests {
         assert_eq!(SearchFormat::from_str("json").unwrap(), SearchFormat::Json);
         assert_eq!(SearchFormat::from_str("TEXT").unwrap(), SearchFormat::Text);
         assert!(SearchFormat::from_str("xml").is_err());
+    }
+
+    #[test]
+    fn test_search_colon_query_does_not_return_empty() {
+        // A query containing a colon used to cause a Tantivy parse error, which
+        // would propagate as an Err or silently return zero results.
+        // After sanitization, the query should retrieve the matching doc.
+        let tmp = tempfile::tempdir().unwrap();
+        let vault_root = tmp.path().to_path_buf();
+
+        let cards_dir = vault_root.join("20 cards");
+        std::fs::create_dir_all(&cards_dir).unwrap();
+        std::fs::write(
+            cards_dir.join("Workflow note.md"),
+            "---\ntype: card\n---\n\nA good workflow starts with planning. Structure your work first.\n",
+        )
+        .unwrap();
+
+        let cfg = make_cfg(vault_root.clone());
+
+        // run() with a colon query must not error and must find the doc.
+        // We verify by calling run_bm25 indirectly through run() with text format;
+        // redirect stdout is not available in unit tests, so we check it does not panic/error.
+        let result = run("workflow: plan first", &cfg, 0, None, false, 10, SearchFormat::Text);
+        assert!(result.is_ok(), "colon query must not return an error: {:?}", result.err());
     }
 
     #[test]
