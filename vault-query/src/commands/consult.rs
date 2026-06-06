@@ -144,17 +144,22 @@ pub(crate) fn sanitize_query(query: &str) -> String {
 // Shared English analysis chain
 // ---------------------------------------------------------------------------
 
-/// Build the English analysis chain shared by `consult` and `search` (Decision 6):
-///   SimpleTokenizer → RemoveLongFilter(40) → LowerCaser → Stemmer(English).
+/// Build the bilingual (EN + RU) analysis chain shared by `consult` and `search` (Decision 6):
+///   SimpleTokenizer → RemoveLongFilter(40) → LowerCaser → Stemmer(English) → Stemmer(Russian).
+///
+/// English Snowball only mutates Latin vowel/suffix patterns and passes Cyrillic through
+/// unchanged; Russian Snowball only mutates Cyrillic and passes Latin through unchanged.
+/// Chaining them is safe and stems both languages without corrupting either.
 ///
 /// Single source of truth for both the index `"default"` tokenizer and the
 /// coverage tokenizer, so every BM25 site stems identically. A divergence here
 /// would silently skew relevance between `search` and `consult`.
-pub(crate) fn english_analyzer() -> TextAnalyzer {
+pub(crate) fn bilingual_analyzer() -> TextAnalyzer {
     TextAnalyzer::builder(SimpleTokenizer::default())
         .filter(RemoveLongFilter::limit(40))
         .filter(LowerCaser)
         .filter(Stemmer::new(Language::English))
+        .filter(Stemmer::new(Language::Russian))
         .build()
 }
 
@@ -164,8 +169,8 @@ pub(crate) fn english_analyzer() -> TextAnalyzer {
 
 /// Build a Tantivy in-RAM index over `files`, query it, and return scored hits.
 ///
-/// Uses the same stemmed analyzer as `search.rs`:
-///   SimpleTokenizer → RemoveLongFilter(40) → LowerCaser → Stemmer(English)
+/// Uses the same bilingual stemmed analyzer as `search.rs`:
+///   SimpleTokenizer → RemoveLongFilter(40) → LowerCaser → Stemmer(English) → Stemmer(Russian)
 ///
 /// `limit` controls the Tantivy top-N cut (IDF and top-N are computed only over
 /// the provided `files`, so callers must pre-filter to the in-scope set before
@@ -199,8 +204,8 @@ fn bm25_rank(files: &[&VaultFile], vault_root: &Path, query: &str, limit: usize)
     // --- Index ---
     let index = Index::create_in_ram(schema);
 
-    // Register the English analysis chain (shared with search.rs; Decision 6).
-    index.tokenizers().register("default", english_analyzer());
+    // Register the bilingual analysis chain (shared with search.rs; Decision 6).
+    index.tokenizers().register("default", bilingual_analyzer());
 
     let total_content: usize = files.iter().map(|f| f.content.len()).sum();
     let writer_budget = total_content.max(15_000_000);
@@ -279,7 +284,7 @@ fn bm25_rank(files: &[&VaultFile], vault_root: &Path, query: &str, limit: usize)
 /// near-universal presence in docs means they contribute fractionally to coverage
 /// but rarely determine the binary pass/fail of the gate.
 fn stemmed_tokens(text: &str) -> Vec<String> {
-    let mut analyzer = english_analyzer();
+    let mut analyzer = bilingual_analyzer();
     let mut stream = analyzer.token_stream(text);
     let mut tokens = Vec::new();
     while stream.advance() {
@@ -1057,6 +1062,80 @@ mod tests {
                 panic!("expected ANSWER for colon query, got ABSTAIN: {}", reason);
             }
         }
+    }
+
+    // --- Test 13: Russian morphological query variant matches via bilingual analyzer ---
+
+    #[test]
+    fn russian_stemming_matches_morphological_variant() {
+        // "алгоритмы" (plural nominative) and "алгоритм" (singular nominative) stem to
+        // the same Russian Snowball stem, so a query using one form retrieves a doc
+        // containing the other form.
+        let card = make_vault_file(
+            "RuCard",
+            "card",
+            "Алгоритм сортировки работает за линейное время. \
+             Эффективные алгоритмы используют рекурсию и динамическое программирование.",
+        );
+        let unrelated = make_vault_file(
+            "UnrelatedCard",
+            "card",
+            "Database schema migrations require careful planning and versioning.",
+        );
+
+        let files = vec![card, unrelated];
+        let scope = vec!["card".to_string()];
+        let config = default_config();
+
+        // Query uses singular "алгоритм"; document contains both singular and plural.
+        let (result, _diag) = run_consult(
+            "алгоритм",
+            &files,
+            &vault_root(),
+            &scope,
+            &config,
+            ConsultMode::Deliberate,
+        )
+        .unwrap();
+
+        match result {
+            ConsultOutcome::Selected { docs, .. } => {
+                assert!(!docs.is_empty(), "expected at least one doc for Russian query");
+                assert_eq!(
+                    docs[0].title, "RuCard",
+                    "expected RuCard as top result for Russian query"
+                );
+            }
+            ConsultOutcome::Abstain { reason, .. } => {
+                panic!("expected ANSWER for Russian query, got ABSTAIN: {}", reason);
+            }
+        }
+    }
+
+    // --- Test 14: stemmed_tokens produces Russian stems ---
+
+    #[test]
+    fn stemmed_tokens_produces_russian_stems() {
+        // "сортировки" (genitive) and "сортировку" (accusative) should reduce to the
+        // same stem as "сортировка" (nominative) under Russian Snowball.
+        let tokens_nominative = stemmed_tokens("сортировка");
+        let tokens_genitive = stemmed_tokens("сортировки");
+        let tokens_accusative = stemmed_tokens("сортировку");
+
+        assert_eq!(
+            tokens_nominative, tokens_genitive,
+            "genitive 'сортировки' must stem identically to nominative 'сортировка'"
+        );
+        assert_eq!(
+            tokens_nominative, tokens_accusative,
+            "accusative 'сортировку' must stem identically to nominative 'сортировка'"
+        );
+
+        // Sanity: result must be non-empty.
+        assert!(
+            !tokens_nominative.is_empty(),
+            "stemmed_tokens must return at least one token for Russian input"
+        );
     }
 
     // --- Test 10: near_misses contain matched_terms ---

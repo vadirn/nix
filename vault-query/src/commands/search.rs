@@ -10,7 +10,7 @@ use tantivy::schema::*;
 use tantivy::{doc, Index, IndexWriter, SnippetGenerator};
 
 use crate::{
-    commands::consult::{english_analyzer, sanitize_query},
+    commands::consult::{bilingual_analyzer, sanitize_query},
     frontmatter, vault, wikilink,
 };
 
@@ -114,8 +114,8 @@ fn run_bm25(
     // Build in-RAM index
     let index = Index::create_in_ram(schema);
 
-    // Register the English analysis chain (shared with consult.rs; Decision 6).
-    index.tokenizers().register("default", english_analyzer());
+    // Register the bilingual analysis chain (shared with consult.rs; Decision 6).
+    index.tokenizers().register("default", bilingual_analyzer());
 
     let total_content: usize = files.iter().map(|f| f.content.len()).sum();
     let writer_budget = total_content.max(15_000_000);
@@ -349,7 +349,7 @@ mod tests {
         let path_field = schema_builder.add_text_field("path", STRING | STORED);
         let schema = schema_builder.build();
         let index = Index::create_in_ram(schema);
-        index.tokenizers().register("default", english_analyzer());
+        index.tokenizers().register("default", bilingual_analyzer());
         let mut writer: IndexWriter = index.writer(15_000_000).unwrap();
         for file in &files {
             let rel = file.relative_path(&vault_root);
