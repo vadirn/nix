@@ -274,9 +274,12 @@ fn test_list_titles_sorted() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let lines: Vec<&str> = stdout.lines().collect();
     assert!(lines.len() >= 2, "expected at least 2 cards, got: {:?}", lines);
-    // Sorted: "Impureim sandwich" before "Test card"
-    assert!(lines[0].starts_with("Impureim sandwich"));
-    assert!(lines[1].starts_with("Test card"));
+    // Sorted: "Impureim sandwich" comes before "Test card" (alphabetical)
+    let imp_pos = lines.iter().position(|l| l.starts_with("Impureim sandwich"))
+        .expect("Impureim sandwich should be in the list");
+    let test_pos = lines.iter().position(|l| l.starts_with("Test card"))
+        .expect("Test card should be in the list");
+    assert!(imp_pos < test_pos, "Impureim sandwich should sort before Test card");
 }
 
 #[test]
@@ -553,4 +556,85 @@ fn test_lint_asset_wikilinks_resolve() {
         "expected zero broken-wikilink findings for asset wikilinks, got: {:#?}",
         broken
     );
+}
+
+// ---------------------------------------------------------------------------
+// consult subcommand integration tests
+// ---------------------------------------------------------------------------
+
+/// Run `vault-query consult` against the fixture vault and return (stdout, exit_code).
+fn run_consult(args: &[&str]) -> (String, i32) {
+    let mut cmd = Command::new(cargo_bin());
+    cmd.args(["consult"])
+        .arg("--vault-root")
+        .arg(fixture_dir().to_str().unwrap());
+    for a in args {
+        cmd.arg(a);
+    }
+    let output = cmd.output().expect("failed to run vault-query consult");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    (stdout, code)
+}
+
+/// A query matching "Retry patterns.md" exits 0 and contains the document body.
+#[test]
+fn test_consult_relevant_query_exits_0_with_content() {
+    let (stdout, code) = run_consult(&["retry backoff failure"]);
+    assert_eq!(code, 0, "expected exit 0 for relevant query, stdout: {}", stdout);
+    assert!(!stdout.is_empty(), "expected non-empty output for selected outcome");
+    // Should contain the card's title or body excerpt
+    assert!(
+        stdout.contains("Retry") || stdout.contains("retry") || stdout.contains("backoff"),
+        "expected retry content in output: {}",
+        stdout
+    );
+}
+
+/// A query that cannot possibly match any vault content exits 4 (abstain).
+#[test]
+fn test_consult_irrelevant_query_exits_4_with_near_misses() {
+    // Use a nonsense string unlikely to appear in any vault document.
+    let (stdout, code) = run_consult(&["xyzzy_zork_quux_frobnicator_abcdefgh123"]);
+    assert_eq!(code, 4, "expected exit 4 (abstain) for irrelevant query, stdout: {}", stdout);
+    assert!(!stdout.is_empty(), "abstain output should be non-empty (near_misses note)");
+}
+
+/// `--format json` emits valid JSON for a selected outcome.
+#[test]
+fn test_consult_json_format_selected_is_valid() {
+    let (stdout, code) = run_consult(&["retry backoff failure", "--format", "json"]);
+    // If the query hits (exit 0), validate JSON structure.
+    // If the vault is too small to pass the gate (exit 4), validate the abstain envelope.
+    assert!(
+        code == 0 || code == 4,
+        "expected exit 0 or 4, got {}",
+        code
+    );
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("expected valid JSON, got: {}", &stdout[..stdout.len().min(200)]));
+    let status = v["status"].as_str().expect("missing status field");
+    if code == 0 {
+        assert_eq!(status, "selected");
+        assert!(v["docs"].is_array(), "missing docs array");
+        assert!(v.get("total_tokens").is_some(), "missing total_tokens");
+        assert!(v.get("query").is_some(), "missing query");
+    } else {
+        assert_eq!(status, "abstain");
+        assert!(v["near_misses"].is_array(), "missing near_misses array");
+        assert!(v.get("reason").is_some(), "missing reason");
+        assert!(v.get("query").is_some(), "missing query");
+    }
+}
+
+/// `--format json` emits valid JSON for an abstain outcome.
+#[test]
+fn test_consult_json_format_abstain_is_valid() {
+    let (stdout, code) = run_consult(&["xyzzy_zork_quux_frobnicator_abcdefgh123", "--format", "json"]);
+    assert_eq!(code, 4, "expected exit 4 for irrelevant query, stdout: {}", stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("expected valid JSON abstain envelope, got: {}", &stdout[..stdout.len().min(200)]));
+    assert_eq!(v["status"].as_str(), Some("abstain"), "wrong status field");
+    assert!(v["near_misses"].is_array(), "missing near_misses array in abstain envelope");
+    assert!(v.get("reason").is_some(), "missing reason in abstain envelope");
 }

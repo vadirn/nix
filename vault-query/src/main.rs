@@ -160,6 +160,23 @@ enum Commands {
         /// Year to report (defaults to current)
         year: Option<i32>,
     },
+    /// Retrieve vault context for a task (retrieve → select → emit)
+    Consult {
+        /// Query string describing the task or topic
+        task: String,
+        /// Comma-separated frontmatter types to search (overrides config types)
+        #[arg(long, value_delimiter = ',')]
+        types: Vec<String>,
+        /// Stricter abstain gate for ambient/hook invocations (Decision 18)
+        #[arg(long)]
+        ambient: bool,
+        /// Output format: markdown (default) or json
+        #[arg(long, default_value = "markdown")]
+        format: commands::consult_cmd::ConsultFormat,
+        /// Absolute score backstop; overrides config threshold (optional)
+        #[arg(long)]
+        threshold: Option<f32>,
+    },
 }
 
 fn resolve_config(cli: &Cli) -> Result<config::ResolvedConfig> {
@@ -283,6 +300,27 @@ fn main() -> Result<()> {
         Commands::Xp { year } => {
             let cfg = resolve_config(&cli)?;
             commands::xp::run(&cfg, *year)
+        }
+        Commands::Consult {
+            task,
+            types,
+            ambient,
+            format,
+            threshold,
+        } => {
+            let cfg = resolve_config(&cli)?;
+            let exit_code = commands::consult_cmd::run(
+                task,
+                &cfg,
+                types,
+                *ambient,
+                *format,
+                *threshold,
+            )?;
+            if exit_code != 0 {
+                std::process::exit(exit_code);
+            }
+            Ok(())
         }
     }
 }
