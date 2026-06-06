@@ -208,7 +208,17 @@
         ]
       }
     ],
-    "UserPromptSubmit": []
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/vault-consult.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
   },
   "statusLine": {
     "type": "command",
