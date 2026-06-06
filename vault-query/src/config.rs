@@ -92,6 +92,14 @@ pub struct ConsultConfig {
     /// Optional absolute-score backstop; `None` means no hard floor (Decision 12).
     #[serde(default)]
     pub threshold: Option<f32>,
+
+    /// Optional path (relative to `vault_root`, or absolute) for the JSONL
+    /// invocation log (Decision 8, Backlog 6).  When `Some`, `consult` appends
+    /// one JSON object per invocation.  When `None`, no logging occurs.
+    /// Parent directory is created if it does not exist; any IO/serialize error
+    /// is swallowed (logging is best-effort and never affects the exit code).
+    #[serde(default)]
+    pub log_path: Option<String>,
 }
 
 impl Default for ConsultConfig {
@@ -105,6 +113,7 @@ impl Default for ConsultConfig {
             ambient_coverage_fraction: default_ambient_coverage_fraction(),
             ambient_elbow_k: default_ambient_elbow_k(),
             threshold: None,
+            log_path: None,
         }
     }
 }

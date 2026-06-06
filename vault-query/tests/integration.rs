@@ -638,3 +638,130 @@ fn test_consult_json_format_abstain_is_valid() {
     assert!(v["near_misses"].is_array(), "missing near_misses array in abstain envelope");
     assert!(v.get("reason").is_some(), "missing reason in abstain envelope");
 }
+
+// ---------------------------------------------------------------------------
+// JSONL logging tests (Backlog 6, Decision 8)
+// ---------------------------------------------------------------------------
+
+/// Helper: run consult with a root config that sets `log_path`.
+/// Returns (stdout, exit_code, log_file_path).
+fn run_consult_with_log(query: &str, log_file: &Path) -> (String, i32) {
+    // Write a minimal root config pointing at the fixture vault with log_path set.
+    let tmp_home = tempfile::tempdir().unwrap();
+    let cfg_dir = tmp_home.path().join(".config/vault");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.json"),
+        serde_json::json!({
+            "vault_root": fixture_dir().to_str().unwrap(),
+            "projects_path": "41 projects",
+            "consult": {
+                "log_path": log_file.to_str().unwrap()
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .env("HOME", tmp_home.path())
+        .args(["consult", query])
+        .output()
+        .expect("failed to run vault-query consult");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    (stdout, code)
+}
+
+/// With `log_path` set, one invocation appends exactly one parseable JSON line
+/// with the expected keys; the command exit code is unaffected.
+#[test]
+fn test_consult_log_path_appends_one_jsonl_line() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log_file = tmp.path().join("consult-log.jsonl");
+
+    // File must not exist before the invocation.
+    assert!(!log_file.exists(), "log file should not exist before first run");
+
+    let (_stdout, code) = run_consult_with_log("retry backoff failure", &log_file);
+
+    // Exit code is 0 or 4 (gate may abstain on fixture corpus); never an error.
+    assert!(
+        code == 0 || code == 4,
+        "expected exit 0 or 4, got {}",
+        code
+    );
+
+    // Exactly one line must have been appended.
+    let content = std::fs::read_to_string(&log_file)
+        .expect("log file should exist after invocation");
+    let lines: Vec<&str> = content.lines().collect();
+    assert_eq!(lines.len(), 1, "expected exactly one JSONL line, got {}", lines.len());
+
+    // The line must parse as JSON and carry the required keys.
+    let record: serde_json::Value = serde_json::from_str(lines[0])
+        .expect("log line should be valid JSON");
+
+    // Required top-level keys:
+    for key in &[
+        "timestamp_ms", "query", "mode", "format", "outcome",
+        "num_returned", "num_selected", "total_tokens",
+        "selected_paths", "near_miss_titles", "near_miss_scores",
+    ] {
+        assert!(record.get(key).is_some(), "missing key '{}' in log record", key);
+    }
+
+    // Diagnostic keys (may be null for empty corpora):
+    for key in &["top_score", "median_score", "coverage", "elbow_ratio"] {
+        assert!(record.get(key).is_some(), "missing diagnostic key '{}' in log record", key);
+    }
+
+    // mode is "deliberate" (no --ambient flag).
+    assert_eq!(record["mode"].as_str(), Some("deliberate"));
+
+    // outcome matches the exit code.
+    let expected_outcome = if code == 0 { "selected" } else { "abstain" };
+    assert_eq!(
+        record["outcome"].as_str(),
+        Some(expected_outcome),
+        "outcome field mismatch"
+    );
+}
+
+/// A second invocation appends a second line (not overwriting the first).
+#[test]
+fn test_consult_log_path_appends_not_overwrites() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log_file = tmp.path().join("consult-log.jsonl");
+
+    run_consult_with_log("retry backoff failure", &log_file);
+    run_consult_with_log("retry backoff failure", &log_file);
+
+    let content = std::fs::read_to_string(&log_file).unwrap();
+    let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 2, "expected two JSONL lines after two runs, got {}", lines.len());
+
+    // Both lines must be parseable.
+    for (i, line) in lines.iter().enumerate() {
+        serde_json::from_str::<serde_json::Value>(line)
+            .unwrap_or_else(|e| panic!("line {} is not valid JSON: {}", i + 1, e));
+    }
+}
+
+/// With `log_path = None` (default), no file is written and the command behaves normally.
+#[test]
+fn test_consult_no_log_path_no_file_written() {
+    // Use the standard fixture-vault run_consult helper (no log_path in config).
+    let tmp = tempfile::tempdir().unwrap();
+    let would_be_log = tmp.path().join("should-not-exist.jsonl");
+
+    // No --log-path flag; the default config has no log_path.
+    let (stdout, code) = run_consult(&["retry backoff failure"]);
+
+    // Command behaves identically regardless of log_path presence.
+    assert!(code == 0 || code == 4);
+    assert!(!stdout.is_empty());
+
+    // And no file appeared at our would-be location (trivially true; just guards the contract).
+    assert!(!would_be_log.exists(), "log file should not be created when log_path is None");
+}

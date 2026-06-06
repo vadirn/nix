@@ -74,6 +74,26 @@ pub enum ConsultOutcome {
     },
 }
 
+/// Gate diagnostics captured during a `run_consult` call (Backlog 6).
+///
+/// Exposes the raw numbers behind each gate decision so that the JSONL log
+/// (Step F) can retroactively determine which constant values would have
+/// flipped each abstain/select.
+#[derive(Debug, Clone)]
+pub struct ConsultDiagnostics {
+    /// BM25 score of the top-ranked document (`None` if no hits).
+    pub top_score: Option<f32>,
+    /// Median BM25 score across all returned hits (`None` if no hits).
+    pub median_score: Option<f32>,
+    /// Coverage fraction of the top doc: matched_query_terms / total_query_terms
+    /// (`None` if the query tokenizes to nothing or no hits).
+    pub coverage: Option<f32>,
+    /// Elbow ratio: top_score / median_score (`None` if ≤1 hit).
+    pub elbow_ratio: Option<f32>,
+    /// Number of documents returned from BM25 before gate filtering.
+    pub num_returned: usize,
+}
+
 // ---------------------------------------------------------------------------
 // Internal hit type
 // ---------------------------------------------------------------------------
@@ -256,6 +276,9 @@ fn median_f32(values: &[f32]) -> f32 {
 /// `files` is the pre-scanned vault slice (all files; scope filtering happens
 /// inside this function — Decision 11).
 /// `scope_types` is the resolved type list (from config.types or CLI override).
+///
+/// Returns a `(ConsultOutcome, ConsultDiagnostics)` tuple.  The diagnostics
+/// expose the raw gate numbers so the JSONL log can record them for Step F.
 pub fn run_consult(
     query: &str,
     files: &[VaultFile],
@@ -263,7 +286,7 @@ pub fn run_consult(
     scope_types: &[String],
     config: &ConsultConfig,
     mode: ConsultMode,
-) -> Result<ConsultOutcome> {
+) -> Result<(ConsultOutcome, ConsultDiagnostics)> {
     // --- 1. Scope-before-index (Decision 11 + 13) ---
     //
     // Filter to files whose frontmatter `type` is in scope_types AND whose
@@ -290,11 +313,21 @@ pub fn run_consult(
     let hits = bm25_rank(&in_scope, vault_root, query, limit)?;
 
     if hits.is_empty() {
-        return Ok(ConsultOutcome::Abstain {
-            query: query.to_string(),
-            near_misses: vec![],
-            reason: "no results".to_string(),
-        });
+        let diag = ConsultDiagnostics {
+            top_score: None,
+            median_score: None,
+            coverage: None,
+            elbow_ratio: None,
+            num_returned: 0,
+        };
+        return Ok((
+            ConsultOutcome::Abstain {
+                query: query.to_string(),
+                near_misses: vec![],
+                reason: "no results".to_string(),
+            },
+            diag,
+        ));
     }
 
     // --- 2. Relative abstain gate (Decision 12) ---
@@ -318,9 +351,9 @@ pub fn run_consult(
             .collect()
     };
 
-    let coverage_ok = if query_terms.is_empty() {
+    let (coverage_ok, coverage_value) = if query_terms.is_empty() {
         // Degenerate: query tokenizes to nothing (all special chars). Abstain.
-        false
+        (false, None)
     } else {
         let top_doc_tokens: HashSet<String> =
             stemmed_tokens(&top.stored_body).into_iter().collect();
@@ -328,7 +361,8 @@ pub fn run_consult(
             .iter()
             .filter(|t| top_doc_tokens.contains(*t))
             .count();
-        (matched as f32 / query_terms.len() as f32) >= coverage_fraction
+        let frac = matched as f32 / query_terms.len() as f32;
+        (frac >= coverage_fraction, Some(frac))
     };
 
     let elbow_ok = if hits.len() == 1 {
@@ -343,6 +377,21 @@ pub fn run_consult(
     let threshold_ok = match config.threshold {
         Some(t) => top.score >= t,
         None => true,
+    };
+
+    // Compute elbow_ratio for diagnostics (None when only one hit).
+    let elbow_ratio = if hits.len() > 1 && med > 0.0 {
+        Some(top.score / med)
+    } else {
+        None
+    };
+
+    let diag = ConsultDiagnostics {
+        top_score: Some(top.score),
+        median_score: Some(med),
+        coverage: coverage_value,
+        elbow_ratio,
+        num_returned: hits.len(),
     };
 
     if !coverage_ok || !elbow_ok || !threshold_ok {
@@ -375,11 +424,14 @@ pub fn run_consult(
             })
             .collect();
 
-        return Ok(ConsultOutcome::Abstain {
-            query: query.to_string(),
-            near_misses,
-            reason,
-        });
+        return Ok((
+            ConsultOutcome::Abstain {
+                query: query.to_string(),
+                near_misses,
+                reason,
+            },
+            diag,
+        ));
     }
 
     // --- 3. Greedy whole-body budget packing (Decision 15) ---
@@ -434,11 +486,14 @@ pub fn run_consult(
         // else: skip this doc and continue to next candidate.
     }
 
-    Ok(ConsultOutcome::Selected {
-        query: query.to_string(),
-        docs: packed,
-        total_tokens: running_tokens,
-    })
+    Ok((
+        ConsultOutcome::Selected {
+            query: query.to_string(),
+            docs: packed,
+            total_tokens: running_tokens,
+        },
+        diag,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -512,7 +567,7 @@ mod tests {
 
         // Use a query that would match all three if they were all indexed.
         let config = default_config();
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "filtering algorithms",
             &files,
             &vault_root(),
@@ -552,7 +607,7 @@ mod tests {
         let scope = vec!["card".to_string()];
         let config = default_config();
 
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "important concepts retrieval",
             &files,
             &vault_root(),
@@ -598,7 +653,7 @@ mod tests {
         let scope = vec!["card".to_string()];
         let config = default_config();
 
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "retry backoff failure",
             &files,
             &vault_root(),
@@ -642,7 +697,7 @@ mod tests {
         let mut config = default_config();
         config.threshold = Some(1000.0); // guaranteed abstain
 
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "quantum teleportation entanglement",
             &files,
             &vault_root(),
@@ -684,7 +739,7 @@ mod tests {
         config.per_doc_token_cap = per_doc_cap;
         config.token_budget = 10_000; // generous budget
 
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "retry backoff failure",
             &files,
             &vault_root(),
@@ -747,7 +802,7 @@ mod tests {
         config.token_budget = budget;
         config.per_doc_token_cap = 200; // large_body ~80 tokens is under cap; medium ~50 too
 
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "retry backoff failure",
             &files,
             &vault_root(),
@@ -810,7 +865,7 @@ mod tests {
 
         // Deliberate with defaults should answer (coverage 2/3 > 0.5).
         let config_deliberate = default_config();
-        let deliberate_result = run_consult(
+        let (deliberate_result, _) = run_consult(
             "retry backoff timeout",
             &files,
             &vault_root(),
@@ -825,7 +880,7 @@ mod tests {
         // We tune ambient so it definitely fails: set ambient_coverage_fraction = 0.9.
         let mut config_ambient = default_config();
         config_ambient.ambient_coverage_fraction = 0.9; // "timeout" not in body → fails
-        let ambient_result = run_consult(
+        let (ambient_result, _) = run_consult(
             "retry backoff timeout",
             &files,
             &vault_root(),
@@ -875,7 +930,7 @@ mod tests {
         let mut config = default_config();
         config.threshold = Some(99999.0); // impossibly high — always abstain
 
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "retry backoff failure",
             &files,
             &vault_root(),
@@ -905,7 +960,7 @@ mod tests {
         let scope = vec!["track".to_string()];
         let config = default_config();
 
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "retry",
             &files,
             &vault_root(),
@@ -937,7 +992,7 @@ mod tests {
         let mut config = default_config();
         config.threshold = Some(99999.0); // force abstain
 
-        let result = run_consult(
+        let (result, _diag) = run_consult(
             "btree index range",
             &files,
             &vault_root(),

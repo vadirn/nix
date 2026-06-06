@@ -10,7 +10,9 @@ use std::str::FromStr;
 use anyhow::Result;
 use serde::Serialize;
 
-use crate::commands::consult::{ConsultMode, ConsultOutcome, NearMiss, SelectedDoc, run_consult};
+use crate::commands::consult::{
+    ConsultDiagnostics, ConsultMode, ConsultOutcome, NearMiss, SelectedDoc, run_consult,
+};
 use crate::config::{ConsultConfig, ResolvedConfig};
 use crate::vault;
 
@@ -168,6 +170,135 @@ fn render_json_abstain(query: &str, near_misses: &[NearMiss], reason: &str) -> R
 }
 
 // ---------------------------------------------------------------------------
+// JSONL invocation log (Decision 8, Backlog 6)
+// ---------------------------------------------------------------------------
+
+/// One JSONL record appended per `consult` invocation.
+///
+/// All diagnostic floats use `Option<f32>` because `serde_json` serializes
+/// `f32::NAN`/`Infinity` as `null` only when wrapped in `Option`.
+#[derive(Serialize)]
+struct LogRecord<'a> {
+    /// UTC epoch milliseconds (std time only — this binary has no async runtime).
+    timestamp_ms: u128,
+    query: &'a str,
+    /// "deliberate" or "ambient".
+    mode: &'a str,
+    format: &'a str,
+    /// "selected" or "abstain".
+    outcome: &'a str,
+    /// Populated only when outcome = "abstain".
+    reason: Option<&'a str>,
+    // Gate diagnostics
+    top_score: Option<f32>,
+    median_score: Option<f32>,
+    coverage: Option<f32>,
+    elbow_ratio: Option<f32>,
+    num_returned: usize,
+    // Selection summary
+    num_selected: usize,
+    total_tokens: usize,
+    selected_paths: Vec<&'a str>,
+    near_miss_titles: Vec<&'a str>,
+    near_miss_scores: Vec<f32>,
+}
+
+/// Append one JSONL record to `log_path` (relative to `vault_root` or absolute).
+/// Best-effort: any error is silently swallowed; the exit code is never affected.
+fn append_log(
+    log_path: &str,
+    vault_root: &std::path::Path,
+    query: &str,
+    mode_str: &str,
+    format_str: &str,
+    outcome: &ConsultOutcome,
+    diag: &ConsultDiagnostics,
+) {
+    let _ = append_log_inner(log_path, vault_root, query, mode_str, format_str, outcome, diag);
+}
+
+fn append_log_inner(
+    log_path: &str,
+    vault_root: &std::path::Path,
+    query: &str,
+    mode_str: &str,
+    format_str: &str,
+    outcome: &ConsultOutcome,
+    diag: &ConsultDiagnostics,
+) -> Result<()> {
+    use std::io::Write;
+
+    let path = {
+        let p = std::path::Path::new(log_path);
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            vault_root.join(p)
+        }
+    };
+
+    // Create parent directory if it does not exist.
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let timestamp_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    let record: LogRecord = match outcome {
+        ConsultOutcome::Selected { docs, total_tokens, .. } => LogRecord {
+            timestamp_ms,
+            query,
+            mode: mode_str,
+            format: format_str,
+            outcome: "selected",
+            reason: None,
+            top_score: diag.top_score,
+            median_score: diag.median_score,
+            coverage: diag.coverage,
+            elbow_ratio: diag.elbow_ratio,
+            num_returned: diag.num_returned,
+            num_selected: docs.len(),
+            total_tokens: *total_tokens,
+            selected_paths: docs.iter().map(|d| d.path.as_str()).collect(),
+            near_miss_titles: vec![],
+            near_miss_scores: vec![],
+        },
+        ConsultOutcome::Abstain { near_misses, reason, .. } => LogRecord {
+            timestamp_ms,
+            query,
+            mode: mode_str,
+            format: format_str,
+            outcome: "abstain",
+            reason: Some(reason.as_str()),
+            top_score: diag.top_score,
+            median_score: diag.median_score,
+            coverage: diag.coverage,
+            elbow_ratio: diag.elbow_ratio,
+            num_returned: diag.num_returned,
+            num_selected: 0,
+            total_tokens: 0,
+            selected_paths: vec![],
+            near_miss_titles: near_misses.iter().map(|nm| nm.title.as_str()).collect(),
+            near_miss_scores: near_misses.iter().map(|nm| nm.score).collect(),
+        },
+    };
+
+    let mut line = serde_json::to_string(&record)?;
+    line.push('\n');
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)?;
+    file.write_all(line.as_bytes())?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
@@ -208,7 +339,16 @@ pub fn run(
         ConsultMode::Deliberate
     };
 
-    let outcome = run_consult(task, &files, vault_root, &scope_types, &consult_config, mode)?;
+    let mode_str = if ambient { "ambient" } else { "deliberate" };
+    let format_str = format.to_string();
+
+    let (outcome, diag) =
+        run_consult(task, &files, vault_root, &scope_types, &consult_config, mode)?;
+
+    // Best-effort JSONL logging (Decision 8). Any error is silently swallowed.
+    if let Some(ref log_path) = consult_config.log_path {
+        append_log(log_path, vault_root, task, mode_str, &format_str, &outcome, &diag);
+    }
 
     match outcome {
         ConsultOutcome::Selected { query, docs, total_tokens } => {
