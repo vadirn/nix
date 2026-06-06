@@ -23,7 +23,13 @@ fn default_token_budget() -> usize {
 }
 
 fn default_per_doc_token_cap() -> usize {
-    2000
+    // Raised from 2000 to 4000 (Decision 19): two confirmed ANSWER-MISS cases had
+    // expected docs of 3035 and 2994 estimated tokens (chars/4) and were skipped
+    // whole while the packer still had budget to spare.  4000 recovers those docs
+    // while keeping the single-doc cap at exactly half of the 8000-token budget,
+    // preventing any one document from consuming more than half the payload and
+    // leaving room for at least one additional document.
+    4000
 }
 
 fn default_coverage_fraction() -> f32 {
@@ -512,7 +518,7 @@ mod tests {
         let defaults = ConsultConfig::default();
         assert_eq!(defaults.types, vec!["card", "note", "reference", "experiment"]);
         assert_eq!(defaults.token_budget, 8000);
-        assert_eq!(defaults.per_doc_token_cap, 2000);
+        assert_eq!(defaults.per_doc_token_cap, 4000);
         assert!((defaults.coverage_fraction - 0.45).abs() < f32::EPSILON);
         assert!((defaults.elbow_k - 1.5).abs() < f32::EPSILON);
         assert!((defaults.ambient_coverage_fraction - 0.50).abs() < f32::EPSILON);
@@ -545,7 +551,7 @@ mod tests {
         assert_eq!(consult.token_budget, 4000);
         // Everything else stays at calibrated defaults (Step F, 29-pair eval):
         assert_eq!(consult.types, vec!["card", "note", "reference", "experiment"]);
-        assert_eq!(consult.per_doc_token_cap, 2000);
+        assert_eq!(consult.per_doc_token_cap, 4000);
         assert!((consult.coverage_fraction - 0.45).abs() < f32::EPSILON);
         assert!((consult.elbow_k - 1.5).abs() < f32::EPSILON);
         assert!((consult.ambient_coverage_fraction - 0.50).abs() < f32::EPSILON);

@@ -803,6 +803,82 @@ mod tests {
         }
     }
 
+    // --- Test 5b: per_doc_token_cap regression — docs between old cap (2000) and new cap (4000) pack ---
+    //
+    // Two confirmed ANSWER-MISS cases had bodies of 3035 and 2994 estimated tokens
+    // (chars/4) and were skipped whole while the packer still had budget.  This test
+    // constructs a doc in that range (~2800 estimated tokens = 11200 chars) and asserts
+    // that it is included with the default cap of 4000.  If the cap is ever lowered back
+    // below 2800, this test will fail — that is the intent.
+
+    #[test]
+    fn packing_includes_doc_between_old_and_new_cap() {
+        // Body of ~11200 chars → ~2800 estimated tokens (chars / 4).
+        // This is above the old cap (2000) but below the new cap (4000).
+        let long_body = "retry backoff failure resilience distributed system pattern ".repeat(190);
+        // Verify the estimate is in the target range before asserting packing behaviour.
+        let estimated_tokens = long_body.chars().count() / 4;
+        assert!(
+            estimated_tokens > 2000,
+            "test body must exceed old cap: got {} tokens",
+            estimated_tokens
+        );
+        assert!(
+            estimated_tokens < 4000,
+            "test body must be below new cap: got {} tokens",
+            estimated_tokens
+        );
+
+        let long_doc = make_vault_file("LongDoc", "card", &long_body);
+        // Pair with a short unrelated doc so BM25 has a comparison point.
+        let short_doc = make_vault_file(
+            "ShortDoc",
+            "card",
+            "Unrelated content about cooking and recipes.",
+        );
+
+        let files = vec![long_doc, short_doc];
+        let scope = vec!["card".to_string()];
+        // Use the real default config (per_doc_token_cap = 4000, token_budget = 8000).
+        let config = default_config();
+
+        let (result, _diag) = run_consult(
+            "retry backoff failure",
+            &files,
+            &vault_root(),
+            &scope,
+            &config,
+            ConsultMode::Deliberate,
+        )
+        .unwrap();
+
+        match result {
+            ConsultOutcome::Selected { docs, .. } => {
+                let included = docs.iter().any(|d| d.title == "LongDoc");
+                assert!(
+                    included,
+                    "LongDoc (~{} tokens) should be packed with per_doc_token_cap=4000, \
+                     but it was skipped. Lowering the cap below {} would cause ANSWER-MISS \
+                     regressions on real vault documents.",
+                    estimated_tokens,
+                    estimated_tokens + 1,
+                );
+            }
+            ConsultOutcome::Abstain { reason, .. } => {
+                // If BM25 abstains (gate not cleared), the test cannot validate packing.
+                // This path is acceptable only if the gate itself abstained; it does not
+                // indicate a per_doc_token_cap regression.  Use a panic with a clear
+                // message so a future gate recalibration does not silently hide regressions.
+                panic!(
+                    "consult abstained ({}); cannot verify per_doc_token_cap packing. \
+                     If gate constants changed, update this test to use an explicit config \
+                     that passes the gate.",
+                    reason
+                );
+            }
+        }
+    }
+
     // --- Test 6: greedy packing — later smaller doc fits when earlier large one overflows ---
 
     #[test]
