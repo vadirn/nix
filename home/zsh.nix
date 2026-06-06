@@ -60,7 +60,7 @@
         fi
       }
 
-      lt() {
+      lw() {
         local theme=catppuccin-mocha
         [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" != "Dark" ]] && theme=catppuccin-latte
         local tmp selected rc
@@ -74,7 +74,7 @@
         rm -f "$tmp"
         return $rc
       }
-      (( $+functions[compdef] )) && compdef lt=lazyworktree
+      (( $+functions[compdef] )) && compdef lw=lazyworktree
 
       alias y='yazi'
       alias v='nvim'

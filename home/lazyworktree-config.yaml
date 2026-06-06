@@ -9,7 +9,7 @@
 trust_mode: "never"
 
 # Where new worktrees are created. Default layout: ~/.local/share/worktrees/<org>-<repo>.
-# The shell `lt` helper assumes this root, so change both together if you move it.
+# The shell `lw` helper assumes this root, so change both together if you move it.
 # To keep worktrees inside each repo instead: worktree_dir: $LWT_REPO_PATH/.worktrees
 worktree_dir: ~/.local/share/worktrees
 
@@ -21,7 +21,7 @@ sort_mode: switched
 auto_refresh: true
 ci_auto_refresh: false
 
-# Theme is chosen at runtime by the `lt` shell function to follow the macOS
+# Theme is chosen at runtime by the `lw` shell function to follow the macOS
 # light/dark setting: catppuccin-mocha (dark) / catppuccin-latte (light),
 # mirroring how `lg` switches lazygit. Left empty here so a bare `lazyworktree`
 # invocation auto-detects from the terminal background instead.
