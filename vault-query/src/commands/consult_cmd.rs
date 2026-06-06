@@ -90,7 +90,7 @@ struct JsonAbstain {
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
-fn render_markdown_selected(_query: &str, docs: &[SelectedDoc], total_tokens: usize) -> String {
+fn render_markdown_selected(docs: &[SelectedDoc], total_tokens: usize) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "<!-- vault-query consult: {} doc(s), ~{} tokens -->\n\n",
@@ -108,7 +108,7 @@ fn render_markdown_selected(_query: &str, docs: &[SelectedDoc], total_tokens: us
     trimmed + "\n"
 }
 
-fn render_markdown_abstain(_query: &str, near_misses: &[NearMiss], reason: &str) -> String {
+fn render_markdown_abstain(near_misses: &[NearMiss], reason: &str) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "<!-- vault-query consult: no confident match ({}) -->\n",
@@ -339,7 +339,7 @@ pub fn run(
         ConsultMode::Deliberate
     };
 
-    let mode_str = if ambient { "ambient" } else { "deliberate" };
+    let mode_str = mode.as_str();
     let format_str = format.to_string();
 
     let (outcome, diag) =
@@ -353,7 +353,7 @@ pub fn run(
     match outcome {
         ConsultOutcome::Selected { query, docs, total_tokens } => {
             let rendered = match format {
-                ConsultFormat::Markdown => render_markdown_selected(&query, &docs, total_tokens),
+                ConsultFormat::Markdown => render_markdown_selected(&docs, total_tokens),
                 ConsultFormat::Json => render_json_selected(&query, &docs, total_tokens)?,
             };
             print!("{}", rendered);
@@ -361,7 +361,7 @@ pub fn run(
         }
         ConsultOutcome::Abstain { query, near_misses, reason } => {
             let rendered = match format {
-                ConsultFormat::Markdown => render_markdown_abstain(&query, &near_misses, &reason),
+                ConsultFormat::Markdown => render_markdown_abstain(&near_misses, &reason),
                 ConsultFormat::Json => render_json_abstain(&query, &near_misses, &reason)?,
             };
             print!("{}", rendered);

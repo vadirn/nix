@@ -14,7 +14,7 @@ use anyhow::Result;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
-use tantivy::tokenizer::{Language, RemoveLongFilter, Stemmer, TextAnalyzer};
+use tantivy::tokenizer::{Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, TextAnalyzer};
 use tantivy::{doc, Index, IndexWriter};
 
 use crate::config::ConsultConfig;
@@ -33,6 +33,16 @@ pub enum ConsultMode {
     Deliberate,
     /// Global `UserPromptSubmit` hook — fears false-positive.
     Ambient,
+}
+
+impl ConsultMode {
+    /// Log/label string for this mode.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ConsultMode::Deliberate => "deliberate",
+            ConsultMode::Ambient => "ambient",
+        }
+    }
 }
 
 /// A document selected for inclusion in the ANSWER payload.
@@ -131,6 +141,24 @@ pub(crate) fn sanitize_query(query: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Shared English analysis chain
+// ---------------------------------------------------------------------------
+
+/// Build the English analysis chain shared by `consult` and `search` (Decision 6):
+///   SimpleTokenizer → RemoveLongFilter(40) → LowerCaser → Stemmer(English).
+///
+/// Single source of truth for both the index `"default"` tokenizer and the
+/// coverage tokenizer, so every BM25 site stems identically. A divergence here
+/// would silently skew relevance between `search` and `consult`.
+pub(crate) fn english_analyzer() -> TextAnalyzer {
+    TextAnalyzer::builder(SimpleTokenizer::default())
+        .filter(RemoveLongFilter::limit(40))
+        .filter(LowerCaser)
+        .filter(Stemmer::new(Language::English))
+        .build()
+}
+
+// ---------------------------------------------------------------------------
 // Core BM25 retrieval over an arbitrary file slice
 // ---------------------------------------------------------------------------
 
@@ -171,15 +199,8 @@ fn bm25_rank(files: &[&VaultFile], vault_root: &Path, query: &str, limit: usize)
     // --- Index ---
     let index = Index::create_in_ram(schema);
 
-    // Register the English analysis chain matching search.rs (Step A.1, Decision 6).
-    index.tokenizers().register(
-        "default",
-        TextAnalyzer::builder(tantivy::tokenizer::SimpleTokenizer::default())
-            .filter(RemoveLongFilter::limit(40))
-            .filter(tantivy::tokenizer::LowerCaser)
-            .filter(Stemmer::new(Language::English))
-            .build(),
-    );
+    // Register the English analysis chain (shared with search.rs; Decision 6).
+    index.tokenizers().register("default", english_analyzer());
 
     let total_content: usize = files.iter().map(|f| f.content.len()).sum();
     let writer_budget = total_content.max(15_000_000);
@@ -258,14 +279,7 @@ fn bm25_rank(files: &[&VaultFile], vault_root: &Path, query: &str, limit: usize)
 /// near-universal presence in docs means they contribute fractionally to coverage
 /// but rarely determine the binary pass/fail of the gate.
 fn stemmed_tokens(text: &str) -> Vec<String> {
-    use tantivy::tokenizer::{SimpleTokenizer, TextAnalyzer};
-
-    let mut analyzer = TextAnalyzer::builder(SimpleTokenizer::default())
-        .filter(RemoveLongFilter::limit(40))
-        .filter(tantivy::tokenizer::LowerCaser)
-        .filter(Stemmer::new(Language::English))
-        .build();
-
+    let mut analyzer = english_analyzer();
     let mut stream = analyzer.token_stream(text);
     let mut tokens = Vec::new();
     while stream.advance() {
@@ -371,13 +385,7 @@ pub fn run_consult(
 
     // Coverage: distinct stemmed query content terms present in the top doc's text.
     // We check the stored body text (indexed content) for each term.
-    let query_terms: Vec<String> = {
-        let mut seen = HashSet::new();
-        stemmed_tokens(query)
-            .into_iter()
-            .filter(|t| seen.insert(t.clone()))
-            .collect()
-    };
+    let query_terms: HashSet<String> = stemmed_tokens(query).into_iter().collect();
 
     let (coverage_ok, coverage_value) = if query_terms.is_empty() {
         // Degenerate: query tokenizes to nothing (all special chars). Abstain.
@@ -472,22 +480,19 @@ pub fn run_consult(
     let mut running_tokens: usize = 0;
 
     for hit in &candidates {
-        // Resolve the full VaultFile for links and canonical body.
-        let (doc_type, links, body) = if let Some(vf) = file_map.get(&hit.path) {
+        // Canonical body: the index already stored `frontmatter::body(content)`,
+        // so reuse it (leading newline removed) rather than rescanning the file.
+        let body = hit.stored_body.trim_start_matches('\n').to_string();
+
+        // Resolve type and links from the full VaultFile when available.
+        let (doc_type, links) = if let Some(vf) = file_map.get(&hit.path) {
             let t = {
                 let v = vf.get_property("type");
                 if v.is_empty() { None } else { Some(v) }
             };
-            let l = wikilink::collect_all_link_targets(vf);
-            // Canonical body: frontmatter stripped, leading newline removed.
-            let b = frontmatter::body(&vf.content)
-                .trim_start_matches('\n')
-                .to_string();
-            (t, l, b)
+            (t, wikilink::collect_all_link_targets(vf))
         } else {
-            // Fall back to stored body if the VaultFile is not in the lookup.
-            let b = hit.stored_body.trim_start_matches('\n').to_string();
-            (None, vec![], b)
+            (None, vec![])
         };
 
         let tokens = body.chars().count() / 4;
@@ -575,10 +580,6 @@ mod tests {
 
     fn vault_root() -> std::path::PathBuf {
         std::path::PathBuf::from("/vault")
-    }
-
-    fn scope_types() -> Vec<String> {
-        vec!["card".to_string(), "note".to_string(), "reference".to_string()]
     }
 
     // --- Test 1: scope filter excludes out-of-type docs ---
@@ -861,18 +862,17 @@ mod tests {
 
     #[test]
     fn ambient_stricter_than_deliberate() {
-        // A query with borderline coverage (just above deliberate threshold,
-        // below ambient threshold). We force this by using the config defaults:
-        // deliberate coverage_fraction = 0.5, ambient = 0.66.
+        // A query whose top doc covers 2 of 3 query terms. With the calibrated
+        // defaults (deliberate coverage_fraction = 0.45, ambient = 0.50) both
+        // would pass on coverage alone, so this test forces the ambient gate by
+        // raising ambient_coverage_fraction to 0.9 below — the invariant under
+        // test is "stricter ambient params never answer where deliberate does."
         //
         // Build two cards: one relevant, one completely unrelated.
-        // The relevant card matches exactly half the query terms (borderline for deliberate).
         //
         // Query: "retry backoff timeout" (3 terms after stemming).
-        // Relevant card body contains "retry" and "backoff" but NOT "timeout".
-        // coverage = 2/3 ≈ 0.67 — passes deliberate (0.5) but borderline for ambient (0.66).
-        //
-        // We set a high elbow_k for ambient so the elbow test also fails on 2 docs.
+        // Relevant card body contains "retry" and "backoff" but NOT "timeout",
+        // so coverage = 2/3 ≈ 0.67.
 
         let relevant = make_vault_file(
             "RetryCard",
@@ -903,8 +903,7 @@ mod tests {
         )
         .unwrap();
 
-        // Ambient with higher bar should abstain (coverage 2/3 is right at 0.66 boundary,
-        // and the ambient elbow_k = 3.0 is stricter).
+        // Ambient with a higher coverage bar should abstain: 2/3 ≈ 0.67 < 0.9.
         // We tune ambient so it definitely fails: set ambient_coverage_fraction = 0.9.
         let mut config_ambient = default_config();
         config_ambient.ambient_coverage_fraction = 0.9; // "timeout" not in body → fails
