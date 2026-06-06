@@ -89,6 +89,9 @@ enum Commands {
         /// Max results (BM25 mode only)
         #[arg(short = 'n', long, default_value = "20")]
         limit: usize,
+        /// Output format: text (default) or json
+        #[arg(long, default_value = "text")]
+        format: commands::search::SearchFormat,
     },
     /// Resolve a slug to a vault file path
     Resolve {
@@ -212,9 +215,10 @@ fn main() -> Result<()> {
             path,
             regex,
             limit,
+            format,
         } => {
             let cfg = resolve_config(&cli)?;
-            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit)
+            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format)
         }
         Commands::Resolve { slug } => {
             let cfg = resolve_config(&cli)?;
