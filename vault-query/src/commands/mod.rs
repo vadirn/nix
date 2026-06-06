@@ -1,4 +1,5 @@
 pub mod backlinks;
+pub mod consult;
 pub mod lint;
 pub mod config_cmd;
 pub mod context;
