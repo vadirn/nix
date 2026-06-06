@@ -20,6 +20,12 @@ if selected == "new":
         leave Direction empty for the user to fill, leave Glossary baseline intact,
         keep Files of interest / Decisions / Backlog / Log empty")
     Bash("write atomically: write content to <track_path>.tmp, then mv <track_path>.tmp <track_path>")
+
+    grounding = Bash(vault-query consult "<description>" --format markdown)
+    if grounding exit code == 0:
+        do("present the returned vault slices as 'Related prior thinking' to inform the new track's direction")
+    // exit code 4 = confident silence; 1 or 2 = error — present nothing extra in both cases
+
     do("ask user to fill ## Direction now or defer")
 
 else:

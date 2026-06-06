@@ -7,18 +7,25 @@ results = Bash(vault-query tracks --view Active --format json)
 
 if results is empty (parsed JSON is []):
     do("tell user: no Active tracks in this project; suggest /track save to create one")
-elif results has one row:
-    cfg = Bash(vault-query config)
-    track_path = <cfg.project_path>/<row.Track>.md
-    do("Read(track_path), present the full body")
 else:
-    options = [for r in results: { label: r.Track, description: r.Status + " · updated " + r.Updated + " · " + r.Description }]
-    selected = AskUserQuestion(options, singleSelect=true)
-    cfg = Bash(vault-query config)
-    track_path = <cfg.project_path>/<selected.Track>.md
-    do("Read(track_path), present the full body")
+    if results has one row:
+        cfg = Bash(vault-query config)
+        track_path = <cfg.project_path>/<row.Track>.md
+        do("Read(track_path), present the full body")
+    else:
+        options = [for r in results: { label: r.Track, description: r.Status + " · updated " + r.Updated + " · " + r.Description }]
+        selected = AskUserQuestion(options, singleSelect=true)
+        cfg = Bash(vault-query config)
+        track_path = <cfg.project_path>/<selected.Track>.md
+        do("Read(track_path), present the full body")
 
-ask "what should we do with this track?"
+    query = do("derive a short phrase from the track's Direction and description — the topic the user is working on")
+    grounding = Bash(vault-query consult "<query>" --format markdown)
+    if grounding exit code == 0:
+        do("fold the returned vault slices into the presentation as 'Related prior thinking' before asking what to do")
+    // exit code 4 = confident silence; 1 or 2 = error — present nothing extra in both cases
+
+    ask "what should we do with this track?"
 ```
 
 ## Reference
