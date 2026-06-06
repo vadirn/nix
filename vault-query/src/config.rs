@@ -27,23 +27,29 @@ fn default_per_doc_token_cap() -> usize {
 }
 
 fn default_coverage_fraction() -> f32 {
-    // PROVISIONAL — calibrate against the Backlog 7 eval set before treating as tuned.
-    0.5
+    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
+    // (Step F, 9% false-abstain, 0% false-positive). Base deliberate gate.
+    0.45
 }
 
 fn default_elbow_k() -> f32 {
-    // PROVISIONAL — calibrate against the Backlog 7 eval set before treating as tuned.
-    2.0
+    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
+    // (Step F, 9% false-abstain, 0% false-positive). Base deliberate gate.
+    1.5
 }
 
 fn default_ambient_coverage_fraction() -> f32 {
-    // PROVISIONAL — calibrate against the Backlog 7 eval set before treating as tuned.
-    0.66
+    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
+    // (Step F). Kept mildly stricter than base (0.50 vs 0.45) as a hedge for the
+    // global UserPromptSubmit hook where false-positives are more costly.
+    0.50
 }
 
 fn default_ambient_elbow_k() -> f32 {
-    // PROVISIONAL — calibrate against the Backlog 7 eval set before treating as tuned.
-    3.0
+    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
+    // (Step F). Kept mildly stricter than base (1.8 vs 1.5) as a hedge for the
+    // global UserPromptSubmit hook where false-positives are more costly.
+    1.8
 }
 
 /// Configuration for the `consult` command (Decision 5).
@@ -58,34 +64,34 @@ pub struct ConsultConfig {
     pub types: Vec<String>,
 
     /// Total token budget for packed bodies (Decision 15).
-    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
     #[serde(default = "default_token_budget")]
     pub token_budget: usize,
 
     /// Skip any single document whose body exceeds this token estimate (Decision 15).
-    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
     #[serde(default = "default_per_doc_token_cap")]
     pub per_doc_token_cap: usize,
 
     /// Deliberate-mode coverage gate: the top document must match at least this
     /// fraction of the query's content terms (Decision 12).
-    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
     #[serde(default = "default_coverage_fraction")]
     pub coverage_fraction: f32,
 
     /// Deliberate-mode elbow gate: the top score must be at least k× the median
     /// of the returned set (Decision 12).
-    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
     #[serde(default = "default_elbow_k")]
     pub elbow_k: f32,
 
     /// Stricter `--ambient` coverage fraction (Decision 18).
-    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    /// Kept mildly stricter than base as a hedge for the global UserPromptSubmit hook.
     #[serde(default = "default_ambient_coverage_fraction")]
     pub ambient_coverage_fraction: f32,
 
     /// Stricter `--ambient` elbow multiplier (Decision 18).
-    /// PROVISIONAL — will be calibrated against the Backlog 7 eval set.
+    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    /// Kept mildly stricter than base as a hedge for the global UserPromptSubmit hook.
     #[serde(default = "default_ambient_elbow_k")]
     pub ambient_elbow_k: f32,
 
@@ -501,15 +507,16 @@ mod tests {
 
     #[test]
     fn consult_block_absent_defaults_are_correct() {
-        // When no [consult] block is present, the Default impl must yield the documented defaults.
+        // When no [consult] block is present, the Default impl must yield the calibrated defaults
+        // from the 29-pair eval set (consult-materials/consult-eval.jsonl, Step F).
         let defaults = ConsultConfig::default();
         assert_eq!(defaults.types, vec!["card", "note", "reference", "experiment"]);
         assert_eq!(defaults.token_budget, 8000);
         assert_eq!(defaults.per_doc_token_cap, 2000);
-        assert!((defaults.coverage_fraction - 0.5).abs() < f32::EPSILON);
-        assert!((defaults.elbow_k - 2.0).abs() < f32::EPSILON);
-        assert!((defaults.ambient_coverage_fraction - 0.66).abs() < 1e-4);
-        assert!((defaults.ambient_elbow_k - 3.0).abs() < f32::EPSILON);
+        assert!((defaults.coverage_fraction - 0.45).abs() < f32::EPSILON);
+        assert!((defaults.elbow_k - 1.5).abs() < f32::EPSILON);
+        assert!((defaults.ambient_coverage_fraction - 0.50).abs() < f32::EPSILON);
+        assert!((defaults.ambient_elbow_k - 1.8).abs() < f32::EPSILON);
         assert!(defaults.threshold.is_none());
     }
 
@@ -536,13 +543,13 @@ mod tests {
         let consult = config.consult.expect("consult block should be present");
         // The overridden field:
         assert_eq!(consult.token_budget, 4000);
-        // Everything else stays at defaults:
+        // Everything else stays at calibrated defaults (Step F, 29-pair eval):
         assert_eq!(consult.types, vec!["card", "note", "reference", "experiment"]);
         assert_eq!(consult.per_doc_token_cap, 2000);
-        assert!((consult.coverage_fraction - 0.5).abs() < f32::EPSILON);
-        assert!((consult.elbow_k - 2.0).abs() < f32::EPSILON);
-        assert!((consult.ambient_coverage_fraction - 0.66).abs() < 1e-4);
-        assert!((consult.ambient_elbow_k - 3.0).abs() < f32::EPSILON);
+        assert!((consult.coverage_fraction - 0.45).abs() < f32::EPSILON);
+        assert!((consult.elbow_k - 1.5).abs() < f32::EPSILON);
+        assert!((consult.ambient_coverage_fraction - 0.50).abs() < f32::EPSILON);
+        assert!((consult.ambient_elbow_k - 1.8).abs() < f32::EPSILON);
         assert!(consult.threshold.is_none());
     }
 }
