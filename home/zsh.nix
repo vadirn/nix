@@ -47,11 +47,15 @@
       precmd_functions+=(_set_tab_title)
       chpwd_functions+=(_set_tab_title)
 
+      # True when macOS is in Dark mode. AppleInterfaceStyle is unset in Light
+      # mode, so the read fails and the test is false.
+      _macos_is_dark() {
+        [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" == "Dark" ]]
+      }
+
       lg() {
         local cfg="$HOME/.config/lazygit/config.yml"
-        if [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" != "Dark" ]]; then
-          cfg="$HOME/.config/lazygit/light.yml"
-        fi
+        _macos_is_dark || cfg="$HOME/.config/lazygit/light.yml"
         export LAZYGIT_NEW_DIR_FILE=~/.lazygit/newdir
         LG_CONFIG_FILE="$cfg" command lazygit "$@"
         if [ -f $LAZYGIT_NEW_DIR_FILE ]; then
@@ -59,6 +63,23 @@
           rm -f $LAZYGIT_NEW_DIR_FILE > /dev/null
         fi
       }
+
+      lw() {
+        local theme=catppuccin-mocha
+        _macos_is_dark || theme=catppuccin-latte
+        local tmp selected rc
+        tmp=$(mktemp "''${TMPDIR:-/tmp}/lazyworktree.selection.XXXXXX") || return 1
+        command lazyworktree --theme "$theme" --output-selection="$tmp" "$@"
+        rc=$?
+        if [[ -s "$tmp" ]]; then
+          selected=$(<"$tmp")
+          [[ -n "$selected" && -d "$selected" ]] && cd "$selected"
+        fi
+        rm -f "$tmp"
+        return $rc
+      }
+      (( $+functions[compdef] )) && compdef lw=lazyworktree
+
       alias y='yazi'
       alias v='nvim'
 
