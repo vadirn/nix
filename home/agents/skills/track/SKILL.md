@@ -1,7 +1,7 @@
 ---
 name: track
 description: >
-  Read or save a per-project rolling handoff file at `41 projects/<project>/track-<slug>.md`.
+  Read or save a per-project rolling work log at `41 projects/<project>/track-<slug>.md`.
   Triggers: `/track`, save phrases ("wrapping up", "save session", "end of session"), resume phrases
   ("what was I working on", "where did we leave off"). Non-track artifacts (cards/notes/references)
   route to /vault.
