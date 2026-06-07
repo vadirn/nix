@@ -92,6 +92,8 @@ Use the `/commit` skill to create commits. Use conventional commit prefixes (fea
 - chore: no user-facing behavior change (improve design, improve performance)
 - feat: everything else
 
+Push is manual. The user runs `git push` themselves, usually via lazygit, and a hook blocks the agent from running it. When work needs publishing, ask the user to push.
+
 ## Bash
 
 - Run one command at a time. Separate invocations are easier to review than chained ones.
