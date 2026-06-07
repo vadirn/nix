@@ -177,7 +177,7 @@ enum Commands {
         #[arg(long)]
         threshold: Option<f32>,
         /// Suppress JSONL instrumentation for this invocation (overrides --log-path and config log_path)
-        #[arg(long, conflicts_with = "log_path")]
+        #[arg(long)]
         no_log: bool,
         /// Write this invocation's JSONL record to PATH instead of config log_path
         #[arg(long, value_name = "PATH")]
