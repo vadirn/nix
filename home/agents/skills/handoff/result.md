@@ -11,7 +11,7 @@ What the worker did and what it hands back.
 ## Backlog
 ```
 
-Return a result inline in the final message by default; write it to a `mktemp` file and pass the path only when it is bulky.
+Return a result inline in the final message by default; write it to a temp file and pass the path only when it is bulky, via the `mktemp -u` step in `Write a handoff`.
 
 ### Recap discipline
 

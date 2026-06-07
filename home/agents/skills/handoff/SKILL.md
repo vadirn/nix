@@ -10,9 +10,7 @@ description: >
 
 # Handoff
 
-A handoff is one short-lived markdown file that carries work-state from one agent or session to the next. The writer creates it with `mktemp`, fills a template, and passes the path; the reader reads the path and acts. The file is the message: plain text both parties can inspect, not hidden context.
-
-Handoffs are ephemeral by design — `$TMPDIR` scratch, no cleanup, no persistence. Durable carry-forward across cold launches is `/track`'s job; a continuation may name such a durable record as a next action, yet needs no external file to be acted on.
+A handoff is one short-lived markdown file that carries work-state from one agent or session to the next. The writer reserves a temp path with `mktemp`, writes a filled template, and passes the path; the reader reads the path and acts. The file is the message: plain text both parties can inspect, not hidden context.
 
 ## Write a handoff
 
@@ -25,7 +23,7 @@ do("read <type>.md in this skill directory and fill its template (the filled bod
 if type == result and do("the filled result is not bulky"):
     do("return the filled body inline in the final message; write no file")
 else:
-    path = Bash(mktemp "$TMPDIR/handoff-XXXXXX.md")
+    path = Bash(mktemp -u "$TMPDIR/handoff-XXXXXX.md")   // -u reserves the name without creating the file; Write refuses to overwrite a file it has not read, so the path must not exist yet
     Write(path, <filled body>)
     do("surface <path> to the reader: an orchestrator inlines it in the spawn prompt; a user-invoked handoff prints one copy-pasteable `read <path>` line for the next context to run, not the body")
 ```
