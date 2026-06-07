@@ -9,7 +9,8 @@
 trust_mode: "never"
 
 # Where new worktrees are created. Default layout: ~/.local/share/worktrees/<org>-<repo>.
-# The shell `lw` helper assumes this root, so change both together if you move it.
+# lazyworktree reports the chosen path back to the `lw` shell helper via
+# --output-selection, so moving this root needs no change to `lw`.
 # To keep worktrees inside each repo instead: worktree_dir: $LWT_REPO_PATH/.worktrees
 worktree_dir: ~/.local/share/worktrees
 
