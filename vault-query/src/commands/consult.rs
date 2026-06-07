@@ -535,6 +535,16 @@ pub fn run_consult(
     // coverage_fraction, but that hit may be below the median and therefore absent from
     // `candidates`.  If the filter empties the candidate set, fall back to all
     // candidates (preserving the pre-filter pack behaviour) so the result is never empty.
+    // Per-doc coverage: fraction of query terms present in the doc body.
+    let doc_coverage = |h: &Hit| -> f32 {
+        if query_terms.is_empty() {
+            return 0.0;
+        }
+        let doc_tokens: HashSet<String> = stemmed_tokens(&h.stored_body).into_iter().collect();
+        let matched = query_terms.iter().filter(|t| doc_tokens.contains(*t)).count();
+        matched as f32 / query_terms.len() as f32
+    };
+
     let coverage_filtered: Vec<&Hit> = if query_terms.is_empty() {
         // Degenerate query: no terms to compute coverage against; pass all candidates.
         candidates.iter().copied().collect()
@@ -542,21 +552,18 @@ pub fn run_consult(
         let filtered: Vec<&Hit> = candidates
             .iter()
             .copied()
-            .filter(|h| {
-                let doc_tokens: HashSet<String> =
-                    stemmed_tokens(&h.stored_body).into_iter().collect();
-                let matched = query_terms
-                    .iter()
-                    .filter(|t| doc_tokens.contains(*t))
-                    .count();
-                let doc_coverage = matched as f32 / query_terms.len() as f32;
-                doc_coverage >= coverage_fraction
-            })
+            .filter(|h| doc_coverage(h) >= coverage_fraction)
             .collect();
         if filtered.is_empty() {
-            // Fallback: coverage gate qualified via a sub-median doc; revert to full
-            // candidate set so the pack is never left empty after a gate-pass.
-            candidates.iter().copied().collect()
+            // The gate opened via a top-3 hit that clears coverage but sits below the
+            // median, so it is absent from `candidates`.  Pack that hit — it is exactly
+            // what justified the gate pass — instead of reverting to the low-coverage
+            // above-median displacer the per-doc filter just rejected (bug_004).  The
+            // gate guarantees at least one such top-3 hit exists, so this is non-empty.
+            hits.iter()
+                .take(3)
+                .filter(|h| doc_coverage(h) >= coverage_fraction)
+                .collect()
         } else {
             filtered
         }
@@ -603,6 +610,22 @@ pub fn run_consult(
             });
         }
         // else: skip this doc and continue to next candidate.
+    }
+
+    // Every coverage-qualified candidate was either over the per-doc cap or too large
+    // for the remaining budget, leaving nothing to weave.  Abstain rather than emit a
+    // doc-less `Selected`, which would tell the caller (per SKILL.md) to weave context
+    // that does not exist and break the exit-code contract — 0 = selected with docs,
+    // 4 = abstain (bug_009).
+    if packed.is_empty() {
+        return Ok((
+            ConsultOutcome::Abstain {
+                query: query.to_string(),
+                near_misses: build_near_misses(&hits, &query_terms),
+                reason: "no candidate within token budget".to_string(),
+            },
+            diag,
+        ));
     }
 
     Ok((
@@ -1417,6 +1440,18 @@ mod tests {
                     !docs.is_empty(),
                     "expected at least one doc after gate passed via top-3 coverage"
                 );
+                // The packed set must contain the doc whose coverage justified the gate
+                // (the rank-2 "Engineering Feedback"), not the low-coverage rank-1
+                // displacer the per-doc filter rejects (bug_004).
+                assert!(
+                    docs.iter().any(|d| d.title == "Engineering Feedback"),
+                    "expected the high-coverage rank-2 doc to be packed, got: {:?}",
+                    docs.iter().map(|d| d.title.as_str()).collect::<Vec<_>>()
+                );
+                assert!(
+                    !docs.iter().any(|d| d.title == "compound loop learn cycle"),
+                    "the low-coverage rank-1 displacer must not be packed (bug_004)"
+                );
             }
             ConsultOutcome::Abstain { reason, .. } => {
                 panic!(
@@ -1504,5 +1539,51 @@ mod tests {
             "max_top3_coverage ({:.4}) should be 1.0 when rank-2 doc has full coverage",
             max_cov,
         );
+    }
+
+    // --- Test 17: gate passes but packer admits nothing → Abstain (bug_009) ---
+    //
+    // The abstain gate can open while the packer drops every candidate.  Here the sole
+    // high-coverage doc clears the gate but exceeds a tiny per-doc token cap, so the
+    // pack ends empty.  The result must be Abstain, not a doc-less Selected, so the
+    // exit-code contract holds: 0 = selected with docs, 4 = abstain.
+
+    #[test]
+    fn empty_pack_after_gate_pass_abstains() {
+        // One doc with full coverage of the query → the gate passes.
+        let body = "compound loop learn cycle ".repeat(50);
+        let relevant = make_vault_file("Long Relevant Note", "card", &body);
+
+        let files = vec![relevant];
+        let scope = vec!["card".to_string()];
+
+        let mut config = default_config();
+        config.elbow_k = 1.0;
+        // Force every candidate over the per-doc cap so the packer admits nothing.
+        config.per_doc_token_cap = 1;
+
+        let (result, _diag) = run_consult(
+            "compound loop learn cycle",
+            &files,
+            &vault_root(),
+            &scope,
+            &config,
+            ConsultMode::Deliberate,
+        )
+        .unwrap();
+
+        match result {
+            ConsultOutcome::Abstain { reason, .. } => {
+                assert_eq!(reason, "no candidate within token budget");
+            }
+            ConsultOutcome::Selected { docs, total_tokens, .. } => {
+                panic!(
+                    "expected Abstain when the packer admits no doc, got Selected with \
+                     {} doc(s), {} tokens",
+                    docs.len(),
+                    total_tokens,
+                );
+            }
+        }
     }
 }
