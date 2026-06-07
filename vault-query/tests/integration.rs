@@ -765,3 +765,102 @@ fn test_consult_no_log_path_no_file_written() {
     // And no file appeared at our would-be location (trivially true; just guards the contract).
     assert!(!would_be_log.exists(), "log file should not be created when log_path is None");
 }
+
+// ---------------------------------------------------------------------------
+// --no-log and --log-path flag tests (Backlog 26)
+// ---------------------------------------------------------------------------
+
+/// `--no-log` suppresses the JSONL record even when the config has a log_path set.
+#[test]
+fn test_consult_no_log_flag_suppresses_write() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log_file = tmp.path().join("consult-log.jsonl");
+
+    // Build a config with log_path set to an absolute path.
+    let tmp_home = tempfile::tempdir().unwrap();
+    let cfg_dir = tmp_home.path().join(".config/vault");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.json"),
+        serde_json::json!({
+            "vault_root": fixture_dir().to_str().unwrap(),
+            "projects_path": "41 projects",
+            "consult": {
+                "log_path": log_file.to_str().unwrap()
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .env("HOME", tmp_home.path())
+        .args(["consult", "retry backoff failure", "--no-log"])
+        .output()
+        .expect("failed to run vault-query consult");
+
+    let code = output.status.code().unwrap_or(-1);
+    assert!(code == 0 || code == 4, "expected exit 0 or 4, got {}", code);
+
+    // The log file must NOT have been created despite config log_path being set.
+    assert!(
+        !log_file.exists(),
+        "--no-log must suppress the log write even when config log_path is set"
+    );
+}
+
+/// `--log-path <PATH>` writes the record to the override path, not the config path.
+#[test]
+fn test_consult_log_path_flag_overrides_config() {
+    let tmp = tempfile::tempdir().unwrap();
+    let config_log_file = tmp.path().join("config-log.jsonl");
+    let override_log_file = tmp.path().join("override-log.jsonl");
+
+    // Build a config with log_path pointing at config_log_file.
+    let tmp_home = tempfile::tempdir().unwrap();
+    let cfg_dir = tmp_home.path().join(".config/vault");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.json"),
+        serde_json::json!({
+            "vault_root": fixture_dir().to_str().unwrap(),
+            "projects_path": "41 projects",
+            "consult": {
+                "log_path": config_log_file.to_str().unwrap()
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .env("HOME", tmp_home.path())
+        .args([
+            "consult",
+            "retry backoff failure",
+            "--log-path",
+            override_log_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run vault-query consult");
+
+    let code = output.status.code().unwrap_or(-1);
+    assert!(code == 0 || code == 4, "expected exit 0 or 4, got {}", code);
+
+    // Record must appear at the override path.
+    assert!(
+        override_log_file.exists(),
+        "--log-path record must be written to the override path"
+    );
+    let content = std::fs::read_to_string(&override_log_file).unwrap();
+    let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 1, "expected exactly one JSONL line at override path");
+    serde_json::from_str::<serde_json::Value>(lines[0])
+        .expect("override log line must be valid JSON");
+
+    // The config-path log must NOT have been touched.
+    assert!(
+        !config_log_file.exists(),
+        "--log-path must not write to the config log_path"
+    );
+}

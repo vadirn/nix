@@ -176,6 +176,12 @@ enum Commands {
         /// Absolute score backstop; overrides config threshold (optional)
         #[arg(long)]
         threshold: Option<f32>,
+        /// Suppress JSONL instrumentation for this invocation (overrides --log-path and config log_path)
+        #[arg(long, conflicts_with = "log_path")]
+        no_log: bool,
+        /// Write this invocation's JSONL record to PATH instead of config log_path
+        #[arg(long, value_name = "PATH")]
+        log_path: Option<String>,
     },
 }
 
@@ -307,6 +313,8 @@ fn main() -> Result<()> {
             ambient,
             format,
             threshold,
+            no_log,
+            log_path,
         } => {
             let cfg = resolve_config(&cli)?;
             let exit_code = commands::consult_cmd::run(
@@ -316,6 +324,8 @@ fn main() -> Result<()> {
                 *ambient,
                 *format,
                 *threshold,
+                *no_log,
+                log_path.as_deref(),
             )?;
             if exit_code != 0 {
                 std::process::exit(exit_code);

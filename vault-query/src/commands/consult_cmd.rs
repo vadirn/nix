@@ -314,6 +314,8 @@ pub fn run(
     ambient: bool,
     format: ConsultFormat,
     threshold_override: Option<f32>,
+    no_log: bool,
+    log_path_override: Option<&str>,
 ) -> Result<i32> {
     let vault_root = &cfg.vault_root;
 
@@ -349,8 +351,13 @@ pub fn run(
         run_consult(task, &files, vault_root, &scope_types, &consult_config, mode)?;
 
     // Best-effort JSONL logging (Decision 8). Any error is silently swallowed.
-    if let Some(ref log_path) = consult_config.log_path {
-        append_log(log_path, vault_root, task, mode_str, &format_str, &outcome, &diag);
+    // Precedence: --no-log wins over --log-path, which wins over config log_path.
+    if !no_log {
+        let effective_log_path: Option<&str> = log_path_override
+            .or(consult_config.log_path.as_deref());
+        if let Some(log_path) = effective_log_path {
+            append_log(log_path, vault_root, task, mode_str, &format_str, &outcome, &diag);
+        }
     }
 
     match outcome {
