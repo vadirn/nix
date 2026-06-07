@@ -7,7 +7,7 @@
 //!
 //! This module is the unit-test surface — no CLI wiring (Step D does that).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::Result;
@@ -319,6 +319,36 @@ fn median_f32(values: &[f32]) -> f32 {
 }
 
 // ---------------------------------------------------------------------------
+// Near-miss helper
+// ---------------------------------------------------------------------------
+
+/// Build the `near_misses` payload from the top ~3 hits (Decision 16).
+///
+/// `query_terms` is a `BTreeSet`, so `matched_terms` comes out in a stable
+/// (sorted) order across invocations — the abstain markdown/JSON is byte-identical
+/// for identical inputs.
+fn build_near_misses(hits: &[Hit], query_terms: &BTreeSet<String>) -> Vec<NearMiss> {
+    hits.iter()
+        .take(3)
+        .map(|h| {
+            let doc_tokens: HashSet<String> =
+                stemmed_tokens(&h.stored_body).into_iter().collect();
+            let matched_terms: Vec<String> = query_terms
+                .iter()
+                .filter(|t| doc_tokens.contains(*t))
+                .cloned()
+                .collect();
+            NearMiss {
+                path: h.path.clone(),
+                title: h.title.clone(),
+                score: h.score,
+                matched_terms,
+            }
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -405,7 +435,7 @@ pub fn run_consult(
     //
     // Diagnostics retain the rank-1 coverage so existing callers/logs are unaffected;
     // the gate decision uses the top-3 maximum.
-    let query_terms: HashSet<String> = stemmed_tokens(query).into_iter().collect();
+    let query_terms: BTreeSet<String> = stemmed_tokens(query).into_iter().collect();
 
     // Top-3 inspection bound: examine at most the 3 highest-scoring candidates.
     let top3_inspect = hits.iter().take(3);
@@ -479,25 +509,7 @@ pub fn run_consult(
             "no score elbow".to_string()
         };
 
-        let near_misses = hits
-            .iter()
-            .take(3)
-            .map(|h| {
-                let doc_tokens: HashSet<String> =
-                    stemmed_tokens(&h.stored_body).into_iter().collect();
-                let matched_terms: Vec<String> = query_terms
-                    .iter()
-                    .filter(|t| doc_tokens.contains(*t))
-                    .cloned()
-                    .collect();
-                NearMiss {
-                    path: h.path.clone(),
-                    title: h.title.clone(),
-                    score: h.score,
-                    matched_terms,
-                }
-            })
-            .collect();
+        let near_misses = build_near_misses(&hits, &query_terms);
 
         return Ok((
             ConsultOutcome::Abstain {
