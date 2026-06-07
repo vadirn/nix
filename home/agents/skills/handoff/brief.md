@@ -17,4 +17,4 @@ If the task needs its own multi-step orchestration, surface that in ## Backlog r
 than invoking /work yourself.
 ```
 
-Phrase every directive affirmatively (the `/affirm` convention): the positive form is narrower and defines done. "Edit only `rules/<name>.rs`" beats "do NOT touch other files".
+Phrase every directive affirmatively (the `/affirm` convention): an affirmative directive names a verifiable target state, while a negative directive leaves the exclusions open-ended. "Edit only `rules/<name>.rs`" beats "do NOT touch other files".

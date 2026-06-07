@@ -12,13 +12,12 @@ description: >
 
 A handoff is one short-lived markdown file that carries work-state from one agent or session to the next. The writer creates it with `mktemp`, fills a template, and passes the path; the reader reads the path and acts. The file is the message: plain text both parties can inspect, not hidden context.
 
-Handoffs are ephemeral by design — `$TMPDIR` scratch, no cleanup, no persistence. Durable carry-forward across cold launches is `/track`'s job; a continuation points at a durable record when one exists.
+Handoffs are ephemeral by design — `$TMPDIR` scratch, no cleanup, no persistence. Durable carry-forward across cold launches is `/track`'s job; a continuation may name such a durable record as a next action, yet needs no external file to be acted on.
 
 ## Write a handoff
 
 ```
 type = <type> from args (brief | result | continuation), else continuation
-// Invoking /handoff before a /clear or compaction defaults to a continuation of the current session.
 
 do("read <type>.md in this skill directory and fill its template")
 
@@ -42,7 +41,13 @@ do("act on <type>: a brief is your task; a result updates your plan; a continuat
 | result       | `result.md`       | outcome report from worker back to delegator      |
 | continuation | `continuation.md` | session-state packet for the same effort resuming |
 
-## Boundaries
+## Reference
+
+### Boundaries
 
 - **vs `/track`:** a handoff is ephemeral and carries into the very next context (e.g. across a `/clear`); a track is the durable, per-project work log saved at session boundaries. The two are independent: a continuation points at a track when one exists, but depends on none.
 - **vs `/work`:** `/work` is orchestration policy — planning, delegation, git posture. It consumes handoff's brief and result templates to talk to its subagents; handoff owns only the message shape and the write/read protocol.
+
+### Default type
+
+Invoking `/handoff` before a `/clear` or compaction defaults to a continuation of the current session.
