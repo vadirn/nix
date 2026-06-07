@@ -7,10 +7,11 @@ use std::str::FromStr;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
-use tantivy::{doc, Index, IndexWriter, SnippetGenerator};
+use tantivy::SnippetGenerator;
 
 use crate::{
-    commands::consult::{bilingual_analyzer, sanitize_query},
+    commands::consult::{build_index, sanitize_query},
+    config::{DEFAULT_DESCRIPTION_BOOST, DEFAULT_TITLE_BOOST},
     frontmatter, vault, wikilink,
 };
 
@@ -92,56 +93,21 @@ pub fn collect_bm25_results(
 
     let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
 
-    // Build schema
-    let mut schema_builder = Schema::builder();
-    let title_options = TextOptions::default()
-        .set_indexing_options(
-            TextFieldIndexing::default()
-                .set_tokenizer("default")
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-        )
-        .set_stored();
-    let body_options = TextOptions::default()
-        .set_indexing_options(
-            TextFieldIndexing::default()
-                .set_tokenizer("default")
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-        )
-        .set_stored();
-    let title = schema_builder.add_text_field("title", title_options);
-    let body = schema_builder.add_text_field("body", body_options);
-    let path_field = schema_builder.add_text_field("path", STRING | STORED);
-    let schema = schema_builder.build();
-
-    // Build in-RAM index
-    let index = Index::create_in_ram(schema);
-
-    // Register the bilingual analysis chain (shared with consult.rs; Decision 6).
-    index.tokenizers().register("default", bilingual_analyzer());
-
-    let total_content: usize = files.iter().map(|f| f.content.len()).sum();
-    let writer_budget = total_content.max(15_000_000);
-    let mut writer: IndexWriter = index.writer(writer_budget)?;
-
-    for file in &files {
-        let rel = file.relative_path(vault_root);
-        let body_text = frontmatter::body(&file.content);
-        writer.add_document(doc!(
-            title => file.name.as_str(),
-            body => body_text,
-            path_field => rel,
-        ))?;
-    }
-    writer.commit()?;
+    // Build the shared BM25 index (schema + bilingual analyzer shared with consult).
+    let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
+    let (index, fields) = build_index(&file_refs, vault_root)?;
 
     let reader = index.reader()?;
     let searcher = reader.searcher();
 
-    // Parse query with title boosted. Sanitize metacharacters first so that
+    // Parse query over title + description + body with the shared boosts (filename
+    // demoted, curated description favored). Sanitize metacharacters first so that
     // natural-language queries containing `:` or other Tantivy syntax chars
     // (e.g. "structure the workflow: plan first") are treated as plain terms.
-    let mut query_parser = QueryParser::for_index(&index, vec![title, body]);
-    query_parser.set_field_boost(title, 2.0);
+    let mut query_parser =
+        QueryParser::for_index(&index, vec![fields.title, fields.description, fields.body]);
+    query_parser.set_field_boost(fields.title, DEFAULT_TITLE_BOOST);
+    query_parser.set_field_boost(fields.description, DEFAULT_DESCRIPTION_BOOST);
     let sanitized = sanitize_query(query);
     let parsed = query_parser.parse_query(&sanitized)?;
 
@@ -152,7 +118,7 @@ pub fn collect_bm25_results(
     }
 
     // SnippetGenerator must be created from the same searcher + parsed query.
-    let snippet_generator = SnippetGenerator::create(&searcher, &parsed, body)?;
+    let snippet_generator = SnippetGenerator::create(&searcher, &parsed, fields.body)?;
 
     // Build a path → &VaultFile lookup map for type/links resolution.
     let file_map: HashMap<String, &vault::VaultFile> = files
@@ -164,13 +130,13 @@ pub fn collect_bm25_results(
     for (score, doc_address) in top_docs {
         let doc: TantivyDocument = searcher.doc(doc_address)?;
         let path_val = doc
-            .get_first(path_field)
+            .get_first(fields.path)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
 
         let title_val = doc
-            .get_first(title)
+            .get_first(fields.title)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -179,7 +145,7 @@ pub fn collect_bm25_results(
         // HTML-encodes (`&`→`&amp;`, `<`→`&lt;`, `'`→`&#x27;`, …) before wrapping
         // matches in <b> tags — stripping the tags would leave the entity references
         // behind. `fragment()` is the unescaped windowed text with no highlight markup.
-        let body_val = doc.get_first(body).and_then(|v| v.as_str()).unwrap_or("");
+        let body_val = doc.get_first(fields.body).and_then(|v| v.as_str()).unwrap_or("");
         let snippet_plain = snippet_generator.snippet(body_val).fragment().to_string();
 
         // Look up the VaultFile for type and links
@@ -242,56 +208,21 @@ fn run_bm25(
 
     let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
 
-    // Build schema
-    let mut schema_builder = Schema::builder();
-    let title_options = TextOptions::default()
-        .set_indexing_options(
-            TextFieldIndexing::default()
-                .set_tokenizer("default")
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-        )
-        .set_stored();
-    let body_options = TextOptions::default()
-        .set_indexing_options(
-            TextFieldIndexing::default()
-                .set_tokenizer("default")
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-        )
-        .set_stored();
-    let title = schema_builder.add_text_field("title", title_options);
-    let body = schema_builder.add_text_field("body", body_options);
-    let path_field = schema_builder.add_text_field("path", STRING | STORED);
-    let schema = schema_builder.build();
-
-    // Build in-RAM index
-    let index = Index::create_in_ram(schema);
-
-    // Register the bilingual analysis chain (shared with consult.rs; Decision 6).
-    index.tokenizers().register("default", bilingual_analyzer());
-
-    let total_content: usize = files.iter().map(|f| f.content.len()).sum();
-    let writer_budget = total_content.max(15_000_000);
-    let mut writer: IndexWriter = index.writer(writer_budget)?;
-
-    for file in &files {
-        let rel = file.relative_path(vault_root);
-        let body_text = frontmatter::body(&file.content);
-        writer.add_document(doc!(
-            title => file.name.as_str(),
-            body => body_text,
-            path_field => rel,
-        ))?;
-    }
-    writer.commit()?;
+    // Build the shared BM25 index (schema + bilingual analyzer shared with consult).
+    let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
+    let (index, fields) = build_index(&file_refs, vault_root)?;
 
     let reader = index.reader()?;
     let searcher = reader.searcher();
 
-    // Parse query with title boosted. Sanitize metacharacters first so that
+    // Parse query over title + description + body with the shared boosts (filename
+    // demoted, curated description favored). Sanitize metacharacters first so that
     // natural-language queries containing `:` or other Tantivy syntax chars
     // (e.g. "structure the workflow: plan first") are treated as plain terms.
-    let mut query_parser = QueryParser::for_index(&index, vec![title, body]);
-    query_parser.set_field_boost(title, 2.0);
+    let mut query_parser =
+        QueryParser::for_index(&index, vec![fields.title, fields.description, fields.body]);
+    query_parser.set_field_boost(fields.title, DEFAULT_TITLE_BOOST);
+    query_parser.set_field_boost(fields.description, DEFAULT_DESCRIPTION_BOOST);
     let sanitized = sanitize_query(query);
     let parsed = query_parser.parse_query(&sanitized)?;
 
@@ -301,17 +232,17 @@ fn run_bm25(
         return Ok(());
     }
 
-    let snippet_generator = SnippetGenerator::create(&searcher, &parsed, body)?;
+    let snippet_generator = SnippetGenerator::create(&searcher, &parsed, fields.body)?;
 
     for (score, doc_address) in top_docs {
         let doc: TantivyDocument = searcher.doc(doc_address)?;
         let path_val = doc
-            .get_first(path_field)
+            .get_first(fields.path)
             .and_then(|v| v.as_str())
             .unwrap_or("");
         println!("[{:.2}] {}", score, path_val);
 
-        let body_val = doc.get_first(body).and_then(|v| v.as_str()).unwrap_or("");
+        let body_val = doc.get_first(fields.body).and_then(|v| v.as_str()).unwrap_or("");
         let snippet = snippet_generator.snippet(body_val);
         let html = snippet.to_html();
         if !html.is_empty() {
