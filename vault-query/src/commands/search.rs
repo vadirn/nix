@@ -175,13 +175,12 @@ pub fn collect_bm25_results(
             .unwrap_or("")
             .to_string();
 
-        // snippet: plain text (strip <b>/<b> tags, no asterisk substitution)
+        // snippet: plain text. Use the raw fragment rather than `to_html()`, which
+        // HTML-encodes (`&`→`&amp;`, `<`→`&lt;`, `'`→`&#x27;`, …) before wrapping
+        // matches in <b> tags — stripping the tags would leave the entity references
+        // behind. `fragment()` is the unescaped windowed text with no highlight markup.
         let body_val = doc.get_first(body).and_then(|v| v.as_str()).unwrap_or("");
-        let snippet_plain = snippet_generator
-            .snippet(body_val)
-            .to_html()
-            .replace("<b>", "")
-            .replace("</b>", "");
+        let snippet_plain = snippet_generator.snippet(body_val).fragment().to_string();
 
         // Look up the VaultFile for type and links
         let (doc_type, links, body_text) = if let Some(vf) = file_map.get(&path_val) {
