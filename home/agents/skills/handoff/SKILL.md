@@ -19,11 +19,15 @@ Handoffs are ephemeral by design — `$TMPDIR` scratch, no cleanup, no persisten
 ```
 type = <type> from args (brief | result | continuation), else continuation
 
-do("read <type>.md in this skill directory and fill its template")
+do("read <type>.md in this skill directory and fill its template (the filled body already opens with its `# Handoff: <type>` line)")
 
-path = Bash(mktemp "$TMPDIR/handoff-XXXXXX.md")
-Write(path, "# Handoff: <type>\n\n<filled body>")
-do("surface <path> to the reader: an orchestrator inlines it in the spawn prompt; a user-invoked handoff prints one copy-pasteable `read <path>` line for the next context to run, not the body")
+// brief and continuation carry by file path; a result returns inline by default (result.md), to a file only when bulky
+if type == result and do("the filled result is not bulky"):
+    do("return the filled body inline in the final message; write no file")
+else:
+    path = Bash(mktemp "$TMPDIR/handoff-XXXXXX.md")
+    Write(path, <filled body>)
+    do("surface <path> to the reader: an orchestrator inlines it in the spawn prompt; a user-invoked handoff prints one copy-pasteable `read <path>` line for the next context to run, not the body")
 ```
 
 ## Read a handoff
@@ -46,7 +50,7 @@ do("act on <type>: a brief is your task; a result updates your plan; a continuat
 ### Boundaries
 
 - **vs `/track`:** a handoff is ephemeral and carries into the very next context (e.g. across a `/clear`); a track is the durable, per-project work log saved at session boundaries. The two are independent: a continuation points at a track when one exists, but depends on none.
-- **vs `/work`:** `/work` is orchestration policy — planning, delegation, git posture. It consumes handoff's brief and result templates to talk to its subagents; handoff owns only the message shape and the write/read protocol.
+- **vs `/work`:** `/work` is orchestration policy — planning, delegation, git posture. It mirrors handoff's brief and result shapes to talk to its subagents, inlining its own copies rather than reading these files; handoff owns only the message shape and the write/read protocol.
 
 ### Default type
 
