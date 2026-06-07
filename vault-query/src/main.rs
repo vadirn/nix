@@ -89,6 +89,9 @@ enum Commands {
         /// Max results (BM25 mode only)
         #[arg(short = 'n', long, default_value = "20")]
         limit: usize,
+        /// Output format: text (default) or json
+        #[arg(long, default_value = "text")]
+        format: commands::search::SearchFormat,
     },
     /// Resolve a slug to a vault file path
     Resolve {
@@ -157,6 +160,29 @@ enum Commands {
         /// Year to report (defaults to current)
         year: Option<i32>,
     },
+    /// Retrieve vault context for a task (retrieve → select → emit)
+    Consult {
+        /// Query string describing the task or topic
+        task: String,
+        /// Comma-separated frontmatter types to search (overrides config types)
+        #[arg(long, value_delimiter = ',')]
+        types: Vec<String>,
+        /// Stricter abstain gate for ambient/hook invocations (Decision 18)
+        #[arg(long)]
+        ambient: bool,
+        /// Output format: markdown (default) or json
+        #[arg(long, default_value = "markdown")]
+        format: commands::consult_cmd::ConsultFormat,
+        /// Absolute score backstop; overrides config threshold (optional)
+        #[arg(long)]
+        threshold: Option<f32>,
+        /// Suppress JSONL instrumentation for this invocation (overrides --log-path and config log_path)
+        #[arg(long)]
+        no_log: bool,
+        /// Write this invocation's JSONL record to PATH instead of config log_path
+        #[arg(long, value_name = "PATH")]
+        log_path: Option<String>,
+    },
 }
 
 fn resolve_config(cli: &Cli) -> Result<config::ResolvedConfig> {
@@ -212,9 +238,10 @@ fn main() -> Result<()> {
             path,
             regex,
             limit,
+            format,
         } => {
             let cfg = resolve_config(&cli)?;
-            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit)
+            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format)
         }
         Commands::Resolve { slug } => {
             let cfg = resolve_config(&cli)?;
@@ -279,6 +306,31 @@ fn main() -> Result<()> {
         Commands::Xp { year } => {
             let cfg = resolve_config(&cli)?;
             commands::xp::run(&cfg, *year)
+        }
+        Commands::Consult {
+            task,
+            types,
+            ambient,
+            format,
+            threshold,
+            no_log,
+            log_path,
+        } => {
+            let cfg = resolve_config(&cli)?;
+            let exit_code = commands::consult_cmd::run(
+                task,
+                &cfg,
+                types,
+                *ambient,
+                *format,
+                *threshold,
+                *no_log,
+                log_path.as_deref(),
+            )?;
+            if exit_code != 0 {
+                std::process::exit(exit_code);
+            }
+            Ok(())
         }
     }
 }

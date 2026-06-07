@@ -61,6 +61,14 @@ Avoid:
 - Suggest 2-3 concrete options: search it, try a different approach, state assumptions.
 - Grade confidence 1-10 for recommendations with brief reasoning.
 
+## Grounding
+
+Before answering a task that turns on the user's own judgment, consult the vault for the user's prior thinking. This applies during exploration and grounding, and to subagents gathering context.
+
+Run `vault-query consult "<task framing>" --format markdown`; the `/consult` skill wraps this. Branch on the exit code: 0 returns ranked vault slices to fold into the answer; 4 is confident silence (no source cleared the threshold), so proceed un-enriched; 1 or 2 is an error, so proceed un-enriched. Phrase the query yourself, and reformulate once with broader terms before accepting silence. To reach a project track or checkpoint, add `--types track,checkpoint`.
+
+Consult when grounding needs the user's view: an opinion, stance, definition, framing, design preference, or a decision already reasoned through. The signal is the request for the user's judgment, whatever the surface subject. Skip consult for mechanical execution: locating or reading code, editing, refactoring, debugging, file operations, running commands. Abstention costs one cheap call, so when a task concerns the user's view and relevance is uncertain, consult.
+
 ## CLI tools
 
 Use these CLI tools through the Bash tool. Prefer them over manual code reading or web search.

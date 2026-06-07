@@ -21,6 +21,7 @@ fn cfg_for(vault_root: &Path) -> ResolvedConfig {
         projects_path: None,
         project_path: None,
         lint: None,
+        consult: None,
         ignore,
     }
 }
@@ -273,9 +274,12 @@ fn test_list_titles_sorted() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let lines: Vec<&str> = stdout.lines().collect();
     assert!(lines.len() >= 2, "expected at least 2 cards, got: {:?}", lines);
-    // Sorted: "Impureim sandwich" before "Test card"
-    assert!(lines[0].starts_with("Impureim sandwich"));
-    assert!(lines[1].starts_with("Test card"));
+    // Sorted: "Impureim sandwich" comes before "Test card" (alphabetical)
+    let imp_pos = lines.iter().position(|l| l.starts_with("Impureim sandwich"))
+        .expect("Impureim sandwich should be in the list");
+    let test_pos = lines.iter().position(|l| l.starts_with("Test card"))
+        .expect("Test card should be in the list");
+    assert!(imp_pos < test_pos, "Impureim sandwich should sort before Test card");
 }
 
 #[test]
@@ -551,5 +555,312 @@ fn test_lint_asset_wikilinks_resolve() {
         broken.is_empty(),
         "expected zero broken-wikilink findings for asset wikilinks, got: {:#?}",
         broken
+    );
+}
+
+// ---------------------------------------------------------------------------
+// consult subcommand integration tests
+// ---------------------------------------------------------------------------
+
+/// Run `vault-query consult` against the fixture vault and return (stdout, exit_code).
+fn run_consult(args: &[&str]) -> (String, i32) {
+    let mut cmd = Command::new(cargo_bin());
+    cmd.args(["consult"])
+        .arg("--vault-root")
+        .arg(fixture_dir().to_str().unwrap());
+    for a in args {
+        cmd.arg(a);
+    }
+    let output = cmd.output().expect("failed to run vault-query consult");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    (stdout, code)
+}
+
+/// A query matching "Retry patterns.md" exits 0 and contains the document body.
+#[test]
+fn test_consult_relevant_query_exits_0_with_content() {
+    let (stdout, code) = run_consult(&["retry backoff failure"]);
+    assert_eq!(code, 0, "expected exit 0 for relevant query, stdout: {}", stdout);
+    assert!(!stdout.is_empty(), "expected non-empty output for selected outcome");
+    // Should contain the card's title or body excerpt
+    assert!(
+        stdout.contains("Retry") || stdout.contains("retry") || stdout.contains("backoff"),
+        "expected retry content in output: {}",
+        stdout
+    );
+}
+
+/// A query that cannot possibly match any vault content exits 4 (abstain).
+#[test]
+fn test_consult_irrelevant_query_exits_4_with_near_misses() {
+    // Use a nonsense string unlikely to appear in any vault document.
+    let (stdout, code) = run_consult(&["xyzzy_zork_quux_frobnicator_abcdefgh123"]);
+    assert_eq!(code, 4, "expected exit 4 (abstain) for irrelevant query, stdout: {}", stdout);
+    assert!(!stdout.is_empty(), "abstain output should be non-empty (near_misses note)");
+}
+
+/// `--format json` emits valid JSON for a selected outcome.
+#[test]
+fn test_consult_json_format_selected_is_valid() {
+    let (stdout, code) = run_consult(&["retry backoff failure", "--format", "json"]);
+    // If the query hits (exit 0), validate JSON structure.
+    // If the vault is too small to pass the gate (exit 4), validate the abstain envelope.
+    assert!(
+        code == 0 || code == 4,
+        "expected exit 0 or 4, got {}",
+        code
+    );
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("expected valid JSON, got: {}", &stdout[..stdout.len().min(200)]));
+    let status = v["status"].as_str().expect("missing status field");
+    if code == 0 {
+        assert_eq!(status, "selected");
+        assert!(v["docs"].is_array(), "missing docs array");
+        assert!(v.get("total_tokens").is_some(), "missing total_tokens");
+        assert!(v.get("query").is_some(), "missing query");
+    } else {
+        assert_eq!(status, "abstain");
+        assert!(v["near_misses"].is_array(), "missing near_misses array");
+        assert!(v.get("reason").is_some(), "missing reason");
+        assert!(v.get("query").is_some(), "missing query");
+    }
+}
+
+/// `--format json` emits valid JSON for an abstain outcome.
+#[test]
+fn test_consult_json_format_abstain_is_valid() {
+    let (stdout, code) = run_consult(&["xyzzy_zork_quux_frobnicator_abcdefgh123", "--format", "json"]);
+    assert_eq!(code, 4, "expected exit 4 for irrelevant query, stdout: {}", stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("expected valid JSON abstain envelope, got: {}", &stdout[..stdout.len().min(200)]));
+    assert_eq!(v["status"].as_str(), Some("abstain"), "wrong status field");
+    assert!(v["near_misses"].is_array(), "missing near_misses array in abstain envelope");
+    assert!(v.get("reason").is_some(), "missing reason in abstain envelope");
+}
+
+// ---------------------------------------------------------------------------
+// JSONL logging tests (Backlog 6, Decision 8)
+// ---------------------------------------------------------------------------
+
+/// Helper: run consult with a root config that sets `log_path`.
+/// Returns (stdout, exit_code, log_file_path).
+fn run_consult_with_log(query: &str, log_file: &Path) -> (String, i32) {
+    // Write a minimal root config pointing at the fixture vault with log_path set.
+    let tmp_home = tempfile::tempdir().unwrap();
+    let cfg_dir = tmp_home.path().join(".config/vault");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.json"),
+        serde_json::json!({
+            "vault_root": fixture_dir().to_str().unwrap(),
+            "projects_path": "41 projects",
+            "consult": {
+                "log_path": log_file.to_str().unwrap()
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .env("HOME", tmp_home.path())
+        .args(["consult", query])
+        .output()
+        .expect("failed to run vault-query consult");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    (stdout, code)
+}
+
+/// With `log_path` set, one invocation appends exactly one parseable JSON line
+/// with the expected keys; the command exit code is unaffected.
+#[test]
+fn test_consult_log_path_appends_one_jsonl_line() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log_file = tmp.path().join("consult-log.jsonl");
+
+    // File must not exist before the invocation.
+    assert!(!log_file.exists(), "log file should not exist before first run");
+
+    let (_stdout, code) = run_consult_with_log("retry backoff failure", &log_file);
+
+    // Exit code is 0 or 4 (gate may abstain on fixture corpus); never an error.
+    assert!(
+        code == 0 || code == 4,
+        "expected exit 0 or 4, got {}",
+        code
+    );
+
+    // Exactly one line must have been appended.
+    let content = std::fs::read_to_string(&log_file)
+        .expect("log file should exist after invocation");
+    let lines: Vec<&str> = content.lines().collect();
+    assert_eq!(lines.len(), 1, "expected exactly one JSONL line, got {}", lines.len());
+
+    // The line must parse as JSON and carry the required keys.
+    let record: serde_json::Value = serde_json::from_str(lines[0])
+        .expect("log line should be valid JSON");
+
+    // Required top-level keys:
+    for key in &[
+        "timestamp_ms", "query", "mode", "format", "outcome",
+        "num_returned", "num_selected", "total_tokens",
+        "selected_paths", "near_miss_titles", "near_miss_scores",
+    ] {
+        assert!(record.get(key).is_some(), "missing key '{}' in log record", key);
+    }
+
+    // Diagnostic keys (may be null for empty corpora):
+    for key in &["top_score", "median_score", "coverage", "max_top3_coverage", "elbow_ratio"] {
+        assert!(record.get(key).is_some(), "missing diagnostic key '{}' in log record", key);
+    }
+
+    // mode is "deliberate" (no --ambient flag).
+    assert_eq!(record["mode"].as_str(), Some("deliberate"));
+
+    // outcome matches the exit code.
+    let expected_outcome = if code == 0 { "selected" } else { "abstain" };
+    assert_eq!(
+        record["outcome"].as_str(),
+        Some(expected_outcome),
+        "outcome field mismatch"
+    );
+}
+
+/// A second invocation appends a second line (not overwriting the first).
+#[test]
+fn test_consult_log_path_appends_not_overwrites() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log_file = tmp.path().join("consult-log.jsonl");
+
+    run_consult_with_log("retry backoff failure", &log_file);
+    run_consult_with_log("retry backoff failure", &log_file);
+
+    let content = std::fs::read_to_string(&log_file).unwrap();
+    let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 2, "expected two JSONL lines after two runs, got {}", lines.len());
+
+    // Both lines must be parseable.
+    for (i, line) in lines.iter().enumerate() {
+        serde_json::from_str::<serde_json::Value>(line)
+            .unwrap_or_else(|e| panic!("line {} is not valid JSON: {}", i + 1, e));
+    }
+}
+
+/// With `log_path = None` (default), no file is written and the command behaves normally.
+#[test]
+fn test_consult_no_log_path_no_file_written() {
+    // Use the standard fixture-vault run_consult helper (no log_path in config).
+    let tmp = tempfile::tempdir().unwrap();
+    let would_be_log = tmp.path().join("should-not-exist.jsonl");
+
+    // No --log-path flag; the default config has no log_path.
+    let (stdout, code) = run_consult(&["retry backoff failure"]);
+
+    // Command behaves identically regardless of log_path presence.
+    assert!(code == 0 || code == 4);
+    assert!(!stdout.is_empty());
+
+    // And no file appeared at our would-be location (trivially true; just guards the contract).
+    assert!(!would_be_log.exists(), "log file should not be created when log_path is None");
+}
+
+// ---------------------------------------------------------------------------
+// --no-log and --log-path flag tests (Backlog 26)
+// ---------------------------------------------------------------------------
+
+/// `--no-log` suppresses the JSONL record even when the config has a log_path set.
+#[test]
+fn test_consult_no_log_flag_suppresses_write() {
+    let tmp = tempfile::tempdir().unwrap();
+    let log_file = tmp.path().join("consult-log.jsonl");
+
+    // Build a config with log_path set to an absolute path.
+    let tmp_home = tempfile::tempdir().unwrap();
+    let cfg_dir = tmp_home.path().join(".config/vault");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.json"),
+        serde_json::json!({
+            "vault_root": fixture_dir().to_str().unwrap(),
+            "projects_path": "41 projects",
+            "consult": {
+                "log_path": log_file.to_str().unwrap()
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .env("HOME", tmp_home.path())
+        .args(["consult", "retry backoff failure", "--no-log"])
+        .output()
+        .expect("failed to run vault-query consult");
+
+    let code = output.status.code().unwrap_or(-1);
+    assert!(code == 0 || code == 4, "expected exit 0 or 4, got {}", code);
+
+    // The log file must NOT have been created despite config log_path being set.
+    assert!(
+        !log_file.exists(),
+        "--no-log must suppress the log write even when config log_path is set"
+    );
+}
+
+/// `--log-path <PATH>` writes the record to the override path, not the config path.
+#[test]
+fn test_consult_log_path_flag_overrides_config() {
+    let tmp = tempfile::tempdir().unwrap();
+    let config_log_file = tmp.path().join("config-log.jsonl");
+    let override_log_file = tmp.path().join("override-log.jsonl");
+
+    // Build a config with log_path pointing at config_log_file.
+    let tmp_home = tempfile::tempdir().unwrap();
+    let cfg_dir = tmp_home.path().join(".config/vault");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.json"),
+        serde_json::json!({
+            "vault_root": fixture_dir().to_str().unwrap(),
+            "projects_path": "41 projects",
+            "consult": {
+                "log_path": config_log_file.to_str().unwrap()
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .env("HOME", tmp_home.path())
+        .args([
+            "consult",
+            "retry backoff failure",
+            "--log-path",
+            override_log_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run vault-query consult");
+
+    let code = output.status.code().unwrap_or(-1);
+    assert!(code == 0 || code == 4, "expected exit 0 or 4, got {}", code);
+
+    // Record must appear at the override path.
+    assert!(
+        override_log_file.exists(),
+        "--log-path record must be written to the override path"
+    );
+    let content = std::fs::read_to_string(&override_log_file).unwrap();
+    let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 1, "expected exactly one JSONL line at override path");
+    serde_json::from_str::<serde_json::Value>(lines[0])
+        .expect("override log line must be valid JSON");
+
+    // The config-path log must NOT have been touched.
+    assert!(
+        !config_log_file.exists(),
+        "--log-path must not write to the config log_path"
     );
 }

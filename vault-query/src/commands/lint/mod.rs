@@ -140,6 +140,7 @@ mod tests {
             projects_path: None,
             project_path: None,
             lint: None,
+            consult: None,
             ignore: crate::vault_ignore::VaultIgnore::from_patterns(vec![]),
         }
     }
@@ -153,6 +154,7 @@ mod tests {
             projects_path: None,
             project_path: None,
             lint: None,
+            consult: None,
             ignore,
         }
     }

@@ -188,6 +188,56 @@ pub fn build_backlink_index(
     index
 }
 
+/// Collect all unique wikilink targets for a file: union of body wikilinks
+/// (via `extract`) and frontmatter wikilinks (recursively scanning YAML values).
+/// Source order is preserved; duplicates are removed (first occurrence kept).
+pub fn collect_all_link_targets(file: &crate::vault::VaultFile) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+
+    // Body wikilinks
+    for link in extract(&file.content) {
+        if seen.insert(link.target.clone()) {
+            result.push(link.target);
+        }
+    }
+
+    // Frontmatter wikilinks
+    for value in file.frontmatter.values() {
+        collect_frontmatter_link_targets(value, &mut seen, &mut result);
+    }
+
+    result
+}
+
+/// Recursively walk a `serde_yaml::Value` and collect wikilink targets into `out`.
+fn collect_frontmatter_link_targets(
+    value: &serde_yaml::Value,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    match value {
+        serde_yaml::Value::String(s) => {
+            for link in extract(s) {
+                if seen.insert(link.target.clone()) {
+                    out.push(link.target);
+                }
+            }
+        }
+        serde_yaml::Value::Sequence(items) => {
+            for item in items {
+                collect_frontmatter_link_targets(item, seen, out);
+            }
+        }
+        serde_yaml::Value::Mapping(map) => {
+            for (_key, val) in map {
+                collect_frontmatter_link_targets(val, seen, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Recursively walk a `serde_yaml::Value` and merge any wikilinks found in
 /// string scalars into `index`.  This mirrors the `collect_cited` helper in
 /// `dangling_reference.rs` but writes into the backlink index instead of a set.

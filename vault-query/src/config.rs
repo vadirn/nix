@@ -5,12 +5,142 @@ use std::path::{Path, PathBuf};
 use crate::commands::lint::config::LintConfig;
 use crate::vault_ignore::{self, VaultIgnore};
 
+// ---------------------------------------------------------------------------
+// ConsultConfig
+// ---------------------------------------------------------------------------
+
+fn default_consult_types() -> Vec<String> {
+    vec![
+        "card".to_string(),
+        "note".to_string(),
+        "reference".to_string(),
+        "experiment".to_string(),
+    ]
+}
+
+fn default_token_budget() -> usize {
+    8000
+}
+
+fn default_per_doc_token_cap() -> usize {
+    // Raised from 2000 to 4000 (Decision 19): two confirmed ANSWER-MISS cases had
+    // expected docs of 3035 and 2994 estimated tokens (chars/4) and were skipped
+    // whole while the packer still had budget to spare.  4000 recovers those docs
+    // while keeping the single-doc cap at exactly half of the 8000-token budget,
+    // preventing any one document from consuming more than half the payload and
+    // leaving room for at least one additional document.
+    4000
+}
+
+fn default_coverage_fraction() -> f32 {
+    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
+    // (Step F, 9% false-abstain, 0% false-positive). Base deliberate gate.
+    0.45
+}
+
+fn default_elbow_k() -> f32 {
+    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
+    // (Step F, 9% false-abstain, 0% false-positive). Base deliberate gate.
+    1.5
+}
+
+fn default_ambient_coverage_fraction() -> f32 {
+    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
+    // (Step F). Kept mildly stricter than base (0.50 vs 0.45) as a hedge for the
+    // global UserPromptSubmit hook where false-positives are more costly.
+    0.50
+}
+
+fn default_ambient_elbow_k() -> f32 {
+    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
+    // (Step F). Kept mildly stricter than base (1.8 vs 1.5) as a hedge for the
+    // global UserPromptSubmit hook where false-positives are more costly.
+    1.8
+}
+
+/// Configuration for the `consult` command (Decision 5).
+///
+/// A missing or partial `[consult]` block in the root config is valid; every
+/// field falls back to a serde default so the block is fully optional.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConsultConfig {
+    /// Default corpus scope by frontmatter `type` (Decision 13).
+    /// Override at the call site with `--types`.
+    #[serde(default = "default_consult_types")]
+    pub types: Vec<String>,
+
+    /// Total token budget for packed bodies (Decision 15).
+    #[serde(default = "default_token_budget")]
+    pub token_budget: usize,
+
+    /// Skip any single document whose body exceeds this token estimate (Decision 15).
+    #[serde(default = "default_per_doc_token_cap")]
+    pub per_doc_token_cap: usize,
+
+    /// Deliberate-mode coverage gate: the top document must match at least this
+    /// fraction of the query's content terms (Decision 12).
+    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    #[serde(default = "default_coverage_fraction")]
+    pub coverage_fraction: f32,
+
+    /// Deliberate-mode elbow gate: the top score must be at least k× the median
+    /// of the returned set (Decision 12).
+    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    #[serde(default = "default_elbow_k")]
+    pub elbow_k: f32,
+
+    /// Stricter `--ambient` coverage fraction (Decision 18).
+    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    /// Kept mildly stricter than base as a hedge for the global UserPromptSubmit hook.
+    #[serde(default = "default_ambient_coverage_fraction")]
+    pub ambient_coverage_fraction: f32,
+
+    /// Stricter `--ambient` elbow multiplier (Decision 18).
+    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    /// Kept mildly stricter than base as a hedge for the global UserPromptSubmit hook.
+    #[serde(default = "default_ambient_elbow_k")]
+    pub ambient_elbow_k: f32,
+
+    /// Optional absolute-score backstop; `None` means no hard floor (Decision 12).
+    #[serde(default)]
+    pub threshold: Option<f32>,
+
+    /// Optional path (relative to `vault_root`, or absolute) for the JSONL
+    /// invocation log (Decision 8, Backlog 6).  When `Some`, `consult` appends
+    /// one JSON object per invocation.  When `None`, no logging occurs.
+    /// Parent directory is created if it does not exist; any IO/serialize error
+    /// is swallowed (logging is best-effort and never affects the exit code).
+    #[serde(default)]
+    pub log_path: Option<String>,
+}
+
+impl Default for ConsultConfig {
+    fn default() -> Self {
+        Self {
+            types: default_consult_types(),
+            token_budget: default_token_budget(),
+            per_doc_token_cap: default_per_doc_token_cap(),
+            coverage_fraction: default_coverage_fraction(),
+            elbow_k: default_elbow_k(),
+            ambient_coverage_fraction: default_ambient_coverage_fraction(),
+            ambient_elbow_k: default_ambient_elbow_k(),
+            threshold: None,
+            log_path: None,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ResolvedConfig / RootConfig
+// ---------------------------------------------------------------------------
+
 #[derive(Debug, Clone)]
 pub struct ResolvedConfig {
     pub vault_root: PathBuf,
     pub projects_path: Option<String>,
     pub project_path: Option<PathBuf>,
     pub lint: Option<LintConfig>,
+    pub consult: Option<ConsultConfig>,
     pub ignore: VaultIgnore,
 }
 
@@ -20,6 +150,8 @@ struct RootConfig {
     projects_path: String,
     #[serde(default)]
     lint: Option<LintConfig>,
+    #[serde(default)]
+    consult: Option<ConsultConfig>,
 }
 
 #[derive(Deserialize)]
@@ -44,6 +176,7 @@ pub fn resolve(
     let mut project_path: Option<PathBuf> = None;
     let mut projects_path: Option<String> = None;
     let mut lint_config: Option<LintConfig> = None;
+    let mut consult_config: Option<ConsultConfig> = None;
 
     // Layer 1: Walk up from start_dir for project config (skipped when vault_root is overridden)
     if vault_root_override.is_none() {
@@ -77,6 +210,7 @@ pub fn resolve(
         }
         projects_path = Some(rc.projects_path);
         lint_config = rc.lint;
+        consult_config = rc.consult;
     }
 
     // Layer 3: --vault-root takes precedence over both prior layers
@@ -108,6 +242,7 @@ pub fn resolve(
         projects_path,
         project_path,
         lint: lint_config,
+        consult: consult_config,
         ignore,
     })
 }
@@ -359,5 +494,68 @@ mod tests {
                 std::path::PathBuf::from(".vaultignore"),
             ]
         );
+    }
+
+    #[test]
+    fn consult_block_absent_gives_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{"vault_root": "/tmp/test-vault", "projects_path": "41 projects"}"#,
+        )
+        .unwrap();
+
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
+        assert!(config.consult.is_none());
+    }
+
+    #[test]
+    fn consult_block_absent_defaults_are_correct() {
+        // When no [consult] block is present, the Default impl must yield the calibrated defaults
+        // from the 29-pair eval set (consult-materials/consult-eval.jsonl, Step F).
+        let defaults = ConsultConfig::default();
+        assert_eq!(defaults.types, vec!["card", "note", "reference", "experiment"]);
+        assert_eq!(defaults.token_budget, 8000);
+        assert_eq!(defaults.per_doc_token_cap, 4000);
+        assert!((defaults.coverage_fraction - 0.45).abs() < f32::EPSILON);
+        assert!((defaults.elbow_k - 1.5).abs() < f32::EPSILON);
+        assert!((defaults.ambient_coverage_fraction - 0.50).abs() < f32::EPSILON);
+        assert!((defaults.ambient_elbow_k - 1.8).abs() < f32::EPSILON);
+        assert!(defaults.threshold.is_none());
+    }
+
+    #[test]
+    fn consult_block_partial_overrides_one_field() {
+        // A partial [consult] block (only token_budget set) must override just that field;
+        // all other fields fall back to their serde defaults.
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{
+                "vault_root": "/tmp/test-vault",
+                "projects_path": "41 projects",
+                "consult": {
+                    "token_budget": 4000
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
+        let consult = config.consult.expect("consult block should be present");
+        // The overridden field:
+        assert_eq!(consult.token_budget, 4000);
+        // Everything else stays at calibrated defaults (Step F, 29-pair eval):
+        assert_eq!(consult.types, vec!["card", "note", "reference", "experiment"]);
+        assert_eq!(consult.per_doc_token_cap, 4000);
+        assert!((consult.coverage_fraction - 0.45).abs() < f32::EPSILON);
+        assert!((consult.elbow_k - 1.5).abs() < f32::EPSILON);
+        assert!((consult.ambient_coverage_fraction - 0.50).abs() < f32::EPSILON);
+        assert!((consult.ambient_elbow_k - 1.8).abs() < f32::EPSILON);
+        assert!(consult.threshold.is_none());
     }
 }
