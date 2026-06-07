@@ -168,6 +168,92 @@ pub(crate) fn bilingual_analyzer() -> TextAnalyzer {
 }
 
 // ---------------------------------------------------------------------------
+// Shared BM25 index builder (consult + both search sites)
+// ---------------------------------------------------------------------------
+
+/// Field handles for the shared BM25 schema, returned by [`build_index`].
+///
+/// `Field` is `Copy`, so callers freely pass these into the query parser, into a
+/// `SnippetGenerator` (search), and into stored-doc readback (consult's coverage gate).
+pub(crate) struct IndexFields {
+    pub title: Field,
+    pub description: Field,
+    pub body: Field,
+    pub path: Field,
+}
+
+/// Build the in-RAM Tantivy index shared by every BM25 site: `consult`'s `bm25_rank`
+/// and `search`'s `collect_bm25_results` + `run_bm25` text arm. One definition so the
+/// three sites cannot drift in schema or analyzer.
+///
+/// Schema:
+///   - `title`       ← `file.name` (the filename), STORED, default tokenizer
+///   - `description` ← frontmatter `description:` precis, INDEX-ONLY (not stored;
+///                     nothing reads it back — coverage reads `stored_body`)
+///   - `body`        ← `frontmatter::body()`, STORED
+///   - `path`        ← relative path, STRING | STORED
+///
+/// Everything downstream of `commit()` (query-parser boosts, search, snippet
+/// generation, result shaping) stays in the caller, since those steps diverge between
+/// consult and search. Per-field boosts are set by the caller — from `ConsultConfig`
+/// (consult) or `DEFAULT_TITLE_BOOST` / `DEFAULT_DESCRIPTION_BOOST` (search).
+pub(crate) fn build_index(files: &[&VaultFile], vault_root: &Path) -> Result<(Index, IndexFields)> {
+    let mut schema_builder = Schema::builder();
+    let stored_text = || {
+        TextOptions::default()
+            .set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_tokenizer("default")
+                    .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+            )
+            .set_stored()
+    };
+    // description participates in scoring but is never read back, so index-only.
+    let indexed_only = TextOptions::default().set_indexing_options(
+        TextFieldIndexing::default()
+            .set_tokenizer("default")
+            .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+    );
+    let title = schema_builder.add_text_field("title", stored_text());
+    let description = schema_builder.add_text_field("description", indexed_only);
+    let body = schema_builder.add_text_field("body", stored_text());
+    let path = schema_builder.add_text_field("path", STRING | STORED);
+    let schema = schema_builder.build();
+
+    let index = Index::create_in_ram(schema);
+
+    // Register the bilingual analysis chain (Decision 6) so every site stems identically.
+    index.tokenizers().register("default", bilingual_analyzer());
+
+    let total_content: usize = files.iter().map(|f| f.content.len()).sum();
+    let writer_budget = total_content.max(15_000_000);
+    let mut writer: IndexWriter = index.writer(writer_budget)?;
+
+    for file in files {
+        let rel = file.relative_path(vault_root);
+        let body_text = frontmatter::body(&file.content);
+        let description_text = frontmatter::get_display(&file.frontmatter, "description");
+        writer.add_document(doc!(
+            title => file.name.as_str(),
+            description => description_text,
+            body => body_text,
+            path => rel,
+        ))?;
+    }
+    writer.commit()?;
+
+    Ok((
+        index,
+        IndexFields {
+            title,
+            description,
+            body,
+            path,
+        },
+    ))
+}
+
+// ---------------------------------------------------------------------------
 // Core BM25 retrieval over an arbitrary file slice
 // ---------------------------------------------------------------------------
 
@@ -179,58 +265,30 @@ pub(crate) fn bilingual_analyzer() -> TextAnalyzer {
 /// `limit` controls the Tantivy top-N cut (IDF and top-N are computed only over
 /// the provided `files`, so callers must pre-filter to the in-scope set before
 /// calling this — Decision 11).
-fn bm25_rank(files: &[&VaultFile], vault_root: &Path, query: &str, limit: usize) -> Result<Vec<Hit>> {
+fn bm25_rank(
+    files: &[&VaultFile],
+    vault_root: &Path,
+    query: &str,
+    limit: usize,
+    config: &ConsultConfig,
+) -> Result<Vec<Hit>> {
     if files.is_empty() {
         return Ok(vec![]);
     }
 
-    // --- Schema ---
-    let mut schema_builder = Schema::builder();
-    let title_options = TextOptions::default()
-        .set_indexing_options(
-            TextFieldIndexing::default()
-                .set_tokenizer("default")
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-        )
-        .set_stored();
-    let body_options = TextOptions::default()
-        .set_indexing_options(
-            TextFieldIndexing::default()
-                .set_tokenizer("default")
-                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-        )
-        .set_stored();
-    let title_field = schema_builder.add_text_field("title", title_options);
-    let body_field = schema_builder.add_text_field("body", body_options);
-    let path_field = schema_builder.add_text_field("path", STRING | STORED);
-    let schema = schema_builder.build();
-
-    // --- Index ---
-    let index = Index::create_in_ram(schema);
-
-    // Register the bilingual analysis chain (shared with search.rs; Decision 6).
-    index.tokenizers().register("default", bilingual_analyzer());
-
-    let total_content: usize = files.iter().map(|f| f.content.len()).sum();
-    let writer_budget = total_content.max(15_000_000);
-    let mut writer: IndexWriter = index.writer(writer_budget)?;
-
-    for file in files {
-        let rel = file.relative_path(vault_root);
-        let body_text = frontmatter::body(&file.content);
-        writer.add_document(doc!(
-            title_field => file.name.as_str(),
-            body_field => body_text,
-            path_field => rel,
-        ))?;
-    }
-    writer.commit()?;
+    // Schema + index build is shared with both search sites (build_index).
+    let (index, fields) = build_index(files, vault_root)?;
 
     let reader = index.reader()?;
     let searcher = reader.searcher();
 
-    let mut query_parser = QueryParser::for_index(&index, vec![title_field, body_field]);
-    query_parser.set_field_boost(title_field, 2.0);
+    // Query over title + description + body. Boosts come from config so consult
+    // can be recalibrated without a rebuild: the filename (title) is demoted and
+    // the curated `description` precis is favored; body stays at the implicit 1.0.
+    let mut query_parser =
+        QueryParser::for_index(&index, vec![fields.title, fields.description, fields.body]);
+    query_parser.set_field_boost(fields.title, config.title_boost);
+    query_parser.set_field_boost(fields.description, config.description_boost);
 
     // Sanitize metacharacters before handing the query to Tantivy's parser so
     // that natural-language queries (e.g. "structure the workflow: plan first")
@@ -249,17 +307,18 @@ fn bm25_rank(files: &[&VaultFile], vault_root: &Path, query: &str, limit: usize)
     for (score, doc_address) in top_docs {
         let doc: TantivyDocument = searcher.doc(doc_address)?;
         let path_val = doc
-            .get_first(path_field)
+            .get_first(fields.path)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
         let title_val = doc
-            .get_first(title_field)
+            .get_first(fields.title)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        // description is index-only (not stored); the coverage gate reads body.
         let stored_body = doc
-            .get_first(body_field)
+            .get_first(fields.body)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
@@ -391,7 +450,7 @@ pub fn run_consult(
     // BM25 over the in-scope set only.  Retrieve enough candidates for the gate
     // (20 gives a stable median; the packer may use fewer).
     let limit = 20;
-    let hits = bm25_rank(&in_scope, vault_root, query, limit)?;
+    let hits = bm25_rank(&in_scope, vault_root, query, limit, config)?;
 
     if hits.is_empty() {
         let diag = ConsultDiagnostics {
@@ -681,6 +740,17 @@ mod tests {
             content,
             ctime: None,
         }
+    }
+
+    /// Like `make_vault_file`, but also sets a frontmatter `description:` value
+    /// (the field whose indexing this change introduces).
+    fn make_vault_file_desc(name: &str, doc_type: &str, description: &str, body: &str) -> VaultFile {
+        let mut vf = make_vault_file(name, doc_type, body);
+        vf.frontmatter.insert(
+            "description".to_string(),
+            serde_yaml::Value::String(description.to_string()),
+        );
+        vf
     }
 
     fn default_config() -> ConsultConfig {
@@ -1410,8 +1480,13 @@ mod tests {
 
         // Set elbow_k = 1.0 to isolate the coverage gate test (elbow is trivially satisfied).
         // coverage_fraction remains 0.45 (default).
+        // Pin title_boost = 2.0 (the historical value): this fixture manufactures a
+        // high-score / low-coverage rank-1 displacer via the filename, which only ranks #1
+        // when the title is boosted above body. The default is now 1.0, so without this pin
+        // the body-saturated relevant doc would take rank 1 and the gate would not be exercised.
         let mut config = default_config();
         config.elbow_k = 1.0;
+        config.title_boost = 2.0;
 
         let (result, diag) = run_consult(
             "compound loop learn cycle",
@@ -1464,6 +1539,96 @@ mod tests {
         }
     }
 
+    // --- Test 15a: the frontmatter `description` field is indexed and drives ranking ---
+    //
+    // A query term that appears ONLY in a note's frontmatter `description` — not in its
+    // filename and not in its body — must surface that note. Before this change the
+    // `description` was stripped from the index entirely (zero weight), so such a note was
+    // invisible to BM25. This test operates on `bm25_rank` (pure ranking; the body-only
+    // coverage gate is a separate concern, deliberately not exercised here).
+
+    #[test]
+    fn description_field_is_indexed_and_surfaces_a_doc() {
+        // The query terms live only in `matching`'s description. Both bodies and both
+        // filenames are unrelated to the query, so only the description can match.
+        let matching = make_vault_file_desc(
+            "Untitled fragment",
+            "card",
+            "photosynthesis chloroplast thylakoid",
+            "An unrelated body about weekend gardening and compost bins.",
+        );
+        let other = make_vault_file(
+            "Another fragment",
+            "card",
+            "An unrelated body about weekend gardening and compost bins.",
+        );
+
+        let files: Vec<&VaultFile> = vec![&matching, &other];
+        let config = default_config();
+        let hits = bm25_rank(&files, &vault_root(), "photosynthesis chloroplast", 10, &config)
+            .unwrap();
+
+        assert!(
+            !hits.is_empty(),
+            "a query matched only by frontmatter description must surface a hit; \
+             description is no longer discarded from the index"
+        );
+        assert_eq!(
+            hits[0].title, "Untitled fragment",
+            "the doc whose description matches the query must rank first, got: {:?}",
+            hits.iter().map(|h| (h.title.as_str(), h.score)).collect::<Vec<_>>()
+        );
+    }
+
+    // --- Test 15b: the demoted title boost lets `description` outrank a filename-only match ---
+    //
+    // Regression lock on the boost change: with two symmetric 3-word fields each matching all
+    // query terms (one in the filename, one in the description), the winner is decided by the
+    // boost ratio. Under the historical title boost (2.0) the filename dominates; under the new
+    // default (title 1.0, description 1.5) the curated description wins. Asserting the flip
+    // proves the demotion is the cause, independent of absolute BM25 magnitudes.
+
+    #[test]
+    fn demoted_title_boost_lets_description_outrank_filename() {
+        // Filename carries all query terms; description/body do not.
+        let filename_doc = make_vault_file(
+            "alpha beta gamma",
+            "card",
+            "Body text concerning unrelated kitchen recipes.",
+        );
+        // Description carries all query terms; filename/body do not.
+        let desc_doc = make_vault_file_desc(
+            "Curated note",
+            "card",
+            "alpha beta gamma",
+            "Body text concerning unrelated kitchen recipes.",
+        );
+
+        let files: Vec<&VaultFile> = vec![&filename_doc, &desc_doc];
+
+        // Historical behavior: title boosted 2.0 → filename-only match dominates.
+        let mut old = default_config();
+        old.title_boost = 2.0;
+        let hits_old =
+            bm25_rank(&files, &vault_root(), "alpha beta gamma", 10, &old).unwrap();
+        assert_eq!(
+            hits_old[0].title, "alpha beta gamma",
+            "under the historical 2.0 title boost the filename-only doc should dominate, got: {:?}",
+            hits_old.iter().map(|h| (h.title.as_str(), h.score)).collect::<Vec<_>>()
+        );
+
+        // New defaults: title 1.0, description 1.5 → the description match wins.
+        let new = default_config();
+        let hits_new =
+            bm25_rank(&files, &vault_root(), "alpha beta gamma", 10, &new).unwrap();
+        assert_eq!(
+            hits_new[0].title, "Curated note",
+            "with the default demoted title boost (1.0) and description boost (1.5), the \
+             description match must outrank the filename-only match, got: {:?}",
+            hits_new.iter().map(|h| (h.title.as_str(), h.score)).collect::<Vec<_>>()
+        );
+    }
+
     // --- Test 16: max_top3_coverage diagnostics field is populated ---
     //
     // Reuses the displacer/relevant fixture from Test 15.  Asserts that
@@ -1497,8 +1662,11 @@ mod tests {
         let files = vec![displacer, relevant];
         let scope = vec!["card".to_string()];
 
+        // Pin title_boost = 2.0 (historical value) so the filename-based displacer ranks #1;
+        // see the sibling top3 gate test. The default is now 1.0.
         let mut config = default_config();
         config.elbow_k = 1.0;
+        config.title_boost = 2.0;
 
         let (_result, diag) = run_consult(
             "compound loop learn cycle",

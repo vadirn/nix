@@ -58,6 +58,26 @@ fn default_ambient_elbow_k() -> f32 {
     1.8
 }
 
+/// Default BM25 query-parser boost for the `title` field (the note filename).
+/// Demoted from the historical 2.0 so a curated frontmatter `description` precis
+/// outranks incidental filename token overlap. Single source of truth shared by
+/// `ConsultConfig` and the two `search` BM25 sites, so consult and search never drift.
+pub const DEFAULT_TITLE_BOOST: f32 = 1.0;
+
+/// Default BM25 query-parser boost for the frontmatter `description` field.
+/// Boosted above the body (1.0) but kept modest: Tantivy's BM25 short-field norm
+/// already favors the one-line description, so a large boost risks over-correcting.
+/// Starting point for eval calibration. Shared by `ConsultConfig` and `search`.
+pub const DEFAULT_DESCRIPTION_BOOST: f32 = 1.5;
+
+fn default_title_boost() -> f32 {
+    DEFAULT_TITLE_BOOST
+}
+
+fn default_description_boost() -> f32 {
+    DEFAULT_DESCRIPTION_BOOST
+}
+
 /// Configuration for the `consult` command (Decision 5).
 ///
 /// A missing or partial `[consult]` block in the root config is valid; every
@@ -76,6 +96,18 @@ pub struct ConsultConfig {
     /// Skip any single document whose body exceeds this token estimate (Decision 15).
     #[serde(default = "default_per_doc_token_cap")]
     pub per_doc_token_cap: usize,
+
+    /// BM25 query-parser boost for the `title` field (note filename).
+    /// Default `DEFAULT_TITLE_BOOST` (1.0) demotes the filename relative to the
+    /// curated `description`. Tunable without a rebuild for eval calibration.
+    #[serde(default = "default_title_boost")]
+    pub title_boost: f32,
+
+    /// BM25 query-parser boost for the frontmatter `description` field.
+    /// Default `DEFAULT_DESCRIPTION_BOOST` (1.5). Tunable without a rebuild so
+    /// consult can be recalibrated against the eval set without recompiling.
+    #[serde(default = "default_description_boost")]
+    pub description_boost: f32,
 
     /// Deliberate-mode coverage gate: the top document must match at least this
     /// fraction of the query's content terms (Decision 12).
@@ -120,6 +152,8 @@ impl Default for ConsultConfig {
             types: default_consult_types(),
             token_budget: default_token_budget(),
             per_doc_token_cap: default_per_doc_token_cap(),
+            title_boost: default_title_boost(),
+            description_boost: default_description_boost(),
             coverage_fraction: default_coverage_fraction(),
             elbow_k: default_elbow_k(),
             ambient_coverage_fraction: default_ambient_coverage_fraction(),
@@ -519,6 +553,8 @@ mod tests {
         assert_eq!(defaults.types, vec!["card", "note", "reference", "experiment"]);
         assert_eq!(defaults.token_budget, 8000);
         assert_eq!(defaults.per_doc_token_cap, 4000);
+        assert!((defaults.title_boost - 1.0).abs() < f32::EPSILON);
+        assert!((defaults.description_boost - 1.5).abs() < f32::EPSILON);
         assert!((defaults.coverage_fraction - 0.45).abs() < f32::EPSILON);
         assert!((defaults.elbow_k - 1.5).abs() < f32::EPSILON);
         assert!((defaults.ambient_coverage_fraction - 0.50).abs() < f32::EPSILON);
@@ -552,6 +588,8 @@ mod tests {
         // Everything else stays at calibrated defaults (Step F, 29-pair eval):
         assert_eq!(consult.types, vec!["card", "note", "reference", "experiment"]);
         assert_eq!(consult.per_doc_token_cap, 4000);
+        assert!((consult.title_boost - 1.0).abs() < f32::EPSILON);
+        assert!((consult.description_boost - 1.5).abs() < f32::EPSILON);
         assert!((consult.coverage_fraction - 0.45).abs() < f32::EPSILON);
         assert!((consult.elbow_k - 1.5).abs() < f32::EPSILON);
         assert!((consult.ambient_coverage_fraction - 0.50).abs() < f32::EPSILON);
