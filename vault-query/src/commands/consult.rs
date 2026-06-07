@@ -388,22 +388,50 @@ pub fn run_consult(
     let scores: Vec<f32> = hits.iter().map(|h| h.score).collect();
     let med = median_f32(&scores);
 
-    // Coverage: distinct stemmed query content terms present in the top doc's text.
-    // We check the stored body text (indexed content) for each term.
+    // Coverage gate: pass when ANY of the top-3 highest-scoring in-scope candidates
+    // reaches coverage ≥ coverage_fraction.
+    //
+    // Rationale: the packer emits a SET of docs but the old gate judged only rank 1.
+    // That is a structural mismatch — a high-score/low-coverage doc at rank 1 would
+    // block a relevant rank-2 doc from ever being returned.  Taking the maximum
+    // coverage over the top-3 inspection window (3 = inspection bound) fixes the
+    // defect while leaving the elbow test, median cut, and threshold backstop intact.
+    // False-positive safety still rests on the elbow test.
+    //
+    // Diagnostics retain the rank-1 coverage so existing callers/logs are unaffected;
+    // the gate decision uses the top-3 maximum.
     let query_terms: HashSet<String> = stemmed_tokens(query).into_iter().collect();
+
+    // Top-3 inspection bound: examine at most the 3 highest-scoring candidates.
+    let top3_inspect = hits.iter().take(3);
 
     let (coverage_ok, coverage_value) = if query_terms.is_empty() {
         // Degenerate: query tokenizes to nothing (all special chars). Abstain.
         (false, None)
     } else {
+        // Rank-1 coverage retained for diagnostics.
         let top_doc_tokens: HashSet<String> =
             stemmed_tokens(&top.stored_body).into_iter().collect();
-        let matched = query_terms
+        let top1_matched = query_terms
             .iter()
             .filter(|t| top_doc_tokens.contains(*t))
             .count();
-        let frac = matched as f32 / query_terms.len() as f32;
-        (frac >= coverage_fraction, Some(frac))
+        let top1_frac = top1_matched as f32 / query_terms.len() as f32;
+
+        // Max coverage over top-3 for the gate decision.
+        let max_coverage = top3_inspect
+            .map(|h| {
+                let doc_tokens: HashSet<String> =
+                    stemmed_tokens(&h.stored_body).into_iter().collect();
+                let matched = query_terms
+                    .iter()
+                    .filter(|t| doc_tokens.contains(*t))
+                    .count();
+                matched as f32 / query_terms.len() as f32
+            })
+            .fold(0.0f32, f32::max);
+
+        (max_coverage >= coverage_fraction, Some(top1_frac))
     };
 
     let elbow_ok = if hits.len() == 1 {
@@ -1253,6 +1281,97 @@ mod tests {
             }
             ConsultOutcome::Selected { .. } => {
                 panic!("expected ABSTAIN due to threshold backstop");
+            }
+        }
+    }
+
+    // --- Test 15: top-3 coverage gate — rank-1 displacer (low coverage) + rank-2 relevant ---
+    //
+    // This is the displacement case: a high-BM25/low-coverage doc sits at rank 1 above a
+    // lower-BM25/high-coverage doc.  Under the old rank-1-only gate the whole query would
+    // abstain.  Under the new top-3 max-coverage gate it should return (rank-2 coverage
+    // clears the threshold).
+    //
+    // Fixture design:
+    //   - We use elbow_k = 1.0 so the elbow test is trivially satisfied (top_score ≥ 1.0 ×
+    //     median is always true when top is the max-scoring doc). This isolates the test to
+    //     the coverage gate only.
+    //   - Displacer (rank 1): title contains all 4 query terms (2× title boost → high BM25),
+    //     body has only ONE of the 4 terms → rank-1 coverage = 0.25 < 0.45.
+    //     Old gate: abstain.  New gate: inspect rank 2.
+    //   - Relevant (rank 2): body has all 4 terms → coverage = 1.0 ≥ 0.45.
+    //     New gate: pass.
+    //
+    // Expected outcome: ConsultOutcome::Selected (gate opens because rank-2 coverage ≥ 0.45).
+
+    #[test]
+    fn top3_coverage_gate_recovers_rank2_relevant_doc() {
+        // Displacer: all 4 query tokens in title (2× boost → rank 1), body has only "cycle".
+        let displacer_body =
+            "cycle cycle cycle cycle cycle cycle cycle cycle cycle cycle \
+             The seasonal cycle repeats. Each annual cycle drives change. \
+             Temperature variation marks the cycle. The cycle of seasons is predictable.";
+        let displacer = make_vault_file(
+            "compound loop learn cycle", // title has all 4 query terms → rank 1 via title boost
+            "card",
+            displacer_body,              // body: only "cycle" → rank-1 coverage = 1/4 = 0.25
+        );
+
+        // Relevant: title unrelated, body saturated with all 4 query terms → coverage = 1.0.
+        let relevant_body =
+            "compound loop learn cycle ".repeat(20)
+            + "Compounding small improvements over each cycle is how you learn. \
+               The feedback loop drives compound learning. Every cycle teaches something. \
+               Learn from each loop to compound your gains across cycles.";
+        let relevant = make_vault_file(
+            "Engineering Feedback",   // title: no query terms
+            "card",
+            &relevant_body,
+        );
+
+        let files = vec![displacer, relevant];
+        let scope = vec!["card".to_string()];
+
+        // Set elbow_k = 1.0 to isolate the coverage gate test (elbow is trivially satisfied).
+        // coverage_fraction remains 0.45 (default).
+        let mut config = default_config();
+        config.elbow_k = 1.0;
+
+        let (result, diag) = run_consult(
+            "compound loop learn cycle",
+            &files,
+            &vault_root(),
+            &scope,
+            &config,
+            ConsultMode::Deliberate,
+        )
+        .unwrap();
+
+        // Rank-1 coverage must be below 0.45 to confirm this exercises the gate fix.
+        if let Some(cov) = diag.coverage {
+            assert!(
+                cov < 0.45,
+                "rank-1 coverage {:.2} ≥ 0.45; displacer title boost did not separate the \
+                 scores from the coverage; the test does not exercise the top-3 gate fix",
+                cov
+            );
+        }
+
+        match result {
+            ConsultOutcome::Selected { docs, .. } => {
+                // Gate opened — correct behavior.  At least one doc was packed.
+                assert!(
+                    !docs.is_empty(),
+                    "expected at least one doc after gate passed via top-3 coverage"
+                );
+            }
+            ConsultOutcome::Abstain { reason, .. } => {
+                panic!(
+                    "top-3 coverage gate must pass when rank-2 coverage = 1.0 ≥ 0.45, \
+                     but abstained: {}. Rank-1 coverage: {:?}",
+                    reason,
+                    diag.coverage,
+                );
             }
         }
     }
