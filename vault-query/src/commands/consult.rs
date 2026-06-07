@@ -515,10 +515,45 @@ pub fn run_consult(
     // PROVISIONAL membership rule: above-median score cut. Tunable in Step F.
     let candidates: Vec<&Hit> = hits.iter().filter(|h| h.score >= med).collect();
 
+    // Per-doc coverage filter: compute coverage for each candidate and keep only
+    // those that clear coverage_fraction.  This prevents a high-score / low-coverage
+    // "displacer" from consuming token budget at the expense of genuinely relevant docs.
+    //
+    // Safety: the gate verified that at least one of the top-3 hits clears
+    // coverage_fraction, but that hit may be below the median and therefore absent from
+    // `candidates`.  If the filter empties the candidate set, fall back to all
+    // candidates (preserving the pre-filter pack behaviour) so the result is never empty.
+    let coverage_filtered: Vec<&Hit> = if query_terms.is_empty() {
+        // Degenerate query: no terms to compute coverage against; pass all candidates.
+        candidates.iter().copied().collect()
+    } else {
+        let filtered: Vec<&Hit> = candidates
+            .iter()
+            .copied()
+            .filter(|h| {
+                let doc_tokens: HashSet<String> =
+                    stemmed_tokens(&h.stored_body).into_iter().collect();
+                let matched = query_terms
+                    .iter()
+                    .filter(|t| doc_tokens.contains(*t))
+                    .count();
+                let doc_coverage = matched as f32 / query_terms.len() as f32;
+                doc_coverage >= coverage_fraction
+            })
+            .collect();
+        if filtered.is_empty() {
+            // Fallback: coverage gate qualified via a sub-median doc; revert to full
+            // candidate set so the pack is never left empty after a gate-pass.
+            candidates.iter().copied().collect()
+        } else {
+            filtered
+        }
+    };
+
     let mut packed: Vec<SelectedDoc> = Vec::new();
     let mut running_tokens: usize = 0;
 
-    for hit in &candidates {
+    for hit in &coverage_filtered {
         // Canonical body: the index already stored `frontmatter::body(content)`,
         // so reuse it (leading newline removed) rather than rescanning the file.
         let body = hit.stored_body.trim_start_matches('\n').to_string();
