@@ -712,7 +712,7 @@ fn test_consult_log_path_appends_one_jsonl_line() {
     }
 
     // Diagnostic keys (may be null for empty corpora):
-    for key in &["top_score", "median_score", "coverage", "elbow_ratio"] {
+    for key in &["top_score", "median_score", "coverage", "max_top3_coverage", "elbow_ratio"] {
         assert!(record.get(key).is_some(), "missing diagnostic key '{}' in log record", key);
     }
 

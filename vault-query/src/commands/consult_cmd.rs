@@ -193,6 +193,7 @@ struct LogRecord<'a> {
     top_score: Option<f32>,
     median_score: Option<f32>,
     coverage: Option<f32>,
+    max_top3_coverage: Option<f32>,
     elbow_ratio: Option<f32>,
     num_returned: usize,
     // Selection summary
@@ -258,6 +259,7 @@ fn append_log_inner(
             top_score: diag.top_score,
             median_score: diag.median_score,
             coverage: diag.coverage,
+            max_top3_coverage: diag.max_top3_coverage,
             elbow_ratio: diag.elbow_ratio,
             num_returned: diag.num_returned,
             num_selected: docs.len(),
@@ -276,6 +278,7 @@ fn append_log_inner(
             top_score: diag.top_score,
             median_score: diag.median_score,
             coverage: diag.coverage,
+            max_top3_coverage: diag.max_top3_coverage,
             elbow_ratio: diag.elbow_ratio,
             num_returned: diag.num_returned,
             num_selected: 0,

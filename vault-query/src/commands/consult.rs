@@ -98,6 +98,10 @@ pub struct ConsultDiagnostics {
     /// Coverage fraction of the top doc: matched_query_terms / total_query_terms
     /// (`None` if the query tokenizes to nothing or no hits).
     pub coverage: Option<f32>,
+    /// Maximum coverage fraction over the top-3 elbow candidates (the value the
+    /// Decision 27 gate uses to decide).  `None` when the query tokenizes to
+    /// nothing or there are no hits.
+    pub max_top3_coverage: Option<f32>,
     /// Elbow ratio: top_score / median_score (`None` if ≤1 hit).
     pub elbow_ratio: Option<f32>,
     /// Number of documents returned from BM25 before gate filtering.
@@ -364,6 +368,7 @@ pub fn run_consult(
             top_score: None,
             median_score: None,
             coverage: None,
+            max_top3_coverage: None,
             elbow_ratio: None,
             num_returned: 0,
         };
@@ -405,9 +410,9 @@ pub fn run_consult(
     // Top-3 inspection bound: examine at most the 3 highest-scoring candidates.
     let top3_inspect = hits.iter().take(3);
 
-    let (coverage_ok, coverage_value) = if query_terms.is_empty() {
+    let (coverage_ok, coverage_value, max_top3_coverage_value) = if query_terms.is_empty() {
         // Degenerate: query tokenizes to nothing (all special chars). Abstain.
-        (false, None)
+        (false, None, None)
     } else {
         // Rank-1 coverage retained for diagnostics.
         let top_doc_tokens: HashSet<String> =
@@ -431,7 +436,7 @@ pub fn run_consult(
             })
             .fold(0.0f32, f32::max);
 
-        (max_coverage >= coverage_fraction, Some(top1_frac))
+        (max_coverage >= coverage_fraction, Some(top1_frac), Some(max_coverage))
     };
 
     let elbow_ok = if hits.len() == 1 {
@@ -459,6 +464,7 @@ pub fn run_consult(
         top_score: Some(top.score),
         median_score: Some(med),
         coverage: coverage_value,
+        max_top3_coverage: max_top3_coverage_value,
         elbow_ratio,
         num_returned: hits.len(),
     };
@@ -1374,5 +1380,82 @@ mod tests {
                 );
             }
         }
+    }
+
+    // --- Test 16: max_top3_coverage diagnostics field is populated ---
+    //
+    // Reuses the displacer/relevant fixture from Test 15.  Asserts that
+    // `diag.max_top3_coverage` is `Some` and is ≥ rank-1 `diag.coverage`
+    // (since the relevant doc at rank 2 has higher coverage than the displacer
+    // at rank 1).
+
+    #[test]
+    fn max_top3_coverage_diagnostics_field_is_populated() {
+        let displacer_body =
+            "cycle cycle cycle cycle cycle cycle cycle cycle cycle cycle \
+             The seasonal cycle repeats. Each annual cycle drives change. \
+             Temperature variation marks the cycle. The cycle of seasons is predictable.";
+        let displacer = make_vault_file(
+            "compound loop learn cycle",
+            "card",
+            displacer_body,
+        );
+
+        let relevant_body =
+            "compound loop learn cycle ".repeat(20)
+            + "Compounding small improvements over each cycle is how you learn. \
+               The feedback loop drives compound learning. Every cycle teaches something. \
+               Learn from each loop to compound your gains across cycles.";
+        let relevant = make_vault_file(
+            "Engineering Feedback",
+            "card",
+            &relevant_body,
+        );
+
+        let files = vec![displacer, relevant];
+        let scope = vec!["card".to_string()];
+
+        let mut config = default_config();
+        config.elbow_k = 1.0;
+
+        let (_result, diag) = run_consult(
+            "compound loop learn cycle",
+            &files,
+            &vault_root(),
+            &scope,
+            &config,
+            ConsultMode::Deliberate,
+        )
+        .unwrap();
+
+        // max_top3_coverage must be Some when query is non-empty and hits exist.
+        let max_cov = diag.max_top3_coverage.expect(
+            "max_top3_coverage should be Some when query is non-empty and hits exist"
+        );
+        let rank1_cov = diag.coverage.expect(
+            "rank-1 coverage should be Some in the same conditions"
+        );
+
+        // The relevant doc (rank 2, full coverage) lifts max above rank-1.
+        assert!(
+            max_cov >= rank1_cov,
+            "max_top3_coverage ({:.2}) must be ≥ rank-1 coverage ({:.2})",
+            max_cov,
+            rank1_cov,
+        );
+
+        // Rank-1 coverage is low (displacer body has only "cycle" out of 4 terms).
+        assert!(
+            rank1_cov < 0.45,
+            "rank-1 coverage ({:.2}) should be below 0.45 (displacer fixture)",
+            rank1_cov,
+        );
+
+        // max_top3_coverage should reach 1.0 because the relevant doc matches all 4 terms.
+        assert!(
+            (max_cov - 1.0f32).abs() < 1e-4,
+            "max_top3_coverage ({:.4}) should be 1.0 when rank-2 doc has full coverage",
+            max_cov,
+        );
     }
 }
