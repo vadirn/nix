@@ -92,6 +92,9 @@ enum Commands {
         /// Output format: text (default) or json
         #[arg(long, default_value = "text")]
         format: commands::search::SearchFormat,
+        /// Filter by frontmatter `type:` (comma-separated). Default: all types.
+        #[arg(long, value_delimiter = ',')]
+        types: Vec<String>,
     },
     /// Resolve a slug to a vault file path
     Resolve {
@@ -239,9 +242,10 @@ fn main() -> Result<()> {
             regex,
             limit,
             format,
+            types,
         } => {
             let cfg = resolve_config(&cli)?;
-            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format)
+            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format, types)
         }
         Commands::Resolve { slug } => {
             let cfg = resolve_config(&cli)?;

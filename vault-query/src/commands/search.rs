@@ -12,7 +12,7 @@ use tantivy::SnippetGenerator;
 use crate::{
     commands::consult::{build_index, sanitize_query},
     config::{DEFAULT_DESCRIPTION_BOOST, DEFAULT_TITLE_BOOST},
-    frontmatter, vault, wikilink,
+    frontmatter, vault, vault_ignore::VaultIgnore, wikilink,
 };
 
 /// Output format for the search command.
@@ -72,26 +72,51 @@ pub fn run(
     regex_mode: bool,
     limit: usize,
     format: SearchFormat,
+    types: &[String],
 ) -> Result<()> {
     if regex_mode {
-        return run_regex(query, cfg, context, subfolder);
+        return run_regex(query, cfg, context, subfolder, types);
     }
-    run_bm25(query, cfg, subfolder, limit, format)
+    run_bm25(query, cfg, subfolder, limit, format, types)
+}
+
+/// Scan the vault rooted at `root` and drop files whose frontmatter `type:` is
+/// not in `types`. An empty `types` slice means no filter (all files returned).
+fn scan_and_filter(
+    root: &Path,
+    vault_root: &Path,
+    ignore: &VaultIgnore,
+    types: &[String],
+) -> Result<Vec<vault::VaultFile>> {
+    let mut files = vault::scan(root, vault_root, Some(ignore))?;
+    if !types.is_empty() {
+        files.retain(|f| {
+            let file_type = frontmatter::get_display(&f.frontmatter, "type");
+            frontmatter::matches_type(&file_type, types)
+        });
+    }
+    Ok(files)
 }
 
 /// Build the BM25 index, run ranking, generate snippets, and return enriched results.
+/// Pass an empty `types` slice to return all document types (no filter).
 ///
 /// Returns an empty Vec when no documents match (callers handle the empty case).
-pub fn collect_bm25_results(
+///
+/// Formerly there was a no-filter wrapper `collect_bm25_results` that forwarded to this
+/// function with `&[]`. It was removed because its only caller (the test suite) was
+/// updated to call this function directly with `&[]`, leaving the wrapper unused.
+pub fn collect_bm25_results_filtered(
     query: &str,
     cfg: &crate::config::ResolvedConfig,
     subfolder: Option<&Path>,
     limit: usize,
+    types: &[String],
 ) -> Result<Vec<SearchResult>> {
     let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
+    let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
 
     // Build the shared BM25 index (schema + bilingual analyzer shared with consult).
     let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
@@ -187,11 +212,12 @@ fn run_bm25(
     subfolder: Option<&Path>,
     limit: usize,
     format: SearchFormat,
+    types: &[String],
 ) -> Result<()> {
-    // JSON arm: delegate entirely to collect_bm25_results so the path exercises
+    // JSON arm: delegate entirely to collect_bm25_results_filtered so the path exercises
     // production index build + enrichment without duplication.
     if format == SearchFormat::Json {
-        let results = collect_bm25_results(query, cfg, subfolder, limit)?;
+        let results = collect_bm25_results_filtered(query, cfg, subfolder, limit, types)?;
         let output = SearchOutput {
             query: query.to_string(),
             count: results.len(),
@@ -206,7 +232,7 @@ fn run_bm25(
     let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
+    let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
 
     // Build the shared BM25 index (schema + bilingual analyzer shared with consult).
     let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
@@ -263,13 +289,14 @@ fn run_regex(
     cfg: &crate::config::ResolvedConfig,
     context: usize,
     subfolder: Option<&Path>,
+    types: &[String],
 ) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let re = Regex::new(query)?;
 
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
+    let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
 
     for file in &files {
         let lines: Vec<&str> = file.content.lines().collect();
@@ -329,7 +356,7 @@ mod tests {
         let cfg = make_cfg(vault_root.clone());
 
         // Call production code directly — no index rebuild, no enrichment duplication.
-        let results = collect_bm25_results("alpha", &cfg, None, 10).unwrap();
+        let results = collect_bm25_results_filtered("alpha", &cfg, None, 10, &[]).unwrap();
 
         assert!(!results.is_empty(), "expected at least one search result");
 
@@ -416,7 +443,7 @@ mod tests {
         // run() with a colon query must not error and must find the doc.
         // We verify by calling run_bm25 indirectly through run() with text format;
         // redirect stdout is not available in unit tests, so we check it does not panic/error.
-        let result = run("workflow: plan first", &cfg, 0, None, false, 10, SearchFormat::Text);
+        let result = run("workflow: plan first", &cfg, 0, None, false, 10, SearchFormat::Text, &[]);
         assert!(result.is_ok(), "colon query must not return an error: {:?}", result.err());
     }
 
@@ -435,5 +462,131 @@ mod tests {
         let json = serde_json::to_string(&result).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["type"], serde_json::Value::Null);
+    }
+
+    /// A fixture vault with two docs — one `type: card`, one `type: note` — both
+    /// containing the term "luminary". With `types: &["card"]` only the card doc
+    /// should appear in results.
+    #[test]
+    fn search_types_filter_excludes_non_matching() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault_root = tmp.path().to_path_buf();
+
+        let docs_dir = vault_root.join("docs");
+        std::fs::create_dir_all(&docs_dir).unwrap();
+
+        // Both docs contain the search term "luminary" so BM25 would return both
+        // if the filter were absent.
+        std::fs::write(
+            docs_dir.join("Card doc.md"),
+            "---\ntype: card\n---\n\nThis luminary card covers retrieval basics.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            docs_dir.join("Note doc.md"),
+            "---\ntype: note\n---\n\nThis luminary note covers writing basics.\n",
+        )
+        .unwrap();
+
+        let cfg = make_cfg(vault_root.clone());
+        let types_filter = vec!["card".to_string()];
+        let results =
+            collect_bm25_results_filtered("luminary", &cfg, None, 10, &types_filter).unwrap();
+
+        assert!(!results.is_empty(), "expected at least one result for the card doc");
+        for r in &results {
+            assert_eq!(
+                r.doc_type.as_deref(),
+                Some("card"),
+                "all results must have type=card; got {:?} for {}",
+                r.doc_type,
+                r.path
+            );
+        }
+    }
+
+    /// Same two-doc fixture; calling with `types: &[]` must return both docs.
+    #[test]
+    fn search_types_filter_empty_matches_all() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault_root = tmp.path().to_path_buf();
+
+        let docs_dir = vault_root.join("docs");
+        std::fs::create_dir_all(&docs_dir).unwrap();
+
+        std::fs::write(
+            docs_dir.join("Card doc.md"),
+            "---\ntype: card\n---\n\nThis luminary card covers retrieval basics.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            docs_dir.join("Note doc.md"),
+            "---\ntype: note\n---\n\nThis luminary note covers writing basics.\n",
+        )
+        .unwrap();
+
+        let cfg = make_cfg(vault_root.clone());
+        let results = collect_bm25_results_filtered("luminary", &cfg, None, 10, &[]).unwrap();
+
+        let types_found: std::collections::HashSet<Option<&str>> =
+            results.iter().map(|r| r.doc_type.as_deref()).collect();
+
+        assert!(
+            types_found.contains(&Some("card")),
+            "expected card doc in unfiltered results; got: {:?}",
+            types_found
+        );
+        assert!(
+            types_found.contains(&Some("note")),
+            "expected note doc in unfiltered results; got: {:?}",
+            types_found
+        );
+    }
+
+    /// Two docs, one `type: card` and one `type: note`, both containing the term
+    /// "quasar". The regex path with `--types card` must scan only the card doc,
+    /// so the note doc must not appear in the filtered file list produced by
+    /// `scan_and_filter` (exercised here directly, since `run_regex` prints to
+    /// stdout and is not easily captured in unit tests).
+    #[test]
+    fn search_regex_respects_types_filter() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault_root = tmp.path().to_path_buf();
+
+        let docs_dir = vault_root.join("docs");
+        std::fs::create_dir_all(&docs_dir).unwrap();
+
+        std::fs::write(
+            docs_dir.join("Card doc.md"),
+            "---\ntype: card\n---\n\nThis quasar card shines in the night sky.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            docs_dir.join("Note doc.md"),
+            "---\ntype: note\n---\n\nThis quasar note also shines in the night sky.\n",
+        )
+        .unwrap();
+
+        let cfg = make_cfg(vault_root.clone());
+        let root = vault::resolve_root(&cfg.vault_root, None);
+        let types_filter = vec!["card".to_string()];
+
+        // scan_and_filter is the pre-match gating step used by run_regex.
+        let files = scan_and_filter(&root, &cfg.vault_root, &cfg.ignore, &types_filter).unwrap();
+
+        assert!(!files.is_empty(), "expected at least one file after filtering");
+        for f in &files {
+            let file_type = frontmatter::get_display(&f.frontmatter, "type");
+            assert_eq!(
+                file_type, "card",
+                "regex pre-filter must exclude non-card files; got type={:?} for {}",
+                file_type,
+                f.relative_path(&cfg.vault_root)
+            );
+        }
+
+        // Also confirm the full run() path succeeds (output goes to stdout, not captured).
+        let result = run("quasar", &cfg, 0, None, true, 10, SearchFormat::Text, &types_filter);
+        assert!(result.is_ok(), "run() with --regex --types must not error: {:?}", result.err());
     }
 }

@@ -127,6 +127,24 @@ pub fn get_seq_len(fm: &BTreeMap<String, Value>, key: &str) -> usize {
     }
 }
 
+/// Parse a comma-separated type filter string into a `Vec<String>`.
+/// Trims whitespace and drops empty tokens.
+/// Provided for callers that receive a raw string (e.g. env-var or config file);
+/// clap's `value_delimiter = ','` already produces a split `Vec<String>` directly.
+pub fn parse_types(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Return `true` if `doc_type` matches any entry in `allowed`, or if `allowed` is empty.
+/// An empty `allowed` slice means "no filter — accept everything".
+/// `doc_type` is the value returned by `frontmatter::get_display(&fm, "type")`.
+pub fn matches_type(doc_type: &str, allowed: &[String]) -> bool {
+    allowed.is_empty() || allowed.iter().any(|t| t == doc_type)
+}
+
 /// Check if a string field contains any of the given values.
 pub fn contains_any(fm: &BTreeMap<String, Value>, key: &str, values: &[&str]) -> bool {
     match fm.get(key) {
@@ -216,5 +234,29 @@ mod tests {
         // would have falsely matched it.
         let content = "---\nfoo: 1\n---bar\nreal body\n---\nafter\n";
         assert_eq!(body(content), "\nafter\n");
+    }
+
+    #[test]
+    fn matches_type_empty_allowed_matches_anything() {
+        assert!(matches_type("card", &[]), "non-empty type with empty allowed should match");
+        assert!(matches_type("", &[]), "empty type with empty allowed should match");
+    }
+
+    #[test]
+    fn matches_type_non_empty_requires_exact() {
+        let allowed = vec!["card".to_string()];
+        assert!(matches_type("card", &allowed), "exact match should return true");
+        assert!(!matches_type("note", &allowed), "non-matching type should return false");
+        assert!(!matches_type("", &allowed), "empty type with non-empty allowed should return false");
+    }
+
+    #[test]
+    fn parse_types_splits_and_trims() {
+        assert_eq!(
+            parse_types("card, note ,experiment"),
+            vec!["card", "note", "experiment"]
+        );
+        assert_eq!(parse_types(""), Vec::<String>::new(), "empty input should return empty vec");
+        assert_eq!(parse_types(",,"), Vec::<String>::new(), "lone commas should return empty vec");
     }
 }

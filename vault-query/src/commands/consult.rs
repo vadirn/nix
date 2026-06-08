@@ -416,6 +416,9 @@ fn build_near_misses(hits: &[Hit], query_terms: &BTreeSet<String>) -> Vec<NearMi
 /// `files` is the pre-scanned vault slice (all files; scope filtering happens
 /// inside this function — Decision 11).
 /// `scope_types` is the resolved type list (from config.types or CLI override).
+/// An empty `scope_types` matches all types (pass-through), meaning a config
+/// with `types = []` searches the whole vault rather than abstaining. The default
+/// config types are non-empty, so this is an edge case in practice.
 ///
 /// Returns a `(ConsultOutcome, ConsultDiagnostics)` tuple.  The diagnostics
 /// expose the raw gate numbers so the JSONL log can record them for Step F.
@@ -436,7 +439,7 @@ pub fn run_consult(
         .iter()
         .filter(|f| {
             let file_type = frontmatter::get_display(&f.frontmatter, "type");
-            scope_types.iter().any(|t| t == &file_type)
+            frontmatter::matches_type(&file_type, scope_types)
                 && frontmatter::get_bool(&f.frontmatter, "template") != Some(true)
         })
         .collect();

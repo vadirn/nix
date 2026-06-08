@@ -27,7 +27,8 @@ task = do("describe, in your own words, what the user is trying to do — and ex
            terms and concepts you expect their notes to use. You own query phrasing (the tool does no
            expansion), so a richer task string retrieves better.")
 
-result = Bash(vault-query consult "<task>" --format markdown)   // typed exit codes: 0 / 4 / 1
+result = Bash(vault-query consult "<task>" --types card,note,experiment --format markdown)
+                                            // typed exit codes: 0 / 4 / 1
 
 if exit == 0:
     do("weave the returned vault context into your answer; name the source titles/paths so the user can
@@ -47,9 +48,12 @@ else:                                 // exit 1 or other — vault or index erro
 
 ## Scope and flags
 
-- Default corpus is the knowledge types (cards, notes, references, experiments). Reach time-bound project
-  memory deliberately with `--types track,checkpoint` when the task is specifically about prior project
-  decisions rather than reusable knowledge.
+- Default corpus is the user's own writing: `--types card,note,experiment`. References are bookmarks to
+  external content (URL + a one-line description), not the user's prior thinking, so they are excluded
+  from the default. Opt in with `--types card,note,experiment,reference` when the task is about finding
+  what the user has *read* on a topic rather than what they *think*. Reach time-bound project memory
+  deliberately with `--types track,checkpoint` when the task is specifically about prior project decisions
+  rather than reusable knowledge.
 - `--format markdown` (the default) returns a paste-ready block. Use `--format json` only when you need
   the structured envelope (path, title, type, score, body, tokens, links) for programmatic handling.
 - Do not pass `--ambient`: that tightens the gate for the unattended hook path and trades recall for
