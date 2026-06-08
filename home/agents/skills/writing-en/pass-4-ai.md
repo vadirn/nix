@@ -1,5 +1,7 @@
 # Pass 4: AI Patterns
 
+These patterns share one cause: the model regresses to the statistical mean, smoothing specific facts into generic, important-sounding prose. One test catches most of them. Ask of each sentence: could this apply to almost any subject? If yes, cut it or replace it with something true only of this subject.
+
 ## Pseudocode
 
 ```
@@ -25,6 +27,25 @@ for each punctuation choice:
     use colon  // Match punctuation to emphasis
   if semicolon joins a long sentence:
     split with a period instead  // Match punctuation to emphasis
+
+for each sentence:
+  if it asserts broad importance/legacy/trend, or ends with an editorializing "-ing" clause:
+    cut it, or replace with a specific sourced fact  // Cut significance inflation
+  if a copula was replaced (serves as / represents / boasts / features):
+    restore "is" or "has"  // Restore the plain copula
+  if "not just X, but Y" / "it's not X, it's Y" / a reflexive triple:
+    state the real claim directly; trim the triple to what is true  // Cut canned constructions
+
+for each word:
+  if it is in the AI-vocabulary set and the set clusters here:
+    prefer the plain verb (has, shows, uses, supports)  // Thin out AI vocabulary
+  if attribution is vague ("experts argue", "several sources"):
+    name the source and its exact claim, or cut  // Thin out AI vocabulary
+  if a synonym was swapped only to avoid repeating a word:
+    repeat the plain word  // Thin out AI vocabulary
+
+guard:
+  keep simple is/has, plain words, and true superlatives; a single instance is not a tell  // Don't overcorrect
 ```
 
 ## Rules
@@ -85,3 +106,55 @@ Use periods, colons, or parentheses instead of em-dashes. AI-generated text lean
 - **Commas** when the clause is short and unambiguous
 
 **Semicolons** are acceptable only as a last resort when both clauses are short (see Pass 2). If either clause is long, split with a period.
+
+### Cut significance inflation
+
+Padding that asserts importance, legacy, or a broader trend says nothing about the subject. Delete it, or replace it with a specific sourced fact. A trailing "-ing" clause that editorializes is the same move at clause scale.
+
+| Before                                                                                      | After                         |
+| ------------------------------------------------------------------------------------------- | ----------------------------- |
+| Founded in 1989, it marked a pivotal moment in the evolution of regional statistics.        | Founded in 1989.              |
+| The station has eight tracks, contributing to the socio-economic development of the region. | The station has eight tracks. |
+| This etymology highlights the enduring legacy of the community's resistance.                | (cut)                         |
+
+**Words to watch:** stands/serves as a testament, a pivotal/vital/crucial moment, reflects a broader, underscores its significance, leaves an indelible mark, marks a turning point, setting the stage for.
+
+### Restore the plain copula
+
+The model swaps `is` and `has` for heavier verbs. Put them back.
+
+| Before                                                    | After                                              |
+| --------------------------------------------------------- | -------------------------------------------------- |
+| Gallery 825 serves as the association's exhibition space. | Gallery 825 is the association's exhibition space. |
+| The mall boasts over 200 stores.                          | The mall has over 200 stores.                      |
+| The festival represents one of the region's largest.      | The festival is one of the region's largest.       |
+
+**Swaps to reverse:** serves as / stands as / represents → is; boasts / features / offers / maintains → has.
+
+### Cut canned constructions
+
+Two reflexive shapes. Negative parallelism ("not just X, but Y"; "it's not X, it's Y") sets up a strawman to knock down. The rule of three pads one idea with two near-synonyms. State the real point directly; keep only the items that are true.
+
+| Before                                                                   | After                                               |
+| ------------------------------------------------------------------------ | --------------------------------------------------- |
+| The portrait is not just a self-image, but a document of her obsessions. | The portrait documents her obsessions.              |
+| A clear, concise, and compelling summary.                                | A clear summary.                                    |
+| The platform is fast, reliable, and scalable.                            | The platform handles 50,000 concurrent connections. |
+
+### Thin out AI vocabulary
+
+A recurring word set marks AI text by its density, not any single use. Where the set clusters, prefer the plain verb (has, shows, uses, supports). Two related tells travel with it.
+
+**The set:** delve, underscore, showcase, highlight (verb), emphasize, foster, enhance, boast, leverage, robust, crucial, pivotal, vital, intricate, tapestry, landscape (abstract), testament, vibrant, meticulous, align with, garner, interplay, realm, navigate, ever-evolving.
+
+- **Vague attribution:** "experts argue", "observers note", "several sources" (citing one). Name the source and its exact claim, or cut it.
+- **Elegant variation:** "the company… the firm… the organization". Repeat the plain word ("the company… it… the company"). The synonym churn is an AI artifact; humans repeat.
+
+### Don't overcorrect
+
+The signal is density and co-occurrence, not a single instance. Keep what is human and clear:
+
+- Simple "is a", "there is", "it has" phrasing.
+- Plain words over stiff synonyms: wrote (not authored), used (not utilized), died (not passed away).
+- True superlatives when accurate: the first, the only, one of the best.
+- One em-dash, one "Additionally", one curly quote is not a tell. Stripping every one leaves stiff, over-corrected prose.
