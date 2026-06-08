@@ -181,6 +181,10 @@ fn render_json_abstain(query: &str, near_misses: &[NearMiss], reason: &str) -> R
 struct LogRecord<'a> {
     /// UTC epoch milliseconds (std time only — this binary has no async runtime).
     timestamp_ms: u128,
+    /// Wall-clock duration of the consult computation in milliseconds: vault scan +
+    /// index build + abstain gate + packing, measured from the top of `run()` to just
+    /// before this record is written. Excludes process startup and final stdout render.
+    duration_ms: u128,
     query: &'a str,
     /// "deliberate" or "ambient".
     mode: &'a str,
@@ -214,8 +218,11 @@ fn append_log(
     format_str: &str,
     outcome: &ConsultOutcome,
     diag: &ConsultDiagnostics,
+    duration_ms: u128,
 ) {
-    let _ = append_log_inner(log_path, vault_root, query, mode_str, format_str, outcome, diag);
+    let _ = append_log_inner(
+        log_path, vault_root, query, mode_str, format_str, outcome, diag, duration_ms,
+    );
 }
 
 fn append_log_inner(
@@ -226,6 +233,7 @@ fn append_log_inner(
     format_str: &str,
     outcome: &ConsultOutcome,
     diag: &ConsultDiagnostics,
+    duration_ms: u128,
 ) -> Result<()> {
     use std::io::Write;
 
@@ -251,6 +259,7 @@ fn append_log_inner(
     let record: LogRecord = match outcome {
         ConsultOutcome::Selected { docs, total_tokens, .. } => LogRecord {
             timestamp_ms,
+            duration_ms,
             query,
             mode: mode_str,
             format: format_str,
@@ -270,6 +279,7 @@ fn append_log_inner(
         },
         ConsultOutcome::Abstain { near_misses, reason, .. } => LogRecord {
             timestamp_ms,
+            duration_ms,
             query,
             mode: mode_str,
             format: format_str,
@@ -317,6 +327,10 @@ pub fn run(
     no_log: bool,
     log_path_override: Option<&str>,
 ) -> Result<i32> {
+    // Start the wall-clock timer before any vault I/O so the logged duration_ms
+    // captures the full computation (scan + index + gate + pack).
+    let started = std::time::Instant::now();
+
     let vault_root = &cfg.vault_root;
 
     // Scan the vault using the same path as `search`: full vault root + vaultignore.
@@ -352,11 +366,14 @@ pub fn run(
 
     // Best-effort JSONL logging (Decision 8). Any error is silently swallowed.
     // Precedence: --no-log wins over --log-path, which wins over config log_path.
+    let duration_ms = started.elapsed().as_millis();
     if !no_log {
         let effective_log_path: Option<&str> = log_path_override
             .or(consult_config.log_path.as_deref());
         if let Some(log_path) = effective_log_path {
-            append_log(log_path, vault_root, task, mode_str, &format_str, &outcome, &diag);
+            append_log(
+                log_path, vault_root, task, mode_str, &format_str, &outcome, &diag, duration_ms,
+            );
         }
     }
 
