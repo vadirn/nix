@@ -436,7 +436,7 @@ pub fn run_consult(
         .iter()
         .filter(|f| {
             let file_type = frontmatter::get_display(&f.frontmatter, "type");
-            scope_types.iter().any(|t| t == &file_type)
+            frontmatter::matches_type(&file_type, scope_types)
                 && frontmatter::get_bool(&f.frontmatter, "template") != Some(true)
         })
         .collect();

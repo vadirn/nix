@@ -127,6 +127,24 @@ pub fn get_seq_len(fm: &BTreeMap<String, Value>, key: &str) -> usize {
     }
 }
 
+/// Parse a comma-separated type filter string into a `Vec<String>`.
+/// Trims whitespace and drops empty tokens.
+/// Provided for callers that receive a raw string (e.g. env-var or config file);
+/// clap's `value_delimiter = ','` already produces a split `Vec<String>` directly.
+pub fn parse_types(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Return `true` if `doc_type` matches any entry in `allowed`, or if `allowed` is empty.
+/// An empty `allowed` slice means "no filter — accept everything".
+/// `doc_type` is the value returned by `frontmatter::get_display(&fm, "type")`.
+pub fn matches_type(doc_type: &str, allowed: &[String]) -> bool {
+    allowed.is_empty() || allowed.iter().any(|t| t == doc_type)
+}
+
 /// Check if a string field contains any of the given values.
 pub fn contains_any(fm: &BTreeMap<String, Value>, key: &str, values: &[&str]) -> bool {
     match fm.get(key) {

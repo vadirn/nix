@@ -72,11 +72,12 @@ pub fn run(
     regex_mode: bool,
     limit: usize,
     format: SearchFormat,
+    types: &[String],
 ) -> Result<()> {
     if regex_mode {
         return run_regex(query, cfg, context, subfolder);
     }
-    run_bm25(query, cfg, subfolder, limit, format)
+    run_bm25(query, cfg, subfolder, limit, format, types)
 }
 
 /// Build the BM25 index, run ranking, generate snippets, and return enriched results.
@@ -88,10 +89,29 @@ pub fn collect_bm25_results(
     subfolder: Option<&Path>,
     limit: usize,
 ) -> Result<Vec<SearchResult>> {
+    collect_bm25_results_filtered(query, cfg, subfolder, limit, &[])
+}
+
+/// Like `collect_bm25_results` but accepts an optional type filter applied pre-index.
+pub fn collect_bm25_results_filtered(
+    query: &str,
+    cfg: &crate::config::ResolvedConfig,
+    subfolder: Option<&Path>,
+    limit: usize,
+    types: &[String],
+) -> Result<Vec<SearchResult>> {
     let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
+    let mut files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
+
+    // Pre-index type filter: calibrate IDF over the filtered corpus only.
+    if !types.is_empty() {
+        files.retain(|f| {
+            let file_type = frontmatter::get_display(&f.frontmatter, "type");
+            frontmatter::matches_type(&file_type, types)
+        });
+    }
 
     // Build the shared BM25 index (schema + bilingual analyzer shared with consult).
     let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
@@ -187,11 +207,12 @@ fn run_bm25(
     subfolder: Option<&Path>,
     limit: usize,
     format: SearchFormat,
+    types: &[String],
 ) -> Result<()> {
-    // JSON arm: delegate entirely to collect_bm25_results so the path exercises
+    // JSON arm: delegate entirely to collect_bm25_results_filtered so the path exercises
     // production index build + enrichment without duplication.
     if format == SearchFormat::Json {
-        let results = collect_bm25_results(query, cfg, subfolder, limit)?;
+        let results = collect_bm25_results_filtered(query, cfg, subfolder, limit, types)?;
         let output = SearchOutput {
             query: query.to_string(),
             count: results.len(),
@@ -206,7 +227,15 @@ fn run_bm25(
     let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, subfolder);
 
-    let files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
+    let mut files = vault::scan(&root, vault_root, Some(&cfg.ignore))?;
+
+    // Pre-index type filter: calibrate IDF over the filtered corpus only.
+    if !types.is_empty() {
+        files.retain(|f| {
+            let file_type = frontmatter::get_display(&f.frontmatter, "type");
+            frontmatter::matches_type(&file_type, types)
+        });
+    }
 
     // Build the shared BM25 index (schema + bilingual analyzer shared with consult).
     let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
@@ -416,7 +445,7 @@ mod tests {
         // run() with a colon query must not error and must find the doc.
         // We verify by calling run_bm25 indirectly through run() with text format;
         // redirect stdout is not available in unit tests, so we check it does not panic/error.
-        let result = run("workflow: plan first", &cfg, 0, None, false, 10, SearchFormat::Text);
+        let result = run("workflow: plan first", &cfg, 0, None, false, 10, SearchFormat::Text, &[]);
         assert!(result.is_ok(), "colon query must not return an error: {:?}", result.err());
     }
 
