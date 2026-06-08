@@ -345,6 +345,10 @@ pub fn run(
     }
 
     // Resolve scope_types: CLI wins over config.
+    // An empty result here means "match all types" (frontmatter::matches_type
+    // treats an empty allowed slice as a pass-through). This is only reachable
+    // when config.types is explicitly set to [] and no CLI override is given;
+    // the default config types are non-empty, so this is an edge case.
     let scope_types: Vec<String> = if !cli_types.is_empty() {
         cli_types.to_vec()
     } else {
