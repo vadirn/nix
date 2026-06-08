@@ -235,4 +235,28 @@ mod tests {
         let content = "---\nfoo: 1\n---bar\nreal body\n---\nafter\n";
         assert_eq!(body(content), "\nafter\n");
     }
+
+    #[test]
+    fn matches_type_empty_allowed_matches_anything() {
+        assert!(matches_type("card", &[]), "non-empty type with empty allowed should match");
+        assert!(matches_type("", &[]), "empty type with empty allowed should match");
+    }
+
+    #[test]
+    fn matches_type_non_empty_requires_exact() {
+        let allowed = vec!["card".to_string()];
+        assert!(matches_type("card", &allowed), "exact match should return true");
+        assert!(!matches_type("note", &allowed), "non-matching type should return false");
+        assert!(!matches_type("", &allowed), "empty type with non-empty allowed should return false");
+    }
+
+    #[test]
+    fn parse_types_splits_and_trims() {
+        assert_eq!(
+            parse_types("card, note ,experiment"),
+            vec!["card", "note", "experiment"]
+        );
+        assert_eq!(parse_types(""), Vec::<String>::new(), "empty input should return empty vec");
+        assert_eq!(parse_types(",,"), Vec::<String>::new(), "lone commas should return empty vec");
+    }
 }
