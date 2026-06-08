@@ -27,7 +27,6 @@
           ngrok
           ruby
           ast-grep
-          (callPackage ./lazyworktree.nix {})
         ];
       };
       programs = {
@@ -54,7 +53,6 @@
           enableZshIntegration = true;
         };
       };
-      xdg.configFile."lazyworktree/config.yaml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/lazyworktree-config.yaml";
       home.file.".bunfig.toml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/bun/bunfig.toml";
 
       imports = [

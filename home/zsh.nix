@@ -64,21 +64,41 @@
         fi
       }
 
-      lw() {
-        local theme=catppuccin-mocha
-        _macos_is_dark || theme=catppuccin-latte
-        local tmp selected rc
-        tmp=$(mktemp "''${TMPDIR:-/tmp}/lazyworktree.selection.XXXXXX") || return 1
-        command lazyworktree --theme "$theme" --output-selection="$tmp" "$@"
-        rc=$?
-        if [[ -s "$tmp" ]]; then
-          selected=$(<"$tmp")
-          [[ -n "$selected" && -d "$selected" ]] && cd "$selected"
-        fi
-        rm -f "$tmp"
-        return $rc
+      # git worktree helpers (fzf-backed, no TUI). Create lives under
+      # $WT_ROOT (default ~/Documents/worktrees/<repo>/<branch>).
+      wt() {
+        emulate -L zsh
+        local dir=$(git worktree list 2>/dev/null | fzf --height 40% --reverse --prompt 'cd> ' | awk '{print $1}')
+        [[ -n $dir ]] && cd "$dir"
       }
-      (( $+functions[compdef] )) && compdef lw=lazyworktree
+
+      wtp() {
+        emulate -L zsh
+        local dir=$(git worktree list 2>/dev/null | fzf --height 40% --reverse --prompt 'copy> ' | awk '{print $1}')
+        [[ -n $dir ]] && printf %s "$dir" | pbcopy && print "copied: $dir"
+      }
+
+      wtc() {
+        emulate -L zsh
+        local branch=$1 base=''${2:-HEAD} top dir
+        [[ -n $branch ]] || { print -u2 'usage: wtc <branch> [base-ref]'; return 1 }
+        top=$(git rev-parse --show-toplevel 2>/dev/null) || { print -u2 'wtc: not in a git repo'; return 1 }
+        dir=''${WT_ROOT:-$HOME/Documents/worktrees}/''${top:t}/$branch
+        mkdir -p "''${dir:h}"
+        if git show-ref --verify --quiet "refs/heads/$branch"; then
+          git worktree add "$dir" "$branch" || return
+        else
+          git worktree add -b "$branch" "$dir" "$base" || return
+        fi
+        cd "$dir"
+      }
+
+      wtd() {
+        emulate -L zsh
+        local dir=$(git worktree list 2>/dev/null | fzf --height 40% --reverse --prompt 'remove> ' | awk '{print $1}')
+        [[ -n $dir ]] || return
+        git worktree remove "$dir" && print "removed: $dir"
+      }
 
       alias y='yazi'
       alias v='nvim'
