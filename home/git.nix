@@ -1,4 +1,10 @@
-{pkgs, ...}: {
+{
+  pkgs,
+  config,
+  ...
+}: let
+  homeDirectory = config.home.homeDirectory;
+in {
   programs.git = {
     enable = true;
     lfs.enable = true;
@@ -25,7 +31,7 @@
       tag.gpgsign = true;
     };
     includes = [
-      { path = "~/nix/home/catppuccin-delta.gitconfig"; }
+      {path = "~/nix/home/catppuccin-delta.gitconfig";}
     ];
   };
   programs.delta = {
@@ -37,4 +43,6 @@
       features = "catppuccin-mocha";
     };
   };
+  xdg.configFile."git/hooks/post-commit".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/post-commit";
+  xdg.configFile."git/hooks/commit-msg".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/commit-msg";
 }

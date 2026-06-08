@@ -1,11 +1,9 @@
-{config, ...}:
-let
+{config, ...}: let
   homeDirectory = config.home.homeDirectory;
-in
-{
+in {
   programs.starship = {
     enable = true;
     enableZshIntegration = true;
   };
-  home.file.".config/starship.toml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/starship.toml";
+  xdg.configFile."starship.toml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/starship.toml";
 }
