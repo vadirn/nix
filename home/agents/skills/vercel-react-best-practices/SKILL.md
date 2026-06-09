@@ -1,21 +1,11 @@
 ---
 name: vercel-react-best-practices
-description: React/Next.js performance guidelines from Vercel. Use when reviewing or optimizing React/Next.js code.
+description: React/Next.js performance guidelines from Vercel. Use when reviewing or optimizing React/Next.js code, writing new React components or Next.js pages, implementing data fetching (client or server-side), refactoring existing React/Next.js code, or optimizing bundle size or load times. Skip for HTML/CSS-first work or non-React JS (use modern-web-guidance).
 ---
 
 # Vercel React Best Practices
 
 Performance optimization guide for React and Next.js applications, maintained by Vercel. Contains 57 rules across 8 categories, prioritized by impact to guide automated refactoring and code generation.
-
-## When to Apply
-
-Apply these guidelines when:
-
-- Writing new React components or Next.js pages
-- Implementing data fetching (client or server-side)
-- Reviewing code for performance issues
-- Refactoring existing React/Next.js code
-- Optimizing bundle size or load times
 
 ## Rule Categories by Priority
 
@@ -23,11 +13,11 @@ Apply these guidelines when:
 | -------- | ------------------------- | ----------- | ------------ |
 | 1        | Eliminating Waterfalls    | CRITICAL    | `async-`     |
 | 2        | Bundle Size Optimization  | CRITICAL    | `bundle-`    |
-| 3        | Server-Side Performance   | HIGH        | `server-`    |
+| 3        | Server-Side Performance & Security | HIGH/CRITICAL | `server-` |
 | 4        | Client-Side Data Fetching | MEDIUM-HIGH | `client-`    |
 | 5        | Re-render Optimization    | MEDIUM      | `rerender-`  |
 | 6        | Rendering Performance     | MEDIUM      | `rendering-` |
-| 7        | JavaScript Performance    | LOW-MEDIUM  | `js-`        |
+| 7        | JavaScript Performance    | LOW–MEDIUM-HIGH | `js-`   |
 | 8        | Advanced Patterns         | LOW         | `advanced-`  |
 
 ## Quick Reference
@@ -48,7 +38,7 @@ Apply these guidelines when:
 - `bundle-conditional` - Load modules only when feature is activated
 - `bundle-preload` - Preload on hover/focus for perceived speed
 
-### 3. Server-Side Performance (HIGH)
+### 3. Server-Side Performance & Security (HIGH/CRITICAL)
 
 - `server-auth-actions` - Authenticate server actions like API routes
 - `server-cache-react` - Use React.cache() for per-request deduplication
@@ -92,7 +82,7 @@ Apply these guidelines when:
 - `rendering-conditional-render` - Use ternary, not && for conditionals
 - `rendering-usetransition-loading` - Prefer useTransition for loading state
 
-### 7. JavaScript Performance (LOW-MEDIUM)
+### 7. JavaScript Performance (LOW–MEDIUM-HIGH)
 
 - `js-batch-dom-css` - Group CSS changes via classes or cssText
 - `js-index-maps` - Build Map for repeated lookups
