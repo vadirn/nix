@@ -37,7 +37,7 @@ loop:
       if reconnected sentence is overloaded:
         rephrase with a different technique
         if still overloaded after 2 attempts:
-          show both variants to user → stop
+          keep the simpler of the two variants and continue
       go to loop
 ```
 

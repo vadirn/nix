@@ -5,6 +5,7 @@ description: >
   Use when user invokes /affirm or asks to make instructions direct, remove hedging,
   flip negatives to positives, or strengthen language in skill files, docs, or prompts.
   Works on inline text, files, or conversation context.
+  Skip general prose editing (use /writing-en instead); affirm targets instruction and directive text.
 ---
 
 # Affirm
@@ -18,6 +19,11 @@ Rewrite instructions as direct positive statements. Remove hedging.
 ```
 text = <args> or conversation context
 if no text provided: AskUserQuestion("What text should I rewrite?")
+if text looks like a file path (starts with / or ./, ends with a known extension, or matches an existing file):
+  read the file at that path  // Read file content
+  apply all transforms to the file content
+  write the result back to the same path  // Write result back
+  show a summary of changes made
 
 // Flip negatives
 do("find sentences with 'do not', 'don't', 'never', 'avoid', 'no', 'not'")

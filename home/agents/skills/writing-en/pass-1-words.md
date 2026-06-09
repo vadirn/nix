@@ -13,7 +13,7 @@ for each word/phrase in text:
   if negative construction (negation or "X, not Y" contrast):
     replace with affirmative equivalent  // Use affirmative form
   if dead metaphor (cliché figure of speech):
-    invent a concrete image or say what you mean  // Invent fresh comparisons
+    replace with a literal statement of what you mean  // Replace dead metaphors with literal statements
   if formal/Latin word with a plain equivalent:
     replace with everyday English  // Use everyday English
 ```
@@ -82,9 +82,9 @@ Negatives force the reader to picture an action and then cancel it. Affirmatives
 | Not a sprint, but a marathon | A marathon                   |
 | Not theory, but practice     | Practice                     |
 
-### Invent fresh comparisons
+### Replace dead metaphors with literal statements
 
-When you need a figure of speech, create one that produces a visual image. Dead metaphors ("level playing field", "at the end of the day") pass unnoticed.
+Dead metaphors ("level playing field", "at the end of the day") pass unnoticed and obscure meaning. Replace them with a literal statement of what you mean. Do not invent new figures of speech.
 
 | Before                | After                         |
 | --------------------- | ----------------------------- |
@@ -93,7 +93,7 @@ When you need a figure of speech, create one that produces a visual image. Dead 
 | move the needle       | increase signups by 10%       |
 | low-hanging fruit     | tasks that take under an hour |
 
-**Orwell's procedure:** think wordlessly first, visualize the thing, then hunt for words that fit.
+**Diagnostic:** if the metaphor can be removed and replaced with the concrete fact it points to, replace it.
 
 ### Use everyday English
 
