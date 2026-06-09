@@ -2,8 +2,8 @@
 name: glossary
 description: >
   Bootstrap and maintain a project glossary as a 2-column Markdown table. Triggers: /glossary,
-  "build a glossary", "document the jargon", "define project terms", "what does X mean in this
-  codebase". Use proactively when the user discusses ambiguous domain terminology.
+  "build a glossary", "document the jargon", "define project terms". Use proactively when the user
+  discusses ambiguous domain terminology.
 ---
 
 # Glossary
@@ -17,9 +17,16 @@ Bootstrap and maintain a glossary as a 2-column Markdown table (`| Term | Defini
 - `--inline`: emit only the paragraph + table fragment (no `# Glossary` H1, no file write — print to stdout for the caller to splice in).
 
 ```
+scan_root = args.path if scope == "path" else CWD
+
 if --inline:
     target = stdout
-    existing_table = <the file the caller names> (or empty)
+    named_file = args.file (the file the caller names)
+    if named_file exists and contains a "## Glossary" section:
+        existing_table = parse the 2-col table from that section (same logic as update mode)
+    else:
+        existing_table = { pinned: [], unpinned: [] }
+    mode = update
 elif ./GLOSSARY.md exists:
     target = ./GLOSSARY.md
     existing_table = parse the existing 2-col table from ./GLOSSARY.md
@@ -83,7 +90,7 @@ The strong form names what differentiates the term from adjacent concepts (`Cart
 ### Pinned vs. un-pinned
 
 - **Pinned** (`**Term**` — bolded): load-bearing anchors. Never edit, never remove, never re-order. Reserved for the small set of terms whose definitions are constitutional to the codebase — the ones a cold reader must resolve before reading any module.
-- **Un-pinned** (`Term` — plain): the working vocabulary. Append-only by convention; refine by appending a new row with the sharpened wording rather than rewording in place. The history of a term's understanding stays recoverable.
+- **Un-pinned** (`Term` — plain): the working vocabulary. Append-only by convention; refine by appending a new row with sharpened wording rather than rewording in place. The history of a term's understanding stays recoverable.
 
 The convention is shared with `/track` and `/experiment` so a reader who's learned one knows all three.
 
@@ -99,7 +106,7 @@ Drop terms that belong to the framework or standard library: `Request`, `Respons
 
 ### Update mode
 
-In update mode, pinned rows are never modified or removed (this is enforced by the skill, not just by convention). Un-pinned rows can be sorted A–Z on every write — sorting is deterministic so diffs stay clean. New candidates are appended after user confirmation. If a candidate matches an existing term with a different definition, surface the conflict: "GLOSSARY.md defines Order as X; code suggests Y. Reconcile by editing in place, or append a refining row?"
+In update mode, pinned rows are never modified or removed (this is enforced by the skill, not just by convention). Un-pinned rows can be sorted A–Z on every write — sorting is deterministic so diffs stay clean. New candidates are appended after user confirmation. If a candidate matches an existing term with a different definition, surface the conflict: "GLOSSARY.md defines Order as X; code suggests Y. Append a refining row?"
 
 ### `--inline` mode
 

@@ -22,7 +22,9 @@ path = AskUserQuestion("Vault path? (e.g. '41 projects/my-project')")
 target = "<vault_root>/<path>"
 
 // Wire-only branch: project already exists
-if Read(<target>/context.md):
+if <target> directory exists:
+    if not Read(<target>/context.md):
+        Write(<target>/context.md, do("fill context.md template — see Reference"))
     Write(<repo>/.vault.config.json, {vault_root, project_path: target})
     gitignore = Read(<repo>/.gitignore)
     if ".vault.config.json" not in gitignore: do("append it")
@@ -35,7 +37,11 @@ result = AskUserQuestion("Result? (one sentence — what 'done' looks like)")
 
 Bash(mkdir -p <target>)
 template = Read(<vault_root>/templates/Project.md)
-Write(<target>/<title>.md, do("fill template: status=in progress, result, replace <path> and description placeholders"))
+if template:
+    Write(<target>/<title>.md, do("fill template: status=in progress, result, replace <path> and description placeholders"))
+else:
+    Write(<target>/<title>.md, do("write minimal project note: frontmatter with status=in progress; body with description and result fields"))
+    do("report that <vault_root>/templates/Project.md was not found; note was created from defaults")
 Write(<target>/context.md, do("fill context.md template — see Reference"))
 
 Write(<repo>/.vault.config.json, {vault_root, project_path: target})
@@ -105,5 +111,5 @@ Substitute `<path>`, `<title>`, `<description>`, `<result>`.
 
 ## Notes
 
-- The generated files live in the vault. Wikilinks work. The user adds project-specific context to context.md.
+- The generated files live in the vault. Wikilinks work.
 - Save and resume sessions via `/track`.
