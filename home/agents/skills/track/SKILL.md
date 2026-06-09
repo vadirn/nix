@@ -14,7 +14,7 @@ Rolling per-project work artifact. One file per effort, updated across the many 
 ```
 dir = skill base directory
 
-if args contains "save":
+if args contains any of ["save", "wrapping up", "end of session", "save session"]:
     Read(dir/references/save.md)
     do("follow save procedure")
 else:

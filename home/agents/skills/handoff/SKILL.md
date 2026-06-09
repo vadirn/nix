@@ -23,7 +23,7 @@ do("read <type>.md in this skill directory and fill its template (the filled bod
 if type == result and do("the filled result is not bulky"):
     do("return the filled body inline in the final message; write no file")
 else:
-    path = Bash(mktemp -u "$TMPDIR/handoff-XXXXXX.md")   // -u reserves the name without creating the file; Write refuses to overwrite a file it has not read, so the path must not exist yet
+    path = Bash(mktemp -u "$TMPDIR/handoff-XXXXXX.md")   // -u prints a name without creating the file; no slot is reserved, but collision is negligible on a single machine; Write refuses to overwrite a file it has not read, so the path must not exist yet
     Write(path, <filled body>)
     do("surface <path> to the reader: an orchestrator inlines it in the spawn prompt; a user-invoked handoff prints one copy-pasteable `read <path>` line for the next context to run, not the body")
 ```
