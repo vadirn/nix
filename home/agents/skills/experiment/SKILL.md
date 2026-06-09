@@ -38,6 +38,7 @@ verdict = do("classify the outcome as confirmed / refuted / inconclusive; write 
 cfg = Bash(vault-query config)
 if cfg errors: do("surface 'no vault configured' and skip Capture")
 vault_root = cfg.vault_root
+if vault_root is empty or null: do("surface 'vault_root not set' and skip Capture")
 Bash(mkdir -p "<vault_root>/35 experiments")
 
 slug = do("derive kebab-case slug from claim, 3–6 words capturing the predicate")
@@ -55,6 +56,7 @@ tags = do("suggest 1–3 kebab-case tags from: tool-behavior, config, performanc
 
 // Build record — see Reference §Record template
 template = Read(<vault_root>/templates/Experiment.md)
+if Read fails: template = do("instantiate inline from the shape in Reference §Record template; note 'instantiated from inline fallback' in the Execution field")
 record = do("instantiate template:
     - drop the `template: true` line
     - replace the `verdict:` multi-value picker list with the single chosen verdict
