@@ -11,7 +11,7 @@
  */
 
 import { parseArgs } from "util";
-import { mkdirSync, writeFileSync, appendFileSync } from "fs";
+import { mkdirSync, writeFileSync, appendFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import os from "os";
 import { expandTilde, sniffSourceMimes, dryRunExit } from "../../_shared/scripts/media-utils.ts";

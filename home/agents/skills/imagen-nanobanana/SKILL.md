@@ -63,7 +63,7 @@ chroma_key_flag      = do("--transparent --cutout colorkey when chroma_key is tr
 
 // Invoke (replace <skill-dir> with this skill's base directory at invocation time)
 Bash(doppler run -p claude-code -c std --no-fallback -- bun <skill-dir>/scripts/imagen-nanobanana.ts "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag] [chroma_key_flag])
-// chroma_key_flag = --transparent --cutout colorkey — see Reference §Transparency via chroma-key
+// chroma_key_flag = --transparent --cutout colorkey — see Notes §Transparency via chroma-key
 
 // Relay output
 do("print each 'image: ...' and 'alpha: ...' path so the user can see or copy them")
@@ -72,7 +72,7 @@ do("note the log path the script printed")
 // Iterate
 if user wants to refine or upscale:
   do("call the script again with a chosen output path as --source and adjusted flags")
-  do("when iterating on a chroma-key image, re-run the green-key post-process step")
+  do("when iterating on a chroma-key image, pass --transparent --cutout colorkey again; the script re-runs the green-key step automatically")
 
 // Refusals
 if script reports no image:
