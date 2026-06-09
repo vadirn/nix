@@ -10,22 +10,12 @@ Structured exploration of a topic through opposing viewpoints.
 ## Parameters
 
 - `topic` (required): Claim or question to debate
-- `rounds=N`: Number of rounds (default: 7)
+- `rounds=N`: Number of rounds (default: 3)
 - `lang=en|ru`: Output language (default: auto-detect from topic)
 
 ```
 lang = <lang> parameter, or do("detect language from topic")
-rounds = <rounds> parameter, default 7
-
-// Research (parallel)
-results_for = Skill(firecrawl-search, "evidence arguments for: <topic>")
-results_against = Skill(firecrawl-search, "evidence arguments against: <topic>")
-results_data = Skill(firecrawl-search, "statistics data <topic>")
-
-evidence_base = do("compile search results into structured notes, discard results without concrete data")
-
-if promising URLs in results:
-    Skill(firecrawl-scrape, <top 2-3 URLs for deeper evidence>)
+rounds = <rounds> parameter, default 3
 
 // Debate
 if lang == "ru":
@@ -33,7 +23,7 @@ if lang == "ru":
 else:
     Read(dir/workflows/en.md)
 
-do("follow loaded workflow as internal instructions, output only the debate rounds and verdict, use evidence_base as shared context")
+do("follow loaded workflow as internal instructions, output only the debate rounds and verdict; search for evidence each round as directed by the workflow")
 do("cite sources from research as inline links")
 do("output each round progressively, one at a time")
 if genuine consensus reached: stop early
@@ -41,6 +31,6 @@ if genuine consensus reached: stop early
 
 ## Reference
 
-### Evidence base structure
+### Evidence per round
 
-Each entry in evidence_base contains: claim with source (URL, date), statistics and measurements, counterarguments found. Discard search results that lack concrete data.
+Each round, each side searches for new evidence. Cite sources as inline links. Discard results without concrete data (no measurements, no statistics).

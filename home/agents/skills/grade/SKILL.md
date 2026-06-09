@@ -2,7 +2,8 @@
 name: grade
 description: >
   Grade a decision/recommendation/claim on a 1-10 confidence scale. Use on /grade or "rate confidence in X".
-  Open questions → /debate; plan stress-test → /probe.
+  Skip when the user wants both sides argued rather than a single confidence score (use /debate).
+  Skip when the goal is stress-testing a plan for holes (use /probe).
   Skip when the claim is empirically testable by running a command (use /experiment).
 ---
 
