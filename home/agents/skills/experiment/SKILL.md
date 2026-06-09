@@ -51,16 +51,13 @@ if cfg contains project_path:
 else:
     project_wikilink = null
 
-tags = do("suggest 1–3 kebab-case tags from: tool-behavior, config, performance,
-    api, cli, format, nix, shell; omit the tags line if no clear fit")
-
 // Build record — see Reference §Record template
 template = Read(<vault_root>/templates/Experiment.md)
 if Read fails: template = do("instantiate inline from the shape in Reference §Record template; note 'instantiated from inline fallback' in the Execution field")
 record = do("instantiate template:
     - drop the `template: true` line
     - replace the `verdict:` multi-value picker list with the single chosen verdict
-    - set description, date, project (omit line if null), tags (omit line if empty)
+    - set description, date, project (omit line if null)
     - fill each body section (## Claim, ## Method, ## Execution, ## Verdict, ## Open)
       with the corresponding content under its heading
     - leave the ## Glossary section's pinned rows (Claim, Method, Execution, Verdict, Open)
@@ -106,21 +103,20 @@ type: experiment
 description: <one-line claim summary>
 verdict: confirmed | refuted | inconclusive
 date: YYYY-MM-DD
-project: "[[<project wikilink>]]"   # omit line if no project resolved
-tags: [<tag>, ...]                  # omit line if no tags
+project: "[[<project wikilink>]]" # omit line if no project resolved
 ---
 
 ## Glossary
 
 Rows whose **Term** is bolded are pinned: text, position, and presence are fixed. Pinned rows describe load-bearing anchors a cold reader must resolve before reading the Claim. Append un-pinned rows for working vocabulary; refine an existing un-pinned term by appending a new row with the sharpened wording rather than rewording in place.
 
-| Term          | Definition                                                                  |
-| ------------- | --------------------------------------------------------------------------- |
-| **Claim**     | The falsifiable predicate under test, stated as one sentence.               |
-| **Method**    | The exact procedure (command, query, steps) that decides the verdict.       |
-| **Execution** | Raw output of running the method, verbatim, no commentary.                  |
-| **Verdict**   | One of: `confirmed`, `refuted`, `inconclusive`.                             |
-| **Open**      | Unresolved questions this experiment raises but does not answer.            |
+| Term          | Definition                                                            |
+| ------------- | --------------------------------------------------------------------- |
+| **Claim**     | The falsifiable predicate under test, stated as one sentence.         |
+| **Method**    | The exact procedure (command, query, steps) that decides the verdict. |
+| **Execution** | Raw output of running the method, verbatim, no commentary.            |
+| **Verdict**   | One of: `confirmed`, `refuted`, `inconclusive`.                       |
+| **Open**      | Unresolved questions this experiment raises but does not answer.      |
 
 ## Claim
 
@@ -137,14 +133,13 @@ The Glossary ships with five pinned rows — Claim, Method, Execution, Verdict, 
 
 ### Frontmatter schema
 
-| Field         | Required | Value                                                  |
-| ------------- | -------- | ------------------------------------------------------ |
-| `type`        | yes      | always `experiment`                                    |
-| `description` | yes      | one-line claim summary, ≤ 80 chars                    |
-| `verdict`     | yes      | `confirmed`, `refuted`, or `inconclusive`              |
-| `date`        | yes      | ISO date `YYYY-MM-DD`                                  |
-| `project`     | no       | wikilink from `<project_path>/context.md`              |
-| `tags`        | no       | list of kebab-case strings                             |
+| Field         | Required | Value                                     |
+| ------------- | -------- | ----------------------------------------- |
+| `type`        | yes      | always `experiment`                       |
+| `description` | yes      | one-line claim summary, ≤ 80 chars        |
+| `verdict`     | yes      | `confirmed`, `refuted`, or `inconclusive` |
+| `date`        | yes      | ISO date `YYYY-MM-DD`                     |
+| `project`     | no       | wikilink from `<project_path>/context.md` |
 
 ### Falsifiability test
 
