@@ -16,12 +16,14 @@ status = Bash(git status)
 branch = Bash(git rev-parse --abbrev-ref HEAD)
 default_branch = Bash(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
 upstream = Bash(git rev-parse --abbrev-ref @{upstream} 2>/dev/null)
+
+// Gather diff and log (depend on default_branch)
 diff = Bash(git diff <default_branch>...HEAD)
 log = Bash(git log <default_branch>..HEAD --oneline)
 
 // Guards
 if branch == default_branch: stop, ask user to create a feature branch (see /git-branch)
-if uncommitted changes in status: Skill(commit), then stop
+if uncommitted changes in status: Skill(commit)
 
 // Push
 if no upstream: Bash(git push -u origin <branch>)
@@ -29,7 +31,18 @@ else if ahead: Bash(git push)
 
 // Existing PR
 existing = Bash(gh pr view --json url,state -q '.url' 2>/dev/null)
-if existing: show URL, AskUserQuestion("update or stop?")
+if existing:
+    show URL, AskUserQuestion("update or stop?")
+    if stop: stop
+    // update path
+    title = do("regenerate conventional commit-style title from diff and log")
+    body  = do("regenerate body from diff and log, filling the existing template's sections")
+    AskUserQuestion("confirm updated title and body")
+    Bash(rm -f /tmp/claude/pr.md)
+    Write(/tmp/claude/pr.md, body)
+    Bash(gh pr edit --title "<title>" --body-file /tmp/claude/pr.md)
+    Bash(rm -f /tmp/claude/pr.md)
+    show PR URL, stop
 
 // Template (deterministic resolution via pr-template)
 out = Bash(pr-template)

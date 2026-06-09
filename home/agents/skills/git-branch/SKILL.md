@@ -31,10 +31,13 @@ else if branch != default:
     AskUserQuestion("on <branch>, not <default> — stack the new branch here, or cut from <default>?")
     base = current HEAD, or origin/<default> per the answer
 else:                                  // on default with uncommitted changes
-    base = current HEAD                // checkout -b carries the working tree along
+    AskUserQuestion("uncommitted changes — commit them on <branch> first, or carry them onto the new branch?")
+    if commit first: Skill(commit), base = "origin/<default>"
+    else:            base = current HEAD   // checkout -b carries the working tree along
 
 // Confirm
-AskUserQuestion("create <name> off <base>?")
+if user supplied explicit branch name: skip
+else: AskUserQuestion("create <name> off <base>?")
 
 // Create
 if base == "origin/<default>": Bash(git checkout -b <name> origin/<default>)

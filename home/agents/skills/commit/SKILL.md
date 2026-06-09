@@ -20,7 +20,7 @@ log = Bash(git log --oneline -5)
 if no changes in status: do("say 'Nothing to commit.'"), stop
 
 // Stage
-files = do("pick files to stage; warn and exclude secrets (.env, credentials, tokens); honor user subset like 'commit the refactor'")
+files, secrets_excluded = do("pick files to stage; exclude secrets (.env, credentials, tokens) and set secrets_excluded=true if any are found; honor user subset like 'commit the refactor'")
 Bash(git add <files>)
 
 // Draft
@@ -28,13 +28,12 @@ prefix = do("pick one of feat | fix | chore by the three-question contract test"
 message = do("draft '<prefix>: <why>', short single lowercase line, state the WHY")
 
 // Confirm when ambiguous
-needs_confirmation = do("true if mixed changes, unclear prefix, or secrets detected")
+needs_confirmation = do("true if mixed changes, unclear prefix, or secrets_excluded")
 if needs_confirmation: AskUserQuestion("prefix: <prefix> | message: <message> | files: <files>")
 
 // Commit
 Write(/tmp/claude/commit.txt, "<prefix>: <message>")
 Bash(git commit -F /tmp/claude/commit.txt)
-Bash(rm -f /tmp/claude/commit.txt)
 
 // Verify
 Bash(git status)
