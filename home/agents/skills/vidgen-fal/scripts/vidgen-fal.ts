@@ -165,34 +165,37 @@ const NEGATIVE_PROMPT = values["negative-prompt"] ?? "blur, distort, and low qua
 
 const DO_WEBM = values.webm ?? false;
 
-// --scale: positive even integer width in pixels for WebM output
-const scaleArg = values.scale ?? "640";
-if (!/^\d+$/.test(scaleArg)) {
-  console.error(`ERROR: --scale must be a positive even integer (got '${scaleArg}')`);
-  process.exit(1);
-}
-const scaleParsed = parseInt(scaleArg, 10);
-if (scaleParsed <= 0 || scaleParsed % 2 !== 0) {
-  console.error(`ERROR: --scale must be a positive even integer (got '${scaleArg}')`);
-  process.exit(1);
-}
-const SCALE = scaleParsed;
+let SCALE = 640;
+let WEBM_CRF = 32;
 
-// --webm-crf: strict integer 0–63
-const webmCrfArg = values["webm-crf"] ?? "32";
-if (!/^\d+$/.test(webmCrfArg)) {
-  console.error(`ERROR: --webm-crf must be an integer between 0 and 63 (got '${webmCrfArg}')`);
-  process.exit(1);
-}
-const webmCrfParsed = parseInt(webmCrfArg, 10);
-if (webmCrfParsed < 0 || webmCrfParsed > 63) {
-  console.error(`ERROR: --webm-crf must be an integer between 0 and 63 (got '${webmCrfArg}')`);
-  process.exit(1);
-}
-const WEBM_CRF = webmCrfParsed;
+if (DO_WEBM) {
+  // --scale: positive even integer width in pixels for WebM output
+  const scaleArg = values.scale ?? "640";
+  if (!/^\d+$/.test(scaleArg)) {
+    console.error(`ERROR: --scale must be a positive even integer (got '${scaleArg}')`);
+    process.exit(1);
+  }
+  const scaleParsed = parseInt(scaleArg, 10);
+  if (scaleParsed <= 0 || scaleParsed % 2 !== 0) {
+    console.error(`ERROR: --scale must be a positive even integer (got '${scaleArg}')`);
+    process.exit(1);
+  }
+  SCALE = scaleParsed;
 
-// Warn if --scale or --webm-crf were explicitly supplied without --webm
-if (!DO_WEBM) {
+  // --webm-crf: strict integer 0–63
+  const webmCrfArg = values["webm-crf"] ?? "32";
+  if (!/^\d+$/.test(webmCrfArg)) {
+    console.error(`ERROR: --webm-crf must be an integer between 0 and 63 (got '${webmCrfArg}')`);
+    process.exit(1);
+  }
+  const webmCrfParsed = parseInt(webmCrfArg, 10);
+  if (webmCrfParsed < 0 || webmCrfParsed > 63) {
+    console.error(`ERROR: --webm-crf must be an integer between 0 and 63 (got '${webmCrfArg}')`);
+    process.exit(1);
+  }
+  WEBM_CRF = webmCrfParsed;
+} else {
+  // Warn if --scale or --webm-crf were explicitly supplied without --webm
   if (values.scale !== undefined) {
     console.warn(`WARNING: --scale has no effect unless --webm is set`);
   }

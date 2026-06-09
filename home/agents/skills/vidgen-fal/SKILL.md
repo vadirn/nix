@@ -6,9 +6,10 @@ description: >
   alongside it (default 640px wide, ~1–3 MB for a 5s clip).
   Targets Kling v1.6 by default (standard tier); pass --pro for the pro tier. No
   router hub exists today; invoke this skill directly.
-  Triggers: /vidgen-fal, "generate a video", "make a looping video", "animate this",
+  Triggers: /vidgen-fal, "generate a video", "make a looping video",
   explicit mentions of "fal video", "Kling video".
-  Skip for image-only tasks and non-video generation requests.
+  Skip for image-only tasks and non-video generation requests. Skip when the user
+  supplies a reference image wanting image-to-video — this script is text-to-video only.
 ---
 
 # vidgen-fal
