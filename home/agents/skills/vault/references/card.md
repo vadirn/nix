@@ -36,7 +36,8 @@ if non-trivial connection (pattern, tension, synthesis):
 
 ## Frontmatter
 
-Read `templates/Card.md` for structure.
+vault_root = Bash(vault-query config).vault_root
+Read(<vault_root>/templates/Card.md) for structure.
 
 - `type` — always `card`
 - `description` — 1 sentence capturing the core idea

@@ -5,7 +5,8 @@ description: >
   knowledge, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into
   cards, writing original notes, searching or quizzing saved content, listing active projects ("what am I working
   on"), explicit /vault commands, weekly-log operations (backlog/бэклог, planning, completing tasks, sleep). Excludes
-  raw markdown edits, Obsidian app features (kanban, canvas, plugins, .base), web search.
+  direct file edits not routed through /vault (editing a .md file in a code repo that is not a vault
+  artifact), Obsidian app features (kanban, canvas, plugins, .base), web search.
   Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
 ---
 
@@ -19,6 +20,7 @@ dir = skill base directory
 
 // Route by command
 if "search <query>":
+    Read(dir/references/search.md)
     results = Bash(vault-query search <query>)
     do("present results with file paths, offer to Read top hits")
 
@@ -49,6 +51,10 @@ elif "cards":
 elif "notes":
     results = Bash(vault-query notes)
     do("present notes with metadata")
+
+elif "experiments":
+    results = Bash(vault-query experiments)
+    do("present experiments with metadata: date, verdict, description")
 
 elif "projects":
     results = Bash(vault-query projects)
@@ -107,7 +113,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | Inbox                                     | Captured-but-unsorted item awaiting triage. Distinct from a reference: an inbox item is raw capture; a reference is captured and classified with tags.                                                                                                                                                                       | `00 inbox/`                             |
 | Reference                                 | Pointer to an external source (article, book, video, talk). Captured and classified with tags, no analysis. Distinct from a card: a reference holds the source, a card holds the idea drawn from it.                                                                                                                         | `10 references/`                        |
 | Card                                      | One concept distilled from one or more external references, in your own words. The `reference:` field records its sources and marks the file as a card. Distinct from a note: a card distils external sources, a note is original.                                                                                           | `20 cards/`                             |
-| Note                                      | Original thinking, free-form; carries no `reference:` field. Stands alone or links ideas across cards and references. Distinct from a card: a note is original, a card distils external sources.                                                                                                                             | `30 notes/`                             |
+| Note                                      | Original thinking, free-form; carries no `reference:` field. Stands alone or links ideas across cards and references. Distinct from a card: a note is original, a card distils external sources. Work-specific notes use `31 work notes/` (same format).                                                                    | `30 notes/`, `31 work notes/`           |
 | Goal                                      | High-level aspiration with success criteria. Nests via the `goal:` field on a child goal. Distinct from a project: the goal is the _why_, the project is a deliverable that advances it.                                                                                                                                     | `41 projects/`                          |
 | Project                                   | Concrete deliverable linked to a goal. Has `result`, `status`, optional `deadline`. Single file, or a subfolder when work fans out. Distinct from a track: the project is the unit of intent, the track is the unit of working memory across sessions.                                                                       | `41 projects/<project>/`                |
 | Project context                           | Stable per-project framing (purpose, conventions, links) read by `vault-query --project <name> context`. Distinct from a track: context is durable framing, a track is rolling state.                                                                                                                                        | `41 projects/<project>/context.md`      |

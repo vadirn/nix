@@ -28,7 +28,7 @@ task = do("describe, in your own words, what the user is trying to do — and ex
            expansion), so a richer task string retrieves better.")
 
 result = Bash(vault-query consult "<task>" --types card,note,experiment --format markdown)
-                                            // typed exit codes: 0 / 4 / 1
+                                            // exit codes: 0=results, 4=abstain, 1=error
 
 if exit == 0:
     do("weave the returned vault context into your answer; name the source titles/paths so the user can
@@ -48,7 +48,7 @@ else:                                 // exit 1 or other — vault or index erro
 
 ## Scope and flags
 
-- Default corpus is the user's own writing: `--types card,note,experiment`. References are bookmarks to
+- This skill always passes `--types card,note,experiment` (the CLI default searches all types). References are bookmarks to
   external content (URL + a one-line description), not the user's prior thinking, so they are excluded
   from the default. Opt in with `--types card,note,experiment,reference` when the task is about finding
   what the user has *read* on a topic rather than what they *think*. Reach time-bound project memory

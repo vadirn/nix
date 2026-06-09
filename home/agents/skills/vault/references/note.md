@@ -33,7 +33,8 @@ present related cards/references as potential wikilink targets
 
 ## Frontmatter
 
-Read `templates/Note.md` for structure.
+vault_root = Bash(vault-query config).vault_root
+Read(<vault_root>/templates/Note.md) for structure.
 
 - `type` — always `note`
 - `description` — 1 sentence capturing what this note explores

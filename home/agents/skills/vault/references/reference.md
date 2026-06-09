@@ -18,7 +18,8 @@ References are raw captures. They contain the source link and metadata, not your
 
 ## Frontmatter
 
-Read the chosen template (`templates/Web.md`, `templates/Book.md`, `templates/Conversation.md`, or `templates/Reference.md`).
+vault_root = Bash(vault-query config).vault_root
+Read(<vault_root>/templates/<chosen>.md) — Web.md, Book.md, Conversation.md, or Reference.md.
 
 - `type` — always `reference`
 - `description` — 1 sentence describing what this source is about
