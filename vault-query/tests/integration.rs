@@ -639,6 +639,67 @@ fn test_consult_json_format_abstain_is_valid() {
     assert!(v.get("reason").is_some(), "missing reason in abstain envelope");
 }
 
+/// With a per-doc cap that no document can satisfy, a relevant query still exits 0:
+/// found-but-too-big is Selected with empty docs and the find surfaced as pointers.
+#[test]
+fn test_consult_oversized_candidates_exit_0_with_pointers() {
+    // No CLI flag exists for the cap, so it rides in via a temp root config (the
+    // JSONL log test pattern).  `--vault-root` still pins the corpus to the fixture
+    // vault: without it the layer-1 walk-up from the test cwd finds the developer's
+    // own `.vault.config.json` and queries the real vault.
+    let tmp_home = tempfile::tempdir().unwrap();
+    let cfg_dir = tmp_home.path().join(".config/vault");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.json"),
+        serde_json::json!({
+            "vault_root": fixture_dir().to_str().unwrap(),
+            "projects_path": "41 projects",
+            "consult": {
+                "per_doc_token_cap": 1
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .env("HOME", tmp_home.path())
+        .args([
+            "consult",
+            "retry backoff failure",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+            "--format",
+            "json",
+            "--no-log",
+        ])
+        .output()
+        .expect("failed to run vault-query consult");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+
+    assert_eq!(
+        code, 0,
+        "found-but-too-big must exit 0 (selected with pointers), stdout: {}",
+        stdout
+    );
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("expected valid JSON, got: {}", &stdout[..stdout.len().min(200)]));
+    assert_eq!(v["status"].as_str(), Some("selected"), "wrong status field");
+    assert_eq!(
+        v["docs"].as_array().map(|a| a.len()),
+        Some(0),
+        "no doc fits a 1-token cap; docs must be empty"
+    );
+    let pointers = v["pointers"].as_array().expect("missing pointers array");
+    assert!(!pointers.is_empty(), "expected at least one pointer for the relevant doc");
+    for p in pointers {
+        assert!(p["path"].as_str().is_some(), "pointer missing path");
+        assert!(p["tokens_est"].as_u64().unwrap_or(0) > 0, "pointer tokens_est must be > 0");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // JSONL logging tests (Backlog 6, Decision 8)
 // ---------------------------------------------------------------------------

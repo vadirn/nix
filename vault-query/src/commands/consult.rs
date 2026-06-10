@@ -67,6 +67,20 @@ pub struct NearMiss {
     pub matched_terms: Vec<String>,
 }
 
+/// A relevant document that cleared the gate and per-doc coverage filter but
+/// was dropped by the packer (per-doc cap or budget).  Found-but-too-big is a
+/// success: the caller reads the doc itself via the path, so exit 4 keeps
+/// meaning "nothing relevant exists".
+#[derive(Debug, Clone)]
+pub struct DocPointer {
+    pub path: String,
+    pub title: String,
+    pub doc_type: Option<String>,
+    pub score: f32,
+    pub coverage: f32,
+    pub tokens_est: usize,
+}
+
 /// Outcome of a `run_consult` call.
 #[derive(Debug)]
 pub enum ConsultOutcome {
@@ -75,6 +89,8 @@ pub enum ConsultOutcome {
         query: String,
         docs: Vec<SelectedDoc>,
         total_tokens: usize,
+        /// Coverage-cleared candidates the packer could not inline.
+        pointers: Vec<DocPointer>,
     },
     /// No document cleared the gate; near-misses provided for reformulation.
     Abstain {
@@ -674,27 +690,40 @@ pub fn run_consult(
         // else: skip this doc and continue to next candidate.
     }
 
-    // Every coverage-qualified candidate was either over the per-doc cap or too large
-    // for the remaining budget, leaving nothing to weave.  Abstain rather than emit a
-    // doc-less `Selected`, which would tell the caller (per SKILL.md) to weave context
-    // that does not exist and break the exit-code contract — 0 = selected with docs,
-    // 4 = abstain (bug_009).
-    if packed.is_empty() {
-        return Ok((
-            ConsultOutcome::Abstain {
-                query: query.to_string(),
-                near_misses: build_near_misses(&hits, &query_terms),
-                reason: "no candidate within token budget".to_string(),
-            },
-            diag,
-        ));
-    }
+    // Pointers: coverage-cleared candidates the packer dropped (per-doc cap or
+    // budget), as the set difference coverage_filtered − packed by path.  The
+    // difference is uniform across the normal path and the sub-median fallback
+    // because both feed `coverage_filtered`; the displacer suppressed by the
+    // per-doc coverage filter (Decision 30) never enters it.  Found-but-too-big
+    // is a success: an empty pack with pointers returns Selected (exit 0) so
+    // the caller can read the doc itself, and exit 4 keeps meaning "nothing
+    // relevant exists".
+    let packed_paths: HashSet<&str> = packed.iter().map(|d| d.path.as_str()).collect();
+    let pointers: Vec<DocPointer> = coverage_filtered
+        .iter()
+        .filter(|h| !packed_paths.contains(h.path.as_str()))
+        .map(|h| {
+            let doc_type = file_map.get(&h.path).and_then(|vf| {
+                let v = vf.get_property("type");
+                if v.is_empty() { None } else { Some(v) }
+            });
+            DocPointer {
+                path: h.path.clone(),
+                title: h.title.clone(),
+                doc_type,
+                score: h.score,
+                coverage: doc_coverage(h),
+                tokens_est: h.stored_body.trim_start_matches('\n').chars().count() / 4,
+            }
+        })
+        .collect();
 
     Ok((
         ConsultOutcome::Selected {
             query: query.to_string(),
             docs: packed,
             total_tokens: running_tokens,
+            pointers,
         },
         diag,
     ))
@@ -931,24 +960,31 @@ mod tests {
         }
     }
 
-    // --- Test 5: packing respects per_doc_token_cap ---
+    // --- Test 5: packing respects per_doc_token_cap; the dropped doc becomes a pointer ---
 
     #[test]
     fn packing_skips_oversized_doc() {
-        // A doc whose body is large (> per_doc_token_cap) and a small doc that fits.
-        // The large doc should be skipped; the small doc should be included.
+        // BigDoc and SmallDoc both fully cover the query, so both clear the per-doc
+        // coverage filter; BigDoc exceeds the cap and must be dropped from the pack
+        // and surface as a pointer instead.  WeakDoc matches one diluted term: with
+        // three hits the median sits at its score, keeping both relevant docs in the
+        // above-median candidate set regardless of which of the two ranks first.
         let per_doc_cap = 50; // very small cap for test
-        let big_body = "word ".repeat(300); // 300 * 5 chars = 1500 chars → ~375 tokens
+        let big_body =
+            "retry backoff failure pattern helps resilience in distributed systems ".repeat(50);
         let small_body = "retry backoff failure pattern helps resilience in distributed systems";
+        let weak_body = "the failure of the crop harvest was caused by unseasonal weather";
 
         let big = make_vault_file("BigDoc", "card", &big_body);
         let small = make_vault_file("SmallDoc", "card", small_body);
+        let weak = make_vault_file("WeakDoc", "card", weak_body);
 
-        let files = vec![big, small];
+        let files = vec![big, small, weak];
         let scope = vec!["card".to_string()];
         let mut config = default_config();
         config.per_doc_token_cap = per_doc_cap;
         config.token_budget = 10_000; // generous budget
+        config.elbow_k = 1.0; // isolate the test from the elbow gate
 
         let (result, _diag) = run_consult(
             "retry backoff failure",
@@ -961,7 +997,7 @@ mod tests {
         .unwrap();
 
         match result {
-            ConsultOutcome::Selected { docs, .. } => {
+            ConsultOutcome::Selected { docs, pointers, .. } => {
                 for doc in &docs {
                     assert!(
                         doc.tokens <= per_doc_cap,
@@ -972,10 +1008,23 @@ mod tests {
                     );
                     assert_ne!(doc.title, "BigDoc", "BigDoc should have been skipped (over cap)");
                 }
+                assert!(
+                    docs.iter().any(|d| d.title == "SmallDoc"),
+                    "SmallDoc fits the cap and must be packed, got: {:?}",
+                    docs.iter().map(|d| d.title.as_str()).collect::<Vec<_>>()
+                );
+                assert!(
+                    pointers.iter().any(|p| p.title == "BigDoc"),
+                    "the cap-dropped BigDoc must appear in pointers, got: {:?}",
+                    pointers.iter().map(|p| p.title.as_str()).collect::<Vec<_>>()
+                );
             }
-            ConsultOutcome::Abstain { .. } => {
-                // If SmallDoc doesn't have enough overlap to pass the gate, that's OK.
-                // The test primarily validates that BigDoc is skipped when it does pass.
+            ConsultOutcome::Abstain { reason, .. } => {
+                panic!(
+                    "expected Selected: both relevant docs fully cover the query \
+                     and the elbow is disabled, got Abstain: {}",
+                    reason
+                );
             }
         }
     }
@@ -1512,7 +1561,7 @@ mod tests {
         }
 
         match result {
-            ConsultOutcome::Selected { docs, .. } => {
+            ConsultOutcome::Selected { docs, pointers, .. } => {
                 // Gate opened — correct behavior.  At least one doc was packed.
                 assert!(
                     !docs.is_empty(),
@@ -1529,6 +1578,12 @@ mod tests {
                 assert!(
                     !docs.iter().any(|d| d.title == "compound loop learn cycle"),
                     "the low-coverage rank-1 displacer must not be packed (bug_004)"
+                );
+                // The displacer never enters `coverage_filtered`, so it must not leak
+                // into pointers either (Decision 30 holds for the pointer set).
+                assert!(
+                    !pointers.iter().any(|p| p.title == "compound loop learn cycle"),
+                    "the coverage-rejected displacer must not appear in pointers"
                 );
             }
             ConsultOutcome::Abstain { reason, .. } => {
@@ -1712,15 +1767,16 @@ mod tests {
         );
     }
 
-    // --- Test 17: gate passes but packer admits nothing → Abstain (bug_009) ---
+    // --- Test 17: gate passes but packer admits nothing → Selected with pointers ---
     //
     // The abstain gate can open while the packer drops every candidate.  Here the sole
     // high-coverage doc clears the gate but exceeds a tiny per-doc token cap, so the
-    // pack ends empty.  The result must be Abstain, not a doc-less Selected, so the
-    // exit-code contract holds: 0 = selected with docs, 4 = abstain.
+    // pack ends empty.  Found-but-too-big is a success: the result is Selected with no
+    // docs and a pointer to the oversized doc, so exit 4 keeps meaning "nothing
+    // relevant exists" (Decision 4 contract).
 
     #[test]
-    fn empty_pack_after_gate_pass_abstains() {
+    fn empty_pack_after_gate_pass_returns_selected_with_pointers() {
         // One doc with full coverage of the query → the gate passes.
         let body = "compound loop learn cycle ".repeat(50);
         let relevant = make_vault_file("Long Relevant Note", "card", &body);
@@ -1744,16 +1800,62 @@ mod tests {
         .unwrap();
 
         match result {
-            ConsultOutcome::Abstain { reason, .. } => {
-                assert_eq!(reason, "no candidate within token budget");
-            }
-            ConsultOutcome::Selected { docs, total_tokens, .. } => {
-                panic!(
-                    "expected Abstain when the packer admits no doc, got Selected with \
-                     {} doc(s), {} tokens",
-                    docs.len(),
-                    total_tokens,
+            ConsultOutcome::Selected { docs, pointers, .. } => {
+                assert!(docs.is_empty(), "no doc fits the cap; docs must be empty");
+                assert!(
+                    pointers.iter().any(|p| p.path == "Long Relevant Note.md"),
+                    "the oversized coverage-cleared doc must appear in pointers, got: {:?}",
+                    pointers.iter().map(|p| p.path.as_str()).collect::<Vec<_>>()
                 );
+                for p in &pointers {
+                    assert!(p.tokens_est > 0, "pointer tokens_est must be positive");
+                }
+            }
+            ConsultOutcome::Abstain { reason, .. } => {
+                panic!(
+                    "expected Selected with pointers when the gate passed but the packer \
+                     admitted no doc, got Abstain: {}",
+                    reason,
+                );
+            }
+        }
+    }
+
+    // --- Test 18: a fully-packed selection carries no pointers ---
+
+    #[test]
+    fn selected_with_all_docs_packed_has_empty_pointers() {
+        let body = "compound loop learn cycle ".repeat(50);
+        let relevant = make_vault_file("Long Relevant Note", "card", &body);
+
+        let files = vec![relevant];
+        let scope = vec!["card".to_string()];
+
+        // Default caps comfortably fit the ~325-token body.
+        let mut config = default_config();
+        config.elbow_k = 1.0;
+
+        let (result, _diag) = run_consult(
+            "compound loop learn cycle",
+            &files,
+            &vault_root(),
+            &scope,
+            &config,
+            ConsultMode::Deliberate,
+        )
+        .unwrap();
+
+        match result {
+            ConsultOutcome::Selected { docs, pointers, .. } => {
+                assert!(!docs.is_empty(), "the doc fits the cap and budget; expected it packed");
+                assert!(
+                    pointers.is_empty(),
+                    "every coverage-cleared candidate was packed; pointers must be empty, got: {:?}",
+                    pointers.iter().map(|p| p.path.as_str()).collect::<Vec<_>>()
+                );
+            }
+            ConsultOutcome::Abstain { reason, .. } => {
+                panic!("expected Selected for a fully-packed relevant doc, got Abstain: {}", reason);
             }
         }
     }

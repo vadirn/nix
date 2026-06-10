@@ -11,7 +11,8 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::commands::consult::{
-    ConsultDiagnostics, ConsultMode, ConsultOutcome, NearMiss, SelectedDoc, run_consult,
+    ConsultDiagnostics, ConsultMode, ConsultOutcome, DocPointer, NearMiss, SelectedDoc,
+    run_consult,
 };
 use crate::config::{ConsultConfig, ResolvedConfig};
 use crate::vault;
@@ -63,11 +64,23 @@ struct JsonSelectedDoc {
 }
 
 #[derive(Serialize)]
+struct JsonPointer {
+    path: String,
+    title: String,
+    #[serde(rename = "type")]
+    doc_type: Option<String>,
+    score: f32,
+    coverage: f32,
+    tokens_est: usize,
+}
+
+#[derive(Serialize)]
 struct JsonSelected {
     status: &'static str,
     query: String,
     total_tokens: usize,
     docs: Vec<JsonSelectedDoc>,
+    pointers: Vec<JsonPointer>,
 }
 
 #[derive(Serialize)]
@@ -90,7 +103,11 @@ struct JsonAbstain {
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
-fn render_markdown_selected(docs: &[SelectedDoc], total_tokens: usize) -> String {
+fn render_markdown_selected(
+    docs: &[SelectedDoc],
+    total_tokens: usize,
+    pointers: &[DocPointer],
+) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "<!-- vault-query consult: {} doc(s), ~{} tokens -->\n\n",
@@ -102,6 +119,16 @@ fn render_markdown_selected(docs: &[SelectedDoc], total_tokens: usize) -> String
         out.push_str(&format!("## {} ({})\n\n", doc.title, doc.path));
         out.push_str(doc.body.trim_end());
         out.push_str("\n\n");
+    }
+    if !pointers.is_empty() {
+        out.push_str("Too large to inline — read directly:\n\n");
+        for p in pointers {
+            out.push_str(&format!(
+                "- **{}** ({}) — ~{} est tokens, coverage {:.2}\n  → vault-query get \"{}\"\n",
+                p.title, p.path, p.tokens_est, p.coverage, p.path
+            ));
+        }
+        out.push('\n');
     }
     // Remove trailing blank line
     let trimmed = out.trim_end().to_string();
@@ -130,7 +157,12 @@ fn render_markdown_abstain(near_misses: &[NearMiss], reason: &str) -> String {
     out
 }
 
-fn render_json_selected(query: &str, docs: &[SelectedDoc], total_tokens: usize) -> Result<String> {
+fn render_json_selected(
+    query: &str,
+    docs: &[SelectedDoc],
+    total_tokens: usize,
+    pointers: &[DocPointer],
+) -> Result<String> {
     let envelope = JsonSelected {
         status: "selected",
         query: query.to_string(),
@@ -145,6 +177,17 @@ fn render_json_selected(query: &str, docs: &[SelectedDoc], total_tokens: usize) 
                 body: d.body.clone(),
                 tokens: d.tokens,
                 links: d.links.clone(),
+            })
+            .collect(),
+        pointers: pointers
+            .iter()
+            .map(|p| JsonPointer {
+                path: p.path.clone(),
+                title: p.title.clone(),
+                doc_type: p.doc_type.clone(),
+                score: p.score,
+                coverage: p.coverage,
+                tokens_est: p.tokens_est,
             })
             .collect(),
     };
@@ -204,6 +247,8 @@ struct LogRecord<'a> {
     num_selected: usize,
     total_tokens: usize,
     selected_paths: Vec<&'a str>,
+    num_pointers: usize,
+    pointer_paths: Vec<&'a str>,
     near_miss_titles: Vec<&'a str>,
     near_miss_scores: Vec<f32>,
 }
@@ -257,7 +302,7 @@ fn append_log_inner(
         .as_millis();
 
     let record: LogRecord = match outcome {
-        ConsultOutcome::Selected { docs, total_tokens, .. } => LogRecord {
+        ConsultOutcome::Selected { docs, total_tokens, pointers, .. } => LogRecord {
             timestamp_ms,
             duration_ms,
             query,
@@ -274,6 +319,8 @@ fn append_log_inner(
             num_selected: docs.len(),
             total_tokens: *total_tokens,
             selected_paths: docs.iter().map(|d| d.path.as_str()).collect(),
+            num_pointers: pointers.len(),
+            pointer_paths: pointers.iter().map(|p| p.path.as_str()).collect(),
             near_miss_titles: vec![],
             near_miss_scores: vec![],
         },
@@ -294,6 +341,8 @@ fn append_log_inner(
             num_selected: 0,
             total_tokens: 0,
             selected_paths: vec![],
+            num_pointers: 0,
+            pointer_paths: vec![],
             near_miss_titles: near_misses.iter().map(|nm| nm.title.as_str()).collect(),
             near_miss_scores: near_misses.iter().map(|nm| nm.score).collect(),
         },
@@ -382,10 +431,14 @@ pub fn run(
     }
 
     match outcome {
-        ConsultOutcome::Selected { query, docs, total_tokens } => {
+        ConsultOutcome::Selected { query, docs, total_tokens, pointers } => {
             let rendered = match format {
-                ConsultFormat::Markdown => render_markdown_selected(&docs, total_tokens),
-                ConsultFormat::Json => render_json_selected(&query, &docs, total_tokens)?,
+                ConsultFormat::Markdown => {
+                    render_markdown_selected(&docs, total_tokens, &pointers)
+                }
+                ConsultFormat::Json => {
+                    render_json_selected(&query, &docs, total_tokens, &pointers)?
+                }
             };
             print!("{}", rendered);
             Ok(0)
