@@ -15,8 +15,8 @@ if not fast and missing thesis:
   use their framing as foundation — help structure; let the user supply the thesis
 
 // Duplicate check — before creating anything
-exact = Glob("<topic>.md", "30 notes/")
-semantic = Bash(vault-query search "<topic>" -n 5)
+exact = Glob("<topic>.md", "00 inbox/") + Glob("<topic>.md", "30 notes/")
+semantic = Bash(vault-query search "<topic>" -n 5)  // whole-vault, inbox included
 if exact or semantic:
   present matches, ask: proceed / edit existing?
 
@@ -25,7 +25,7 @@ tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // pick on
 // a tag absent from the list requires explicit user confirmation before use
 description = 1-sentence summary of what this note explores
 body = help structure thinking if requested
-create file in 30 notes/
+create file in 00 inbox/  // complete type: note; user files it to 30 notes/ once triaged
 
 // Surface connections
 related = Bash(vault-query search "<key terms>" -n 10)

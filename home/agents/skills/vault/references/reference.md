@@ -8,13 +8,13 @@ References are raw captures. They contain the source link and metadata, not your
 
 1. Ask for the source (URL, book title, etc.) if not provided
 2. **Duplicate check** (before creating anything):
-   - `Glob` for exact filename match in `10 references/`
-   - `Bash(vault-query search "<title>" -n 5)` — near-duplicates by meaning
+   - `Glob` for exact filename match in both `00 inbox/` and `10 references/`
+   - `Bash(vault-query search "<title>" -n 5)` — near-duplicates by meaning (scans the whole vault, inbox included)
    - If matches found, present them and ask whether to proceed or edit existing
 3. Pick a template that fits the source: `Web.md` (URL — articles, YouTube, talks), `Book.md` (book with authors/publisher), `Conversation.md` (LLM dialogue or NotebookLM notebook — body holds an extract, not a transcript). If nothing fits, use `Reference.md`.
 4. Pick tags: run `vault-query tags --vault-root <vault_root> --sort count` to get the live tag list, pick one or more from it. Fall back to the tag tree in CLAUDE.md if vault-query is unavailable. A tag absent from the list requires explicit user confirmation before use.
 5. Write a 1-sentence `description`
-6. Create the file in `10 references/`
+6. Create the file in `00 inbox/`. It is a complete `type: reference` already; the user files it to `10 references/` once triaged. (`vault-query` classifies by the `type:` field, so it counts as a reference from creation — the move is for browsing, not classification.)
 
 ## Frontmatter
 

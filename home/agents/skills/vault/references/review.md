@@ -31,9 +31,9 @@ for each card in 3 selected cards:
 key_terms = extract from reviewed cards
 related = Bash(vault-query search "<key terms>" -n 10)
 if non-trivial pattern, tension, or synthesis across cards:
-  propose creating a note in 30 notes/
+  propose creating a note in 00 inbox/
 if user had ideas or reactions during recall:
-  propose capturing them as a note in 30 notes/
+  propose capturing them as a note in 00 inbox/
 ```
 
 ## Notes

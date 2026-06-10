@@ -7,11 +7,11 @@ Cards contain your own understanding in your own words. They backlink to the sou
 ## Process
 
 ```
-source = identify source reference (should exist in 10 references/)
+source = identify source reference (should exist in 10 references/, or 00 inbox/ if not yet filed)
 
 // Duplicate check — before creating anything
-exact = Glob("<concept>.md", "20 cards/")
-semantic = Bash(vault-query search "<concept>" -n 5)
+exact = Glob("<concept>.md", "00 inbox/") + Glob("<concept>.md", "20 cards/")
+semantic = Bash(vault-query search "<concept>" -n 5)  // whole-vault, inbox included
 if exact or semantic:
   present matches, ask: proceed / merge / edit existing?
 
@@ -27,12 +27,12 @@ tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // pick on
 // a tag absent from the list requires explicit user confirmation before use
 description = 1-sentence core idea
 body = concise summary in user's own framing
-create file in 20 cards/
+create file in 00 inbox/  // complete type: card; user files it to 20 cards/ once triaged
 
 // Surface connections
 related = Bash(vault-query search "<key terms>" -n 10)
 if non-trivial connection (pattern, tension, synthesis):
-  propose creating a note in 30 notes/  // cards stay atomic, connections live in notes
+  propose creating a note in 00 inbox/  // cards stay atomic, connections live in notes
 ```
 
 ## Frontmatter
