@@ -1,3 +1,12 @@
+---
+name: tdd
+description: >
+  Test-driven development for agentic coding: one failing test, one implementation, repeat.
+  Triggers: /tdd, "write tests first", "test-driven", "TDD", "red green refactor",
+  "write a failing test". Skip when testing an existing behavior against a falsifiable
+  claim (use /experiment); skip for a feasibility spike with no known design (use /prototype).
+---
+
 # TDD Skill
 
 Test-driven development for agentic coding. Tests verify behavior through public interfaces.
@@ -86,3 +95,9 @@ Each ⏸ stop is a natural save point. If the project uses checkpoints, note the
 ## Mocking
 
 Mock at system boundaries only: external APIs, databases, time, filesystem. All internal code uses real implementations. See [mocking.md](mocking.md) for details.
+
+## Reference files
+
+Read `tests.md` before writing any test code (step 4 TDD Loop). It contains examples that set the expected style and structure for tests in this project.
+
+Read `mocking.md` when a step raises a boundary or mocking question — typically during step 2 (Plan) when designing for testability, or during step 4 when a boundary crosses into external APIs, databases, time, or the filesystem.

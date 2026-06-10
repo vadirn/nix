@@ -20,7 +20,7 @@ if not fast and missing concept or description:
   ask user: "What concept would you name this card?"
   ask user: "What's the core idea in 1 sentence?"
   wait for response
-  use their input as basis — refine wording, fix factual errors, don't replace
+  use their input as basis — refine wording, fix factual errors, preserve their framing
 
 // Build the card
 tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // fall back to CLAUDE.md tag tree
@@ -36,7 +36,8 @@ if non-trivial connection (pattern, tension, synthesis):
 
 ## Frontmatter
 
-Read `templates/Card.md` for structure.
+vault_root = Bash(vault-query config).vault_root
+Read(<vault_root>/templates/Card.md) for structure.
 
 - `type` — always `card`
 - `description` — 1 sentence capturing the core idea
@@ -59,7 +60,7 @@ Name by the concept, not the source.
 - Bullet points for key details
 - Code snippets for technical concepts
 - Keep it atomic — one idea per card
-- Never add cross-card connections here; create a note instead
+- Cross-card connections belong in notes; create a note instead of adding them here
 
 ## Example
 
@@ -88,7 +89,7 @@ When asked to edit or enrich an existing card:
 
 1. Read the file
 2. Check what's missing: `description`, `reference:` backlink, `tags`
-3. Fill in missing fields. Don't touch existing body content.
+3. Fill in missing fields. Leave existing body content unchanged.
 4. If tags exist but don't match the CLAUDE.md tag tree, suggest corrections.
 
 ## Notes

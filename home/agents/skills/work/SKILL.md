@@ -103,7 +103,7 @@ Discipline applies only to Recap. `## Modified files`, `## Decisions`, and `## B
 
 ### Delegation classifier
 
-Delegate by default. Answer directly only when the answer is already in the orchestrator's context (a fact just produced by a subagent in this session, or stated by the user this turn). Any step requiring a fresh Read, Bash, Write, or Edit, or producing bulk output → delegate. Conversational asides during orchestration are delegated like any other read; to skip delegation for an aside, the user signals stop first.
+Delegate by default. Answer directly only when the answer is already in the orchestrator's context (a fact just produced by a subagent in this session, or stated by the user this turn). Any step requiring a fresh Read, Bash, Write, or Edit, or producing bulk output → delegate. Conversational asides during orchestration follow the same rule: if the answer is already in context, answer directly; if the aside requires a fresh read or lookup, delegate it like any other read step.
 
 ### Mapping spawn_subagent to a real tool
 

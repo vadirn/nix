@@ -3,8 +3,10 @@ name: justify
 description: >
   Demand a sufficient reason for each element (code, plan step, or action) and recommend cutting
   whatever cannot earn its place. Use on /justify: defaults to the working-tree diff, "justify actions"
-  audits the recent action transcript, or pass a file path or plan to audit that. To stress-test a
-  plan's decisions use /probe; for code cleanups that assume the code should stay use /simplify.
+  audits the recent action transcript, or pass a file path or plan to audit that. Also triggers on:
+  "does this need to be here", "is this justified", "what can we cut", "does this carry dead weight",
+  "audit this diff", "is this code/step/action necessary". To stress-test a plan's decisions use
+  /probe; for code cleanups that assume the code should stay use /simplify.
 ---
 
 # Justify

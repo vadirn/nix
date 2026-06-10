@@ -14,16 +14,17 @@ Generate radically different designs, then compare. Based on Ousterhout's "Desig
 
 - `topic` (required): What to design. Can be inline text, a file path, or context from conversation.
 - `domain=auto`: cli|api|data|config|pipeline|general (default: auto-detect from topic)
-- `count=3`: Number of designs to generate (minimum 3)
+- `count=4`: Number of designs to generate (minimum 3)
 
 ```
 topic = <topic> from arguments or conversation context
 if no topic: AskUserQuestion("What should I design?")
 
 domain = <domain> parameter, or do("auto-detect from topic")
-count = <count> parameter, default 3
+count = <count> parameter, default 4
 
 // Determine constraints
+// auto-detect: match topic against keywords — cli: flag/command/argv; api: function/method/interface; data: schema/table/model; config: settings/env; pipeline: workflow/job/step; no match → general
 if domain == "general" or auto-detect fails:
     do("probe user: what problem does this solve? who are the callers?")
     do("probe user: what are the key operations? any constraints?")
@@ -33,6 +34,7 @@ else:
     constraints = do("load predefined set for domain — see Reference §Predefined constraint sets")
 
 // Generate designs (parallel sub-agents)
+count = min(count, len(constraints))   // cap so a user-supplied count never exhausts the set silently
 (parallel) for each constraint in constraints[:count]:
     spawn_subagent("design <topic> under constraint: <constraint>")
     do("output: signature, usage example, what it hides, tradeoffs")
@@ -62,7 +64,7 @@ do("suggest /probe to stress-test the chosen design")
 1. Minimize method count: aim for 1-3 methods max
 2. Maximize flexibility: support many use cases via composition
 3. Optimize for the most common case: make the easy thing easy
-4. Paradigm-inspired: take cues from a specific well-known library
+4. Builder pattern: separate construction from use via a fluent builder or factory; callers never touch partially-constructed state
 
 **data** (data models, schemas, storage):
 

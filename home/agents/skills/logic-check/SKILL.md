@@ -32,13 +32,13 @@ Read(references/forms.md)
 
 // Reconstruct argument
 thesis, premises, conclusion = do("extract thesis, premises, and conclusion from text")
-if structure was implicit: do("show reconstruction to user before listing violations")
+do("always show the reconstruction before listing violations")
 
 // Fix term meanings
 terms = do("list key terms; for each multivalent term, note the sense it carries in each location")
 
 // Scan for violations
-violations = do("walk text against each loaded reference; record only real violations, not stylistic weaknesses")
+violations = do("walk text against each loaded reference; record real violations; exclude stylistic weaknesses")
 
 // Output — match the input language
 if violations is empty:
@@ -68,7 +68,8 @@ else:
 
 1. <довод 1>
 2. <довод 2>
-   **Вывод:** <если отличается от тезиса>
+
+**Вывод:** <если отличается от тезиса>
 
 ## Нарушения
 
@@ -98,7 +99,8 @@ else:
 
 1. <premise 1>
 2. <premise 2>
-   **Conclusion:** <if it differs from the thesis>
+
+**Conclusion:** <if it differs from the thesis>
 
 ## Violations
 

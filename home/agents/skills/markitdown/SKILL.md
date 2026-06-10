@@ -1,6 +1,12 @@
 ---
 name: markitdown
-description: Convert files to Markdown via Microsoft's markitdown (uvx). Use for PDFs, DOCX, PPTX, XLSX, images, audio, HTML, CSV, JSON, XML, ZIP, YouTube URLs, EPubs. For PDF manipulation use pypdf/reportlab.
+description: >
+  Convert files to Markdown via Microsoft's markitdown (uvx). Use for PDFs, DOCX, PPTX, XLSX,
+  images, audio, HTML, CSV, JSON, XML, ZIP, YouTube URLs, EPubs.
+  Triggers: /markitdown, "convert this file to markdown", "extract text from this PDF",
+  "read this DOCX", "transcribe this audio".
+  Skip for PDF manipulation (merge, split, rotate, fill forms, create) — use pypdf/reportlab;
+  web page scraping — use firecrawl; DOCX editing or form-filling; files Claude can read natively.
 ---
 
 # markitdown
@@ -29,8 +35,8 @@ PDF, DOCX, PPTX, XLSX, XLS, images (EXIF + OCR), audio (EXIF + transcription), H
 - User provides a YouTube URL and wants a transcript
 - User wants to extract text/tables from a file for analysis
 
-## When NOT to use
+## Route elsewhere for
 
 - PDF manipulation (merge, split, rotate, fill forms, create) — use `pypdf`/`reportlab` with `uv run`
 - Web page scraping — use `firecrawl`
-- Files Claude can read natively (plain text, code, Markdown)
+- Files Claude can read natively (plain text, code, Markdown) — read directly

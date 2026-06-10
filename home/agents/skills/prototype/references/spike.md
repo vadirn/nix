@@ -25,9 +25,9 @@ Execute the spike up to the time-box. Cut every corner that does not bear on the
 - Skip tests, except those that *are* the answer (a benchmark, a load test, a correctness check).
 - Skip authorization, logging, telemetry, retries, configuration. The spike does not run in production.
 
-If the spike requires touching a real database or external service, treat that as a constraint: set up the smallest possible isolated instance, never the shared dev one. See gotchas in SKILL.md for the Row-Level Security warning.
+If the spike requires touching a real database or external service, treat that as a constraint: set up the smallest possible isolated instance, always separate from the shared dev environment. See gotchas in SKILL.md for the Row-Level Security warning.
 
-If a blocker appears (the technique requires something you cannot get inside the time-box), surface it immediately. Do not silently extend.
+If a blocker appears (the technique requires something you cannot get inside the time-box), surface it immediately. Respect the time-box; record any extension in writing.
 
 ## Capture
 
@@ -52,4 +52,4 @@ The spike code is now overhead. Ask the user:
 - Archive: tag the branch (`spike/<slug>-archived`) and delete the working copy. Useful if a future spike might revisit the same question.
 - Delete: drop the branch or directory. Default for cheap-to-reproduce spikes.
 
-Do not promote spike code to production. If the answer is "yes, proceed", the production implementation starts fresh from the design (informed by the spike, not built on it). Promotion is the failure mode named in SKILL.md gotchas.
+Keep spike code out of production. If the answer is "yes, proceed", start the production implementation fresh from the design (informed by the spike, not built on it). Promotion is the failure mode named in SKILL.md gotchas.

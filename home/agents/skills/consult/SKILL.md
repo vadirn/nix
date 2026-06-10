@@ -7,9 +7,9 @@ description: >
   Y", "what have I already reasoned or decided about Z", their stance on a design fork, or planning work
   they've deliberated before. This holds even when the surface topic is code or engineering; the signal is
   the request for the user's view, not the subject matter. The tool abstains silently when nothing fits, so
-  consulting is cheap. Skip purely mechanical execution where no opinion is sought: running commands,
-  editing, refactoring, or debugging code, file operations, and routine boilerplate setup (even when phrased
-  "how do I usually"), plus conversational and meta turns. Manually invocable as /consult <task>.
+  consulting is cheap. Limit triggering to tasks where the user's opinion is sought; mechanical execution
+  (running commands, editing, refactoring, debugging code, file operations, routine boilerplate setup, even
+  when phrased "how do I usually") and conversational/meta turns fall outside scope. Manually invocable as /consult <task>.
 ---
 
 # Consult
@@ -28,7 +28,7 @@ task = do("describe, in your own words, what the user is trying to do — and ex
            expansion), so a richer task string retrieves better.")
 
 result = Bash(vault-query consult "<task>" --types card,note,experiment --format markdown)
-                                            // typed exit codes: 0 / 4 / 1
+                                            // exit codes: 0=results, 4=abstain, 1=runtime error, 2=CLI usage error (clap)
 
 if exit == 0:
     do("weave the returned vault context into your answer; name the source titles/paths so the user can
@@ -41,14 +41,14 @@ elif exit == 4:                       // abstain — nothing cleared the relevan
         do("proceed un-enriched and say nothing about it — an abstention is identical to the knowledge
             not existing, and a silent miss is the designed-for outcome, not a failure")
 
-else:                                 // exit 1 or other — vault or index error
-    do("proceed un-enriched; a vault hiccup must never block the task. Do not surface the error unless
+else:                                 // exit 1 (runtime) or 2 (bad CLI invocation) — vault or index error
+    do("proceed un-enriched; the task proceeds regardless of vault errors. Surface the error only when
         the user explicitly asked to consult the vault.")
 ```
 
 ## Scope and flags
 
-- Default corpus is the user's own writing: `--types card,note,experiment`. References are bookmarks to
+- This skill always passes `--types card,note,experiment` (the CLI default searches all types). References are bookmarks to
   external content (URL + a one-line description), not the user's prior thinking, so they are excluded
   from the default. Opt in with `--types card,note,experiment,reference` when the task is about finding
   what the user has *read* on a topic rather than what they *think*. Reach time-bound project memory
@@ -56,8 +56,7 @@ else:                                 // exit 1 or other — vault or index erro
   rather than reusable knowledge.
 - `--format markdown` (the default) returns a paste-ready block. Use `--format json` only when you need
   the structured envelope (path, title, type, score, body, tokens, links) for programmatic handling.
-- Do not pass `--ambient`: that tightens the gate for the unattended hook path and trades recall for
-  fewer false positives. As a deliberate caller you want the higher-recall default gate.
+- Pass `--ambient` only on the unattended hook path; as a deliberate caller, use the higher-recall default gate (omit the flag).
 
 ## When to reach for this
 

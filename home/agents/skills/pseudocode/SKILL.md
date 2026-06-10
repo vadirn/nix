@@ -2,8 +2,9 @@
 name: pseudocode
 description: >
   Convert freeform workflow text into structured pseudocode for SKILL.md files. Triggers: /pseudocode,
-  "write pseudocode", "convert to pseudocode", "make this a skill", or refactoring skill instructions
-  from prose.
+  "write pseudocode", "convert to pseudocode", "make this a skill", or converting a SKILL.md prose
+  procedure into a pseudocode block. Skip when the goal is to create or iterate on a skill
+  holistically (use skill-creator).
 ---
 
 # Pseudocode
@@ -89,7 +90,9 @@ branch = Bash(git rev-parse --abbrev-ref HEAD)
 
 // Guards
 if branch == "main": stop
-if uncommitted changes in status: Skill(commit), then stop
+if uncommitted changes in status:
+  Skill(commit)
+  stop
 
 Bash(git push -u origin <branch>)
 title, body = do("generate title and body from branch commits")

@@ -5,7 +5,7 @@ description: >
   Triggers: /imagen-fal, explicit mentions of "Kling", "BiRefNet", "fal.ai image",
   or "use fal". Skip for non-image tasks, text-in-image prompts (route to
   imagen-nanobanana), and ambiguous image requests (those route through the /imagen
-  hub). Do NOT trigger on bare "/imagen" or "generate an image".
+  hub). Trigger only on explicit fal/Kling/BiRefNet mentions or direct invocation.
 ---
 
 # imagen-fal
@@ -43,12 +43,13 @@ Replace `<skill-dir>` with this skill's base directory at invocation time. Pass 
 | `--source <path>` | One or more reference image paths, comma-separated for multi-ref (e.g. `a.png,b.png`). Up to 10. Presence of `--source` auto-switches the default model to `fal-ai/kling-image/o1` (i2i). Each file is uploaded to fal storage and passed as `image_urls`. |
 | `--drafts <N>` | Number of variant images to generate (1–9, default: 1). |
 | `--model <id>` | Model identifier. Default auto-picks `fal-ai/kling-image/v3/text-to-image` for t2i or `fal-ai/kling-image/o1` for i2i. |
-| `--aspect <ratio>` | Aspect ratio enum, one of `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `21:9`. The `o1` (i2i) endpoint also accepts `auto`. Other ratios are rejected by fal. |
+| `--aspect <ratio>` | Aspect ratio enum, one of `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `21:9`. The `o1` (i2i) endpoint also accepts `auto`. Other ratios are rejected by fal. Default: `auto` for image-to-image (`--source` provided), `1:1` for text-to-image. |
 | `--resolution <1k\|2k\|4k>` | Output resolution (default: `2k`). Maps to Kling's `1K`/`2K` enum. fal Kling does not support `4k` — passing it triggers a warning and caps to `2k`. |
-| `--name <slug>` | Output filename prefix (default: slugified first 5 prompt words). |
+| `--name <slug>` | Output filename prefix (default: full prompt slugified, truncated to 40 chars). |
 | `--out <dir>` | Output directory (default: `~/Pictures/imagen`). |
 | `--transparent` | After generation, run the cutout step (controlled by `--cutout`). The original Kling PNG is kept; BiRefNet result is written to a sibling `<base>-alpha.png`. Both paths are emitted. |
 | `--cutout <birefnet\|none>` | Controls the cutout step when `--transparent` is set. `birefnet` (default): run BiRefNet v2 and write `<base>-alpha.png`. `none`: skip BiRefNet; only the raw Kling PNG is saved. |
+| `--dry-run` | Print the resolved request payload as JSON and exit without making an API call. No `FAL_KEY` required. |
 
 ## Workflow
 
@@ -61,7 +62,7 @@ transparent = do("true if user wants a transparent/cut-out/no-background/alpha r
 prompt = do("""
   Rewrite the request as a full descriptive paragraph — not a keyword list.
   Cover: subject, composition, lighting, colour palette, style, camera angle, mood.
-  Do NOT include transparency/alpha/checkerboard wording — that is handled by --transparent.
+  Omit transparency/alpha/checkerboard wording — that is handled by --transparent.
 """)
 
 // Choose flags

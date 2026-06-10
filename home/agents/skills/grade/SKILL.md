@@ -2,7 +2,8 @@
 name: grade
 description: >
   Grade a decision/recommendation/claim on a 1-10 confidence scale. Use on /grade or "rate confidence in X".
-  Open questions → /debate; plan stress-test → /probe.
+  Skip when the user wants both sides argued rather than a single confidence score (use /debate).
+  Skip when the goal is stress-testing a plan for holes (use /probe).
   Skip when the claim is empirically testable by running a command (use /experiment).
 ---
 
@@ -98,4 +99,4 @@ Start from the claim, not from a checklist. Common factors include evidence stre
 
 ### Next step
 
-A concrete action: a command to run, a metric to check, a person to ask. Specific moves like "run `fio --randwrite` on the target disk and check if it exceeds 500 IOPS" rather than vague ones like "get more data." If the uncertainty is inherent (no action can reduce it), say so and explain why.
+A concrete action: a command to run, a metric to check, a person to ask. State specific moves: "run `fio --randwrite` on the target disk and check if it exceeds 500 IOPS." If the uncertainty is inherent (no action can reduce it), say so and explain why.

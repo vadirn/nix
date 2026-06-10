@@ -281,5 +281,6 @@
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "model": "fable"
 }

@@ -45,7 +45,7 @@ for each word:
     repeat the plain word  // Thin out AI vocabulary
 
 guard:
-  keep simple is/has, plain words, and true superlatives; a single instance is not a tell  // Don't overcorrect
+  keep simple is/has, plain words, and true superlatives; a single instance is not a tell  // Preserve what is clear and human
 ```
 
 ## Rules
@@ -150,7 +150,7 @@ A recurring word set marks AI text by its density, not any single use. Where the
 - **Vague attribution:** "experts argue", "observers note", "several sources" (citing one). Name the source and its exact claim, or cut it.
 - **Elegant variation:** "the company… the firm… the organization". Repeat the plain word ("the company… it… the company"). The synonym churn is an AI artifact; humans repeat.
 
-### Don't overcorrect
+### Preserve what is clear and human
 
 The signal is density and co-occurrence, not a single instance. Keep what is human and clear:
 

@@ -64,4 +64,4 @@ If `status` is `abandoned`, file the eval set anyway. The cases document what wa
 
 ## Boundary
 
-Prompt-as-prototype answers prompt-level questions only. If the prompt converges and the next open question is about retrieval quality, tool design, or fine-tune data composition, that is a new prototype with a new design question. Do not extend prompt-as-prototype into RAG iteration; the eval methodology is different and the open question has moved.
+Prompt-as-prototype answers prompt-level questions only. If the prompt converges and the next open question is about retrieval quality, tool design, or fine-tune data composition, that is a new prototype with a new design question. Stop prompt-as-prototype there and open a new prototype invocation for the RAG layer; the eval methodology is different and the open question has moved.

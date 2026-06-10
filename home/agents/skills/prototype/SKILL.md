@@ -8,7 +8,8 @@ description: >
   "PoC", "proof of concept", "is X feasible", "explore Y approach", "tracer bullet",
   "walking skeleton", "vibe-code this", "quick demo of"; Russian: «прототип», «спайк», «прощупать»,
   «по-быстрому накидать». Skip on feature work with a known design, bug fixes, refactors, or
-  production code paths; prototypes resolve open questions, not closed ones.
+  production code paths; prototypes resolve open questions, not closed ones. Also skip when testing an
+  existing behavior against a falsifiable claim without building new code (use /experiment).
 ---
 
 # Prototype
@@ -74,7 +75,6 @@ timebox = <args>.timebox or AskUserQuestion("Time-box duration (e.g. 30m, 2h, 1d
 capture = <args>.capture or (intent == "throwaway" ? "memo" : "adr")
 if intent == "throwaway" and capture == "adr": stop, ask user to resolve the intent/capture conflict
 if intent == "retained"  and capture == "memo": stop, ask user to resolve the intent/capture conflict
-variants = <args>.variants or 1
 
 // Pick the method from the matrix in Reference
 method = lookup(question, intent) in the method matrix
@@ -138,7 +138,7 @@ if intent == "throwaway":
 | User cannot state the design question                | [references/find-goal.md](references/find-goal.md)             |
 | Expand the artifact's Next step into a task list     | [references/next-steps.md](references/next-steps.md)           |
 
-Load the matching reference file when the situation arises. Each file is self-contained; do not try to apply one to another's case.
+Load the matching reference file when the situation arises. Each file is self-contained; apply each only to its own case.
 
 ### The four declarations
 
@@ -162,7 +162,7 @@ If the user cannot state the question, load `references/find-goal.md`.
 | Question \ Intent | Throwaway                       | Retained                          |
 | ----------------- | ------------------------------- | --------------------------------- |
 | Implementation    | Spike (Beck 1999)               | Tracer bullet (Hunt & Thomas 1999)|
-| Look-and-feel     | Component stub / Storybook mock | Out of scope: handle via team's design-system process |
+| Look-and-feel     | Spike (throwaway UI slice)      | Out of scope: handle via team's design-system process |
 | Role              | Wizard of Oz (Kelley 1984)      | rare; upgrade to MVP, out of scope|
 | Integration       | Agent-driven spike across layers| Walking skeleton (Cockburn 2004)  |
 

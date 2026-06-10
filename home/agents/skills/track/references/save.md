@@ -38,8 +38,8 @@ else:
 
     proposed_edits = {
       decisions:  do("session decisions to append as numbered items, or [] if none; if any existing decision was reversed or overridden this session, also wrap its title and rationale in ~~strike-through~~ in place and reference it from the new superseding decision"),
-      backlog:    do("new backlog items to append as `- [ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
-      glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; NEVER modify or remove existing rows, especially pinned (bolded-Term) rows"),
+      backlog:    do("new backlog items to append as `- [ ] (N). ...`; resolved items to mark `[x]` in place — keep all items; preserve all numbers"),
+      glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; preserve all existing rows, especially pinned (bolded-Term) rows"),
       log_entry:  "### " + new_entry_number + ". " + <today> + " — " + title + "\n\n" + narrative,
       updated:    <today>,
     }
@@ -94,12 +94,12 @@ grep for `^### ([0-9]+)\.` in the `## Log` section, take the max, add one.
 ### Backlog conventions
 
 - Numbered, append-only.
-- Resolved items get `[x]` marked in place — never delete, never renumber.
+- Resolved items get `[x]` marked in place — keep all items; preserve all numbers.
 - New items get appended as `- [ ] (N). <text>` where N is the next available integer (length of list + 1). The parentheses prevent Obsidian from rendering the leading number as a markdown ordered-list item, which would re-number the line.
 
 ### Decisions conventions
 
-Numbered, append-only. Each decision: a short title, then the rationale. Never delete.
+Numbered, append-only. Each decision: a short title, then the rationale. Keep all decisions.
 
 When a decision is reversed or overridden:
 
@@ -114,9 +114,9 @@ Surface both the new decision and the strike-through edit in the `proposed_edits
 
 The Glossary is a 2-column markdown table: `| Term | Definition |`. Two row classes:
 
-- **Pinned rows** — Term is bolded (e.g. **Track**, **Decision**). Never edit, never remove, never re-order.
+- **Pinned rows** — Term is bolded (e.g. **Track**, **Decision**). Keep pinned rows intact: preserve their order, wording, and presence.
   The template seeds eight pinned rows describing the track's own conventions; they document the format inside
-  every track so a cold reader doesn't have to consult the skill.
+  every track so a cold reader can understand it without consulting the skill.
 - **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default; refining a
   definition is done by appending a new row with the sharpened wording rather than rewording in place. The old
   row stays so the history of a term's understanding is recoverable.

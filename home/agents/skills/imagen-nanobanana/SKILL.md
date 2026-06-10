@@ -41,11 +41,10 @@ prompt = do("""
   The paragraph is the value passed to the script as the first positional argument.
 
   If chroma_key is true:
-    - Do NOT use the words "transparent", "transparency", "alpha", "checkerboard",
-      "no background", or "PNG" in the prompt — these trigger the painted-checkerboard
+    - Omit the words "transparent", "transparency", "alpha", "checkerboard",
+      "no background", and "PNG" from the prompt — these trigger the painted-checkerboard
       failure mode.
-    - Do NOT use green anywhere on the subject; pick non-green colours for the subject
-      explicitly when relevant.
+    - Pick non-green colours for the subject explicitly when relevant.
     - Append this background directive verbatim as the final sentence:
         "The entire background must be a single flat, fully saturated pure green of
          hex colour #00ff00 (R=0, G=255, B=0) filling every pixel that is not part of
@@ -63,7 +62,7 @@ chroma_key_flag      = do("--transparent --cutout colorkey when chroma_key is tr
 
 // Invoke (replace <skill-dir> with this skill's base directory at invocation time)
 Bash(doppler run -p claude-code -c std --no-fallback -- bun <skill-dir>/scripts/imagen-nanobanana.ts "<prompt>" [source_flags] [drafts_flag] [aspect_flag] [res_flag] [model_flag] [chroma_key_flag])
-// chroma_key_flag = --transparent --cutout colorkey — see Reference §Transparency via chroma-key
+// chroma_key_flag = --transparent --cutout colorkey — see Notes §Transparency via chroma-key
 
 // Relay output
 do("print each 'image: ...' and 'alpha: ...' path so the user can see or copy them")
@@ -72,11 +71,11 @@ do("note the log path the script printed")
 // Iterate
 if user wants to refine or upscale:
   do("call the script again with a chosen output path as --source and adjusted flags")
-  do("when iterating on a chroma-key image, re-run the green-key post-process step")
+  do("when iterating on a chroma-key image, pass --transparent --cutout colorkey again; the script re-runs the green-key step automatically")
 
 // Refusals
 if script reports no image:
-  do("relay the returned safety or model text honestly; do not retry automatically")
+  do("relay the returned safety or model text honestly; stop after one attempt")
 ```
 
 ## Notes

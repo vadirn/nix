@@ -18,7 +18,7 @@ This skill is a router only — it has no script of its own. It reads the user's
 |---|---|---|
 | Text inside image (sign, label, UI mock, readable words) | `imagen-nanobanana` | Nano Banana is strong at typography; Kling O1 is explicitly weak at text rendering. |
 | Numerical / logical reasoning (chart, infographic, diagram, math) | `imagen-nanobanana` | Nano Banana has stronger reasoning needed to place data correctly. |
-| 4+ reference images, multi-reference remix | `imagen-fal` | Kling O1 accepts up to 10 reference images; Nano Banana does not support multi-ref. |
+| Multi-reference style remix (2+ source images combined into one composition) | `imagen-fal` | Kling O1 is purpose-built for multi-ref remix — it ingests references via a dedicated i2i endpoint. Nano Banana also accepts multiple `--source` images but treats them as inline prompt context, not a specialised remix path. |
 | Cinematic / anime / stylised artistic composition | `imagen-fal` | Declared Kling strength per provider documentation. |
 | Transparent background requested (no text) | `imagen-fal --transparent` | BiRefNet v2 produces a clean alpha PNG sibling. If text-in-image is also requested, routes to nanobanana instead; the hub auto-injects `--transparent --cutout colorkey` so the nanobanana script runs the chroma-key step in-process and emits both `image:` and `alpha:` paths — no separate user pass required. |
 | Default / ambiguous | `imagen-nanobanana` | Cheaper for the common case — see cost rationale below. |
@@ -33,6 +33,7 @@ prompt_args = do("collect any flags the user specified: --source, --drafts, --mo
 // Match signals (in priority order)
 transparent_requested = do("true if user asked for transparent / alpha / cut-out / no background")
 ref_count             = do("count of --source images the user provided; 0 if none")
+multi_ref_remix       = do("true if the user's goal is to blend or remix multiple source images into one composition; false for single-source edits")
 text_in_image         = do("true if the final image must contain readable text: signs, labels, UI mockups")
 reasoning_image       = do("true if the image requires numerical layout: charts, infographics, math diagrams")
 cinematic_or_anime    = do("true if the prompt is primarily cinematic, anime, or highly stylised artistic composition")
@@ -40,7 +41,7 @@ cinematic_or_anime    = do("true if the prompt is primarily cinematic, anime, or
 // Route: text fidelity first, then transparency/refs, then style, then default
 if text_in_image OR reasoning_image:
   worker = "imagen-nanobanana"   // text fidelity wins; --transparent auto-injected below if needed
-else if transparent_requested OR ref_count >= 4:
+else if transparent_requested OR (ref_count >= 2 AND multi_ref_remix):
   worker = "imagen-fal"
 else if cinematic_or_anime:
   worker = "imagen-fal"
@@ -61,7 +62,7 @@ else:
   Skill(skill: "imagen-fal", args: "<prompt> [prompt_args]")
 ```
 
-If multiple signals match: `text_in_image` or `reasoning_image` takes highest priority and always routes to `imagen-nanobanana`, even when `transparent_requested` is also true. `transparent_requested` or ≥4 refs routes to `imagen-fal` only when no text signal is present.
+If multiple signals match: `text_in_image` or `reasoning_image` takes highest priority and always routes to `imagen-nanobanana`, even when `transparent_requested` is also true. `transparent_requested` or multi-ref remix routes to `imagen-fal` only when no text signal is present.
 
 ## Capability gaps
 

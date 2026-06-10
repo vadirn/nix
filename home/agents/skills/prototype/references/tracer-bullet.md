@@ -49,4 +49,4 @@ File the ADR at `docs/adr/<NNNN>-<slug>.md` where `<NNNN>` is the next four-digi
 
 After the ADR is filed, the prototype is done. The slice becomes the seed of the feature; subsequent work expands it via ordinary engineering: more cases, more layers, more tests, driven by whichever development loop the project uses.
 
-The skill stops here. Do not enter "ongoing development" mode inside the prototype workflow; that is feature work and follows the team's normal process.
+The skill stops here. Hand off to the team's normal development process; ongoing development is feature work, not prototype work.

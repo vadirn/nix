@@ -1,6 +1,6 @@
 ---
 name: writing-en
-description: Edit English text for clarity. Removes passive voice, filler, AI patterns. Use on /writing-en, "simplify text", "cut fluff".
+description: Edit English text for clarity. Removes passive voice, filler, AI patterns. Use on /writing-en, "simplify text", "cut fluff". For flipping negative instructions to positive directives in skill files or prompts, use /affirm.
 ---
 
 # Clear Writing in English
@@ -9,7 +9,7 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 
 ## Rules
 
-Apply all rules in a single pass. Rule details are in the reference files below. Skip a rule only when applying it would change the author's meaning, lose factual precision, or violate the register of the input (e.g., do not expand terse bullet points into prose).
+Apply all rules in a single reading. Rule details are in the reference files below. Skip a rule only when applying it would change the author's meaning, lose factual precision, or violate the register of the input (e.g., leave terse bullet points as bullets). Exception: pass-2's split-and-reconnect step runs as an iterative loop until the text is stable, not once.
 
 | Area       | Reference                                    | What it targets                                                                                                                                           |
 | ---------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -34,6 +34,8 @@ do("order branches by dependency: resolve prerequisites first")
 do("probe terminology branches before design branches that use the disputed term")
 
 // Phase 2: Walk each branch
+if depth == "shallow":
+    do("select the 5 branches with highest criticality; drop lower-stakes branches")
 for each branch:
     do("pose a specific, pointed question about this branch")
     do("provide a recommended answer grounded in the plan and codebase")
