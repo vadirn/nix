@@ -24,6 +24,6 @@ If the change is mechanical and applies the same transform N times, write a code
 
 ## Anti-patterns
 
-- Running the codemod across the whole tree in one pass: review becomes impossible.
-- Skipping the sample step: hidden edge cases land in real code.
-- Using regex instead of an AST tool: false positives in strings and comments.
+- Run the codemod one directory at a time; a whole-tree pass makes review impossible.
+- Complete the sample step; skipping it lets hidden edge cases reach real code.
+- Use an AST tool; regex produces false positives in strings and comments.

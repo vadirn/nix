@@ -2,7 +2,7 @@
 name: commit
 description: >
   Stage and commit changes with a conventional commit message. Triggers: /commit, "commit", "коммит",
-  "закоммить", "сохрани изменения". For new commits only; skip for amend/rebase/push.
+  "закоммить", "сохрани изменения". Covers new commits only; amend, rebase, and push fall outside scope.
 ---
 
 # Commit

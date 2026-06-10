@@ -60,11 +60,11 @@ When asked to edit or enrich an existing reference:
 
 1. Read the file
 2. Check what's missing: `description`, `tags`
-3. Fill in missing fields. Don't touch existing body content.
+3. Fill in missing fields. Leave existing body content unchanged.
 4. If tags exist but don't match the CLAUDE.md tag tree, suggest corrections.
 
 ## Notes
 
 - Follow obsidian-markdown skill for Obsidian syntax
-- Don't summarize the source — that's what cards are for
-- When writing `description`, read the source first (use firecrawl, fallback to WebFetch). Don't guess from title alone.
+- Leave source summarization to cards; references are raw captures only
+- When writing `description`, read the source first (use firecrawl, fallback to WebFetch). Base the description on the actual content, not the title.

@@ -138,7 +138,7 @@ if intent == "throwaway":
 | User cannot state the design question                | [references/find-goal.md](references/find-goal.md)             |
 | Expand the artifact's Next step into a task list     | [references/next-steps.md](references/next-steps.md)           |
 
-Load the matching reference file when the situation arises. Each file is self-contained; do not try to apply one to another's case.
+Load the matching reference file when the situation arises. Each file is self-contained; apply each only to its own case.
 
 ### The four declarations
 

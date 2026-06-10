@@ -41,11 +41,10 @@ prompt = do("""
   The paragraph is the value passed to the script as the first positional argument.
 
   If chroma_key is true:
-    - Do NOT use the words "transparent", "transparency", "alpha", "checkerboard",
-      "no background", or "PNG" in the prompt — these trigger the painted-checkerboard
+    - Omit the words "transparent", "transparency", "alpha", "checkerboard",
+      "no background", and "PNG" from the prompt — these trigger the painted-checkerboard
       failure mode.
-    - Do NOT use green anywhere on the subject; pick non-green colours for the subject
-      explicitly when relevant.
+    - Pick non-green colours for the subject explicitly when relevant.
     - Append this background directive verbatim as the final sentence:
         "The entire background must be a single flat, fully saturated pure green of
          hex colour #00ff00 (R=0, G=255, B=0) filling every pixel that is not part of
@@ -76,7 +75,7 @@ if user wants to refine or upscale:
 
 // Refusals
 if script reports no image:
-  do("relay the returned safety or model text honestly; do not retry automatically")
+  do("relay the returned safety or model text honestly; stop after one attempt")
 ```
 
 ## Notes

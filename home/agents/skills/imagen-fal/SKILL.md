@@ -5,7 +5,7 @@ description: >
   Triggers: /imagen-fal, explicit mentions of "Kling", "BiRefNet", "fal.ai image",
   or "use fal". Skip for non-image tasks, text-in-image prompts (route to
   imagen-nanobanana), and ambiguous image requests (those route through the /imagen
-  hub). Do NOT trigger on bare "/imagen" or "generate an image".
+  hub). Trigger only on explicit fal/Kling/BiRefNet mentions or direct invocation.
 ---
 
 # imagen-fal
@@ -62,7 +62,7 @@ transparent = do("true if user wants a transparent/cut-out/no-background/alpha r
 prompt = do("""
   Rewrite the request as a full descriptive paragraph — not a keyword list.
   Cover: subject, composition, lighting, colour palette, style, camera angle, mood.
-  Do NOT include transparency/alpha/checkerboard wording — that is handled by --transparent.
+  Omit transparency/alpha/checkerboard wording — that is handled by --transparent.
 """)
 
 // Choose flags

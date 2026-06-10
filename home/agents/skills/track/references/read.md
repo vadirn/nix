@@ -53,12 +53,11 @@ When no rows match, vault-query exits 0 and prints `[]`. Parse the JSON and bran
 
 vault-query resolves the project from the current working directory by walking up to find `<repo>/.vault.config.json`.
 If cwd isn't inside a project, vault-query errors with `no project resolved (use --project <name> or add .vault.config.json)`.
-Surface that error verbatim — do not synthesize a project name.
+Surface that error verbatim — report it as-is without synthesizing a project name.
 
 `vault-query config` prints JSON with `vault_root` and `project_path`. Use `project_path` to build absolute file paths.
 
 ### Presenting a track
 
 Read the whole body. The latest Log entry (highest `### N.` heading) is the current snapshot. Direction, Glossary,
-and Files of interest are stable across sessions. Decisions and Backlog are append-only — read all entries; don't
-treat older items as stale.
+and Files of interest are stable across sessions. Decisions and Backlog are append-only — read all entries; treat every item as current.

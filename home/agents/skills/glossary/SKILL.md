@@ -64,7 +64,7 @@ A 2-column Markdown table preceded by one explanatory paragraph. Standalone file
 ```markdown
 # Glossary
 
-Rows whose **Term** is bolded are pinned: text, position, and presence are fixed. Pinned rows describe load-bearing domain anchors that should not drift. Append project-specific terms beneath the baseline as un-pinned rows; refine an existing un-pinned term by appending a new row with the sharpened wording rather than rewording in place.
+Rows whose **Term** is bolded are pinned: text, position, and presence are fixed. Pinned rows hold the codebase's load-bearing anchors; their definitions are fixed. Append project-specific terms beneath the baseline as un-pinned rows; refine an existing un-pinned term by appending a new row with the sharpened wording rather than rewording in place.
 
 | Term            | Definition                                                                                                       |
 | --------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -89,7 +89,7 @@ The strong form names what differentiates the term from adjacent concepts (`Cart
 
 ### Pinned vs. un-pinned
 
-- **Pinned** (`**Term**` — bolded): load-bearing anchors. Never edit, never remove, never re-order. Reserved for the small set of terms whose definitions are constitutional to the codebase — the ones a cold reader must resolve before reading any module.
+- **Pinned** (`**Term**` — bolded): load-bearing anchors. Keep their text, position, and presence fixed. Reserved for the small set of terms whose definitions are constitutional to the codebase — the ones a cold reader must resolve before reading any module.
 - **Un-pinned** (`Term` — plain): the working vocabulary. Append-only by convention; refine by appending a new row with sharpened wording rather than rewording in place. The history of a term's understanding stays recoverable.
 
 The convention is shared with `/track` and `/experiment` so a reader who's learned one knows all three.
@@ -106,7 +106,7 @@ Drop terms that belong to the framework or standard library: `Request`, `Respons
 
 ### Update mode
 
-In update mode, pinned rows are never modified or removed (this is enforced by the skill, not just by convention). Un-pinned rows can be sorted A–Z on every write — sorting is deterministic so diffs stay clean. New candidates are appended after user confirmation. If a candidate matches an existing term with a different definition, surface the conflict: "GLOSSARY.md defines Order as X; code suggests Y. Append a refining row?"
+In update mode, pinned rows remain fixed (enforced by the skill, not just by convention). Un-pinned rows can be sorted A–Z on every write — sorting is deterministic so diffs stay clean. New candidates are appended after user confirmation. If a candidate matches an existing term with a different definition, surface the conflict: "GLOSSARY.md defines Order as X; code suggests Y. Append a refining row?"
 
 ### `--inline` mode
 

@@ -12,7 +12,7 @@ if not fast and missing thesis:
   ask user: "What question or thesis does this note explore?"
   ask user: "Why does it matter — what does it connect or resolve?"
   wait for response
-  use their framing as foundation — help structure, don't generate the thesis
+  use their framing as foundation — help structure; let the user supply the thesis
 
 // Duplicate check — before creating anything
 exact = Glob("<topic>.md", "30 notes/")
@@ -80,7 +80,7 @@ When asked to edit or enrich an existing note:
 
 1. Read the file
 2. Check what's missing: `description`, `tags`
-3. Fill in missing fields. Don't touch existing body content.
+3. Fill in missing fields. Leave existing body content unchanged.
 4. If tags exist but don't match the CLAUDE.md tag tree, suggest corrections.
 
 ## Notes

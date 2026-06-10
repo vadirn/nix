@@ -35,8 +35,8 @@ PDF, DOCX, PPTX, XLSX, XLS, images (EXIF + OCR), audio (EXIF + transcription), H
 - User provides a YouTube URL and wants a transcript
 - User wants to extract text/tables from a file for analysis
 
-## When NOT to use
+## Route elsewhere for
 
 - PDF manipulation (merge, split, rotate, fill forms, create) — use `pypdf`/`reportlab` with `uv run`
 - Web page scraping — use `firecrawl`
-- Files Claude can read natively (plain text, code, Markdown)
+- Files Claude can read natively (plain text, code, Markdown) — read directly

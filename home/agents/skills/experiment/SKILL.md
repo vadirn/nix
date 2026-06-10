@@ -163,7 +163,7 @@ Use the smallest sandbox that still answers the question without contaminating t
 
 1. **Host itself under test?** (Claude Code, hooks, nix config, macOS APIs, the editor) → **host execution**. Record the host runtime version (commit SHA, nix-darwin generation, settings.json state) in the Method field — a re-run after an update silently tests a different thing otherwise.
 2. **Writes that persist outside `$TMPDIR` and are shared across sessions?** (`~/.config`, `~/.cache`, `~/.npm`, `~/Library/`, Keychain, `launchctl`, OS packages) → **Docker**. Containment is the point. If the claim is platform-specific, Docker on macOS gives a Linux verdict — note the scope in the Verdict field.
-3. **Will the record be re-run from cold storage later?** (months out, different machine, future Claude session) → **Docker** with a pinned image tag (`node:22.11.0`, never `:latest`). Reproducibility is the real reason.
+3. **Will the record be re-run from cold storage later?** (months out, different machine, future Claude session) → **Docker** with a pinned image tag (`node:22.11.0`; pin to an exact version). Reproducibility is the real reason.
 4. **Otherwise — single-process, user-level, contained to `$TMPDIR`, one-shot verdict** → lightest available runner:
    - npm-native binary → `bunx --bun <pkg>@<version>` (the `bunfig.toml` 7-day minimum-release-age guard applies; pass `--minimum-release-age=0` and document it in the Method field if the pin is fresher).
    - nixpkgs derivation → `nix run nixpkgs#<pkg>`.

@@ -84,7 +84,7 @@ Negatives force the reader to picture an action and then cancel it. Affirmatives
 
 ### Replace dead metaphors with literal statements
 
-Dead metaphors ("level playing field", "at the end of the day") pass unnoticed and obscure meaning. Replace them with a literal statement of what you mean. Do not invent new figures of speech.
+Dead metaphors ("level playing field", "at the end of the day") pass unnoticed and obscure meaning. Replace them with a literal statement of what you mean. Stick to literal statements.
 
 | Before                | After                         |
 | --------------------- | ----------------------------- |

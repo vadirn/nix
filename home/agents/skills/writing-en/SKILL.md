@@ -9,7 +9,7 @@ Sources: Orwell ("Politics and the English Language"), Williams ("Style: Lessons
 
 ## Rules
 
-Apply all rules in a single reading. Rule details are in the reference files below. Skip a rule only when applying it would change the author's meaning, lose factual precision, or violate the register of the input (e.g., do not expand terse bullet points into prose). Exception: pass-2's split-and-reconnect step runs as an iterative loop until the text is stable, not once.
+Apply all rules in a single reading. Rule details are in the reference files below. Skip a rule only when applying it would change the author's meaning, lose factual precision, or violate the register of the input (e.g., leave terse bullet points as bullets). Exception: pass-2's split-and-reconnect step runs as an iterative loop until the text is stable, not once.
 
 | Area       | Reference                                    | What it targets                                                                                                                                           |
 | ---------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |

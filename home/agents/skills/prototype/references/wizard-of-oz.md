@@ -67,6 +67,6 @@ File the plan at `docs/spikes/<YYYY-MM-DD>-<slug>-woz-plan.md`. The `-woz-plan` 
 
 Wizard of Oz answers role questions, not implementation questions. If the prototype confirms the role works but leaves the implementation open, the next prototype is a spike or a tracer bullet on the technique, not another wizard session.
 
-Do not promote a Wizard of Oz to an MVP. The two are different artifacts: the wizard answers a design question with discardable evidence; an MVP is a launched product. Confusing them yields a feature that "worked in testing" because a human was behind it.
+Keep the Wizard of Oz separate from an MVP. The two are different artifacts: the wizard answers a design question with discardable evidence; an MVP is a launched product. Confusing them yields a feature that "worked in testing" because a human was behind it.
 
-The agent does not simulate the wizard for the user. A Claude session improvising a wizard for itself produces sympathetic-noise evidence; see the "Demo as proof" gotcha in `SKILL.md`.
+The agent produces the plan; a human runs the sessions. A Claude session improvising a wizard for itself produces sympathetic-noise evidence; see the "Demo as proof" gotcha in `SKILL.md`.

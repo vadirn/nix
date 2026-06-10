@@ -38,7 +38,7 @@ do("always show the reconstruction before listing violations")
 terms = do("list key terms; for each multivalent term, note the sense it carries in each location")
 
 // Scan for violations
-violations = do("walk text against each loaded reference; record only real violations, not stylistic weaknesses")
+violations = do("walk text against each loaded reference; record real violations; exclude stylistic weaknesses")
 
 // Output — match the input language
 if violations is empty:

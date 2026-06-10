@@ -7,9 +7,9 @@ description: >
   Y", "what have I already reasoned or decided about Z", their stance on a design fork, or planning work
   they've deliberated before. This holds even when the surface topic is code or engineering; the signal is
   the request for the user's view, not the subject matter. The tool abstains silently when nothing fits, so
-  consulting is cheap. Skip purely mechanical execution where no opinion is sought: running commands,
-  editing, refactoring, or debugging code, file operations, and routine boilerplate setup (even when phrased
-  "how do I usually"), plus conversational and meta turns. Manually invocable as /consult <task>.
+  consulting is cheap. Limit triggering to tasks where the user's opinion is sought; mechanical execution
+  (running commands, editing, refactoring, debugging code, file operations, routine boilerplate setup, even
+  when phrased "how do I usually") and conversational/meta turns fall outside scope. Manually invocable as /consult <task>.
 ---
 
 # Consult
@@ -42,7 +42,7 @@ elif exit == 4:                       // abstain — nothing cleared the relevan
             not existing, and a silent miss is the designed-for outcome, not a failure")
 
 else:                                 // exit 1 (runtime) or 2 (bad CLI invocation) — vault or index error
-    do("proceed un-enriched; a vault hiccup must never block the task. Do not surface the error unless
+    do("proceed un-enriched; the task proceeds regardless of vault errors. Surface the error only when
         the user explicitly asked to consult the vault.")
 ```
 
@@ -56,8 +56,7 @@ else:                                 // exit 1 (runtime) or 2 (bad CLI invocati
   rather than reusable knowledge.
 - `--format markdown` (the default) returns a paste-ready block. Use `--format json` only when you need
   the structured envelope (path, title, type, score, body, tokens, links) for programmatic handling.
-- Do not pass `--ambient`: that tightens the gate for the unattended hook path and trades recall for
-  fewer false positives. As a deliberate caller you want the higher-recall default gate.
+- Pass `--ambient` only on the unattended hook path; as a deliberate caller, use the higher-recall default gate (omit the flag).
 
 ## When to reach for this
 

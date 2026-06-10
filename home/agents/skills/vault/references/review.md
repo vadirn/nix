@@ -40,6 +40,6 @@ if user had ideas or reactions during recall:
 
 - 3 cards per session: enough for useful practice, not tedious
 - Cards only, not notes (cards are atomic facts for recall; notes are synthesis)
-- Don't ask to edit cards during review. Cards are atomic; edits belong in /vault card
+- Route card edits to /vault card; keep the review session focused on recall only
 - Follow note process when creating notes from review insights
 - Follow obsidian-markdown skill for Obsidian syntax

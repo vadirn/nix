@@ -111,5 +111,5 @@ Substitute `<path>`, `<title>`, `<description>`, `<result>`.
 
 ## Notes
 
-- The generated files live in the vault. Wikilinks work.
+- Generated files live in the vault. Wikilinks work.
 - Save and resume sessions via `/track`.

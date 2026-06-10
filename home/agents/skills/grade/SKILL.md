@@ -99,4 +99,4 @@ Start from the claim, not from a checklist. Common factors include evidence stre
 
 ### Next step
 
-A concrete action: a command to run, a metric to check, a person to ask. Specific moves like "run `fio --randwrite` on the target disk and check if it exceeds 500 IOPS" rather than vague ones like "get more data." If the uncertainty is inherent (no action can reduce it), say so and explain why.
+A concrete action: a command to run, a metric to check, a person to ask. State specific moves: "run `fio --randwrite` on the target disk and check if it exceeds 500 IOPS." If the uncertainty is inherent (no action can reduce it), say so and explain why.

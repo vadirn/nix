@@ -1,6 +1,6 @@
 ---
 name: debate
-description: Structured debate exploring a topic through Defender/Skeptic roles. Use when user invokes /debate or wants to analyze a claim from multiple angles with systematic argumentation. Also use when the user asks for pros and cons, devil's advocate, "argue both sides", steelman/strawman, "is X really better than Y", "convince me", or "arguments for and against". Skip when the goal is to generate new concrete solutions from scratch (use /design).
+description: Structured debate exploring a topic through Defender/Skeptic roles. Use when user invokes /debate or wants to analyze a claim from multiple angles with systematic argumentation. Also use when the user asks for pros and cons, devil's advocate, "argue both sides", steelman/strawman, "is X really better than Y", "convince me", or "arguments for and against". Route to /design when the goal is to generate new concrete solutions from scratch.
 ---
 
 # Debate
@@ -33,4 +33,4 @@ if genuine consensus reached: stop early
 
 ### Evidence per round
 
-Each round, each side searches for new evidence. Cite sources as inline links. Discard results without concrete data (no measurements, no statistics).
+Each round, each side searches for new evidence. Cite sources as inline links. Keep only results with concrete data (measurements, statistics).
