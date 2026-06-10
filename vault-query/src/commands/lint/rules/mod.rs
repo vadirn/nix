@@ -4,6 +4,7 @@ pub mod duplicate_h1;
 pub mod invalid_frontmatter;
 pub mod missing_required_field;
 pub mod orphan_card;
+pub mod oversized_doc;
 pub mod reference_not_wikilink;
 pub mod singleton_tag;
 pub mod untagged_card;

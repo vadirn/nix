@@ -1,6 +1,8 @@
 use super::rule::Rule;
 
-pub fn built_in_rules() -> Vec<Box<dyn Rule>> {
+/// `per_doc_token_cap` parameterizes `oversized_doc` with the consult packer's
+/// threshold (`ConsultConfig.per_doc_token_cap`), keeping one source of truth.
+pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
     vec![
         Box::new(super::rules::broken_wikilink::BrokenWikilink),
         Box::new(super::rules::dangling_reference::DanglingReference),
@@ -8,6 +10,7 @@ pub fn built_in_rules() -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::invalid_frontmatter::InvalidFrontmatter),
         Box::new(super::rules::missing_required_field::MissingRequiredField),
         Box::new(super::rules::orphan_card::OrphanCard),
+        Box::new(super::rules::oversized_doc::OversizedDoc { per_doc_token_cap }),
         Box::new(super::rules::reference_not_wikilink::ReferenceNotWikilink),
         Box::new(super::rules::singleton_tag::SingletonTag),
         Box::new(super::rules::untagged_card::UntaggedCard),
@@ -15,5 +18,6 @@ pub fn built_in_rules() -> Vec<Box<dyn Rule>> {
 }
 
 pub fn rule_names() -> Vec<&'static str> {
-    built_in_rules().iter().map(|r| r.name()).collect()
+    // Dummy cap: only `.name()` is consulted here, never `.check()`.
+    built_in_rules(0).iter().map(|r| r.name()).collect()
 }
