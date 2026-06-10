@@ -1,6 +1,6 @@
 use super::rule::Rule;
 
-/// `per_doc_token_cap` parameterizes `oversized_doc` with the consult packer's
+/// `per_doc_token_cap` parameterizes `oversized-doc` with the consult packer's
 /// threshold (`ConsultConfig.per_doc_token_cap`), keeping one source of truth.
 pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
     vec![

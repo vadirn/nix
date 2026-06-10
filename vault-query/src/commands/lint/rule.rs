@@ -30,6 +30,9 @@ pub struct LintContext<'a> {
     pub assets: Vec<crate::vault::VaultAsset>,
     pub cards: Vec<&'a crate::vault::VaultFile>,
     pub references: Vec<&'a crate::vault::VaultFile>,
+    /// Body wikilinks per file, parallel to `files`.  Extracted once here so
+    /// rules reuse the parse instead of re-running it per rule.
+    pub body_links: Vec<Vec<crate::wikilink::Wikilink>>,
     pub backlink_index: HashMap<String, Vec<String>>,
 }
 
@@ -51,7 +54,11 @@ impl<'a> LintContext<'a> {
             }
         }
 
-        let backlink_index = crate::wikilink::build_backlink_index(files);
+        let body_links: Vec<Vec<crate::wikilink::Wikilink>> = files
+            .iter()
+            .map(|f| crate::wikilink::extract(&f.content))
+            .collect();
+        let backlink_index = crate::wikilink::build_backlink_index_with(files, &body_links);
 
         LintContext {
             vault_root,
@@ -59,6 +66,7 @@ impl<'a> LintContext<'a> {
             assets: assets.to_vec(),
             cards,
             references,
+            body_links,
             backlink_index,
         }
     }

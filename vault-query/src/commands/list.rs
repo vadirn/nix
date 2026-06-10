@@ -28,7 +28,7 @@ pub fn run_by_type(cfg: &crate::config::ResolvedConfig, type_value: &str, fields
         .iter()
         .filter(|f| {
             frontmatter::get_display(&f.frontmatter, "type") == type_value
-                && frontmatter::get_bool(&f.frontmatter, "template") != Some(true)
+                && !frontmatter::is_template(&f.frontmatter)
         })
         .collect();
     print_listing(matching, fields);

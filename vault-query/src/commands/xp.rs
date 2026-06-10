@@ -1,8 +1,8 @@
 use anyhow::Result;
 use chrono::{Datelike, NaiveDate, Weekday};
 use regex::Regex;
-use serde_yaml::Value;
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 use crate::config::ResolvedConfig;
 use crate::frontmatter;
@@ -38,7 +38,7 @@ pub fn parse_weekly_logs(cfg: &ResolvedConfig) -> Result<LogData> {
         .iter()
         .filter(|f| {
             frontmatter::get_display(&f.frontmatter, "type") == "weekly-log"
-                && frontmatter::get_bool(&f.frontmatter, "template") != Some(true)
+                && !frontmatter::is_template(&f.frontmatter)
         })
         .collect();
     weekly_logs.sort_by(|a, b| a.name.cmp(&b.name));
@@ -91,17 +91,10 @@ pub fn parse_weekly_logs(cfg: &ResolvedConfig) -> Result<LogData> {
     Ok(data)
 }
 
-fn sleep_dates(fm: &std::collections::BTreeMap<String, Value>) -> Vec<String> {
-    match fm.get("sleep") {
-        Some(Value::Sequence(arr)) => arr
-            .iter()
-            .filter_map(|v| match v {
-                Value::String(s) if !s.is_empty() => Some(s.clone()),
-                _ => None,
-            })
-            .collect(),
-        _ => Vec::new(),
-    }
+fn sleep_dates(fm: &std::collections::BTreeMap<String, serde_yaml::Value>) -> Vec<String> {
+    let mut dates = frontmatter::get_string_seq(fm, "sleep");
+    dates.retain(|s| !s.is_empty());
+    dates
 }
 
 fn section_lines(text: &str, heading: &str) -> Vec<String> {
@@ -124,8 +117,9 @@ fn section_lines(text: &str, heading: &str) -> Vec<String> {
 }
 
 fn week_monday(week_str: &str) -> Option<NaiveDate> {
-    let re = Regex::new(r"(\d{4})-[Ww](\d{2})").ok()?;
-    let caps = re.captures(week_str)?;
+    static WEEK_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(\d{4})-[Ww](\d{2})").unwrap());
+    let caps = WEEK_RE.captures(week_str)?;
     let year: i32 = caps[1].parse().ok()?;
     let week: u32 = caps[2].parse().ok()?;
     NaiveDate::from_isoywd_opt(year, week, Weekday::Mon)
@@ -195,6 +189,7 @@ pub fn render_calendar(
     let months = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
+    let today_str = today.format("%Y-%m-%d").to_string();
     let mut year_total = 0i32;
 
     for m in 1..=12u32 {
@@ -232,7 +227,6 @@ pub fn render_calendar(
             hdr.push_str(reset);
         } else {
             hdr.push_str(month_name);
-            let today_str = today.format("%Y-%m-%d").to_string();
             for (i, ds) in date_strs.iter().enumerate() {
                 let d = i as u32 + 1;
                 if *ds == today_str {
@@ -262,7 +256,6 @@ pub fn render_calendar(
                 format!("{:3}", month_total)
             };
 
-            let today_str = today.format("%Y-%m-%d").to_string();
             for (i, ds) in date_strs.iter().enumerate() {
                 let dxp = day_xps[i];
                 if dxp > 0 {
@@ -331,6 +324,7 @@ fn detect_dark_mode() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_yaml::Value;
 
     fn date(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()

@@ -25,9 +25,9 @@ impl Rule for BrokenWikilink {
             ctx.assets.iter().map(|a| normalize(&a.name)).collect();
 
         let mut findings = Vec::new();
-        for file in ctx.files {
+        for (file, links) in ctx.files.iter().zip(&ctx.body_links) {
             let mut seen: HashSet<String> = HashSet::new();
-            for link in wikilink::extract(&file.content) {
+            for link in links {
                 // Detect whether the target carries a non-md asset extension.
                 let ext = Path::new(&link.target)
                     .extension()

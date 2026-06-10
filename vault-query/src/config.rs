@@ -9,54 +9,13 @@ use crate::vault_ignore::{self, VaultIgnore};
 // ConsultConfig
 // ---------------------------------------------------------------------------
 
-fn default_consult_types() -> Vec<String> {
-    vec![
-        "card".to_string(),
-        "note".to_string(),
-        "reference".to_string(),
-        "experiment".to_string(),
-    ]
-}
-
-fn default_token_budget() -> usize {
-    8000
-}
-
-fn default_per_doc_token_cap() -> usize {
-    // Raised from 2000 to 4000 (Decision 19): two confirmed ANSWER-MISS cases had
-    // expected docs of 3035 and 2994 estimated tokens (chars/4) and were skipped
-    // whole while the packer still had budget to spare.  4000 recovers those docs
-    // while keeping the single-doc cap at exactly half of the 8000-token budget,
-    // preventing any one document from consuming more than half the payload and
-    // leaving room for at least one additional document.
-    4000
-}
-
-fn default_coverage_fraction() -> f32 {
-    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
-    // (Step F, 9% false-abstain, 0% false-positive). Base deliberate gate.
-    0.45
-}
-
-fn default_elbow_k() -> f32 {
-    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
-    // (Step F, 9% false-abstain, 0% false-positive). Base deliberate gate.
-    1.5
-}
-
-fn default_ambient_coverage_fraction() -> f32 {
-    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
-    // (Step F). Kept mildly stricter than base (0.50 vs 0.45) as a hedge for the
-    // global UserPromptSubmit hook where false-positives are more costly.
-    0.50
-}
-
-fn default_ambient_elbow_k() -> f32 {
-    // Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl
-    // (Step F). Kept mildly stricter than base (1.8 vs 1.5) as a hedge for the
-    // global UserPromptSubmit hook where false-positives are more costly.
-    1.8
-}
+/// Default consult per-doc token cap.  Raised from 2000 to 4000 (Decision 19):
+/// two confirmed ANSWER-MISS cases had expected docs of ~3000 estimated tokens
+/// and were skipped whole while the packer still had budget to spare.  4000
+/// recovers those docs while keeping the single-doc cap at exactly half of the
+/// 8000-token budget, so one document never consumes more than half the payload.
+/// Shared with `lint` (the `oversized_doc` rule threshold).
+pub const DEFAULT_PER_DOC_TOKEN_CAP: usize = 4000;
 
 /// Default BM25 query-parser boost for the `title` field (the note filename).
 /// Demoted from the historical 2.0 so a curated frontmatter `description` precis
@@ -70,71 +29,55 @@ pub const DEFAULT_TITLE_BOOST: f32 = 1.0;
 /// Starting point for eval calibration. Shared by `ConsultConfig` and `search`.
 pub const DEFAULT_DESCRIPTION_BOOST: f32 = 1.5;
 
-fn default_title_boost() -> f32 {
-    DEFAULT_TITLE_BOOST
-}
-
-fn default_description_boost() -> f32 {
-    DEFAULT_DESCRIPTION_BOOST
-}
-
 /// Configuration for the `consult` command (Decision 5).
 ///
-/// A missing or partial `[consult]` block in the root config is valid; every
-/// field falls back to a serde default so the block is fully optional.
+/// A missing or partial `[consult]` block in the root config is valid; the
+/// container-level `#[serde(default)]` fills every missing field from
+/// [`ConsultConfig::default`], so the block is fully optional.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct ConsultConfig {
     /// Default corpus scope by frontmatter `type` (Decision 13).
     /// Override at the call site with `--types`.
-    #[serde(default = "default_consult_types")]
     pub types: Vec<String>,
 
     /// Total token budget for packed bodies (Decision 15).
-    #[serde(default = "default_token_budget")]
     pub token_budget: usize,
 
     /// Skip any single document whose body exceeds this token estimate (Decision 15).
-    #[serde(default = "default_per_doc_token_cap")]
     pub per_doc_token_cap: usize,
 
     /// BM25 query-parser boost for the `title` field (note filename).
     /// Default `DEFAULT_TITLE_BOOST` (1.0) demotes the filename relative to the
     /// curated `description`. Tunable without a rebuild for eval calibration.
-    #[serde(default = "default_title_boost")]
     pub title_boost: f32,
 
     /// BM25 query-parser boost for the frontmatter `description` field.
     /// Default `DEFAULT_DESCRIPTION_BOOST` (1.5). Tunable without a rebuild so
     /// consult can be recalibrated against the eval set without recompiling.
-    #[serde(default = "default_description_boost")]
     pub description_boost: f32,
 
     /// Deliberate-mode coverage gate: the top document must match at least this
     /// fraction of the query's content terms (Decision 12).
     /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
-    #[serde(default = "default_coverage_fraction")]
     pub coverage_fraction: f32,
 
     /// Deliberate-mode elbow gate: the top score must be at least k× the median
     /// of the returned set (Decision 12).
     /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
-    #[serde(default = "default_elbow_k")]
     pub elbow_k: f32,
 
     /// Stricter `--ambient` coverage fraction (Decision 18).
     /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
     /// Kept mildly stricter than base as a hedge for the global UserPromptSubmit hook.
-    #[serde(default = "default_ambient_coverage_fraction")]
     pub ambient_coverage_fraction: f32,
 
     /// Stricter `--ambient` elbow multiplier (Decision 18).
     /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
     /// Kept mildly stricter than base as a hedge for the global UserPromptSubmit hook.
-    #[serde(default = "default_ambient_elbow_k")]
     pub ambient_elbow_k: f32,
 
     /// Optional absolute-score backstop; `None` means no hard floor (Decision 12).
-    #[serde(default)]
     pub threshold: Option<f32>,
 
     /// Optional path (relative to `vault_root`, or absolute) for the JSONL
@@ -142,22 +85,30 @@ pub struct ConsultConfig {
     /// one JSON object per invocation.  When `None`, no logging occurs.
     /// Parent directory is created if it does not exist; any IO/serialize error
     /// is swallowed (logging is best-effort and never affects the exit code).
-    #[serde(default)]
     pub log_path: Option<String>,
 }
 
 impl Default for ConsultConfig {
     fn default() -> Self {
         Self {
-            types: default_consult_types(),
-            token_budget: default_token_budget(),
-            per_doc_token_cap: default_per_doc_token_cap(),
-            title_boost: default_title_boost(),
-            description_boost: default_description_boost(),
-            coverage_fraction: default_coverage_fraction(),
-            elbow_k: default_elbow_k(),
-            ambient_coverage_fraction: default_ambient_coverage_fraction(),
-            ambient_elbow_k: default_ambient_elbow_k(),
+            types: vec![
+                "card".to_string(),
+                "note".to_string(),
+                "reference".to_string(),
+                "experiment".to_string(),
+            ],
+            token_budget: 8000,
+            per_doc_token_cap: DEFAULT_PER_DOC_TOKEN_CAP,
+            title_boost: DEFAULT_TITLE_BOOST,
+            description_boost: DEFAULT_DESCRIPTION_BOOST,
+            // Gate constants calibrated against the 29-pair eval set in
+            // consult-materials/consult-eval.jsonl (Step F, 9% false-abstain,
+            // 0% false-positive); the ambient pair is kept mildly stricter as
+            // a hedge for the global UserPromptSubmit hook.
+            coverage_fraction: 0.45,
+            elbow_k: 1.5,
+            ambient_coverage_fraction: 0.50,
+            ambient_elbow_k: 1.8,
             threshold: None,
             log_path: None,
         }

@@ -169,10 +169,20 @@ pub fn strip(text: &str) -> String {
 pub fn build_backlink_index(
     files: &[crate::vault::VaultFile],
 ) -> HashMap<String, Vec<String>> {
+    let body_links: Vec<Vec<Wikilink>> = files.iter().map(|f| extract(&f.content)).collect();
+    build_backlink_index_with(files, &body_links)
+}
+
+/// Like [`build_backlink_index`], but takes pre-extracted body wikilinks
+/// (parallel to `files`) so callers that already parsed every file reuse the
+/// result instead of paying a second Markdown parse per file.
+pub fn build_backlink_index_with(
+    files: &[crate::vault::VaultFile],
+    body_links: &[Vec<Wikilink>],
+) -> HashMap<String, Vec<String>> {
     let mut index: HashMap<String, Vec<String>> = HashMap::new();
-    for file in files {
-        // Collect wikilinks from the Markdown body.
-        let links = extract(&file.content);
+    for (file, links) in files.iter().zip(body_links) {
+        // Wikilinks from the Markdown body.
         for link in links {
             let target_name = resolve_name(&link.target).to_lowercase();
             index
@@ -180,9 +190,15 @@ pub fn build_backlink_index(
                 .or_default()
                 .push(file.name.clone());
         }
-        // Collect wikilinks from every YAML frontmatter scalar value.
+        // Wikilinks from every YAML frontmatter scalar value.
         for value in file.frontmatter.values() {
-            collect_frontmatter_wikilinks(value, &file.name, &mut index);
+            walk_frontmatter_links(value, &mut |link| {
+                let target_name = resolve_name(&link.target).to_lowercase();
+                index
+                    .entry(target_name)
+                    .or_default()
+                    .push(file.name.clone());
+            });
         }
     }
     index
@@ -204,69 +220,38 @@ pub fn collect_all_link_targets(file: &crate::vault::VaultFile) -> Vec<String> {
 
     // Frontmatter wikilinks
     for value in file.frontmatter.values() {
-        collect_frontmatter_link_targets(value, &mut seen, &mut result);
+        walk_frontmatter_links(value, &mut |link| {
+            if seen.insert(link.target.clone()) {
+                result.push(link.target);
+            }
+        });
     }
 
     result
 }
 
-/// Recursively walk a `serde_yaml::Value` and collect wikilink targets into `out`.
-fn collect_frontmatter_link_targets(
-    value: &serde_yaml::Value,
-    seen: &mut std::collections::HashSet<String>,
-    out: &mut Vec<String>,
-) {
+/// Recursively walk a `serde_yaml::Value` and call `f` on every wikilink found
+/// in string scalars.  Sequences and mapping values are descended into; other
+/// scalar kinds (Bool, Number, Null, Tagged) carry no links.  Single traversal
+/// shared by the backlink index, `collect_all_link_targets`, and the
+/// dangling-reference lint rule.
+pub(crate) fn walk_frontmatter_links<F: FnMut(Wikilink)>(value: &serde_yaml::Value, f: &mut F) {
     match value {
         serde_yaml::Value::String(s) => {
             for link in extract(s) {
-                if seen.insert(link.target.clone()) {
-                    out.push(link.target);
-                }
+                f(link);
             }
         }
         serde_yaml::Value::Sequence(items) => {
             for item in items {
-                collect_frontmatter_link_targets(item, seen, out);
+                walk_frontmatter_links(item, f);
             }
         }
         serde_yaml::Value::Mapping(map) => {
             for (_key, val) in map {
-                collect_frontmatter_link_targets(val, seen, out);
+                walk_frontmatter_links(val, f);
             }
         }
-        _ => {}
-    }
-}
-
-/// Recursively walk a `serde_yaml::Value` and merge any wikilinks found in
-/// string scalars into `index`.  This mirrors the `collect_cited` helper in
-/// `dangling_reference.rs` but writes into the backlink index instead of a set.
-fn collect_frontmatter_wikilinks(
-    value: &serde_yaml::Value,
-    source_name: &str,
-    index: &mut HashMap<String, Vec<String>>,
-) {
-    match value {
-        serde_yaml::Value::String(s) => {
-            for link in extract(s) {
-                let target_name = resolve_name(&link.target).to_lowercase();
-                index
-                    .entry(target_name)
-                    .or_default()
-                    .push(source_name.to_string());
-            }
-        }
-        serde_yaml::Value::Sequence(items) => {
-            for item in items {
-                collect_frontmatter_wikilinks(item, source_name, index);
-            }
-        }
-        serde_yaml::Value::Mapping(map) => {
-            for (_key, val) in map {
-                collect_frontmatter_wikilinks(val, source_name, index);
-            }
-        }
-        // Bool, Number, Null, Tagged — nothing to extract.
         _ => {}
     }
 }

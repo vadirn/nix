@@ -11,6 +11,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::Result;
+use serde::Serialize;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
@@ -46,10 +47,12 @@ impl ConsultMode {
 }
 
 /// A document selected for inclusion in the ANSWER payload.
-#[derive(Debug, Clone)]
+/// Serializes directly into the `consult --format json` envelope.
+#[derive(Debug, Clone, Serialize)]
 pub struct SelectedDoc {
     pub path: String,
     pub title: String,
+    #[serde(rename = "type")]
     pub doc_type: Option<String>,
     pub score: f32,
     pub body: String,
@@ -58,7 +61,8 @@ pub struct SelectedDoc {
 }
 
 /// A sub-gate hit reported on ABSTAIN (Decision 16).
-#[derive(Debug, Clone)]
+/// Serializes directly into the `consult --format json` envelope.
+#[derive(Debug, Clone, Serialize)]
 pub struct NearMiss {
     pub path: String,
     pub title: String,
@@ -71,10 +75,12 @@ pub struct NearMiss {
 /// was dropped by the packer (per-doc cap or budget).  Found-but-too-big is a
 /// success: the caller reads the doc itself via the path, so exit 4 keeps
 /// meaning "nothing relevant exists".
-#[derive(Debug, Clone)]
+/// Serializes directly into the `consult --format json` envelope.
+#[derive(Debug, Clone, Serialize)]
 pub struct DocPointer {
     pub path: String,
     pub title: String,
+    #[serde(rename = "type")]
     pub doc_type: Option<String>,
     pub score: f32,
     pub coverage: f32,
@@ -363,16 +369,25 @@ fn bm25_rank(
 /// near-universal presence in docs means they contribute fractionally to coverage
 /// but rarely determine the binary pass/fail of the gate.
 fn stemmed_tokens(text: &str) -> Vec<String> {
-    let mut analyzer = bilingual_analyzer();
-    let mut stream = analyzer.token_stream(text);
-    let mut tokens = Vec::new();
-    while stream.advance() {
-        let text = stream.token().text.clone();
-        if !text.is_empty() {
-            tokens.push(text);
-        }
+    // token_stream takes &mut self, so the analyzer chain is reused via a
+    // thread-local rather than rebuilt on every call (this runs once per
+    // candidate body in the gate and packer).
+    thread_local! {
+        static ANALYZER: std::cell::RefCell<TextAnalyzer> =
+            std::cell::RefCell::new(bilingual_analyzer());
     }
-    tokens
+    ANALYZER.with(|analyzer| {
+        let mut analyzer = analyzer.borrow_mut();
+        let mut stream = analyzer.token_stream(text);
+        let mut tokens = Vec::new();
+        while stream.advance() {
+            let text = stream.token().text.clone();
+            if !text.is_empty() {
+                tokens.push(text);
+            }
+        }
+        tokens
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -399,15 +414,19 @@ fn median_f32(values: &[f32]) -> f32 {
 
 /// Build the `near_misses` payload from the top ~3 hits (Decision 16).
 ///
+/// `top3_tokens` carries the pre-computed stemmed token set per hit (parallel
+/// to `hits`, at most 3 entries), so the bodies are not re-tokenized here.
 /// `query_terms` is a `BTreeSet`, so `matched_terms` comes out in a stable
 /// (sorted) order across invocations — the abstain markdown/JSON is byte-identical
 /// for identical inputs.
-fn build_near_misses(hits: &[Hit], query_terms: &BTreeSet<String>) -> Vec<NearMiss> {
+fn build_near_misses(
+    hits: &[Hit],
+    query_terms: &BTreeSet<String>,
+    top3_tokens: &[HashSet<String>],
+) -> Vec<NearMiss> {
     hits.iter()
-        .take(3)
-        .map(|h| {
-            let doc_tokens: HashSet<String> =
-                stemmed_tokens(&h.stored_body).into_iter().collect();
+        .zip(top3_tokens)
+        .map(|(h, doc_tokens)| {
             let matched_terms: Vec<String> = query_terms
                 .iter()
                 .filter(|t| doc_tokens.contains(*t))
@@ -456,7 +475,7 @@ pub fn run_consult(
         .filter(|f| {
             let file_type = frontmatter::get_display(&f.frontmatter, "type");
             frontmatter::matches_type(&file_type, scope_types)
-                && frontmatter::get_bool(&f.frontmatter, "template") != Some(true)
+                && !frontmatter::is_template(&f.frontmatter)
         })
         .collect();
 
@@ -515,34 +534,32 @@ pub fn run_consult(
     // the gate decision uses the top-3 maximum.
     let query_terms: BTreeSet<String> = stemmed_tokens(query).into_iter().collect();
 
-    // Top-3 inspection bound: examine at most the 3 highest-scoring candidates.
-    let top3_inspect = hits.iter().take(3);
+    // Stemmed token set per hit in the top-3 inspection window, computed once
+    // and shared by the gate, diagnostics, near-misses, and the sub-median
+    // packing fallback.
+    let top3_tokens: Vec<HashSet<String>> = hits
+        .iter()
+        .take(3)
+        .map(|h| stemmed_tokens(&h.stored_body).into_iter().collect())
+        .collect();
+
+    // Fraction of query terms present in `doc_tokens` (0.0 for an empty query).
+    let coverage_of = |doc_tokens: &HashSet<String>| -> f32 {
+        if query_terms.is_empty() {
+            return 0.0;
+        }
+        let matched = query_terms.iter().filter(|t| doc_tokens.contains(*t)).count();
+        matched as f32 / query_terms.len() as f32
+    };
 
     let (coverage_ok, coverage_value, max_top3_coverage_value) = if query_terms.is_empty() {
         // Degenerate: query tokenizes to nothing (all special chars). Abstain.
         (false, None, None)
     } else {
-        // Rank-1 coverage retained for diagnostics.
-        let top_doc_tokens: HashSet<String> =
-            stemmed_tokens(&top.stored_body).into_iter().collect();
-        let top1_matched = query_terms
-            .iter()
-            .filter(|t| top_doc_tokens.contains(*t))
-            .count();
-        let top1_frac = top1_matched as f32 / query_terms.len() as f32;
-
-        // Max coverage over top-3 for the gate decision.
-        let max_coverage = top3_inspect
-            .map(|h| {
-                let doc_tokens: HashSet<String> =
-                    stemmed_tokens(&h.stored_body).into_iter().collect();
-                let matched = query_terms
-                    .iter()
-                    .filter(|t| doc_tokens.contains(*t))
-                    .count();
-                matched as f32 / query_terms.len() as f32
-            })
-            .fold(0.0f32, f32::max);
+        let top3_coverages: Vec<f32> = top3_tokens.iter().map(&coverage_of).collect();
+        // Rank-1 coverage retained for diagnostics; the gate uses the top-3 maximum.
+        let top1_frac = top3_coverages[0];
+        let max_coverage = top3_coverages.iter().copied().fold(0.0f32, f32::max);
 
         (max_coverage >= coverage_fraction, Some(top1_frac), Some(max_coverage))
     };
@@ -587,7 +604,7 @@ pub fn run_consult(
             "no score elbow".to_string()
         };
 
-        let near_misses = build_near_misses(&hits, &query_terms);
+        let near_misses = build_near_misses(&hits, &query_terms, &top3_tokens);
 
         return Ok((
             ConsultOutcome::Abstain {
@@ -608,29 +625,26 @@ pub fn run_consult(
     // Per-doc coverage filter: compute coverage for each candidate and keep only
     // those that clear coverage_fraction.  This prevents a high-score / low-coverage
     // "displacer" from consuming token budget at the expense of genuinely relevant docs.
+    // Coverage is computed once per candidate and carried alongside the hit, since
+    // the pointer payload below reports the same value.
+    //
+    // `query_terms` is non-empty here — an empty token set fails the coverage gate
+    // and abstains above.
     //
     // Safety: the gate verified that at least one of the top-3 hits clears
     // coverage_fraction, but that hit may be below the median and therefore absent from
     // `candidates`.  If the filter empties the candidate set, fall back to all
     // candidates (preserving the pre-filter pack behaviour) so the result is never empty.
-    // Per-doc coverage: fraction of query terms present in the doc body.
     let doc_coverage = |h: &Hit| -> f32 {
-        if query_terms.is_empty() {
-            return 0.0;
-        }
         let doc_tokens: HashSet<String> = stemmed_tokens(&h.stored_body).into_iter().collect();
-        let matched = query_terms.iter().filter(|t| doc_tokens.contains(*t)).count();
-        matched as f32 / query_terms.len() as f32
+        coverage_of(&doc_tokens)
     };
 
-    let coverage_filtered: Vec<&Hit> = if query_terms.is_empty() {
-        // Degenerate query: no terms to compute coverage against; pass all candidates.
-        candidates.iter().copied().collect()
-    } else {
-        let filtered: Vec<&Hit> = candidates
+    let coverage_filtered: Vec<(&Hit, f32)> = {
+        let filtered: Vec<(&Hit, f32)> = candidates
             .iter()
-            .copied()
-            .filter(|h| doc_coverage(h) >= coverage_fraction)
+            .map(|h| (*h, doc_coverage(h)))
+            .filter(|(_, cov)| *cov >= coverage_fraction)
             .collect();
         if filtered.is_empty() {
             // The gate opened via a top-3 hit that clears coverage but sits below the
@@ -640,7 +654,9 @@ pub fn run_consult(
             // gate guarantees at least one such top-3 hit exists, so this is non-empty.
             hits.iter()
                 .take(3)
-                .filter(|h| doc_coverage(h) >= coverage_fraction)
+                .zip(&top3_tokens)
+                .map(|(h, doc_tokens)| (h, coverage_of(doc_tokens)))
+                .filter(|(_, cov)| *cov >= coverage_fraction)
                 .collect()
         } else {
             filtered
@@ -650,7 +666,7 @@ pub fn run_consult(
     let mut packed: Vec<SelectedDoc> = Vec::new();
     let mut running_tokens: usize = 0;
 
-    for hit in &coverage_filtered {
+    for (hit, _) in &coverage_filtered {
         // Canonical body: the index already stored `frontmatter::body(content)`,
         // so reuse it (leading newline removed) rather than rescanning the file.
         let body = hit.stored_body.trim_start_matches('\n').to_string();
@@ -666,7 +682,7 @@ pub fn run_consult(
             (None, vec![])
         };
 
-        let tokens = body.chars().count() / 4;
+        let tokens = crate::tokens::estimate_tokens(&body);
 
         // Skip whole if the single doc exceeds the per-doc cap.
         if tokens > config.per_doc_token_cap {
@@ -701,8 +717,8 @@ pub fn run_consult(
     let packed_paths: HashSet<&str> = packed.iter().map(|d| d.path.as_str()).collect();
     let pointers: Vec<DocPointer> = coverage_filtered
         .iter()
-        .filter(|h| !packed_paths.contains(h.path.as_str()))
-        .map(|h| {
+        .filter(|(h, _)| !packed_paths.contains(h.path.as_str()))
+        .map(|(h, cov)| {
             let doc_type = file_map.get(&h.path).and_then(|vf| {
                 let v = vf.get_property("type");
                 if v.is_empty() { None } else { Some(v) }
@@ -712,8 +728,10 @@ pub fn run_consult(
                 title: h.title.clone(),
                 doc_type,
                 score: h.score,
-                coverage: doc_coverage(h),
-                tokens_est: h.stored_body.trim_start_matches('\n').chars().count() / 4,
+                coverage: *cov,
+                tokens_est: crate::tokens::estimate_tokens(
+                    h.stored_body.trim_start_matches('\n'),
+                ),
             }
         })
         .collect();

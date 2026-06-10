@@ -51,6 +51,25 @@ pub fn resolve_root(vault_root: &Path, subfolder: Option<&Path>) -> PathBuf {
     }
 }
 
+/// Walk `walk_root` and yield entries whose vault-relative path passes the
+/// optional ignore filter.  Shared by [`scan`] and [`scan_assets`]; extension
+/// filtering stays in the caller.
+fn walk_entries<'a>(
+    walk_root: &Path,
+    vault_root: &'a Path,
+    ignore: Option<&'a VaultIgnore>,
+) -> impl Iterator<Item = walkdir::DirEntry> + 'a {
+    WalkDir::new(walk_root)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(move |entry| {
+            let path = entry.path();
+            let vault_relative = path.strip_prefix(vault_root).unwrap_or(path);
+            ignore.is_none_or(|ig| !ig.excludes(vault_relative))
+        })
+}
+
 /// Scan a directory for .md files and parse their frontmatter.
 ///
 /// - `walk_root`: the directory to walk (may be a subfolder of the vault).
@@ -62,20 +81,10 @@ pub fn scan(
     ignore: Option<&VaultIgnore>,
 ) -> Result<Vec<VaultFile>> {
     let mut files = Vec::new();
-    for entry in WalkDir::new(walk_root)
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in walk_entries(walk_root, vault_root, ignore) {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("md") {
             continue;
-        }
-        let vault_relative = path.strip_prefix(vault_root).unwrap_or(path);
-        if let Some(ig) = ignore {
-            if ig.excludes(vault_relative) {
-                continue;
-            }
         }
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
@@ -93,7 +102,7 @@ pub fn scan(
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
-        let ctime = fs::metadata(path).ok().and_then(|m| m.created().ok());
+        let ctime = entry.metadata().ok().and_then(|m| m.created().ok());
         files.push(VaultFile {
             path: path.to_path_buf(),
             name,
@@ -132,26 +141,14 @@ pub fn scan_assets(
     ignore: Option<&VaultIgnore>,
 ) -> Result<Vec<VaultAsset>> {
     let mut assets = Vec::new();
-    for entry in WalkDir::new(walk_root)
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in walk_entries(walk_root, vault_root, ignore) {
         let path = entry.path();
         let ext = path
             .extension()
             .and_then(|e| e.to_str())
             .map(|e| e.to_lowercase());
-        let ext = match ext {
-            Some(e) if ASSET_EXTENSIONS.contains(&e.as_str()) => e,
-            _ => continue,
-        };
-        let _ = ext;
-        let vault_relative = path.strip_prefix(vault_root).unwrap_or(path);
-        if let Some(ig) = ignore {
-            if ig.excludes(vault_relative) {
-                continue;
-            }
+        if !ext.is_some_and(|e| ASSET_EXTENSIONS.contains(&e.as_str())) {
+            continue;
         }
         let name = path
             .file_name()

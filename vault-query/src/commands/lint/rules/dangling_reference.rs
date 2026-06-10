@@ -19,7 +19,9 @@ impl Rule for DanglingReference {
         let mut cited: HashSet<String> = HashSet::new();
         for card in &ctx.cards {
             if let Some(value) = card.frontmatter.get("reference") {
-                collect_cited(value, &mut cited);
+                wikilink::walk_frontmatter_links(value, &mut |link| {
+                    cited.insert(normalize(wikilink::resolve_name(&link.target)));
+                });
             }
         }
 
@@ -39,23 +41,6 @@ impl Rule for DanglingReference {
             }
         }
         findings
-    }
-}
-
-fn collect_cited(value: &serde_yaml::Value, into: &mut HashSet<String>) {
-    match value {
-        serde_yaml::Value::String(s) => {
-            for link in wikilink::extract(s) {
-                let name = normalize(wikilink::resolve_name(&link.target));
-                into.insert(name);
-            }
-        }
-        serde_yaml::Value::Sequence(items) => {
-            for item in items {
-                collect_cited(item, into);
-            }
-        }
-        _ => {}
     }
 }
 

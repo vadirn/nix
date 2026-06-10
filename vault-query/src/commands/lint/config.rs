@@ -112,10 +112,10 @@ mod tests {
     #[test]
     fn effective_accepts_oversized_doc_rule_name() {
         // The parameterized rule must still register under its name, so config
-        // and CLI can address it (e.g. `oversized_doc=off`).
-        let cli = vec!["oversized_doc=off".to_string()];
+        // and CLI can address it (e.g. `oversized-doc=off`).
+        let cli = vec!["oversized-doc=off".to_string()];
         let result = effective_severities(None, &cli).unwrap();
-        assert_eq!(result.get("oversized_doc"), Some(&Severity::Off));
+        assert_eq!(result.get("oversized-doc"), Some(&Severity::Off));
     }
 
     #[test]

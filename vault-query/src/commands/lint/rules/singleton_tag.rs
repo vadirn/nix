@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
+use crate::frontmatter;
 
 pub struct SingletonTag;
 
@@ -16,7 +17,7 @@ impl Rule for SingletonTag {
     fn check(&self, ctx: &LintContext) -> Vec<Finding> {
         let mut tag_to_files: HashMap<String, Vec<&crate::vault::VaultFile>> = HashMap::new();
         for file in ctx.files {
-            for tag in extract_tags(&file.frontmatter) {
+            for tag in frontmatter::get_string_seq(&file.frontmatter, "tags") {
                 tag_to_files.entry(tag).or_default().push(file);
             }
         }
@@ -52,16 +53,6 @@ impl Rule for SingletonTag {
             ta.cmp(tb)
         });
         findings
-    }
-}
-
-fn extract_tags(fm: &std::collections::BTreeMap<String, serde_yaml::Value>) -> Vec<String> {
-    match fm.get("tags") {
-        Some(serde_yaml::Value::Sequence(items)) => items
-            .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect(),
-        _ => Vec::new(),
     }
 }
 

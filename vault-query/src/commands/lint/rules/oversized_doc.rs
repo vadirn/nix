@@ -20,7 +20,7 @@ const CHECKED_TYPES: [&str; 3] = ["card", "note", "experiment"];
 
 impl Rule for OversizedDoc {
     fn name(&self) -> &'static str {
-        "oversized_doc"
+        "oversized-doc"
     }
 
     fn default_severity(&self) -> Severity {
@@ -31,7 +31,7 @@ impl Rule for OversizedDoc {
         let mut findings = Vec::new();
 
         for file in ctx.files {
-            if frontmatter::get_bool(&file.frontmatter, "template") == Some(true) {
+            if frontmatter::is_template(&file.frontmatter) {
                 continue;
             }
 
@@ -41,7 +41,7 @@ impl Rule for OversizedDoc {
             }
 
             // Same estimate the consult packer applies to the body it would inline.
-            let tokens_est = frontmatter::body(&file.content).chars().count() / 4;
+            let tokens_est = crate::tokens::estimate_tokens(frontmatter::body(&file.content));
             if tokens_est > self.per_doc_token_cap {
                 findings.push(Finding {
                     rule: self.name(),
@@ -116,7 +116,7 @@ mod tests {
         )];
         let findings = check_with_cap(files, 100);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule, "oversized_doc");
+        assert_eq!(findings[0].rule, "oversized-doc");
         assert_eq!(findings[0].severity, Severity::Warn);
         assert!(
             findings[0].message.contains("card 'BigCard'")

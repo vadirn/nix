@@ -127,6 +127,25 @@ pub fn get_seq_len(fm: &BTreeMap<String, Value>, key: &str) -> usize {
     }
 }
 
+/// Get the string items of a sequence field. Non-string items are skipped;
+/// a missing or non-sequence value yields an empty Vec.
+pub fn get_string_seq(fm: &BTreeMap<String, Value>, key: &str) -> Vec<String> {
+    match fm.get(key) {
+        Some(Value::Sequence(items)) => items
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Return `true` when the file is marked `template: true`. Templates carry the
+/// same `type:` as their instances but are scaffolding, not content, so every
+/// content-level scan skips them via this one predicate.
+pub fn is_template(fm: &BTreeMap<String, Value>) -> bool {
+    get_bool(fm, "template") == Some(true)
+}
+
 /// Parse a comma-separated type filter string into a `Vec<String>`.
 /// Trims whitespace and drops empty tokens.
 /// Provided for callers that receive a raw string (e.g. env-var or config file);
