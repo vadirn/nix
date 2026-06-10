@@ -11,7 +11,7 @@ source = identify source reference (should exist in 10 references/)
 
 // Duplicate check — before creating anything
 exact = Glob("<concept>.md", "20 cards/")
-semantic = Bash(vault-query search "<concept>" -n 5 --files)
+semantic = Bash(vault-query search "<concept>" -n 5)
 if exact or semantic:
   present matches, ask: proceed / merge / edit existing?
 
@@ -23,13 +23,14 @@ if not fast and missing concept or description:
   use their input as basis — refine wording, fix factual errors, preserve their framing
 
 // Build the card
-tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // fall back to CLAUDE.md tag tree
+tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // pick one or more from this list; fall back to CLAUDE.md tag tree
+// a tag absent from the list requires explicit user confirmation before use
 description = 1-sentence core idea
 body = concise summary in user's own framing
 create file in 20 cards/
 
 // Surface connections
-related = Bash(vault-query search "<key terms>" -n 10 --files)
+related = Bash(vault-query search "<key terms>" -n 10)
 if non-trivial connection (pattern, tension, synthesis):
   propose creating a note in 30 notes/  // cards stay atomic, connections live in notes
 ```
@@ -42,7 +43,7 @@ Read(<vault_root>/templates/Card.md) for structure.
 - `type` — always `card`
 - `description` — 1 sentence capturing the core idea
 - `reference` — wikilink array to source references (e.g. `"[[10 references/Source Name|Source Name]]"`)
-- `tags` — from CLAUDE.md tag tree
+- `tags` — one or more from the live tag list (`vault-query tags`); a tag absent from the list requires user confirmation
 
 If a value contains double quotes, wrap it in single quotes: `description: '"Use X" does Y'`
 
@@ -90,7 +91,7 @@ When asked to edit or enrich an existing card:
 1. Read the file
 2. Check what's missing: `description`, `reference:` backlink, `tags`
 3. Fill in missing fields. Leave existing body content unchanged.
-4. If tags exist but don't match the CLAUDE.md tag tree, suggest corrections.
+4. If tags exist but don't match the live tag list (`vault-query tags`), suggest corrections.
 
 ## Notes
 
