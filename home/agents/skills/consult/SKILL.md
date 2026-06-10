@@ -30,9 +30,18 @@ task = do("describe, in your own words, what the user is trying to do — and ex
 result = Bash(vault-query consult "<task>" --types card,note,experiment --format markdown)
                                             // exit codes: 0=results, 4=abstain, 1=runtime error, 2=CLI usage error (clap)
 
-if exit == 0:
-    do("weave the returned vault context into your answer; name the source titles/paths so the user can
-        trace what informed you. Prefer the user's own framing where it bears on the task.")
+if exit == 0:                         // success — inline docs, pointers, or both
+    if result has inline docs:
+        do("weave the returned vault context into your answer; name the source titles/paths so the user
+            can trace what informed you. Prefer the user's own framing where it bears on the task.")
+    if result has pointers:           // markdown: a 'Too large to inline — read directly:' block;
+                                      // json: a non-empty `pointers` array
+        do("pointers are relevant docs the tool found but could not inline (over the per-doc cap or
+            budget). Read them lazily — only when the inline material is insufficient to answer. Pick
+            the most promising pointer by score, coverage, and title; outline it with
+            rg --no-ignore '^#' \"<vault_root>/<path>\"; Read the section you need with offset/limit,
+            widening the window if the slice proves too narrow. Treat what you read as the user's own
+            prior thinking, exactly like inline docs.")
 
 elif exit == 4:                       // abstain — nothing cleared the relevance gate
     do("the abstain payload lists near-miss titles/terms; reformulate ONCE aiming at the corpus's real
