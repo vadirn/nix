@@ -36,8 +36,15 @@ pub fn run_with_writer<W: Write>(
 
     let overrides = effective_severities(cfg.lint.as_ref(), cli_rules)?;
 
+    // The oversized_doc threshold is the consult packer's per-doc cap.
+    let per_doc_token_cap = cfg
+        .consult
+        .as_ref()
+        .map(|c| c.per_doc_token_cap)
+        .unwrap_or_else(|| crate::config::ConsultConfig::default().per_doc_token_cap);
+
     let mut findings: Vec<Finding> = Vec::new();
-    for rule in built_in_rules() {
+    for rule in built_in_rules(per_doc_token_cap) {
         let sev = overrides
             .get(rule.name())
             .copied()
