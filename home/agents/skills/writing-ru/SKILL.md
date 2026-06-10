@@ -1,6 +1,6 @@
 ---
 name: writing-ru
-description: Редактирует русский текст: убирает канцеляризмы, пассив, AI-штампы. Use on /writing-ru, "упрости текст", "убери воду".
+description: Редактирует русский текст: убирает канцеляризмы, пассив, AI-штампы. Use on /writing-ru, "упрости текст", "убери воду". For flipping negative instructions to positive directives in skill files or prompts, use /affirm.
 ---
 
 # Ясное письмо на русском

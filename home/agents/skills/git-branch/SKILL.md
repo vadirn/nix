@@ -24,8 +24,8 @@ name   = "<prefix>/<slug>"
 
 // Pick the base
 clean = do("true if status shows no uncommitted changes")
+Bash(git fetch origin <default>)       // fetch before any base decision so origin/<default> is never stale
 if branch == default and clean:
-    Bash(git fetch origin <default>)
     base = "origin/<default>"          // start even with origin
 else if branch != default:
     AskUserQuestion("on <branch>, not <default> — stack the new branch here, or cut from <default>?")

@@ -31,20 +31,8 @@ else if ahead: Bash(git push)
 
 // Existing PR
 existing = Bash(gh pr view --json url,state -q '.url' 2>/dev/null)
-if existing:
-    show URL, AskUserQuestion("update or stop?")
-    if stop: stop
-    // update path
-    title = do("regenerate conventional commit-style title from diff and log")
-    body  = do("regenerate body from diff and log, filling the existing template's sections")
-    AskUserQuestion("confirm updated title and body")
-    Bash(rm -f /tmp/claude/pr.md)
-    Write(/tmp/claude/pr.md, body)
-    Bash(gh pr edit --title "<title>" --body-file /tmp/claude/pr.md)
-    Bash(rm -f /tmp/claude/pr.md)
-    show PR URL, stop
 
-// Template (deterministic resolution via pr-template)
+// Template (deterministic resolution via pr-template) — shared by create and update paths
 out = Bash(pr-template)
 mode = first line of out, stripped of "MODE: " prefix    // single | multi | default — see Reference §PR creation details
 rest = lines after the first
@@ -54,6 +42,19 @@ if mode == "multi":
   template_content = Read(<git-root>/chosen)
 else:
   template_content = rest    // single or default — both deliver content directly
+
+if existing:
+    show URL, AskUserQuestion("update or stop?")
+    if stop: stop
+    // update path — reuses template resolved above
+    title = do("regenerate conventional commit-style title from diff and log")
+    body  = do("regenerate body from diff and log, filling template_content sections; preserve every heading, emoji, and section verbatim")
+    AskUserQuestion("confirm updated title and body")
+    Bash(rm -f /tmp/claude/pr.md)
+    Write(/tmp/claude/pr.md, body)
+    Bash(gh pr edit --title "<title>" --body-file /tmp/claude/pr.md)
+    Bash(rm -f /tmp/claude/pr.md)
+    show PR URL, stop
 
 title = do("generate conventional commit-style title: '<prefix>: <message>' (see /commit skill for prefix and message rules)")
 body = do("fill template_content placeholders from diff and log; preserve every heading, emoji, and section verbatim")

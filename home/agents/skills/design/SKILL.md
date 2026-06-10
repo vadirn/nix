@@ -34,6 +34,7 @@ else:
     constraints = do("load predefined set for domain — see Reference §Predefined constraint sets")
 
 // Generate designs (parallel sub-agents)
+count = min(count, len(constraints))   // cap so a user-supplied count never exhausts the set silently
 (parallel) for each constraint in constraints[:count]:
     spawn_subagent("design <topic> under constraint: <constraint>")
     do("output: signature, usage example, what it hides, tradeoffs")

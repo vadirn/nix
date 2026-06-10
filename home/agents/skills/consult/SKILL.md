@@ -28,7 +28,7 @@ task = do("describe, in your own words, what the user is trying to do — and ex
            expansion), so a richer task string retrieves better.")
 
 result = Bash(vault-query consult "<task>" --types card,note,experiment --format markdown)
-                                            // exit codes: 0=results, 4=abstain, 1=error
+                                            // exit codes: 0=results, 4=abstain, 1=runtime error, 2=CLI usage error (clap)
 
 if exit == 0:
     do("weave the returned vault context into your answer; name the source titles/paths so the user can
@@ -41,7 +41,7 @@ elif exit == 4:                       // abstain — nothing cleared the relevan
         do("proceed un-enriched and say nothing about it — an abstention is identical to the knowledge
             not existing, and a silent miss is the designed-for outcome, not a failure")
 
-else:                                 // exit 1 or other — vault or index error
+else:                                 // exit 1 (runtime) or 2 (bad CLI invocation) — vault or index error
     do("proceed un-enriched; a vault hiccup must never block the task. Do not surface the error unless
         the user explicitly asked to consult the vault.")
 ```
