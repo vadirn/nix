@@ -16,18 +16,19 @@ if not fast and missing thesis:
 
 // Duplicate check — before creating anything
 exact = Glob("<topic>.md", "30 notes/")
-semantic = Bash(vault-query search "<topic>" -n 5 --files)
+semantic = Bash(vault-query search "<topic>" -n 5)
 if exact or semantic:
   present matches, ask: proceed / edit existing?
 
 // Build the note
-tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // fall back to CLAUDE.md tag tree
+tags = Bash(vault-query tags --vault-root <vault_root> --sort count)  // pick one or more from this list; fall back to CLAUDE.md tag tree
+// a tag absent from the list requires explicit user confirmation before use
 description = 1-sentence summary of what this note explores
 body = help structure thinking if requested
 create file in 30 notes/
 
 // Surface connections
-related = Bash(vault-query search "<key terms>" -n 10 --files)
+related = Bash(vault-query search "<key terms>" -n 10)
 present related cards/references as potential wikilink targets
 ```
 
@@ -38,7 +39,7 @@ Read(<vault_root>/templates/Note.md) for structure.
 
 - `type` — always `note`
 - `description` — 1 sentence capturing what this note explores
-- `tags` — from CLAUDE.md tag tree (optional — skip if no tag fits)
+- `tags` — one or more from the live tag list (`vault-query tags`); a tag absent from the list requires user confirmation (optional — skip if no tag fits)
 
 If a value contains double quotes, wrap it in single quotes: `description: '"Use X" does Y'`
 
@@ -81,7 +82,7 @@ When asked to edit or enrich an existing note:
 1. Read the file
 2. Check what's missing: `description`, `tags`
 3. Fill in missing fields. Leave existing body content unchanged.
-4. If tags exist but don't match the CLAUDE.md tag tree, suggest corrections.
+4. If tags exist but don't match the live tag list (`vault-query tags`), suggest corrections.
 
 ## Notes
 

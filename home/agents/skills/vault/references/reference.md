@@ -9,10 +9,10 @@ References are raw captures. They contain the source link and metadata, not your
 1. Ask for the source (URL, book title, etc.) if not provided
 2. **Duplicate check** (before creating anything):
    - `Glob` for exact filename match in `10 references/`
-   - `Bash(vault-query search "<title>" -n 5 --files)` — near-duplicates by meaning
+   - `Bash(vault-query search "<title>" -n 5)` — near-duplicates by meaning
    - If matches found, present them and ask whether to proceed or edit existing
 3. Pick a template that fits the source: `Web.md` (URL — articles, YouTube, talks), `Book.md` (book with authors/publisher), `Conversation.md` (LLM dialogue or NotebookLM notebook — body holds an extract, not a transcript). If nothing fits, use `Reference.md`.
-4. Pick tags: run `vault-query tags --vault-root <vault_root> --sort count` to get the live tag list, pick from it. Fall back to the tag tree in CLAUDE.md if vault-query is unavailable. Ask if ambiguous.
+4. Pick tags: run `vault-query tags --vault-root <vault_root> --sort count` to get the live tag list, pick one or more from it. Fall back to the tag tree in CLAUDE.md if vault-query is unavailable. A tag absent from the list requires explicit user confirmation before use.
 5. Write a 1-sentence `description`
 6. Create the file in `10 references/`
 
@@ -23,7 +23,7 @@ Read(<vault_root>/templates/<chosen>.md) — Web.md, Book.md, Conversation.md, o
 
 - `type` — always `reference`
 - `description` — 1 sentence describing what this source is about
-- `tags` — from CLAUDE.md tag tree
+- `tags` — one or more from the live tag list (`vault-query tags`); a tag absent from the list requires user confirmation
 - For Books, also: `authors`, `published`, `publisher`
 
 If a value contains double quotes, wrap it in single quotes: `description: '"Use X" does Y'`
@@ -61,7 +61,7 @@ When asked to edit or enrich an existing reference:
 1. Read the file
 2. Check what's missing: `description`, `tags`
 3. Fill in missing fields. Leave existing body content unchanged.
-4. If tags exist but don't match the CLAUDE.md tag tree, suggest corrections.
+4. If tags exist but don't match the live tag list (`vault-query tags`), suggest corrections.
 
 ## Notes
 
