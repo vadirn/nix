@@ -50,53 +50,25 @@ impl std::fmt::Display for ConsultFormat {
 // ---------------------------------------------------------------------------
 // JSON envelope types (Decision 3)
 // ---------------------------------------------------------------------------
+//
+// The domain types (`SelectedDoc`, `DocPointer`, `NearMiss`) derive `Serialize`
+// in `consult.rs`, so the envelopes borrow them directly.
 
 #[derive(Serialize)]
-struct JsonSelectedDoc {
-    path: String,
-    title: String,
-    #[serde(rename = "type")]
-    doc_type: Option<String>,
-    score: f32,
-    body: String,
-    tokens: usize,
-    links: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct JsonPointer {
-    path: String,
-    title: String,
-    #[serde(rename = "type")]
-    doc_type: Option<String>,
-    score: f32,
-    coverage: f32,
-    tokens_est: usize,
-}
-
-#[derive(Serialize)]
-struct JsonSelected {
+struct JsonSelected<'a> {
     status: &'static str,
-    query: String,
+    query: &'a str,
     total_tokens: usize,
-    docs: Vec<JsonSelectedDoc>,
-    pointers: Vec<JsonPointer>,
+    docs: &'a [SelectedDoc],
+    pointers: &'a [DocPointer],
 }
 
 #[derive(Serialize)]
-struct JsonNearMiss {
-    path: String,
-    title: String,
-    score: f32,
-    matched_terms: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct JsonAbstain {
+struct JsonAbstain<'a> {
     status: &'static str,
-    query: String,
-    reason: String,
-    near_misses: Vec<JsonNearMiss>,
+    query: &'a str,
+    reason: &'a str,
+    near_misses: &'a [NearMiss],
 }
 
 // ---------------------------------------------------------------------------
@@ -165,31 +137,10 @@ fn render_json_selected(
 ) -> Result<String> {
     let envelope = JsonSelected {
         status: "selected",
-        query: query.to_string(),
+        query,
         total_tokens,
-        docs: docs
-            .iter()
-            .map(|d| JsonSelectedDoc {
-                path: d.path.clone(),
-                title: d.title.clone(),
-                doc_type: d.doc_type.clone(),
-                score: d.score,
-                body: d.body.clone(),
-                tokens: d.tokens,
-                links: d.links.clone(),
-            })
-            .collect(),
-        pointers: pointers
-            .iter()
-            .map(|p| JsonPointer {
-                path: p.path.clone(),
-                title: p.title.clone(),
-                doc_type: p.doc_type.clone(),
-                score: p.score,
-                coverage: p.coverage,
-                tokens_est: p.tokens_est,
-            })
-            .collect(),
+        docs,
+        pointers,
     };
     Ok(serde_json::to_string_pretty(&envelope)?)
 }
@@ -197,17 +148,9 @@ fn render_json_selected(
 fn render_json_abstain(query: &str, near_misses: &[NearMiss], reason: &str) -> Result<String> {
     let envelope = JsonAbstain {
         status: "abstain",
-        query: query.to_string(),
-        reason: reason.to_string(),
-        near_misses: near_misses
-            .iter()
-            .map(|nm| JsonNearMiss {
-                path: nm.path.clone(),
-                title: nm.title.clone(),
-                score: nm.score,
-                matched_terms: nm.matched_terms.clone(),
-            })
-            .collect(),
+        query,
+        reason,
+        near_misses,
     };
     Ok(serde_json::to_string_pretty(&envelope)?)
 }
@@ -254,23 +197,9 @@ struct LogRecord<'a> {
 }
 
 /// Append one JSONL record to `log_path` (relative to `vault_root` or absolute).
-/// Best-effort: any error is silently swallowed; the exit code is never affected.
+/// The caller discards the error: logging is best-effort and never affects the
+/// exit code.
 fn append_log(
-    log_path: &str,
-    vault_root: &std::path::Path,
-    query: &str,
-    mode_str: &str,
-    format_str: &str,
-    outcome: &ConsultOutcome,
-    diag: &ConsultDiagnostics,
-    duration_ms: u128,
-) {
-    let _ = append_log_inner(
-        log_path, vault_root, query, mode_str, format_str, outcome, diag, duration_ms,
-    );
-}
-
-fn append_log_inner(
     log_path: &str,
     vault_root: &std::path::Path,
     query: &str,
@@ -424,7 +353,7 @@ pub fn run(
         let effective_log_path: Option<&str> = log_path_override
             .or(consult_config.log_path.as_deref());
         if let Some(log_path) = effective_log_path {
-            append_log(
+            let _ = append_log(
                 log_path, vault_root, task, mode_str, &format_str, &outcome, &diag, duration_ms,
             );
         }

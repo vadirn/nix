@@ -37,7 +37,7 @@ impl Rule for MissingRequiredField {
 
         for file in ctx.files {
             // Skip templates — they legitimately have empty fields.
-            if frontmatter::get_bool(&file.frontmatter, "template") == Some(true) {
+            if frontmatter::is_template(&file.frontmatter) {
                 continue;
             }
 

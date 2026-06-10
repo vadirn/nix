@@ -98,21 +98,25 @@ fn scan_and_filter(
     Ok(files)
 }
 
-/// Build the BM25 index, run ranking, generate snippets, and return enriched results.
-/// Pass an empty `types` slice to return all document types (no filter).
-///
-/// Returns an empty Vec when no documents match (callers handle the empty case).
-///
-/// Formerly there was a no-filter wrapper `collect_bm25_results` that forwarded to this
-/// function with `&[]`. It was removed because its only caller (the test suite) was
-/// updated to call this function directly with `&[]`, leaving the wrapper unused.
-pub fn collect_bm25_results_filtered(
+/// Shared BM25 plumbing for both `run_bm25` arms: scan + type filter, index
+/// build, query parse with the shared boosts, ranking, and snippet generator.
+/// `None` when no documents matched. Result shaping stays in the callers,
+/// since text and JSON output diverge in snippet rendering.
+struct Bm25Hits {
+    files: Vec<vault::VaultFile>,
+    searcher: tantivy::Searcher,
+    fields: crate::commands::consult::IndexFields,
+    top_docs: Vec<(f32, tantivy::DocAddress)>,
+    snippet_generator: SnippetGenerator,
+}
+
+fn search_bm25(
     query: &str,
     cfg: &crate::config::ResolvedConfig,
     subfolder: Option<&Path>,
     limit: usize,
     types: &[String],
-) -> Result<Vec<SearchResult>> {
+) -> Result<Option<Bm25Hits>> {
     let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, subfolder);
 
@@ -139,11 +143,47 @@ pub fn collect_bm25_results_filtered(
     let top_docs = searcher.search(&parsed, &TopDocs::with_limit(limit))?;
 
     if top_docs.is_empty() {
-        return Ok(vec![]);
+        return Ok(None);
     }
 
     // SnippetGenerator must be created from the same searcher + parsed query.
     let snippet_generator = SnippetGenerator::create(&searcher, &parsed, fields.body)?;
+
+    Ok(Some(Bm25Hits {
+        files,
+        searcher,
+        fields,
+        top_docs,
+        snippet_generator,
+    }))
+}
+
+/// Build the BM25 index, run ranking, generate snippets, and return enriched results.
+/// Pass an empty `types` slice to return all document types (no filter).
+///
+/// Returns an empty Vec when no documents match (callers handle the empty case).
+///
+/// Formerly there was a no-filter wrapper `collect_bm25_results` that forwarded to this
+/// function with `&[]`. It was removed because its only caller (the test suite) was
+/// updated to call this function directly with `&[]`, leaving the wrapper unused.
+pub fn collect_bm25_results_filtered(
+    query: &str,
+    cfg: &crate::config::ResolvedConfig,
+    subfolder: Option<&Path>,
+    limit: usize,
+    types: &[String],
+) -> Result<Vec<SearchResult>> {
+    let Some(hits) = search_bm25(query, cfg, subfolder, limit, types)? else {
+        return Ok(vec![]);
+    };
+    let Bm25Hits {
+        files,
+        searcher,
+        fields,
+        top_docs,
+        snippet_generator,
+    } = hits;
+    let vault_root = &cfg.vault_root;
 
     // Build a path → &VaultFile lookup map for type/links resolution.
     let file_map: HashMap<String, &vault::VaultFile> = files
@@ -189,7 +229,7 @@ pub fn collect_bm25_results_filtered(
             (None, vec![], body_val.trim_start_matches('\n').to_string())
         };
 
-        let tokens = body_text.chars().count() / 4;
+        let tokens = crate::tokens::estimate_tokens(&body_text);
 
         results.push(SearchResult {
             path: path_val,
@@ -227,49 +267,22 @@ fn run_bm25(
         return Ok(());
     }
 
-    // Text arm: stay inline so snippet highlighting (asterisk substitution) is
-    // byte-identical to the original output.
-    let vault_root = &cfg.vault_root;
-    let root = vault::resolve_root(vault_root, subfolder);
-
-    let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
-
-    // Build the shared BM25 index (schema + bilingual analyzer shared with consult).
-    let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
-    let (index, fields) = build_index(&file_refs, vault_root)?;
-
-    let reader = index.reader()?;
-    let searcher = reader.searcher();
-
-    // Parse query over title + description + body with the shared boosts (filename
-    // demoted, curated description favored). Sanitize metacharacters first so that
-    // natural-language queries containing `:` or other Tantivy syntax chars
-    // (e.g. "structure the workflow: plan first") are treated as plain terms.
-    let mut query_parser =
-        QueryParser::for_index(&index, vec![fields.title, fields.description, fields.body]);
-    query_parser.set_field_boost(fields.title, DEFAULT_TITLE_BOOST);
-    query_parser.set_field_boost(fields.description, DEFAULT_DESCRIPTION_BOOST);
-    let sanitized = sanitize_query(query);
-    let parsed = query_parser.parse_query(&sanitized)?;
-
-    let top_docs = searcher.search(&parsed, &TopDocs::with_limit(limit))?;
-
-    if top_docs.is_empty() {
+    // Text arm: same plumbing via search_bm25; only the snippet rendering
+    // (asterisk highlighting from `to_html()`) differs from the JSON arm.
+    let Some(hits) = search_bm25(query, cfg, subfolder, limit, types)? else {
         return Ok(());
-    }
+    };
 
-    let snippet_generator = SnippetGenerator::create(&searcher, &parsed, fields.body)?;
-
-    for (score, doc_address) in top_docs {
-        let doc: TantivyDocument = searcher.doc(doc_address)?;
+    for (score, doc_address) in hits.top_docs {
+        let doc: TantivyDocument = hits.searcher.doc(doc_address)?;
         let path_val = doc
-            .get_first(fields.path)
+            .get_first(hits.fields.path)
             .and_then(|v| v.as_str())
             .unwrap_or("");
         println!("[{:.2}] {}", score, path_val);
 
-        let body_val = doc.get_first(fields.body).and_then(|v| v.as_str()).unwrap_or("");
-        let snippet = snippet_generator.snippet(body_val);
+        let body_val = doc.get_first(hits.fields.body).and_then(|v| v.as_str()).unwrap_or("");
+        let snippet = hits.snippet_generator.snippet(body_val);
         let html = snippet.to_html();
         if !html.is_empty() {
             // Convert <b>term</b> to *term* for terminal display

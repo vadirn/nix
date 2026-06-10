@@ -1,7 +1,7 @@
 use anyhow::Result;
-use serde_yaml::Value;
 use std::collections::BTreeMap;
 
+use crate::frontmatter;
 use crate::vault;
 
 pub fn run(cfg: &crate::config::ResolvedConfig, sort: &str) -> Result<()> {
@@ -10,12 +10,8 @@ pub fn run(cfg: &crate::config::ResolvedConfig, sort: &str) -> Result<()> {
     let mut tag_counts: BTreeMap<String, usize> = BTreeMap::new();
 
     for file in &files {
-        if let Some(Value::Sequence(tags)) = file.frontmatter.get("tags") {
-            for tag in tags {
-                if let Value::String(t) = tag {
-                    *tag_counts.entry(t.clone()).or_insert(0) += 1;
-                }
-            }
+        for tag in frontmatter::get_string_seq(&file.frontmatter, "tags") {
+            *tag_counts.entry(tag).or_insert(0) += 1;
         }
     }
 

@@ -7,6 +7,7 @@ mod commands;
 mod config;
 mod frontmatter;
 mod output;
+mod tokens;
 mod vault;
 mod vault_ignore;
 mod wikilink;
