@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# PostToolUse hook: format the file just written.
+# Format one file, routed by extension. Two entry points (see settings.json):
 #
-# Wired to the Write matcher only (see settings.json). Edit/MultiEdit are
-# intentionally excluded to prevent the Edit-round-trip failure: a formatter
-# reflowing the file between two Edits in one turn makes the second Edit's
-# old_string fail to match.
+#   - PostToolUse Write matcher: path arrives as hook JSON on stdin. Write
+#     replaces whole content, so reflowing right away is safe.
+#   - flush-format-queue.sh (Stop hook): path arrives as $1. Edits are never
+#     formatted mid-turn — a formatter reflowing the file between two Edits
+#     in one turn makes the second Edit's old_string fail to match — so
+#     queue-format.sh defers them to the turn boundary.
 #
 # JS/TS/JSON + web + markdown branch (extensions oxfmt handles natively):
 #   - Walks up looking for a package.json that defines a `format:file` script
@@ -28,9 +30,13 @@ set -uo pipefail
 # shellcheck source=lib/detect-pm.sh
 source "$(dirname "$0")/lib/detect-pm.sh"
 
-INPUT=$(cat)
-# Newline-delimited so paths with spaces (e.g. vault's "35 experiments/") survive.
-{ IFS= read -r FILE; } < <(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')
+if [ $# -ge 1 ]; then
+  FILE=$1
+else
+  INPUT=$(cat)
+  # Newline-delimited so paths with spaces (e.g. vault's "35 experiments/") survive.
+  { IFS= read -r FILE; } < <(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""')
+fi
 
 [ -n "$FILE" ] || exit 0
 [ -f "$FILE" ] || exit 0

@@ -105,6 +105,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "^Edit$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/queue-format.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [],
@@ -193,6 +203,11 @@
             "command": "bash ~/.claude/hooks/sound.sh Stop",
             "timeout": 5,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/flush-format-queue.sh",
+            "timeout": 60
           },
           {
             "type": "command",
