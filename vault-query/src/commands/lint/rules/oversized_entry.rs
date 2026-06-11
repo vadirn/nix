@@ -12,15 +12,15 @@ use crate::frontmatter;
 /// Scope: the knowledge types consult inlines (card, note, experiment).
 /// References are bookmarks, tracks/checkpoints are append-mostly project
 /// memory — all exempt, as are templates.
-pub struct OversizedDoc {
+pub struct OversizedEntry {
     pub per_doc_token_cap: usize,
 }
 
 const CHECKED_TYPES: [&str; 3] = ["card", "note", "experiment"];
 
-impl Rule for OversizedDoc {
+impl Rule for OversizedEntry {
     fn name(&self) -> &'static str {
-        "oversized-doc"
+        "oversized-entry"
     }
 
     fn default_severity(&self) -> Severity {
@@ -97,7 +97,7 @@ mod tests {
     fn check_with_cap(files: Vec<crate::vault::VaultFile>, cap: usize) -> Vec<Finding> {
         let root = PathBuf::from("/vault");
         let ctx = LintContext::build(&root, &files, &[]);
-        OversizedDoc { per_doc_token_cap: cap }.check(&ctx)
+        OversizedEntry { per_doc_token_cap: cap }.check(&ctx)
     }
 
     // 50 reps × 10 chars = 500 chars → ~125 est tokens.
@@ -116,7 +116,7 @@ mod tests {
         )];
         let findings = check_with_cap(files, 100);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule, "oversized-doc");
+        assert_eq!(findings[0].rule, "oversized-entry");
         assert_eq!(findings[0].severity, Severity::Warn);
         assert!(
             findings[0].message.contains("card 'BigCard'")

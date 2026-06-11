@@ -14,7 +14,7 @@ use crate::vault_ignore::{self, VaultIgnore};
 /// and were skipped whole while the packer still had budget to spare.  4000
 /// recovers those docs while keeping the single-doc cap at exactly half of the
 /// 8000-token budget, so one document never consumes more than half the payload.
-/// Shared with `lint` (the `oversized_doc` rule threshold).
+/// Shared with `lint` (the `oversized_entry` rule threshold).
 pub const DEFAULT_PER_DOC_TOKEN_CAP: usize = 4000;
 
 /// Default BM25 query-parser boost for the `title` field (the note filename).
