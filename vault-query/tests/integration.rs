@@ -925,3 +925,105 @@ fn test_consult_log_path_flag_overrides_config() {
         "--log-path must not write to the config log_path"
     );
 }
+
+// ---------------------------------------------------------------------------
+// --include-superseded flag tests
+// ---------------------------------------------------------------------------
+
+/// Superseded entries are excluded from consult scope by default.
+/// "Superseded card.md" has `superseded: true` and body text containing the unique
+/// nonsense token "xkqzflpbvmt" repeated many times. Without `--include-superseded`,
+/// a query for that token must abstain (exit 4) — the entry is not indexed.
+#[test]
+fn test_consult_superseded_excluded_by_default() {
+    let (stdout, code) = run_consult(&["xkqzflpbvmt", "--no-log"]);
+    assert_eq!(
+        code, 4,
+        "consult must abstain (exit 4) when the only matching entry is superseded; \
+         stdout: {}",
+        stdout
+    );
+}
+
+/// With `--include-superseded`, the superseded entry enters the consult scope.
+/// "Superseded card.md" contains the unique token "xkqzflpbvmt" repeated 15 times;
+/// no other fixture contains that token, so it scores clearly above median (single
+/// result — vacuous elbow) and the gate passes.
+#[test]
+fn test_consult_superseded_included_with_flag() {
+    let (stdout, code) = run_consult(&[
+        "xkqzflpbvmt",
+        "--include-superseded",
+        "--no-log",
+        "--types",
+        "card",
+    ]);
+    assert_eq!(
+        code, 0,
+        "consult must select (exit 0) the superseded entry when --include-superseded is set; \
+         stdout: {}",
+        stdout
+    );
+    // The [superseded] label must appear in the markdown heading.
+    assert!(
+        stdout.contains("[superseded]"),
+        "expected [superseded] label in rendered heading; stdout: {}",
+        stdout
+    );
+}
+
+/// Checkpoint entries (type: checkpoint) are excluded from consult scope by default.
+/// The fixture at "41 projects/nix/checkpoint-001.md" has `type: checkpoint`.
+/// A query for terms exclusive to that file must abstain when `--types card,checkpoint`
+/// is passed but the checkpoint is still excluded by the superseded gate.
+///
+/// We verify exclusion via the API directly (unit-test style) rather than via CLI,
+/// since the CLI fixture corpus has non-checkpoint cards that could satisfy the gate.
+#[test]
+fn test_consult_checkpoint_excluded_by_default() {
+    use vault_query::commands::consult::{run_consult, ConsultMode, ConsultOutcome};
+    use vault_query::config::ConsultConfig;
+    use vault_query::vault::VaultFile;
+    use std::collections::BTreeMap;
+
+    // Build a minimal VaultFile for a checkpoint with recognisable body text.
+    let body_term = "checkpoint-consult-gate-test-term";
+    let content = format!(
+        "---\ntype: checkpoint\ndone: true\n---\n\n{}\n",
+        body_term
+    );
+    let mut fm = BTreeMap::new();
+    fm.insert("type".to_string(), serde_yaml::Value::String("checkpoint".to_string()));
+    fm.insert("done".to_string(), serde_yaml::Value::Bool(true));
+    let checkpoint_file = VaultFile {
+        name: "checkpoint-test".to_string(),
+        path: std::path::PathBuf::from("/vault/checkpoint-test.md"),
+        frontmatter: fm,
+        frontmatter_error: None,
+        content,
+        ctime: None,
+    };
+
+    let vault_root = std::path::PathBuf::from("/vault");
+    // Pass an empty scope_types so that both "checkpoint" and "card" types are in scope —
+    // the superseded gate (not the type filter) is what must exclude it.
+    let scope_types: Vec<String> = vec![];
+    let mut config = ConsultConfig::default();
+    config.elbow_k = 1.0; // isolate to superseded-gate behaviour
+
+    let (result, _diag) = run_consult(
+        body_term,
+        &[checkpoint_file],
+        &vault_root,
+        &scope_types,
+        &config,
+        ConsultMode::Deliberate,
+        false, // include_superseded = false → checkpoint must be excluded
+    )
+    .unwrap();
+
+    assert!(
+        matches!(result, ConsultOutcome::Abstain { .. }),
+        "checkpoint must be excluded from consult scope by default (include_superseded=false)"
+    );
+}

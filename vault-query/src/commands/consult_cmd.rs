@@ -87,8 +87,9 @@ fn render_markdown_selected(
         total_tokens
     ));
     for doc in docs {
-        // Section heading: title + relative path
-        out.push_str(&format!("## {} ({})\n\n", doc.title, doc.path));
+        // Section heading: title + relative path, with optional [superseded] label
+        let superseded_label = if doc.superseded { " [superseded]" } else { "" };
+        out.push_str(&format!("## {}{} ({})\n\n", doc.title, superseded_label, doc.path));
         out.push_str(doc.body.trim_end());
         out.push_str("\n\n");
     }
@@ -304,6 +305,7 @@ pub fn run(
     threshold_override: Option<f32>,
     no_log: bool,
     log_path_override: Option<&str>,
+    include_superseded: bool,
 ) -> Result<i32> {
     // Start the wall-clock timer before any vault I/O so the logged duration_ms
     // captures the full computation (scan + index + gate + pack).
@@ -344,7 +346,7 @@ pub fn run(
     let format_str = format.to_string();
 
     let (outcome, diag) =
-        run_consult(task, &files, vault_root, &scope_types, &consult_config, mode)?;
+        run_consult(task, &files, vault_root, &scope_types, &consult_config, mode, include_superseded)?;
 
     // Best-effort JSONL logging (Decision 8). Any error is silently swallowed.
     // Precedence: --no-log wins over --log-path, which wins over config log_path.

@@ -186,6 +186,9 @@ enum Commands {
         /// Write this invocation's JSONL record to PATH instead of config log_path
         #[arg(long, value_name = "PATH")]
         log_path: Option<String>,
+        /// Include superseded entries (superseded: true) and checkpoints in consult scope
+        #[arg(long)]
+        include_superseded: bool,
     },
 }
 
@@ -320,6 +323,7 @@ fn main() -> Result<()> {
             threshold,
             no_log,
             log_path,
+            include_superseded,
         } => {
             let cfg = resolve_config(&cli)?;
             let exit_code = commands::consult_cmd::run(
@@ -331,6 +335,7 @@ fn main() -> Result<()> {
                 *threshold,
                 *no_log,
                 log_path.as_deref(),
+                *include_superseded,
             )?;
             if exit_code != 0 {
                 std::process::exit(exit_code);

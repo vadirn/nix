@@ -58,6 +58,9 @@ pub struct SelectedDoc {
     pub body: String,
     pub tokens: usize,
     pub links: Vec<String>,
+    /// True when this document has `superseded: true` in its frontmatter.
+    /// Only populated (and potentially true) when `--include-superseded` is set.
+    pub superseded: bool,
 }
 
 /// A sub-gate hit reported on ABSTAIN (Decision 16).
@@ -464,18 +467,24 @@ pub fn run_consult(
     scope_types: &[String],
     config: &ConsultConfig,
     mode: ConsultMode,
+    include_superseded: bool,
 ) -> Result<(ConsultOutcome, ConsultDiagnostics)> {
     // --- 1. Scope-before-index (Decision 11 + 13) ---
     //
     // Filter to files whose frontmatter `type` is in scope_types AND whose
     // `template` key is not `true`.  Mirrors the `run_by_type` exclusion in
     // `list.rs`.
+    // By default, also exclude entries with `superseded: true` frontmatter and
+    // entries with `type: checkpoint` (inherently superseded). Pass
+    // `include_superseded = true` to restore them.
     let in_scope: Vec<&VaultFile> = files
         .iter()
         .filter(|f| {
             let file_type = frontmatter::get_display(&f.frontmatter, "type");
             frontmatter::matches_type(&file_type, scope_types)
                 && !frontmatter::is_template(&f.frontmatter)
+                && (include_superseded || !frontmatter::is_superseded(&f.frontmatter))
+                && (include_superseded || file_type.as_str() != "checkpoint")
         })
         .collect();
 
@@ -671,15 +680,17 @@ pub fn run_consult(
         // so reuse it (leading newline removed) rather than rescanning the file.
         let body = hit.stored_body.trim_start_matches('\n').to_string();
 
-        // Resolve type and links from the full VaultFile when available.
-        let (doc_type, links) = if let Some(vf) = file_map.get(&hit.path) {
+        // Resolve type, links, and superseded flag from the full VaultFile when available.
+        let (doc_type, links, is_superseded_doc) = if let Some(vf) = file_map.get(&hit.path) {
             let t = {
                 let v = vf.get_property("type");
                 if v.is_empty() { None } else { Some(v) }
             };
-            (t, wikilink::collect_all_link_targets(vf))
+            let sup = frontmatter::is_superseded(&vf.frontmatter)
+                || vf.get_property("type") == "checkpoint";
+            (t, wikilink::collect_all_link_targets(vf), sup)
         } else {
-            (None, vec![])
+            (None, vec![], false)
         };
 
         let tokens = crate::tokens::estimate_tokens(&body);
@@ -701,6 +712,7 @@ pub fn run_consult(
                 body,
                 tokens,
                 links,
+                superseded: is_superseded_doc,
             });
         }
         // else: skip this doc and continue to next candidate.
@@ -832,6 +844,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -872,6 +885,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -918,6 +932,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -962,6 +977,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1011,6 +1027,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1093,6 +1110,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1163,6 +1181,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1225,6 +1244,7 @@ mod tests {
             &scope,
             &config_deliberate,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1239,6 +1259,7 @@ mod tests {
             &scope,
             &config_ambient,
             ConsultMode::Ambient,
+            false,
         )
         .unwrap();
 
@@ -1289,6 +1310,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1319,6 +1341,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1367,6 +1390,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1415,6 +1439,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1481,6 +1506,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1565,6 +1591,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1751,6 +1778,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1814,6 +1842,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
@@ -1860,6 +1889,7 @@ mod tests {
             &scope,
             &config,
             ConsultMode::Deliberate,
+            false,
         )
         .unwrap();
 
