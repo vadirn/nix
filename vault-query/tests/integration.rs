@@ -1027,3 +1027,257 @@ fn test_consult_checkpoint_excluded_by_default() {
         "checkpoint must be excluded from consult scope by default (include_superseded=false)"
     );
 }
+
+// ---------------------------------------------------------------------------
+// search / list / get / backlinks superseded labeling and --no-superseded tests
+// ---------------------------------------------------------------------------
+
+/// Helper: run `vault-query search` against the fixture vault.
+fn run_search(args: &[&str]) -> (String, i32) {
+    let mut cmd = Command::new(cargo_bin());
+    cmd.args(["search"])
+        .arg("--vault-root")
+        .arg(fixture_dir().to_str().unwrap());
+    for a in args {
+        cmd.arg(a);
+    }
+    let output = cmd.output().expect("failed to run vault-query search");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    (stdout, code)
+}
+
+/// Helper: run `vault-query list` against the fixture vault.
+fn run_list(args: &[&str]) -> (String, i32) {
+    let mut cmd = Command::new(cargo_bin());
+    cmd.args(["list", "20 cards"])
+        .arg("--vault-root")
+        .arg(fixture_dir().to_str().unwrap());
+    for a in args {
+        cmd.arg(a);
+    }
+    let output = cmd.output().expect("failed to run vault-query list");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    (stdout, code)
+}
+
+/// Helper: run `vault-query get` against the fixture vault.
+fn run_get(args: &[&str]) -> (String, i32) {
+    let mut cmd = Command::new(cargo_bin());
+    cmd.args(["get"])
+        .arg("--vault-root")
+        .arg(fixture_dir().to_str().unwrap());
+    for a in args {
+        cmd.arg(a);
+    }
+    let output = cmd.output().expect("failed to run vault-query get");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    (stdout, code)
+}
+
+/// search: a superseded entry (unique token "xkqzflpbvmt") appears in results by default,
+/// labeled with [superseded].
+#[test]
+fn test_search_labels_superseded_result() {
+    let (stdout, code) = run_search(&["xkqzflpbvmt"]);
+    assert_eq!(code, 0, "search must exit 0; stdout: {}", stdout);
+    assert!(
+        stdout.contains("[superseded]"),
+        "search output must label superseded results with [superseded]; stdout: {}",
+        stdout
+    );
+}
+
+/// search: superseded entries are ranked lower than fresh entries with comparable matches.
+/// The fixture "Superseded card.md" contains "xkqzflpbvmt" repeated 15 times.
+/// We create a fresh card also containing "xkqzflpbvmt" multiple times and verify it
+/// appears first (or at least that the superseded card's line has [superseded]).
+/// This test verifies the downrank via the JSON output's score field.
+#[test]
+fn test_search_superseded_downranked_below_fresh() {
+    // Create a temp vault with one superseded card and one fresh card, both containing
+    // the unique token "xkqzflpbvmt" many times. The fresh card must score higher.
+    let tmp = tempfile::tempdir().unwrap();
+    let vault_root = tmp.path().to_path_buf();
+    let cards_dir = vault_root.join("20 cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+
+    std::fs::write(
+        cards_dir.join("Fresh card.md"),
+        "---\ntype: card\n---\n\nxkqzflpbvmt xkqzflpbvmt xkqzflpbvmt xkqzflpbvmt xkqzflpbvmt\nxkqzflpbvmt xkqzflpbvmt xkqzflpbvmt xkqzflpbvmt xkqzflpbvmt\n",
+    )
+    .unwrap();
+    std::fs::write(
+        cards_dir.join("Superseded card.md"),
+        "---\ntype: card\nsuperseded: true\n---\n\nxkqzflpbvmt xkqzflpbvmt xkqzflpbvmt xkqzflpbvmt xkqzflpbvmt\nxkqzflpbvmt xkqzflpbvmt xkqzflpbvmt xkqzflpbvmt xkqzflpbvmt\n",
+    )
+    .unwrap();
+
+    let ignore = vault_query::vault_ignore::load(&vault_root, false).unwrap();
+    let cfg = ResolvedConfig {
+        vault_root: vault_root.clone(),
+        projects_path: None,
+        project_path: None,
+        lint: None,
+        consult: None,
+        ignore,
+    };
+
+    let results = vault_query::commands::search::collect_bm25_results_filtered(
+        "xkqzflpbvmt",
+        &cfg,
+        None,
+        10,
+        &[],
+        false, // include superseded but apply downrank
+    )
+    .unwrap();
+
+    assert!(results.len() >= 2, "expected at least 2 results, got {}", results.len());
+
+    let fresh = results.iter().find(|r| r.path.contains("Fresh card")).expect("fresh card not found");
+    let superseded = results.iter().find(|r| r.superseded).expect("superseded card not found");
+
+    assert!(
+        fresh.score > superseded.score,
+        "fresh card (score {:.4}) must outrank superseded card (score {:.4}) after 0.3 downrank",
+        fresh.score,
+        superseded.score,
+    );
+
+    // results are sorted descending: fresh must appear before superseded.
+    let fresh_pos = results.iter().position(|r| r.path.contains("Fresh card")).unwrap();
+    let sup_pos = results.iter().position(|r| r.superseded).unwrap();
+    assert!(
+        fresh_pos < sup_pos,
+        "fresh card must appear before superseded card in sorted results"
+    );
+}
+
+/// search --no-superseded: superseded entries are excluded entirely.
+#[test]
+fn test_search_no_superseded_excludes() {
+    let (stdout, code) = run_search(&["xkqzflpbvmt", "--no-superseded"]);
+    assert_eq!(code, 0, "search must exit 0; stdout: {}", stdout);
+    assert!(
+        !stdout.contains("[superseded]"),
+        "--no-superseded must not produce any [superseded] lines; stdout: {}",
+        stdout
+    );
+    // The unique token only appears in a superseded card, so the output must be empty.
+    assert!(
+        stdout.trim().is_empty(),
+        "--no-superseded must exclude the only matching (superseded) entry; stdout: {}",
+        stdout
+    );
+}
+
+/// list: superseded entries are labeled with [superseded] prefix.
+#[test]
+fn test_list_labels_superseded() {
+    let (stdout, code) = run_list(&[]);
+    assert_eq!(code, 0, "list must exit 0; stdout: {}", stdout);
+    assert!(
+        stdout.contains("[superseded]"),
+        "list output must label superseded entries with [superseded]; stdout: {}",
+        stdout
+    );
+    // The superseded card names must appear with the prefix.
+    let sup_lines: Vec<&str> = stdout.lines().filter(|l| l.starts_with("[superseded]")).collect();
+    assert!(
+        !sup_lines.is_empty(),
+        "expected at least one [superseded]-prefixed line; stdout: {}",
+        stdout
+    );
+}
+
+/// list --no-superseded: superseded entries are excluded.
+#[test]
+fn test_list_no_superseded_excludes() {
+    let (stdout, code) = run_list(&["--no-superseded"]);
+    assert_eq!(code, 0, "list must exit 0; stdout: {}", stdout);
+    assert!(
+        !stdout.contains("[superseded]"),
+        "--no-superseded list must not include any [superseded] lines; stdout: {}",
+        stdout
+    );
+    // Non-superseded entries must still appear.
+    assert!(
+        stdout.contains("Impureim sandwich") || stdout.contains("Test card"),
+        "non-superseded entries must still appear with --no-superseded; stdout: {}",
+        stdout
+    );
+}
+
+/// get: a superseded entry shows the [superseded] marker line.
+#[test]
+fn test_get_shows_superseded_marker() {
+    let (stdout, code) = run_get(&["superseded-card"]);
+    assert_eq!(code, 0, "get must exit 0 for superseded entry without --no-superseded; stdout: {}", stdout);
+    assert!(
+        stdout.contains("[superseded]"),
+        "get must emit [superseded] marker for superseded entries; stdout: {}",
+        stdout
+    );
+}
+
+/// get --no-superseded: exits 1 for a superseded entry.
+#[test]
+fn test_get_no_superseded_exits_1() {
+    let mut cmd = Command::new(cargo_bin());
+    let output = cmd
+        .args(["get", "superseded-card", "--no-superseded"])
+        .arg("--vault-root")
+        .arg(fixture_dir().to_str().unwrap())
+        .output()
+        .expect("failed to run vault-query get");
+    let code = output.status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 1,
+        "get --no-superseded must exit 1 for a superseded entry; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// backlinks: a superseded source is labeled with [superseded].
+/// "Superseded card with link.md" links to "Test card" and is superseded.
+#[test]
+fn test_backlinks_labels_superseded_source() {
+    let mut cmd = Command::new(cargo_bin());
+    let output = cmd
+        .args(["backlinks", "Test card.md"])
+        .arg("--vault-root")
+        .arg(fixture_dir().to_str().unwrap())
+        .output()
+        .expect("failed to run vault-query backlinks");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    assert_eq!(code, 0, "backlinks must exit 0; stdout: {}", stdout);
+    assert!(
+        stdout.contains("[superseded]"),
+        "backlinks must label superseded sources with [superseded]; stdout: {}",
+        stdout
+    );
+}
+
+/// backlinks --no-superseded: superseded sources are excluded.
+#[test]
+fn test_backlinks_no_superseded_excludes() {
+    let mut cmd = Command::new(cargo_bin());
+    let output = cmd
+        .args(["backlinks", "Test card.md", "--no-superseded"])
+        .arg("--vault-root")
+        .arg(fixture_dir().to_str().unwrap())
+        .output()
+        .expect("failed to run vault-query backlinks");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let code = output.status.code().unwrap_or(-1);
+    assert_eq!(code, 0, "backlinks must exit 0; stdout: {}", stdout);
+    assert!(
+        !stdout.contains("[superseded]"),
+        "--no-superseded backlinks must exclude superseded sources; stdout: {}",
+        stdout
+    );
+}

@@ -54,6 +54,7 @@ pub struct SearchResult {
     pub body: String,
     pub tokens: usize,
     pub links: Vec<String>,
+    pub superseded: bool,
 }
 
 /// The top-level JSON envelope.
@@ -73,11 +74,12 @@ pub fn run(
     limit: usize,
     format: SearchFormat,
     types: &[String],
+    no_superseded: bool,
 ) -> Result<()> {
     if regex_mode {
         return run_regex(query, cfg, context, subfolder, types);
     }
-    run_bm25(query, cfg, subfolder, limit, format, types)
+    run_bm25(query, cfg, subfolder, limit, format, types, no_superseded)
 }
 
 /// Scan the vault rooted at `root` and drop files whose frontmatter `type:` is
@@ -160,6 +162,9 @@ fn search_bm25(
 
 /// Build the BM25 index, run ranking, generate snippets, and return enriched results.
 /// Pass an empty `types` slice to return all document types (no filter).
+/// When `no_superseded` is true, entries with `superseded: true` or `type: checkpoint`
+/// are excluded from results entirely. Otherwise they are included but their scores
+/// are multiplied by 0.3 (post-retrieval downrank) and labeled `superseded: true`.
 ///
 /// Returns an empty Vec when no documents match (callers handle the empty case).
 ///
@@ -172,6 +177,7 @@ pub fn collect_bm25_results_filtered(
     subfolder: Option<&Path>,
     limit: usize,
     types: &[String],
+    no_superseded: bool,
 ) -> Result<Vec<SearchResult>> {
     let Some(hits) = search_bm25(query, cfg, subfolder, limit, types)? else {
         return Ok(vec![]);
@@ -192,7 +198,7 @@ pub fn collect_bm25_results_filtered(
         .collect();
 
     let mut results = Vec::new();
-    for (score, doc_address) in top_docs {
+    for (raw_score, doc_address) in top_docs {
         let doc: TantivyDocument = searcher.doc(doc_address)?;
         let path_val = doc
             .get_first(fields.path)
@@ -213,8 +219,8 @@ pub fn collect_bm25_results_filtered(
         let body_val = doc.get_first(fields.body).and_then(|v| v.as_str()).unwrap_or("");
         let snippet_plain = snippet_generator.snippet(body_val).fragment().to_string();
 
-        // Look up the VaultFile for type and links
-        let (doc_type, links, body_text) = if let Some(vf) = file_map.get(&path_val) {
+        // Look up the VaultFile for type, links, and superseded flag.
+        let (doc_type, links, body_text, is_sup) = if let Some(vf) = file_map.get(&path_val) {
             let t = {
                 let v = vf.get_property("type");
                 if v.is_empty() { None } else { Some(v) }
@@ -224,10 +230,19 @@ pub fn collect_bm25_results_filtered(
             let b = frontmatter::body(&vf.content)
                 .trim_start_matches('\n')
                 .to_string();
-            (t, l, b)
+            let sup = frontmatter::is_superseded(&vf.frontmatter)
+                || t.as_deref() == Some("checkpoint");
+            (t, l, b, sup)
         } else {
-            (None, vec![], body_val.trim_start_matches('\n').to_string())
+            (None, vec![], body_val.trim_start_matches('\n').to_string(), false)
         };
+
+        if no_superseded && is_sup {
+            continue;
+        }
+
+        // Downrank superseded entries by 0.3 post-retrieval.
+        let score = if is_sup { raw_score * 0.3 } else { raw_score };
 
         let tokens = crate::tokens::estimate_tokens(&body_text);
 
@@ -240,8 +255,12 @@ pub fn collect_bm25_results_filtered(
             body: body_text,
             tokens,
             links,
+            superseded: is_sup,
         });
     }
+
+    // Re-sort after score adjustment (Tantivy returns pre-downrank order).
+    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
     Ok(results)
 }
@@ -253,11 +272,12 @@ fn run_bm25(
     limit: usize,
     format: SearchFormat,
     types: &[String],
+    no_superseded: bool,
 ) -> Result<()> {
-    // JSON arm: delegate entirely to collect_bm25_results_filtered so the path exercises
-    // production index build + enrichment without duplication.
+    // Both arms delegate to collect_bm25_results_filtered so downranking and
+    // [superseded] labeling are applied uniformly; only snippet rendering differs.
     if format == SearchFormat::Json {
-        let results = collect_bm25_results_filtered(query, cfg, subfolder, limit, types)?;
+        let results = collect_bm25_results_filtered(query, cfg, subfolder, limit, types, no_superseded)?;
         let output = SearchOutput {
             query: query.to_string(),
             count: results.len(),
@@ -267,22 +287,57 @@ fn run_bm25(
         return Ok(());
     }
 
-    // Text arm: same plumbing via search_bm25; only the snippet rendering
-    // (asterisk highlighting from `to_html()`) differs from the JSON arm.
+    // Text arm: single index build via search_bm25; apply downranking and labeling inline.
     let Some(hits) = search_bm25(query, cfg, subfolder, limit, types)? else {
         return Ok(());
     };
 
-    for (score, doc_address) in hits.top_docs {
+    let vault_root = &cfg.vault_root;
+    let file_map: HashMap<String, &vault::VaultFile> = hits.files
+        .iter()
+        .map(|f| (f.relative_path(vault_root), f))
+        .collect();
+
+    // Build (adjusted_score, is_superseded, path, body_val) tuples, then sort.
+    struct TextEntry {
+        score: f32,
+        superseded: bool,
+        path: String,
+        body: String,
+    }
+    let mut entries: Vec<TextEntry> = Vec::new();
+    for (raw_score, doc_address) in hits.top_docs {
         let doc: TantivyDocument = hits.searcher.doc(doc_address)?;
         let path_val = doc
             .get_first(hits.fields.path)
             .and_then(|v| v.as_str())
-            .unwrap_or("");
-        println!("[{:.2}] {}", score, path_val);
+            .unwrap_or("")
+            .to_string();
+        let body_val = doc
+            .get_first(hits.fields.body)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
-        let body_val = doc.get_first(hits.fields.body).and_then(|v| v.as_str()).unwrap_or("");
-        let snippet = hits.snippet_generator.snippet(body_val);
+        let is_sup = file_map.get(&path_val).map(|vf| {
+            let file_type = frontmatter::get_display(&vf.frontmatter, "type");
+            frontmatter::is_superseded(&vf.frontmatter) || file_type == "checkpoint"
+        }).unwrap_or(false);
+
+        if no_superseded && is_sup {
+            continue;
+        }
+
+        let score = if is_sup { raw_score * 0.3 } else { raw_score };
+        entries.push(TextEntry { score, superseded: is_sup, path: path_val, body: body_val });
+    }
+    entries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+
+    for entry in &entries {
+        let sup_label = if entry.superseded { " [superseded]" } else { "" };
+        println!("[{:.2}]{} {}", entry.score, sup_label, entry.path);
+
+        let snippet = hits.snippet_generator.snippet(&entry.body);
         let html = snippet.to_html();
         if !html.is_empty() {
             // Convert <b>term</b> to *term* for terminal display
@@ -369,7 +424,7 @@ mod tests {
         let cfg = make_cfg(vault_root.clone());
 
         // Call production code directly — no index rebuild, no enrichment duplication.
-        let results = collect_bm25_results_filtered("alpha", &cfg, None, 10, &[]).unwrap();
+        let results = collect_bm25_results_filtered("alpha", &cfg, None, 10, &[], false).unwrap();
 
         assert!(!results.is_empty(), "expected at least one search result");
 
@@ -456,7 +511,7 @@ mod tests {
         // run() with a colon query must not error and must find the doc.
         // We verify by calling run_bm25 indirectly through run() with text format;
         // redirect stdout is not available in unit tests, so we check it does not panic/error.
-        let result = run("workflow: plan first", &cfg, 0, None, false, 10, SearchFormat::Text, &[]);
+        let result = run("workflow: plan first", &cfg, 0, None, false, 10, SearchFormat::Text, &[], false);
         assert!(result.is_ok(), "colon query must not return an error: {:?}", result.err());
     }
 
@@ -471,6 +526,7 @@ mod tests {
             body: "body text".to_string(),
             tokens: 2,
             links: vec![],
+            superseded: false,
         };
         let json = serde_json::to_string(&result).unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -504,7 +560,7 @@ mod tests {
         let cfg = make_cfg(vault_root.clone());
         let types_filter = vec!["card".to_string()];
         let results =
-            collect_bm25_results_filtered("luminary", &cfg, None, 10, &types_filter).unwrap();
+            collect_bm25_results_filtered("luminary", &cfg, None, 10, &types_filter, false).unwrap();
 
         assert!(!results.is_empty(), "expected at least one result for the card doc");
         for r in &results {
@@ -539,7 +595,7 @@ mod tests {
         .unwrap();
 
         let cfg = make_cfg(vault_root.clone());
-        let results = collect_bm25_results_filtered("luminary", &cfg, None, 10, &[]).unwrap();
+        let results = collect_bm25_results_filtered("luminary", &cfg, None, 10, &[], false).unwrap();
 
         let types_found: std::collections::HashSet<Option<&str>> =
             results.iter().map(|r| r.doc_type.as_deref()).collect();
@@ -599,7 +655,7 @@ mod tests {
         }
 
         // Also confirm the full run() path succeeds (output goes to stdout, not captured).
-        let result = run("quasar", &cfg, 0, None, true, 10, SearchFormat::Text, &types_filter);
+        let result = run("quasar", &cfg, 0, None, true, 10, SearchFormat::Text, &types_filter, false);
         assert!(result.is_ok(), "run() with --regex --types must not error: {:?}", result.err());
     }
 }

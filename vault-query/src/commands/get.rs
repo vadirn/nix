@@ -1,10 +1,8 @@
 use anyhow::Result;
 
-use crate::vault;
+use crate::{frontmatter, vault};
 
-
-
-pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig) -> Result<()> {
+pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: bool) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let paths = resolve_paths(fragment, cfg)?;
 
@@ -13,9 +11,25 @@ pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig) -> Result<()> {
         std::process::exit(1);
     } else if paths.len() == 1 {
         let full = vault_root.join(&paths[0]);
-        println!("{}", full.display());
-        println!("---");
         let content = std::fs::read_to_string(&full)?;
+
+        // Determine if the resolved entry is superseded.
+        let fm = frontmatter::parse(&content)
+            .unwrap_or(None)
+            .unwrap_or_default();
+        let file_type = frontmatter::get_display(&fm, "type");
+        let is_sup = frontmatter::is_superseded(&fm) || file_type == "checkpoint";
+
+        if no_superseded && is_sup {
+            eprintln!("Entry is superseded. Use without --no-superseded to retrieve it.");
+            std::process::exit(1);
+        }
+
+        println!("{}", full.display());
+        if is_sup {
+            println!("[superseded]");
+        }
+        println!("---");
         print!("{}", content);
     } else {
         for p in &paths {
