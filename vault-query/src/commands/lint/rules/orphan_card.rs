@@ -1,4 +1,5 @@
 use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
+use crate::frontmatter;
 
 pub struct OrphanCard;
 
@@ -14,6 +15,11 @@ impl Rule for OrphanCard {
     fn check(&self, ctx: &LintContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for card in &ctx.cards {
+            if frontmatter::is_superseded(&card.frontmatter)
+                || frontmatter::get_display(&card.frontmatter, "type").as_str() == "checkpoint"
+            {
+                continue;
+            }
             if is_folder_index(card) {
                 continue;
             }
@@ -160,5 +166,50 @@ mod tests {
         let paths: Vec<&PathBuf> = findings.iter().map(|f| &f.file).collect();
         assert!(paths.contains(&&PathBuf::from("/vault/20 cards/Alpha.md")));
         assert!(paths.contains(&&PathBuf::from("/vault/20 cards/Beta.md")));
+    }
+
+    fn superseded_card(name: &str, path: &str) -> crate::vault::VaultFile {
+        let mut fm = BTreeMap::new();
+        fm.insert("type".to_string(), Value::String("card".to_string()));
+        fm.insert("superseded".to_string(), Value::Bool(true));
+        crate::vault::VaultFile {
+            name: name.to_string(),
+            path: PathBuf::from(path),
+            frontmatter: fm,
+            ..Default::default()
+        }
+    }
+
+    fn checkpoint_file(name: &str, path: &str) -> crate::vault::VaultFile {
+        let mut fm = BTreeMap::new();
+        fm.insert("type".to_string(), Value::String("checkpoint".to_string()));
+        crate::vault::VaultFile {
+            name: name.to_string(),
+            path: PathBuf::from(path),
+            frontmatter: fm,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn superseded_card_with_no_backlinks_is_exempt() {
+        let card = superseded_card("OldConcept", "/vault/20 cards/OldConcept.md");
+        let files = vec![card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = OrphanCard.check(&ctx);
+        assert!(findings.is_empty(), "superseded card must not produce orphan-card finding");
+    }
+
+    #[test]
+    fn checkpoint_with_no_backlinks_is_exempt() {
+        let cp = checkpoint_file("checkpoint-001", "/vault/41 projects/nix/checkpoint-001.md");
+        let files = vec![cp];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = OrphanCard.check(&ctx);
+        assert!(findings.is_empty(), "checkpoint must not produce orphan-card finding");
     }
 }

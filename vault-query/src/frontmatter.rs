@@ -146,6 +146,13 @@ pub fn is_template(fm: &BTreeMap<String, Value>) -> bool {
     get_bool(fm, "template") == Some(true)
 }
 
+/// Return `true` when the file is marked `superseded: true`. Superseded entries
+/// are excluded from consult scope by default and may carry an optional
+/// `superseded_by: "[[...]]"` wikilink.
+pub fn is_superseded(fm: &BTreeMap<String, Value>) -> bool {
+    get_bool(fm, "superseded") == Some(true)
+}
+
 /// Parse a comma-separated type filter string into a `Vec<String>`.
 /// Trims whitespace and drops empty tokens.
 /// Provided for callers that receive a raw string (e.g. env-var or config file);

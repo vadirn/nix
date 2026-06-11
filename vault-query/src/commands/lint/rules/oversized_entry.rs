@@ -12,15 +12,15 @@ use crate::frontmatter;
 /// Scope: the knowledge types consult inlines (card, note, experiment).
 /// References are bookmarks, tracks/checkpoints are append-mostly project
 /// memory — all exempt, as are templates.
-pub struct OversizedDoc {
+pub struct OversizedEntry {
     pub per_doc_token_cap: usize,
 }
 
 const CHECKED_TYPES: [&str; 3] = ["card", "note", "experiment"];
 
-impl Rule for OversizedDoc {
+impl Rule for OversizedEntry {
     fn name(&self) -> &'static str {
-        "oversized-doc"
+        "oversized-entry"
     }
 
     fn default_severity(&self) -> Severity {
@@ -32,6 +32,11 @@ impl Rule for OversizedDoc {
 
         for file in ctx.files {
             if frontmatter::is_template(&file.frontmatter) {
+                continue;
+            }
+            if frontmatter::is_superseded(&file.frontmatter)
+                || frontmatter::get_display(&file.frontmatter, "type").as_str() == "checkpoint"
+            {
                 continue;
             }
 
@@ -97,7 +102,7 @@ mod tests {
     fn check_with_cap(files: Vec<crate::vault::VaultFile>, cap: usize) -> Vec<Finding> {
         let root = PathBuf::from("/vault");
         let ctx = LintContext::build(&root, &files, &[]);
-        OversizedDoc { per_doc_token_cap: cap }.check(&ctx)
+        OversizedEntry { per_doc_token_cap: cap }.check(&ctx)
     }
 
     // 50 reps × 10 chars = 500 chars → ~125 est tokens.
@@ -116,7 +121,7 @@ mod tests {
         )];
         let findings = check_with_cap(files, 100);
         assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].rule, "oversized-doc");
+        assert_eq!(findings[0].rule, "oversized-entry");
         assert_eq!(findings[0].severity, Severity::Warn);
         assert!(
             findings[0].message.contains("card 'BigCard'")
@@ -186,5 +191,45 @@ mod tests {
         )];
         assert_eq!(check_with_cap(files.clone(), 100).len(), 1);
         assert!(check_with_cap(files, 200).is_empty());
+    }
+
+    fn make_superseded_file(name: &str, path: &str, type_val: &str, body: &str) -> crate::vault::VaultFile {
+        let content = format!("---\ntype: {type_val}\nsuperseded: true\n---\n{body}");
+        let mut fm = BTreeMap::new();
+        fm.insert("type".to_string(), Value::String(type_val.to_string()));
+        fm.insert("superseded".to_string(), Value::Bool(true));
+        crate::vault::VaultFile {
+            name: name.to_string(),
+            path: PathBuf::from(path),
+            frontmatter: fm,
+            content,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn oversized_superseded_card_is_exempt() {
+        let files = vec![make_superseded_file(
+            "OldCard",
+            "/vault/20 cards/OldCard.md",
+            "card",
+            &big_body(),
+        )];
+        assert!(check_with_cap(files, 100).is_empty(), "superseded card must not fire oversized-entry");
+    }
+
+    #[test]
+    fn oversized_checkpoint_is_exempt() {
+        let content = format!("---\ntype: checkpoint\n---\n{}", big_body());
+        let mut fm = BTreeMap::new();
+        fm.insert("type".to_string(), Value::String("checkpoint".to_string()));
+        let file = crate::vault::VaultFile {
+            name: "checkpoint-001".to_string(),
+            path: PathBuf::from("/vault/41 projects/nix/checkpoint-001.md"),
+            frontmatter: fm,
+            content,
+            ..Default::default()
+        };
+        assert!(check_with_cap(vec![file], 1).is_empty(), "checkpoint must not fire oversized-entry");
     }
 }

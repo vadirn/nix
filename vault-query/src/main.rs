@@ -64,6 +64,9 @@ enum Commands {
     Backlinks {
         /// Path to the .md file
         file: PathBuf,
+        /// Exclude superseded entries (superseded: true or type: checkpoint)
+        #[arg(long)]
+        no_superseded: bool,
     },
     /// Run vault-wide lint rules
     Lint {
@@ -96,6 +99,9 @@ enum Commands {
         /// Filter by frontmatter `type:` (comma-separated). Default: all types.
         #[arg(long, value_delimiter = ',')]
         types: Vec<String>,
+        /// Exclude superseded entries (superseded: true or type: checkpoint)
+        #[arg(long)]
+        no_superseded: bool,
     },
     /// Resolve a slug to a vault file path
     Resolve {
@@ -109,6 +115,9 @@ enum Commands {
         /// Extra frontmatter fields to display (comma-separated)
         #[arg(long, value_delimiter = ',')]
         fields: Vec<String>,
+        /// Exclude superseded entries (superseded: true or type: checkpoint)
+        #[arg(long)]
+        no_superseded: bool,
     },
     /// List files in the vault
     Files {
@@ -141,6 +150,9 @@ enum Commands {
     Get {
         /// Name fragment to resolve
         fragment: String,
+        /// Exclude superseded entries: exit 1 if the resolved entry is superseded
+        #[arg(long)]
+        no_superseded: bool,
     },
     /// List all cards with metadata
     Cards,
@@ -186,6 +198,9 @@ enum Commands {
         /// Write this invocation's JSONL record to PATH instead of config log_path
         #[arg(long, value_name = "PATH")]
         log_path: Option<String>,
+        /// Include superseded entries (superseded: true) and checkpoints in consult scope
+        #[arg(long)]
+        include_superseded: bool,
     },
 }
 
@@ -224,9 +239,9 @@ fn main() -> Result<()> {
             commands::tags::run(&cfg, sort)
         }
         Commands::Links { file } => commands::links::run(file),
-        Commands::Backlinks { file } => {
+        Commands::Backlinks { file, no_superseded } => {
             let cfg = resolve_config(&cli)?;
-            commands::backlinks::run(file, &cfg)
+            commands::backlinks::run(file, &cfg, *no_superseded)
         }
         Commands::Lint { format, rule } => {
             let cfg = resolve_config(&cli)?;
@@ -244,9 +259,10 @@ fn main() -> Result<()> {
             limit,
             format,
             types,
+            no_superseded,
         } => {
             let cfg = resolve_config(&cli)?;
-            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format, types)
+            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format, types, *no_superseded)
         }
         Commands::Resolve { slug } => {
             let cfg = resolve_config(&cli)?;
@@ -256,9 +272,9 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Commands::List { folder, fields } => {
+        Commands::List { folder, fields, no_superseded } => {
             let cfg = resolve_config(&cli)?;
-            commands::list::run(&cfg, folder, fields)
+            commands::list::run(&cfg, folder, fields, *no_superseded)
         }
         Commands::Files {
             folder,
@@ -284,21 +300,21 @@ fn main() -> Result<()> {
             let cfg = resolve_config(&cli)?;
             commands::tracks::init(&cfg)
         }
-        Commands::Get { fragment } => {
+        Commands::Get { fragment, no_superseded } => {
             let cfg = resolve_config(&cli)?;
-            commands::get::run(fragment, &cfg)
+            commands::get::run(fragment, &cfg, *no_superseded)
         }
         Commands::Cards => {
             let cfg = resolve_config(&cli)?;
-            commands::list::run_by_type(&cfg, "card", &["reference".to_string()])
+            commands::list::run_by_type(&cfg, "card", &["reference".to_string()], false)
         }
         Commands::Notes => {
             let cfg = resolve_config(&cli)?;
-            commands::list::run_by_type(&cfg, "note", &[])
+            commands::list::run_by_type(&cfg, "note", &[], false)
         }
         Commands::Experiments => {
             let cfg = resolve_config(&cli)?;
-            commands::list::run_by_type(&cfg, "experiment", &[])
+            commands::list::run_by_type(&cfg, "experiment", &[], false)
         }
         Commands::Projects { view } => {
             let cfg = resolve_config(&cli)?;
@@ -320,6 +336,7 @@ fn main() -> Result<()> {
             threshold,
             no_log,
             log_path,
+            include_superseded,
         } => {
             let cfg = resolve_config(&cli)?;
             let exit_code = commands::consult_cmd::run(
@@ -331,6 +348,7 @@ fn main() -> Result<()> {
                 *threshold,
                 *no_log,
                 log_path.as_deref(),
+                *include_superseded,
             )?;
             if exit_code != 0 {
                 std::process::exit(exit_code);

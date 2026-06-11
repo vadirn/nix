@@ -6,12 +6,20 @@ use crate::wikilink;
 
 /// List markdown files in a folder with frontmatter metadata.
 /// Output format: `title — description [tags] (field: value)`
-pub fn run(cfg: &crate::config::ResolvedConfig, folder: &str, fields: &[String]) -> Result<()> {
+pub fn run(cfg: &crate::config::ResolvedConfig, folder: &str, fields: &[String], no_superseded: bool) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     let matching: Vec<&VaultFile> = files
         .iter()
-        .filter(|f| f.in_folder(folder, vault_root))
+        .filter(|f| {
+            if !f.in_folder(folder, vault_root) {
+                return false;
+            }
+            if no_superseded && is_entry_superseded(f) {
+                return false;
+            }
+            true
+        })
         .collect();
     print_listing(matching, fields);
     Ok(())
@@ -21,18 +29,34 @@ pub fn run(cfg: &crate::config::ResolvedConfig, folder: &str, fields: &[String])
 /// Folder placement is irrelevant; the `type` key is the authoritative classifier.
 /// Files marked `template: true` are excluded — templates carry the same `type`
 /// as their instances but are not themselves instances.
-pub fn run_by_type(cfg: &crate::config::ResolvedConfig, type_value: &str, fields: &[String]) -> Result<()> {
+pub fn run_by_type(cfg: &crate::config::ResolvedConfig, type_value: &str, fields: &[String], no_superseded: bool) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     let matching: Vec<&VaultFile> = files
         .iter()
         .filter(|f| {
-            frontmatter::get_display(&f.frontmatter, "type") == type_value
-                && !frontmatter::is_template(&f.frontmatter)
+            let file_type = frontmatter::get_display(&f.frontmatter, "type");
+            if file_type != type_value {
+                return false;
+            }
+            if frontmatter::is_template(&f.frontmatter) {
+                return false;
+            }
+            if no_superseded && is_entry_superseded(f) {
+                return false;
+            }
+            true
         })
         .collect();
     print_listing(matching, fields);
     Ok(())
+}
+
+/// Returns true when a VaultFile is superseded: either `superseded: true` in frontmatter
+/// or `type: checkpoint`.
+fn is_entry_superseded(f: &VaultFile) -> bool {
+    frontmatter::is_superseded(&f.frontmatter)
+        || frontmatter::get_display(&f.frontmatter, "type") == "checkpoint"
 }
 
 fn print_listing(mut files: Vec<&VaultFile>, fields: &[String]) {
@@ -42,7 +66,8 @@ fn print_listing(mut files: Vec<&VaultFile>, fields: &[String]) {
         let desc = frontmatter::get_display(&file.frontmatter, "description");
         let tags = frontmatter::get_display(&file.frontmatter, "tags");
 
-        let mut line = file.name.clone();
+        let sup_prefix = if is_entry_superseded(file) { "[superseded] " } else { "" };
+        let mut line = format!("{}{}", sup_prefix, file.name);
         if !desc.is_empty() {
             line.push_str(" — ");
             line.push_str(&desc);

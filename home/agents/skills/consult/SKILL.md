@@ -61,8 +61,9 @@ else:                                 // exit 1 (runtime) or 2 (bad CLI invocati
   external content (URL + a one-line description), not the user's prior thinking, so they are excluded
   from the default. Opt in with `--types card,note,experiment,reference` when the task is about finding
   what the user has *read* on a topic rather than what they *think*. Reach time-bound project memory
-  deliberately with `--types track,checkpoint` when the task is specifically about prior project decisions
-  rather than reusable knowledge.
+  deliberately with `--types track` when the task is specifically about prior project decisions rather
+  than reusable knowledge; checkpoints are superseded entries, so reaching one also needs
+  `--include-superseded` (e.g. `--types track,checkpoint --include-superseded`).
 - `--format markdown` (the default) returns a paste-ready block. Use `--format json` only when you need
   the structured envelope (path, title, type, score, body, tokens, links) for programmatic handling.
 - Pass `--ambient` only on the unattended hook path; as a deliberate caller, use the higher-recall default gate (omit the flag).

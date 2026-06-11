@@ -1,6 +1,6 @@
 use super::rule::Rule;
 
-/// `per_doc_token_cap` parameterizes `oversized-doc` with the consult packer's
+/// `per_doc_token_cap` parameterizes `oversized-entry` with the consult packer's
 /// threshold (`ConsultConfig.per_doc_token_cap`), keeping one source of truth.
 pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
     vec![
@@ -10,10 +10,11 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::invalid_frontmatter::InvalidFrontmatter),
         Box::new(super::rules::missing_required_field::MissingRequiredField),
         Box::new(super::rules::orphan_card::OrphanCard),
-        Box::new(super::rules::oversized_doc::OversizedDoc { per_doc_token_cap }),
+        Box::new(super::rules::oversized_entry::OversizedEntry { per_doc_token_cap }),
         Box::new(super::rules::reference_not_wikilink::ReferenceNotWikilink),
         Box::new(super::rules::singleton_tag::SingletonTag),
         Box::new(super::rules::untagged_card::UntaggedCard),
+        Box::new(super::rules::untyped_entry::UntypedEntry),
     ]
 }
 

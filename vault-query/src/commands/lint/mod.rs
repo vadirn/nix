@@ -36,7 +36,7 @@ pub fn run_with_writer<W: Write>(
 
     let overrides = effective_severities(cfg.lint.as_ref(), cli_rules)?;
 
-    // The oversized-doc threshold is the consult packer's per-doc cap.
+    // The oversized-entry threshold is the consult packer's per-doc cap.
     let per_doc_token_cap = cfg
         .consult
         .as_ref()
