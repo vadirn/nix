@@ -8,3 +8,4 @@ pub mod oversized_entry;
 pub mod reference_not_wikilink;
 pub mod singleton_tag;
 pub mod untagged_card;
+pub mod untyped_entry;

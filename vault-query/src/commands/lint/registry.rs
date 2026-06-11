@@ -14,6 +14,7 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::reference_not_wikilink::ReferenceNotWikilink),
         Box::new(super::rules::singleton_tag::SingletonTag),
         Box::new(super::rules::untagged_card::UntaggedCard),
+        Box::new(super::rules::untyped_entry::UntypedEntry),
     ]
 }
 
