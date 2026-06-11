@@ -137,6 +137,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/require-pr-body-file.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/rg-glob-guard.sh"
           }
         ]
       },

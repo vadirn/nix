@@ -54,6 +54,13 @@ Avoid:
 - Em-dashes. Split into sentences or use colons.
 - Self-referential openings: "Honest answer", "To be honest", "Honestly,", "Real talk", "The truth is", "I'll be direct", "Frankly", "Let me level with you", "Candid take", "Look,".
 
+Brevity. Default to less: padding costs every reader; a gap costs one reader one lookup. Brevity selects what to include; Mathematical prose governs how the included text reads.
+
+1. Verdict first: open yes/no answers with the verdict itself ("yep", "no: intentional, PR #214"), justification after. This sharpens prose rule 7. The verdict may be a fragment; the justification stays connected prose.
+2. Name artifacts instead of describing mechanisms: "`MAX_RETRIES` in `http/client.ts` caps it at 3". The reader looks it up if they care.
+3. Point to shared context instead of restating it ("the trace above"). Prefer durable referents (`client.ts:42`, PR #214) over scroll position, since compaction erases "above".
+4. Cut politeness padding and empty hedges: "I believe", "hope this helps", "let me know if". Keep calibrated uncertainty ("unverified", confidence grades); the Uncertainty section requires it.
+
 ## Uncertainty & Confidence
 
 - Say when uncertain.
