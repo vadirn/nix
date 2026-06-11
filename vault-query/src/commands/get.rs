@@ -2,9 +2,29 @@ use anyhow::Result;
 
 use crate::{frontmatter, vault};
 
+/// Return true if the file at `full_path` is superseded (frontmatter `superseded: true`
+/// or `type: checkpoint`). Returns false if the file cannot be read or parsed.
+fn path_is_superseded(full_path: &std::path::Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(full_path) else {
+        return false;
+    };
+    let fm = frontmatter::parse(&content)
+        .unwrap_or(None)
+        .unwrap_or_default();
+    let file_type = frontmatter::get_display(&fm, "type");
+    frontmatter::is_superseded(&fm) || file_type == "checkpoint"
+}
+
 pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: bool) -> Result<()> {
     let vault_root = &cfg.vault_root;
-    let paths = resolve_paths(fragment, cfg)?;
+    let mut paths = resolve_paths(fragment, cfg)?;
+
+    // Apply --no-superseded filter before branching on path count so that a single
+    // surviving non-superseded match resolves normally instead of falling through to
+    // the multi-match listing or the no-match exit.
+    if no_superseded {
+        paths.retain(|p| !path_is_superseded(&vault_root.join(p)));
+    }
 
     if paths.is_empty() {
         eprintln!("No matches for '{}'", fragment);
@@ -20,6 +40,9 @@ pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: b
         let file_type = frontmatter::get_display(&fm, "type");
         let is_sup = frontmatter::is_superseded(&fm) || file_type == "checkpoint";
 
+        // With --no-superseded the path was already filtered out above, so this
+        // branch only triggers for the single-match case without the flag, or for a
+        // superseded single match when the flag is absent.
         if no_superseded && is_sup {
             eprintln!("Entry is superseded. Use without --no-superseded to retrieve it.");
             std::process::exit(1);
@@ -32,8 +55,11 @@ pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: b
         println!("---");
         print!("{}", content);
     } else {
+        // Multi-match: list all candidates. Append [superseded] label where applicable.
         for p in &paths {
-            println!("{}", vault_root.join(p).display());
+            let full = vault_root.join(p);
+            let sup_label = if path_is_superseded(&full) { " [superseded]" } else { "" };
+            println!("{}{}", full.display(), sup_label);
         }
     }
     Ok(())

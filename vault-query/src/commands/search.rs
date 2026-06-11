@@ -142,7 +142,12 @@ fn search_bm25(
     let sanitized = sanitize_query(query);
     let parsed = query_parser.parse_query(&sanitized)?;
 
-    let top_docs = searcher.search(&parsed, &TopDocs::with_limit(limit))?;
+    // Use the full candidate set so that filter/downrank steps in callers operate
+    // over all matching docs, not just the pre-truncated top-N. This prevents
+    // superseded entries from consuming limit slots (--no-superseded) and lets a
+    // downranked doc be displaced by a non-superseded doc just outside the raw top-N.
+    let full_limit = files.len().max(limit);
+    let top_docs = searcher.search(&parsed, &TopDocs::with_limit(full_limit))?;
 
     if top_docs.is_empty() {
         return Ok(None);
@@ -262,6 +267,9 @@ pub fn collect_bm25_results_filtered(
     // Re-sort after score adjustment (Tantivy returns pre-downrank order).
     results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
+    // Truncate to the caller's requested limit now that filtering and re-sorting are done.
+    results.truncate(limit);
+
     Ok(results)
 }
 
@@ -332,6 +340,7 @@ fn run_bm25(
         entries.push(TextEntry { score, superseded: is_sup, path: path_val, body: body_val });
     }
     entries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    entries.truncate(limit);
 
     for entry in &entries {
         let sup_label = if entry.superseded { " [superseded]" } else { "" };
