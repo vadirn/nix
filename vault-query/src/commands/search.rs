@@ -77,7 +77,7 @@ pub fn run(
     no_superseded: bool,
 ) -> Result<()> {
     if regex_mode {
-        return run_regex(query, cfg, context, subfolder, types);
+        return run_regex(query, cfg, context, subfolder, types, no_superseded);
     }
     run_bm25(query, cfg, subfolder, limit, format, types, no_superseded)
 }
@@ -358,6 +358,7 @@ fn run_regex(
     context: usize,
     subfolder: Option<&Path>,
     types: &[String],
+    no_superseded: bool,
 ) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let re = Regex::new(query)?;
@@ -367,6 +368,14 @@ fn run_regex(
     let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
 
     for file in &files {
+        let file_type = frontmatter::get_display(&file.frontmatter, "type");
+        let is_sup = frontmatter::is_superseded(&file.frontmatter)
+            || file_type.as_str() == "checkpoint";
+
+        if no_superseded && is_sup {
+            continue;
+        }
+
         let lines: Vec<&str> = file.content.lines().collect();
         let mut printed_header = false;
 
@@ -374,7 +383,8 @@ fn run_regex(
             if re.is_match(line) {
                 if !printed_header {
                     let rel = file.relative_path(vault_root);
-                    println!("{}:", rel);
+                    let sup_label = if is_sup { " [superseded]" } else { "" };
+                    println!("{}{}:", rel, sup_label);
                     printed_header = true;
                 }
 

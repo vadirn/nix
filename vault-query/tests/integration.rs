@@ -394,6 +394,61 @@ fn test_regex_mode_context() {
     assert!(!context_lines.is_empty(), "expected context lines in output: {}", stdout);
 }
 
+/// regex search: a superseded entry matching the pattern is labeled "[superseded]" in output.
+/// "Superseded card.md" has `superseded: true` and contains the unique token "xkqzflpbvmt".
+#[test]
+fn test_regex_labels_superseded_result() {
+    let output = Command::new(cargo_bin())
+        .args([
+            "search",
+            "xkqzflpbvmt",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+            "--regex",
+        ])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        output.status.success(),
+        "regex search must exit 0; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("[superseded]"),
+        "regex output must label superseded entry with [superseded]; stdout: {}",
+        stdout
+    );
+}
+
+/// regex search --no-superseded: superseded entries are excluded entirely.
+/// "Superseded card.md" is the only file containing "xkqzflpbvmt", so output must be empty.
+#[test]
+fn test_regex_no_superseded_excludes() {
+    let output = Command::new(cargo_bin())
+        .args([
+            "search",
+            "xkqzflpbvmt",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+            "--regex",
+            "--no-superseded",
+        ])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        output.status.success(),
+        "regex search --no-superseded must exit 0; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.trim().is_empty(),
+        "--no-superseded must exclude the only matching superseded entry; stdout: {:?}",
+        stdout
+    );
+}
+
 // --- files --tag tests ---
 
 #[test]
