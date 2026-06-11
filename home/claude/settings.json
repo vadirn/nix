@@ -6,14 +6,15 @@
     "ENABLE_TOOL_SEARCH": "auto:5",
     "MAX_STRUCTURED_OUTPUT_RETRIES": "3",
     "CLAUDE_CODE_NO_FLICKER": "1",
-    "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING": "1",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
     "BASECAMP_NO_KEYRING": "1",
     "BASECAMP_HINTS": "false",
     "BASECAMP_STATS": "false",
     "CLAUDE_CODE_WORKFLOWS": "1"
   },
-  "includeCoAuthoredBy": false,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
     "allow": [
       "Skill(writing-ru)",
@@ -79,6 +80,7 @@
     "deny": [],
     "defaultMode": "auto"
   },
+  "model": "fable",
   "enableAllProjectMcpServers": true,
   "hooks": {
     "Notification": [
@@ -100,6 +102,16 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/post-tool-format.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "^Edit$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/queue-format.sh",
             "timeout": 5
           }
         ]
@@ -194,6 +206,11 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/flush-format-queue.sh",
+            "timeout": 60
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/stop-verify.sh",
             "timeout": 120
           }
@@ -280,11 +297,9 @@
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "effortLevel": "xhigh",
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
-  "skipAutoPermissionPrompt": true,
-  "model": "fable"
+  "skipAutoPermissionPrompt": true
 }
