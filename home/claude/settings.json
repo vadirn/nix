@@ -80,7 +80,6 @@
     "deny": [],
     "defaultMode": "auto"
   },
-  "model": "fable",
   "enableAllProjectMcpServers": true,
   "hooks": {
     "Notification": [
