@@ -60,10 +60,12 @@ enum Commands {
         #[arg(long, default_value = "text")]
         format: commands::read::ReadFormat,
     },
-    /// Show frontmatter properties of a file
+    /// Show frontmatter properties of a file, or read one field by path
     Properties {
         /// Path to the .md file
         file: PathBuf,
+        /// Optional field path: dotted keys with [i] indices (e.g. references[0].target)
+        path: Option<String>,
         /// Output format
         #[arg(long, default_value = "table")]
         format: output::Format,
@@ -260,7 +262,9 @@ fn main() -> Result<()> {
             threshold,
             format,
         } => commands::read::run(file, address.as_deref(), *depth, *full, *threshold, *format),
-        Commands::Properties { file, format } => commands::properties::run(file, *format),
+        Commands::Properties { file, path, format } => {
+            commands::properties::run(file, path.as_deref(), *format)
+        }
         Commands::Tags { sort } => {
             let cfg = resolve_config(&cli)?;
             commands::tags::run(&cfg, sort)
