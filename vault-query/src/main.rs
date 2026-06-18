@@ -41,6 +41,25 @@ enum Commands {
         #[arg(long, default_value = "table")]
         format: output::Format,
     },
+    /// Read a .md file: folded overview, or unfold an addressed section
+    Read {
+        /// Path to the .md file
+        file: PathBuf,
+        /// Section address: numeric (e.g. 2.1), heading slug, or 0/text
+        address: Option<String>,
+        /// Max levels to expand under the addressed node (Step 2)
+        #[arg(long)]
+        depth: Option<usize>,
+        /// Expand everything, ignoring threshold and depth (Step 2)
+        #[arg(long)]
+        full: bool,
+        /// Inline cutoff in estimated tokens (Step 2)
+        #[arg(long)]
+        threshold: Option<usize>,
+        /// Output format: text (default) or json
+        #[arg(long, default_value = "text")]
+        format: commands::read::ReadFormat,
+    },
     /// Show frontmatter properties of a file
     Properties {
         /// Path to the .md file
@@ -233,6 +252,14 @@ fn main() -> Result<()> {
             let cfg = resolve_config(&cli)?;
             commands::query::run(base_path, view, &cfg, *format)
         }
+        Commands::Read {
+            file,
+            address,
+            depth,
+            full,
+            threshold,
+            format,
+        } => commands::read::run(file, address.as_deref(), *depth, *full, *threshold, *format),
         Commands::Properties { file, format } => commands::properties::run(file, *format),
         Commands::Tags { sort } => {
             let cfg = resolve_config(&cli)?;

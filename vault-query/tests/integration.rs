@@ -1600,3 +1600,168 @@ fn test_get_multi_match_labels_superseded_candidate() {
         stdout
     );
 }
+
+// --- read command tests -----------------------------------------------------
+
+fn read_fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/read").join(name)
+}
+
+#[test]
+fn test_read_overview_header_and_tree() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // Frontmatter field names (no count), alphabetized by BTreeMap key order.
+    let fields_line = stdout.lines().find(|l| l.starts_with("fields:")).expect("fields line");
+    for f in ["type", "slug", "description", "status"] {
+        assert!(fields_line.contains(f), "missing field {} in: {}", f, fields_line);
+    }
+    // Link count: 3 wikilinks in the fixture body.
+    assert!(stdout.lines().any(|l| l.trim() == "links: 3"), "expected 'links: 3'; got:\n{}", stdout);
+
+    // Text region line present with its label.
+    assert!(stdout.contains("[0]") && stdout.contains("(text)"), "missing text region: {}", stdout);
+
+    // Tree: Direction is a parent (marked '+'), Glossary is a leaf, addresses numbered.
+    let dir_line = stdout.lines().find(|l| l.contains("Direction")).expect("Direction line");
+    assert!(dir_line.trim_start().starts_with('+'), "Direction should be a parent (+): {}", dir_line);
+    assert!(stdout.lines().any(|l| l.contains("1.1") && l.contains("Background")), "missing 1.1 Background");
+    assert!(stdout.lines().any(|l| l.contains("1.2") && l.contains("Goals")), "missing 1.2 Goals");
+
+    // Illustrative next: footer.
+    assert!(stdout.lines().any(|l| l.starts_with("next:")), "missing next: footer: {}", stdout);
+}
+
+#[test]
+fn test_read_overview_json_shape() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+
+    assert!(v["path"].is_string());
+    assert!(v["fields"].as_array().unwrap().len() >= 4);
+    assert_eq!(v["links"].as_u64().unwrap(), 3);
+
+    // Text node present with address 0 and label (text).
+    assert_eq!(v["text"]["address"], "0");
+    assert_eq!(v["text"]["label"], "(text)");
+    assert!(v["text"]["tokens"].as_u64().unwrap() > 0);
+
+    // Tree: 4 top-level nodes; Direction has 2 children.
+    let tree = v["tree"].as_array().unwrap();
+    assert_eq!(tree.len(), 4);
+    assert_eq!(tree[0]["address"], "1");
+    assert_eq!(tree[0]["heading"], "Direction");
+    assert_eq!(tree[0]["slug"], "direction");
+    assert_eq!(tree[0]["children"].as_array().unwrap().len(), 2);
+    assert_eq!(tree[0]["children"][0]["address"], "1.1");
+}
+
+#[test]
+fn test_read_numeric_section() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "1.1"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Header line carries address + heading + line; body carries the heading text.
+    assert!(stdout.contains("1.1") && stdout.contains("Background"), "missing 1.1 header: {}", stdout);
+    assert!(stdout.contains("Background body line one."), "missing section body: {}", stdout);
+    // Should NOT include the sibling Goals body.
+    assert!(!stdout.contains("Goal body."), "1.1 must not leak sibling body: {}", stdout);
+}
+
+#[test]
+fn test_read_slug_section_json() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "glossary", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).unwrap();
+    assert_eq!(v["address"], "2");
+    assert_eq!(v["heading"], "Glossary");
+    assert_eq!(v["slug"], "glossary");
+    assert!(v["content"].as_str().unwrap().contains("| Term | Definition |"));
+}
+
+#[test]
+fn test_read_text_address() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "0"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("(text)"), "missing text label: {}", stdout);
+    assert!(stdout.contains("Lede prose before any heading."), "missing lede body: {}", stdout);
+    // The `text` keyword resolves identically.
+    let output2 = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "text"])
+        .output()
+        .unwrap();
+    assert!(output2.status.success());
+    assert!(String::from_utf8(output2.stdout).unwrap().contains("Lede prose before any heading."));
+}
+
+#[test]
+fn test_read_headingless_whole_body_is_text() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("headingless.md").to_str().unwrap(), "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).unwrap();
+    assert_eq!(v["tree"].as_array().unwrap().len(), 0, "heading-less file has no tree");
+    assert_eq!(v["text"]["address"], "0");
+    assert!(v["text"]["lines"].as_u64().unwrap() > 0);
+}
+
+#[test]
+fn test_read_ambiguous_slug_exits_1() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "log-notes"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "ambiguous slug must exit 1");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("Ambiguous"), "expected ambiguity message on stderr: {}", stderr);
+    // Both colliding candidates listed.
+    assert!(stderr.contains("Log & Notes") && stderr.contains("Log Notes"), "candidates: {}", stderr);
+    // Candidates go to stderr, not stdout.
+    assert!(String::from_utf8(output.stdout).unwrap().is_empty(), "stdout must be empty on error");
+}
+
+#[test]
+fn test_read_unknown_address_exits_1() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "nonexistent-slug"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+
+    let oob = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "99"])
+        .output()
+        .unwrap();
+    assert_eq!(oob.status.code(), Some(1), "out-of-range numeric must exit 1");
+}
+
+#[test]
+fn test_read_unreadable_file_exits_1() {
+    let output = Command::new(cargo_bin())
+        .args(["read", read_fixture("does-not-exist.md").to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "unreadable file must exit 1");
+}
