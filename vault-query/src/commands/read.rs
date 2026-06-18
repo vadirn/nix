@@ -492,6 +492,163 @@ fn node_to_json(n: &Node, lines: &[&str]) -> NodeJson {
     }
 }
 
+/// One child entry in an unfolded section's JSON output. `content` is present
+/// only when the child was inlined; `folded` is true when it was folded.
+#[derive(Serialize)]
+struct UnfoldChildJson {
+    address: String,
+    heading: String,
+    line: usize,
+    lines: usize,
+    tokens: usize,
+    folded: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+}
+
+#[derive(Serialize)]
+struct UnfoldJson {
+    path: String,
+    address: String,
+    heading: String,
+    slug: String,
+    line: usize,
+    lines: usize,
+    tokens: usize,
+    content: String,
+    children: Vec<UnfoldChildJson>,
+}
+
+// ---- Smart-unfold (Step 2, Backlog 5) ------------------------------------
+
+/// Estimated tokens covered by a node's full range (heading through descendants).
+fn node_tokens(n: &Node, lines: &[&str]) -> usize {
+    tokens::estimate_tokens(&range_slice(lines, n.start, n.end))
+}
+
+/// Decide whether a child at `level_depth` levels below the addressed node is
+/// inlined (recursed into) or folded to a placeholder.
+///
+/// `--full` forces inline. Otherwise inline requires both:
+///   - within the depth budget (`level_depth < depth` when `depth` is set;
+///     unlimited when `None`), and
+///   - `child.tokens <= threshold`.
+fn should_inline(
+    child: &Node,
+    lines: &[&str],
+    level_depth: usize,
+    depth: Option<usize>,
+    threshold: usize,
+    full: bool,
+) -> bool {
+    if full {
+        return true;
+    }
+    let within_depth = depth.map_or(true, |d| level_depth < d);
+    within_depth && node_tokens(child, lines) <= threshold
+}
+
+/// Render the addressed node's own prose: the lines from `own_start` (the
+/// heading line) through the line before its first child heading, or the node's
+/// range end when it has no children.
+fn own_prose(n: &Node, lines: &[&str]) -> String {
+    let own_end = n
+        .children
+        .first()
+        .map_or(n.end, |c| c.start.saturating_sub(1));
+    range_slice(lines, n.start, own_end)
+}
+
+/// Recursively emit a node's unfolded text. `level_depth` counts levels below
+/// the addressed node (0 at the addressed node itself). Prints the node's own
+/// prose, then for each child either recurses (inline) or emits a folded
+/// placeholder line matching the overview tree line exactly.
+fn unfold_text(
+    n: &Node,
+    lines: &[&str],
+    level_depth: usize,
+    depth: Option<usize>,
+    threshold: usize,
+    full: bool,
+) {
+    let prose = own_prose(n, lines);
+    print!("{}", prose);
+    if !prose.is_empty() && !prose.ends_with('\n') {
+        println!();
+    }
+    for child in &n.children {
+        if should_inline(child, lines, level_depth, depth, threshold, full) {
+            unfold_text(child, lines, level_depth + 1, depth, threshold, full);
+        } else {
+            // Folded placeholder identical to the overview tree line so the
+            // reader can drill further with the same address grammar.
+            print_tree_line_single(child, lines);
+        }
+    }
+}
+
+/// Recursively build a child's unfold JSON. When inlined, `content` holds the
+/// child's own prose plus its (recursively unfolded) descendants, and `folded`
+/// is false; when folded, `content` is omitted and `folded` is true.
+fn unfold_child_json(
+    n: &Node,
+    lines: &[&str],
+    level_depth: usize,
+    depth: Option<usize>,
+    threshold: usize,
+    full: bool,
+) -> UnfoldChildJson {
+    let inline = should_inline(n, lines, level_depth, depth, threshold, full);
+    let content = if inline {
+        Some(unfold_content_string(n, lines, level_depth, depth, threshold, full))
+    } else {
+        None
+    };
+    UnfoldChildJson {
+        address: n.address.clone(),
+        heading: n.heading.clone(),
+        line: n.line,
+        lines: range_lines(n.start, n.end),
+        tokens: node_tokens(n, lines),
+        folded: !inline,
+        content,
+    }
+}
+
+/// Build the unfolded content string for a node: its own prose, then for each
+/// child either the recursively-unfolded text (inline) or a folded placeholder
+/// line. Mirrors `unfold_text` but returns a string instead of printing, for
+/// JSON embedding.
+fn unfold_content_string(
+    n: &Node,
+    lines: &[&str],
+    level_depth: usize,
+    depth: Option<usize>,
+    threshold: usize,
+    full: bool,
+) -> String {
+    let mut out = own_prose(n, lines);
+    for child in &n.children {
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push('\n');
+        }
+        if should_inline(child, lines, level_depth, depth, threshold, full) {
+            out.push_str(&unfold_content_string(
+                child,
+                lines,
+                level_depth + 1,
+                depth,
+                threshold,
+                full,
+            ));
+        } else {
+            out.push_str(&tree_line_string(child, lines));
+            out.push('\n');
+        }
+    }
+    out
+}
+
 // ---- Entry point ---------------------------------------------------------
 
 pub fn run(
@@ -502,8 +659,6 @@ pub fn run(
     threshold: Option<usize>,
     format: ReadFormat,
 ) -> Result<()> {
-    let _ = (depth, full, threshold); // Step 2 (smart-unfold) consumes these.
-
     let content = match std::fs::read_to_string(file) {
         Ok(c) => c,
         Err(e) => {
@@ -514,9 +669,13 @@ pub fn run(
 
     let doc = parse_document(&content);
 
+    // Default inline cutoff in estimated tokens. This is a tuning knob: the
+    // track targets ~4k-token chunks, so revisit after first real use.
+    let threshold = threshold.unwrap_or(2000);
+
     match address {
         None => emit_overview(file, &content, &doc, format),
-        Some(addr) => emit_section(file, &doc, addr, format),
+        Some(addr) => emit_section(file, &doc, addr, depth, full, threshold, format),
     }
 }
 
@@ -576,18 +735,30 @@ fn emit_overview(file: &Path, content: &str, doc: &Document, format: ReadFormat)
     Ok(())
 }
 
-/// Recursively print one overview tree line and its descendants.
-fn print_tree_line(n: &Node, lines: &[&str]) {
+/// Format a single overview tree line (no trailing newline, no descendants).
+/// Shared by the overview renderer and the unfold folded-placeholder so that a
+/// folded child reads identically to its overview line.
+fn tree_line_string(n: &Node, lines: &[&str]) -> String {
     let marker = if n.children.is_empty() { ' ' } else { '+' };
     // Indent the heading column by depth (number of `.` segments).
     let depth = n.address.matches('.').count();
     let indent = "  ".repeat(depth);
     let lc = range_lines(n.start, n.end);
     let toks = tokens::estimate_tokens(&range_slice(lines, n.start, n.end));
-    println!(
+    format!(
         "{} {}{:<6} {:<14} L{}   {} lines · ~{} tok",
         marker, indent, n.address, truncate_heading(&n.heading), n.line, lc, toks
-    );
+    )
+}
+
+/// Print one tree line and no descendants (folded placeholder in unfold output).
+fn print_tree_line_single(n: &Node, lines: &[&str]) {
+    println!("{}", tree_line_string(n, lines));
+}
+
+/// Recursively print one overview tree line and its descendants.
+fn print_tree_line(n: &Node, lines: &[&str]) {
+    print_tree_line_single(n, lines);
     for c in &n.children {
         print_tree_line(c, lines);
     }
@@ -605,10 +776,24 @@ fn truncate_heading(h: &str) -> String {
     }
 }
 
-/// With-address path. Step 1 resolves the node and prints a minimal section
-/// dump; full smart-unfold is Step 2. Address resolution, `[0]`, and exit codes
-/// are complete here.
-fn emit_section(file: &Path, doc: &Document, address: &str, format: ReadFormat) -> Result<()> {
+/// With-address path: smart-unfold the addressed node (Backlog 5, Decision 8).
+///
+/// Text: print the node header, then its own prose, then for each direct child
+/// either the inlined (recursively unfolded) text or a folded placeholder line
+/// identical to the overview tree line. The text node (`[0]`) has no children,
+/// so it prints its own prose uniformly.
+///
+/// JSON: `{ path, address, heading, slug, line, lines, tokens, content,
+/// children:[{address, heading, line, lines, tokens, folded, content?}] }`.
+fn emit_section(
+    file: &Path,
+    doc: &Document,
+    address: &str,
+    depth: Option<usize>,
+    full: bool,
+    threshold: usize,
+    format: ReadFormat,
+) -> Result<()> {
     match resolve_address(doc, address) {
         Resolved::Text => {
             let t = doc.text.as_ref().expect("text region present");
@@ -616,16 +801,19 @@ fn emit_section(file: &Path, doc: &Document, address: &str, format: ReadFormat) 
             let toks = tokens::estimate_tokens(&range_slice(&doc.lines, t.start, t.end));
             let content = range_slice(&doc.lines, t.start, t.end);
             if format == ReadFormat::Json {
-                let out = serde_json::json!({
-                    "path": file.display().to_string(),
-                    "address": "0",
-                    "heading": "(text)",
-                    "slug": "text",
-                    "line": t.line,
-                    "lines": lines,
-                    "tokens": toks,
-                    "content": content,
-                });
+                // The text region has no children; emit an empty children list
+                // for a uniform unfold shape.
+                let out = UnfoldJson {
+                    path: file.display().to_string(),
+                    address: "0".to_string(),
+                    heading: "(text)".to_string(),
+                    slug: "text".to_string(),
+                    line: t.line,
+                    lines,
+                    tokens: toks,
+                    content,
+                    children: Vec::new(),
+                };
                 println!("{}", serde_json::to_string_pretty(&out)?);
             } else {
                 println!("[0]  (text)   L{}   {} lines · ~{} tok", t.line, lines, toks);
@@ -638,19 +826,24 @@ fn emit_section(file: &Path, doc: &Document, address: &str, format: ReadFormat) 
         }
         Resolved::Node(n) => {
             let lines = range_lines(n.start, n.end);
-            let toks = tokens::estimate_tokens(&range_slice(&doc.lines, n.start, n.end));
-            let content = range_slice(&doc.lines, n.start, n.end);
+            let toks = node_tokens(n, &doc.lines);
             if format == ReadFormat::Json {
-                let out = serde_json::json!({
-                    "path": file.display().to_string(),
-                    "address": n.address,
-                    "heading": n.heading,
-                    "slug": n.slug,
-                    "line": n.line,
-                    "lines": lines,
-                    "tokens": toks,
-                    "content": content,
-                });
+                let children = n
+                    .children
+                    .iter()
+                    .map(|c| unfold_child_json(c, &doc.lines, 1, depth, threshold, full))
+                    .collect();
+                let out = UnfoldJson {
+                    path: file.display().to_string(),
+                    address: n.address.clone(),
+                    heading: n.heading.clone(),
+                    slug: n.slug.clone(),
+                    line: n.line,
+                    lines,
+                    tokens: toks,
+                    content: own_prose(n, &doc.lines),
+                    children,
+                };
                 println!("{}", serde_json::to_string_pretty(&out)?);
             } else {
                 println!(
@@ -658,10 +851,7 @@ fn emit_section(file: &Path, doc: &Document, address: &str, format: ReadFormat) 
                     n.address, n.heading, n.line, lines, toks
                 );
                 println!();
-                print!("{}", content);
-                if !content.ends_with('\n') {
-                    println!();
-                }
+                unfold_text(n, &doc.lines, 0, depth, threshold, full);
             }
         }
     }
@@ -802,6 +992,79 @@ mod tests {
         flatten(&doc.tree, &mut all);
         let matches: Vec<&Node> = all.into_iter().filter(|n| n.slug == needle).collect();
         assert_eq!(matches.len(), 2, "expected a slug collision in the fixture");
+    }
+
+    // A parent section with one small child (below threshold) and one large
+    // child (above threshold), the large child carrying a grandchild. Used to
+    // exercise the inline-vs-fold heuristic and the depth budget.
+    const UNFOLD: &str = "# Sec\n\nsec prose.\n\n## Small\n\ntiny.\n\n## Large\n\nLLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL.\n\n### Grand\n\ngrand prose.\n";
+
+    #[test]
+    fn should_inline_by_threshold() {
+        let doc = parse_document(UNFOLD);
+        let sec = &doc.tree[0];
+        let small = &sec.children[0];
+        let large = &sec.children[1];
+        let small_tok = node_tokens(small, &doc.lines);
+        let large_tok = node_tokens(large, &doc.lines);
+        assert!(small_tok < large_tok, "fixture should split on tokens");
+        // Threshold between the two: small inlines, large folds.
+        let cut = (small_tok + large_tok) / 2;
+        assert!(should_inline(small, &doc.lines, 1, None, cut, false));
+        assert!(!should_inline(large, &doc.lines, 1, None, cut, false));
+        // `--full` overrides the threshold for the large child.
+        assert!(should_inline(large, &doc.lines, 1, None, cut, true));
+    }
+
+    #[test]
+    fn should_inline_by_depth() {
+        let doc = parse_document(UNFOLD);
+        let large = &doc.tree[0].children[1];
+        let grand = &large.children[0];
+        let big = usize::MAX; // threshold never binds
+        // depth=1 admits level_depth 0 (the addressed node's direct children at
+        // level_depth 1 fail since 1 < 1 is false)…
+        assert!(!should_inline(grand, &doc.lines, 1, Some(1), big, false));
+        // …depth=2 admits level_depth 1.
+        assert!(should_inline(grand, &doc.lines, 1, Some(2), big, false));
+        // Unlimited depth admits any level.
+        assert!(should_inline(grand, &doc.lines, 9, None, big, false));
+    }
+
+    #[test]
+    fn own_prose_stops_at_first_child() {
+        let doc = parse_document(UNFOLD);
+        let sec = &doc.tree[0];
+        let prose = own_prose(sec, &doc.lines);
+        assert!(prose.contains("sec prose."), "own prose: {}", prose);
+        assert!(!prose.contains("tiny."), "own prose must stop before first child: {}", prose);
+    }
+
+    #[test]
+    fn folded_placeholder_matches_overview_line() {
+        let doc = parse_document(UNFOLD);
+        let large = &doc.tree[0].children[1];
+        // The folded placeholder for a child equals that child's overview tree
+        // line (the single-line form), so a reader can drill with the same address.
+        let placeholder = tree_line_string(large, &doc.lines);
+        assert!(placeholder.contains("1.2"), "placeholder: {}", placeholder);
+        assert!(placeholder.contains("Large"), "placeholder: {}", placeholder);
+        assert!(placeholder.trim_start().starts_with('+'), "Large has a child, marker '+': {}", placeholder);
+    }
+
+    #[test]
+    fn unfold_content_inlines_small_folds_large() {
+        let doc = parse_document(UNFOLD);
+        let sec = &doc.tree[0];
+        let small_tok = node_tokens(&sec.children[0], &doc.lines);
+        let large_tok = node_tokens(&sec.children[1], &doc.lines);
+        let cut = (small_tok + large_tok) / 2;
+        let s = unfold_content_string(sec, &doc.lines, 0, None, cut, false);
+        assert!(s.contains("sec prose."), "own prose present: {}", s);
+        assert!(s.contains("tiny."), "small child inlined: {}", s);
+        // Large child folded: its body absent, its placeholder line present.
+        assert!(!s.contains("LLLL LLLL"), "large body must be folded out: {}", s);
+        assert!(s.contains("1.2"), "large child placeholder present: {}", s);
     }
 
     #[test]

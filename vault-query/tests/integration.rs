@@ -1765,3 +1765,180 @@ fn test_read_unreadable_file_exits_1() {
         .unwrap();
     assert_eq!(output.status.code(), Some(1), "unreadable file must exit 1");
 }
+
+// --- read smart-unfold (Step 2, Backlog 5) ---------------------------------
+
+#[test]
+fn test_unfold_threshold_inlines_small_folds_large() {
+    // Threshold 100 sits between Small Child (~16 tok) and Large Child (~293 tok).
+    let output = Command::new(cargo_bin())
+        .args([
+            "read",
+            read_fixture("unfold.md").to_str().unwrap(),
+            "1",
+            "--threshold",
+            "100",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // Section own prose printed.
+    assert!(stdout.contains("Section own prose"), "missing own prose: {}", stdout);
+    // Small child inlined (its body appears).
+    assert!(stdout.contains("Small child body"), "small child should inline: {}", stdout);
+    // Large child folded: body absent, placeholder line present with its address.
+    assert!(!stdout.contains("LARGEMARK"), "large child body must be folded out: {}", stdout);
+    let placeholder = stdout
+        .lines()
+        .find(|l| l.contains("1.2") && l.contains("Large Child"))
+        .expect("folded placeholder for 1.2");
+    assert!(placeholder.contains("tok"), "placeholder carries token stat: {}", placeholder);
+}
+
+#[test]
+fn test_unfold_placeholder_matches_overview_line() {
+    let path = read_fixture("unfold.md");
+    // Overview tree line for 1.2.
+    let overview = Command::new(cargo_bin())
+        .args(["read", path.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let overview_line = String::from_utf8(overview.stdout)
+        .unwrap()
+        .lines()
+        .find(|l| l.contains("1.2") && l.contains("Large Child"))
+        .expect("overview 1.2 line")
+        .to_string();
+
+    // Folded placeholder in the unfold output for the same node.
+    let unfold = Command::new(cargo_bin())
+        .args(["read", path.to_str().unwrap(), "1", "--threshold", "100"])
+        .output()
+        .unwrap();
+    let placeholder = String::from_utf8(unfold.stdout)
+        .unwrap()
+        .lines()
+        .find(|l| l.contains("1.2") && l.contains("Large Child"))
+        .expect("unfold 1.2 placeholder")
+        .to_string();
+
+    assert_eq!(placeholder, overview_line, "folded placeholder must match the overview tree line");
+}
+
+#[test]
+fn test_unfold_depth_cap_folds_grandchild() {
+    // High threshold so only the depth budget binds. depth=1 inlines direct
+    // children but folds the grandchild (### Grandchild) to a placeholder.
+    let output = Command::new(cargo_bin())
+        .args([
+            "read",
+            read_fixture("unfold.md").to_str().unwrap(),
+            "1",
+            "--depth",
+            "1",
+            "--threshold",
+            "100000",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    // Large child inlined (depth 1 admits direct children, threshold no longer binds).
+    assert!(stdout.contains("LARGEMARK"), "large child should inline at depth 1: {}", stdout);
+    // Grandchild folded: its prose absent, placeholder for 1.2.1 present.
+    assert!(!stdout.contains("GRANDMARK"), "grandchild must fold at depth 1: {}", stdout);
+    assert!(
+        stdout.lines().any(|l| l.contains("1.2.1") && l.contains("Grandchild")),
+        "missing grandchild placeholder: {}", stdout
+    );
+}
+
+#[test]
+fn test_unfold_full_expands_everything() {
+    // --full ignores threshold and depth: even the deep grandchild inlines.
+    let output = Command::new(cargo_bin())
+        .args([
+            "read",
+            read_fixture("unfold.md").to_str().unwrap(),
+            "1",
+            "--full",
+            "--threshold",
+            "1",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("LARGEMARK"), "large child must inline under --full: {}", stdout);
+    assert!(stdout.contains("GRANDMARK"), "grandchild must inline under --full: {}", stdout);
+    // Nothing folded: no placeholder line carrying the address/heading pair.
+    assert!(
+        !stdout.lines().any(|l| l.contains("1.2.1") && l.contains("Grandchild") && l.contains("tok")),
+        "--full must leave no folded placeholders: {}", stdout
+    );
+}
+
+#[test]
+fn test_unfold_json_shape_with_folded_flags() {
+    let output = Command::new(cargo_bin())
+        .args([
+            "read",
+            read_fixture("unfold.md").to_str().unwrap(),
+            "1",
+            "--threshold",
+            "100",
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let v: serde_json::Value =
+        serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).expect("valid JSON");
+
+    // Top-level addressed node: own prose only in `content`, children separate.
+    assert_eq!(v["address"], "1");
+    assert_eq!(v["heading"], "Section");
+    assert_eq!(v["slug"], "section");
+    assert!(v["content"].as_str().unwrap().contains("Section own prose"));
+    assert!(!v["content"].as_str().unwrap().contains("Small child body"), "children carried separately");
+
+    let children = v["children"].as_array().unwrap();
+    assert_eq!(children.len(), 2);
+
+    // Small child inlined: folded=false, content present.
+    let small = &children[0];
+    assert_eq!(small["address"], "1.1");
+    assert_eq!(small["folded"], false);
+    assert!(small["content"].as_str().unwrap().contains("Small child body"));
+
+    // Large child folded: folded=true, content absent.
+    let large = &children[1];
+    assert_eq!(large["address"], "1.2");
+    assert_eq!(large["folded"], true);
+    assert!(large.get("content").is_none(), "folded child must omit content: {}", large);
+    assert!(large["tokens"].as_u64().unwrap() > 100, "folded because over threshold");
+}
+
+#[test]
+fn test_unfold_text_node_has_no_children() {
+    // The `[0]` text node prints its own prose uniformly; JSON children empty.
+    let output = Command::new(cargo_bin())
+        .args([
+            "read",
+            read_fixture("sample.md").to_str().unwrap(),
+            "0",
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let v: serde_json::Value =
+        serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).unwrap();
+    assert_eq!(v["address"], "0");
+    assert_eq!(v["children"].as_array().unwrap().len(), 0);
+    assert!(v["content"].as_str().unwrap().contains("Lede prose before any heading."));
+}
