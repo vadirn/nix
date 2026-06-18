@@ -1,0 +1,26 @@
+{
+  "skill_name": "brief",
+  "evals": [
+    {
+      "id": 0,
+      "name": "draft-for-pm",
+      "prompt": "I need to send Sarah (the Acme PM) an update on where the login work stands. Draft it for me.",
+      "expected_output": "A status-update draft for Sarah in her currency (features/dates): translates the auth-token migration and session-layer rework into the login work it enabled rather than raw infra terms, surfaces the SSO blocker and the Fri->Wed estimate slip, marks any inferred/counterfactual content for verification, surfaces Sarah's stored model/currency, and stops at a draft without sending.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "diagnose-target-gap",
+      "prompt": "Sarah just messaged me: 'honestly this is way more than we agreed for this sprint — I expected the dashboard to be done by now.' How should I respond?",
+      "expected_output": "Recognizes this as a target gap, NOT a state gap. Does not immediately draft a status report. Leads with the consequence and a forced choice (is this about what you've done vs what they expected). Classifies (too-large / off-target — the dashboard was never in sprint scope per context.md). Offers 'both, in order': a status update for what is done, then a renegotiation framing from the goal. Stops at drafts; never sends.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "diagnose-state-gap",
+      "prompt": "Raj pinged asking 'what's the current status on the login flow? haven't heard in a few days.' Help me put together what to tell him.",
+      "expected_output": "Recognizes this as a state gap (impression distance), not a target gap — the asymmetric guard does NOT over-fire. Produces or offers a status update for Raj in his currency (infra/risk). Because Raj inspects PRs, it does not just recap merged PRs; it leads with the risk/blocker view (SSO config wait). Stops at a draft; never sends.",
+      "files": []
+    }
+  ]
+}
