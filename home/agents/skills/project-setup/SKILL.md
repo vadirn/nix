@@ -90,6 +90,19 @@ Substitutions: `<path>` placeholders in body, description comment, `result` and 
 Substitute `<path>`, `<title>`, `<description>`, `<result>`.
 
 ```markdown
+---
+# stakeholders: read by the `brief` skill. One entry per person; brief writes only each
+# `last_drafted`. Everything else is yours. Delete the block if unused. Repo paths are NOT
+# stored here — they differ per device; brief reads the git repo containing cwd.
+# stakeholders:
+#   - name: Sarah
+#     role: PM                     # optional; no brief logic branches on it
+#     currency: [features, dates]  # units they count in; brief translates work into these
+#     model: thinks the migration is nearly done   # their current belief about the state
+#     inspects: []                 # what they close themselves (e.g. [PRs]); [] = waits to be told
+#     last_drafted:                # YYYY-MM-DD, written by brief on an accepted draft
+---
+
 # <title> Context
 
 <description>
