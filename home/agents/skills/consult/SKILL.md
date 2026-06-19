@@ -71,7 +71,7 @@ else:                                 // exit 1 (runtime) or 2 (bad CLI invocati
 - This skill always passes `--types card,note,experiment` (the CLI default searches all types). References are bookmarks to
   external content (URL + a one-line description), not the user's prior thinking, so they are excluded
   from the default. Opt in with `--types card,note,experiment,reference` when the task is about finding
-  what the user has *read* on a topic rather than what they *think*. Reach time-bound project memory
+  what the user has _read_ on a topic rather than what they _think_. Reach time-bound project memory
   deliberately with `--types track` when the task is specifically about prior project decisions rather
   than reusable knowledge; checkpoints are superseded entries, so reaching one also needs
   `--include-superseded` (e.g. `--types track,checkpoint --include-superseded`).
