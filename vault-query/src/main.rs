@@ -58,7 +58,7 @@ enum Commands {
         threshold: Option<usize>,
         /// Output format: text (default) or json
         #[arg(long, default_value = "text")]
-        format: commands::read::ReadFormat,
+        format: output::TextJson,
     },
     /// Show frontmatter properties of a file, or read one field by path
     Properties {
@@ -116,7 +116,7 @@ enum Commands {
         limit: usize,
         /// Output format: text (default) or json
         #[arg(long, default_value = "text")]
-        format: commands::search::SearchFormat,
+        format: output::TextJson,
         /// Filter by frontmatter `type:` (comma-separated). Default: all types.
         #[arg(long, value_delimiter = ',')]
         types: Vec<String>,

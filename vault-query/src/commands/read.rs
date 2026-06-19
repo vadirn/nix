@@ -1,36 +1,9 @@
 use anyhow::Result;
 use serde::Serialize;
 use std::path::Path;
-use std::str::FromStr;
 
+use crate::output::TextJson;
 use crate::{tokens, wikilink};
-
-/// Output format for the read command (Decision 12).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ReadFormat {
-    Text,
-    Json,
-}
-
-impl FromStr for ReadFormat {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "text" => Ok(ReadFormat::Text),
-            "json" => Ok(ReadFormat::Json),
-            _ => Err(format!("unknown format: {} (expected text or json)", s)),
-        }
-    }
-}
-
-impl std::fmt::Display for ReadFormat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReadFormat::Text => write!(f, "text"),
-            ReadFormat::Json => write!(f, "json"),
-        }
-    }
-}
 
 /// A heading node in the document tree.
 ///
@@ -533,7 +506,7 @@ fn is_numeric_address(s: &str) -> bool {
 // ---- JSON shapes ---------------------------------------------------------
 
 #[derive(Serialize)]
-struct TextJson {
+struct TextNodeJson {
     address: String,
     label: String,
     line: usize,
@@ -558,7 +531,7 @@ struct OverviewJson {
     path: String,
     fields: Vec<String>,
     links: usize,
-    text: Option<TextJson>,
+    text: Option<TextNodeJson>,
     tree: Vec<NodeJson>,
 }
 
@@ -732,7 +705,7 @@ pub fn run(
     depth: Option<usize>,
     full: bool,
     threshold: Option<usize>,
-    format: ReadFormat,
+    format: TextJson,
 ) -> Result<()> {
     let content = match std::fs::read_to_string(file) {
         Ok(c) => c,
@@ -755,15 +728,15 @@ pub fn run(
 }
 
 /// Overview path (bare `read FILE`).
-fn emit_overview(file: &Path, content: &str, doc: &Document, format: ReadFormat) -> Result<()> {
+fn emit_overview(file: &Path, content: &str, doc: &Document, format: TextJson) -> Result<()> {
     // `frontmatter::parse` returns a BTreeMap (alphabetized), which would
     // misrepresent the file's on-disk field order. Scan the raw frontmatter
     // block for top-level keys in source order instead.
     let fields: Vec<String> = frontmatter_field_order(content);
     let link_count = wikilink::extract(content).len();
 
-    if format == ReadFormat::Json {
-        let text = doc.text.as_ref().map(|t| TextJson {
+    if format == TextJson::Json {
+        let text = doc.text.as_ref().map(|t| TextNodeJson {
             address: "0".to_string(),
             label: "(text)".to_string(),
             line: t.line,
@@ -866,12 +839,12 @@ fn emit_section(
     depth: Option<usize>,
     full: bool,
     threshold: usize,
-    format: ReadFormat,
+    format: TextJson,
 ) -> Result<()> {
     let n = resolve_address(doc, address);
     let lines = range_lines(n.start, n.end);
     let toks = node_tokens(n, &doc.lines);
-    if format == ReadFormat::Json {
+    if format == TextJson::Json {
         let children = n
             .children
             .iter()
@@ -904,17 +877,18 @@ fn emit_section(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     const SAMPLE: &str = "---\ntype: note\nslug: x\n---\n\nLede prose before any heading.\nSecond line of lede.\n\n# Direction\n\nDir body.\n\n## Sub one\n\nsub one body\n\n## Sub two\n\nsub two body\n\n# Glossary\n\ngloss body\n\n# Log & Notes\n\nfirst.\n\n# Log Notes\n\nsecond.\n";
 
     #[test]
     fn from_str_roundtrip() {
-        assert_eq!(ReadFormat::from_str("text").unwrap(), ReadFormat::Text);
-        assert_eq!(ReadFormat::from_str("json").unwrap(), ReadFormat::Json);
-        assert_eq!(ReadFormat::from_str("JSON").unwrap(), ReadFormat::Json);
-        assert!(ReadFormat::from_str("yaml").is_err());
-        assert_eq!(ReadFormat::Text.to_string(), "text");
-        assert_eq!(ReadFormat::Json.to_string(), "json");
+        assert_eq!(TextJson::from_str("text").unwrap(), TextJson::Text);
+        assert_eq!(TextJson::from_str("json").unwrap(), TextJson::Json);
+        assert_eq!(TextJson::from_str("JSON").unwrap(), TextJson::Json);
+        assert!(TextJson::from_str("yaml").is_err());
+        assert_eq!(TextJson::Text.to_string(), "text");
+        assert_eq!(TextJson::Json.to_string(), "json");
     }
 
     #[test]
