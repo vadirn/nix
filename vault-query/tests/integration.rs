@@ -1616,11 +1616,17 @@ fn test_read_overview_header_and_tree() {
     assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8(output.stdout).unwrap();
 
-    // Frontmatter field names (no count), alphabetized by BTreeMap key order.
+    // Frontmatter field names (no count), in on-disk source order.
     let fields_line = stdout.lines().find(|l| l.starts_with("fields:")).expect("fields line");
     for f in ["type", "slug", "description", "status"] {
         assert!(fields_line.contains(f), "missing field {} in: {}", f, fields_line);
     }
+    // Source order is type, slug, description, status (not alphabetical).
+    assert_eq!(
+        fields_line.trim(),
+        "fields: type, slug, description, status",
+        "fields must follow source order, not BTreeMap alphabetization"
+    );
     // Link count: 3 wikilinks in the fixture body.
     assert!(stdout.lines().any(|l| l.trim() == "links: 3"), "expected 'links: 3'; got:\n{}", stdout);
 
@@ -1755,6 +1761,17 @@ fn test_read_unknown_address_exits_1() {
         .output()
         .unwrap();
     assert_eq!(oob.status.code(), Some(1), "out-of-range numeric must exit 1");
+
+    // An all-digit address that overflows usize must exit 1 gracefully, not
+    // panic. A panic would surface as a non-1 abort code and a backtrace.
+    let overflow = Command::new(cargo_bin())
+        .args(["read", read_fixture("sample.md").to_str().unwrap(), "99999999999999999999"])
+        .output()
+        .unwrap();
+    assert_eq!(overflow.status.code(), Some(1), "oversized numeric must exit 1, not panic");
+    let stderr = String::from_utf8(overflow.stderr).unwrap();
+    assert!(stderr.contains("out of range"), "expected out-of-range message: {}", stderr);
+    assert!(!stderr.contains("panicked"), "must not panic: {}", stderr);
 }
 
 #[test]
@@ -1902,6 +1919,8 @@ fn test_unfold_json_shape_with_folded_flags() {
     assert_eq!(v["address"], "1");
     assert_eq!(v["heading"], "Section");
     assert_eq!(v["slug"], "section");
+    // `level` exposed on the addressed node (# Section = level 1).
+    assert_eq!(v["level"].as_u64().unwrap(), 1);
     assert!(v["content"].as_str().unwrap().contains("Section own prose"));
     assert!(!v["content"].as_str().unwrap().contains("Small child body"), "children carried separately");
 
@@ -1912,6 +1931,8 @@ fn test_unfold_json_shape_with_folded_flags() {
     let small = &children[0];
     assert_eq!(small["address"], "1.1");
     assert_eq!(small["folded"], false);
+    // `level` exposed on children too (## Small Child = level 2).
+    assert_eq!(small["level"].as_u64().unwrap(), 2);
     assert!(small["content"].as_str().unwrap().contains("Small child body"));
 
     // Large child folded: folded=true, content absent.
