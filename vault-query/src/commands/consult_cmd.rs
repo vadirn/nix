@@ -97,7 +97,7 @@ fn render_markdown_selected(
         out.push_str("Too large to inline — read directly:\n\n");
         for p in pointers {
             out.push_str(&format!(
-                "- **{}** ({}) — ~{} est tokens, coverage {:.2}\n  → vault-query get \"{}\"\n",
+                "- **{}** ({}) — ~{} est tokens, coverage {:.2}\n  → vault-query read \"{}\"\n",
                 p.title, p.path, p.tokens_est, p.coverage, p.path
             ));
         }

@@ -755,6 +755,55 @@ fn test_consult_oversized_candidates_exit_0_with_pointers() {
     }
 }
 
+/// The markdown overflow pointer is a navigate verb, not a full-file dump: an
+/// oversized match emits `→ vault-query read "<path>"` so the agent drills into
+/// a folded overview instead of pulling the whole document.
+#[test]
+fn test_consult_oversized_pointer_emits_read_verb() {
+    let tmp_home = tempfile::tempdir().unwrap();
+    let cfg_dir = tmp_home.path().join(".config/vault");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    std::fs::write(
+        cfg_dir.join("config.json"),
+        serde_json::json!({
+            "vault_root": fixture_dir().to_str().unwrap(),
+            "projects_path": "41 projects",
+            "consult": {
+                "per_doc_token_cap": 1
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = Command::new(cargo_bin())
+        .env("HOME", tmp_home.path())
+        .args([
+            "consult",
+            "retry backoff failure",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+            "--format",
+            "markdown",
+            "--no-log",
+        ])
+        .output()
+        .expect("failed to run vault-query consult");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    assert_eq!(output.status.code().unwrap_or(-1), 0, "stdout: {}", stdout);
+    assert!(
+        stdout.contains("→ vault-query read \""),
+        "oversized pointer must navigate via `read`, got: {}",
+        stdout
+    );
+    assert!(
+        !stdout.contains("→ vault-query get \""),
+        "the `get` full-file dump must no longer appear, got: {}",
+        stdout
+    );
+}
+
 // ---------------------------------------------------------------------------
 // JSONL logging tests (Backlog 6, Decision 8)
 // ---------------------------------------------------------------------------
