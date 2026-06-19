@@ -1840,6 +1840,37 @@ fn test_read_unreadable_file_exits_1() {
     assert_eq!(output.status.code(), Some(1), "unreadable file must exit 1");
 }
 
+/// A vault-relative path (the bare pointer consult emits) resolves against the
+/// configured `vault_root`, so `read "20 cards/Retry patterns.md"` runs from a
+/// cwd that is not the vault root.
+#[test]
+fn test_read_resolves_vault_relative_path() {
+    // Run from a temp cwd where the relative path does not exist, forcing the
+    // vault_root fallback. `--vault-root` pins the corpus to the fixture vault.
+    let cwd = tempfile::tempdir().unwrap();
+    let output = Command::new(cargo_bin())
+        .current_dir(cwd.path())
+        .args([
+            "read",
+            "20 cards/Retry patterns.md",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "vault-relative read must succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("Retry patterns.md"),
+        "overview must name the resolved file, got: {}",
+        stdout
+    );
+}
+
 // --- read smart-unfold (Step 2, Backlog 5) ---------------------------------
 
 #[test]

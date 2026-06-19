@@ -261,7 +261,21 @@ fn main() -> Result<()> {
             full,
             threshold,
             format,
-        } => commands::read::run(file, address.as_deref(), *depth, *full, *threshold, *format),
+        } => {
+            // Resolve config so vault-relative pointer paths work from any cwd;
+            // fall back to None (cwd-only) when no vault config is present so a
+            // bare `read FILE` still works outside a vault.
+            let vault_root = resolve_config(&cli).ok().map(|c| c.vault_root);
+            commands::read::run(
+                file,
+                vault_root.as_deref(),
+                address.as_deref(),
+                *depth,
+                *full,
+                *threshold,
+                *format,
+            )
+        }
         Commands::Properties { file, path, format } => {
             commands::properties::run(file, path.as_deref(), *format)
         }

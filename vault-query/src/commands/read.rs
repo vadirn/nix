@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::output::TextJson;
 use crate::{tokens, wikilink};
@@ -734,14 +734,37 @@ fn unfold_child_json(
 
 // ---- Entry point ---------------------------------------------------------
 
+/// Resolve the path to read. A literal/absolute path that exists wins; if it
+/// does not exist and a `vault_root` is configured, fall back to
+/// `vault_root.join(file)`. When neither resolves, return the original so the
+/// read error names what the caller asked for.
+fn resolve_read_path(file: &Path, vault_root: Option<&Path>) -> PathBuf {
+    if file.exists() {
+        return file.to_path_buf();
+    }
+    if let Some(root) = vault_root {
+        let joined = root.join(file);
+        if joined.exists() {
+            return joined;
+        }
+    }
+    file.to_path_buf()
+}
+
 pub fn run(
     file: &Path,
+    vault_root: Option<&Path>,
     address: Option<&str>,
     depth: Option<usize>,
     full: bool,
     threshold: Option<usize>,
     format: TextJson,
 ) -> Result<()> {
+    // Honor any literal/absolute path that exists (track Decision 2: operate on
+    // any `.md` path); fall back to vault-relative resolution so the bare
+    // pointers consult emits (`read "20 cards/Foo.md"`) run from any cwd.
+    let resolved = resolve_read_path(file, vault_root);
+    let file = resolved.as_path();
     let content = match std::fs::read_to_string(file) {
         Ok(c) => c,
         Err(e) => {
