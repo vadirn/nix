@@ -20,6 +20,12 @@ filesystem, so a weaker in-tool model pre-chewing it would only degrade what you
 material is the user's own prior thinking: treat it as recovered memory, not an external source to hedge
 about.
 
+When a match is too large to inline, the tool returns a `read` pointer instead of the document. Drilling
+those pointers is delegated to the `vault-navigator` sub-agent: a peer model that works query-side
+(it sees the query, never your full task) and returns a synthesis plus the slices it rests on, which you
+fold in exactly like inline docs. This keeps the navigation cost off your context window — you spend it on
+the answer, not on paging through documents.
+
 ## Procedure
 
 ```
@@ -36,12 +42,17 @@ if exit == 0:                         // success — inline docs, pointers, or b
             can trace what informed you. Prefer the user's own framing where it bears on the task.")
     if result has pointers:           // markdown: a 'Too large to inline — read directly:' block;
                                       // json: a non-empty `pointers` array
-        do("pointers are relevant docs the tool found but could not inline (over the per-doc cap or
-            budget). Read them lazily — only when the inline material is insufficient to answer. Pick
-            the most promising pointer by score, coverage, and title; outline it with
-            rg --no-ignore '^#' \"<vault_root>/<path>\"; Read the section you need with offset/limit,
-            widening the window if the slice proves too narrow. Treat what you read as the user's own
-            prior thinking, exactly like inline docs.")
+        if inline docs already answer the task:
+            do("skip the pointers — laziness guard: drilling spends a sub-agent for nothing when the
+                inline material is sufficient")
+        else:
+            navigation = Agent(subagent_type="vault-navigator", prompt=
+                "Query: <the task string you passed to consult>\n\nPointers:\n<paste the pointer block
+                 verbatim — each '- **title** (path) ... / → vault-query read \"path\" addr' line>")
+            do("fold the navigator's ## Synthesis into your answer like inline vault context, and name the
+                cited paths/addresses from its ## Slices so the user can trace what informed you. The
+                navigator works query-side, so its synthesis is the user's prior thinking merged for the
+                query, not adapted to your full task — you do the task-side adaptation.")
 
 elif exit == 4:                       // abstain — nothing cleared the relevance gate
     do("the abstain payload lists near-miss titles/terms; reformulate ONCE aiming at the corpus's real
@@ -60,7 +71,7 @@ else:                                 // exit 1 (runtime) or 2 (bad CLI invocati
 - This skill always passes `--types card,note,experiment` (the CLI default searches all types). References are bookmarks to
   external content (URL + a one-line description), not the user's prior thinking, so they are excluded
   from the default. Opt in with `--types card,note,experiment,reference` when the task is about finding
-  what the user has *read* on a topic rather than what they *think*. Reach time-bound project memory
+  what the user has _read_ on a topic rather than what they _think_. Reach time-bound project memory
   deliberately with `--types track` when the task is specifically about prior project decisions rather
   than reusable knowledge; checkpoints are superseded entries, so reaching one also needs
   `--include-superseded` (e.g. `--types track,checkpoint --include-superseded`).

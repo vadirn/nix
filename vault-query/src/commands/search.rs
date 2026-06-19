@@ -3,7 +3,6 @@ use regex::Regex;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
-use std::str::FromStr;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
@@ -12,35 +11,8 @@ use tantivy::SnippetGenerator;
 use crate::{
     commands::consult::{build_index, sanitize_query},
     config::{DEFAULT_DESCRIPTION_BOOST, DEFAULT_TITLE_BOOST},
-    frontmatter, vault, vault_ignore::VaultIgnore, wikilink,
+    frontmatter, output::TextJson, vault, vault_ignore::VaultIgnore, wikilink,
 };
-
-/// Output format for the search command.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SearchFormat {
-    Text,
-    Json,
-}
-
-impl FromStr for SearchFormat {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "text" => Ok(SearchFormat::Text),
-            "json" => Ok(SearchFormat::Json),
-            _ => Err(format!("unknown format: {} (expected text or json)", s)),
-        }
-    }
-}
-
-impl std::fmt::Display for SearchFormat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SearchFormat::Text => write!(f, "text"),
-            SearchFormat::Json => write!(f, "json"),
-        }
-    }
-}
 
 /// One result in the JSON envelope.
 #[derive(Serialize)]
@@ -72,7 +44,7 @@ pub fn run(
     subfolder: Option<&Path>,
     regex_mode: bool,
     limit: usize,
-    format: SearchFormat,
+    format: TextJson,
     types: &[String],
     no_superseded: bool,
 ) -> Result<()> {
@@ -278,13 +250,13 @@ fn run_bm25(
     cfg: &crate::config::ResolvedConfig,
     subfolder: Option<&Path>,
     limit: usize,
-    format: SearchFormat,
+    format: TextJson,
     types: &[String],
     no_superseded: bool,
 ) -> Result<()> {
     // Both arms delegate to collect_bm25_results_filtered so downranking and
     // [superseded] labeling are applied uniformly; only snippet rendering differs.
-    if format == SearchFormat::Json {
+    if format == TextJson::Json {
         let results = collect_bm25_results_filtered(query, cfg, subfolder, limit, types, no_superseded)?;
         let output = SearchOutput {
             query: query.to_string(),
@@ -414,6 +386,7 @@ fn run_regex(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     fn make_cfg(vault_root: std::path::PathBuf) -> crate::config::ResolvedConfig {
         let ignore = crate::vault_ignore::load(&vault_root, false).unwrap();
         crate::config::ResolvedConfig {
@@ -503,10 +476,10 @@ mod tests {
 
     #[test]
     fn test_search_format_from_str() {
-        assert_eq!(SearchFormat::from_str("text").unwrap(), SearchFormat::Text);
-        assert_eq!(SearchFormat::from_str("json").unwrap(), SearchFormat::Json);
-        assert_eq!(SearchFormat::from_str("TEXT").unwrap(), SearchFormat::Text);
-        assert!(SearchFormat::from_str("xml").is_err());
+        assert_eq!(TextJson::from_str("text").unwrap(), TextJson::Text);
+        assert_eq!(TextJson::from_str("json").unwrap(), TextJson::Json);
+        assert_eq!(TextJson::from_str("TEXT").unwrap(), TextJson::Text);
+        assert!(TextJson::from_str("xml").is_err());
     }
 
     #[test]
@@ -530,7 +503,7 @@ mod tests {
         // run() with a colon query must not error and must find the doc.
         // We verify by calling run_bm25 indirectly through run() with text format;
         // redirect stdout is not available in unit tests, so we check it does not panic/error.
-        let result = run("workflow: plan first", &cfg, 0, None, false, 10, SearchFormat::Text, &[], false);
+        let result = run("workflow: plan first", &cfg, 0, None, false, 10, TextJson::Text, &[], false);
         assert!(result.is_ok(), "colon query must not return an error: {:?}", result.err());
     }
 
@@ -674,7 +647,7 @@ mod tests {
         }
 
         // Also confirm the full run() path succeeds (output goes to stdout, not captured).
-        let result = run("quasar", &cfg, 0, None, true, 10, SearchFormat::Text, &types_filter, false);
+        let result = run("quasar", &cfg, 0, None, true, 10, TextJson::Text, &types_filter, false);
         assert!(result.is_ok(), "run() with --regex --types must not error: {:?}", result.err());
     }
 }

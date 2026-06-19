@@ -96,9 +96,13 @@ fn render_markdown_selected(
     if !pointers.is_empty() {
         out.push_str("Too large to inline — read directly:\n\n");
         for p in pointers {
+            let addr = match &p.section {
+                Some(a) => format!(" {}", a),
+                None => String::new(),
+            };
             out.push_str(&format!(
-                "- **{}** ({}) — ~{} est tokens, coverage {:.2}\n  → vault-query get \"{}\"\n",
-                p.title, p.path, p.tokens_est, p.coverage, p.path
+                "- **{}** ({}) — ~{} est tokens, coverage {:.2}\n  → vault-query read \"{}\"{}\n",
+                p.title, p.path, p.tokens_est, p.coverage, p.path, addr
             ));
         }
         out.push('\n');

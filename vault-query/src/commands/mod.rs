@@ -12,6 +12,7 @@ pub mod log;
 pub mod projects;
 pub mod properties;
 pub mod query;
+pub mod read;
 pub mod resolve;
 pub mod search;
 pub mod tags;

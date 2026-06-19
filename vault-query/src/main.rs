@@ -41,10 +41,31 @@ enum Commands {
         #[arg(long, default_value = "table")]
         format: output::Format,
     },
-    /// Show frontmatter properties of a file
+    /// Read a .md file: folded overview, or unfold an addressed section
+    Read {
+        /// Path to the .md file
+        file: PathBuf,
+        /// Section address: numeric (e.g. 2.1), heading slug, or 0/text
+        address: Option<String>,
+        /// Max levels to expand under the addressed node (Step 2)
+        #[arg(long)]
+        depth: Option<usize>,
+        /// Expand everything, ignoring threshold and depth (Step 2)
+        #[arg(long)]
+        full: bool,
+        /// Inline cutoff in estimated tokens (Step 2)
+        #[arg(long)]
+        threshold: Option<usize>,
+        /// Output format: text (default) or json
+        #[arg(long, default_value = "text")]
+        format: output::TextJson,
+    },
+    /// Show frontmatter properties of a file, or read one field by path
     Properties {
         /// Path to the .md file
         file: PathBuf,
+        /// Optional field path: dotted keys with [i] indices (e.g. references[0].target)
+        path: Option<String>,
         /// Output format
         #[arg(long, default_value = "table")]
         format: output::Format,
@@ -95,7 +116,7 @@ enum Commands {
         limit: usize,
         /// Output format: text (default) or json
         #[arg(long, default_value = "text")]
-        format: commands::search::SearchFormat,
+        format: output::TextJson,
         /// Filter by frontmatter `type:` (comma-separated). Default: all types.
         #[arg(long, value_delimiter = ',')]
         types: Vec<String>,
@@ -233,7 +254,31 @@ fn main() -> Result<()> {
             let cfg = resolve_config(&cli)?;
             commands::query::run(base_path, view, &cfg, *format)
         }
-        Commands::Properties { file, format } => commands::properties::run(file, *format),
+        Commands::Read {
+            file,
+            address,
+            depth,
+            full,
+            threshold,
+            format,
+        } => {
+            // Resolve config so vault-relative pointer paths work from any cwd;
+            // fall back to None (cwd-only) when no vault config is present so a
+            // bare `read FILE` still works outside a vault.
+            let vault_root = resolve_config(&cli).ok().map(|c| c.vault_root);
+            commands::read::run(
+                file,
+                vault_root.as_deref(),
+                address.as_deref(),
+                *depth,
+                *full,
+                *threshold,
+                *format,
+            )
+        }
+        Commands::Properties { file, path, format } => {
+            commands::properties::run(file, path.as_deref(), *format)
+        }
         Commands::Tags { sort } => {
             let cfg = resolve_config(&cli)?;
             commands::tags::run(&cfg, sort)

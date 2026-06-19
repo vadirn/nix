@@ -30,6 +30,33 @@ impl std::fmt::Display for Format {
     }
 }
 
+/// Two-variant output format shared by the read and search commands.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TextJson {
+    Text,
+    Json,
+}
+
+impl FromStr for TextJson {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "text" => Ok(TextJson::Text),
+            "json" => Ok(TextJson::Json),
+            _ => Err(format!("unknown format: {} (expected text or json)", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for TextJson {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TextJson::Text => write!(f, "text"),
+            TextJson::Json => write!(f, "json"),
+        }
+    }
+}
+
 pub fn render(result: &ViewResult, format: &Format) -> String {
     match format {
         Format::Table => render_table(result),
