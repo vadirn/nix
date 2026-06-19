@@ -413,6 +413,41 @@ fn flatten<'a>(tree: &'a [Node], out: &mut Vec<&'a Node>) {
     }
 }
 
+/// A section's structural address and the inclusive 1-based line range it owns,
+/// for callers that map positions onto sections without rendering the tree.
+#[derive(Debug, Clone)]
+pub struct SectionRange {
+    pub address: String,
+    pub level: usize,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// Parse `body` and return its section ranges depth-first: the synthetic
+/// `(text)` region (address `"0"`) leads when present, then the heading tree.
+/// Empty when the body has no headings and no pre-heading prose.
+///
+/// Line numbers are relative to `body`. Addresses are structural (slug/numeric),
+/// so an address computed from a frontmatter-stripped body still resolves
+/// against the on-disk file via `read <path> <address>`.
+pub fn section_ranges(body: &str) -> Vec<SectionRange> {
+    let doc = parse_document(body);
+    let mut nodes: Vec<&Node> = Vec::new();
+    if let Some(t) = &doc.text {
+        nodes.push(t);
+    }
+    flatten(&doc.tree, &mut nodes);
+    nodes
+        .into_iter()
+        .map(|n| SectionRange {
+            address: n.address.clone(),
+            level: n.level,
+            start: n.start,
+            end: n.end,
+        })
+        .collect()
+}
+
 /// Pure address resolution: all the descent/match logic, no process exit.
 /// `resolve_address` wraps this to print stderr and exit; tests call it
 /// directly so there is no parallel test mirror to drift (Decision 3).

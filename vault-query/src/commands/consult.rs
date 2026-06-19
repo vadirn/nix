@@ -88,6 +88,12 @@ pub struct DocPointer {
     pub score: f32,
     pub coverage: f32,
     pub tokens_est: usize,
+    /// `read` address of the section carrying the most matched terms, so the
+    /// caller drills straight into the relevant region instead of the folded
+    /// whole. `None` when the body has no sections or no line carries a query
+    /// term (the pointer then opens a bare overview).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
 }
 
 /// Outcome of a `run_consult` call.
@@ -391,6 +397,75 @@ fn stemmed_tokens(text: &str) -> Vec<String> {
         }
         tokens
     })
+}
+
+// ---------------------------------------------------------------------------
+// Section attribution for pointers
+// ---------------------------------------------------------------------------
+
+/// Return the `read` address of the section in `body` that carries the most
+/// matched query terms, or `None` when no section qualifies.
+///
+/// Each body line is owned by the deepest section whose inclusive range
+/// contains it (ranges nest, so the greatest `level` among containing ranges is
+/// the unique owner). A line's matched-term count is credited to its owner; the
+/// owner with the highest total wins, ties broken toward the deeper, then
+/// earlier, section so the caller lands as specifically as the matches justify.
+/// Returns `None` for an empty query, a section-less body, or a body where no
+/// line carries a query term — the pointer then opens a bare overview.
+fn best_section_address(body: &str, query_terms: &BTreeSet<String>) -> Option<String> {
+    if query_terms.is_empty() {
+        return None;
+    }
+    let ranges = crate::commands::read::section_ranges(body);
+    if ranges.is_empty() {
+        return None;
+    }
+
+    let owner_of = |line: usize| -> Option<&crate::commands::read::SectionRange> {
+        ranges
+            .iter()
+            .filter(|r| r.start <= line && line <= r.end)
+            .max_by_key(|r| r.level)
+    };
+
+    let mut scores: HashMap<&str, usize> = HashMap::new();
+    for (idx, text) in body.lines().enumerate() {
+        let matched = stemmed_tokens(text)
+            .into_iter()
+            .filter(|t| query_terms.contains(t))
+            .count();
+        if matched == 0 {
+            continue;
+        }
+        if let Some(owner) = owner_of(idx + 1) {
+            *scores.entry(owner.address.as_str()).or_insert(0) += matched;
+        }
+    }
+
+    // Walk ranges (depth-first order) and keep the best by (score, deeper level,
+    // earlier start). Iterating `ranges` rather than the map gives level/start
+    // for free and a deterministic order independent of map hashing.
+    let mut best: Option<(&crate::commands::read::SectionRange, usize)> = None;
+    for r in &ranges {
+        let score = *scores.get(r.address.as_str()).unwrap_or(&0);
+        if score == 0 {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((br, bscore)) => {
+                score > bscore
+                    || (score == bscore
+                        && (r.level > br.level
+                            || (r.level == br.level && r.start < br.start)))
+            }
+        };
+        if better {
+            best = Some((r, score));
+        }
+    }
+    best.map(|(r, _)| r.address.clone())
 }
 
 // ---------------------------------------------------------------------------
@@ -744,6 +819,7 @@ pub fn run_consult(
                 tokens_est: crate::tokens::estimate_tokens(
                     h.stored_body.trim_start_matches('\n'),
                 ),
+                section: best_section_address(&h.stored_body, &query_terms),
             }
         })
         .collect();
@@ -767,6 +843,52 @@ pub fn run_consult(
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
+
+    // --- Section attribution ---
+
+    /// Build the stemmed query-term set the way the gate does, so the test
+    /// matches whatever the analyzer actually produces.
+    fn terms(query: &str) -> BTreeSet<String> {
+        stemmed_tokens(query).into_iter().collect()
+    }
+
+    #[test]
+    fn best_section_points_at_the_densest_heading() {
+        // Matched terms cluster under "## Retry handling"; the unrelated section
+        // and the shallow text region carry none.
+        let body = "\
+intro prose about nothing in particular
+
+## Caching
+
+memoize results to avoid recomputation
+
+## Retry handling
+
+exponential backoff retries failed requests on transient failure
+
+### Tuning
+
+pick backoff ceilings empirically";
+        let q = terms("retry backoff failure");
+        // Section "2" (Retry handling) owns the line with three matches; its
+        // child "2.1" (Tuning) owns one. Highest score wins.
+        assert_eq!(best_section_address(body, &q).as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn best_section_is_none_without_matches() {
+        let body = "## Caching\n\nmemoize results";
+        let q = terms("retry backoff failure");
+        assert_eq!(best_section_address(body, &q), None);
+    }
+
+    #[test]
+    fn best_section_attributes_heading_less_body_to_text_region() {
+        let body = "exponential backoff retries failed requests on failure";
+        let q = terms("retry backoff failure");
+        assert_eq!(best_section_address(body, &q).as_deref(), Some("0"));
+    }
 
     // --- Fixture helpers ---
 

@@ -802,6 +802,14 @@ fn test_consult_oversized_pointer_emits_read_verb() {
         "the `get` full-file dump must no longer appear, got: {}",
         stdout
     );
+    // The matching card (`20 cards/Retry patterns.md`) is heading-less, so its
+    // matched terms attribute to the `(text)` region: the pointer lands the
+    // agent on address `0`, not a bare overview.
+    assert!(
+        stdout.contains("Retry patterns.md\" 0\n"),
+        "oversized pointer must carry the matched section's address, got: {}",
+        stdout
+    );
 }
 
 // ---------------------------------------------------------------------------
