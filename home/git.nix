@@ -13,6 +13,7 @@ in {
       "**/.vault.config.json"
       "**/.claude-plans/"
       "**/.firecrawl/"
+      "**/.playwright-mcp/"
     ];
     settings = {
       user.name = "Vadim Kotov";

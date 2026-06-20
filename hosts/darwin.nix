@@ -56,7 +56,6 @@
       "zig"
       "arimxyer/tap/models"
       "oven-sh/bun/bun"
-      "agent-browser"
       "anomalyco/tap/opencode"
       "portless"
     ];
