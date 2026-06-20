@@ -18,6 +18,18 @@ bash "$HOME/nix/home/agents/scripts/sync-agents.sh"
 echo "Installing global bun packages..."
 bash "$HOME/nix/home/bun/install-globals.sh"
 
+# Playwright MCP runs under Node, not Bun: Bun's subprocess/IPC layer can't
+# launch Chromium (microsoft/playwright#27139, oven-sh/bun#23826). The package
+# is installed via Bun above (install != run); both commands below invoke Node.
+echo "Installing Playwright Chromium..."
+node "$HOME/.bun/install/global/node_modules/playwright/cli.js" install chromium
+
+echo "Registering Playwright MCP server..."
+if ! claude mcp get playwright >/dev/null 2>&1; then
+  claude mcp add --scope user playwright -- \
+    node "$HOME/.bun/install/global/node_modules/@playwright/mcp/cli.js"
+fi
+
 echo "Installing pi plugins..."
 pi install https://github.com/davebcn87/pi-autoresearch
 

@@ -18,6 +18,7 @@ bun install -g --minimum-release-age=0 \
   firecrawl-cli@1.18.0 \
   vercel@53.3.2 \
   @playwright/cli@0.1.1 \
+  @playwright/mcp@0.0.76 \
   @mariozechner/pi-coding-agent@0.73.1 \
   knip@6.14.2 \
   madge@8.0.0 \

@@ -237,14 +237,7 @@
     "typescript-lsp@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true
   },
-  "extraKnownMarketplaces": {
-    "agent-browser": {
-      "source": {
-        "source": "github",
-        "repo": "vercel-labs/agent-browser"
-      }
-    }
-  },
+  "extraKnownMarketplaces": {},
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
@@ -280,7 +273,6 @@
     },
     "filesystem": {
       "allowWrite": [
-        "~/.agent-browser",
         "~/.bun",
         "~/.cache",
         "~/.config/basecamp",
