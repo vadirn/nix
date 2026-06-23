@@ -37,6 +37,8 @@ For causal claims, use the method of difference:
 2. Name the single factor that differs between them. That factor is the cause.
 3. When many factors differ, eliminate them one by one until one remains (bisect by experiment).
 
+Lazy resolution (ponytail). The analysis above runs in full; its output is the minimal answer that resolves the principal contradiction. Lazy about the answer, thorough about the reasoning. Before stating a point, ask whether it needs to exist: drop speculative caveats, alternatives not asked for, and background the reader did not request. Keep the grounds a recommendation needs, calibrated uncertainty, and the confidence grade — lazy means efficient, not careless.
+
 ## Uncertainty & Confidence
 
 - Say when uncertain.
