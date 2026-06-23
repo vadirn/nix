@@ -4,10 +4,10 @@ confirm-close-surface = false
 copy-on-select = clipboard
 cursor-style = block
 cursor-style-blink = true
-font-family = "MonoLisa Variable"
+font-family = "MonoLisaCode"
 font-family = "Symbols Nerd Font Mono"
 font-size = 13
-font-variation = "wght=560"
+font-variation = "GRAD=50"
 keybind = alt+left=text:\x1bb
 keybind = alt+right=text:\x1bf
 keybind = shift+enter=text:\x1b\r
