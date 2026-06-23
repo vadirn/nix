@@ -213,6 +213,11 @@
             "type": "command",
             "command": "bash ~/.claude/hooks/stop-verify.sh",
             "timeout": 120
+          },
+          {
+            "type": "command",
+            "command": "doppler run --project claude-code --config std -- bun ~/.claude/hooks/shrink-digest.ts",
+            "timeout": 12
           }
         ]
       }
@@ -262,6 +267,7 @@
         "files.pythonhosted.org",
         "api.doppler.com",
         "cli.doppler.com",
+        "api.fireworks.ai",
         "generativelanguage.googleapis.com",
         "fal.run",
         "*.fal.run",
