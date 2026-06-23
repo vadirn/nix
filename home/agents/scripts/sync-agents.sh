@@ -18,6 +18,7 @@ LINKS=(
   ".claude/settings.json|home/claude/settings.json"
   ".claude/hooks|home/claude/hooks"
   ".claude/agents|home/agents/agents"
+  ".claude/output-styles|home/agents/output-styles"
   ".claude/statusline.sh|home/claude/statusline.sh"
 )
 
