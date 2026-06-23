@@ -11,21 +11,12 @@
 //
 // Runs under `doppler run` so FIREWORKS_API_KEY is in the env. Size-gated so
 // short answers cost nothing past startup.
-import { appendFileSync } from "node:fs";
-
 const MODEL = "accounts/fireworks/models/gpt-oss-120b";
 const GATE_WORDS = 140; // below this, no digest
 const FW_TIMEOUT_MS = 8000;
-const LOG = `${process.env.HOME}/.cache/claude-cut-digest.jsonl`; // ~/.claude is not sandbox-writable; ~/.cache is
 
 const bail = () => process.exit(0); // emit nothing -> no digest, answer untouched
 const wc = (s: string) => (s.trim() ? s.trim().split(/\s+/).length : 0);
-
-function log(rec: Record<string, unknown>) {
-  try {
-    appendFileSync(LOG, JSON.stringify({ ts: new Date().toISOString(), ...rec }) + "\n");
-  } catch {}
-}
 
 // Fence-aware split: blank lines separate blocks, but ``` code fences stay whole.
 function splitBlocks(text: string): string[] {
@@ -79,7 +70,6 @@ Return ONLY strict JSON: {"drop":[n,...]} listing the block numbers to remove. E
 
 ${numbered}`;
 
-const t0 = Date.now();
 let dropIds: number[] = [];
 try {
   const resp = await fetch("https://api.fireworks.ai/inference/v1/chat/completions", {
@@ -101,11 +91,9 @@ try {
   const m = content.match(/\{[\s\S]*\}/); // tolerate prose around the JSON
   const parsed = JSON.parse(m ? m[0] : content);
   dropIds = Array.isArray(parsed.drop) ? parsed.drop.filter((n: any) => Number.isInteger(n)) : [];
-} catch (e) {
-  log({ error: String(e), words_in });
+} catch {
   bail();
 }
-const latency_ms = Date.now() - t0;
 
 const keep = blocks.filter((_, i) => !dropIds.includes(i + 1));
 // Nothing to trim, or model went pathological -> no digest.
@@ -140,8 +128,6 @@ function stripMd(s: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
-
-log({ words_in, words_out, pct, dropped_n: dropIds.length, latency_ms });
 
 const digest = `— cut ${pct}% │ ${words_in}→${words_out} words —\n\n${stripMd(cut)}`;
 process.stdout.write(JSON.stringify({ systemMessage: digest }));
