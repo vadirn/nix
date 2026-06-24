@@ -174,7 +174,7 @@ When two or more designs look plausible and switching cost after commit is high,
 
 ### Standalone
 
-This skill carries every workflow it needs in `references/`. It does not call any other skill. Confidence rating, stress-testing, prose polish, and reasoning checks live in `references/capture-checks.md` as one-line templates; the agent applies them inline at capture without delegating to a sibling skill. The skill works on a host where no other skills are installed. On hosts where `/grade`, `/writing-en`, or `/probe` are installed, the user may run them against the filed artifact afterwards.
+This skill carries every workflow it needs in `references/`. It does not call any other skill. Confidence rating, stress-testing, prose polish, and reasoning checks live in `references/capture-checks.md` as one-line templates; the agent applies them inline at capture without delegating to a sibling skill. The skill works on a host where no other skills are installed. On hosts where `/grade`, `/cut`, or `/probe` are installed, the user may run them against the filed artifact afterwards.
 
 ### Pre-conditions
 
