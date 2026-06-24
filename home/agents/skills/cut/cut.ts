@@ -192,6 +192,12 @@ function extractJson(s: string): string {
   throw new Error(`unbalanced JSON: ${s.slice(0, 200)}`);
 }
 
+// one user-message JSON call: wrap the prompt, request json mode, parse the reply.
+async function askJson<T>(model: string, prompt: string, maxTokens: number): Promise<T> {
+  const raw = await fw(model, [{ role: "user", content: prompt }], { json: true, maxTokens });
+  return JSON.parse(extractJson(raw)) as T;
+}
+
 // ---- prompts ----
 function cutPrompt(blocks: Block[]): string {
   return `You are a ruthless editor. The text below is likely over-written with out-of-scope and unnecessary blocks. First state the text's main point in one sentence, then drop every block that is NOT load-bearing — not necessary for the reader to understand or act on the main point. Err toward cutting: drop generic follow-ups (how to verify afterwards, cautions, alternatives, related context about other actions), because an independent judge will restore any load-bearing block you wrongly dropped and flag genuinely borderline ones for a parent to review. Do NOT reword survivors — only drop whole blocks. Return ONLY JSON {"mainPoint":"<one sentence>","drop":[block id strings]}.
@@ -250,63 +256,37 @@ async function cutText(
   const passes = lang === "ru" ? PASS_RU : PASS_EN;
   const blocks = segment(text);
   const beforeWords = wordCount(text);
-  if (blocks.length <= 1) {
-    // nothing to cut; optionally revise
-    if (noRevise) return { out: text, footer: `— no cut (single block) · ${beforeWords} words` };
-    const rev = await revise(blocks, passes);
-    const out = reconstruct(rev);
-    return {
-      out,
-      footer: `— no cut (single block) · revised · ${beforeWords}→${wordCount(out)} words`,
-    };
-  }
+  // no-cut tail: nothing was dropped (single block, or editor kept everything).
+  // Optionally revise, then build the footer. Shared by both early exits below.
+  const noCut = async (tag: string): Promise<{ out: string; footer: string }> => {
+    if (noRevise) return { out: text, footer: `— ${tag} · ${beforeWords} words` };
+    const out = reconstruct(await revise(blocks, passes));
+    return { out, footer: `— ${tag} · revised · ${beforeWords}→${wordCount(out)} words` };
+  };
+  if (blocks.length <= 1) return noCut("no cut (single block)");
 
   // 1. editor cut
-  const cutRaw = await fw(EDITOR, [{ role: "user", content: cutPrompt(blocks) }], {
-    json: true,
-    maxTokens: 1024,
-  });
-  const cut = JSON.parse(extractJson(cutRaw)) as { mainPoint: string; drop: string[] };
+  const cut = await askJson<{ mainPoint: string; drop: string[] }>(EDITOR, cutPrompt(blocks), 1024);
   const mainPoint = cut.mainPoint ?? "";
   const dropSet = new Set((cut.drop ?? []).filter((id) => blocks.some((b) => b.id === id)));
-  if (dropSet.size === 0) {
-    // editor kept everything; optionally revise
-    if (noRevise) return { out: text, footer: `— no cut · ${beforeWords} words` };
-    const rev = await revise(blocks, passes);
-    const out = reconstruct(rev);
-    return { out, footer: `— no cut · revised · ${beforeWords}→${wordCount(out)} words` };
-  }
+  if (dropSet.size === 0) return noCut("no cut");
 
   const dropped = blocks.filter((b) => dropSet.has(b.id));
   const survivors = blocks.filter((b) => !dropSet.has(b.id));
 
   // 2. judge grade (the safety gate + flag source)
-  const judgeRaw = await fw(
-    JUDGE,
-    [{ role: "user", content: judgePrompt(mainPoint, dropped, survivors, rubric) }],
-    { json: true, maxTokens: 8192 },
-  );
-  const judged = JSON.parse(extractJson(judgeRaw)) as {
+  const judged = await askJson<{
     correctness: { blocks: { id: string; grade: Grade; reason: string }[] };
-  };
+  }>(JUDGE, judgePrompt(mainPoint, dropped, survivors, rubric), 8192);
   const gradeById = new Map<string, Grade>();
   for (const b of judged.correctness?.blocks ?? []) {
     if (b.id && b.grade) gradeById.set(b.id, b.grade);
   }
 
-  // 3. reconstruct: restore load, drop surplus, drop+flag borderline
-  const flagged: Block[] = [];
-  const kept: Block[] = [...survivors];
-  for (const b of dropped) {
-    const g = gradeById.get(b.id);
-    if (g === "load") {
-      kept.push(b); // auto-restore: load-bearing
-    } else if (g === "borderline") {
-      flagged.push(b); // drop + flag for parent
-    } // surplus → drop, no flag
-  }
-  // re-sort kept into original order
-  kept.sort((a, b) => blocks.indexOf(a) - blocks.indexOf(b));
+  // 3. reconstruct: restore load, drop surplus, drop+flag borderline. Filtering over
+  // `blocks` keeps original order; load-graded drops are restored, borderline flagged.
+  const kept = blocks.filter((b) => !dropSet.has(b.id) || gradeById.get(b.id) === "load");
+  const flagged = dropped.filter((b) => gradeById.get(b.id) === "borderline");
 
   // 4. revise survivors (word/sentence-level rubric)
   const finalBlocks = noRevise ? kept : await revise(kept, passes);
@@ -315,14 +295,13 @@ async function cutText(
   const nDropped = blocks.length - kept.length;
 
   // 5. footer (stderr): name the borderline cuts so the parent can restore them
-  const parts = [`— cut ${nDropped} block(s)`, `${beforeWords}→${afterWords} words`];
-  if (flagged.length) {
-    const labels = flagged.map((b) => `[${label(b.text)}]`).join(" ");
-    parts.push(`${flagged.length} questionable: ${labels}`);
-  } else {
-    parts.push("0 questionable");
-  }
-  parts.push("restore from source if needed");
+  const labels = flagged.map((b) => `[${label(b.text)}]`).join(" ");
+  const parts = [
+    `— cut ${nDropped} block(s)`,
+    `${beforeWords}→${afterWords} words`,
+    `${flagged.length} questionable${labels ? `: ${labels}` : ""}`,
+    "restore from source if needed",
+  ];
   return { out, footer: parts.join(" · ") };
 }
 
@@ -333,13 +312,11 @@ async function revise(blocks: Block[], passes: Pass[]): Promise<Block[]> {
   let cur = blocks;
   for (const pass of passes) {
     try {
-      const raw = await fw(EDITOR, [{ role: "user", content: revisePrompt(cur, pass) }], {
-        json: true,
-        maxTokens: 4096,
-      });
-      const { blocks: rev } = JSON.parse(extractJson(raw)) as {
-        blocks: { id: string; text: string }[];
-      };
+      const { blocks: rev } = await askJson<{ blocks: { id: string; text: string }[] }>(
+        EDITOR,
+        revisePrompt(cur, pass),
+        4096,
+      );
       const byId = new Map(rev.map((r) => [r.id, r.text]));
       cur = cur.map((b) => ({ id: b.id, text: byId.get(b.id) ?? b.text }));
     } catch {
