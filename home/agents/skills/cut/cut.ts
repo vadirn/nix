@@ -86,7 +86,8 @@ function segment(text: string): Block[] {
     }
   };
   for (const line of lines) {
-    if (line.trimStart().startsWith("```")) {
+    const t = line.trimStart();
+    if (t.startsWith("```") || t.startsWith("~~~")) {
       inFence = !inFence;
       cur.push(line);
       continue;
@@ -136,6 +137,10 @@ function detectLang(text: string): "en" | "ru" {
 }
 
 // ---- Fireworks call with retry ----
+// Retry once, but only on transient failures: a network/timeout throw, or a
+// 429/5xx status. A 401/400/content-policy error fails the same way on retry, so
+// retrying it only burns a second TIMEOUT_MS before the outer failsafe fires —
+// fail those fast with the status in the message instead.
 async function fw(
   model: string,
   messages: { role: string; content: string }[],
@@ -148,28 +153,47 @@ async function fw(
     temperature: opts.temp ?? 0,
   };
   if (opts.json) body.response_format = { type: "json_object" };
-  const doCall = async () => {
-    const res = await fetch(FW, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.FIREWORKS_API_KEY}`,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    const j = await res.json();
-    if (!res.ok) throw new Error(`FW ${res.status}: ${JSON.stringify(j).slice(0, 300)}`);
-    return j.choices[0].message.content as string;
-  };
-  try {
-    return await doCall();
-  } catch {
-    await new Promise((r) => setTimeout(r, 2000));
-    return await doCall();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(FW, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.FIREWORKS_API_KEY}`,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch (e) {
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue; // network error / timeout: transient
+      }
+      throw e;
+    }
+    const j = await res.json().catch(() => ({}) as Record<string, unknown>); // 5xx gateways return HTML
+    if (!res.ok) {
+      if ((res.status === 429 || res.status >= 500) && attempt === 0) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      throw new Error(`FW ${res.status}: ${JSON.stringify(j).slice(0, 300)}`);
+    }
+    const content = (j as { choices?: { message?: { content?: unknown } }[] }).choices?.[0]?.message
+      ?.content;
+    if (typeof content !== "string") {
+      throw new Error(`FW empty choices: ${JSON.stringify(j).slice(0, 300)}`);
+    }
+    return content;
   }
+  throw new Error("FW unreachable"); // loop always returns or throws
 }
 
+// Defensive layer over json_object mode: that mode is a strong hint, not a
+// guarantee — a thinking model (the JUDGE) can still emit reasoning around the
+// JSON. Pull the first balanced {...} object so such violations parse instead of
+// dropping to the passthrough failsafe. Kept deliberately, not redundant.
 function extractJson(s: string): string {
   const start = s.indexOf("{");
   if (start < 0) throw new Error(`no JSON in: ${s.slice(0, 200)}`);
