@@ -5,7 +5,7 @@ description: >
   Use when user invokes /affirm or asks to make instructions direct, remove hedging,
   flip negatives to positives, or strengthen language in skill files, docs, or prompts.
   Works on inline text, files, or conversation context.
-  Target instruction and directive text only; route general prose editing to /writing-en.
+  Target instruction and directive text only; route general prose editing to /cut.
 ---
 
 # Affirm
