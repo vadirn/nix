@@ -40,10 +40,10 @@ const EXTRACT = "accounts/fireworks/models/gpt-oss-120b"; // fast, obedient; ~3 
 const FIDELITY = "accounts/fireworks/models/glm-5p2"; // thinking; ~15-20 s — stage 5 only (the different model)
 const TIMEOUT_MS = 180_000;
 
-// ---- embedded writing passes (condensed from writing-en/ru pass 1-4) ----
-// Each pass is a separate, focused rule set applied in sequence (words →
-// sentences → paragraphs → AI patterns); each call refines the prior pass's
-// output. Full reference rules live in reference-en.md / reference-ru.md.
+// ---- writing passes (the revise-stage rubric — inline single source) ----
+// Four focused rule sets applied in sequence (words → sentences → paragraphs →
+// AI patterns); each call refines the prior pass's output. These condensed rules
+// are the whole rubric; there is no separate reference file to keep in sync.
 type Pass = { name: string; rules: string };
 
 const PASS_EN: Pass[] = [
@@ -620,7 +620,10 @@ async function distill(
   if (!opts.noRevise) {
     const dblocks: Block[] = [
       { id: "__TIE__", text: tie },
-      ...orderedEntries.map((e, i) => ({ id: `__G${i}__`, text: defByTerm.get(e.term) ?? e.def })),
+      ...orderedEntries.map((e, i) => ({
+        id: `__G${i}__`,
+        text: defByTerm.get(e.term) ?? e.def,
+      })),
     ];
     const rev = await revise(dblocks, passes);
     const byId = new Map(rev.map((b) => [b.id, b.text]));
