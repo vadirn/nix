@@ -43,7 +43,7 @@ distill's output is **not** a verbatim subset of the source, so cut's verbatim c
 
 ## The writing rubric
 
-The revise step runs four sequential passes embedded in `distill.ts` (`PASS_EN` / `PASS_RU`): words → sentences → paragraphs → AI patterns. Full source rules are in [reference-en.md](reference-en.md) / [reference-ru.md](reference-ru.md) — edit those, then re-distill into the pass constants.
+The revise step runs four sequential passes — words → sentences → paragraphs → AI patterns — embedded in `distill.ts` as the `PASS_EN` / `PASS_RU` rubric (the single source; edit them there to change behavior).
 
 ## The synthesis dial — render vs regenerate
 
