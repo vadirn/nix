@@ -12,8 +12,8 @@ A standalone headless CLI that trims over-inclusive text. It cuts whole out-of-s
 When this skill fires, run the finished text through `cut-text` and act on its two outputs:
 
 1. Pipe the text to `cut-text`, run under `doppler run --project claude-code --config std --` so it has the API key. Add `--lang ru` only to override autodetect, `--no-revise` to skip the word-level passes.
-2. Present **stdout** as the trimmed result.
-3. Read the **stderr footer**. For each block it lists as `questionable`, check the source and decide whether that block matters for _this_ reader — restore it when the applicability condition or safety qualifier is load-bearing here. The footer routes the boundary call to you because you hold the context the tool lacks.
+2. Read the **first stdout line** — the path to a fresh temp `.md` file holding the trimmed result. Each questionable (borderline) cut is appended verbatim below a `---` separator, so you can splice it back in place. Open the file to review, and to write back to the source if you apply the cut.
+3. Read the **second stdout line** — the footer. For each block it lists as `questionable`, check the source and decide whether that block matters for _this_ reader — restore it (from the `---` section in the file) when the applicability condition or safety qualifier is load-bearing here. The footer routes the boundary call to you because you hold the context the tool lacks.
 
 Run it on text that is already complete: it is an editing pass over a finished draft, not a drafting aid.
 
@@ -26,7 +26,7 @@ Run it on text that is already complete: it is an editing pass over a finished d
    - `surplus` → **drop, unflagged** (clearly out of scope).
    - `borderline` → **drop + flag** in the footer (a judgment call — e.g. an applicability condition, a safety qualifier on a command).
 4. **Revise** (`gpt-oss-120b`, 4 sequential passes): the survivors pass through words → sentences → paragraphs → AI patterns, each call refining the prior pass's output. Code blocks are kept verbatim; claims and structure are preserved (no invented headings or bullets).
-5. **Output**: the trimmed text to **stdout**; a one-line **footer** to **stderr** naming the questionable cuts.
+5. **Output**: the trimmed text to a fresh temp `.md` file (via `mktemp`), with each questionable cut appended verbatim below a `---` separator; **stdout** carries two lines — the file path, then the one-line **footer** naming the questionable cuts.
 
 ## Install / run
 
@@ -38,7 +38,7 @@ cut-text --lang ru < input.txt          # force the Russian rubric
 cut-text --no-revise < input.txt        # block-cut only, skip word-level revise
 ```
 
-The binary is `cut-text` (not `cut` — that name belongs to coreutils); it is on PATH via `.local/bin/cut-text`. stdout is the trimmed payload; stderr is the footer. Pipe cleanly with `cut-text < in > out` (footer stays on the terminal).
+The binary is `cut-text` (not `cut` — that name belongs to coreutils); it is on PATH via `.local/bin/cut-text`. It writes the trimmed text to a temp `.md` file; stdout is two lines — the file path, then the footer. Capture the path with `path=$(cut-text < in | head -1)`.
 
 ## The footer — how a parent model uses it
 
