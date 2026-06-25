@@ -32,6 +32,7 @@
 //         distill-text --max-retries 1 input.md      # cap stage-5 recovery (default: 2)
 //         distill-text --no-gate input.md            # skip stage-5 fidelity gate
 //         distill-text --no-revise input.md          # skip stage-4 writing passes
+//         distill-text render glossary.md            # separate, on-demand: prose note FROM a distilled glossary
 import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
@@ -580,6 +581,136 @@ function assembleBody(
   return parts.join("\n\n");
 }
 
+// ---- render mode: reconstruct a prose note from a distilled glossary ----
+// The inverse of the compress pipeline. Input is a distilled file (this tool's
+// own output, or a saved glossary note): frontmatter + a tie-together line + a
+// `## Glossary` table + optional retained blocks. Output is a flowing prose note
+// grounded ONLY in that glossary — the certified reference. No fidelity gate: the
+// glossary is the certified artifact, the prose its readable derivative (always
+// regenerable and checkable against it). The glossary table is dropped from output.
+
+// If the input is wrapped in <result>…</result> (the raw temp file this tool
+// emits), use the inner content and ignore any <residue>; otherwise use as-is.
+function unwrapResult(text: string): string {
+  const m = text.match(/<result>\r?\n?([\s\S]*?)\r?\n?<\/result>/);
+  return m ? m[1] : text;
+}
+
+const stripH1 = (s: string): string => s.replace(/^#\s+[^\n]*\r?\n?/, "");
+
+// Parse a distilled body into its parts: the tie-together prose (head, minus any
+// H1), the glossary entries (the `## Glossary` table — header/separator rows
+// skipped, `\|` unescaped, the inverse of escCell + assembleBody), and any
+// retained blocks after the table (e.g. a wikilink reference list).
+function parseDistilled(body: string): {
+  tie: string;
+  entries: { term: string; def: string }[];
+  retained: string;
+} {
+  const gi = body.match(/^##\s+Glossary\b.*$/im);
+  if (!gi || gi.index === undefined) {
+    return { tie: stripH1(body).trim(), entries: [], retained: "" };
+  }
+  const head = body.slice(0, gi.index);
+  const after = body.slice(gi.index + gi[0].length).split("\n");
+  const rows: string[] = [];
+  let j = 0;
+  for (; j < after.length; j++) {
+    const t = after[j].trim();
+    if (t === "") {
+      if (rows.length) break; // a blank after the rows ends the table
+      continue; // blank between heading and table
+    }
+    if (t.startsWith("|")) {
+      rows.push(t);
+      continue;
+    }
+    break; // first non-blank non-row line ends the table
+  }
+  const retained = after.slice(j).join("\n").trim();
+  const entries: { term: string; def: string }[] = [];
+  for (const row of rows) {
+    const cells = row
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split(/(?<!\\)\|/)
+      .map((c) => c.replace(/\\\|/g, "|").trim());
+    if (cells.length < 2) continue;
+    const [term, def] = cells;
+    if (!term || term.toLowerCase() === "term") continue; // header row
+    if (/^:?-{3,}:?$/.test(term.replace(/\s/g, ""))) continue; // separator row
+    entries.push({ term, def });
+  }
+  return { tie: stripH1(head).trim(), entries, retained };
+}
+
+function renderPrompt(
+  description: string,
+  tie: string,
+  entries: { term: string; def: string }[],
+  lang: "en" | "ru",
+): string {
+  const gloss = entries.map((e) => `- ${e.term}: ${e.def}`).join("\n");
+  return `You are reconstructing a readable prose note from its distilled glossary. Write flowing prose (connected markdown paragraphs) using ONLY the description, thesis, and glossary definitions below — introduce NO claim, term, or example absent from them. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings; write paragraphs a reader follows start to finish. Lead with the thesis, then develop each concept and how it relates to the others. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
+
+DESCRIPTION: ${description || "(none)"}
+
+THESIS / TIE:
+${tie || "(none)"}
+
+GLOSSARY:
+${gloss}`;
+}
+
+async function renderProse(
+  description: string,
+  tie: string,
+  entries: { term: string; def: string }[],
+  lang: "en" | "ru",
+): Promise<string> {
+  const res = await askJson<{ prose: string }>(
+    EXTRACT,
+    renderPrompt(description, tie, entries, lang),
+    4096,
+  );
+  return (res.prose ?? "").trim();
+}
+
+// Drive render mode: parse → synthesize prose → revise (no gate) → assemble.
+// Failsafe mirrors the compress path: any error → the original is passed through.
+async function runRender(
+  input: string,
+  opts: { lang: "en" | "ru" | "auto"; noRevise: boolean },
+  emit: (body: string, footer: string) => void,
+): Promise<void> {
+  try {
+    const { front, body } = splitFrontmatter(unwrapResult(input));
+    const { tie, entries, retained } = parseDistilled(body);
+    if (entries.length === 0) {
+      emit(input, "— render skipped: no ## Glossary table found");
+      return;
+    }
+    const lang = opts.lang === "auto" ? detectLang(body) : opts.lang;
+    let prose = await renderProse(parseDescription(front), tie, entries, lang);
+    if (!prose) {
+      emit(input, "— render skipped: empty prose");
+      return;
+    }
+    if (!opts.noRevise) {
+      const revised = await revise(segment(prose), lang === "ru" ? PASS_RU : PASS_EN);
+      prose = revised.map((b) => b.text).join("\n\n");
+    }
+    const outBody = retained ? `${prose}\n\n${retained}` : prose;
+    const result = front ? front + "\n" + outBody : outBody;
+    emit(
+      `<result>\n${result}\n</result>\n`,
+      `— rendered prose · ${wordCount(body)}→${wordCount(outBody)} words · ${entries.length} entries`,
+    );
+  } catch (e) {
+    emit(input, `— render skipped (error): ${String(e).slice(0, 160)}`);
+  }
+}
+
 // ---- pipeline ----
 type Residue = { term: string; reason: string; source: string };
 async function distill(
@@ -771,6 +902,10 @@ async function main() {
     );
     process.exit(1);
   }
+  // The first positional `render` selects prose-render mode (the inverse flow);
+  // it is sliced off before flag parsing so the next token is the input path.
+  const rawArgv = process.argv.slice(2);
+  const mode: "compress" | "render" = rawArgv[0] === "render" ? "render" : "compress";
   const {
     lang,
     synth,
@@ -778,17 +913,21 @@ async function main() {
     noRevise,
     noGate,
     path: inputPath,
-  } = parseArgs(process.argv.slice(2));
+  } = parseArgs(mode === "render" ? rawArgv.slice(1) : rawArgv);
   const input = readFileSync(inputPath ?? 0, "utf8");
   if (!input.trim()) process.exit(0);
-  // Strip leading frontmatter: it passes through verbatim and the pipeline (incl.
-  // language detection) operates on the body only.
-  const { front, body } = splitFrontmatter(input);
   const path = tempMdPath();
   const emit = (body: string, footer: string): void => {
     writeFileSync(path, body);
     process.stdout.write(`${path}\n${footer}\n`);
   };
+  if (mode === "render") {
+    await runRender(input, { lang, noRevise }, emit);
+    return;
+  }
+  // compress mode: strip leading frontmatter (it passes through verbatim; the
+  // pipeline + language detection operate on the body only).
+  const { front, body } = splitFrontmatter(input);
   if (!body.trim()) {
     emit(input, "— no body to distill");
     process.exit(0);

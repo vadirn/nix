@@ -23,6 +23,15 @@ When this skill fires, run the finished note through `distill-text` (the binary,
 4. **Revise** (`gpt-oss-120b`, 4 passes): the distilled prose passes through words → sentences → paragraphs → AI patterns. Code, wikilinks, and inline code are masked and restored verbatim.
 5. **Fidelity-grade** (`glm-5p2`, the **different** model): round-trip entailment — does each output definition entail its source statement and vice versa, and is the thesis recoverable? A failing definition is re-rendered from source (capped at `--max-retries`); whatever still fails is surfaced as `<residue>`, never silently shipped.
 
+## Render a prose note from a glossary (separate, on-demand)
+
+`distill-text render <file>` runs the inverse: it reconstructs a flowing **prose note** from an already-distilled glossary. The split is deliberate — the `## Glossary` output is the durable, gate-certified **reference**; the prose is its readable derivative, regenerable and checkable against the glossary anytime. Use it when you want the note back as paragraphs rather than a table.
+
+- **Input**: a distilled file — this tool's own output (the `<result>…</result>` wrapper is stripped; any `<residue>` is ignored) or a saved glossary note. It reads the frontmatter, the tie-together line, the `## Glossary` table, and any retained blocks (e.g. a wikilink reference list).
+- **Output**: frontmatter verbatim, then flowing prose grounded **only** in the glossary (no claim, term, or example absent from it), then the retained blocks. The `## Glossary` table itself is dropped. Same two-line stdout contract — temp `.md` path, then a footer (`— rendered prose · 221→281 words · 5 entries`).
+- **Passes / flags**: reuses the four revise passes (`--no-revise` skips them) and honors `--lang`. It is **not** fidelity-gated — there is no `<residue>`; the glossary is the certified artifact, so re-ground the prose against it if a claim looks off.
+- **Limit**: the rendered table is `term | definition` only, so the prose works from definitions (which often carry their relations in wording) rather than the extractor's explicit relation list — relations are softer than in the original note. The glossary remains the source of truth.
+
 ## Install / run
 
 Requires `FIREWORKS_API_KEY` (e.g. via `doppler run --project claude-code --config std --`).
@@ -33,6 +42,7 @@ distill-text < input.txt                   # read from stdin
 distill-text --lang ru input.md            # force the Russian rubric
 distill-text --synth regenerate input.md   # denser dial (default: render)
 distill-text --no-gate input.md            # skip the stage-5 fidelity gate
+distill-text render glossary.md            # separate: prose note FROM a distilled glossary (no gate)
 ```
 
 The binary is `distill-text`; it is on PATH via `.local/bin/distill-text`. It writes the XML-tagged result to a temp `.md` file; stdout is two lines — the file path, then the footer. Capture the path with `path=$(distill-text input.md | head -1)`.
