@@ -5,16 +5,19 @@
 // load/borderline/surplus) → reconstruct (restore load, drop surplus, drop+flag
 // borderline) → revise survivors (gpt-oss-120b, 4 sequential writing passes) → output.
 //
-// Output: the trimmed text is written to a fresh temp .md file (mktemp), with each
-// questionable (borderline) cut appended verbatim below a `---` separator so a parent
+// Output: the trimmed text is written to a fresh temp .md file (mktemp), XML-wrapped.
+// A <result>…</result> section holds exactly the text to write back to source
+// (frontmatter, if any, + revised body); a <borderline>…</borderline> section (omitted
+// when empty) holds one <block reason="…"> per questionable cut, verbatim, so a parent
 // model can splice it back in place. stdout is two lines — the file path, then a
-// footer naming the questionable cuts. Failsafe: any error → the temp file holds the
-// original text (passthrough), path still printed.
+// one-line summary footer. Failsafe: any error → the temp file holds the original text
+// (passthrough, not XML-wrapped), path still printed.
 //
 // Standalone headless CLI. Generous time budget (~25–40 s). Fireworks via
 // FIREWORKS_API_KEY (e.g. `doppler run --project claude-code --config std --`).
 //
-// Usage:  cut-text < input.txt              # auto-detect language
+// Usage:  cut-text input.md                 # read from file (auto-detect language)
+//         cut-text < input.txt              # read from stdin
 //         cut-text --lang ru < input.txt    # force Russian rubric
 //         cut-text --no-revise < input.txt  # block-cut only, skip word-level revise
 import { readFileSync, writeFileSync } from "node:fs";
@@ -120,16 +123,6 @@ function reconstruct(blocks: Block[]): string {
 function wordCount(s: string): number {
   const t = s.trim();
   return t ? t.split(/\s+/).length : 0;
-}
-
-// short human+parent-readable label for a block: first non-fence line, truncated
-function label(text: string): string {
-  const firstLine =
-    text
-      .split("\n")
-      .map((l) => l.trim())
-      .find((l) => l && !l.startsWith("```")) ?? text.trim();
-  return firstLine.length > 50 ? firstLine.slice(0, 47) + "…" : firstLine;
 }
 
 // a block carries a deliberate connection if it contains [[...]] — this also
@@ -326,11 +319,12 @@ ${render(blocks)}`;
 }
 
 // ---- pipeline ----
+type Flagged = { text: string; reason: string };
 async function cutText(
   text: string,
   lang: "en" | "ru",
   noRevise: boolean,
-): Promise<{ out: string; footer: string; flagged: string[] }> {
+): Promise<{ out: string; footer: string; flagged: Flagged[] }> {
   const rubric = lang === "ru" ? RUBRIC_RU : RUBRIC_EN;
   const passes = lang === "ru" ? PASS_RU : PASS_EN;
   const blocks = segment(text);
@@ -339,7 +333,7 @@ async function cutText(
   // Optionally revise, then build the footer. Shared by both early exits below.
   const noCut = async (
     tag: string,
-  ): Promise<{ out: string; footer: string; flagged: string[] }> => {
+  ): Promise<{ out: string; footer: string; flagged: Flagged[] }> => {
     if (noRevise) return { out: text, footer: `— ${tag} · ${beforeWords} words`, flagged: [] };
     const out = reconstruct(await revise(blocks, passes));
     return {
@@ -364,8 +358,10 @@ async function cutText(
     correctness: { blocks: { id: string; grade: Grade; reason: string }[] };
   }>(JUDGE, judgePrompt(mainPoint, dropped, survivors, rubric), 8192);
   const gradeById = new Map<string, Grade>();
+  const reasonById = new Map<string, string>();
   for (const b of judged.correctness?.blocks ?? []) {
     if (b.id && b.grade) gradeById.set(b.id, b.grade);
+    if (b.id && b.reason) reasonById.set(b.id, b.reason);
   }
   // clamp: a dropped block carrying a wikilink can never be surplus or ungraded —
   // force at least borderline so a deliberate connection is flagged for restore,
@@ -379,7 +375,15 @@ async function cutText(
   // 3. reconstruct: restore load, drop surplus, drop+flag borderline. Filtering over
   // `blocks` keeps original order; load-graded drops are restored, borderline flagged.
   const kept = blocks.filter((b) => !dropSet.has(b.id) || gradeById.get(b.id) === "load");
-  const flagged = dropped.filter((b) => gradeById.get(b.id) === "borderline");
+  const flaggedBlocks = dropped.filter((b) => gradeById.get(b.id) === "borderline");
+  // carry each flagged block's verbatim text + judge reason out for the file. The
+  // wikilink clamp can force "borderline" on a block the judge left ungraded — fall
+  // back to a fixed reason so the file always carries one.
+  const flagged: Flagged[] = flaggedBlocks.map((b) => ({
+    text: b.text,
+    reason:
+      reasonById.get(b.id) ?? "deliberate connection (wikilink) — flagged for restore",
+  }));
 
   // 4. revise survivors (word/sentence-level rubric)
   const finalBlocks = noRevise ? kept : await revise(kept, passes);
@@ -387,15 +391,9 @@ async function cutText(
   const afterWords = wordCount(out);
   const nDropped = blocks.length - kept.length;
 
-  // 5. footer (stderr): name the borderline cuts so the parent can restore them
-  const labels = flagged.map((b) => `[${label(b.text)}]`).join(" ");
-  const parts = [
-    `— cut ${nDropped} block(s)`,
-    `${beforeWords}→${afterWords} words`,
-    `${flagged.length} questionable${labels ? `: ${labels}` : ""}`,
-    "restore from source if needed",
-  ];
-  return { out, footer: parts.join(" · "), flagged: flagged.map((b) => b.text) };
+  // 5. footer: one-line summary; the per-block reasons now live in the file.
+  const footer = `— cut ${nDropped} · ${beforeWords}→${afterWords} words · ${flagged.length} borderline`;
+  return { out, footer, flagged };
 }
 
 async function revise(blocks: Block[], passes: Pass[]): Promise<Block[]> {
@@ -440,14 +438,28 @@ async function revise(blocks: Block[], passes: Pass[]): Promise<Block[]> {
 }
 
 // ---- arg parsing + io ----
-function parseArgs(argv: string[]): { lang: "en" | "ru" | "auto"; noRevise: boolean } {
+// Flags may appear in any position. `--lang` consumes the following token as its
+// value, so that token is never mistaken for the positional path. The first token
+// that is neither a flag nor a flag's consumed value is the input file path.
+function parseArgs(argv: string[]): {
+  lang: "en" | "ru" | "auto";
+  noRevise: boolean;
+  path?: string;
+} {
   let lang: "en" | "ru" | "auto" = "auto";
   let noRevise = false;
+  let path: string | undefined;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--lang" && argv[i + 1]) lang = argv[i + 1] as "en" | "ru" | "auto";
-    if (argv[i] === "--no-revise") noRevise = true;
+    if (argv[i] === "--lang" && argv[i + 1]) {
+      lang = argv[i + 1] as "en" | "ru" | "auto";
+      i++; // skip the consumed lang value
+      continue;
+    }
+    if (argv[i] === "--no-revise") continue;
+    if (path === undefined) path = argv[i];
   }
-  return { lang, noRevise };
+  noRevise = argv.includes("--no-revise");
+  return { lang, noRevise, path };
 }
 
 // Create an empty temp file with a .md extension and return its path. The cut
@@ -464,8 +476,9 @@ async function main() {
     );
     process.exit(1);
   }
-  const { lang, noRevise } = parseArgs(process.argv.slice(2));
-  const input = readFileSync(0, "utf8");
+  const { lang, noRevise, path: inputPath } = parseArgs(process.argv.slice(2));
+  // input source: positional file path if given, else stdin (fd 0).
+  const input = readFileSync(inputPath ?? 0, "utf8");
   if (!input.trim()) {
     process.exit(0);
   }
@@ -481,11 +494,20 @@ async function main() {
   const resolved = lang === "auto" ? detectLang(body) : lang;
   try {
     const { out, footer, flagged } = await cutText(body, resolved, noRevise);
-    const final = front ? front + "\n" + out : out;
-    // Append each footer-flagged (borderline) block verbatim below the cut text,
-    // each behind a `---` separator, so the parent can splice it back in place.
-    const fileBody = [final, ...flagged].join("\n\n---\n\n");
-    writeFileSync(path, fileBody + (fileBody.endsWith("\n") ? "" : "\n"));
+    // <result> wraps exactly the text to write back to source: frontmatter
+    // (verbatim, if any) + revised body. <borderline> carries one <block> per
+    // flagged cut with the verbatim block text inside; omitted entirely when empty.
+    const result = front ? front + "\n" + out : out;
+    let fileBody = `<result>\n${result}\n</result>\n`;
+    if (flagged.length) {
+      const escAttr = (s: string) =>
+        s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+      const blocks = flagged
+        .map((f) => `<block reason="${escAttr(f.reason)}">\n${f.text}\n</block>`)
+        .join("\n");
+      fileBody += `\n<borderline>\n${blocks}\n</borderline>\n`;
+    }
+    writeFileSync(path, fileBody);
     process.stdout.write(`${path}\n${footer}\n`);
   } catch (e) {
     // failsafe: temp file holds the original (passthrough); path still printed
