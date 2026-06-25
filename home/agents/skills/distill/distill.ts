@@ -696,8 +696,18 @@ async function distill(
   }
 
   const afterWords = wordCount(out);
+  // passthrough guard: a distillation that expands the note has failed its one job.
+  // Ship the original body rather than the larger output. (the footer's +N% only
+  // flagged this after the fact; this prevents it.)
+  if (afterWords > beforeWords) {
+    return {
+      out: text,
+      footer: `— distillation expanded ${beforeWords}→${afterWords} words; kept original`,
+      residue: [],
+    };
+  }
   const pct = beforeWords ? Math.round((100 * (beforeWords - afterWords)) / beforeWords) : 0;
-  const sizeTag = `${pct > 0 ? "-" : pct < 0 ? "+" : "±"}${Math.abs(pct)}%`; // +N% flags an expansion (compression failed)
+  const sizeTag = `${pct > 0 ? "-" : pct < 0 ? "+" : "±"}${Math.abs(pct)}%`; // expansion is guarded above, so this is -N% or ±0%
   const retriesTag = retries ? ` · ${retries} retries` : "";
   const footer = `— distilled ${opts.synth} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries · ${retained.length} verbatim · ${residue.length} residue${retriesTag}`;
   return { out, footer, residue };
