@@ -146,10 +146,10 @@ const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
 // leaves Cyrillic and source guillemets alone, so it is safe for the RU rubric.
 function normalizeTypography(s: string): string {
   return s
-    .replace(/[‘’‚‛]/g, "'") // ‘ ’ ‚ ‛ → '
-    .replace(/[“”„‟]/g, '"') // “ ” „ ‟ → "
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/[“”„‟]/g, '"')
     .replace(/[‐‑‒–—―]/g, "-") // hyphen/nbhyphen/figure/en/em/bar → -
-    .replace(/…/g, "...") // … → ...
+    .replace(/…/g, "...")
     .replace(/ /g, " "); // nbsp → space
 }
 
@@ -262,7 +262,6 @@ function extractJson(s: string): string {
   throw new Error(`unbalanced JSON: ${s.slice(0, 200)}`);
 }
 
-// one user-message JSON call: wrap the prompt, request json mode, parse the reply.
 async function askJson<T>(model: string, prompt: string, maxTokens: number): Promise<T> {
   const raw = await fw(model, [{ role: "user", content: prompt }], { json: true, maxTokens });
   return JSON.parse(extractJson(raw)) as T;
@@ -422,7 +421,7 @@ async function revise(blocks: Block[], passes: Pass[]): Promise<Block[]> {
       const byId = new Map(rev.map((r) => [r.id, r.text]));
       cur = cur.map((b) => ({ id: b.id, text: byId.get(b.id) ?? b.text }));
     } catch {
-      // pass failed; keep current blocks, continue to next pass
+      // a failed pass keeps the current blocks (see above); continue
     }
   }
   // normalize typography on the model's prose, then restore masked spans verbatim
