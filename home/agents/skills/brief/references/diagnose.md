@@ -81,5 +81,5 @@ Remedy: <the matching practice above>.
 Want me to draft <the update | the renegotiation framing | both, in order>?
 ```
 
-Point to the source for the full argument when useful: `vault-query get "Target distance"`.
+Point to the source for the full argument when useful (`vault-query get "Target distance"` resolves the path; Read it).
 Do not paste the note's prose into the output.
