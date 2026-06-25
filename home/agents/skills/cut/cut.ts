@@ -153,6 +153,28 @@ function normalizeTypography(s: string): string {
     .replace(/ /g, " "); // nbsp → space
 }
 
+// ---- frontmatter: YAML metadata block fenced by --- at the very start ----
+// Split off leading frontmatter so it passes through verbatim — it is metadata,
+// not prose, and must never be segmented, cut, graded, or reworded. Returns the
+// frontmatter (fences included, trailing newline kept) and the remaining body.
+// A leading --- with no closing fence is not frontmatter, so the whole text is body.
+function splitFrontmatter(text: string): { front: string; body: string } {
+  if (!text.startsWith("---\n") && !text.startsWith("---\r\n")) return { front: "", body: text };
+  const lines = text.split("\n");
+  for (let i = 1; i < lines.length; i++) {
+    const t = lines[i].replace(/\r$/, "");
+    if (t === "---" || t === "...") {
+      const front = lines.slice(0, i + 1).join("\n") + "\n";
+      const body = lines
+        .slice(i + 1)
+        .join("\n")
+        .replace(/^\n/, ""); // drop one separating blank line
+      return { front, body };
+    }
+  }
+  return { front: "", body: text };
+}
+
 function detectLang(text: string): "en" | "ru" {
   const letters = text.match(/[a-zA-Zа-яА-ЯёЁ]/g) ?? [];
   if (letters.length === 0) return "en";
@@ -431,10 +453,18 @@ async function main() {
   if (!input.trim()) {
     process.exit(0);
   }
-  const resolved = lang === "auto" ? detectLang(input) : lang;
+  // Strip leading frontmatter: it passes through verbatim and the pipeline (incl.
+  // language detection) operates on the body only. Body-only input is unaffected.
+  const { front, body } = splitFrontmatter(input);
+  if (!body.trim()) {
+    process.stdout.write(input);
+    process.exit(0);
+  }
+  const resolved = lang === "auto" ? detectLang(body) : lang;
   try {
-    const { out, footer } = await cutText(input, resolved, noRevise);
-    process.stdout.write(out + (out.endsWith("\n") ? "" : "\n"));
+    const { out, footer } = await cutText(body, resolved, noRevise);
+    const final = front ? front + "\n" + out : out;
+    process.stdout.write(final + (final.endsWith("\n") ? "" : "\n"));
     console.error(footer);
   } catch (e) {
     // failsafe: passthrough original
