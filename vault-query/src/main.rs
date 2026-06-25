@@ -167,7 +167,7 @@ enum Commands {
     },
     /// Initialize Tracks.base in the current project
     TracksInit,
-    /// Find and read a note/card/reference/checkpoint by name
+    /// Resolve a note/card/reference/checkpoint name to its absolute path (one per line)
     Get {
         /// Name fragment to resolve
         fragment: String,

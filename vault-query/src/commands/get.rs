@@ -29,38 +29,13 @@ pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: b
     if paths.is_empty() {
         eprintln!("No matches for '{}'", fragment);
         std::process::exit(1);
-    } else if paths.len() == 1 {
-        let full = vault_root.join(&paths[0]);
-        let content = std::fs::read_to_string(&full)?;
+    }
 
-        // Determine if the resolved entry is superseded.
-        let fm = frontmatter::parse(&content)
-            .unwrap_or(None)
-            .unwrap_or_default();
-        let file_type = frontmatter::get_display(&fm, "type");
-        let is_sup = frontmatter::is_superseded(&fm) || file_type == "checkpoint";
-
-        // With --no-superseded the path was already filtered out above, so this
-        // branch only triggers for the single-match case without the flag, or for a
-        // superseded single match when the flag is absent.
-        if no_superseded && is_sup {
-            eprintln!("Entry is superseded. Use without --no-superseded to retrieve it.");
-            std::process::exit(1);
-        }
-
-        println!("{}", full.display());
-        if is_sup {
-            println!("[superseded]");
-        }
-        println!("---");
-        print!("{}", content);
-    } else {
-        // Multi-match: list all candidates. Append [superseded] label where applicable.
-        for p in &paths {
-            let full = vault_root.join(p);
-            let sup_label = if path_is_superseded(&full) { " [superseded]" } else { "" };
-            println!("{}{}", full.display(), sup_label);
-        }
+    // `get` resolves a fragment to absolute path(s), one per line, and nothing else.
+    // Reading is a separate concern: pipe the path into Read, `vault-query read`,
+    // `cat`, or `distill-text`. Supersededness is gated by --no-superseded above.
+    for p in &paths {
+        println!("{}", vault_root.join(p).display());
     }
     Ok(())
 }

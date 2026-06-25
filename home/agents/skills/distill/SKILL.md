@@ -11,7 +11,7 @@ A standalone headless CLI that re-expresses an expository note as a dense Glossa
 
 When this skill fires, run the finished note through `distill-text` (the binary, on PATH) and act on its two outputs:
 
-1. Give `distill-text` the note — a positional file path (`distill-text input.md`) or piped on stdin — under `doppler run --project claude-code --config std --` so it has `FIREWORKS_API_KEY` in env (doppler is one way to inject it). `--lang ru` overrides language autodetect; `--synth regenerate` switches the synthesis dial (default `render`); `--max-retries N` caps gate recovery (default 2); `--no-gate` / `--no-revise` skip stage 5 / stage 4.
+1. Give `distill-text` the note — a positional file path (`distill-text input.md`) or piped on stdin — under `doppler run --project claude-code --config std --` so it has `FIREWORKS_API_KEY` in env (doppler is one way to inject it). For a **vault entry named rather than pathed**, resolve the path first with `vault-query get` (it prints the absolute path, one per line): `distill-text "$(vault-query get "Target distance")"`. `--lang ru` overrides language autodetect; `--synth regenerate` switches the synthesis dial (default `render`); `--max-retries N` caps gate recovery (default 2); `--no-gate` / `--no-revise` skip stage 5 / stage 4.
 2. Read the **first stdout line** — the path to a fresh temp `.md` file. Its `<result>…</result>` section holds exactly the text to write back to source (frontmatter verbatim, if any, then the distilled body: a short tie-together, the `## Glossary` table, and any operational blocks kept verbatim). A `<residue>…</residue>` section (omitted when empty) holds one `<entry term="…" reason="…">` per definition that failed the fidelity gate, with the verbatim `<source>` inside — re-read those from the source, they did not translate.
 3. Read the **second stdout line** — the footer (e.g. `— distilled render · 755→381 words (-50%) · 8 entries · 1 verbatim · 0 residue · 1 retries`). A `+N%` size means the output grew — distillation expanded it (the note was too short or too list-heavy to compress); prefer the original. A non-zero residue count means open the file and recover those definitions from source.
 
@@ -39,6 +39,7 @@ Requires `FIREWORKS_API_KEY` (e.g. via `doppler run --project claude-code --conf
 ```bash
 distill-text input.md                      # read from a file (auto-detect language)
 distill-text < input.txt                   # read from stdin
+distill-text "$(vault-query get "Entry name")"  # vault entry resolved by name → path
 distill-text --lang ru input.md            # force the Russian rubric
 distill-text --synth regenerate input.md   # denser dial (default: render)
 distill-text --no-gate input.md            # skip the stage-5 fidelity gate
