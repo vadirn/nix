@@ -1,0 +1,20 @@
+{
+  "note": "Two concepts, each defined 3x in scattered paraphrases (ground truth by construction). A correct distill collapses each set to exactly ONE glossary entry.",
+  "baseWords": 430,
+  "concepts": [
+    {
+      "term": "lag horizon",
+      "match": ["lag horizon"],
+      "restatements": 3,
+      "expected_entries": 1,
+      "must_not_drop": true
+    },
+    {
+      "term": "shed ratio",
+      "match": ["shed ratio"],
+      "restatements": 3,
+      "expected_entries": 1,
+      "must_not_drop": true
+    }
+  ]
+}
