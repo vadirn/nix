@@ -129,6 +129,30 @@ function label(text: string): string {
   return firstLine.length > 50 ? firstLine.slice(0, 47) + "…" : firstLine;
 }
 
+// a block carries a deliberate connection if it contains [[...]] — this also
+// matches ![[...]] embeds, since the embed wraps a wikilink. Detection is
+// deterministic so the protection (Edit 1/2 in the wikilink spec) cannot miss one.
+const WIKILINK = /\[\[[^\]]+\]\]/;
+const hasWikilink = (text: string): boolean => WIKILINK.test(text);
+
+// Reference spans the revise passes must keep verbatim and that never need
+// rewording: wikilinks, embeds (![[...]]), and inline code. They are masked to
+// opaque ⟦N⟧ tokens for the duration of revise, then restored (see revise()).
+const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
+
+// Deterministic typographic normalization. The revise model substitutes typeset
+// glyphs (curly quotes, an em dash, a non-breaking hyphen) regardless of prompt
+// instruction; this maps the finite set back. It touches only substitutes — it
+// leaves Cyrillic and source guillemets alone, so it is safe for the RU rubric.
+function normalizeTypography(s: string): string {
+  return s
+    .replace(/[‘’‚‛]/g, "'") // ‘ ’ ‚ ‛ → '
+    .replace(/[“”„‟]/g, '"') // “ ” „ ‟ → "
+    .replace(/[‐‑‒–—―]/g, "-") // hyphen/nbhyphen/figure/en/em/bar → -
+    .replace(/…/g, "...") // … → ...
+    .replace(/ /g, " "); // nbsp → space
+}
+
 function detectLang(text: string): "en" | "ru" {
   const letters = text.match(/[a-zA-Zа-яА-ЯёЁ]/g) ?? [];
   if (letters.length === 0) return "en";
@@ -224,7 +248,7 @@ async function askJson<T>(model: string, prompt: string, maxTokens: number): Pro
 
 // ---- prompts ----
 function cutPrompt(blocks: Block[]): string {
-  return `You are a ruthless editor. The text below is likely over-written with out-of-scope and unnecessary blocks. First state the text's main point in one sentence, then drop every block that is NOT load-bearing — not necessary for the reader to understand or act on the main point. Err toward cutting: drop generic follow-ups (how to verify afterwards, cautions, alternatives, related context about other actions), because an independent judge will restore any load-bearing block you wrongly dropped and flag genuinely borderline ones for a parent to review. Do NOT reword survivors — only drop whole blocks. Return ONLY JSON {"mainPoint":"<one sentence>","drop":[block id strings]}.
+  return `You are a ruthless editor. The text below is likely over-written with out-of-scope and unnecessary blocks. First state the text's main point in one sentence, then keep only the load-bearing blocks — those the reader needs to understand or act on the main point — and drop the rest. Err toward cutting: drop generic follow-ups (how to verify afterwards, cautions, alternatives, related context about other actions), because an independent judge will restore any load-bearing block you wrongly dropped and flag genuinely borderline ones for a parent to review. Keep survivors verbatim; drop whole blocks only. Return ONLY JSON {"mainPoint":"<one sentence>","drop":[block id strings]}.
 
 TEXT (block IDs in [Bn] markers):
 ${render(blocks)}`;
@@ -236,23 +260,29 @@ function judgePrompt(
   survivors: Block[],
   rubric: string,
 ): string {
+  // dropped blocks carrying a wikilink are marked [wikilink] so the judge can
+  // apply the never-surplus rule below; the clamp in cutText is the guarantee.
+  const renderDropped = dropped
+    .map((b) => `[${b.id}]${hasWikilink(b.text) ? " [wikilink]" : ""} ${b.text}`)
+    .join("\n\n");
   return `You are an independent judge grading an editor's cut. You see the text's main point, the blocks the editor DROPPED, and the blocks that SURVIVE. Grade three dimensions. Return ONLY JSON.
 
 MAIN POINT: ${mainPoint}
 
 DROPPED blocks:
-${render(dropped)}
+${renderDropped}
 
 SURVIVING blocks:
 ${render(survivors)}
 
 Grade each:
-1. "fluff": among the SURVIVING blocks, count those out-of-scope (not needed for the main point). {"count": int, "blocks": [ids]}
+1. "fluff": among the SURVIVING blocks, count those out-of-scope (irrelevant to the main point). {"count": int, "blocks": [ids]}
 2. "readability": grade the surviving text against the clarity rules below. {"grade": "PASS"|"MARGINAL"|"FAIL", "violations": [short strings]}
 3. "correctness" (answerability + graded): First, using ONLY the SURVIVING blocks, construct the most complete expression of the MAIN POINT you can, and note any part you cannot express or that a reader could not act on without more. Then grade EACH DROPPED block:
    - "load": its absence leaves a GAP — the reader cannot carry out the specific action the text recommends, or cannot judge whether that action applies to their situation.
-   - "borderline": no gap that blocks the action, but the block bears on whether the advice fits the reader's case or on performing the action safely; a reviewing reader (or model with the source text) should judge whether to restore it. This is NOT a generic follow-up.
+   - "borderline": no gap that blocks the action, but the block bears on whether the advice fits the reader's case or on performing the action safely; a reviewing reader (or model with the source text) should judge whether to restore it. It differs from a generic follow-up.
    - "surplus": out of scope of the main point, OR a generic follow-up the text does not require the reader to take (how to verify the result afterwards, cautions, alternatives, or related context about other actions); nothing relevant is lost by dropping it.
+   A block marked [wikilink] carries a deliberate connection: grade it "load" (inline in load-bearing prose) or "borderline" (e.g. a bare list of related links) — those are its only valid grades.
    correctness "verdict" is "FAIL" iff ANY dropped block is "load"; otherwise "PASS".
    {"verdict":"PASS"|"FAIL", "answer":"<your expression from survivors, or what is missing>", "blocks":[{"id":"Bn","grade":"load|borderline|surplus","reason":"..."}], "issue":"<if FAIL, the load block(s) + the gap; else empty>"}
 
@@ -262,7 +292,7 @@ Return ONLY: {"fluff":{"count":0,"blocks":[]},"readability":{"grade":"PASS","vio
 }
 
 function revisePrompt(blocks: Block[], pass: Pass): string {
-  return `You are a copy editor. This is the ${pass.name.toUpperCase()} pass. Revise each block below applying ONLY the rules below, WITHOUT altering its claims, dropping content, or adding structure (headings, bullets, formatting) not present in the original. Keep code blocks verbatim. Return ONLY JSON {"blocks":[{"id":"B1","text":"revised text"}, ...]} — one entry per block, ids matching.
+  return `You are a copy editor. This is the ${pass.name.toUpperCase()} pass. Revise each block below applying only the rules below. Preserve its claims, keep all its content, and match the original's structure exactly (same headings, bullets, and formatting). Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged. Preserve emphasis (**bold**, _italic_). Write straight quotes and plain hyphens. Return ONLY JSON {"blocks":[{"id":"B1","text":"revised text"}, ...]} — one entry per block, ids matching.
 
 ${pass.rules}
 
@@ -306,6 +336,14 @@ async function cutText(
   for (const b of judged.correctness?.blocks ?? []) {
     if (b.id && b.grade) gradeById.set(b.id, b.grade);
   }
+  // clamp: a dropped block carrying a wikilink can never be surplus or ungraded —
+  // force at least borderline so a deliberate connection is flagged for restore,
+  // never silently lost. A missing grade would otherwise fall through to a silent drop.
+  for (const b of dropped) {
+    if (hasWikilink(b.text) && gradeById.get(b.id) !== "load") {
+      gradeById.set(b.id, "borderline");
+    }
+  }
 
   // 3. reconstruct: restore load, drop surplus, drop+flag borderline. Filtering over
   // `blocks` keeps original order; load-graded drops are restored, borderline flagged.
@@ -330,10 +368,28 @@ async function cutText(
 }
 
 async function revise(blocks: Block[], passes: Pass[]): Promise<Block[]> {
+  // Mask reference spans ([[wikilinks]], ![[embeds]], inline code) to opaque ⟦N⟧
+  // tokens before the passes so the rewriting model cannot reword or drop them;
+  // restored verbatim at the end. Emphasis is left unmasked (it spans words that
+  // legitimately get reworded) and relies on the prompt instruction instead.
+  const masks = new Map<string, string>();
+  let n = 0;
+  const mask = (text: string): string =>
+    text.replace(MASK_RE, (m) => {
+      const key = `⟦${n++}⟧`;
+      masks.set(key, m);
+      return key;
+    });
+  const unmask = (text: string): string => {
+    let out = text;
+    for (const [key, orig] of masks) out = out.split(key).join(orig);
+    return out;
+  };
+
   // sequential passes: each refines the prior pass's output (words → sentences →
   // paragraphs → AI patterns). A failed pass (parse/network) keeps the current
   // blocks so prior improvements survive; the loop continues.
-  let cur = blocks;
+  let cur = blocks.map((b) => ({ id: b.id, text: mask(b.text) }));
   for (const pass of passes) {
     try {
       const { blocks: rev } = await askJson<{ blocks: { id: string; text: string }[] }>(
@@ -347,7 +403,9 @@ async function revise(blocks: Block[], passes: Pass[]): Promise<Block[]> {
       // pass failed; keep current blocks, continue to next pass
     }
   }
-  return cur;
+  // normalize typography on the model's prose, then restore masked spans verbatim
+  // so injected originals are untouched by the normalize step.
+  return cur.map((b) => ({ id: b.id, text: unmask(normalizeTypography(b.text)) }));
 }
 
 // ---- arg parsing + io ----
