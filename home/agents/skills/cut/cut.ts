@@ -381,8 +381,7 @@ async function cutText(
   // back to a fixed reason so the file always carries one.
   const flagged: Flagged[] = flaggedBlocks.map((b) => ({
     text: b.text,
-    reason:
-      reasonById.get(b.id) ?? "deliberate connection (wikilink) — flagged for restore",
+    reason: reasonById.get(b.id) ?? "deliberate connection (wikilink) — flagged for restore",
   }));
 
   // 4. revise survivors (word/sentence-level rubric)
