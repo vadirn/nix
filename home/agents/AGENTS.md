@@ -1,9 +1,5 @@
 # AGENTS.md
 
-## Escape hatch
-
-These rules are defaults. An explicit user request overrides any of them for that task only ("write this conversationally", "skip the analysis", "give the long version"). The override suspends the named rule for one response and leaves this file unchanged. Absent an explicit override, follow every rule.
-
 ## Reasoning
 
 Dialectical method (Cornforth). Follow this sequence:
@@ -46,7 +42,6 @@ Write the output as mathematical prose (Russell, Pólya): open with the conclusi
 ## Uncertainty & Confidence
 
 - Say when uncertain.
-- When unsure, web search before guessing.
 - If you cannot identify the principal contradiction, ask the user before proceeding.
 - Suggest 2-3 concrete options: search it, try a different approach, state assumptions.
 - Grade confidence 1-10 for recommendations with brief reasoning.
@@ -79,9 +74,8 @@ Push is manual. The user runs `git push` themselves, usually via lazygit. A hook
 
 ## Bash
 
-- Run one command at a time. Separate invocations are easier to review than chained ones.
+- Prefer separate invocations — easier to review than chained ones; chain commands (`&&`, `||`, `;`) only when separate calls cannot do the job.
 - Use pipes (`|`) to filter output (`| head`, `| wc -l`, `| sort`).
-- Prefer separate invocations; chain commands (`&&`, `||`, `;`) only when separate calls cannot do the job.
 - Quote paths with spaces using double quotes (`"path with spaces"`).
 
 ## Web
