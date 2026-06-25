@@ -1,19 +1,26 @@
 #!/usr/bin/env bun
-// distill — abstractive idea-compression: re-express a note as a dense Glossary.
+// distill — abstractive idea-compression: re-express a note as readable prose
+// backed by a certified glossary.
 //
 // Not extractive (cut's verbatim-survivor trim, retired). distill rebuilds the
-// note around a canonical form: a `## Glossary` table + a short prose tie-together,
-// with only operational tokens (commands, paths, flags, code) kept verbatim.
+// note around a canonical form. By default the output is a readable note: flowing
+// connective prose (which carries the THESIS and the RELATIONS among terms) above
+// a `## Glossary` table of DEFINITIONS ONLY — division of labor, no duplication.
+// Only operational tokens (commands, paths, flags, code) are kept verbatim.
 // Restatement collapses structurally (N surface forms of one idea → one entry).
+// `--core-only` drops the prose and emits just the glossary (tie + definitions).
 //
 // Pipeline (5 stages): segment → (1) extract combo {description, thesis, glossary
 // with relations + source pointers} (gpt-oss-120b) → (2) grade each block
 // drop/distill/retain (gpt-oss-120b) → (3) synthesize glossary defs via the
-// fidelity dial render|regenerate → (4) revise the distilled prose (4 writing
-// passes) → (5) fidelity-grade output⟷raw-input by round-trip entailment with a
+// fidelity dial render|regenerate, then write the connective prose head from the
+// defs+relations → (4) revise the distilled prose (4 writing passes) →
+// (5) fidelity-grade the glossary defs ⟷ raw-input by round-trip entailment with a
 // DIFFERENT model (glm-5p2); residue is re-rendered from source, capped, then
 // surfaced. Independence of writer (EXTRACT) and grader (FIDELITY) is the safety
-// property — the verbatim certificate is gone, so the gate is equivalence.
+// property — the verbatim certificate is gone, so the gate is equivalence. The
+// gate certifies the glossary definitions; the prose, which restates none of them,
+// rides on those certified terms and is not separately gated.
 //
 // Output: written to a fresh temp .md file (mktemp), XML-wrapped. <result>…</result>
 // holds exactly the text to write back to source (frontmatter verbatim + distilled
@@ -25,8 +32,9 @@
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
 // `doppler run --project claude-code --config std --`).
 //
-// Usage:  distill-text input.md                      # read from file (auto-detect language)
+// Usage:  distill-text input.md                      # prose + ## Glossary (auto-detect language)
 //         distill-text < input.txt                   # read from stdin
+//         distill-text --core-only input.md          # glossary only (tie + definitions), no prose
 //         distill-text --lang ru < input.txt         # force Russian rubric
 //         distill-text --synth regenerate input.md   # denser dial (default: render)
 //         distill-text --max-retries 1 input.md      # cap stage-5 recovery (default: 2)
@@ -149,15 +157,17 @@ const hasOperational = (text: string): boolean =>
 const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
 
 // Deterministic typographic normalization. The revise model substitutes typeset
-// glyphs (curly quotes, an em dash, a non-breaking hyphen) regardless of prompt
-// instruction; this maps the finite set back. It touches only substitutes — it
-// leaves Cyrillic and source guillemets alone, so it is safe for the RU rubric.
+// glyphs (curly quotes, a non-breaking hyphen) regardless of prompt instruction;
+// this maps the finite set back. Em dashes (—) are kept as clause breaks (the
+// source notes use them) but normalized to spaced form ( — ), since the model
+// emits them tight (model—assuming) about half the time. It touches only
+// substitutes — it leaves Cyrillic and source guillemets alone, safe for RU.
 function normalizeTypography(s: string): string {
   return s
     .replace(/[‘’‚‛]/g, "'")
     .replace(/[“”„‟]/g, '"')
-    .replace(/\s*[—―]\s*/g, " - ") // em dash / bar (clause break): space the hyphen, collapse adjacent whitespace
-    .replace(/[‐‑‒–]/g, "-") // hyphen/nbhyphen/figure/en (ranges) → bare -
+    .replace(/[‐‑‒–]/g, "-") // hyphen/nbhyphen/figure/en (ranges) → bare - (em dash — is kept)
+    .replace(/[ \t]*[—―][ \t]*/g, " — ") // em dash / bar → spaced em dash; never eats a newline
     .replace(/…/g, "...")
     .replace(/ /g, " "); // nbsp → space
 }
@@ -321,7 +331,11 @@ async function extractCombo(
     .map((e) => ({
       term: (e.term ?? "").trim(),
       def: (e.def ?? "").trim(),
-      relations: Array.isArray(e.relations) ? e.relations : [],
+      // relations skip revise(), so normalize their typography here (the extractor
+      // emits non-breaking hyphens / typeset glyphs the same way the revise model does)
+      relations: (Array.isArray(e.relations) ? e.relations : [])
+        .map((r) => normalizeTypography(String(r)).trim())
+        .filter(Boolean),
       source: (e.source ?? []).filter((id) => ids.has(id)),
     }))
     // an entry with no valid source block cannot be rendered grounded or graded — drop it
@@ -459,9 +473,57 @@ async function tieTogether(ir: IR, lang: "en" | "ru"): Promise<string> {
   }
 }
 
+// ---- the connective prose (default mode's readable body) ----
+// Writes the note's readable body as flowing prose. Division of labor: the prose
+// carries the RELATIONS (how terms tie together) and the thesis; the definitions
+// live in the `## Glossary` table below, so the prose names each term but does NOT
+// restate its full definition. The definitions are shown to the model only as
+// context (so it places terms correctly), with an explicit instruction not to copy
+// them in. Relations are the spine the paragraphs are built on.
+function connectiveProsePrompt(
+  ir: IR,
+  orderedEntries: GlossEntry[],
+  defByTerm: Map<string, string>,
+  lang: "en" | "ru",
+): string {
+  const concepts = orderedEntries
+    .map(
+      (e) =>
+        `### ${e.term}\nrelations: ${e.relations.join("; ")}\ndef (context only — do NOT restate in the prose): ${defByTerm.get(e.term) ?? e.def}`,
+    )
+    .join("\n\n");
+  return `You are writing the readable body of a note. Its definitions live in a separate "## Glossary" table directly below your prose, which the reader can consult — so your job is the connective tissue, not the definitions. Write flowing prose (connected markdown paragraphs) that develops how the terms relate to one another, building on the relations listed for each concept. Bold each glossary term on its first mention (e.g. **Target distance**) so the bold marks it as a term defined in the glossary below; do NOT restate its full definition; a brief gloss is fine only where the flow needs it.
+Write about the SUBJECT, not about the document: open the FIRST sentence by asserting the thesis directly as a plain claim about the subject (e.g. "Target distance is the gap between …, closed only by …"). NEVER refer to "the note", "this note", "the thesis", "this concept", "the author", or describe what the text does — state every point as a fact about the subject itself.
+Introduce NO claim, term, or relation absent from the input. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings. Keep \`inline code\`, file paths, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
+
+THESIS (assert this in your own words as the opening claim — do not announce it as "the thesis"): ${ir.thesis}
+
+CONCEPTS (term, its relations, and its definition for context):
+${concepts}`;
+}
+
+async function connectiveProse(
+  ir: IR,
+  orderedEntries: GlossEntry[],
+  defByTerm: Map<string, string>,
+  lang: "en" | "ru",
+): Promise<string> {
+  if (orderedEntries.length === 0) return "";
+  try {
+    const res = await askJson<{ prose: string }>(
+      EXTRACT,
+      connectiveProsePrompt(ir, orderedEntries, defByTerm, lang),
+      4096,
+    );
+    return (res.prose ?? "").trim() || ir.thesis;
+  } catch {
+    return ir.thesis; // a failed render degrades to the bare thesis sentence
+  }
+}
+
 // ---- writing passes (stage 4): reuse cut's four sequential rewrites ----
 function revisePrompt(blocks: Block[], pass: Pass): string {
-  return `You are a copy editor. This is the ${pass.name.toUpperCase()} pass. Revise each block below applying only the rules below. Preserve its claims, keep all its content, and match the original's structure exactly (same headings, bullets, and formatting). Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged. Preserve emphasis (**bold**, _italic_). Write straight quotes and plain hyphens. Return ONLY JSON {"blocks":[{"id":"B1","text":"revised text"}, ...]} — one entry per block, ids matching.
+  return `You are a copy editor. This is the ${pass.name.toUpperCase()} pass. Revise each block below applying only the rules below. Preserve its claims, keep all its content, and match the original's structure exactly (same headings, bullets, and formatting). Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged. Preserve emphasis (**bold**, _italic_). Write straight quotes; keep em dashes (—) as written. Return ONLY JSON {"blocks":[{"id":"B1","text":"revised text"}, ...]} — one entry per block, ids matching.
 
 ${pass.rules}
 
@@ -469,15 +531,37 @@ TEXT:
 ${render(blocks)}`;
 }
 
-async function revise(blocks: Block[], passes: Pass[]): Promise<Block[]> {
+async function revise(blocks: Block[], passes: Pass[], literals: string[] = []): Promise<Block[]> {
   // Mask reference spans ([[wikilinks]], ![[embeds]], inline code) to opaque ⟦N⟧
   // tokens before the passes so the rewriting model cannot reword or drop them;
-  // restored verbatim at the end. Emphasis is left unmasked (it spans words that
-  // legitimately get reworded) and relies on the prompt instruction instead.
+  // restored verbatim at the end. General emphasis is left unmasked (it spans words
+  // that legitimately get reworded) and relies on the prompt instruction instead.
+  // `literals` are exact spans to freeze too — the bolded glossary terms (**Term**),
+  // so the term text stays verbatim and keeps matching its glossary key.
   const masks = new Map<string, string>();
+  const litToken = new Map<string, string>();
   let n = 0;
+  // freeze the literal spans first (longest first, so a term that contains another
+  // is masked whole before its substring), then the reference-span regex.
+  const orderedLiterals = [...new Set(literals.filter(Boolean))].sort(
+    (a, b) => b.length - a.length,
+  );
+  const maskLiterals = (text: string): string => {
+    let out = text;
+    for (const lit of orderedLiterals) {
+      if (!out.includes(lit)) continue;
+      let key = litToken.get(lit);
+      if (!key) {
+        key = `⟦${n++}⟧`;
+        litToken.set(lit, key);
+        masks.set(key, lit);
+      }
+      out = out.split(lit).join(key);
+    }
+    return out;
+  };
   const mask = (text: string): string =>
-    text.replace(MASK_RE, (m) => {
+    maskLiterals(text).replace(MASK_RE, (m) => {
       const key = `⟦${n++}⟧`;
       masks.set(key, m);
       return key;
@@ -553,7 +637,11 @@ async function fidelityGate(
   };
 }
 
-// ---- assembly: glossary table + prose tie-together + retained-verbatim blocks ----
+// ---- assembly: head prose + glossary table + retained-verbatim blocks ----
+// `head` is the prose that sits above the table: the full connective note in the
+// default mode (relations live here), or the short tie-together in --core-only.
+// The `## Glossary` table carries definitions only — relations are not a column;
+// they are carried by the connective prose (see connectiveProse).
 function escCell(s: string): string {
   return s.replace(/\|/g, "\\|").replace(/\n+/g, " ").trim();
 }
@@ -563,14 +651,14 @@ const escAttr = (s: string) =>
 
 function assembleBody(
   h1: string,
-  tie: string,
+  head: string,
   orderedEntries: GlossEntry[],
   defByTerm: Map<string, string>,
   retained: Block[],
 ): string {
   const parts: string[] = [];
   if (h1) parts.push(h1);
-  if (tie) parts.push(tie);
+  if (head) parts.push(head);
   if (orderedEntries.length) {
     const rows = orderedEntries
       .map((e) => `| ${escCell(e.term)} | ${escCell(defByTerm.get(e.term) ?? e.def)} |`)
@@ -717,7 +805,7 @@ async function distill(
   text: string,
   lang: "en" | "ru",
   frontDescription: string,
-  opts: { synth: Synth; maxRetries: number; noRevise: boolean; noGate: boolean },
+  opts: { synth: Synth; maxRetries: number; noRevise: boolean; noGate: boolean; coreOnly: boolean },
 ): Promise<{ out: string; footer: string; residue: Residue[] }> {
   const passes = lang === "ru" ? PASS_RU : PASS_EN;
   const blocks = segment(text);
@@ -740,25 +828,31 @@ async function distill(
   const orderKey = (e: GlossEntry) => Math.min(...e.source.map((id) => blockIndex.get(id) ?? 1e9));
   const orderedEntries = [...ir.glossary].sort((a, b) => orderKey(a) - orderKey(b));
 
-  // 3. synthesize definitions via the dial + the prose tie-together
-  const [defByTerm, tie0] = await Promise.all([
-    synthEntries(ir, orderedEntries, opts.synth, blockById, lang),
-    tieTogether(ir, lang),
-  ]);
-  let tie = tie0;
+  // 3. synthesize definitions via the dial; the short tie-together (the gate's
+  // thesis anchor, and the head in --core-only); and—in the default mode—the
+  // connective prose body. connectiveProse needs the defs, so it runs after
+  // synthEntries rather than alongside it.
+  const defByTerm = await synthEntries(ir, orderedEntries, opts.synth, blockById, lang);
+  let tie = await tieTogether(ir, lang);
+  let prose = opts.coreOnly ? "" : await connectiveProse(ir, orderedEntries, defByTerm, lang);
 
-  // 4. revise the distilled prose (tie-together + each def), structure untouched
+  // 4. revise the distilled prose (tie + connective prose + each def), structure untouched
   if (!opts.noRevise) {
     const dblocks: Block[] = [
       { id: "__TIE__", text: tie },
+      ...(prose ? [{ id: "__PROSE__", text: prose }] : []),
       ...orderedEntries.map((e, i) => ({
         id: `__G${i}__`,
         text: defByTerm.get(e.term) ?? e.def,
       })),
     ];
-    const rev = await revise(dblocks, passes);
+    // freeze the bolded glossary terms so revise keeps each term's text (and bold)
+    // verbatim — the prose bolds them as glossary cross-references.
+    const termLiterals = orderedEntries.map((e) => `**${e.term}**`);
+    const rev = await revise(dblocks, passes, termLiterals);
     const byId = new Map(rev.map((b) => [b.id, b.text]));
     tie = byId.get("__TIE__") ?? tie;
+    if (prose) prose = byId.get("__PROSE__") ?? prose;
     orderedEntries.forEach((e, i) => {
       const t = byId.get(`__G${i}__`);
       if (t) defByTerm.set(e.term, t);
@@ -766,7 +860,11 @@ async function distill(
   }
 
   const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
-  let out = assembleBody(h1, tie, orderedEntries, defByTerm, retained);
+  // The gate certifies the GLOSSARY form (tie + definitions), never the prose —
+  // the prose is the un-gated readable derivative, and feeding it to the judge
+  // made it mark every terse def as "missing" the detail the prose elaborates.
+  // Gate `gloss`; build the final `out` (prose head by default) after recovery.
+  let gloss = assembleBody(h1, tie, orderedEntries, defByTerm, retained);
 
   // 5. fidelity gate + recovery (round-trip entailment, capped re-render from source)
   const residue: Residue[] = [];
@@ -778,7 +876,7 @@ async function distill(
         def: defByTerm.get(e.term) ?? e.def,
         sourceText: sourceTextFor(e, blockById),
       }));
-    let graded = await fidelityGate(ir.thesis, out, rendered());
+    let graded = await fidelityGate(ir.thesis, gloss, rendered());
     let failing = graded.concepts.filter((c) => c.grade === "residue");
     while (failing.length > 0 && retries < opts.maxRetries) {
       retries++;
@@ -798,12 +896,12 @@ async function distill(
           // a failed re-render keeps the prior def; the gate re-grades it next
         }
       }
-      out = assembleBody(h1, tie, orderedEntries, defByTerm, retained);
+      gloss = assembleBody(h1, tie, orderedEntries, defByTerm, retained);
       // re-grade only the patched entries, not the full glossary (budget)
       const patchTerms = new Set(failing.map((c) => c.term));
       const reg = await fidelityGate(
         ir.thesis,
-        out,
+        gloss,
         rendered().filter((r) => patchTerms.has(r.term)),
       );
       failing = reg.concepts.filter((c) => c.grade === "residue");
@@ -826,6 +924,11 @@ async function distill(
     }
   }
 
+  // assemble the final output: the connective prose head by default, the tie in
+  // --core-only. Definitions are the gate-settled ones; the prose restates none
+  // of them, so recovery changing a def never invalidates the prose above it.
+  const out = assembleBody(h1, opts.coreOnly ? tie : prose, orderedEntries, defByTerm, retained);
+
   const afterWords = wordCount(out);
   // passthrough guard: a distillation that expands the note has failed its one job.
   // Ship the original body rather than the larger output. (the footer's +N% only
@@ -840,7 +943,8 @@ async function distill(
   const pct = beforeWords ? Math.round((100 * (beforeWords - afterWords)) / beforeWords) : 0;
   const sizeTag = `${pct > 0 ? "-" : pct < 0 ? "+" : "±"}${Math.abs(pct)}%`; // expansion is guarded above, so this is -N% or ±0%
   const retriesTag = retries ? ` · ${retries} retries` : "";
-  const footer = `— distilled ${opts.synth} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries · ${retained.length} verbatim · ${residue.length} residue${retriesTag}`;
+  const shapeTag = opts.coreOnly ? "gloss" : "prose+gloss";
+  const footer = `— distilled ${shapeTag} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries · ${retained.length} verbatim · ${residue.length} residue${retriesTag}`;
   return { out, footer, residue };
 }
 
@@ -855,6 +959,7 @@ function parseArgs(argv: string[]): {
   maxRetries: number;
   noRevise: boolean;
   noGate: boolean;
+  coreOnly: boolean;
   path?: string;
 } {
   let lang: "en" | "ru" | "auto" = "auto";
@@ -884,6 +989,7 @@ function parseArgs(argv: string[]): {
     maxRetries,
     noRevise: argv.includes("--no-revise"),
     noGate: argv.includes("--no-gate"),
+    coreOnly: argv.includes("--core-only"),
     path,
   };
 }
@@ -912,6 +1018,7 @@ async function main() {
     maxRetries,
     noRevise,
     noGate,
+    coreOnly,
     path: inputPath,
   } = parseArgs(mode === "render" ? rawArgv.slice(1) : rawArgv);
   const input = readFileSync(inputPath ?? 0, "utf8");
@@ -940,6 +1047,7 @@ async function main() {
       maxRetries,
       noRevise,
       noGate,
+      coreOnly,
     });
     // <result> wraps exactly the text to write back to source: frontmatter
     // (verbatim, if any) + distilled body. <residue> carries one <entry> per
