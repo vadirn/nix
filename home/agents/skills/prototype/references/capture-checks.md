@@ -24,4 +24,4 @@ If the decision is contested, walk the chain: thesis, premises, conclusion. Each
 
 ## Layering sibling skills
 
-This skill is standalone and does not dispatch to sibling skills. On hosts where `/grade`, `/cut`, or `/probe` are installed, run them against the filed artifact yourself for sharper checks. The prototype skill produces an artifact that those skills can audit; it does not invoke them.
+This skill is standalone and does not dispatch to sibling skills. On hosts where `/grade`, `/distill`, or `/probe` are installed, run them against the filed artifact yourself for sharper checks. The prototype skill produces an artifact that those skills can audit; it does not invoke them.
