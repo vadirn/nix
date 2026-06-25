@@ -5,9 +5,11 @@
 // load/borderline/surplus) → reconstruct (restore load, drop surplus, drop+flag
 // borderline) → revise survivors (gpt-oss-120b, 4 sequential writing passes) → output.
 //
-// stdout: the trimmed text (payload). stderr: a footer naming the questionable
-// (borderline) cuts so a parent model — which has the source text — can restore
-// them. Failsafe: any error → passthrough (original text, no cut).
+// Output: the trimmed text is written to a fresh temp .md file (mktemp), with each
+// questionable (borderline) cut appended verbatim below a `---` separator so a parent
+// model can splice it back in place. stdout is two lines — the file path, then a
+// footer naming the questionable cuts. Failsafe: any error → the temp file holds the
+// original text (passthrough), path still printed.
 //
 // Standalone headless CLI. Generous time budget (~25–40 s). Fireworks via
 // FIREWORKS_API_KEY (e.g. `doppler run --project claude-code --config std --`).
@@ -15,7 +17,8 @@
 // Usage:  cut-text < input.txt              # auto-detect language
 //         cut-text --lang ru < input.txt    # force Russian rubric
 //         cut-text --no-revise < input.txt  # block-cut only, skip word-level revise
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 const FW = "https://api.fireworks.ai/inference/v1/chat/completions";
 const EDITOR = "accounts/fireworks/models/gpt-oss-120b"; // fast, obedient; ~3 s
@@ -148,7 +151,8 @@ function normalizeTypography(s: string): string {
   return s
     .replace(/[‘’‚‛]/g, "'")
     .replace(/[“”„‟]/g, '"')
-    .replace(/[‐‑‒–—―]/g, "-") // hyphen/nbhyphen/figure/en/em/bar → -
+    .replace(/\s*[—―]\s*/g, " - ") // em dash / bar (clause break): space the hyphen, collapse adjacent whitespace so the model's glued "word—word" does not become "word-word"
+    .replace(/[‐‑‒–]/g, "-") // hyphen/nbhyphen/figure/en (ranges) → bare -
     .replace(/…/g, "...")
     .replace(/ /g, " "); // nbsp → space
 }
@@ -326,17 +330,23 @@ async function cutText(
   text: string,
   lang: "en" | "ru",
   noRevise: boolean,
-): Promise<{ out: string; footer: string }> {
+): Promise<{ out: string; footer: string; flagged: string[] }> {
   const rubric = lang === "ru" ? RUBRIC_RU : RUBRIC_EN;
   const passes = lang === "ru" ? PASS_RU : PASS_EN;
   const blocks = segment(text);
   const beforeWords = wordCount(text);
   // no-cut tail: nothing was dropped (single block, or editor kept everything).
   // Optionally revise, then build the footer. Shared by both early exits below.
-  const noCut = async (tag: string): Promise<{ out: string; footer: string }> => {
-    if (noRevise) return { out: text, footer: `— ${tag} · ${beforeWords} words` };
+  const noCut = async (
+    tag: string,
+  ): Promise<{ out: string; footer: string; flagged: string[] }> => {
+    if (noRevise) return { out: text, footer: `— ${tag} · ${beforeWords} words`, flagged: [] };
     const out = reconstruct(await revise(blocks, passes));
-    return { out, footer: `— ${tag} · revised · ${beforeWords}→${wordCount(out)} words` };
+    return {
+      out,
+      footer: `— ${tag} · revised · ${beforeWords}→${wordCount(out)} words`,
+      flagged: [],
+    };
   };
   if (blocks.length <= 1) return noCut("no cut (single block)");
 
@@ -385,7 +395,7 @@ async function cutText(
     `${flagged.length} questionable${labels ? `: ${labels}` : ""}`,
     "restore from source if needed",
   ];
-  return { out, footer: parts.join(" · ") };
+  return { out, footer: parts.join(" · "), flagged: flagged.map((b) => b.text) };
 }
 
 async function revise(blocks: Block[], passes: Pass[]): Promise<Block[]> {
@@ -440,6 +450,13 @@ function parseArgs(argv: string[]): { lang: "en" | "ru" | "auto"; noRevise: bool
   return { lang, noRevise };
 }
 
+// Create an empty temp file with a .md extension and return its path. The cut
+// result is written here instead of stdout so the caller gets a real .md artifact
+// (openable, diffable) and stdout carries only the path + footer.
+function tempMdPath(): string {
+  return execFileSync("mktemp", ["--suffix=.md"], { encoding: "utf8" }).trim();
+}
+
 async function main() {
   if (!process.env.FIREWORKS_API_KEY) {
     console.error(
@@ -455,20 +472,25 @@ async function main() {
   // Strip leading frontmatter: it passes through verbatim and the pipeline (incl.
   // language detection) operates on the body only. Body-only input is unaffected.
   const { front, body } = splitFrontmatter(input);
+  const path = tempMdPath();
   if (!body.trim()) {
-    process.stdout.write(input);
+    writeFileSync(path, input);
+    process.stdout.write(`${path}\n— no body to cut\n`);
     process.exit(0);
   }
   const resolved = lang === "auto" ? detectLang(body) : lang;
   try {
-    const { out, footer } = await cutText(body, resolved, noRevise);
+    const { out, footer, flagged } = await cutText(body, resolved, noRevise);
     const final = front ? front + "\n" + out : out;
-    process.stdout.write(final + (final.endsWith("\n") ? "" : "\n"));
-    console.error(footer);
+    // Append each footer-flagged (borderline) block verbatim below the cut text,
+    // each behind a `---` separator, so the parent can splice it back in place.
+    const fileBody = [final, ...flagged].join("\n\n---\n\n");
+    writeFileSync(path, fileBody + (fileBody.endsWith("\n") ? "" : "\n"));
+    process.stdout.write(`${path}\n${footer}\n`);
   } catch (e) {
-    // failsafe: passthrough original
-    process.stdout.write(input);
-    console.error(`— cut skipped (error): ${String(e).slice(0, 160)}`);
+    // failsafe: temp file holds the original (passthrough); path still printed
+    writeFileSync(path, input);
+    process.stdout.write(`${path}\n— cut skipped (error): ${String(e).slice(0, 160)}\n`);
     process.exit(0);
   }
 }
