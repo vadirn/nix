@@ -10,7 +10,7 @@ MANDATORY: To help prevent a "flash of un-themed content" (FOUC), place a `<meta
 
 ```html
 <!-- MANDATORY: Declare support for both light and dark themes -->
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="light dark" />
 ```
 
 ### 2. Apply page-wide color scheme to CSS :root or html
@@ -62,7 +62,6 @@ Even when overriding the system default, it can be useful to use the `prefers-co
 
 For example, use a slightly dimmer light theme when the system setting is `dark`, or a more contrasting dark theme when the system setting is `light`, so the page is not visually overpowered by the surrounding UI.
 
-
 ## Fine-grained browser UI customization
 
 Setting `color-scheme` already adapts browser UI to the used color scheme, but this will use OS defaults and/or system colors that may not perfectly align with the website design.
@@ -106,6 +105,7 @@ You can use `scrollbar-color` together with `light-dark()` to set custom scrollb
 ### Further customization
 
 Most browser UI exposes pseudo-elements to fully customize its appearance, such as:
+
 - `::placeholder`
 - `::spelling-error`
 - `::grammar-error`
@@ -124,6 +124,7 @@ The default color-scheme MUST be the user's system preference, which happens aut
 For website-specific customization, a manual toggle could be provided to allow users to choose between light, dark, or system-default modes.
 
 If a user-facing toggle to override it is desired, it should:
+
 - Update the `<meta name="color-scheme">` element to reflect the chosen theme (`light dark` for system default, `light` for light, and `dark` for dark).
 - If branching is desired for non-color values, set a class on `<html>` to match the theme preference and use descendant selectors. While `:root:has(> head > meta[name="color-scheme"][content="dark"])` would technically work, it is slower and confers no benefit, since we are already using JS to update the `<meta>` element.
 - Persist user choice in `localStorage`.
@@ -132,28 +133,30 @@ If a user-facing toggle to override it is desired, it should:
 - **IMPORTANT**: To avoid a Flash of Unstyled Content (FOUC) for users who have pinned a different color scheme than their system default, use an inline script (NOT `type=module`, NOT `defer`) to set it when the page loads:
 
 ```html
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="light dark" />
 <script>
-{
-  const colorScheme = localStorage.getItem("color-scheme");
-  if (colorScheme) {
-    document.querySelector('meta[name="color-scheme"]').content = colorScheme;
+  {
+    const colorScheme = localStorage.getItem("color-scheme");
+    if (colorScheme) {
+      document.querySelector('meta[name="color-scheme"]').content = colorScheme;
+    }
   }
-}
 </script>
 ```
 
 ### UX considerations
 
 Use a two-state control:
+
 1. System setting.
 2. The opposite (e.g. light when the system setting is dark, and dark when the system setting is light). Selecting this setting must pin that exact color scheme, not a dynamically computed "opposite of system setting" value. Example scenario:
-    1. The OS is set to light mode.
-    2. The user selects the opposite setting for this website (dark).
-    3. The user changes their system setting to dark.
-    4. The website should remain dark.
+   1. The OS is set to light mode.
+   2. The user selects the opposite setting for this website (dark).
+   3. The user changes their system setting to dark.
+   4. The website should remain dark.
 
 **DON'T** expose all three states (system, light, dark). While the rationale is plausible — "Follow system (currently dark)" is a distinct user intent from "Always dark" — it provides suboptimal UX:
+
 - Users cannot meaningfully express intent for problems they don't currently have. A manual toggle is a temporary comfort adjustment ("it's too bright right now"), not a long-term preference ("make sure this never changes").
 - Two of the three options always produce the same visual result, violating the principle of feedback.
 
@@ -163,7 +166,8 @@ You can override the global theme for specific elements by setting `color-scheme
 This is useful for "dark mode" sections within a light-themed site, such as code blocks or media players.
 
 ```css
-pre, code {
+pre,
+code {
   /* Forces element and its children to use dark themed UI */
   color-scheme: dark;
 }
@@ -211,7 +215,7 @@ To adapt to the user's preferences in older browsers, use `prefers-color-scheme`
 }
 
 button.primary {
-	background-color: var(--color-brand);
+  background-color: var(--color-brand);
 }
 ```
 
@@ -246,7 +250,8 @@ For browsers that support `color-scheme` but not yet `light-dark()`, light and d
   accent-color: var(--accent-color);
 }
 
-pre, code {
+pre,
+code {
   color-scheme: dark;
 
   /* **Mandatory**: any inherited color properties must be set again, even if to the same design tokens */

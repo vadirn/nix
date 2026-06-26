@@ -14,33 +14,31 @@ Browsers use heuristics to assign loading priorities to images, but these defaul
 
 ```html
 <!-- Elevate priority for the LCP image -->
-<img src="/images/hero-lcp.jpg"
-     alt="Main Banner"
-     fetchpriority="high"
-     width="800" height="400">
+<img src="/images/hero-lcp.jpg" alt="Main Banner" fetchpriority="high" width="800" height="400" />
 
 <!-- Deprioritize initially hidden images above the fold -->
-<img src="/images/gallery-alt.jpg"
-     alt="Gallery Image"
-     fetchpriority="low"
-     width="400" height="300">
+<img
+  src="/images/gallery-alt.jpg"
+  alt="Gallery Image"
+  fetchpriority="low"
+  width="400"
+  height="300"
+/>
 
 <!-- Deprioritize images revealed only after user interaction -->
-<img src="/images/mega-menu-promo.jpg"
-     alt="Special Offer"
-     fetchpriority="low"
-     width="300" height="150">
+<img
+  src="/images/mega-menu-promo.jpg"
+  alt="Special Offer"
+  fetchpriority="low"
+  width="300"
+  height="150"
+/>
 
 <!-- Use lazy loading ALONE for standard below-the-fold images -->
-<img src="/images/footer-logo.png"
-     alt="Footer Logo"
-     loading="lazy"
-     width="120" height="60">
+<img src="/images/footer-logo.png" alt="Footer Logo" loading="lazy" width="120" height="60" />
 
 <!-- Omit fetchpriority for images with standard priority -->
-<img src="/images/standard-image.jpg"
-     alt="Standard Image"
-     width="400" height="300">
+<img src="/images/standard-image.jpg" alt="Standard Image" width="400" height="300" />
 ```
 
 ## Best practices

@@ -39,9 +39,7 @@ const observer = new ResizeObserver(([entry]) => {
 const supportsDevicePixelContentBox =
   typeof ResizeObserverEntry !== "undefined" &&
   "devicePixelContentBoxSize" in ResizeObserverEntry.prototype;
-const options = supportsDevicePixelContentBox
-  ? { box: "device-pixel-content-box" }
-  : {};
+const options = supportsDevicePixelContentBox ? { box: "device-pixel-content-box" } : {};
 observer.observe(canvas, options);
 ```
 
@@ -62,14 +60,7 @@ canvas.onpaint = () => {
 ```js
 canvas.onpaint = () => {
   if (gl.texElementImage2D) {
-    gl.texElementImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      uiElement,
-    );
+    gl.texElementImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, uiElement);
   }
 };
 ```
@@ -148,15 +139,10 @@ canvas.onpaint = () => {
       .scale(canvas.width / 2, -canvas.height / 2, canvas.height / 2);
 
     // 4. Multiply: (Clip -> Pixels) * (MVP) * (pixels -> unit square)
-    const screenSpaceTransform = clipToCanvasViewport
-      .multiply(mvpDOM)
-      .multiply(toGLModel);
+    const screenSpaceTransform = clipToCanvasViewport.multiply(mvpDOM).multiply(toGLModel);
 
     // 5. Apply to the transform
-    const computedTransform = canvas.getElementTransform(
-      targetHTMLElement,
-      screenSpaceTransform,
-    );
+    const computedTransform = canvas.getElementTransform(targetHTMLElement, screenSpaceTransform);
     targetHTMLElement.style.transform = computedTransform.toString();
   }
   ```
@@ -181,9 +167,7 @@ targetHTMLElement.style.transform = computedTransform.toString();
 ```html
 <canvas id="canvas" layoutsubtree style="width: 400px; height: 200px;">
   <div id="ui-element">
-    <p>
-      This text is rendered inside the canvas but is present in the DOM tree.
-    </p>
+    <p>This text is rendered inside the canvas but is present in the DOM tree.</p>
     <input type="email" name="email" placeholder="enter your email" />
     <button type="button">Submit</button>
   </div>
@@ -218,9 +202,7 @@ targetHTMLElement.style.transform = computedTransform.toString();
   const supportsDevicePixelContentBox =
     typeof ResizeObserverEntry !== "undefined" &&
     "devicePixelContentBoxSize" in ResizeObserverEntry.prototype;
-  const options = supportsDevicePixelContentBox
-    ? { box: "device-pixel-content-box" }
-    : {};
+  const options = supportsDevicePixelContentBox ? { box: "device-pixel-content-box" } : {};
   observer.observe(canvas, options);
 </script>
 ```
@@ -247,14 +229,7 @@ targetHTMLElement.style.transform = computedTransform.toString();
   canvas.onpaint = () => {
     // 1. Update texture with HTML content
     if (gl.texElementImage2D) {
-      gl.texElementImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        uiElement,
-      );
+      gl.texElementImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, uiElement);
     }
 
     // ... Render your 3D scene here, calculating htmlElementMVP matrix ...
@@ -277,14 +252,9 @@ targetHTMLElement.style.transform = computedTransform.toString();
         .translate(canvas.width / 2, canvas.height / 2)
         .scale(canvas.width / 2, -canvas.height / 2, canvas.height / 2);
 
-      const screenSpaceTransform = clipToCanvasViewport
-        .multiply(mvpDOM)
-        .multiply(cssToUnitSpace);
+      const screenSpaceTransform = clipToCanvasViewport.multiply(mvpDOM).multiply(cssToUnitSpace);
 
-      const computedTransform = canvas.getElementTransform(
-        uiElement,
-        screenSpaceTransform,
-      );
+      const computedTransform = canvas.getElementTransform(uiElement, screenSpaceTransform);
       uiElement.style.transform = computedTransform.toString();
     }
   };
@@ -335,14 +305,9 @@ targetHTMLElement.style.transform = computedTransform.toString();
         .translate(canvas.width / 2, canvas.height / 2)
         .scale(canvas.width / 2, -canvas.height / 2, canvas.height / 2); // Retain Z scale
 
-      const screenSpaceTransform = clipToCanvasViewport
-        .multiply(mvpDOM)
-        .multiply(cssToUnitSpace);
+      const screenSpaceTransform = clipToCanvasViewport.multiply(mvpDOM).multiply(cssToUnitSpace);
 
-      const computedTransform = canvas.getElementTransform(
-        uiElement,
-        screenSpaceTransform,
-      );
+      const computedTransform = canvas.getElementTransform(uiElement, screenSpaceTransform);
       uiElement.style.transform = computedTransform.toString();
     }
   };

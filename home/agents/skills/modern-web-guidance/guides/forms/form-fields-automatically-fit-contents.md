@@ -78,9 +78,9 @@ If dynamically growing fields are absolutely required for older browsers, you mu
 
 ```javascript
 // Only attach the fallback event listeners if field-sizing is unsupported
-if (!CSS.supports('field-sizing', 'content')) {
-  document.querySelectorAll('.growable-textarea > textarea').forEach(textarea => {
-    textarea.addEventListener('input', () => {
+if (!CSS.supports("field-sizing", "content")) {
+  document.querySelectorAll(".growable-textarea > textarea").forEach((textarea) => {
+    textarea.addEventListener("input", () => {
       textarea.parentNode.dataset.replicatedValue = textarea.value;
     });
   });

@@ -19,7 +19,7 @@ Older technique like creating an `<img>` pixel in an `unload` event listener are
 This code measures the session duration of a user's visit to a page using `fetchLater()` to queue a new beacon every 10 seconds with the updated session duration.
 
 ```javascript
-const ANALYTICS_ENDPOINT = '/path/to/analytics/endpoint';
+const ANALYTICS_ENDPOINT = "/path/to/analytics/endpoint";
 
 const sessionData = {
   duration: 0,
@@ -42,8 +42,8 @@ function queueBeacon() {
   // IMPORTANT: wrap the call in a try/catch to handle quota errors.
   try {
     fetchLater(ANALYTICS_ENDPOINT, {
-      method: 'POST',
-      headers: {'content-type': 'application/json'},
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(sessionData),
       signal: fetchLaterController.signal,
     });
@@ -91,12 +91,8 @@ globalThis.fetchLater ??= function fetchLater(url, init = {}) {
       // Use fetch keepalive if the browser supports it or if custom fetch
       // parameters are specified (e.g. custom headers or methods).
       // Otherwise fall back to `navigator.sendBeacon()`.
-      if (
-        'keepalive' in Request.prototype ||
-        init.method !== 'POST' ||
-        init.headers
-      ) {
-        fetch(url, Object.assign({}, init, {keepalive: true}));
+      if ("keepalive" in Request.prototype || init.method !== "POST" || init.headers) {
+        fetch(url, Object.assign({}, init, { keepalive: true }));
         activated = true;
       } else {
         activated = navigator.sendBeacon(url, init.body);
@@ -106,24 +102,24 @@ globalThis.fetchLater ??= function fetchLater(url, init = {}) {
   }
 
   function destroy() {
-    document.removeEventListener('visibilitychange', sendNow);
+    document.removeEventListener("visibilitychange", sendNow);
     clearTimeout(timeoutHandle);
   }
 
-  if (document.visibilityState === 'hidden') {
+  if (document.visibilityState === "hidden") {
     // If the beacon was created while the page is already hidden, send data
     // ASAP but wait until the next microtask to allow all sync code to run.
     queueMicrotask(sendNow);
   } else {
-    document.addEventListener('visibilitychange', sendNow);
+    document.addEventListener("visibilitychange", sendNow);
 
-    if (typeof init.activateAfter === 'number' && init.activateAfter >= 0) {
+    if (typeof init.activateAfter === "number" && init.activateAfter >= 0) {
       timeoutHandle = setTimeout(sendNow, init.activateAfter);
     }
   }
 
   if (init.signal) {
-    init.signal.addEventListener('abort', destroy);
+    init.signal.addEventListener("abort", destroy);
   }
 
   return {

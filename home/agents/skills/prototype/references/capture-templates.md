@@ -95,7 +95,13 @@ Status: <iterating | converged | abandoned>
 **`evals/<slug>/cases.jsonl`** — one JSON object per line:
 
 ```json
-{"id": "case-001", "input": "...", "expected": "...", "notes": "...", "result": "pass|fail|inspect"}
+{
+  "id": "case-001",
+  "input": "...",
+  "expected": "...",
+  "notes": "...",
+  "result": "pass|fail|inspect"
+}
 ```
 
 Rules:

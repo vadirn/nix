@@ -66,20 +66,20 @@ Ask three questions in order; stop at the first "yes":
 
 Prefix-selection examples (these illustrate which prefix to choose, not message style):
 
-*Contract changes (`feat`):*
+_Contract changes (`feat`):_
 
 - "add retry logic to API client" — new promise → `feat`
 - "remove deprecated /v1 endpoint" — contract narrowed → `feat`
 - "drop deprecated `orders.legacy_status` column" → `feat`
 - "tighten return type from `any` to `User`" — type signature is part of the contract → `feat`
 
-*Contract repairs (`fix`):*
+_Contract repairs (`fix`):_
 
 - "fix typo in error message" — error text is part of the contract → `fix`
 - "patch credential-leak in token handler" — implicit safety promise was violated → `fix`
 - "correct wrong example in public API docs" — public docs are the contract → `fix`
 
-*Below the contract (`chore`):*
+_Below the contract (`chore`):_
 
 - "extract request helper" — contract unchanged → `chore`
 - "cache user lookup, 50ms → 2ms" — speed sits below the contract line → `chore`
@@ -90,7 +90,7 @@ Prefix-selection examples (these illustrate which prefix to choose, not message 
 - "bump dependency, no API impact" → `chore`
 - "add unit test for existing behavior" → `chore`
 
-*Special:*
+_Special:_
 
 - Reverts: apply the three-question test to the revert's effect on the contract. Reverting a buggy release restores a violated promise → `fix`. Pulling a feature narrows the contract → `feat`.
 

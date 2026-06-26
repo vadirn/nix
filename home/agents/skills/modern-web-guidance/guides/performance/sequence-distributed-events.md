@@ -1,6 +1,6 @@
 # Sequencing Distributed Events
 
-High-frequency tracing and event logging in distributed systems require precise timestamps to ensure correct causal ordering. Standard JavaScript `Date.now()` provides millisecond resolution, which can lead to timestamp collisions when multiple events occur within the same millisecond. 
+High-frequency tracing and event logging in distributed systems require precise timestamps to ensure correct causal ordering. Standard JavaScript `Date.now()` provides millisecond resolution, which can lead to timestamp collisions when multiple events occur within the same millisecond.
 
 The `Temporal` API, specifically `Temporal.Instant`, provides nanosecond-resolution timestamps, enabling precise sequencing of events without collisions.
 
@@ -21,7 +21,7 @@ function recordEvent(eventType, nodeId) {
   return {
     nodeId,
     eventType,
-    timestamp: Temporal.Now.instant() // Nanosecond resolution
+    timestamp: Temporal.Now.instant(), // Nanosecond resolution
   };
 }
 
@@ -36,11 +36,11 @@ function analyzeTelemetry(sortedEvents) {
   for (let i = 1; i < sortedEvents.length; i++) {
     const prev = sortedEvents[i - 1];
     const curr = sortedEvents[i];
-    
+
     // Calculate difference in nanoseconds
     const duration = curr.timestamp.since(prev.timestamp);
-    const nsDiff = duration.total('nanoseconds');
-    
+    const nsDiff = duration.total("nanoseconds");
+
     console.log(`Delay between Event ${prev.eventType} and Event ${curr.eventType}: ${nsDiff}ns`);
   }
 }
@@ -64,13 +64,13 @@ For environments without native support, use a standards-compliant polyfill such
 ```javascript
 (async () => {
   // Check for native support
-  if (typeof Temporal === 'undefined') {
+  if (typeof Temporal === "undefined") {
     // Dynamically load polyfill using an ESM-compatible CDN
-    const module = await import('https://esm.sh/@js-temporal/polyfill');
+    const module = await import("https://esm.sh/@js-temporal/polyfill");
     // The polyfill does not auto-install globally, so we must assign it
     globalThis.Temporal = module.Temporal;
   }
-  
+
   // Proceed with application logic
 })();
 ```

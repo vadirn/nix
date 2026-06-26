@@ -68,18 +68,18 @@ Example:
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
-    source:               { type: "string", multiple: true },
-    drafts:               { type: "string" },
-    model:                { type: "string" },
-    aspect:               { type: "string" },
-    resolution:           { type: "string" },
-    name:                 { type: "string" },
-    out:                  { type: "string" },
-    transparent:          { type: "boolean", default: false },
-    cutout:               { type: "string" },
+    source: { type: "string", multiple: true },
+    drafts: { type: "string" },
+    model: { type: "string" },
+    aspect: { type: "string" },
+    resolution: { type: "string" },
+    name: { type: "string" },
+    out: { type: "string" },
+    transparent: { type: "boolean", default: false },
+    cutout: { type: "string" },
     "chroma-key-fallback": { type: "boolean", default: false },
-    "dry-run":            { type: "boolean", default: false },
-    help:                 { type: "boolean", default: false, short: "h" },
+    "dry-run": { type: "boolean", default: false },
+    help: { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: true,
 });
@@ -95,7 +95,9 @@ let transparent = values.transparent ?? false;
 let cutoutOverride = values.cutout;
 
 if (chromaKeyFallback) {
-  console.error("WARNING: --chroma-key-fallback is deprecated; use --transparent --cutout colorkey instead");
+  console.error(
+    "WARNING: --chroma-key-fallback is deprecated; use --transparent --cutout colorkey instead",
+  );
   transparent = true;
   cutoutOverride = cutoutOverride ?? "colorkey";
 }
@@ -116,7 +118,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_API_KEY && !DRY_RUN) {
   console.error(
     "ERROR: GEMINI_API_KEY is not set.\n" +
-    "Inject it via: doppler run -p claude-code -c std --no-fallback --"
+      "Inject it via: doppler run -p claude-code -c std --no-fallback --",
   );
   process.exit(1);
 }
@@ -161,7 +163,7 @@ const RESOLUTION_API = RESOLUTION.toUpperCase();
 
 // Validate --aspect
 const VALID_ASPECTS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
-const ASPECT = (values.aspect ?? "1:1");
+const ASPECT = values.aspect ?? "1:1";
 if (!VALID_ASPECTS.includes(ASPECT)) {
   console.error(`ERROR: --aspect must be one of: ${VALID_ASPECTS.join(", ")}`);
   process.exit(1);
@@ -232,8 +234,7 @@ const TIMESTAMP =
     .toISOString()
     .replace(/[-:T]/g, "")
     .replace(/\.\d+Z$/, "")
-    .replace(/^(\d{8})(\d{6})$/, "$1-$2") +
-  `-${process.pid}`;
+    .replace(/^(\d{8})(\d{6})$/, "$1-$2") + `-${process.pid}`;
 
 const LOG_FILE = join(IMAGEN_DIR, "log.jsonl");
 
@@ -242,9 +243,12 @@ const LOG_FILE = join(IMAGEN_DIR, "log.jsonl");
 // ---------------------------------------------------------------------------
 function mimeToExt(mime: string): string {
   switch (mime) {
-    case "image/png":  return "png";
-    case "image/jpeg": return "jpg";
-    case "image/webp": return "webp";
+    case "image/png":
+      return "png";
+    case "image/jpeg":
+      return "jpg";
+    case "image/webp":
+      return "webp";
     default:
       console.error(`WARNING: unknown MIME type '${mime}'; defaulting to png`);
       return "png";
@@ -316,10 +320,8 @@ async function runDraft(): Promise<DraftResult> {
   }
 
   // Walk candidates[0].content.parts for inlineData
-  const parts0 = (
-    (json as { candidates?: Array<{ content?: { parts?: unknown[] } }> })
-      ?.candidates?.[0]?.content?.parts ?? []
-  ) as Array<Record<string, unknown>>;
+  const parts0 = ((json as { candidates?: Array<{ content?: { parts?: unknown[] } }> })
+    ?.candidates?.[0]?.content?.parts ?? []) as Array<Record<string, unknown>>;
 
   const inlineParts = parts0.filter((p) => p.inlineData != null);
   if (inlineParts.length === 0) {
@@ -329,8 +331,8 @@ async function runDraft(): Promise<DraftResult> {
       .map((p) => p.text as string)
       .join(" ");
     const finishReason =
-      (json as { candidates?: Array<{ finishReason?: string }> })
-        ?.candidates?.[0]?.finishReason ?? "";
+      (json as { candidates?: Array<{ finishReason?: string }> })?.candidates?.[0]?.finishReason ??
+      "";
     return {
       ok: false,
       error: `No image in response. finishReason: ${finishReason}. text: ${textParts}`,
@@ -348,8 +350,7 @@ async function runDraft(): Promise<DraftResult> {
   }
 
   // Fix N5: capture usageMetadata
-  const usageMetadata =
-    ((json as { usageMetadata?: Record<string, unknown> })?.usageMetadata) ?? {};
+  const usageMetadata = (json as { usageMetadata?: Record<string, unknown> })?.usageMetadata ?? {};
 
   return { ok: true, data: Buffer.from(data, "base64"), mime, usageMetadata };
 }
@@ -361,17 +362,25 @@ async function applyColorkey(imagePath: string): Promise<string> {
   const alphaBase = imagePath.replace(/\.[^.]+$/, "-alpha");
   const alphaPath = `${alphaBase}.png`;
 
-  const proc = Bun.spawn([
-    "ffmpeg",
-    "-nostats", "-loglevel", "error", "-hide_banner",
-    "-y",
-    "-i", imagePath,
-    "-vf", "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba",
-    alphaPath,
-  ], {
-    stdout: "ignore",
-    stderr: "pipe",
-  });
+  const proc = Bun.spawn(
+    [
+      "ffmpeg",
+      "-nostats",
+      "-loglevel",
+      "error",
+      "-hide_banner",
+      "-y",
+      "-i",
+      imagePath,
+      "-vf",
+      "colorkey=0x00ff00:0.30:0.20,despill=type=green:mix=0.5:expand=0,format=rgba",
+      alphaPath,
+    ],
+    {
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  );
 
   const stderrText = await new Response(proc.stderr).text();
   const exitCode = await proc.exited;
@@ -395,7 +404,7 @@ async function applyColorkey(imagePath: string): Promise<string> {
 async function runWithConcurrency<T>(
   count: number,
   concurrency: number,
-  fn: (i: number) => Promise<T>
+  fn: (i: number) => Promise<T>,
 ): Promise<T[]> {
   const results: T[] = new Array(count);
   let next = 0;
@@ -455,7 +464,7 @@ async function main(): Promise<void> {
       const outExt = OUT_PATH.split(".").pop()?.toLowerCase().replace("jpeg", "jpg") ?? "";
       if (outExt && outExt !== ext) {
         console.error(
-          `WARNING draft ${i + 1}: --out extension does not match returned format (${result.mime}); file kept at ${finalPath}`
+          `WARNING draft ${i + 1}: --out extension does not match returned format (${result.mime}); file kept at ${finalPath}`,
         );
       }
     } else {
@@ -531,7 +540,7 @@ async function main(): Promise<void> {
         transparent: TRANSPARENT,
         cutout: CUTOUT,
         prompt,
-      }) + "\n"
+      }) + "\n",
     );
   }
 }

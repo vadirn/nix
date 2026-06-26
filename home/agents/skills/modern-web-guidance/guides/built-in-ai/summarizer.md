@@ -6,7 +6,6 @@ The **Summarizer API** allows web developers to offer local, AI-powered text dis
 
 The Summarizer API is available starting in **Chrome and Edge 138**. It requires a one-time model download of Gemini Nano or Phi (respectively).
 
-
 ### Hardware & Software Requirements
 
 - **OS**: Windows 10/11, macOS 13+, Linux, or ChromeOS (Chromebook Plus).
@@ -16,7 +15,7 @@ The Summarizer API is available starting in **Chrome and Edge 138**. It requires
 
 ### Model Download and Availability
 
-Check if the model is ready, needs downloading, or is unavailable. 
+Check if the model is ready, needs downloading, or is unavailable.
 
 **Mandatory Options Passing:** You must pass the identical configuration options object to both `Summarizer.availability(options)` and `Summarizer.create(options)`. Do NOT use the deprecated `window.ai.summarizer` API surface.
 
@@ -26,23 +25,23 @@ Check if the model is ready, needs downloading, or is unavailable.
 
 ```javascript
 const options = {
-  type: 'key-points',
-  format: 'plain-text',
-  length: 'medium'
+  type: "key-points",
+  format: "plain-text",
+  length: "medium",
 };
 
 const availability = await Summarizer.availability(options);
 
-if (availability === 'available') {
+if (availability === "available") {
   const summarizer = await Summarizer.create(options);
   // Ready to use immediately
-} else if (availability === 'downloadable') {
+} else if (availability === "downloadable") {
   // A user gesture is strictly required to start the download
-  document.getElementById('start-download-btn').addEventListener('click', async () => {
+  document.getElementById("start-download-btn").addEventListener("click", async () => {
     const summarizer = await Summarizer.create({
       ...options,
       monitor(m) {
-        m.addEventListener('downloadprogress', (e) => {
+        m.addEventListener("downloadprogress", (e) => {
           console.log(`Downloaded ${Math.round((e.loaded / e.total) * 100)}%`);
         });
       },
@@ -67,10 +66,10 @@ the output:
 
 ```javascript
 const options = {
-  sharedContext: 'This is a scientific article',
-  type: 'key-points',
-  format: 'markdown',
-  length: 'medium',
+  sharedContext: "This is a scientific article",
+  type: "key-points",
+  format: "markdown",
+  length: "medium",
 };
 
 if (navigator.userActivation.isActive) {
@@ -85,9 +84,9 @@ summary request.
 
 ```javascript
 const summarizer = await Summarizer.create({
-  type: 'key-points',
-  expectedInputLanguages: ['en', 'ja'],
-  outputLanguage: 'es',
+  type: "key-points",
+  expectedInputLanguages: ["en", "ja"],
+  outputLanguage: "es",
 });
 ```
 
@@ -98,9 +97,9 @@ const summarizer = await Summarizer.create({
 Processes the entire text at once and returns the result.
 
 ```javascript
-const longText = document.querySelector('article').innerText;
+const longText = document.querySelector("article").innerText;
 const summary = await summarizer.summarize(longText, {
-  context: 'This article is intended for a tech-savvy audience.',
+  context: "This article is intended for a tech-savvy audience.",
 });
 console.log(summary);
 ```
@@ -137,7 +136,7 @@ Unsupported in: Edge, Firefox, and Safari.
 Before initializing or querying availability, check if the browser supports the `Summarizer` API:
 
 ```javascript
-if ('Summarizer' in self) {
+if ("Summarizer" in self) {
   // The Summarizer API is supported.
 } else {
   // Execute fallback strategy
@@ -147,6 +146,7 @@ if ('Summarizer' in self) {
 If the `Summarizer` API is unsupported or availability checks return `'unavailable'`, you must gracefully fall back.
 
 Recommended options:
+
 1. **Remote API Fallback**: Direct the distillation request to a server endpoint or remote API (such as the Vertex AI Gemini API) so that users still get summaries.
 2. **Graceful Degradation**: Visually disable the summarization controls in the UI, or hide the button while displaying a friendly message (e.g., `"Local summarization is currently unsupported in this browser"`). Do not allow interaction to trigger generic unhandled runtime exceptions.
 3. **Polyfill Fallback**: You can use community-maintained polyfills like `built-in-ai-task-apis-polyfills` or `prompt-api-polyfill` to emulate the API surface using remote services with models in the cloud or on-device inference with local models.

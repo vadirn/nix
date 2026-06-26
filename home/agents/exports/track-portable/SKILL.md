@@ -28,11 +28,11 @@ else:
 
 ## Reference
 
-| File                          | Purpose                                                                |
-| ----------------------------- | ---------------------------------------------------------------------- |
-| `references/read.md`          | Resume a track. Lists Active tracks, picks one, presents the body.     |
-| `references/save.md`          | Save session work into an existing track or create a new one.          |
-| `assets/track-template.md`    | Embedded template instantiated when creating a new track.              |
+| File                       | Purpose                                                            |
+| -------------------------- | ------------------------------------------------------------------ |
+| `references/read.md`       | Resume a track. Lists Active tracks, picks one, presents the body. |
+| `references/save.md`       | Save session work into an existing track or create a new one.      |
+| `assets/track-template.md` | Embedded template instantiated when creating a new track.          |
 
 Tracks live in the repo at `<repo-root>/.tracks/track-<slug>.md`, where `<repo-root>` is the output of
 `git rev-parse --show-toplevel` (falling back to `pwd` outside a git repo). Active tracks are those whose

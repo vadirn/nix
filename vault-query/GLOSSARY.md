@@ -8,7 +8,7 @@ Example: `vault-query backlinks foo` lists every file containing `[[Foo]]` or `[
 
 ## Backlog completion
 
-The XP event of a completed task (`- [x] (date)`) under the `## Backlog` heading of a WeeklyLog. Subtracts 1 XP from the day on which the task was completed, distinct from Task completion under `## Tasks` which adds 1 XP. The name disambiguates the *event* (XP-bearing) from the `## Backlog` section heading itself, and from the `## Backlog` sections found in Track files (which carry no XP semantics).
+The XP event of a completed task (`- [x] (date)`) under the `## Backlog` heading of a WeeklyLog. Subtracts 1 XP from the day on which the task was completed, distinct from Task completion under `## Tasks` which adds 1 XP. The name disambiguates the _event_ (XP-bearing) from the `## Backlog` section heading itself, and from the `## Backlog` sections found in Track files (which carry no XP semantics).
 
 Example: marking a `## Backlog` item done in this week's WeeklyLog on Tuesday yields −1 XP for that Tuesday.
 
@@ -32,7 +32,7 @@ Example: a project's `checkpoint-2026-04-28.md` carries `type: checkpoint` and r
 
 ## Coverage bonus (XP)
 
-When every project listed in the `## Projects` section of a WeeklyLog has at least one completed task linking to it that week, a bonus equal to `projects.len()` XP is credited to the Monday of the *following* ISO week. Partial coverage yields zero.
+When every project listed in the `## Projects` section of a WeeklyLog has at least one completed task linking to it that week, a bonus equal to `projects.len()` XP is credited to the Monday of the _following_ ISO week. Partial coverage yields zero.
 
 Example: a week with three projects, all touched, awards +3 XP on next Monday.
 
@@ -56,7 +56,7 @@ Example: `formula.priority = if(urgent, 10, 1)` computes a per-file score.
 
 ## Frontmatter
 
-Two senses, distinguished by context. As a *text region*: the YAML block delimited by `---` at the start of a markdown file (BOM-stripped before parsing). As a *parsed result*: the `BTreeMap<String, serde_yaml::Value>` produced from that region — `None` when the opening `---` is absent, an empty map (with a stderr warning) when YAML parsing fails. The parsed-result sense is the one consulted by `type`-based listings, filter expressions, and `frontmatter:` field selection.
+Two senses, distinguished by context. As a _text region_: the YAML block delimited by `---` at the start of a markdown file (BOM-stripped before parsing). As a _parsed result_: the `BTreeMap<String, serde_yaml::Value>` produced from that region — `None` when the opening `---` is absent, an empty map (with a stderr warning) when YAML parsing fails. The parsed-result sense is the one consulted by `type`-based listings, filter expressions, and `frontmatter:` field selection.
 
 Example: `---\ntype: track\nstatus: open\n---` is the text region; it parses to the result `{type: "track", status: "open"}`.
 
@@ -64,7 +64,7 @@ Example: `---\ntype: track\nstatus: open\n---` is the text region; it parses to 
 
 A file matches `file.inFolder("path")` if and only if its relative path (from vault root) starts with the given string — a bare `starts_with` check with no trailing-slash normalisation.
 
-Example: `file.inFolder("41 projects/nix")` matches files under `41 projects/nix/` *and* `41 projects/nixos/`.
+Example: `file.inFolder("41 projects/nix")` matches files under `41 projects/nix/` _and_ `41 projects/nixos/`.
 
 ## Level
 
@@ -170,7 +170,7 @@ A Task in `## Tasks` adds +1 XP to the day it was completed; a Task in `## Backl
 
 The Coverage bonus is all-or-nothing: it is awarded only when every Project listed in `## Projects` is referenced by at least one completed Task that week.
 
-The Coverage bonus credits the Monday of the ISO week *following* the week being scored, not the week itself.
+The Coverage bonus credits the Monday of the ISO week _following_ the week being scored, not the week itself.
 
 Streak counts consecutive calendar days with a Sleep date ending at today; a single missing day resets the streak.
 
@@ -184,7 +184,7 @@ A VaultFile marked `template: true` is a template, not an instance: it carries t
 
 A Track has exactly one `status` value drawn from `{open, paused, done, abandoned, superseded}`; the Active view selects exactly `{open, paused}`.
 
-A FilterSet evaluates to true only if all `and` clauses pass *and*, when `or` is non-empty, at least one `or` clause passes; an empty `and` or `or` list is treated as "no constraint".
+A FilterSet evaluates to true only if all `and` clauses pass _and_, when `or` is non-empty, at least one `or` clause passes; an empty `and` or `or` list is treated as "no constraint".
 
 An unrecognised Filter expression evaluates to `true` (silent pass-through), not an error.
 

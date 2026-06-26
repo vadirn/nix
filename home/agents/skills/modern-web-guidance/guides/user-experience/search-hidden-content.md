@@ -90,18 +90,18 @@ When handling custom mutually exclusive regions controlled by external buttons, 
 ```
 
 ```javascript
-const accordion = document.querySelector('.custom-accordion');
+const accordion = document.querySelector(".custom-accordion");
 
-accordion.addEventListener('beforematch', (e) => {
+accordion.addEventListener("beforematch", (e) => {
   // Hide all panels and synchronize button states before the browser reveals the matched panel
-  accordion.querySelectorAll('.panel').forEach((panel) => {
+  accordion.querySelectorAll(".panel").forEach((panel) => {
     if (panel !== e.target) {
-      panel.hidden = 'until-found';
+      panel.hidden = "until-found";
     }
   });
-  accordion.querySelectorAll('button').forEach((btn) => {
-    const controls = btn.getAttribute('aria-controls');
-    btn.setAttribute('aria-expanded', controls === e.target.id ? 'true' : 'false');
+  accordion.querySelectorAll("button").forEach((btn) => {
+    const controls = btn.getAttribute("aria-controls");
+    btn.setAttribute("aria-expanded", controls === e.target.id ? "true" : "false");
   });
 });
 ```
@@ -124,10 +124,10 @@ The `hidden="until-found"` attribute is not yet Baseline Widely available, but i
 For standard UI elements like accordions or "Read more" sections, use JavaScript to feature-detect and show all content if the feature is unsupported.
 
 ```javascript
-if (!('onbeforematch' in HTMLElement.prototype)) {
+if (!("onbeforematch" in HTMLElement.prototype)) {
   // Expand all hidden content for unsupported browsers
   document.querySelectorAll('[hidden="until-found"]').forEach((el) => {
-    el.removeAttribute('hidden');
+    el.removeAttribute("hidden");
     // MANDATORY: also update any aria references to this element.
   });
 }

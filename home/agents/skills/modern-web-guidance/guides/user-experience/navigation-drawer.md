@@ -38,10 +38,7 @@ The drawer is a single popover containing a horizontal scroller, which contains 
   <header>
     <!-- aria-controls links the trigger to the drawer; aria-expanded
          reflects the current state for assistive tech. -->
-    <button id="drawer-open"
-            aria-label="Menu"
-            aria-expanded="false"
-            aria-controls="drawer">
+    <button id="drawer-open" aria-label="Menu" aria-expanded="false" aria-controls="drawer">
       <!-- MANDATORY: Inline decorative SVGs MUST define aria-hidden="true" -->
       <svg aria-hidden="true" viewBox="0 0 24 24">...</svg>
     </button>
@@ -117,7 +114,7 @@ The scroller is a horizontal grid wider than the viewport: column 1 holds the sh
 
 /* The empty spacer that creates the "closed" snap stop. */
 .Drawer-scroller::after {
-  content: '';
+  content: "";
   scroll-snap-align: end;
   /* Open the popover already scrolled to this stop (drawer off-screen),
      so the JS only needs to scroll to the open position to
@@ -172,16 +169,20 @@ A scroll-driven animation maps `--drawer-backdrop` from 1 (open) to 0 (closed) a
      interpolate it — the backdrop would jump from 0 to 1 with no
      fade. */
   @property --drawer-backdrop {
-    syntax: '<number>';
+    syntax: "<number>";
     inherits: true;
     initial-value: 0;
   }
 
   @keyframes fade-drawer-backdrop {
     /* Scroll position 0 = drawer fully open = backdrop visible. */
-    0% { --drawer-backdrop: 1 }
+    0% {
+      --drawer-backdrop: 1;
+    }
     /* Scroll position 100% = drawer fully closed = backdrop hidden. */
-    100% { --drawer-backdrop: 0 }
+    100% {
+      --drawer-backdrop: 0;
+    }
   }
 }
 ```
@@ -191,10 +192,10 @@ A scroll-driven animation maps `--drawer-backdrop` from 1 (open) to 0 (closed) a
 Opening is two steps: promote the popover to the top layer, then scroll the sheet into view. Closing is one step: scroll back to the spacer; an observer (step 4) hides the popover once the sheet is fully off-screen.
 
 ```js
-const drawer = document.getElementById('drawer');
-const openBtn = document.getElementById('drawer-open');
-const scroller = drawer.querySelector('.Drawer-scroller');
-const sheet = drawer.querySelector('.Drawer-sheet');
+const drawer = document.getElementById("drawer");
+const openBtn = document.getElementById("drawer-open");
+const scroller = drawer.querySelector(".Drawer-scroller");
+const sheet = drawer.querySelector(".Drawer-sheet");
 
 function openDrawer() {
   // Show the popover first so the element is in the top layer before
@@ -207,7 +208,7 @@ function openDrawer() {
   // to the CSS `scroll-behavior` property, which will be smooth unless
   // the user prefers reduced motion. Snap takes over at the end and
   // locks the drawer fully open.
-  scroller.scrollTo({left: 0, behavior: 'auto'});
+  scroller.scrollTo({ left: 0, behavior: "auto" });
 }
 
 function closeDrawer() {
@@ -216,7 +217,7 @@ function closeDrawer() {
   // and the close animation would not be visible. The
   // IntersectionObserver in step 4 hides the popover once the sheet
   // has actually left the viewport.
-  scroller.scrollTo({left: scroller.offsetWidth, behavior: 'auto'});
+  scroller.scrollTo({ left: scroller.offsetWidth, behavior: "auto" });
 }
 ```
 
@@ -228,8 +229,8 @@ Use an `IntersectionObserver` on the sheet — not the scroll position — as th
 function onDrawerOpened() {
   // Mark the rest of the page inert so keyboard and screen-reader
   // users cannot tab into content hidden behind the drawer.
-  document.querySelector('main').inert = true;
-  openBtn.setAttribute('aria-expanded', 'true');
+  document.querySelector("main").inert = true;
+  openBtn.setAttribute("aria-expanded", "true");
   // Move focus into the drawer for keyboard users.
   sheet.focus();
 }
@@ -238,8 +239,8 @@ function onDrawerClosed() {
   // Hide the popover only after the close animation completes,
   // so the slide-out is visible to the user.
   drawer.hidePopover();
-  document.querySelector('main').inert = false;
-  openBtn.setAttribute('aria-expanded', 'false');
+  document.querySelector("main").inert = false;
+  openBtn.setAttribute("aria-expanded", "false");
 }
 
 // Treat "any pixel of the sheet visible inside the popover root" as
@@ -259,7 +260,7 @@ const observer = new IntersectionObserver(
   // root: drawer makes the popover element the intersection root,
   // so the ratio reflects the sheet's visibility within the popover
   // (i.e. how much of it has been swiped on-screen).
-  {root: drawer, threshold: [visibleThreshold, 1]},
+  { root: drawer, threshold: [visibleThreshold, 1] },
 );
 observer.observe(sheet);
 ```
@@ -268,20 +269,20 @@ observer.observe(sheet);
 
 ```js
 // Open trigger.
-openBtn.addEventListener('click', openDrawer);
+openBtn.addEventListener("click", openDrawer);
 
 // Light-dismiss: a tap on the dimmed area (anywhere inside the
 // popover but outside the sheet) closes the drawer. We implement
 // this manually because popover="manual" disables the browser's
 // built-in light-dismiss (which would also fire mid-swipe — see step 1).
-drawer.addEventListener('click', (event) => {
+drawer.addEventListener("click", (event) => {
   if (!sheet.contains(event.target)) closeDrawer();
 });
 
 // Escape key. Listen on document because focus may be inside the
 // drawer when the user presses Escape.
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') closeDrawer();
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeDrawer();
 });
 ```
 
@@ -301,12 +302,12 @@ Unsupported in: Firefox.
 Detect with `CSS.supports('animation-timeline: scroll()')` and write `--drawer-backdrop` from a `scroll` event listener if not supported. The CSS `@supports` block in step 2 ensures the keyframes never apply in unsupported browsers, so the JavaScript value is the only writer.
 
 ```js
-if (!CSS.supports('animation-timeline: scroll()')) {
-  scroller.addEventListener('scroll', () => {
+if (!CSS.supports("animation-timeline: scroll()")) {
+  scroller.addEventListener("scroll", () => {
     // Same mapping as the @keyframes: 0 scroll = 1 (open),
     // sheet-width scroll = 0 (closed).
     const ratio = 1 - scroller.scrollLeft / sheet.offsetWidth;
-    drawer.style.setProperty('--drawer-backdrop', ratio);
+    drawer.style.setProperty("--drawer-backdrop", ratio);
   });
 }
 ```
@@ -323,19 +324,17 @@ Detect with `CSS.supports('scroll-initial-target', 'nearest')` and inside `openD
 async function openDrawer() {
   drawer.showPopover();
 
-  if (!CSS.supports('scroll-initial-target', 'nearest')) {
+  if (!CSS.supports("scroll-initial-target", "nearest")) {
     // Jump-scroll to the closed stop so the scroll below
     // animates the drawer in from off-screen.
-    scroller.scrollTo({left: scroller.offsetWidth, behavior: 'instant'});
+    scroller.scrollTo({ left: scroller.offsetWidth, behavior: "instant" });
     // Wait two animation frames for the jump-scroll to commit.
     // A single rAF is not enough — the second `scrollTo` would
     // cancel the first before the browser has a chance to apply it.
-    await new Promise((r) =>
-      requestAnimationFrame(() => requestAnimationFrame(r))
-    );
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   }
 
-  scroller.scrollTo({left: 0, behavior: 'auto'});
+  scroller.scrollTo({ left: 0, behavior: "auto" });
 }
 ```
 
@@ -345,7 +344,6 @@ Baseline status for Registered custom properties: Newly available. It's been Bas
 Supported by: Chrome 85 (Aug 2020), Edge 85 (Aug 2020), Firefox 128 (Jul 2024), and Safari 16.4 (Mar 2023).
 
 `@property` is only needed because the scroll-driven animation interpolates `--drawer-backdrop` between keyframes — without registration, the property would be treated as a string and would jump between 0 and 1 with no fade. If the scroll-driven animation fallback above is in place, that JavaScript writes a fresh numeric string to `--drawer-backdrop` on every scroll frame and never interpolates, so no seprarate `@property` fallback is needed since all browsers that support scroll-driven animations also support `@property`.
-
 
 #### Popover API fallback (no `popover` attribute support):
 
