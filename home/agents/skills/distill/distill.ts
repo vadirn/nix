@@ -79,6 +79,22 @@ const WF_RECOVERY: WfRecovery = ((): WfRecovery => {
   return v === "retighten" || v === "repair" ? v : "repair-verbatim";
 })();
 
+// Glossary-def scope. A def's contract is definition-only: the connective prose
+// carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while
+// the `## Glossary` table carries what each concept IS. But synth and the fidelity
+// gate historically held a def to its whole source block — folding relation-edges
+// into the def and round-tripping it against rationale the prose was meant to carry,
+// which bloated defs 3–4×. Two levers, each overridable for the def-scope experiment:
+//   DISTILL_DEF_RELATIONS: "drop" (default) keeps relations OUT of the def; "keep"
+//     folds them in (the prior behavior).
+//   DISTILL_DEF_GATE: "definition" (default) grades a def for definitional content
+//     only, letting relations/rationale ride the prose; "block" round-trips it against
+//     the whole source block (the prior behavior).
+const DEF_RELATIONS: "keep" | "drop" =
+  process.env.DISTILL_DEF_RELATIONS === "keep" ? "keep" : "drop";
+const DEF_GATE: "block" | "definition" =
+  process.env.DISTILL_DEF_GATE === "block" ? "block" : "definition";
+
 // ---- writing passes (the revise-stage rubric — inline single source) ----
 // Four focused rule sets applied in sequence (words → sentences → paragraphs →
 // AI patterns); each call refines the prior pass's output. These condensed rules
@@ -463,21 +479,36 @@ function synthEntriesPrompt(
   lang: "en" | "ru",
 ): string {
   if (mode === "render") {
+    // DEF_RELATIONS=drop withholds the relations list so the def-writer cannot fold
+    // edges in; the connective prose carries them. DEF_RELATIONS=keep is prior behavior.
     const concepts = entries
-      .map(
-        (e) =>
-          `### ${e.term}\nrelations: ${e.relations.join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
+      .map((e) =>
+        DEF_RELATIONS === "keep"
+          ? `### ${e.term}\nrelations: ${e.relations.join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`
+          : `### ${e.term}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
       )
       .join("\n\n");
-    return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause), compressing rather than copying a source sentence verbatim. Keep every named relation; use only claims the source states. Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
+    const relRule =
+      DEF_RELATIONS === "keep"
+        ? "Keep every named relation; use only claims the source states."
+        : "Define the concept ITSELF — what it is — and state how it relates to other terms (subsumes / contrasts / precondition for) NOWHERE in the def; the connective prose carries relations. Use only claims the source states.";
+    return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause), compressing rather than copying a source sentence verbatim. ${relRule} Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
 
 CONCEPTS:
 ${concepts}`;
   }
   const concepts = entries
-    .map((e) => `### ${e.term}\ndef(draft): ${e.def}\nrelations: ${e.relations.join("; ")}`)
+    .map((e) =>
+      DEF_RELATIONS === "keep"
+        ? `### ${e.term}\ndef(draft): ${e.def}\nrelations: ${e.relations.join("; ")}`
+        : `### ${e.term}\ndef(draft): ${e.def}`,
+    )
     .join("\n\n");
-  return `You are writing glossary definitions for a compressed note from its extracted idea-graph alone. For each concept, write a maximally dense "def" that preserves its relations. Stay on the thesis; introduce NO new concept. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
+  const defRule =
+    DEF_RELATIONS === "keep"
+      ? 'write a maximally dense "def" that preserves its relations'
+      : 'write a maximally dense "def" that defines the concept itself, stating no relations to other terms (the prose carries those)';
+  return `You are writing glossary definitions for a compressed note from its extracted idea-graph alone. For each concept, ${defRule}. Stay on the thesis; introduce NO new concept. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
 
 THESIS: ${ir.thesis}
 
@@ -629,7 +660,11 @@ function verbatimDirectives(sourceText: string): string[] {
 
 // single-entry render from source — used by stage-5 recovery to re-ground a residue def
 function renderEntryPrompt(entry: GlossEntry, sourceText: string, lang: "en" | "ru"): string {
-  return `Write the glossary definition for "${entry.term}" using ONLY the source text below. One dense sentence; keep every relation (${entry.relations.join("; ")}); use only claims the source states. ${langRule(lang)} Return ONLY JSON {"def":"..."}.
+  const relRule =
+    DEF_RELATIONS === "keep"
+      ? `keep every relation (${entry.relations.join("; ")}); use only claims the source states.`
+      : `define the concept itself; state no relations to other terms (the connective prose carries those); use only claims the source states.`;
+  return `Write the glossary definition for "${entry.term}" using ONLY the source text below. One dense sentence; ${relRule} ${langRule(lang)} Return ONLY JSON {"def":"..."}.
 
 SOURCE:
 ${sourceText}`;
@@ -854,10 +889,17 @@ function fidelityPrompt(
   const concepts = rendered
     .map((r) => `### ${r.term}\nSOURCE:\n${r.sourceText}\nOUTPUT: ${r.def}`)
     .join("\n\n");
-  return `You are an independent fidelity judge. You did NOT write this compression. For EACH concept you see its SOURCE (verbatim from the original note) and its OUTPUT (the compressed definition). Decide round-trip entailment in BOTH directions:
+  const criterion =
+    DEF_GATE === "block"
+      ? `Decide round-trip entailment in BOTH directions:
 - does OUTPUT entail SOURCE (nothing load-bearing dropped)?
 - does SOURCE entail OUTPUT (nothing invented)?
-Grade "translated" if both hold; "residue" if either fails — name the direction ("output-misses-source" or "output-invents") and what is missing or invented.
+Grade "translated" if both hold; "residue" if either fails — name the direction ("output-misses-source" or "output-invents") and what is missing or invented.`
+      : `The OUTPUT is a DEFINITION of the concept. How it relates to other terms (subsumes / contrasts / precondition for), the rationale or "why", and examples are carried by the note's surrounding prose, NOT by the definition — a def that omits any of them is NEVER missing. Judge only the definitional content, in BOTH directions:
+- does OUTPUT capture what the SOURCE says the concept IS (nothing DEFINITIONAL dropped)? Omitting a relation, a reason, or an example is allowed, not missing.
+- does SOURCE entail OUTPUT (nothing invented — no claim absent from the source)?
+Grade "translated" if both hold; "residue" if either fails — name the direction ("output-misses-source" or "output-invents") and the definitional content missing or invented.`;
+  return `You are an independent fidelity judge. You did NOT write this compression. For EACH concept you see its SOURCE (verbatim from the original note) and its OUTPUT (the compressed definition). ${criterion}
 Also judge whether the THESIS is still recoverable from the OUTPUT alone.
 Return ONLY JSON {"thesisRecoverable":true|false,"concepts":[{"term":"...","grade":"translated|residue","direction":"both|output-misses-source|output-invents","missing":"..."}]}.
 
