@@ -10,17 +10,25 @@
 // Restatement collapses structurally (N surface forms of one idea → one entry).
 // `--core-only` drops the prose and emits just the glossary (tie + definitions).
 //
+// Two certified channels share the pipeline: the GLOSSARY (declarative — concepts
+// to know) and the WORKFLOW (procedural — directives to do). The glossary cannot
+// hold a practice or a procedure step, so a note's actionable payload used to
+// dissolve; the workflow channel is its sink. It is optional — empty when the note
+// prescribes nothing, in which case no `## Workflow` section is emitted.
+//
 // Pipeline (5 stages): segment → (1) extract combo {description, thesis, glossary
-// with relations + source pointers} (gpt-oss-120b) → (2) grade each block
-// drop/distill/retain (gpt-oss-120b) → (3) synthesize glossary defs via the
-// fidelity dial render|regenerate, then write the connective prose head from the
-// defs+relations → (4) revise the distilled prose (4 writing passes) →
-// (5) fidelity-grade the glossary defs ⟷ raw-input by round-trip entailment with a
-// DIFFERENT model (glm-5p2); residue is re-rendered from source, capped, then
-// surfaced. Independence of writer (EXTRACT) and grader (FIDELITY) is the safety
-// property — the verbatim certificate is gone, so the gate is equivalence. The
-// gate certifies the glossary definitions; the prose, which restates none of them,
-// rides on those certified terms and is not separately gated.
+// with relations + source pointers, workflow steps + source pointers} (gpt-oss-120b)
+// → (2) grade each block drop/distill/retain (gpt-oss-120b) → (3) synthesize
+// glossary defs AND tighten workflow steps via the fidelity dial render|regenerate,
+// then write the connective prose head from the defs+relations → (4) revise the
+// distilled prose + steps (4 writing passes) → (5) fidelity-grade the glossary defs
+// AND the workflow steps ⟷ raw-input by round-trip entailment with a DIFFERENT model
+// (glm-5p2); residue is re-rendered from source, capped, then surfaced. Independence
+// of writer (EXTRACT) and grader (FIDELITY) is the safety property — the verbatim
+// certificate is gone, so the gate is equivalence. The gate certifies the glossary
+// definitions and the workflow steps; the prose, which restates none of them, rides
+// on those certified items and is not separately gated. Output order is prose →
+// `## Workflow` → `## Glossary` → retained-verbatim.
 //
 // Output: written to a fresh temp .md file (mktemp), XML-wrapped. <result>…</result>
 // holds exactly the text to write back to source (frontmatter verbatim + distilled
@@ -48,6 +56,12 @@ const FW = "https://api.fireworks.ai/inference/v1/chat/completions";
 const EXTRACT = "accounts/fireworks/models/gpt-oss-120b"; // fast, obedient; ~3 s — stages 1-3 + revise
 const FIDELITY = "accounts/fireworks/models/glm-5p2"; // thinking; ~15-20 s — stage 5 only (the different model)
 const TIMEOUT_MS = 180_000;
+// Token budget for the FIDELITY thinking model. Its reasoning is inlined in the
+// content, so the cap must cover BOTH the thinking and the trailing JSON — too low
+// and the model exhausts it mid-thought, returning prose with no `{`, which fails
+// extractJson and drops the whole run to the passthrough failsafe. Sized with
+// headroom for the longest gate input (rationale-carrying workflow steps).
+const FIDELITY_TOKENS = 16_384;
 
 // ---- writing passes (the revise-stage rubric — inline single source) ----
 // Four focused rule sets applied in sequence (words → sentences → paragraphs →
@@ -96,7 +110,12 @@ const PASS_RU: Pass[] = [
 type Block = { id: string; text: string };
 type Grade = "drop" | "distill" | "retain";
 type GlossEntry = { term: string; def: string; relations: string[]; source: string[] };
-type IR = { description: string; thesis: string; glossary: GlossEntry[] };
+// a workflow step is an ACTIONABLE directive the note prescribes (a practice, a
+// procedure step) — the procedural sink the glossary (concepts) cannot hold. The
+// step carries a source-stated reason ("do X because Y") when the source gives
+// one; the gate tolerates a dropped reason but forbids an invented one.
+type WorkStep = { step: string; source: string[] };
+type IR = { description: string; thesis: string; glossary: GlossEntry[]; workflow: WorkStep[] };
 
 // ---- segmentation: fence-aware, split on blank lines; code fences stay whole ----
 function segment(text: string): Block[] {
@@ -297,15 +316,27 @@ function extractJson(s: string): string {
 }
 
 async function askJson<T>(model: string, prompt: string, maxTokens: number): Promise<T> {
-  const raw = await fw(model, [{ role: "user", content: prompt }], { json: true, maxTokens });
-  return JSON.parse(extractJson(raw)) as T;
+  // Retry once on a PARSE failure (distinct from fw's network/5xx retry): the
+  // FIDELITY thinking model sometimes returns only reasoning with no JSON object,
+  // which extractJson rejects. It is non-deterministic, so a second call usually
+  // complies — cheaper than dropping the whole run to the passthrough failsafe.
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await fw(model, [{ role: "user", content: prompt }], { json: true, maxTokens });
+    try {
+      return JSON.parse(extractJson(raw)) as T;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 // distill generates new natural-language text (abstractive), so every prompt must
 // pin the output language to the note's own — else a Russian note distills to English.
 const langName = (lang: "en" | "ru"): string => (lang === "ru" ? "Russian" : "English");
 const langRule = (lang: "en" | "ru"): string =>
-  `Write every natural-language value (description, thesis, term, def, relations, prose) in ${langName(lang)} — match the note's own language. Keep code, paths, identifiers, and [[wikilink]] targets verbatim.`;
+  `Write every natural-language value (description, thesis, term, def, relations, step, prose) in ${langName(lang)} — match the note's own language. Keep code, paths, identifiers, and [[wikilink]] targets verbatim.`;
 
 // ---- stage 1: extract the combo (description, thesis, glossary) ----
 function extractComboPrompt(blocks: Block[], frontDescription: string, lang: "en" | "ru"): string {
@@ -316,8 +347,9 @@ function extractComboPrompt(blocks: Block[], frontDescription: string, lang: "en
 - "description": ${descRule}
 - "thesis": the single spine claim the whole note argues, one sentence.
 - "glossary": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out of the glossary. For each: "term" (the concept's name), "def" (dense, in YOUR OWN words, <=20 words), "relations" (array of strings: how it ties to OTHER terms — "subsumes X", "precondition for Y", "contrast to Z"; NOT a bare restatement of def), "source" (array of [Bn] id strings where it is defined or used, at least one).
+- "workflow": the note's ACTIONABLE directives — the practices, steps, or procedure the note tells the reader to DO, in the order the note gives them. A directive earns an entry only when the note PRESCRIBES an action (an imperative, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives — leave them to the thesis and glossary. For each: "step" (one imperative clause in YOUR OWN words, dense; if the SOURCE gives a reason for the action — "do X because Y", "do X so that Y" — append that source-stated reason to the step; if the source states no reason, keep the step terse), "source" (array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
 Collapse restatements of the SAME concept into ONE entry whose "source" lists all the blocks that state it — do not emit a separate entry per surface form.
-Return ONLY JSON {"description":"...","thesis":"...","glossary":[{"term":"...","def":"...","relations":["..."],"source":["Bn"]}]}.
+Return ONLY JSON {"description":"...","thesis":"...","glossary":[{"term":"...","def":"...","relations":["..."],"source":["Bn"]}],"workflow":[{"step":"...","source":["Bn"]}]}.
 
 TEXT (block IDs in [Bn] markers):
 ${render(blocks)}`;
@@ -343,9 +375,16 @@ async function extractCombo(
     }))
     // an entry with no valid source block cannot be rendered grounded or graded — drop it
     .filter((e) => e.term && e.source.length > 0);
+  const workflow = (ir.workflow ?? [])
+    .map((s) => ({
+      step: (s.step ?? "").trim(),
+      source: (s.source ?? []).filter((id) => ids.has(id)),
+    }))
+    // a step with no valid source block cannot be grounded or gated — drop it
+    .filter((s) => s.step && s.source.length > 0);
   // the authored frontmatter description overrides the model's: the one anchor never paraphrased
   const description = frontDescription || (ir.description ?? "").trim();
-  return { description, thesis: (ir.thesis ?? "").trim(), glossary };
+  return { description, thesis: (ir.thesis ?? "").trim(), glossary, workflow };
 }
 
 // ---- stage 2: grade each block drop / distill / retain ----
@@ -393,7 +432,7 @@ async function gradeBlocks(ir: IR, blocks: Block[]): Promise<Map<string, Grade>>
 // ---- stage 3: synthesize glossary definitions (the fidelity dial) ----
 type Synth = "render" | "regenerate";
 
-function sourceTextFor(entry: GlossEntry, blockById: Map<string, Block>): string {
+function sourceTextFor(entry: { source: string[] }, blockById: Map<string, Block>): string {
   return entry.source
     .map((id) => blockById.get(id)?.text ?? "")
     .filter(Boolean)
@@ -414,7 +453,7 @@ function synthEntriesPrompt(
           `### ${e.term}\nrelations: ${e.relations.join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
       )
       .join("\n\n");
-    return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause). Do NOT copy a source sentence verbatim; compress it. Keep every named relation; introduce NO claim absent from the source. Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
+    return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause), compressing rather than copying a source sentence verbatim. Keep every named relation; use only claims the source states. Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
 
 CONCEPTS:
 ${concepts}`;
@@ -448,9 +487,66 @@ async function synthEntries(
   return out;
 }
 
+// ---- stage 3 (workflow): tighten each directive, preserve order, drop none ----
+// Parallel to synthEntries on the procedural channel. The fidelity dial applies
+// the same way: `render` grounds each tightened step in its source block(s);
+// `regenerate` tightens from the extracted draft alone. Steps are keyed by index
+// (S0, S1, …) since, unlike glossary terms, they have no natural unique name.
+function synthWorkflowPrompt(
+  steps: WorkStep[],
+  mode: Synth,
+  blockById: Map<string, Block>,
+  lang: "en" | "ru",
+): string {
+  if (mode === "render") {
+    // Show each step's own DRAFT alongside its SOURCE. Steps in a list share one
+    // source block, so the draft is what individuates them — without it the model
+    // sees N identical sources and collapses them to one directive.
+    const items = steps
+      .map((s, i) => `### S${i}\ndraft: ${s.step}\nSOURCE:\n${sourceTextFor(s, blockById)}`)
+      .join("\n\n");
+    return `You are tightening the procedure of a note into a clean ordered checklist. Each step has its own DRAFT directive and the SOURCE it came from. Tighten EACH draft into ONE dense imperative directive, keeping its distinct action and grounding it in the SOURCE — reword rather than copy a source sentence verbatim, keep steps separate, one action per step. If the draft carries a reason the SOURCE states ("because/so that Y"), keep that reason in the tightened step and add only reasons the source gives. Keep EVERY step (drop none) and preserve their order. Keep \`inline code\`, file paths, flags, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
+
+STEPS:
+${items}`;
+  }
+  const items = steps.map((s, i) => `### S${i}\ndraft: ${s.step}`).join("\n\n");
+  return `You are tightening the procedure of a note into a clean ordered checklist from its drafted steps alone. For each step, write ONE dense imperative directive that preserves its action and any reason already in the draft, adding only reasons the draft carries. Keep EVERY step (drop none) and preserve their order. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
+
+STEPS:
+${items}`;
+}
+
+async function synthWorkflow(
+  steps: WorkStep[],
+  mode: Synth,
+  blockById: Map<string, Block>,
+  lang: "en" | "ru",
+): Promise<string[]> {
+  const out = steps.map((s) => s.step); // fall back to the extracted draft
+  if (steps.length === 0) return out;
+  try {
+    const res = await askJson<{ steps: { id: string; step: string }[] }>(
+      EXTRACT,
+      synthWorkflowPrompt(steps, mode, blockById, lang),
+      4096,
+    );
+    for (const e of res.steps ?? []) {
+      const m = /^S(\d+)$/.exec((e.id ?? "").trim());
+      if (m && e.step) {
+        const idx = parseInt(m[1], 10);
+        if (idx >= 0 && idx < out.length) out[idx] = e.step.trim();
+      }
+    }
+  } catch {
+    // a failed synth keeps the drafted steps (never silent-dropped)
+  }
+  return out;
+}
+
 // single-entry render from source — used by stage-5 recovery to re-ground a residue def
 function renderEntryPrompt(entry: GlossEntry, sourceText: string, lang: "en" | "ru"): string {
-  return `Write the glossary definition for "${entry.term}" using ONLY the source text below. One dense sentence; keep every relation (${entry.relations.join("; ")}); introduce NO claim absent from the source. ${langRule(lang)} Return ONLY JSON {"def":"..."}.
+  return `Write the glossary definition for "${entry.term}" using ONLY the source text below. One dense sentence; keep every relation (${entry.relations.join("; ")}); use only claims the source states. ${langRule(lang)} Return ONLY JSON {"def":"..."}.
 
 SOURCE:
 ${sourceText}`;
@@ -495,9 +591,9 @@ function connectiveProsePrompt(
         `### ${e.term}\nrelations: ${e.relations.join("; ")}\ndef (context only — do NOT restate in the prose): ${defByTerm.get(e.term) ?? e.def}`,
     )
     .join("\n\n");
-  return `You are writing the readable body of a note. Its definitions live in a separate "## Glossary" table directly below your prose, which the reader can consult — so your job is the connective tissue, not the definitions. Write flowing prose (connected markdown paragraphs) that develops how the terms relate to one another, building on the relations listed for each concept. Bold each glossary term on its first mention (e.g. **Target distance**) so the bold marks it as a term defined in the glossary below; do NOT restate its full definition; a brief gloss is fine only where the flow needs it.
+  return `You are writing the readable body of a note. Its definitions live in a separate "## Glossary" table directly below your prose, which the reader can consult — so your job is the connective tissue, not the definitions. Write flowing prose (connected markdown paragraphs) that develops how the terms relate to one another, building on the relations listed for each concept. Bold each glossary term on its first mention (e.g. **Target distance**) so the bold marks it as a term defined in the glossary below; leave its full definition to the glossary table; add a brief gloss only where the flow needs it.
 Write about the SUBJECT, not about the document: open the FIRST sentence by asserting the thesis directly as a plain claim about the subject (e.g. "Target distance is the gap between …, closed only by …"). NEVER refer to "the note", "this note", "the thesis", "this concept", "the author", or describe what the text does — state every point as a fact about the subject itself.
-Introduce NO claim, term, or relation absent from the input. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings. Keep \`inline code\`, file paths, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
+Use only claims, terms, and relations the input states. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings. Keep \`inline code\`, file paths, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
 
 THESIS (assert this in your own words as the opening claim — do not announce it as "the thesis"): ${ir.thesis}
 
@@ -554,7 +650,7 @@ async function proseJudge(
     const r = await askJson<{ pass?: boolean; issues?: string[] }>(
       FIDELITY,
       proseJudgePrompt(thesis, prose),
-      4096,
+      FIDELITY_TOKENS,
     );
     return {
       pass: r.pass !== false,
@@ -695,12 +791,60 @@ async function fidelityGate(
   const res = await askJson<{ thesisRecoverable?: boolean; concepts?: Concept[] }>(
     FIDELITY,
     fidelityPrompt(thesis, outputBody, rendered),
-    8192,
+    FIDELITY_TOKENS,
   );
   return {
     thesisRecoverable: res.thesisRecoverable !== false,
     concepts: (res.concepts ?? []).filter((c) => c.term),
   };
+}
+
+// ---- workflow gate: directive coverage, NOT bidirectional def↔source ----
+// A step's fidelity unit differs from a glossary entry's. Steps that share a
+// source block (a practices/procedure list is one block) are judged as a SET
+// against that block: every directive in the source must appear as some step
+// (coverage) and every step must trace to a source directive (no invention).
+// Crucially, rationale, explanation, and examples the steps omit do NOT count as
+// missing — a checklist is allowed to drop the "why". A step may CARRY a reason
+// when the source states one (extraction appends it), but the gate forbids
+// INVENTING a reason the source does not give. So the unit is asymmetric: an
+// action must be covered and uninvented (total on directives); a reason may be
+// dropped freely but never fabricated (invention-only on the "why").
+type StepVerdict = { id: string; grade: "translated" | "residue"; missing: string };
+
+function workflowGatePrompt(
+  groups: { id: string; steps: string[]; sourceText: string }[],
+  lang: "en" | "ru",
+): string {
+  const blocks = groups
+    .map(
+      (g) =>
+        `### ${g.id}\nSOURCE:\n${g.sourceText}\nOUTPUT STEPS:\n${g.steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
+    )
+    .join("\n\n");
+  return `You are an independent fidelity judge for a procedure checklist. You did NOT write it. For each GROUP you see the SOURCE (verbatim prescriptive text from the original note) and the OUTPUT STEPS (tightened directives). Judge only the DIRECTIVES:
+- COVERAGE: does every distinct action the SOURCE prescribes appear as one of the OUTPUT STEPS? An action dropped entirely is "residue".
+- NO INVENTION (action): does every OUTPUT STEP correspond to an action the SOURCE prescribes? A step prescribing something the source does not is "residue".
+- NO INVENTION (reason): a step MAY carry a reason ("because/so that Y"). Grade it "residue" only when that reason is NOT stated in the SOURCE — a step that states a reason the source gives is fine; a step that invents a reason the source does not give is "residue".
+A checklist is ALLOWED to omit the source's rationale, explanation, examples, and "why" — omitting a reason the source gives is NEVER missing. The asymmetry: an action must be both covered and uninvented; a reason may be dropped freely but never invented. Judge actions and any stated reasons, not prose. ${langRule(lang)}
+Grade "translated" when coverage holds and nothing is invented; else "residue", naming the dropped or invented action in "missing".
+Return ONLY JSON {"groups":[{"id":"...","grade":"translated|residue","missing":"..."}]} — echo each group's id.
+
+GROUPS:
+${blocks}`;
+}
+
+async function workflowGate(
+  groups: { id: string; steps: string[]; sourceText: string }[],
+  lang: "en" | "ru",
+): Promise<StepVerdict[]> {
+  if (groups.length === 0) return [];
+  const res = await askJson<{ groups?: StepVerdict[] }>(
+    FIDELITY,
+    workflowGatePrompt(groups, lang),
+    FIDELITY_TOKENS,
+  );
+  return (res.groups ?? []).filter((g) => g.id);
 }
 
 // ---- assembly: head prose + glossary table + retained-verbatim blocks ----
@@ -718,6 +862,7 @@ const escAttr = (s: string) =>
 function assembleBody(
   h1: string,
   head: string,
+  workflowSteps: string[],
   orderedEntries: GlossEntry[],
   defByTerm: Map<string, string>,
   retained: Block[],
@@ -725,6 +870,12 @@ function assembleBody(
   const parts: string[] = [];
   if (h1) parts.push(h1);
   if (head) parts.push(head);
+  if (workflowSteps.length) {
+    const items = workflowSteps
+      .map((s, i) => `${i + 1}. ${s.replace(/\n+/g, " ").trim()}`)
+      .join("\n");
+    parts.push(`## Workflow\n\n${items}`);
+  }
   if (orderedEntries.length) {
     const rows = orderedEntries
       .map((e) => `| ${escCell(e.term)} | ${escCell(defByTerm.get(e.term) ?? e.def)} |`)
@@ -754,23 +905,33 @@ const stripH1 = (s: string): string => s.replace(/^#\s+[^\n]*\r?\n?/, "");
 
 // Parse a distilled body into its parts: the tie-together prose (head, minus any
 // H1), the glossary entries (the `## Glossary` table — header/separator rows
-// skipped, `\|` unescaped, the inverse of escCell + assembleBody), and any
-// retained blocks after the table (e.g. a wikilink reference list).
+// skipped, `\|` unescaped, the inverse of escCell + assembleBody), and the
+// preserved tail (everything else after the head: a `## Workflow` section, a
+// wikilink reference list, …). Order-independent: the glossary may sit before or
+// after the workflow section. The glossary table is the only region reconstructed
+// into prose; every other section is passed through verbatim, so a `## Workflow`
+// list is never folded into the prose regardless of where it appears.
 function parseDistilled(body: string): {
   tie: string;
   entries: { term: string; def: string }[];
-  retained: string;
+  preserved: string;
 } {
-  const gi = body.match(/^##\s+Glossary\b.*$/im);
-  if (!gi || gi.index === undefined) {
-    return { tie: stripH1(body).trim(), entries: [], retained: "" };
+  const lines = body.split("\n");
+  const isHeading = (s: string) => /^##\s/.test(s.trim());
+  const glossLine = lines.findIndex((l) => /^##\s+Glossary\b/i.test(l.trim()));
+  if (glossLine < 0) {
+    return { tie: stripH1(body).trim(), entries: [], preserved: "" };
   }
-  const head = body.slice(0, gi.index);
-  const after = body.slice(gi.index + gi[0].length).split("\n");
+  // head: everything before the FIRST `## ` section (prose may precede a workflow
+  // section that itself precedes the glossary). tie is that head minus any H1.
+  let firstHeading = lines.findIndex(isHeading);
+  if (firstHeading < 0) firstHeading = glossLine;
+  const head = lines.slice(0, firstHeading).join("\n");
+  // the glossary table: contiguous `|` rows after the glossary heading
   const rows: string[] = [];
-  let j = 0;
-  for (; j < after.length; j++) {
-    const t = after[j].trim();
+  let j = glossLine + 1;
+  for (; j < lines.length; j++) {
+    const t = lines[j].trim();
     if (t === "") {
       if (rows.length) break; // a blank after the rows ends the table
       continue; // blank between heading and table
@@ -781,7 +942,11 @@ function parseDistilled(body: string): {
     }
     break; // first non-blank non-row line ends the table
   }
-  const retained = after.slice(j).join("\n").trim();
+  // preserved = the sections between head and the glossary heading + everything
+  // after the glossary table, with the glossary heading+table region excised.
+  const before = lines.slice(firstHeading, glossLine).join("\n").trim();
+  const after = lines.slice(j).join("\n").trim();
+  const preserved = [before, after].filter(Boolean).join("\n\n");
   const entries: { term: string; def: string }[] = [];
   for (const row of rows) {
     const cells = row
@@ -795,7 +960,7 @@ function parseDistilled(body: string): {
     if (/^:?-{3,}:?$/.test(term.replace(/\s/g, ""))) continue; // separator row
     entries.push({ term, def });
   }
-  return { tie: stripH1(head).trim(), entries, retained };
+  return { tie: stripH1(head).trim(), entries, preserved };
 }
 
 function renderPrompt(
@@ -805,7 +970,7 @@ function renderPrompt(
   lang: "en" | "ru",
 ): string {
   const gloss = glossList(entries);
-  return `You are reconstructing a readable prose note from its distilled glossary. Write flowing prose (connected markdown paragraphs) using ONLY the description, thesis, and glossary definitions below — introduce NO claim, term, or example absent from them. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings; write paragraphs a reader follows start to finish. Lead with the thesis, then develop each concept and how it relates to the others. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
+  return `You are reconstructing a readable prose note from its distilled glossary. Write flowing prose (connected markdown paragraphs) using ONLY the description, thesis, and glossary definitions below, drawing every claim, term, and example from them. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings; write paragraphs a reader follows start to finish. Lead with the thesis, then develop each concept and how it relates to the others. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
 
 DESCRIPTION: ${description || "(none)"}
 
@@ -839,7 +1004,7 @@ async function runRender(
 ): Promise<void> {
   try {
     const { front, body } = splitFrontmatter(unwrapResult(input));
-    const { tie, entries, retained } = parseDistilled(body);
+    const { tie, entries, preserved } = parseDistilled(body);
     if (entries.length === 0) {
       emit(input, "— render skipped: no ## Glossary table found");
       return;
@@ -854,7 +1019,7 @@ async function runRender(
       const revised = await revise(segment(prose), lang === "ru" ? PASS_RU : PASS_EN);
       prose = revised.map((b) => b.text).join("\n\n");
     }
-    const outBody = retained ? `${prose}\n\n${retained}` : prose;
+    const outBody = preserved ? `${prose}\n\n${preserved}` : prose;
     const result = front ? front + "\n" + outBody : outBody;
     emit(
       `<result>\n${result}\n</result>\n`,
@@ -881,27 +1046,38 @@ async function distill(
 
   // 1. extract combo
   const ir = await extractCombo(blocks, frontDescription, lang);
-  if (ir.glossary.length === 0) {
-    // nothing to distill: no concepts extracted. Passthrough, footer notes it.
-    return { out: text, footer: `— no concepts extracted · ${beforeWords} words`, residue: [] };
+  if (ir.glossary.length === 0 && ir.workflow.length === 0) {
+    // nothing to distill: no concepts and no directives. Passthrough, footer notes it.
+    return { out: text, footer: `— nothing to distill · ${beforeWords} words`, residue: [] };
   }
 
   // 2. grade blocks
   const grades = await gradeBlocks(ir, blocks);
   const retained = blocks.filter((b) => grades.get(b.id) === "retain");
+  const retainedIds = new Set(retained.map((b) => b.id));
 
   // order entries by first appearance of their lowest source block (note's own order)
-  const orderKey = (e: GlossEntry) => Math.min(...e.source.map((id) => blockIndex.get(id) ?? 1e9));
+  const orderKey = (e: { source: string[] }) =>
+    Math.min(...e.source.map((id) => blockIndex.get(id) ?? 1e9));
   const orderedEntries = [...ir.glossary].sort((a, b) => orderKey(a) - orderKey(b));
+
+  // a step whose every source block is retained verbatim is already carried by that
+  // block — drop it so the directive is not duplicated as both a fence and a step.
+  // The rest keep the note's order (Array.sort is stable across a shared block).
+  const orderedSteps = ir.workflow
+    .filter((s) => !s.source.every((id) => retainedIds.has(id)))
+    .sort((a, b) => orderKey(a) - orderKey(b));
 
   // 3. synthesize definitions via the dial and the short tie-together (the gate's
   // thesis anchor, and the head in --core-only). These two are independent, so
   // they run concurrently; the connective prose body needs the defs, so it follows.
-  const [defByTerm, tieResult] = await Promise.all([
+  const [defByTerm, tieResult, workflowSynth] = await Promise.all([
     synthEntries(ir, orderedEntries, opts.synth, blockById, lang),
     tieTogether(ir, lang),
+    synthWorkflow(orderedSteps, opts.synth, blockById, lang),
   ]);
   let tie = tieResult;
+  let workflowSteps = workflowSynth;
   let prose = opts.coreOnly ? "" : await connectiveProse(ir, orderedEntries, defByTerm, lang);
 
   // 4. revise the distilled prose (tie + connective prose + each def), structure untouched
@@ -913,6 +1089,7 @@ async function distill(
         id: `__G${i}__`,
         text: defByTerm.get(e.term) ?? e.def,
       })),
+      ...workflowSteps.map((s, i) => ({ id: `__W${i}__`, text: s })),
     ];
     // freeze the bolded glossary terms so revise keeps each term's text (and bold)
     // verbatim — the prose bolds them as glossary cross-references.
@@ -925,6 +1102,7 @@ async function distill(
       const t = byId.get(`__G${i}__`);
       if (t) defByTerm.set(e.term, t);
     });
+    workflowSteps = workflowSteps.map((s, i) => byId.get(`__W${i}__`) ?? s);
   }
 
   const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
@@ -932,26 +1110,59 @@ async function distill(
   // the prose is the un-gated readable derivative, and feeding it to the judge
   // made it mark every terse def as "missing" the detail the prose elaborates.
   // Gate `gloss`; build the final `out` (prose head by default) after recovery.
-  let gloss = assembleBody(h1, tie, orderedEntries, defByTerm, retained);
+  let gloss = assembleBody(h1, tie, workflowSteps, orderedEntries, defByTerm, retained);
 
-  // 5. fidelity gate + recovery (round-trip entailment, capped re-render from source)
+  // group steps by their shared source block-set so the workflow gate judges them
+  // the way they exist: a practices/procedure list (one block) is one group whose
+  // steps are judged as a set against that block; steps in distinct blocks each
+  // form their own group, giving per-step granularity where the note allows it.
+  const stepGroups = (() => {
+    const by = new Map<string, number[]>();
+    orderedSteps.forEach((s, i) => {
+      const sig = [...new Set(s.source)].sort().join("|");
+      const g = by.get(sig);
+      if (g) g.push(i);
+      else by.set(sig, [i]);
+    });
+    return [...by.entries()].map(([sig, idxs], n) => ({
+      id: `workflow:${n + 1}`,
+      idxs,
+      sourceText: sourceTextFor({ source: sig.split("|") }, blockById),
+    }));
+  })();
+
+  // 5. fidelity gate + recovery. Two criteria, two gates, one shared retry loop:
+  // concepts round-trip bidirectionally against source (a def must capture the whole
+  // concept); workflow groups are judged for directive coverage only (a checklist
+  // may drop rationale). Both re-render failing items from source, capped.
   const residue: Residue[] = [];
   let retries = 0;
   if (!opts.noGate) {
-    const rendered = () =>
+    const renderedC = () =>
       orderedEntries.map((e) => ({
         term: e.term,
         def: defByTerm.get(e.term) ?? e.def,
         sourceText: sourceTextFor(e, blockById),
       }));
-    let graded = await fidelityGate(ir.thesis, gloss, rendered());
-    let failing = graded.concepts.filter((c) => c.grade === "residue");
-    while (failing.length > 0 && retries < opts.maxRetries) {
+    const renderedG = () =>
+      stepGroups.map((g) => ({
+        id: g.id,
+        steps: g.idxs.map((i) => workflowSteps[i]),
+        sourceText: g.sourceText,
+      }));
+    const [graded, gradedG] = await Promise.all([
+      fidelityGate(ir.thesis, gloss, renderedC()),
+      workflowGate(renderedG(), lang),
+    ]);
+    const thesisRecoverable = graded.thesisRecoverable;
+    let failC = graded.concepts.filter((c) => c.grade === "residue");
+    let failG = gradedG.filter((g) => g.grade === "residue");
+    while ((failC.length > 0 || failG.length > 0) && retries < opts.maxRetries) {
       retries++;
-      // re-render each residue entry from source (render mode) regardless of dial;
-      // the entries are independent, so re-render them concurrently
-      await Promise.all(
-        failing.map(async (c) => {
+      // re-render failing concepts/groups from source, regardless of dial; items are
+      // independent, so concurrent. Recovery bypasses revise(), so normalize here.
+      await Promise.all([
+        ...failC.map(async (c) => {
           const entry = orderedEntries.find((e) => e.term === c.term);
           if (!entry) return;
           try {
@@ -960,25 +1171,54 @@ async function distill(
               renderEntryPrompt(entry, sourceTextFor(entry, blockById), lang),
               1024,
             );
-            // recovery bypasses revise(), so normalize typography here too
             if (r.def) defByTerm.set(entry.term, normalizeTypography(r.def.trim()));
           } catch {
             // a failed re-render keeps the prior def; the gate re-grades it next
           }
         }),
-      );
-      gloss = assembleBody(h1, tie, orderedEntries, defByTerm, retained);
-      // re-grade only the patched entries, not the full glossary (budget)
-      const patchTerms = new Set(failing.map((c) => c.term));
-      const reg = await fidelityGate(
-        ir.thesis,
-        gloss,
-        rendered().filter((r) => patchTerms.has(r.term)),
-      );
-      failing = reg.concepts.filter((c) => c.grade === "residue");
+        ...failG.map(async (v) => {
+          const g = stepGroups.find((x) => x.id === v.id);
+          if (!g) return;
+          try {
+            // re-tighten the whole group from source (drafts individuate the steps)
+            const tightened = await synthWorkflow(
+              g.idxs.map((i) => orderedSteps[i]),
+              "render",
+              blockById,
+              lang,
+            );
+            g.idxs.forEach((i, k) => {
+              if (tightened[k]) workflowSteps[i] = normalizeTypography(tightened[k]);
+            });
+          } catch {
+            // a failed re-render keeps the prior steps; the gate re-grades them next
+          }
+        }),
+      ]);
+      gloss = assembleBody(h1, tie, workflowSteps, orderedEntries, defByTerm, retained);
+      // re-grade only the patched items, not the full set (budget)
+      const patchC = new Set(failC.map((c) => c.term));
+      const patchG = new Set(failG.map((g) => g.id));
+      const [reg, regG] = await Promise.all([
+        patchC.size
+          ? fidelityGate(
+              ir.thesis,
+              gloss,
+              renderedC().filter((r) => patchC.has(r.term)),
+            )
+          : Promise.resolve({ thesisRecoverable, concepts: [] as Concept[] }),
+        patchG.size
+          ? workflowGate(
+              renderedG().filter((r) => patchG.has(r.id)),
+              lang,
+            )
+          : Promise.resolve([] as StepVerdict[]),
+      ]);
+      failC = reg.concepts.filter((c) => c.grade === "residue");
+      failG = regG.filter((g) => g.grade === "residue");
     }
     // surviving residue (incl. an unrecoverable thesis) is surfaced, never silent
-    for (const c of failing) {
+    for (const c of failC) {
       const entry = orderedEntries.find((e) => e.term === c.term);
       residue.push({
         term: c.term,
@@ -986,7 +1226,15 @@ async function distill(
         source: entry ? sourceTextFor(entry, blockById) : "",
       });
     }
-    if (!graded.thesisRecoverable) {
+    for (const v of failG) {
+      const g = stepGroups.find((x) => x.id === v.id);
+      residue.push({
+        term: v.id,
+        reason: `workflow: ${v.missing || "directive coverage failed"}`,
+        source: g ? g.sourceText : "",
+      });
+    }
+    if (!thesisRecoverable) {
       residue.unshift({
         term: "(thesis)",
         reason: "thesis not recoverable from output",
@@ -1010,7 +1258,14 @@ async function distill(
   // assemble the final output: the connective prose head by default, the tie in
   // --core-only. Definitions are the gate-settled ones; the prose restates none
   // of them, so recovery changing a def never invalidates the prose above it.
-  const out = assembleBody(h1, opts.coreOnly ? tie : prose, orderedEntries, defByTerm, retained);
+  const out = assembleBody(
+    h1,
+    opts.coreOnly ? tie : prose,
+    workflowSteps,
+    orderedEntries,
+    defByTerm,
+    retained,
+  );
 
   const afterWords = wordCount(out);
   // passthrough guard: a distillation that expands the note has failed its one job.
@@ -1027,8 +1282,9 @@ async function distill(
   const sizeTag = `${pct > 0 ? "-" : pct < 0 ? "+" : "±"}${Math.abs(pct)}%`; // expansion is guarded above, so this is -N% or ±0%
   const retriesTag = retries ? ` · ${retries} retries` : "";
   const proseTag = proseFixes ? ` · ${proseFixes} prose fixes` : "";
+  const stepsTag = orderedSteps.length ? ` · ${orderedSteps.length} steps` : "";
   const shapeTag = opts.coreOnly ? "gloss" : "prose+gloss";
-  const footer = `— distilled ${shapeTag} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries · ${retained.length} verbatim · ${residue.length} residue${retriesTag}${proseTag}`;
+  const footer = `— distilled ${shapeTag} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries${stepsTag} · ${retained.length} verbatim · ${residue.length} residue${retriesTag}${proseTag}`;
   return { out, footer, residue };
 }
 
