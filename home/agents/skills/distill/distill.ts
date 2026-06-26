@@ -140,6 +140,9 @@ function wordCount(s: string): number {
   return t ? t.split(/\s+/).length : 0;
 }
 
+const glossList = (entries: { term: string; def: string }[]): string =>
+  entries.map((e) => `- ${e.term}: ${e.def}`).join("\n");
+
 // a block carries a deliberate connection if it contains [[...]] — this also
 // matches ![[...]] embeds, since the embed wraps a wikilink. Detection is
 // deterministic so the protection cannot miss one.
@@ -347,7 +350,7 @@ async function extractCombo(
 
 // ---- stage 2: grade each block drop / distill / retain ----
 function gradeBlocksPrompt(ir: IR, blocks: Block[]): string {
-  const gloss = ir.glossary.map((e) => `- ${e.term}: ${e.def}`).join("\n");
+  const gloss = glossList(ir.glossary);
   return `You are grading each block of a note for an abstractive compression. You have the note's thesis and its glossary of concepts. Grade EVERY block:
 - "drop": off-thesis, OR its content is already captured by a glossary entry (a restatement).
 - "distill": on-thesis prose whose ideas should be re-expressed densely — it folds into the glossary and a short prose tie-together. This is the DEFAULT for explanatory text.
@@ -454,7 +457,7 @@ ${sourceText}`;
 }
 
 function tieTogetherPrompt(ir: IR, lang: "en" | "ru"): string {
-  const gloss = ir.glossary.map((e) => `- ${e.term}: ${e.def}`).join("\n");
+  const gloss = glossList(ir.glossary);
   return `In 2-4 sentences, state the note's thesis and how its main glossary terms connect. Use only concepts already in the glossary. Plain declarative prose — no heading, no list. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
 
 THESIS: ${ir.thesis}
@@ -801,7 +804,7 @@ function renderPrompt(
   entries: { term: string; def: string }[],
   lang: "en" | "ru",
 ): string {
-  const gloss = entries.map((e) => `- ${e.term}: ${e.def}`).join("\n");
+  const gloss = glossList(entries);
   return `You are reconstructing a readable prose note from its distilled glossary. Write flowing prose (connected markdown paragraphs) using ONLY the description, thesis, and glossary definitions below — introduce NO claim, term, or example absent from them. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings; write paragraphs a reader follows start to finish. Lead with the thesis, then develop each concept and how it relates to the others. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
 
 DESCRIPTION: ${description || "(none)"}
@@ -891,12 +894,14 @@ async function distill(
   const orderKey = (e: GlossEntry) => Math.min(...e.source.map((id) => blockIndex.get(id) ?? 1e9));
   const orderedEntries = [...ir.glossary].sort((a, b) => orderKey(a) - orderKey(b));
 
-  // 3. synthesize definitions via the dial; the short tie-together (the gate's
-  // thesis anchor, and the head in --core-only); and—in the default mode—the
-  // connective prose body. connectiveProse needs the defs, so it runs after
-  // synthEntries rather than alongside it.
-  const defByTerm = await synthEntries(ir, orderedEntries, opts.synth, blockById, lang);
-  let tie = await tieTogether(ir, lang);
+  // 3. synthesize definitions via the dial and the short tie-together (the gate's
+  // thesis anchor, and the head in --core-only). These two are independent, so
+  // they run concurrently; the connective prose body needs the defs, so it follows.
+  const [defByTerm, tieResult] = await Promise.all([
+    synthEntries(ir, orderedEntries, opts.synth, blockById, lang),
+    tieTogether(ir, lang),
+  ]);
+  let tie = tieResult;
   let prose = opts.coreOnly ? "" : await connectiveProse(ir, orderedEntries, defByTerm, lang);
 
   // 4. revise the distilled prose (tie + connective prose + each def), structure untouched
@@ -943,22 +948,25 @@ async function distill(
     let failing = graded.concepts.filter((c) => c.grade === "residue");
     while (failing.length > 0 && retries < opts.maxRetries) {
       retries++;
-      // re-render each residue entry from source (render mode) regardless of dial
-      for (const c of failing) {
-        const entry = orderedEntries.find((e) => e.term === c.term);
-        if (!entry) continue;
-        try {
-          const r = await askJson<{ def: string }>(
-            EXTRACT,
-            renderEntryPrompt(entry, sourceTextFor(entry, blockById), lang),
-            1024,
-          );
-          // recovery bypasses revise(), so normalize typography here too
-          if (r.def) defByTerm.set(entry.term, normalizeTypography(r.def.trim()));
-        } catch {
-          // a failed re-render keeps the prior def; the gate re-grades it next
-        }
-      }
+      // re-render each residue entry from source (render mode) regardless of dial;
+      // the entries are independent, so re-render them concurrently
+      await Promise.all(
+        failing.map(async (c) => {
+          const entry = orderedEntries.find((e) => e.term === c.term);
+          if (!entry) return;
+          try {
+            const r = await askJson<{ def: string }>(
+              EXTRACT,
+              renderEntryPrompt(entry, sourceTextFor(entry, blockById), lang),
+              1024,
+            );
+            // recovery bypasses revise(), so normalize typography here too
+            if (r.def) defByTerm.set(entry.term, normalizeTypography(r.def.trim()));
+          } catch {
+            // a failed re-render keeps the prior def; the gate re-grades it next
+          }
+        }),
+      );
       gloss = assembleBody(h1, tie, orderedEntries, defByTerm, retained);
       // re-grade only the patched entries, not the full glossary (budget)
       const patchTerms = new Set(failing.map((c) => c.term));
