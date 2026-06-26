@@ -37,8 +37,8 @@ const end = endDate.toPlainDateTime(endTime).toZonedDateTime(tz);
 // 3. Calculate difference using .since() and .until()
 // By default, units larger than hours might not wrap automatically.
 // Use largestUnit to ensure differences are expressed in larger units if applicable.
-const timeActive = now.since(start, { largestUnit: 'year' });
-const timeRemaining = now.until(end, { largestUnit: 'year' });
+const timeActive = now.since(start, { largestUnit: "year" });
+const timeRemaining = now.until(end, { largestUnit: "year" });
 
 console.log(`Active: ${timeActive.days} days, ${timeActive.hours} hours`);
 console.log(`Remaining: ${timeRemaining.days} days, ${timeRemaining.hours} hours`);
@@ -52,11 +52,11 @@ if (isExpired) {
 
 ## Strategic Implementation & Best Practices
 
--   **DO** use `Temporal.ZonedDateTime` for calculations involving real-world events that occur in specific time zones (like subscription renewals or event scheduling).
--   **DO** use `largestUnit` to specify the largest unit you want in the result (e.g., `'year'` or `'month'`). If you omit it, it defaults to `'auto'` which might not always sum up to years/months as expected for human-readable durations.
--   **DO** use `.since()` when calculating time elapsed *since* a past event (e.g., `now.since(start)`), and `.until()` for time remaining *until* a future event (e.g., `now.until(end)`).
--   **DO NOT** modify instances directly; `Temporal` objects are **immutable**. Operations like `add()`, `subtract()`, or `with()` return a *new* instance.
--   **DO** use `Temporal.ZonedDateTime.compare` to check if one time point is after another. It returns `1` if the first is after the second, `-1` if before, and `0` if equal.
+- **DO** use `Temporal.ZonedDateTime` for calculations involving real-world events that occur in specific time zones (like subscription renewals or event scheduling).
+- **DO** use `largestUnit` to specify the largest unit you want in the result (e.g., `'year'` or `'month'`). If you omit it, it defaults to `'auto'` which might not always sum up to years/months as expected for human-readable durations.
+- **DO** use `.since()` when calculating time elapsed _since_ a past event (e.g., `now.since(start)`), and `.until()` for time remaining _until_ a future event (e.g., `now.until(end)`).
+- **DO NOT** modify instances directly; `Temporal` objects are **immutable**. Operations like `add()`, `subtract()`, or `with()` return a _new_ instance.
+- **DO** use `Temporal.ZonedDateTime.compare` to check if one time point is after another. It returns `1` if the first is after the second, `-1` if before, and `0` if equal.
 
 ## Fallback Strategy
 
@@ -73,7 +73,7 @@ Note that the polyfill does not automatically assign the `Temporal` object to th
 ```javascript
 // Check if Temporal is supported natively
 (async () => {
-  if (typeof Temporal === 'undefined') {
+  if (typeof Temporal === "undefined") {
     // Load the polyfill conditionally
     const module = await import("https://esm.sh/@js-temporal/polyfill");
     globalThis.Temporal = module.Temporal;

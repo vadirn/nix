@@ -85,17 +85,17 @@ Example:
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
-    source:      { type: "string" },
-    drafts:      { type: "string" },
-    model:       { type: "string" },
-    aspect:      { type: "string" },
-    resolution:  { type: "string" },
-    name:        { type: "string" },
-    out:         { type: "string" },
+    source: { type: "string" },
+    drafts: { type: "string" },
+    model: { type: "string" },
+    aspect: { type: "string" },
+    resolution: { type: "string" },
+    name: { type: "string" },
+    out: { type: "string" },
     transparent: { type: "boolean", default: false },
-    cutout:      { type: "string" },
-    "dry-run":   { type: "boolean", default: false },
-    help:        { type: "boolean", default: false, short: "h" },
+    cutout: { type: "string" },
+    "dry-run": { type: "boolean", default: false },
+    help: { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: true,
 });
@@ -121,7 +121,7 @@ const FAL_KEY = process.env.FAL_KEY;
 if (!FAL_KEY && !DRY_RUN) {
   console.error(
     "ERROR: FAL_KEY is not set.\n" +
-    "Inject it via: doppler run -p claude-code -c std --no-fallback --"
+      "Inject it via: doppler run -p claude-code -c std --no-fallback --",
   );
   process.exit(1);
 }
@@ -137,8 +137,8 @@ if (FAL_KEY) {
 // Auto-pick: refs supplied → kling-image/o1 (i2i, requires image_urls);
 // no refs → kling-image/v3/text-to-image (t2i). User --model overrides both.
 const HAS_SOURCES = Boolean(values.source && values.source.trim());
-const MODEL       = values.model
-  ?? (HAS_SOURCES ? "fal-ai/kling-image/o1" : "fal-ai/kling-image/v3/text-to-image");
+const MODEL =
+  values.model ?? (HAS_SOURCES ? "fal-ai/kling-image/o1" : "fal-ai/kling-image/v3/text-to-image");
 
 // Validate explicit --model override against --source presence.
 // kling-image/o1 is image-to-image (requires --source).
@@ -165,12 +165,24 @@ if (DRAFTS > 9) {
   console.error("ERROR: --drafts must be 9 or fewer (Kling API limit)");
   process.exit(1);
 }
-const VALID_ASPECTS_FAL = new Set(["16:9","9:16","1:1","4:3","3:4","3:2","2:3","21:9","auto"]);
+const VALID_ASPECTS_FAL = new Set([
+  "16:9",
+  "9:16",
+  "1:1",
+  "4:3",
+  "3:4",
+  "3:2",
+  "2:3",
+  "21:9",
+  "auto",
+]);
 if (values.aspect && !VALID_ASPECTS_FAL.has(values.aspect)) {
-  console.error(`ERROR: --aspect must be one of: ${[...VALID_ASPECTS_FAL].join(", ")} (got '${values.aspect}')`);
+  console.error(
+    `ERROR: --aspect must be one of: ${[...VALID_ASPECTS_FAL].join(", ")} (got '${values.aspect}')`,
+  );
   process.exit(1);
 }
-const ASPECT      = values.aspect ?? (HAS_SOURCES ? "auto" : "1:1");
+const ASPECT = values.aspect ?? (HAS_SOURCES ? "auto" : "1:1");
 const TRANSPARENT = values.transparent ?? false;
 
 // --cutout: controls whether BiRefNet runs when --transparent is set.
@@ -202,28 +214,28 @@ if (!["1k", "2k"].includes(RESOLUTION)) {
 }
 
 // Output directory.
-const OUT_DIR = values.out
-  ? expandTilde(values.out)
-  : join(os.homedir(), "Pictures", "imagen");
+const OUT_DIR = values.out ? expandTilde(values.out) : join(os.homedir(), "Pictures", "imagen");
 
 mkdirSync(OUT_DIR, { recursive: true });
 
 // Name slug.
 let NAME_SLUG = values.name ?? "";
 if (!NAME_SLUG) {
-  NAME_SLUG = prompt
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40)
-    .replace(/-$/, "") || "image";
+  NAME_SLUG =
+    prompt
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40)
+      .replace(/-$/, "") || "image";
 }
 
-const TIMESTAMP = new Date()
-  .toISOString()
-  .replace(/[-:T]/g, "")
-  .replace(/\.\d+Z$/, "")
-  .replace(/^(\d{8})(\d{6})$/, "$1-$2") + `-${process.pid}`;
+const TIMESTAMP =
+  new Date()
+    .toISOString()
+    .replace(/[-:T]/g, "")
+    .replace(/\.\d+Z$/, "")
+    .replace(/^(\d{8})(\d{6})$/, "$1-$2") + `-${process.pid}`;
 
 const LOG_FILE = join(OUT_DIR, "log.jsonl");
 
@@ -242,7 +254,11 @@ async function uploadSources(resolvedPaths: string[], mimes: string[]): Promise<
       const file = Bun.file(r);
       blob = new Blob([await file.arrayBuffer()], { type: mime });
     } else {
-      const bytes = await Bun.file(r).image().resize(2048, 2048, { fit: "inside" }).webp({ quality: 85 }).bytes();
+      const bytes = await Bun.file(r)
+        .image()
+        .resize(2048, 2048, { fit: "inside" })
+        .webp({ quality: 85 })
+        .bytes();
       console.log(`  (shrunk ${meta.width}x${meta.height} -> 2048-box webp)`);
       blob = new Blob([bytes], { type: "image/webp" });
     }
@@ -259,9 +275,11 @@ async function downloadImage(url: string, destBase: string): Promise<string> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Failed to download ${url}: ${resp.status} ${resp.statusText}`);
   const contentType = resp.headers.get("content-type") ?? "image/png";
-  const ext = contentType.includes("webp") ? "webp"
-            : contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg"
-            : "png";
+  const ext = contentType.includes("webp")
+    ? "webp"
+    : contentType.includes("jpeg") || contentType.includes("jpg")
+      ? "jpg"
+      : "png";
   const dest = `${destBase}.${ext}`;
   const buf = await resp.arrayBuffer();
   writeFileSync(dest, Buffer.from(buf));
@@ -279,25 +297,29 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
   const imageUrl = await fal.storage.upload(blob);
 
   console.log(`  [BiRefNet] running background removal…`);
-  const result = await withTimeout(fal.subscribe("fal-ai/birefnet/v2", {
-    input: {
-      image_url: imageUrl,
-      model: "General Use (Heavy)",
-      refine_foreground: true,
-      operating_resolution: "2048x2048",
-    },
-    logs: false,
-  }), 120_000, "fal.subscribe(BiRefNet)");
+  const result = await withTimeout(
+    fal.subscribe("fal-ai/birefnet/v2", {
+      input: {
+        image_url: imageUrl,
+        model: "General Use (Heavy)",
+        refine_foreground: true,
+        operating_resolution: "2048x2048",
+      },
+      logs: false,
+    }),
+    120_000,
+    "fal.subscribe(BiRefNet)",
+  );
   const alphaUrl = (result as { data?: { image?: { url?: string } } })?.data?.image?.url;
   if (!alphaUrl) {
     throw new Error(
-      `BiRefNet returned unexpected response shape: ${JSON.stringify(result).slice(0, 500)}`
+      `BiRefNet returned unexpected response shape: ${JSON.stringify(result).slice(0, 500)}`,
     );
   }
   // Download alpha image to a sibling <base>-alpha.<ext>; keep the original.
   const alphaBase = imagePath.replace(/\.[^.]+$/, "");
   const tmpPath = await downloadImage(alphaUrl, `${alphaBase}-birefnet-tmp`);
-  const ext = tmpPath.slice(tmpPath.lastIndexOf("."));  // e.g. ".png", ".webp"
+  const ext = tmpPath.slice(tmpPath.lastIndexOf(".")); // e.g. ".png", ".webp"
   const alphaPath = `${alphaBase}-alpha${ext}`;
   renameSync(tmpPath, alphaPath);
   console.log(`  [BiRefNet] saved alpha image: ${alphaPath}`);
@@ -310,7 +332,10 @@ async function applyBiRefNet(imagePath: string): Promise<string> {
 async function main(): Promise<void> {
   // Resolve source paths and sniff MIMEs (runs even in --dry-run).
   const sourcePaths = values.source
-    ? values.source.split(",").map((p) => p.trim()).filter(Boolean)
+    ? values.source
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean)
     : [];
   const { resolved: resolvedSources, mimes: sourceMimes } = await sniffSourceMimes(sourcePaths);
 
@@ -332,9 +357,8 @@ async function main(): Promise<void> {
   }
 
   // Upload reference images if provided.
-  const referenceUrls: string[] = resolvedSources.length > 0
-    ? await uploadSources(resolvedSources, sourceMimes)
-    : [];
+  const referenceUrls: string[] =
+    resolvedSources.length > 0 ? await uploadSources(resolvedSources, sourceMimes) : [];
 
   const savedPaths: string[] = [];
   let masterCount = 0;
@@ -356,10 +380,14 @@ async function main(): Promise<void> {
   }
 
   console.log(`Generating ${DRAFTS} image(s) via ${MODEL}…`);
-  const result = await withTimeout(fal.subscribe(MODEL, {
-    input,
-    logs: false,
-  }), 180_000, "fal.subscribe(Kling)") as { data: { images: Array<{ url: string; content_type?: string }> } };
+  const result = (await withTimeout(
+    fal.subscribe(MODEL, {
+      input,
+      logs: false,
+    }),
+    180_000,
+    "fal.subscribe(Kling)",
+  )) as { data: { images: Array<{ url: string; content_type?: string }> } };
 
   const images = result.data?.images ?? [];
   if (images.length === 0) {
@@ -406,7 +434,7 @@ async function main(): Promise<void> {
     elapsed_ms: elapsedMs,
     // Cost estimate: Kling O1 ~$0.028/image + BiRefNet ~$0.003/image when cutout ran.
     cost_estimate_usd: parseFloat(
-      (images.length * (0.028 + (TRANSPARENT && CUTOUT === "birefnet" ? 0.003 : 0))).toFixed(4)
+      (images.length * (0.028 + (TRANSPARENT && CUTOUT === "birefnet" ? 0.003 : 0))).toFixed(4),
     ),
   };
 
@@ -421,7 +449,7 @@ async function main(): Promise<void> {
   console.log(`log: ${LOG_FILE}`);
   console.log(
     `cost_estimate: $${logRecord.cost_estimate_usd.toFixed(4)} ` +
-    `(${images.length} image(s), elapsed ${elapsedMs}ms)`
+      `(${images.length} image(s), elapsed ${elapsedMs}ms)`,
   );
 
   // Emit one JSON-lines record per saved file (task acceptance criterion).
@@ -436,10 +464,8 @@ async function main(): Promise<void> {
         transparent: TRANSPARENT,
         cutout: CUTOUT,
         prompt,
-        cost_estimate_usd: parseFloat(
-          (isAlpha ? (birefnetRan ? 0.003 : 0) : 0.028).toFixed(4)
-        ),
-      }) + "\n"
+        cost_estimate_usd: parseFloat((isAlpha ? (birefnetRan ? 0.003 : 0) : 0.028).toFixed(4)),
+      }) + "\n",
     );
   }
 }

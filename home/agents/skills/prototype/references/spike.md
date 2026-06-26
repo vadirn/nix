@@ -1,6 +1,6 @@
 # Spike workflow (throwaway implementation)
 
-Use when the design question is "does X work" and the intent is throwaway. Source: Beck, *Extreme Programming Explained* (1999).
+Use when the design question is "does X work" and the intent is throwaway. Source: Beck, _Extreme Programming Explained_ (1999).
 
 A spike is investigation in code form. The code is evidence. The deliverable is the answer.
 
@@ -22,7 +22,7 @@ Execute the spike up to the time-box. Cut every corner that does not bear on the
 
 - Hard-code inputs the production system would derive.
 - Skip error handling for paths the production system would cover; assert loudly on the happy path.
-- Skip tests, except those that *are* the answer (a benchmark, a load test, a correctness check).
+- Skip tests, except those that _are_ the answer (a benchmark, a load test, a correctness check).
 - Skip authorization, logging, telemetry, retries, configuration. The spike does not run in production.
 
 If the spike requires touching a real database or external service, treat that as a constraint: set up the smallest possible isolated instance, always separate from the shared dev environment. See gotchas in SKILL.md for the Row-Level Security warning.

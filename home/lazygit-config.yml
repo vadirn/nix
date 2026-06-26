@@ -3,7 +3,7 @@ gui:
     activeBorderColor:
       - green
     selectedLineBgColor:
-      - '#585b70'
+      - "#585b70"
 git:
   pagers:
     - pager: delta --features=catppuccin-mocha --paging=never

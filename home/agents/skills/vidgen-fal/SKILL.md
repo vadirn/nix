@@ -18,10 +18,10 @@ This skill is a direct-call fal.ai video worker. It calls a Kling v1.6 endpoint,
 
 ## Models
 
-| Tier | Endpoint | Cost |
-|---|---|---|
+| Tier                   | Endpoint                                         | Cost                    |
+| ---------------------- | ------------------------------------------------ | ----------------------- |
 | **Standard (default)** | `fal-ai/kling-video/v1.6/standard/text-to-video` | $0.28 / 5s, $0.56 / 10s |
-| **Pro** (`--pro`) | `fal-ai/kling-video/v1.6/pro/text-to-video` | $0.49 / 5s, $0.98 / 10s |
+| **Pro** (`--pro`)      | `fal-ai/kling-video/v1.6/pro/text-to-video`      | $0.49 / 5s, $0.98 / 10s |
 
 Both tiers share the same request schema (`prompt`, `duration`, `aspect_ratio`, `negative_prompt`, `cfg_scale`). Pro produces higher quality output at roughly double the cost.
 
@@ -35,18 +35,18 @@ Pass the file path directly — `bun run` is not used because it would interpret
 
 ## Flag reference
 
-| Flag | Default | Description |
-|---|---|---|
-| `--prompt <text>` | required | Text description of the video to generate. |
-| `--out <dir>` | `~/Pictures/vidgen` | Output directory for all generated files. |
-| `--duration <5\|10>` | `5` | Clip length in seconds. Enum — only `5` or `10` accepted. |
-| `--aspect-ratio <16:9\|9:16\|1:1>` | `16:9` | Output aspect ratio. |
-| `--cfg-scale <0–1>` | `0.5` | Prompt adherence (float). Values outside 0–1 are rejected. |
-| `--negative-prompt <text>` | `blur, distort, and low quality` | Negative prompt passed verbatim to Kling. |
-| `--pro` | off | Switch to the pro tier endpoint. |
-| `--webm` | off | Also encode a WebM loop (VP9) alongside the MP4. Both files are kept and emitted. |
-| `--scale <number>` | `640` | Width in pixels for the WebM output. Must be a positive even integer. Height is computed automatically. Has no effect unless `--webm` is set. |
-| `--webm-crf <number>` | `32` | VP9 quality, 0–63. Lower = larger file / better quality. Out-of-range values are rejected. Has no effect unless `--webm` is set. |
+| Flag                               | Default                          | Description                                                                                                                                   |
+| ---------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--prompt <text>`                  | required                         | Text description of the video to generate.                                                                                                    |
+| `--out <dir>`                      | `~/Pictures/vidgen`              | Output directory for all generated files.                                                                                                     |
+| `--duration <5\|10>`               | `5`                              | Clip length in seconds. Enum — only `5` or `10` accepted.                                                                                     |
+| `--aspect-ratio <16:9\|9:16\|1:1>` | `16:9`                           | Output aspect ratio.                                                                                                                          |
+| `--cfg-scale <0–1>`                | `0.5`                            | Prompt adherence (float). Values outside 0–1 are rejected.                                                                                    |
+| `--negative-prompt <text>`         | `blur, distort, and low quality` | Negative prompt passed verbatim to Kling.                                                                                                     |
+| `--pro`                            | off                              | Switch to the pro tier endpoint.                                                                                                              |
+| `--webm`                           | off                              | Also encode a WebM loop (VP9) alongside the MP4. Both files are kept and emitted.                                                             |
+| `--scale <number>`                 | `640`                            | Width in pixels for the WebM output. Must be a positive even integer. Height is computed automatically. Has no effect unless `--webm` is set. |
+| `--webm-crf <number>`              | `32`                             | VP9 quality, 0–63. Lower = larger file / better quality. Out-of-range values are rejected. Has no effect unless `--webm` is set.              |
 
 ## Workflow
 

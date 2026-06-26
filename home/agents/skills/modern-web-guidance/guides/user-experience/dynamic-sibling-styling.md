@@ -10,11 +10,7 @@ You can create a color spectrum across a group of siblings by calculating a uniq
 .swatch {
   /* Calculate hue by dividing the full 360deg circle by total siblings */
   /* and multiplying by the current element's 1-based index */
-  background-color: hsl(
-    calc(360deg / sibling-count() * sibling-index()),
-    70%,
-    50%
-  );
+  background-color: hsl(calc(360deg / sibling-count() * sibling-index()), 70%, 50%);
 }
 ```
 
@@ -47,7 +43,6 @@ By combining these functions with CSS trigonometry (`sin()`, `cos()`), you can p
   position: absolute;
   place-self: center;
 
-
   /* Position each element around the parent center */
   transform: translate(
     calc(cos(var(--angle)) * var(--radius)),
@@ -66,12 +61,12 @@ If `sibling-index()` and `sibling-count()` are not supported, provide a fallback
 
 ```js
 /* MANDATORY: Check for native support before applying fallback */
-if (!CSS.supports('top: calc(sibling-index() * 1px)')) {
-  const items = document.querySelectorAll('.item');
+if (!CSS.supports("top: calc(sibling-index() * 1px)")) {
+  const items = document.querySelectorAll(".item");
   items.forEach((item, index) => {
     /* MANDATORY: Injected index must be 1-based to match native function */
-    item.style.setProperty('--sibling-index', index + 1);
-    item.style.setProperty('--sibling-count', items.length);
+    item.style.setProperty("--sibling-index", index + 1);
+    item.style.setProperty("--sibling-count", items.length);
   });
 }
 ```

@@ -38,7 +38,7 @@ export function expandTilde(p: string): string {
 const VALID_MIMES = ["image/png", "image/jpeg", "image/webp"];
 
 export async function sniffSourceMimes(
-  paths: string[]
+  paths: string[],
 ): Promise<{ resolved: string[]; mimes: string[] }> {
   if (paths.length === 0) return { resolved: [], mimes: [] };
   if (paths.length > 10) {
@@ -65,8 +65,14 @@ export async function sniffSourceMimes(
     } else if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
       magicMime = "image/jpeg";
     } else if (
-      head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
-      head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
+      head[0] === 0x52 &&
+      head[1] === 0x49 &&
+      head[2] === 0x46 &&
+      head[3] === 0x46 &&
+      head[8] === 0x57 &&
+      head[9] === 0x45 &&
+      head[10] === 0x42 &&
+      head[11] === 0x50
     ) {
       magicMime = "image/webp";
     } else if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38) {
@@ -90,7 +96,7 @@ export async function sniffSourceMimes(
     }
     if (magicMime && extMime && magicMime !== extMime) {
       console.error(
-        `WARNING: magic-byte MIME (${magicMime}) disagrees with extension MIME (${extMime}) for: ${r}`
+        `WARNING: magic-byte MIME (${magicMime}) disagrees with extension MIME (${extMime}) for: ${r}`,
       );
     }
 

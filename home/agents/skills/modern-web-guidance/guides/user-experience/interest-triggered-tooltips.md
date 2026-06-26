@@ -39,6 +39,7 @@ The trigger must have a visual indicator to indicate that there is additional in
 ### Accessibility Constraints (WCAG 1.4.13)
 
 Even with `interestfor` handling the semantics above, your implementation MUST still satisfy WCAG 1.4.13 (Content on Hover or Focus):
+
 - **Dismissible:** Users must be able to dismiss the tooltip without moving pointer hover or keyboard focus (e.g., by pressing the `Escape` key). The native `popover` attribute manages this binding automatically.
 - **Hoverable:** The pointer must be able to move over the tooltip content itself without the tooltip disappearing. This allows users with magnification tools to read the tooltip text safely.
 - **Persistent:** The tooltip must remain visible until the hover or focus trigger is removed, the user explicitly dismisses it, or its content is no longer valid.
@@ -46,7 +47,6 @@ Even with `interestfor` handling the semantics above, your implementation MUST s
 ### Positioning the tooltip
 
 The tooltip can be positioned using anchor positioning. When the tooltip is opened using `interestfor`, the trigger becomes an implicit anchor for the tooltip, meaning you don't have to add `anchor-name` or `position-anchor` CSS properties. However, to support browsers without anchor positioning you must use the anchor positioning polyfill, which has several limitations for popovers. **MANDATORY:** Implicit anchors are NOT supported by the polyfill, so YOU MUST explicitly set an `anchor-name` on the trigger and `position-anchor` on the popover.
-
 
 ```css
 /* MANDATORY: use explicit anchor names for compatibility with the polyfill */
@@ -61,7 +61,7 @@ button[interestfor="tooltip-dom"] {
 Also, the polyfill does not support `position-area` on popovers, so **MANDATORY:** DO position using `anchor()` functions, and **YOU MUST** include a `position-try` fallback (e.g. `flip-block` or `flip-inline`).
 
 ```css
-[popover]{
+[popover] {
   /* MANDATORY: use anchor functions and a position-try fallback for the polyfill */
   top: anchor(bottom);
   left: anchor(center);
@@ -69,7 +69,6 @@ Also, the polyfill does not support `position-area` on popovers, so **MANDATORY:
   margin: unset;
 }
 ```
-
 
 ### Fallback strategies
 
@@ -81,7 +80,7 @@ Interest invokers must be conditionally polyfilled using the `interestfor` polyf
 
 ```html
 <script type="module">
-  if(!HTMLButtonElement.prototype.hasOwnProperty("interestForElement")){
+  if (!HTMLButtonElement.prototype.hasOwnProperty("interestForElement")) {
     // CDN link only used for example, prefer bundling.
     await import("https://unpkg.com/interestfor@latest");
   }
@@ -98,7 +97,7 @@ Popover and popover hint must conditionally be polyfilled with the `@oddbird/pop
 
 ```html
 <script type="module">
-  if(!HTMLElement.prototype.hasOwnProperty("popover")){
+  if (!HTMLElement.prototype.hasOwnProperty("popover")) {
     await import("https://unpkg.com/@oddbird/popover-polyfill@latest");
   }
 </script>
@@ -106,7 +105,7 @@ Popover and popover hint must conditionally be polyfilled with the `@oddbird/pop
 
 Anchor positioning is not natively supported by any major browser yet.
 
-**MANDATORY:** To support browsers without anchor positioning, you MUST use the `@oddbird/css-anchor-positioning` polyfill. It does not support implicit anchors, so you MUST add anchor names to the trigger. Additionally, `position-area` is not supported on popovers by the polyfill, so you MUST use `anchor()` on the desired insets. 
+**MANDATORY:** To support browsers without anchor positioning, you MUST use the `@oddbird/css-anchor-positioning` polyfill. It does not support implicit anchors, so you MUST add anchor names to the trigger. Additionally, `position-area` is not supported on popovers by the polyfill, so you MUST use `anchor()` on the desired insets.
 
 ```html
 <!-- MANDATORY: Conditionally install the anchor positioning polyfill -->

@@ -92,7 +92,7 @@ if script reports no image:
 
 ### Transparency via chroma-key (`--transparent`, `--cutout`)
 
-Gemini image models cannot emit a native alpha channel. Asked for a "transparent background", they paint a grey-and-white checkerboard — the *icon* for transparency — as opaque pixels (confirmed by Google docs / community reports). The skill works around this entirely outside the script:
+Gemini image models cannot emit a native alpha channel. Asked for a "transparent background", they paint a grey-and-white checkerboard — the _icon_ for transparency — as opaque pixels (confirmed by Google docs / community reports). The skill works around this entirely outside the script:
 
 1. Detect the transparency request (`chroma_key = true`).
 2. Tell the user up front that chroma-keying is used and that green parts of the subject will be keyed out too.

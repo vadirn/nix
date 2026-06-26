@@ -21,7 +21,7 @@ import { homedir } from "os";
 // Endpoints
 // ---------------------------------------------------------------------------
 const ENDPOINT_STANDARD = "fal-ai/kling-video/v1.6/standard/text-to-video";
-const ENDPOINT_PRO      = "fal-ai/kling-video/v1.6/pro/text-to-video";
+const ENDPOINT_PRO = "fal-ai/kling-video/v1.6/pro/text-to-video";
 
 // ---------------------------------------------------------------------------
 // Tilde expansion — only ~/path or bare ~ (not ~user/path)
@@ -81,17 +81,17 @@ Example:
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
-    prompt:           { type: "string" },
-    out:              { type: "string" },
-    duration:         { type: "string" },
-    "aspect-ratio":   { type: "string" },
-    "cfg-scale":      { type: "string" },
-    "negative-prompt":{ type: "string" },
-    pro:              { type: "boolean", default: false },
-    webm:             { type: "boolean", default: false },
-    scale:            { type: "string" },
-    "webm-crf":       { type: "string" },
-    help:             { type: "boolean", default: false, short: "h" },
+    prompt: { type: "string" },
+    out: { type: "string" },
+    duration: { type: "string" },
+    "aspect-ratio": { type: "string" },
+    "cfg-scale": { type: "string" },
+    "negative-prompt": { type: "string" },
+    pro: { type: "boolean", default: false },
+    webm: { type: "boolean", default: false },
+    scale: { type: "string" },
+    "webm-crf": { type: "string" },
+    help: { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: false,
 });
@@ -115,7 +115,7 @@ const FAL_KEY = process.env.FAL_KEY;
 if (!FAL_KEY) {
   console.error(
     "ERROR: FAL_KEY is not set.\n" +
-    "Inject it via: doppler run -p claude-code -c std --no-fallback --"
+      "Inject it via: doppler run -p claude-code -c std --no-fallback --",
   );
   process.exit(1);
 }
@@ -129,7 +129,7 @@ const ENDPOINT = values.pro ? ENDPOINT_PRO : ENDPOINT_STANDARD;
 
 // --duration: string enum "5" | "10"
 const VALID_DURATIONS = ["5", "10"] as const;
-type Duration = typeof VALID_DURATIONS[number];
+type Duration = (typeof VALID_DURATIONS)[number];
 const durationArg = values.duration ?? "5";
 if (!(VALID_DURATIONS as readonly string[]).includes(durationArg)) {
   console.error(`ERROR: --duration must be "5" or "10" (got '${durationArg}')`);
@@ -139,7 +139,7 @@ const DURATION = durationArg as Duration;
 
 // --aspect-ratio: string enum
 const VALID_ASPECT_RATIOS = ["16:9", "9:16", "1:1"] as const;
-type AspectRatio = typeof VALID_ASPECT_RATIOS[number];
+type AspectRatio = (typeof VALID_ASPECT_RATIOS)[number];
 const aspectRatioArg = values["aspect-ratio"] ?? "16:9";
 if (!(VALID_ASPECT_RATIOS as readonly string[]).includes(aspectRatioArg)) {
   console.error(`ERROR: --aspect-ratio must be one of 16:9, 9:16, 1:1 (got '${aspectRatioArg}')`);
@@ -209,11 +209,12 @@ const OUT_DIR = values.out
   ? expandTilde(values.out)
   : `${process.env.HOME ?? homedir()}/Pictures/vidgen`;
 
-const TIMESTAMP = new Date()
-  .toISOString()
-  .replace(/[-:T]/g, "")
-  .replace(/\.\d+Z$/, "")
-  .replace(/^(\d{8})(\d{6})$/, "$1-$2") + `-${process.pid}`;
+const TIMESTAMP =
+  new Date()
+    .toISOString()
+    .replace(/[-:T]/g, "")
+    .replace(/\.\d+Z$/, "")
+    .replace(/^(\d{8})(\d{6})$/, "$1-$2") + `-${process.pid}`;
 
 const LOG_FILE = join(OUT_DIR, "log.jsonl");
 
@@ -224,7 +225,7 @@ function ffmpeg(args: string[]): void {
   const result = spawnSync("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
   if (result.error) {
     throw new Error(
-      `ffmpeg could not be spawned: ${result.error.message} (is ffmpeg installed and on PATH?)`
+      `ffmpeg could not be spawned: ${result.error.message} (is ffmpeg installed and on PATH?)`,
     );
   }
   if (result.signal) {
@@ -264,7 +265,7 @@ async function main(): Promise<void> {
   // Kling v1.6 params: prompt, duration (str enum), aspect_ratio (str enum),
   // negative_prompt, cfg_scale (float 0–1).
   console.log(`Generating video via ${ENDPOINT}…`);
-  const result = await withTimeout(
+  const result = (await withTimeout(
     fal.subscribe(ENDPOINT, {
       input: {
         prompt: PROMPT,
@@ -277,24 +278,25 @@ async function main(): Promise<void> {
     }),
     300_000,
     "fal.subscribe(Kling video)",
-  ) as { data?: { video?: { url?: string } } };
+  )) as { data?: { video?: { url?: string } } };
 
   const videoUrl = result.data?.video?.url;
   if (!videoUrl) {
-    throw new Error(
-      `No video URL in response: ${JSON.stringify(result).slice(0, 500)}`
-    );
+    throw new Error(`No video URL in response: ${JSON.stringify(result).slice(0, 500)}`);
   }
 
   // Download MP4 — always kept as the master output.
   const mp4Path = join(OUT_DIR, `vidgen-${TIMESTAMP}.mp4`);
   console.log(`Downloading MP4…`);
   const resp = await fetch(videoUrl, { signal: AbortSignal.timeout(120_000) });
-  if (!resp.ok) throw new Error(`Failed to download ${videoUrl}: ${resp.status} ${resp.statusText}`);
+  if (!resp.ok)
+    throw new Error(`Failed to download ${videoUrl}: ${resp.status} ${resp.statusText}`);
   try {
     await Bun.write(mp4Path, resp);
   } catch (err) {
-    try { unlinkSync(mp4Path); } catch {}  // best-effort cleanup; ignore if file never existed
+    try {
+      unlinkSync(mp4Path);
+    } catch {} // best-effort cleanup; ignore if file never existed
     throw err;
   }
   console.log(`video: ${mp4Path}`);
@@ -312,14 +314,25 @@ async function main(): Promise<void> {
     webmPath = join(OUT_DIR, `vidgen-${TIMESTAMP}.webm`);
     console.log(`Encoding WebM…`);
     ffmpeg([
-      "-y", "-i", mp4Path,
-      "-vf", `scale=${SCALE}:-2`,
-      "-c:v", "libvpx-vp9",
-      "-crf", String(WEBM_CRF),
-      "-b:v", "0",
-      "-row-mt", "1",
-      "-pix_fmt", "yuv420p",
-      "-g", "1", "-keyint_min", "1",
+      "-y",
+      "-i",
+      mp4Path,
+      "-vf",
+      `scale=${SCALE}:-2`,
+      "-c:v",
+      "libvpx-vp9",
+      "-crf",
+      String(WEBM_CRF),
+      "-b:v",
+      "0",
+      "-row-mt",
+      "1",
+      "-pix_fmt",
+      "yuv420p",
+      "-g",
+      "1",
+      "-keyint_min",
+      "1",
       "-an",
       webmPath,
     ]);
@@ -365,7 +378,7 @@ async function main(): Promise<void> {
         duration: DURATION,
         aspect_ratio: ASPECT_RATIO,
         cfg_scale: CFG_SCALE,
-      }) + "\n"
+      }) + "\n",
     );
   }
 }

@@ -11,9 +11,7 @@ Popovers can be toggled open and closed using a single button.
 ```html
 <!-- MANDATORY: The commandfor attribute links the invoker to the ID of the target element so the browser knows what to control. -->
 <!-- MANDATORY: The command attribute specifies the action to perform. Use 'toggle-popover' to handle both open and close states automatically. -->
-<button commandfor="my-popover" command="toggle-popover">
-  Toggle Popover
-</button>
+<button commandfor="my-popover" command="toggle-popover">Toggle Popover</button>
 
 <!-- MANDATORY: The target element must have the popover attribute to be controlled as a popover. -->
 <div id="my-popover" popover>
@@ -25,17 +23,13 @@ If you need to control opening and closing with separate buttons, you can use th
 
 ```html
 <!-- MANDATORY: Use 'show-popover' to explicitly open the popover. It will not close the popover if clicked again. -->
-<button commandfor="my-explicit-popover" command="show-popover">
-  Show Popover
-</button>
+<button commandfor="my-explicit-popover" command="show-popover">Show Popover</button>
 
 <div id="my-explicit-popover" popover="manual">
   <p>This popover is explicitly opened and closed by separate buttons.</p>
 
   <!-- MANDATORY: Use 'hide-popover' to explicitly close the targeted popover. -->
-  <button commandfor="my-explicit-popover" command="hide-popover">
-    Hide Popover
-  </button>
+  <button commandfor="my-explicit-popover" command="hide-popover">Hide Popover</button>
 </div>
 ```
 
@@ -46,17 +40,13 @@ Unlike popovers, modal dialogs typically use separate buttons for opening and cl
 ```html
 <!-- MANDATORY: Use command="show-modal" to trigger the dialog as a modal, trapping focus and preventing interaction with the rest of the page. -->
 <!-- MANDATORY: The commandfor attribute connects this button to the dialog ID. -->
-<button commandfor="confirm-dialog" command="show-modal">
-  Open Confirmation
-</button>
+<button commandfor="confirm-dialog" command="show-modal">Open Confirmation</button>
 
 <dialog id="confirm-dialog">
   <p>Are you sure you want to proceed?</p>
 
   <!-- MANDATORY: Use command="close" to dismiss the dialog safely. -->
-  <button commandfor="confirm-dialog" command="close">
-    Cancel
-  </button>
+  <button commandfor="confirm-dialog" command="close">Cancel</button>
 </dialog>
 ```
 
@@ -80,8 +70,8 @@ Install the polyfill via npm (`npm install invokers-polyfill`). This approach is
 ```javascript
 // MANDATORY: Feature detect 'commandForElement' on HTMLButtonElement.prototype.
 // Conditionally load the invokers-polyfill only in browsers lacking native support.
-if (!('commandForElement' in HTMLButtonElement.prototype)) {
-  import('invokers-polyfill');
+if (!("commandForElement" in HTMLButtonElement.prototype)) {
+  import("invokers-polyfill");
 }
 ```
 
@@ -92,8 +82,8 @@ For projects without a bundler, dynamically import the polyfill directly from a 
 <script type="module">
   // MANDATORY: Feature detect 'commandForElement' on HTMLButtonElement.prototype.
   // Conditionally load the invokers-polyfill from a CDN only in browsers lacking native support.
-  if (!('commandForElement' in HTMLButtonElement.prototype)) {
-    import('https://esm.run/invokers-polyfill');
+  if (!("commandForElement" in HTMLButtonElement.prototype)) {
+    import("https://esm.run/invokers-polyfill");
   }
 </script>
 ```
@@ -114,15 +104,15 @@ For the best performance, you should only load the polyfill if the browser doesn
 
 ```javascript
 // Check for native support first
-const hasNativeSupport = 'commandForElement' in HTMLButtonElement.prototype;
+const hasNativeSupport = "commandForElement" in HTMLButtonElement.prototype;
 
 if (!hasNativeSupport) {
   // Dynamically import the polyfill only when needed
   try {
-    await import('https://cdn.jsdelivr.net/npm/invokers-polyfill@latest/dist/index.min.js');
-    console.log('Invoker Commands polyfill loaded');
+    await import("https://cdn.jsdelivr.net/npm/invokers-polyfill@latest/dist/index.min.js");
+    console.log("Invoker Commands polyfill loaded");
   } catch (err) {
-    console.error('Error loading fallback:', err);
+    console.error("Error loading fallback:", err);
   }
 }
 ```
@@ -134,33 +124,35 @@ If you prefer not to use a polyfill, you can use a combination of **event delega
 ```javascript
 // 1. Define a registry of requested actions for cleaner logic
 const commandRegistry = {
-  '--spin': (target) => target.classList.toggle('is-spun'),
-  '--grow': (target) => target.classList.toggle('is-grown'),
-  '--reset': (target) => target.classList.remove('is-spun', 'is-grown'),
+  "--spin": (target) => target.classList.toggle("is-spun"),
+  "--grow": (target) => target.classList.toggle("is-grown"),
+  "--reset": (target) => target.classList.remove("is-spun", "is-grown"),
 };
 
-const supportsInvokers = 'commandForElement' in HTMLButtonElement.prototype;
+const supportsInvokers = "commandForElement" in HTMLButtonElement.prototype;
 
 // 2. The fallback: Dispatch events manually if native support is missing
 if (!supportsInvokers) {
-  document.addEventListener('click', (event) => {
-    const button = event.target.closest('button[commandfor]');
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("button[commandfor]");
     if (!button) return;
 
-    const target = document.getElementById(button.getAttribute('commandfor'));
-    const command = button.getAttribute('command');
+    const target = document.getElementById(button.getAttribute("commandfor"));
+    const command = button.getAttribute("command");
 
     if (target && command) {
-      target.dispatchEvent(new CustomEvent('command', {
-        bubbles: true,
-        detail: { command }
-      }));
+      target.dispatchEvent(
+        new CustomEvent("command", {
+          bubbles: true,
+          detail: { command },
+        }),
+      );
     }
   });
 }
 
 // 3. The unified listener: Registered directly on the target element
-document.getElementById('action-target').addEventListener('command', (event) => {
+document.getElementById("action-target").addEventListener("command", (event) => {
   const command = event.command || event.detail?.command;
   const target = event.currentTarget;
   const action = commandRegistry[command];
@@ -182,8 +174,8 @@ Install the package via npm (`npm install @oddbird/popover-polyfill`). This meth
 
 ```javascript
 // MANDATORY: Feature detect 'popover' on HTMLElement.prototype.
-if (!('popover' in HTMLElement.prototype)) {
-  import('@oddbird/popover-polyfill/fn').then(({ apply }) => {
+if (!("popover" in HTMLElement.prototype)) {
+  import("@oddbird/popover-polyfill/fn").then(({ apply }) => {
     apply();
   });
 }
@@ -196,10 +188,12 @@ For projects without a bundler, dynamically import the polyfill directly from a 
 <script type="module">
   // MANDATORY: Feature detect 'popover' on HTMLElement.prototype.
   // Conditionally load the popover-polyfill from a CDN only in browsers lacking native support.
-  if (!('popover' in HTMLElement.prototype)) {
-    import('https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover-fn.js').then(({ apply }) => {
-      apply();
-    });
+  if (!("popover" in HTMLElement.prototype)) {
+    import("https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover-fn.js").then(
+      ({ apply }) => {
+        apply();
+      },
+    );
   }
 </script>
 ```

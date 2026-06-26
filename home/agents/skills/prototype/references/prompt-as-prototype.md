@@ -15,7 +15,7 @@ Write 5-10 cases before the prompt. Cases first prevents the prompt from optimis
 Each case is one line in `evals/<slug>/cases.jsonl`:
 
 ```json
-{"id": "case-001", "input": "...", "expected": "...", "notes": "...", "result": "pending"}
+{ "id": "case-001", "input": "...", "expected": "...", "notes": "...", "result": "pending" }
 ```
 
 Cover three categories in the initial set:
