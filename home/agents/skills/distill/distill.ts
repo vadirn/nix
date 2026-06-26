@@ -33,9 +33,12 @@
 // Output: written to a fresh temp .md file (mktemp), XML-wrapped. <result>…</result>
 // holds exactly the text to write back to source (frontmatter verbatim + distilled
 // body); <residue>…</residue> (omitted when empty) holds one <entry> per definition
-// that failed the gate, with verbatim <source>, so a parent can re-read it. stdout
-// is two lines — the file path, then a one-line summary footer. Failsafe: any error
-// → the temp file holds the original text (passthrough), path still printed.
+// or step-group that failed the gate, with verbatim <source>, so a parent can re-read
+// it. A `gate-inconclusive:` reason marks an item the judge could not grade (it
+// returned no parseable verdict): the distillation still ships, that item just rides
+// surfaced-but-unverified — a judge flake never discards the whole run. stdout is two
+// lines — the file path, then a one-line summary footer. Failsafe: any error before
+// the gate → the temp file holds the original text (passthrough), path still printed.
 //
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
 // `doppler run --project claude-code --config std --`).
@@ -752,9 +755,13 @@ async function revise(blocks: Block[], passes: Pass[], literals: string[] = []):
 }
 
 // ---- stage 5: fidelity gate (round-trip entailment, different model) ----
+// "inconclusive" is never emitted by the model — the gate functions assign it when
+// the judge returns no parseable verdict (no JSON after askJson's retry). It is kept
+// distinct from "residue": inconclusive items skip recovery (re-rendering cannot fix
+// a judge that will not parse) and surface directly, so a flake never discards the run.
 type Concept = {
   term: string;
-  grade: "translated" | "residue";
+  grade: "translated" | "residue" | "inconclusive";
   direction: string;
   missing: string;
 };
@@ -788,15 +795,30 @@ async function fidelityGate(
   outputBody: string,
   rendered: { term: string; def: string; sourceText: string }[],
 ): Promise<{ thesisRecoverable: boolean; concepts: Concept[] }> {
-  const res = await askJson<{ thesisRecoverable?: boolean; concepts?: Concept[] }>(
-    FIDELITY,
-    fidelityPrompt(thesis, outputBody, rendered),
-    FIDELITY_TOKENS,
-  );
-  return {
-    thesisRecoverable: res.thesisRecoverable !== false,
-    concepts: (res.concepts ?? []).filter((c) => c.term),
-  };
+  try {
+    const res = await askJson<{ thesisRecoverable?: boolean; concepts?: Concept[] }>(
+      FIDELITY,
+      fidelityPrompt(thesis, outputBody, rendered),
+      FIDELITY_TOKENS,
+    );
+    return {
+      thesisRecoverable: res.thesisRecoverable !== false,
+      concepts: (res.concepts ?? []).filter((c) => c.term),
+    };
+  } catch {
+    // judge returned no parseable verdict: mark every concept inconclusive (not
+    // residue) so each ships surfaced-but-unverified rather than discarding the run.
+    // thesisRecoverable stays optimistic — a parse flake is no evidence against it.
+    return {
+      thesisRecoverable: true,
+      concepts: rendered.map((r) => ({
+        term: r.term,
+        grade: "inconclusive" as const,
+        direction: "",
+        missing: "judge returned no verdict",
+      })),
+    };
+  }
 }
 
 // ---- workflow gate: directive coverage, NOT bidirectional def↔source ----
@@ -810,7 +832,11 @@ async function fidelityGate(
 // INVENTING a reason the source does not give. So the unit is asymmetric: an
 // action must be covered and uninvented (total on directives); a reason may be
 // dropped freely but never fabricated (invention-only on the "why").
-type StepVerdict = { id: string; grade: "translated" | "residue"; missing: string };
+type StepVerdict = {
+  id: string;
+  grade: "translated" | "residue" | "inconclusive";
+  missing: string;
+};
 
 function workflowGatePrompt(
   groups: { id: string; steps: string[]; sourceText: string }[],
@@ -839,12 +865,22 @@ async function workflowGate(
   lang: "en" | "ru",
 ): Promise<StepVerdict[]> {
   if (groups.length === 0) return [];
-  const res = await askJson<{ groups?: StepVerdict[] }>(
-    FIDELITY,
-    workflowGatePrompt(groups, lang),
-    FIDELITY_TOKENS,
-  );
-  return (res.groups ?? []).filter((g) => g.id);
+  try {
+    const res = await askJson<{ groups?: StepVerdict[] }>(
+      FIDELITY,
+      workflowGatePrompt(groups, lang),
+      FIDELITY_TOKENS,
+    );
+    return (res.groups ?? []).filter((g) => g.id);
+  } catch {
+    // judge returned no parseable verdict: mark every group inconclusive (not
+    // residue) so the steps ship surfaced-but-unverified rather than discarding the run.
+    return groups.map((g) => ({
+      id: g.id,
+      grade: "inconclusive" as const,
+      missing: "judge returned no verdict",
+    }));
+  }
 }
 
 // ---- assembly: head prose + glossary table + retained-verbatim blocks ----
@@ -1137,6 +1173,7 @@ async function distill(
   // may drop rationale). Both re-render failing items from source, capped.
   const residue: Residue[] = [];
   let retries = 0;
+  let gateSkipped = 0;
   if (!opts.noGate) {
     const renderedC = () =>
       orderedEntries.map((e) => ({
@@ -1155,6 +1192,12 @@ async function distill(
       workflowGate(renderedG(), lang),
     ]);
     const thesisRecoverable = graded.thesisRecoverable;
+    // inconclusive verdicts (judge returned no JSON) are set aside from the start:
+    // recovery cannot fix them, so they bypass the retry loop and surface directly.
+    const inconclusiveC = new Map<string, Concept>();
+    const inconclusiveG = new Map<string, StepVerdict>();
+    for (const c of graded.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
+    for (const g of gradedG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
     let failC = graded.concepts.filter((c) => c.grade === "residue");
     let failG = gradedG.filter((g) => g.grade === "residue");
     while ((failC.length > 0 || failG.length > 0) && retries < opts.maxRetries) {
@@ -1214,6 +1257,10 @@ async function distill(
             )
           : Promise.resolve([] as StepVerdict[]),
       ]);
+      // a re-grade can itself come back inconclusive — capture those too, then drop
+      // them from the recoverable sets so the loop never retries an unparseable verdict.
+      for (const c of reg.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
+      for (const g of regG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
       failC = reg.concepts.filter((c) => c.grade === "residue");
       failG = regG.filter((g) => g.grade === "residue");
     }
@@ -1241,6 +1288,26 @@ async function distill(
         source: ir.thesis,
       });
     }
+    // gate-inconclusive items: the judge could not render a verdict (no JSON after
+    // retry). Ship them surfaced-but-unverified, distinct from genuine residue, so a
+    // judge flake never discards the run — the floor under the passthrough failsafe.
+    for (const c of inconclusiveC.values()) {
+      const entry = orderedEntries.find((e) => e.term === c.term);
+      residue.push({
+        term: c.term,
+        reason: `gate-inconclusive: ${c.missing || "judge returned no verdict"}`,
+        source: entry ? sourceTextFor(entry, blockById) : "",
+      });
+    }
+    for (const v of inconclusiveG.values()) {
+      const g = stepGroups.find((x) => x.id === v.id);
+      residue.push({
+        term: v.id,
+        reason: `gate-inconclusive: ${v.missing || "judge returned no verdict"}`,
+        source: g ? g.sourceText : "",
+      });
+    }
+    gateSkipped = inconclusiveC.size + inconclusiveG.size;
   }
 
   // prose QA: judge the un-gated readable head against its own contract and
@@ -1283,8 +1350,11 @@ async function distill(
   const retriesTag = retries ? ` · ${retries} retries` : "";
   const proseTag = proseFixes ? ` · ${proseFixes} prose fixes` : "";
   const stepsTag = orderedSteps.length ? ` · ${orderedSteps.length} steps` : "";
+  // gate-skipped items are a subset of residue.length — flag them so a batch log
+  // distinguishes "judge couldn't verify" from a genuine fidelity miss.
+  const gateTag = gateSkipped ? ` · ${gateSkipped} gate-skipped` : "";
   const shapeTag = opts.coreOnly ? "gloss" : "prose+gloss";
-  const footer = `— distilled ${shapeTag} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries${stepsTag} · ${retained.length} verbatim · ${residue.length} residue${retriesTag}${proseTag}`;
+  const footer = `— distilled ${shapeTag} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries${stepsTag} · ${retained.length} verbatim · ${residue.length} residue${gateTag}${retriesTag}${proseTag}`;
   return { out, footer, residue };
 }
 
