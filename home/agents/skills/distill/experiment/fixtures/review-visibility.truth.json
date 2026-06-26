@@ -1,0 +1,23 @@
+{
+  "note": "Contrastive-directive trap fixture, by construction. One directive ('record the decision where the reviewer is already reading, NOT the wiki') hides its correct target ('the review thread') abstractly in the explanation while the concrete counterexample noun ('wiki') sits beside the imperative, and a chiastic rationale (wiki/thread x durable-cold/ephemeral-warm) compounds the mis-binding. A faithful distill keeps the directive pointed at the thread; an inverted one prescribes the wiki. The other four directives are ordinary, used to measure whether repair/verbatim bloat the faithful steps.",
+  "baseWords": 470,
+  "contrastive": {
+    "desc": "record the decision where the reviewer is already reading (a reply in the open review), NOT the wiki they would have to go find",
+    "correct": [
+      "already read",
+      "already reading",
+      "is reading",
+      "are reading",
+      "as a reply",
+      "reply",
+      "open review",
+      "in the review",
+      "in reach",
+      "where the reviewer is",
+      "where the reader",
+      "where they are"
+    ],
+    "inverted": ["wiki"]
+  },
+  "directives_expected": 5
+}

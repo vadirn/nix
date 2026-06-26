@@ -66,6 +66,19 @@ const TIMEOUT_MS = 180_000;
 // headroom for the longest gate input (rationale-carrying workflow steps).
 const FIDELITY_TOKENS = 16_384;
 
+// Workflow-gate recovery ladder (stage-5 loop). A flagged step is repaired from
+// the gate's own finding (judge-guided), then — if the repair still fails the
+// re-grade within --max-retries — falls back to the source's verbatim imperative,
+// a guaranteed-faithful floor (a substring of source cannot invert). Overridable
+// for the recovery experiment: "retighten" re-runs the same blind compression that
+// caused the inversion (the prior behavior); "repair" is judge-guided only, no
+// floor; "repair-verbatim" is the full ladder and the default.
+type WfRecovery = "retighten" | "repair" | "repair-verbatim";
+const WF_RECOVERY: WfRecovery = ((): WfRecovery => {
+  const v = process.env.DISTILL_WF_RECOVERY;
+  return v === "retighten" || v === "repair" ? v : "repair-verbatim";
+})();
+
 // ---- writing passes (the revise-stage rubric — inline single source) ----
 // Four focused rule sets applied in sequence (words → sentences → paragraphs →
 // AI patterns); each call refines the prior pass's output. These condensed rules
@@ -547,6 +560,73 @@ async function synthWorkflow(
   return out;
 }
 
+// ---- stage-5 recovery: judge-guided repair of a flagged workflow group ----
+// Unlike synthWorkflow (which re-applies the same compression that inverted the
+// step), repair feeds the gate's own FINDING back, naming the violated direction
+// so the rewrite fixes exactly that. Keyed by local index within the group.
+function repairWorkflowGroupPrompt(
+  steps: string[],
+  missing: string,
+  sourceText: string,
+  lang: "en" | "ru",
+): string {
+  const items = steps.map((s, i) => `S${i}: ${s}`).join("\n");
+  return `You are repairing a procedure checklist that an independent fidelity judge flagged as unfaithful to its source. You see the SOURCE (verbatim prescriptive text from the note), the current OUTPUT STEPS, and the JUDGE'S FINDING naming the dropped or inverted action. Rewrite the OUTPUT STEPS so the finding is resolved: follow the SOURCE's own direction exactly — when the source prescribes one target and rules out another ("do X, NOT Y"), keep X as the target and never name Y as the thing to do. Keep each step's action and any reason the SOURCE states, keep EVERY step (drop none), preserve order, stay dense and imperative. Keep \`inline code\`, file paths, flags, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
+
+JUDGE'S FINDING: ${missing || "a prescribed action is dropped or inverted"}
+
+SOURCE:
+${sourceText}
+
+OUTPUT STEPS:
+${items}`;
+}
+
+async function repairWorkflowGroup(
+  steps: string[],
+  missing: string,
+  sourceText: string,
+  lang: "en" | "ru",
+): Promise<string[]> {
+  const out = [...steps]; // fall back to the flagged steps if repair fails to parse
+  if (steps.length === 0) return out;
+  try {
+    const res = await askJson<{ steps: { id: string; step: string }[] }>(
+      EXTRACT,
+      repairWorkflowGroupPrompt(steps, missing, sourceText, lang),
+      4096,
+    );
+    for (const e of res.steps ?? []) {
+      const m = /^S(\d+)$/.exec((e.id ?? "").trim());
+      if (m && e.step) {
+        const idx = parseInt(m[1], 10);
+        if (idx >= 0 && idx < out.length) out[idx] = e.step.trim();
+      }
+    }
+  } catch {
+    // a failed repair keeps the flagged steps; the gate re-grades them next
+  }
+  return out;
+}
+
+// Extract the source's own imperative clause(s) for the verbatim fallback: prefer
+// the bolded directive spans the note emphasizes (notes bold their directives),
+// else the first sentence of the block. The terminal floor when the repair ladder
+// cannot clear a flagged group — the result is a literal substring of source, so
+// it covers the action and cannot invent or invert.
+function verbatimDirectives(sourceText: string): string[] {
+  const bold = [...sourceText.matchAll(/\*\*([\s\S]+?)\*\*/g)]
+    .map((m) => m[1].replace(/\s+/g, " ").trim())
+    .filter((s) => s.length > 0);
+  if (bold.length) return bold;
+  const first = sourceText
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+/)[0]
+    ?.trim();
+  return first ? [first] : [];
+}
+
 // single-entry render from source — used by stage-5 recovery to re-ground a residue def
 function renderEntryPrompt(entry: GlossEntry, sourceText: string, lang: "en" | "ru"): string {
   return `Write the glossary definition for "${entry.term}" using ONLY the source text below. One dense sentence; keep every relation (${entry.relations.join("; ")}); use only claims the source states. ${langRule(lang)} Return ONLY JSON {"def":"..."}.
@@ -907,10 +987,15 @@ function assembleBody(
   if (h1) parts.push(h1);
   if (head) parts.push(head);
   if (workflowSteps.length) {
+    // filter empties before numbering: the verbatim fallback blanks surplus slots
+    // when a group's source yields fewer directive clauses than it had draft steps,
+    // so renumber over what remains rather than emitting a gap.
     const items = workflowSteps
-      .map((s, i) => `${i + 1}. ${s.replace(/\n+/g, " ").trim()}`)
+      .map((s) => s.replace(/\n+/g, " ").trim())
+      .filter(Boolean)
+      .map((s, i) => `${i + 1}. ${s}`)
       .join("\n");
-    parts.push(`## Workflow\n\n${items}`);
+    if (items) parts.push(`## Workflow\n\n${items}`);
   }
   if (orderedEntries.length) {
     const rows = orderedEntries
@@ -1174,6 +1259,7 @@ async function distill(
   const residue: Residue[] = [];
   let retries = 0;
   let gateSkipped = 0;
+  let keptVerbatim = 0;
   if (!opts.noGate) {
     const renderedC = () =>
       orderedEntries.map((e) => ({
@@ -1223,16 +1309,31 @@ async function distill(
           const g = stepGroups.find((x) => x.id === v.id);
           if (!g) return;
           try {
-            // re-tighten the whole group from source (drafts individuate the steps)
-            const tightened = await synthWorkflow(
-              g.idxs.map((i) => orderedSteps[i]),
-              "render",
-              blockById,
-              lang,
-            );
-            g.idxs.forEach((i, k) => {
-              if (tightened[k]) workflowSteps[i] = normalizeTypography(tightened[k]);
-            });
+            if (WF_RECOVERY === "retighten") {
+              // re-tighten the whole group from source (drafts individuate the steps).
+              // Same compression pressure that inverted the step — kept for the experiment.
+              const tightened = await synthWorkflow(
+                g.idxs.map((i) => orderedSteps[i]),
+                "render",
+                blockById,
+                lang,
+              );
+              g.idxs.forEach((i, k) => {
+                if (tightened[k]) workflowSteps[i] = normalizeTypography(tightened[k]);
+              });
+            } else {
+              // judge-guided repair: feed the gate's finding back so the rewrite fixes
+              // the named inversion instead of re-running the compression that caused it
+              const repaired = await repairWorkflowGroup(
+                g.idxs.map((i) => workflowSteps[i]),
+                v.missing,
+                g.sourceText,
+                lang,
+              );
+              g.idxs.forEach((i, k) => {
+                if (repaired[k]) workflowSteps[i] = normalizeTypography(repaired[k]);
+              });
+            }
           } catch {
             // a failed re-render keeps the prior steps; the gate re-grades them next
           }
@@ -1263,6 +1364,37 @@ async function distill(
       for (const g of regG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
       failC = reg.concepts.filter((c) => c.grade === "residue");
       failG = regG.filter((g) => g.grade === "residue");
+    }
+    // verbatim fallback: a workflow group the repair ladder could not clear ships
+    // the source's own imperative verbatim. The clause is a literal substring of
+    // source, so it covers the action and cannot invert — the inversion clears at
+    // the cost of a slightly verbose step, which beats shipping it inverted. Groups
+    // whose source yields no extractable clause stay in failG and surface as residue.
+    if (WF_RECOVERY === "repair-verbatim" && failG.length) {
+      const stillFail: StepVerdict[] = [];
+      for (const v of failG) {
+        const g = stepGroups.find((x) => x.id === v.id);
+        const verb = g ? verbatimDirectives(g.sourceText) : [];
+        if (g && verb.length) {
+          g.idxs.forEach((idx, k) => {
+            // pair clauses to slots in order; the last slot absorbs any overflow,
+            // surplus slots blank out (filtered when the Workflow list renders).
+            workflowSteps[idx] =
+              k < verb.length
+                ? k === g.idxs.length - 1 && verb.length > g.idxs.length
+                  ? verb.slice(k).join("; ")
+                  : verb[k]
+                : "";
+          });
+          keptVerbatim++;
+        } else {
+          stillFail.push(v);
+        }
+      }
+      failG = stillFail;
+      if (keptVerbatim) {
+        gloss = assembleBody(h1, tie, workflowSteps, orderedEntries, defByTerm, retained);
+      }
     }
     // surviving residue (incl. an unrecoverable thesis) is surfaced, never silent
     for (const c of failC) {
@@ -1353,8 +1485,11 @@ async function distill(
   // gate-skipped items are a subset of residue.length — flag them so a batch log
   // distinguishes "judge couldn't verify" from a genuine fidelity miss.
   const gateTag = gateSkipped ? ` · ${gateSkipped} gate-skipped` : "";
+  // steps the repair ladder could not clear and that shipped the source's verbatim
+  // imperative — faithful but uncompressed, distinct from a cleared step
+  const verbatimTag = keptVerbatim ? ` · ${keptVerbatim} kept-verbatim` : "";
   const shapeTag = opts.coreOnly ? "gloss" : "prose+gloss";
-  const footer = `— distilled ${shapeTag} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries${stepsTag} · ${retained.length} verbatim · ${residue.length} residue${gateTag}${retriesTag}${proseTag}`;
+  const footer = `— distilled ${shapeTag} · ${beforeWords}→${afterWords} words (${sizeTag}) · ${orderedEntries.length} entries${stepsTag} · ${retained.length} verbatim · ${residue.length} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}`;
   return { out, footer, residue };
 }
 
