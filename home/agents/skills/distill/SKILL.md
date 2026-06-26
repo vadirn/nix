@@ -50,22 +50,9 @@ distill-text render glossary.md            # separate: prose note FROM a glossar
 
 The binary is `distill-text`; it is on PATH via `.local/bin/distill-text`. It writes the XML-tagged result to a temp `.md` file; stdout is two lines — the file path, then the footer. Capture the path with `path=$(distill-text input.md | head -1)`.
 
-## Safety model — recovery, not prevention
-
-distill's output is **not** a verbatim subset of the source, so cut's verbatim certificate is gone. The replacement gate is **definition round-trip entailment** by an independent model (`glm-5p2`, never the writer): each output definition must be equivalent to its source statement in both directions. The gate auto-recovers a drifted definition by re-rendering it from source; a definition that still fails is named in `<residue>` with its source text, so recovery is informed re-reading, not blind trust. Equivalence (not "is this necessary") is a deliberate choice — see `35 experiments/2026-06-23-thinking-judge-correctness-gate.md` for why the necessity framing fails with this judge.
-
-## The writing rubric
-
-The revise step runs four sequential passes — words → sentences → paragraphs → AI patterns — embedded in `distill.ts` as the `PASS_EN` / `PASS_RU` rubric (the single source; edit them there to change behavior).
-
-## The synthesis dial — render vs regenerate
-
-`--synth render` (default) grounds each definition in its source block; `--synth regenerate` writes from the idea-graph alone. The dial was settled by experiment (`35 experiments/2026-06-25-distill-synth-dial-stability.md`): on clean expository fixtures render **dominates** — equal cross-run stability and restatement collapse, and _more_ compression (60% vs 54%), with no fidelity-vs-density tradeoff observed. `render` is the default. The experiment hit a stability ceiling (both dials perfectly stable), so the dial's breaking point on harder, naturally-restating notes is open.
-
 ## Limits
 
 - **Scope**: built for expository prose (notes, concept explainers, track sections). On a short or list-heavy note it can expand rather than compress — the footer's `+N%` flags this; prefer the original.
 - **Latency**: ~30–60 s (extract + grade + synth + tie + 4 revise passes + thinking-judge gate + prose-QA judge). Built for a generous budget, not an interactive hook. `--no-gate` / `--no-revise` trade fidelity/polish for speed.
 - **Abstractive risk**: distill writes new text, so a definition can drift from or invent against the source. The fidelity gate catches and surfaces this, but it covers only glossary entries; a _fidelity_ drift inside the prose still escapes it. The prose-QA judge (stage 6) gates the prose for **style** defects only (meta-summary, self-reference, AI vocabulary, opening) — not for invention against the source.
-- **Non-stationarity**: tuned on one model pair (gpt-oss-120b / glm-5p2) at temp 0; re-measure before trusting on a model swap.
 - **Failsafe**: any parse error or timeout → passthrough (original text, footer notes the skip). A missing API key exits non-zero with a clear message rather than passing through.
