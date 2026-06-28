@@ -314,6 +314,34 @@ function splitFrontmatter(text: string): { front: string; body: string } {
   return { front: "", body: text };
 }
 
+// Default the trust tier of distilled output. An agent-distilled note is
+// unverified until curated (D27), so its frontmatter must carry
+// `epistemic_status: provisional` — otherwise `vault-query` retrieval, whose
+// absent-key default is `certified` (the trusted tier), would serve it as ground
+// (D7/D18). An existing `epistemic_status:` line is the author's explicit choice
+// and is left untouched; every other frontmatter line is preserved byte-for-byte.
+// When the source has no frontmatter at all, a minimal block is created.
+export function ensureEpistemicStatus(front: string): string {
+  if (/^epistemic_status:/m.test(front)) return front; // explicit choice wins
+  const LINE = "epistemic_status: provisional";
+  const crlf = front.includes("\r\n");
+  const nl = crlf ? "\r\n" : "\n";
+  if (front === "") return `---${nl}${LINE}${nl}---${nl}`;
+  // front holds opening + closing fences and a trailing newline. Insert the key
+  // immediately before the closing fence (the last `---`/`...` line).
+  const lines = front.split(nl);
+  let close = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i] === "---" || lines[i] === "...") {
+      close = i;
+      break;
+    }
+  }
+  if (close <= 0) return front; // malformed (no distinct closing fence): leave as-is
+  lines.splice(close, 0, LINE);
+  return lines.join(nl);
+}
+
 // Pull an authored single-line `description:` value out of frontmatter. This is
 // the one independent ground-truth anchor — when present it overrides the
 // model's extracted description so the anchor is never paraphrased. A blank or
@@ -1789,9 +1817,11 @@ async function main() {
       isReference,
     });
     // <result> wraps exactly the text to write back to source: frontmatter
-    // (verbatim, if any) + distilled body. <residue> carries one <entry> per
-    // definition that failed the gate, with verbatim <source>; omitted when empty.
-    const result = front ? front + "\n" + out : out;
+    // (verbatim except the injected epistemic_status default) + distilled body.
+    // <residue> carries one <entry> per definition that failed the gate, with
+    // verbatim <source>; omitted when empty.
+    const front2 = ensureEpistemicStatus(front);
+    const result = front2 ? front2 + "\n" + out : out;
     let fileBody = `<result>\n${result}\n</result>\n`;
     if (residue.length) {
       const entries = residue
