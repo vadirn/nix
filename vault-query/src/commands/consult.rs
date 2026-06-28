@@ -556,10 +556,13 @@ pub fn run_consult(
         .iter()
         .filter(|f| {
             let file_type = frontmatter::get_display(&f.frontmatter, "type");
+            // Bottom tier (superseded:true / checkpoint / epistemic_status:superseded)
+            // is excluded by default; one tier check subsumes both legacy signals.
+            let is_bottom = frontmatter::epistemic_tier(&f.frontmatter)
+                == frontmatter::EpistemicTier::Superseded;
             frontmatter::matches_type(&file_type, scope_types)
                 && !frontmatter::is_template(&f.frontmatter)
-                && (include_superseded || !frontmatter::is_superseded(&f.frontmatter))
-                && (include_superseded || file_type.as_str() != "checkpoint")
+                && (include_superseded || !is_bottom)
         })
         .collect();
 
@@ -572,7 +575,21 @@ pub fn run_consult(
     // BM25 over the in-scope set only.  Retrieve enough candidates for the gate
     // (20 gives a stable median; the packer may use fewer).
     let limit = 20;
-    let hits = bm25_rank(&in_scope, vault_root, query, limit, config)?;
+    let mut hits = bm25_rank(&in_scope, vault_root, query, limit, config)?;
+
+    // Grade by epistemic tier (Decision 18): scale each hit's score by its
+    // multiplier so a certified entry outranks a provisional one (and, when
+    // `--include-superseded` restores them, a superseded one) on the same query.
+    // The downstream gate is *relative* (coverage / median / elbow), so a
+    // uniformly-provisional result set scales equally and the gate is unchanged;
+    // only a mixed certified/provisional set shifts — exactly the intended
+    // downrank. Re-sort so the rest of the function keeps its score-desc invariant.
+    for h in &mut hits {
+        if let Some(vf) = file_map.get(&h.path) {
+            h.score *= frontmatter::epistemic_tier(&vf.frontmatter).multiplier();
+        }
+    }
+    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
     if hits.is_empty() {
         let diag = ConsultDiagnostics {
@@ -761,8 +778,8 @@ pub fn run_consult(
                 let v = vf.get_property("type");
                 if v.is_empty() { None } else { Some(v) }
             };
-            let sup = frontmatter::is_superseded(&vf.frontmatter)
-                || vf.get_property("type") == "checkpoint";
+            let sup = frontmatter::epistemic_tier(&vf.frontmatter)
+                == frontmatter::EpistemicTier::Superseded;
             (t, wikilink::collect_all_link_targets(vf), sup)
         } else {
             (None, vec![], false)
@@ -937,6 +954,17 @@ pick backoff ceilings empirically";
         vf
     }
 
+    /// Like `make_vault_file`, but stamps an `epistemic_status:` frontmatter value
+    /// (certified / provisional / superseded) so tier-ranking can be exercised.
+    fn make_vault_file_epistemic(name: &str, status: &str, body: &str) -> VaultFile {
+        let mut vf = make_vault_file(name, "card", body);
+        vf.frontmatter.insert(
+            "epistemic_status".to_string(),
+            serde_yaml::Value::String(status.to_string()),
+        );
+        vf
+    }
+
     fn default_config() -> ConsultConfig {
         ConsultConfig::default()
     }
@@ -1068,6 +1096,67 @@ pick backoff ceilings empirically";
             }
             ConsultOutcome::Abstain { reason, .. } => {
                 panic!("expected ANSWER for relevant query, got ABSTAIN: {}", reason);
+            }
+        }
+    }
+
+    // --- Test 3b: epistemic tier downranks provisional below certified ---
+
+    #[test]
+    fn certified_outranks_provisional_in_consult() {
+        // Two siblings with identical bodies (same matching tokens) differ only in
+        // epistemic_status. The certified sibling must rank above the provisional one
+        // once the tier multiplier (1.0 vs 0.6) scales the tied raw scores.
+        let rich = "retrieval ranking trust retrieval ranking trust retrieval ranking trust \
+                    retrieval ranking trust retrieval ranking trust retrieval ranking trust";
+        let certified = make_vault_file_epistemic("Certified note", "certified", rich);
+        let provisional = make_vault_file_epistemic("Provisional note", "provisional", rich);
+
+        // Weak distractors: they match a single query term amid filler, so they score
+        // low and pull the median below the provisional sibling's scaled score — letting
+        // both siblings clear the `score >= median` candidate cut and pack together.
+        let filler = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod \
+                      tempor incididunt ut labore et dolore magna aliqua ut enim ad minim";
+        let d1 = make_vault_file("Distractor one", "card", &format!("retrieval {filler}"));
+        let d2 = make_vault_file("Distractor two", "card", &format!("retrieval {filler}"));
+        let d3 = make_vault_file("Distractor three", "card", &format!("retrieval {filler}"));
+
+        let files = vec![certified, provisional, d1, d2, d3];
+        let scope = vec!["card".to_string()];
+        let config = default_config();
+
+        let (result, _diag) = run_consult(
+            "retrieval ranking trust",
+            &files,
+            &vault_root(),
+            &scope,
+            &config,
+            ConsultMode::Deliberate,
+            false,
+        )
+        .unwrap();
+
+        match result {
+            ConsultOutcome::Selected { docs, .. } => {
+                let cert_pos = docs.iter().position(|d| d.title == "Certified note");
+                let prov_pos = docs.iter().position(|d| d.title == "Provisional note");
+                let (cert_pos, prov_pos) = (
+                    cert_pos.expect("certified sibling must be packed"),
+                    prov_pos.expect("provisional sibling must be packed"),
+                );
+                assert!(
+                    cert_pos < prov_pos,
+                    "certified (pos {cert_pos}) must outrank provisional (pos {prov_pos})"
+                );
+                let cert_score = docs[cert_pos].score;
+                let prov_score = docs[prov_pos].score;
+                assert!(
+                    cert_score > prov_score,
+                    "certified score {cert_score:.4} must exceed provisional score {prov_score:.4} after the tier multiplier"
+                );
+            }
+            ConsultOutcome::Abstain { reason, .. } => {
+                panic!("expected SELECTED with both siblings packed, got ABSTAIN: {reason}");
             }
         }
     }

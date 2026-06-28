@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
-import { REL_REGISTRY, emitRelationsBlock, slugSegment } from "./distill.ts";
+import { REL_REGISTRY, emitRelationsBlock, ensureEpistemicStatus, slugSegment } from "./distill.ts";
 
 // 4 levels up from this dir (skills → agents → home → /Users/vadim/nix), then into
 // the vault-query lint dir that holds the canonical JSON.
@@ -111,4 +111,35 @@ test("emitRelationsBlock: multi-node note byte-stable entry-grouped form", () =>
 
 test("emitRelationsBlock: no edges yields empty string", () => {
   expect(emitRelationsBlock([{ term: "x", def: "", source: ["B1"], relations: [] }])).toBe("");
+});
+
+// ---- epistemic_status default: distilled output is provisional until curated ----
+test("ensureEpistemicStatus: inserts before the closing fence, other lines byte-stable", () => {
+  const front = "---\ntype: note\ndescription: A pinned anchor\n---\n";
+  expect(ensureEpistemicStatus(front)).toBe(
+    "---\ntype: note\ndescription: A pinned anchor\nepistemic_status: provisional\n---\n",
+  );
+});
+
+test("ensureEpistemicStatus: leaves an existing status verbatim (explicit choice wins)", () => {
+  const front = "---\ntype: note\nepistemic_status: certified\n---\n";
+  expect(ensureEpistemicStatus(front)).toBe(front);
+});
+
+test("ensureEpistemicStatus: empty front creates a minimal block", () => {
+  expect(ensureEpistemicStatus("")).toBe("---\nepistemic_status: provisional\n---\n");
+});
+
+test("ensureEpistemicStatus: preserves CRLF line endings byte-for-byte", () => {
+  const front = "---\r\ntype: note\r\n---\r\n";
+  expect(ensureEpistemicStatus(front)).toBe(
+    "---\r\ntype: note\r\nepistemic_status: provisional\r\n---\r\n",
+  );
+});
+
+test("ensureEpistemicStatus: honors a `...` closing fence", () => {
+  const front = "---\ntype: note\n...\n";
+  expect(ensureEpistemicStatus(front)).toBe(
+    "---\ntype: note\nepistemic_status: provisional\n...\n",
+  );
 });

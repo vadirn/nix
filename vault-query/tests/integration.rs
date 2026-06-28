@@ -1268,6 +1268,82 @@ fn test_search_superseded_downranked_below_fresh() {
     );
 }
 
+/// Backlog 21 (falsifiable): on the same query, a `certified` sibling outranks a
+/// `provisional` one, which outranks a `superseded` one. Fails before the graded
+/// `epistemic_tier` multiplier replaces the binary 0.3 downrank; passes after.
+#[test]
+fn test_search_graded_epistemic_tier_ranking() {
+    let tmp = tempfile::tempdir().unwrap();
+    let vault_root = tmp.path().to_path_buf();
+    let cards_dir = vault_root.join("20 cards");
+    std::fs::create_dir_all(&cards_dir).unwrap();
+
+    // Three siblings with identical bodies (same unique token, same count) so the
+    // raw BM25 scores tie and only the tier multiplier separates them.
+    let body = "qzwxmtkpvbn qzwxmtkpvbn qzwxmtkpvbn qzwxmtkpvbn qzwxmtkpvbn\nqzwxmtkpvbn qzwxmtkpvbn qzwxmtkpvbn qzwxmtkpvbn qzwxmtkpvbn\n";
+    std::fs::write(
+        cards_dir.join("Certified card.md"),
+        format!("---\ntype: card\nepistemic_status: certified\n---\n\n{body}"),
+    )
+    .unwrap();
+    std::fs::write(
+        cards_dir.join("Provisional card.md"),
+        format!("---\ntype: card\nepistemic_status: provisional\n---\n\n{body}"),
+    )
+    .unwrap();
+    std::fs::write(
+        cards_dir.join("Superseded card.md"),
+        format!("---\ntype: card\nepistemic_status: superseded\n---\n\n{body}"),
+    )
+    .unwrap();
+
+    let ignore = vault_query::vault_ignore::load(&vault_root, false).unwrap();
+    let cfg = ResolvedConfig {
+        vault_root: vault_root.clone(),
+        projects_path: None,
+        project_path: None,
+        lint: None,
+        consult: None,
+        ignore,
+    };
+
+    let results = vault_query::commands::search::collect_bm25_results_filtered(
+        "qzwxmtkpvbn",
+        &cfg,
+        None,
+        10,
+        &[],
+        false, // keep all three; tier downrank applies
+    )
+    .unwrap();
+
+    let pos = |needle: &str| {
+        results
+            .iter()
+            .position(|r| r.path.contains(needle))
+            .unwrap_or_else(|| panic!("{needle} not found in results"))
+    };
+    let cert = pos("Certified card");
+    let prov = pos("Provisional card");
+    let sup = pos("Superseded card");
+
+    assert!(
+        cert < prov && prov < sup,
+        "expected certified < provisional < superseded by rank; got certified={cert} provisional={prov} superseded={sup}"
+    );
+
+    // The `epistemic_status: superseded` sibling collapses into the bottom tier:
+    // it carries the `superseded` label even without the legacy `superseded: true`.
+    assert!(
+        results[sup].superseded,
+        "epistemic_status: superseded must set the superseded label"
+    );
+    assert!(
+        !results[prov].superseded,
+        "provisional must NOT be labeled superseded — it is downranked, not retired"
+    );
+}
+
 /// search --no-superseded: superseded entries are excluded entirely.
 #[test]
 fn test_search_no_superseded_excludes() {

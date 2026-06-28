@@ -139,9 +139,11 @@ fn search_bm25(
 
 /// Build the BM25 index, run ranking, generate snippets, and return enriched results.
 /// Pass an empty `types` slice to return all document types (no filter).
-/// When `no_superseded` is true, entries with `superseded: true` or `type: checkpoint`
-/// are excluded from results entirely. Otherwise they are included but their scores
-/// are multiplied by 0.3 (post-retrieval downrank) and labeled `superseded: true`.
+/// When `no_superseded` is true, bottom-tier entries (`superseded: true`,
+/// `type: checkpoint`, or `epistemic_status: superseded`) are excluded from results
+/// entirely. Otherwise every entry's score is multiplied by its epistemic-tier factor
+/// (certified 1.0, provisional 0.6, superseded 0.3) post-retrieval; bottom-tier entries
+/// are also labeled `superseded: true`.
 ///
 /// Returns an empty Vec when no documents match (callers handle the empty case).
 ///
@@ -196,8 +198,8 @@ pub fn collect_bm25_results_filtered(
         let body_val = doc.get_first(fields.body).and_then(|v| v.as_str()).unwrap_or("");
         let snippet_plain = snippet_generator.snippet(body_val).fragment().to_string();
 
-        // Look up the VaultFile for type, links, and superseded flag.
-        let (doc_type, links, body_text, is_sup) = if let Some(vf) = file_map.get(&path_val) {
+        // Look up the VaultFile for type, links, and epistemic tier.
+        let (doc_type, links, body_text, tier) = if let Some(vf) = file_map.get(&path_val) {
             let t = {
                 let v = vf.get_property("type");
                 if v.is_empty() { None } else { Some(v) }
@@ -207,19 +209,26 @@ pub fn collect_bm25_results_filtered(
             let b = frontmatter::body(&vf.content)
                 .trim_start_matches('\n')
                 .to_string();
-            let sup = frontmatter::is_superseded(&vf.frontmatter)
-                || t.as_deref() == Some("checkpoint");
-            (t, l, b, sup)
+            (t, l, b, frontmatter::epistemic_tier(&vf.frontmatter))
         } else {
-            (None, vec![], body_val.trim_start_matches('\n').to_string(), false)
+            (
+                None,
+                vec![],
+                body_val.trim_start_matches('\n').to_string(),
+                frontmatter::EpistemicTier::Certified,
+            )
         };
 
+        // Bottom tier (superseded:true / checkpoint / epistemic_status:superseded)
+        // is what `--no-superseded` filters and the `superseded` label marks.
+        let is_sup = tier == frontmatter::EpistemicTier::Superseded;
         if no_superseded && is_sup {
             continue;
         }
 
-        // Downrank superseded entries by 0.3 post-retrieval.
-        let score = if is_sup { raw_score * 0.3 } else { raw_score };
+        // Graded post-retrieval downrank: certified 1.0, provisional 0.6,
+        // superseded 0.3 (the historical binary value, now the bottom tier).
+        let score = raw_score * tier.multiplier();
 
         let tokens = crate::tokens::estimate_tokens(&body_text);
 
@@ -299,16 +308,17 @@ fn run_bm25(
             .unwrap_or("")
             .to_string();
 
-        let is_sup = file_map.get(&path_val).map(|vf| {
-            let file_type = frontmatter::get_display(&vf.frontmatter, "type");
-            frontmatter::is_superseded(&vf.frontmatter) || file_type == "checkpoint"
-        }).unwrap_or(false);
+        let tier = file_map
+            .get(&path_val)
+            .map(|vf| frontmatter::epistemic_tier(&vf.frontmatter))
+            .unwrap_or(frontmatter::EpistemicTier::Certified);
+        let is_sup = tier == frontmatter::EpistemicTier::Superseded;
 
         if no_superseded && is_sup {
             continue;
         }
 
-        let score = if is_sup { raw_score * 0.3 } else { raw_score };
+        let score = raw_score * tier.multiplier();
         entries.push(TextEntry { score, superseded: is_sup, path: path_val, body: body_val });
     }
     entries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
@@ -349,9 +359,10 @@ fn run_regex(
     let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
 
     for file in &files {
-        let file_type = frontmatter::get_display(&file.frontmatter, "type");
-        let is_sup = frontmatter::is_superseded(&file.frontmatter)
-            || file_type.as_str() == "checkpoint";
+        // Regex mode has no scores, so it only filters and labels — the bottom
+        // tier (superseded:true / checkpoint / epistemic_status:superseded).
+        let is_sup =
+            frontmatter::epistemic_tier(&file.frontmatter) == frontmatter::EpistemicTier::Superseded;
 
         if no_superseded && is_sup {
             continue;
