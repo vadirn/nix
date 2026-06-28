@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
@@ -6,7 +6,11 @@ use std::path::Path;
 use crate::frontmatter;
 use crate::output::{self, Format};
 
-pub fn run(file: &Path, path: Option<&str>, format: Format) -> Result<()> {
+/// Print frontmatter properties (or one addressed field) of `file`. Returns the
+/// process exit code (0 on success, 1 when a requested field path misses or the
+/// file has no frontmatter) rather than exiting mid-stack, so `main` owns the
+/// single exit boundary and the miss branches stay testable.
+pub fn run(file: &Path, path: Option<&str>, format: Format) -> Result<i32> {
     let content = fs::read_to_string(file)?;
     let fm = frontmatter::parse(&content)?;
 
@@ -20,12 +24,12 @@ pub fn run(file: &Path, path: Option<&str>, format: Format) -> Result<()> {
                 .map(|(k, v)| (k.clone(), frontmatter::value_to_display(v)))
                 .collect();
             println!("{}", output::render_properties(&properties, &format));
-            Ok(())
+            Ok(0)
         }
         Some(p) => {
             let Some(fm) = fm else {
                 eprintln!("no frontmatter found in {}", file.display());
-                std::process::exit(1);
+                return Ok(1);
             };
             // The frontmatter root is a map; build a Value::Mapping to navigate uniformly.
             let root = Value::Mapping(
@@ -33,15 +37,14 @@ pub fn run(file: &Path, path: Option<&str>, format: Format) -> Result<()> {
                     .map(|(k, v)| (Value::String(k), v))
                     .collect(),
             );
-            let resolved = navigate(&root, p);
-            match resolved {
+            match navigate(&root, p) {
                 Ok(v) => {
-                    print_value(v, format);
-                    Ok(())
+                    print_value(v, format)?;
+                    Ok(0)
                 }
                 Err(msg) => {
                     eprintln!("{}", msg);
-                    std::process::exit(1);
+                    Ok(1)
                 }
             }
         }
@@ -130,8 +133,9 @@ fn navigate<'a>(root: &'a Value, path: &str) -> Result<&'a Value, String> {
     Ok(current)
 }
 
-/// Print a resolved value in the requested format.
-fn print_value(v: &Value, format: Format) {
+/// Print a resolved value in the requested format. A JSON serialization failure
+/// propagates as an error rather than exiting mid-stack.
+fn print_value(v: &Value, format: Format) -> Result<()> {
     match format {
         Format::Table | Format::Tsv => {
             println!("{}", frontmatter::value_to_display(v));
@@ -139,15 +143,12 @@ fn print_value(v: &Value, format: Format) {
         Format::Json => {
             let json: serde_json::Value =
                 serde_json::to_value(v).unwrap_or(serde_json::Value::Null);
-            match serde_json::to_string_pretty(&json) {
-                Ok(s) => println!("{}", s),
-                Err(e) => {
-                    eprintln!("failed to serialize value to JSON: {}", e);
-                    std::process::exit(1);
-                }
-            }
+            let s = serde_json::to_string_pretty(&json)
+                .context("failed to serialize value to JSON")?;
+            println!("{}", s);
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]

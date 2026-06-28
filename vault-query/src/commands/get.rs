@@ -17,7 +17,10 @@ fn path_is_bottom_tier(full_path: &std::path::Path) -> Result<bool> {
     Ok(crate::epistemic::epistemic_tier(&fm).is_bottom())
 }
 
-pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: bool) -> Result<()> {
+/// Resolve `fragment` to absolute path(s) and print them. Returns the process
+/// exit code (0 on a hit, 1 on no match) instead of exiting mid-stack, so `main`
+/// owns the single exit boundary and the no-match branch stays testable.
+pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: bool) -> Result<i32> {
     let vault_root = &cfg.vault_root;
     let mut paths = crate::slug::resolve_paths(fragment, cfg)?;
 
@@ -36,7 +39,7 @@ pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: b
 
     if paths.is_empty() {
         eprintln!("No matches for '{}'", fragment);
-        std::process::exit(1);
+        return Ok(1);
     }
 
     // `get` resolves a fragment to absolute path(s), one per line, and nothing else.
@@ -45,5 +48,5 @@ pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: b
     for p in &paths {
         println!("{}", vault_root.join(p).display());
     }
-    Ok(())
+    Ok(0)
 }
