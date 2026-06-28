@@ -178,7 +178,7 @@ fn test_json_output() {
 
     let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir);
     let result = view::apply(&all_view, &base, &mut filtered);
-    let json = vault_query::output::render(&result, &vault_query::output::Format::Json);
+    let json = result.render(&vault_query::output::Format::Json);
 
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert!(parsed.is_array());
@@ -195,7 +195,7 @@ fn test_tsv_output() {
 
     let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir);
     let result = view::apply(&all_view, &base, &mut filtered);
-    let tsv = vault_query::output::render(&result, &vault_query::output::Format::Tsv);
+    let tsv = result.render(&vault_query::output::Format::Tsv);
 
     let lines: Vec<&str> = tsv.lines().collect();
     assert_eq!(lines.len(), 4); // header + 3 rows
@@ -446,6 +446,100 @@ fn test_regex_no_superseded_excludes() {
         stdout.trim().is_empty(),
         "--no-superseded must exclude the only matching superseded entry; stdout: {:?}",
         stdout
+    );
+}
+
+/// `epistemic_status: superseded` must be excluded by get/backlinks/list under
+/// --no-superseded — not just the legacy `superseded: true` flag. Before the
+/// epistemic_tier dedup these three commands keyed off `is_superseded()` only and
+/// leaked an `epistemic_status: superseded` entry as live (plan §4.6). The note
+/// here carries NO legacy flag, so it exercises the fix specifically.
+#[test]
+fn test_epistemic_status_superseded_excluded_by_get_backlinks_list() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cards = root.join("20 cards");
+    std::fs::create_dir_all(&cards).unwrap();
+
+    // Plain live card: the backlink target.
+    std::fs::write(cards.join("Target.md"), "---\ntype: card\n---\n\nbody\n").unwrap();
+    // Live card linking to Target.
+    std::fs::write(
+        cards.join("Live source.md"),
+        "---\ntype: card\n---\n\nSee [[Target]].\n",
+    )
+    .unwrap();
+    // epistemic_status: superseded card (no legacy `superseded: true`) linking to Target.
+    std::fs::write(
+        cards.join("Epi gone.md"),
+        "---\ntype: card\nepistemic_status: superseded\n---\n\nSee [[Target]].\n",
+    )
+    .unwrap();
+
+    let root_str = root.to_str().unwrap();
+
+    // list --no-superseded drops the epistemic_status: superseded card.
+    let out = Command::new(cargo_bin())
+        .args(["list", "20 cards", "--vault-root", root_str, "--no-superseded"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "list must exit 0; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(stdout.contains("Live source"), "list must keep the live source; stdout: {}", stdout);
+    assert!(
+        !stdout.contains("Epi gone"),
+        "list --no-superseded must exclude epistemic_status: superseded card; stdout: {}",
+        stdout
+    );
+
+    // backlinks --no-superseded drops the epistemic_status: superseded source.
+    let out = Command::new(cargo_bin())
+        .args([
+            "backlinks",
+            cards.join("Target.md").to_str().unwrap(),
+            "--vault-root",
+            root_str,
+            "--no-superseded",
+        ])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Live source"),
+        "backlinks must keep the live source; stdout: {}",
+        stdout
+    );
+    assert!(
+        !stdout.contains("Epi gone"),
+        "backlinks --no-superseded must exclude epistemic_status: superseded source; stdout: {}",
+        stdout
+    );
+
+    // get --no-superseded refuses to resolve the epistemic_status: superseded note.
+    let out = Command::new(cargo_bin())
+        .args(["get", "Epi gone", "--vault-root", root_str, "--no-superseded"])
+        .output()
+        .unwrap();
+    assert!(
+        !out.status.success(),
+        "get --no-superseded must not resolve an epistemic_status: superseded note; stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+
+    // Sanity: without the flag, get DOES resolve it — proving the exclusion is the
+    // filter, not a missing file.
+    let out = Command::new(cargo_bin())
+        .args(["get", "Epi gone", "--vault-root", root_str])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success() && String::from_utf8_lossy(&out.stdout).contains("Epi gone"),
+        "get without --no-superseded must resolve the note; stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
     );
 }
 

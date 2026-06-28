@@ -52,11 +52,12 @@ pub fn run_by_type(cfg: &crate::config::ResolvedConfig, type_value: &str, fields
     Ok(())
 }
 
-/// Returns true when a VaultFile is superseded: either `superseded: true` in frontmatter
-/// or `type: checkpoint`.
+/// Returns true when a VaultFile is bottom-tier (legacy `superseded: true`,
+/// `type: checkpoint`, or `epistemic_status: superseded`). Delegates to the
+/// canonical trust policy so list shares one definition with get/backlinks and
+/// honors every bottom-tier signal, not just the legacy flag.
 fn is_entry_superseded(f: &VaultFile) -> bool {
-    frontmatter::is_superseded(&f.frontmatter)
-        || frontmatter::get_display(&f.frontmatter, "type") == "checkpoint"
+    crate::epistemic::epistemic_tier(&f.frontmatter).is_bottom()
 }
 
 fn print_listing(mut files: Vec<&VaultFile>, fields: &[String]) {

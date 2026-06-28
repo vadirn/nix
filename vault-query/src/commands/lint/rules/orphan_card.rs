@@ -1,5 +1,5 @@
 use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
-use crate::frontmatter;
+use crate::{epistemic, wikilink};
 
 pub struct OrphanCard;
 
@@ -15,16 +15,16 @@ impl Rule for OrphanCard {
     fn check(&self, ctx: &LintContext) -> Vec<Finding> {
         let mut findings = Vec::new();
         for card in &ctx.cards {
-            if frontmatter::is_superseded(&card.frontmatter)
-                || frontmatter::get_display(&card.frontmatter, "type").as_str() == "checkpoint"
-            {
+            if epistemic::is_lint_exempt(&card.frontmatter) {
                 continue;
             }
             if is_folder_index(card) {
                 continue;
             }
-            let name_lower = card.name.to_lowercase();
-            if !ctx.backlink_index.contains_key(&name_lower) {
+            // Key the lookup through the same canonical join key the index is built
+            // with, so a card and its incoming links collapse to one key.
+            let key = wikilink::backlink_key(&card.name);
+            if !ctx.backlink_index.contains_key(&key) {
                 findings.push(Finding {
                     rule: self.name(),
                     severity: self.default_severity(),
