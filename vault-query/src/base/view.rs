@@ -1,5 +1,4 @@
 use crate::base::{BaseFile, SortDirection, ViewDef};
-use crate::frontmatter;
 use crate::output::Format;
 use crate::vault::VaultFile;
 use std::collections::{BTreeMap, HashSet};
@@ -204,69 +203,7 @@ fn resolve_value(
     file: &VaultFile,
     formulas: &BTreeMap<String, String>,
 ) -> String {
-    // file.name
-    if col == "file.name" {
-        return file.name.clone();
-    }
-    // file.ctime
-    if col == "file.ctime" {
-        if let Some(Ok(duration)) = file.ctime.map(|c| c.duration_since(std::time::UNIX_EPOCH)) {
-            return chrono_format(duration.as_secs());
-        }
-        return String::new();
-    }
-    // formula.X
-    if let Some(fname) = col.strip_prefix("formula.") {
-        return formulas.get(fname).cloned().unwrap_or_default();
-    }
-    // note.X (strip prefix for lookup)
-    if let Some(field) = col.strip_prefix("note.") {
-        return crate::wikilink::strip(&frontmatter::get_display(&file.frontmatter, field));
-    }
-    // Bare field name: try frontmatter
-    crate::wikilink::strip(&frontmatter::get_display(&file.frontmatter, col))
-}
-
-/// Simple timestamp to ISO date string (no chrono dependency).
-fn chrono_format(secs: u64) -> String {
-    // Unix timestamp to YYYY-MM-DD HH:MM
-    let days = secs / 86400;
-    let time_secs = secs % 86400;
-    let hours = time_secs / 3600;
-    let minutes = (time_secs % 3600) / 60;
-
-    // Days since 1970-01-01
-    let mut y = 1970i64;
-    let mut remaining_days = days as i64;
-    loop {
-        let days_in_year = if is_leap(y) { 366 } else { 365 };
-        if remaining_days < days_in_year {
-            break;
-        }
-        remaining_days -= days_in_year;
-        y += 1;
-    }
-    let months = [31, if is_leap(y) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let mut m = 0;
-    for &days_in_month in &months {
-        if remaining_days < days_in_month {
-            break;
-        }
-        remaining_days -= days_in_month;
-        m += 1;
-    }
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}",
-        y,
-        m + 1,
-        remaining_days + 1,
-        hours,
-        minutes
-    )
-}
-
-fn is_leap(y: i64) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    crate::base::column::ColumnRef::parse(col).value(file, formulas)
 }
 
 fn sort_files(
@@ -402,13 +339,6 @@ fn compute_summaries(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_chrono_format() {
-        // 2024-01-01 00:00 UTC = 1704067200
-        let s = chrono_format(1704067200);
-        assert_eq!(s, "2024-01-01 00:00");
-    }
 
     #[test]
     fn test_render_json() {

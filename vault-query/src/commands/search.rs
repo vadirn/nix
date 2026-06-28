@@ -1,7 +1,8 @@
 use anyhow::Result;
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::io::{self, Write};
 use std::path::Path;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
@@ -141,6 +142,157 @@ fn search_bm25(
     }))
 }
 
+/// Maximum compiled size (bytes) for a user-supplied regex. Bounds the memory a
+/// pathological pattern (e.g. deeply nested bounded repetitions like `a{1000}{1000}`)
+/// can demand at compile time, so it fails fast with a clean diagnostic instead of
+/// exhausting memory. The `regex` crate matches in linear time, so this guards
+/// compilation cost, not match-time backtracking.
+const REGEX_SIZE_LIMIT: usize = 1 << 20; // 1 MiB
+
+/// Compile a user-supplied search pattern with a bounded compiled size. A syntax
+/// error or a pattern exceeding [`REGEX_SIZE_LIMIT`] becomes a clean diagnostic
+/// rather than a raw `regex` error string.
+fn compile_search_regex(pattern: &str) -> Result<Regex> {
+    RegexBuilder::new(pattern)
+        .size_limit(REGEX_SIZE_LIMIT)
+        .build()
+        .map_err(|e| anyhow::anyhow!("invalid search pattern {pattern:?}: {e}"))
+}
+
+/// Run `render` against a locked stdout handle, swallowing a broken-pipe error
+/// (downstream closed, e.g. `search … | head`) as a clean stop. `println!` panics
+/// on a closed pipe; routing the text/regex arms through this turns that into a
+/// graceful exit while still propagating any other IO error.
+fn with_stdout<F>(render: F) -> Result<()>
+where
+    F: FnOnce(&mut io::StdoutLock) -> io::Result<()>,
+{
+    let mut out = io::stdout().lock();
+    match render(&mut out) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Apply the epistemic-tier policy to one hit's raw BM25 score. The single home
+/// for the downrank decision shared by the JSON, text, and regex output arms.
+///
+/// Returns `None` when `no_superseded` is set and the hit is bottom-tier
+/// (`superseded: true` / `type: checkpoint` / `epistemic_status: superseded`),
+/// signaling the caller to drop it. Otherwise returns the graded score
+/// (raw × tier multiplier: certified 1.0, provisional 0.6, superseded 0.3) paired
+/// with the bottom-tier flag used for the `superseded` label. The regex arm has no
+/// score and passes a placeholder, using only the filter decision and the flag.
+fn downranked(
+    score: f32,
+    tier: frontmatter::EpistemicTier,
+    no_superseded: bool,
+) -> Option<(f32, bool)> {
+    let is_sup = tier.is_bottom();
+    if no_superseded && is_sup {
+        return None;
+    }
+    Some((score * tier.multiplier(), is_sup))
+}
+
+/// One ranked BM25 hit after the single downrank pass, shared by the JSON and text
+/// output arms. Snippet rendering differs between arms (plain fragment vs. `<b>`→`*`
+/// HTML), so the indexed body is carried as `snippet_source` and each arm runs the
+/// shared `SnippetGenerator` over it at render time.
+struct RankedHit {
+    path: String,
+    title: String,
+    doc_type: Option<String>,
+    score: f32,
+    /// Frontmatter body (leading newline stripped): the JSON `body` field + tokens.
+    body: String,
+    /// Indexed body field: the source the `SnippetGenerator` windows over.
+    snippet_source: String,
+    links: Vec<String>,
+    superseded: bool,
+}
+
+/// The single epistemic-downrank pass over the BM25 candidate set. Resolves each
+/// retrieved doc against the scanned `VaultFile` set, applies [`downranked`] to
+/// filter `--no-superseded` hits and grade the rest, then sorts by adjusted score
+/// and truncates to `limit`. A retrieved doc that does not resolve to a scanned
+/// file is an error (the index and the scan diverged), not a silently skipped row.
+fn rank_hits(
+    hits: &Bm25Hits,
+    vault_root: &Path,
+    limit: usize,
+    no_superseded: bool,
+) -> Result<Vec<RankedHit>> {
+    // Build a path → &VaultFile lookup map for type/links/tier resolution.
+    let file_map: HashMap<String, &vault::VaultFile> = hits
+        .files
+        .iter()
+        .map(|f| (f.relative_path(vault_root), f))
+        .collect();
+
+    let mut ranked = Vec::new();
+    for (raw_score, doc_address) in &hits.top_docs {
+        let doc: TantivyDocument = hits.searcher.doc(*doc_address)?;
+        let path_val = doc
+            .get_first(hits.fields.path)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let title_val = doc
+            .get_first(hits.fields.title)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        // snippet: plain text. The raw fragment, not `to_html()`, which HTML-encodes
+        // (`&`→`&amp;`, `<`→`&lt;`, …) before wrapping matches in <b> tags.
+        let body_val = doc
+            .get_first(hits.fields.body)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // The retrieved doc must resolve to a scanned VaultFile; a miss means the
+        // index and the scan diverged, which is a bug rather than a doc to skip.
+        let vf = file_map.get(&path_val).ok_or_else(|| {
+            anyhow::anyhow!("indexed document {path_val:?} not found in scanned vault files")
+        })?;
+
+        let Some((score, is_sup)) = downranked(
+            *raw_score,
+            frontmatter::epistemic_tier(&vf.frontmatter),
+            no_superseded,
+        ) else {
+            continue;
+        };
+
+        let doc_type = {
+            let v = vf.get_property("type");
+            if v.is_empty() { None } else { Some(v) }
+        };
+        let links = wikilink::collect_all_link_targets(vf);
+        // body: frontmatter::body with leading newline stripped.
+        let body = frontmatter::body(&vf.content).trim_start_matches('\n').to_string();
+
+        ranked.push(RankedHit {
+            path: path_val,
+            title: title_val,
+            doc_type,
+            score,
+            body,
+            snippet_source: body_val,
+            links,
+            superseded: is_sup,
+        });
+    }
+
+    // Re-sort after score adjustment (Tantivy returns pre-downrank order), then
+    // truncate to the caller's requested limit.
+    ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    ranked.truncate(limit);
+    Ok(ranked)
+}
+
 /// Build the BM25 index, run ranking, generate snippets, and return enriched results.
 /// Pass an empty `types` slice to return all document types (no filter).
 /// When `no_superseded` is true, bottom-tier entries (`superseded: true`,
@@ -165,95 +317,32 @@ pub fn collect_bm25_results_filtered(
     let Some(hits) = search_bm25(query, cfg, subfolder, limit, types)? else {
         return Ok(vec![]);
     };
-    let Bm25Hits {
-        files,
-        searcher,
-        fields,
-        top_docs,
-        snippet_generator,
-    } = hits;
-    let vault_root = &cfg.vault_root;
+    let ranked = rank_hits(&hits, &cfg.vault_root, limit, no_superseded)?;
 
-    // Build a path → &VaultFile lookup map for type/links resolution.
-    let file_map: HashMap<String, &vault::VaultFile> = files
-        .iter()
-        .map(|f| (f.relative_path(vault_root), f))
-        .collect();
-
-    let mut results = Vec::new();
-    for (raw_score, doc_address) in top_docs {
-        let doc: TantivyDocument = searcher.doc(doc_address)?;
-        let path_val = doc
-            .get_first(fields.path)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let title_val = doc
-            .get_first(fields.title)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        // snippet: plain text. Use the raw fragment rather than `to_html()`, which
-        // HTML-encodes (`&`→`&amp;`, `<`→`&lt;`, `'`→`&#x27;`, …) before wrapping
-        // matches in <b> tags — stripping the tags would leave the entity references
-        // behind. `fragment()` is the unescaped windowed text with no highlight markup.
-        let body_val = doc.get_first(fields.body).and_then(|v| v.as_str()).unwrap_or("");
-        let snippet_plain = snippet_generator.snippet(body_val).fragment().to_string();
-
-        // Look up the VaultFile for type, links, and epistemic tier.
-        let (doc_type, links, body_text, tier) = if let Some(vf) = file_map.get(&path_val) {
-            let t = {
-                let v = vf.get_property("type");
-                if v.is_empty() { None } else { Some(v) }
-            };
-            let l = wikilink::collect_all_link_targets(vf);
-            // body: frontmatter::body with leading newline stripped
-            let b = frontmatter::body(&vf.content)
-                .trim_start_matches('\n')
+    // Map the shared ranked list onto the JSON envelope shape. The snippet is the
+    // unescaped windowed fragment (no highlight markup); tokens estimate over the body.
+    let results = ranked
+        .into_iter()
+        .map(|hit| {
+            let snippet = hits
+                .snippet_generator
+                .snippet(&hit.snippet_source)
+                .fragment()
                 .to_string();
-            (t, l, b, frontmatter::epistemic_tier(&vf.frontmatter))
-        } else {
-            (
-                None,
-                vec![],
-                body_val.trim_start_matches('\n').to_string(),
-                frontmatter::EpistemicTier::Certified,
-            )
-        };
-
-        // Bottom tier (superseded:true / checkpoint / epistemic_status:superseded)
-        // is what `--no-superseded` filters and the `superseded` label marks.
-        let is_sup = tier.is_bottom();
-        if no_superseded && is_sup {
-            continue;
-        }
-
-        // Graded post-retrieval downrank: certified 1.0, provisional 0.6,
-        // superseded 0.3 (the historical binary value, now the bottom tier).
-        let score = raw_score * tier.multiplier();
-
-        let tokens = crate::tokens::estimate_tokens(&body_text);
-
-        results.push(SearchResult {
-            path: path_val,
-            title: title_val,
-            doc_type,
-            score,
-            snippet: snippet_plain,
-            body: body_text,
-            tokens,
-            links,
-            superseded: is_sup,
-        });
-    }
-
-    // Re-sort after score adjustment (Tantivy returns pre-downrank order).
-    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-
-    // Truncate to the caller's requested limit now that filtering and re-sorting are done.
-    results.truncate(limit);
+            let tokens = crate::tokens::estimate_tokens(&hit.body);
+            SearchResult {
+                path: hit.path,
+                title: hit.title,
+                doc_type: hit.doc_type,
+                score: hit.score,
+                snippet,
+                body: hit.body,
+                tokens,
+                links: hit.links,
+                superseded: hit.superseded,
+            }
+        })
+        .collect();
 
     Ok(results)
 }
@@ -280,71 +369,30 @@ fn run_bm25(
         return Ok(());
     }
 
-    // Text arm: single index build via search_bm25; apply downranking and labeling inline.
+    // Text arm: single index build via search_bm25, then the shared rank_hits pass.
     let Some(hits) = search_bm25(query, cfg, subfolder, limit, types)? else {
         return Ok(());
     };
+    let ranked = rank_hits(&hits, &cfg.vault_root, limit, no_superseded)?;
 
-    let vault_root = &cfg.vault_root;
-    let file_map: HashMap<String, &vault::VaultFile> = hits.files
-        .iter()
-        .map(|f| (f.relative_path(vault_root), f))
-        .collect();
+    with_stdout(|out| {
+        for hit in &ranked {
+            let sup_label = if hit.superseded { " [superseded]" } else { "" };
+            writeln!(out, "[{:.2}]{} {}", hit.score, sup_label, hit.path)?;
 
-    // Build (adjusted_score, is_superseded, path, body_val) tuples, then sort.
-    struct TextEntry {
-        score: f32,
-        superseded: bool,
-        path: String,
-        body: String,
-    }
-    let mut entries: Vec<TextEntry> = Vec::new();
-    for (raw_score, doc_address) in hits.top_docs {
-        let doc: TantivyDocument = hits.searcher.doc(doc_address)?;
-        let path_val = doc
-            .get_first(hits.fields.path)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let body_val = doc
-            .get_first(hits.fields.body)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let tier = file_map
-            .get(&path_val)
-            .map(|vf| frontmatter::epistemic_tier(&vf.frontmatter))
-            .unwrap_or(frontmatter::EpistemicTier::Certified);
-        let is_sup = tier.is_bottom();
-
-        if no_superseded && is_sup {
-            continue;
-        }
-
-        let score = raw_score * tier.multiplier();
-        entries.push(TextEntry { score, superseded: is_sup, path: path_val, body: body_val });
-    }
-    entries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-    entries.truncate(limit);
-
-    for entry in &entries {
-        let sup_label = if entry.superseded { " [superseded]" } else { "" };
-        println!("[{:.2}]{} {}", entry.score, sup_label, entry.path);
-
-        let snippet = hits.snippet_generator.snippet(&entry.body);
-        let html = snippet.to_html();
-        if !html.is_empty() {
-            // Convert <b>term</b> to *term* for terminal display
-            let display = html.replace("<b>", "*").replace("</b>", "*");
-            for line in display.lines() {
-                println!("  {}", line);
+            let snippet = hits.snippet_generator.snippet(&hit.snippet_source);
+            let html = snippet.to_html();
+            if !html.is_empty() {
+                // Convert <b>term</b> to *term* for terminal display.
+                let display = html.replace("<b>", "*").replace("</b>", "*");
+                for line in display.lines() {
+                    writeln!(out, "  {}", line)?;
+                }
             }
+            writeln!(out)?;
         }
-        println!();
-    }
-
-    Ok(())
+        Ok(())
+    })
 }
 
 fn run_regex(
@@ -356,45 +404,50 @@ fn run_regex(
     no_superseded: bool,
 ) -> Result<()> {
     let vault_root = &cfg.vault_root;
-    let re = Regex::new(query)?;
+    let re = compile_search_regex(query)?;
 
     let root = vault::resolve_root(vault_root, subfolder);
 
     let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
 
-    for file in &files {
-        // Regex mode has no scores, so it only filters and labels — the bottom
-        // tier (superseded:true / checkpoint / epistemic_status:superseded).
-        let is_sup = frontmatter::epistemic_tier(&file.frontmatter).is_bottom();
+    with_stdout(|out| {
+        for file in &files {
+            // Regex mode has no scores, so the shared downrank pass is used only for
+            // its filter decision and bottom-tier label (the placeholder score is
+            // discarded).
+            let Some((_, is_sup)) = downranked(
+                0.0,
+                frontmatter::epistemic_tier(&file.frontmatter),
+                no_superseded,
+            ) else {
+                continue;
+            };
 
-        if no_superseded && is_sup {
-            continue;
-        }
+            let lines: Vec<&str> = file.content.lines().collect();
+            let mut printed_header = false;
 
-        let lines: Vec<&str> = file.content.lines().collect();
-        let mut printed_header = false;
+            for (i, line) in lines.iter().enumerate() {
+                if re.is_match(line) {
+                    if !printed_header {
+                        let rel = file.relative_path(vault_root);
+                        let sup_label = if is_sup { " [superseded]" } else { "" };
+                        writeln!(out, "{}{}:", rel, sup_label)?;
+                        printed_header = true;
+                    }
 
-        for (i, line) in lines.iter().enumerate() {
-            if re.is_match(line) {
-                if !printed_header {
-                    let rel = file.relative_path(vault_root);
-                    let sup_label = if is_sup { " [superseded]" } else { "" };
-                    println!("{}{}:", rel, sup_label);
-                    printed_header = true;
+                    let start = i.saturating_sub(context);
+                    let end = (i + context + 1).min(lines.len());
+
+                    for (j, line) in lines.iter().enumerate().take(end).skip(start) {
+                        let marker = if j == i { ">" } else { " " };
+                        writeln!(out, "{} {:4}: {}", marker, j + 1, line)?;
+                    }
+                    writeln!(out)?;
                 }
-
-                let start = i.saturating_sub(context);
-                let end = (i + context + 1).min(lines.len());
-
-                for (j, line) in lines.iter().enumerate().take(end).skip(start) {
-                    let marker = if j == i { ">" } else { " " };
-                    println!("{} {:4}: {}", marker, j + 1, line);
-                }
-                println!();
             }
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -407,6 +460,7 @@ mod tests {
             vault_root,
             projects_path: None,
             project_path: None,
+            log_project_path: crate::config::DEFAULT_LOG_PROJECT_PATH.to_string(),
             lint: None,
             consult: None,
             ignore,
@@ -663,5 +717,54 @@ mod tests {
         // Also confirm the full run() path succeeds (output goes to stdout, not captured).
         let result = run("quasar", &cfg, 0, None, true, 10, TextJson::Text, &types_filter, false);
         assert!(result.is_ok(), "run() with --regex --types must not error: {:?}", result.err());
+    }
+
+    use frontmatter::EpistemicTier;
+
+    #[test]
+    fn downranked_grades_each_tier() {
+        // Certified is neutral; provisional and superseded scale by the tier
+        // multiplier (0.6 / 0.3). None of these is bottom-filtered here.
+        let (cert, cert_sup) = downranked(10.0, EpistemicTier::Certified, false).unwrap();
+        assert_eq!(cert, 10.0);
+        assert!(!cert_sup);
+
+        let (prov, prov_sup) = downranked(10.0, EpistemicTier::Provisional, false).unwrap();
+        assert!((prov - 6.0).abs() < 1e-5, "provisional score: {prov}");
+        assert!(!prov_sup);
+
+        let (sup, sup_flag) = downranked(10.0, EpistemicTier::Superseded, false).unwrap();
+        assert!((sup - 3.0).abs() < 1e-5, "superseded score: {sup}");
+        assert!(sup_flag, "bottom tier must carry the superseded label");
+    }
+
+    #[test]
+    fn downranked_filters_bottom_tier_under_no_superseded() {
+        // With no_superseded, only the bottom tier is dropped; non-bottom tiers pass.
+        assert!(downranked(10.0, EpistemicTier::Superseded, true).is_none());
+
+        let (cert, _) = downranked(10.0, EpistemicTier::Certified, true).unwrap();
+        assert_eq!(cert, 10.0);
+        let (prov, _) = downranked(10.0, EpistemicTier::Provisional, true).unwrap();
+        assert!((prov - 6.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn compile_search_regex_accepts_ordinary_pattern() {
+        let re = compile_search_regex("quasar|pulsar").unwrap();
+        assert!(re.is_match("a quasar shines"));
+        assert!(!re.is_match("a comet streaks"));
+    }
+
+    #[test]
+    fn compile_search_regex_rejects_oversized_pattern() {
+        // Nested bounded repetitions blow the compiled program past REGEX_SIZE_LIMIT;
+        // the user pattern must fail fast with a clean diagnostic rather than
+        // exhausting memory at compile time.
+        let err = compile_search_regex("a{1000}{1000}").unwrap_err();
+        assert!(
+            err.to_string().contains("invalid search pattern"),
+            "expected a clean diagnostic, got: {err}"
+        );
     }
 }

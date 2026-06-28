@@ -79,10 +79,24 @@ pub fn strip_md(s: &str) -> &str {
 pub fn resolve_paths(slug: &str, cfg: &crate::config::ResolvedConfig) -> anyhow::Result<Vec<String>> {
     let vault_root = &cfg.vault_root;
     let files = crate::vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
+    Ok(resolve_paths_in(&files, vault_root, slug))
+}
+
+/// Pure core of [`resolve_paths`]: match a slug against an already-scanned set of
+/// vault files. No disk IO — the caller owns the single vault walk, so this is
+/// directly unit-testable with constructed [`VaultFile`]s.
+///
+/// Both the needle and each candidate's relative path run through [`path`], so
+/// equality and the segment-suffix test share one namespace (see [`resolve_paths`]).
+pub fn resolve_paths_in(
+    files: &[crate::vault::VaultFile],
+    vault_root: &std::path::Path,
+    slug: &str,
+) -> Vec<String> {
     let needle = path(slug);
     let mut matches = Vec::new();
 
-    for file in &files {
+    for file in files {
         let rel = file.relative_path(vault_root);
         let slugified = path(strip_md(&rel));
 
@@ -95,7 +109,7 @@ pub fn resolve_paths(slug: &str, cfg: &crate::config::ResolvedConfig) -> anyhow:
             matches.push(rel);
         }
     }
-    Ok(matches)
+    matches
 }
 
 #[cfg(test)]
@@ -220,5 +234,50 @@ mod tests {
         // 'Foo: Bar/nix' and the path both reduce to 'foo-bar/nix' and match.
         assert!(suffix_match("Foo: Bar/nix", "nix"));
         assert!(suffix_match("Foo: Bar/nix", "Foo: Bar/nix"));
+    }
+
+    // --- pure resolver: resolve_paths_in, no disk scan ---
+
+    fn vault_file(rel: &str) -> crate::vault::VaultFile {
+        crate::vault::VaultFile {
+            path: std::path::PathBuf::from("/vault").join(rel),
+            name: strip_md(rel).rsplit('/').next().unwrap_or(rel).to_string(),
+            frontmatter: std::collections::BTreeMap::new(),
+            frontmatter_error: None,
+            content: String::new(),
+            ctime: None,
+        }
+    }
+
+    #[test]
+    fn resolve_in_exact_match() {
+        let root = std::path::Path::new("/vault");
+        let files = [
+            vault_file("41 projects/nix.md"),
+            vault_file("book of phoenix.md"),
+        ];
+        assert_eq!(
+            resolve_paths_in(&files, root, "41 projects/nix"),
+            vec!["41 projects/nix.md".to_string()]
+        );
+    }
+
+    #[test]
+    fn resolve_in_normalizes_slug_and_matches_segment_suffix() {
+        let root = std::path::Path::new("/vault");
+        let files = [vault_file("41 projects/nix.md")];
+        // Needle `Nix` normalizes to `nix` and matches the final path segment.
+        assert_eq!(
+            resolve_paths_in(&files, root, "Nix"),
+            vec!["41 projects/nix.md".to_string()]
+        );
+    }
+
+    #[test]
+    fn resolve_in_no_match_returns_empty() {
+        let root = std::path::Path::new("/vault");
+        // `nix` must NOT match `book of phoenix` (suffix lacks a '/' boundary).
+        let files = [vault_file("book of phoenix.md")];
+        assert!(resolve_paths_in(&files, root, "nix").is_empty());
     }
 }

@@ -32,7 +32,7 @@ pub fn run(base_path: &Path, view_name: &str, cfg: &crate::config::ResolvedConfi
         &base_file.filters,
         &target_view.filters,
         vault_root,
-    );
+    )?;
 
     let result = view::apply(&target_view, &base_file, &mut filtered);
     print!("{}", result.render(&format));

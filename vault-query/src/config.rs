@@ -29,6 +29,12 @@ pub const DEFAULT_TITLE_BOOST: f32 = 1.0;
 /// Starting point for eval calibration. Shared by `ConsultConfig` and `search`.
 pub const DEFAULT_DESCRIPTION_BOOST: f32 = 1.5;
 
+/// Default project subdirectory (relative to `vault_root`) the generic `log`
+/// command writes weekly logs into. Config-driven via the root config's
+/// `log_project_path` key so the project name is not baked into shared code
+/// (§9 Q4). When the root config omits the key, this default is used.
+pub const DEFAULT_LOG_PROJECT_PATH: &str = "41 projects/block-buster";
+
 /// Configuration for the `consult` command (Decision 5).
 ///
 /// A missing or partial `[consult]` block in the root config is valid; the
@@ -146,6 +152,10 @@ pub struct ResolvedConfig {
     pub vault_root: PathBuf,
     pub projects_path: Option<String>,
     pub project_path: Option<PathBuf>,
+    /// Project subdirectory (relative to `vault_root`) the `log` command writes
+    /// weekly logs into. Defaults to [`DEFAULT_LOG_PROJECT_PATH`]; overridable
+    /// via the root config's `log_project_path` key.
+    pub log_project_path: String,
     pub lint: Option<LintConfig>,
     pub consult: Option<ConsultConfig>,
     pub ignore: VaultIgnore,
@@ -155,6 +165,8 @@ pub struct ResolvedConfig {
 struct RootConfig {
     vault_root: String,
     projects_path: String,
+    #[serde(default)]
+    log_project_path: Option<String>,
     #[serde(default)]
     lint: Option<LintConfig>,
     #[serde(default)]
@@ -179,9 +191,36 @@ pub fn resolve(
     vault_root_override: Option<&Path>,
     respect_user_patterns: bool,
 ) -> Result<ResolvedConfig> {
+    resolve_optional(
+        start_dir,
+        home_dir,
+        project_override,
+        vault_root_override,
+        respect_user_patterns,
+    )?
+    .context(
+        "no vault config found.\n\
+         Create ~/.config/vault/config.json with:\n  \
+         { \"vault_root\": \"/absolute/path/to/vault\", \"projects_path\": \"41 projects\" }",
+    )
+}
+
+/// Resolve config like [`resolve`], but distinguish an *absent* config from a
+/// *malformed* one: returns `Ok(None)` when no config layer supplies a vault
+/// root (nothing to resolve), and `Err` only when a config file that does exist
+/// fails to read or parse. Callers that can run without a vault (e.g. `read` of
+/// a bare path) use this to stop conflating "no config" with "broken config".
+pub fn resolve_optional(
+    start_dir: &Path,
+    home_dir: &Path,
+    project_override: Option<&str>,
+    vault_root_override: Option<&Path>,
+    respect_user_patterns: bool,
+) -> Result<Option<ResolvedConfig>> {
     let mut vault_root: Option<PathBuf> = None;
     let mut project_path: Option<PathBuf> = None;
     let mut projects_path: Option<String> = None;
+    let mut log_project_path: Option<String> = None;
     let mut lint_config: Option<LintConfig> = None;
     let mut consult_config: Option<ConsultConfig> = None;
 
@@ -216,6 +255,7 @@ pub fn resolve(
             vault_root = Some(PathBuf::from(&rc.vault_root));
         }
         projects_path = Some(rc.projects_path);
+        log_project_path = rc.log_project_path;
         lint_config = rc.lint;
         consult_config = rc.consult;
     }
@@ -236,22 +276,25 @@ pub fn resolve(
         project_path = Some(vr.join(pp).join(name));
     }
 
-    let vault_root = vault_root.context(
-        "no vault config found.\n\
-         Create ~/.config/vault/config.json with:\n  \
-         { \"vault_root\": \"/absolute/path/to/vault\", \"projects_path\": \"41 projects\" }",
-    )?;
+    // No config layer supplied a vault root: the config is absent, not broken.
+    // Parse/read failures above already returned `Err`, so reaching here with a
+    // `None` means there was simply nothing to resolve.
+    let Some(vault_root) = vault_root else {
+        return Ok(None);
+    };
 
     let ignore = vault_ignore::load(&vault_root, respect_user_patterns)?;
 
-    Ok(ResolvedConfig {
+    Ok(Some(ResolvedConfig {
         vault_root,
         projects_path,
         project_path,
+        log_project_path: log_project_path
+            .unwrap_or_else(|| DEFAULT_LOG_PROJECT_PATH.to_string()),
         lint: lint_config,
         consult: consult_config,
         ignore,
-    })
+    }))
 }
 
 #[cfg(test)]
@@ -261,6 +304,37 @@ mod tests {
 
     fn fixtures_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/config")
+    }
+
+    #[test]
+    fn resolve_optional_absent_gives_none() {
+        // No project config on the walk-up path and no root config under home:
+        // the config is absent, so resolve_optional yields Ok(None) rather than
+        // an error.
+        let tmp = tempfile::tempdir().unwrap();
+        let result =
+            resolve_optional(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn resolve_absent_still_errors() {
+        // resolve() keeps the strict contract: an absent config is an error.
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).is_err());
+    }
+
+    #[test]
+    fn resolve_optional_malformed_config_errors() {
+        // A present-but-broken root config must surface as Err, not be conflated
+        // with absence (the §7 Read-path distinction).
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(cfg_dir.join("config.json"), "{ not valid json ").unwrap();
+
+        let result = resolve_optional(Path::new("/nonexistent"), tmp.path(), None, None, true);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -501,6 +575,44 @@ mod tests {
                 std::path::PathBuf::from(".vaultignore"),
             ]
         );
+    }
+
+    #[test]
+    fn log_project_path_defaults_when_key_absent() {
+        // No `log_project_path` key in the root config: resolve falls back to
+        // DEFAULT_LOG_PROJECT_PATH, preserving the historical hardcoded path.
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{"vault_root": "/tmp/test-vault", "projects_path": "41 projects"}"#,
+        )
+        .unwrap();
+
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
+        assert_eq!(config.log_project_path, DEFAULT_LOG_PROJECT_PATH);
+        assert_eq!(config.log_project_path, "41 projects/block-buster");
+    }
+
+    #[test]
+    fn log_project_path_override_from_root_config() {
+        // A `log_project_path` key in the root config overrides the default.
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg_dir = tmp.path().join(".config/vault");
+        std::fs::create_dir_all(&cfg_dir).unwrap();
+        std::fs::write(
+            cfg_dir.join("config.json"),
+            r#"{
+                "vault_root": "/tmp/test-vault",
+                "projects_path": "41 projects",
+                "log_project_path": "99 logs/weekly"
+            }"#,
+        )
+        .unwrap();
+
+        let config = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
+        assert_eq!(config.log_project_path, "99 logs/weekly");
     }
 
     #[test]

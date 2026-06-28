@@ -8,7 +8,7 @@ pub fn run(cfg: &ResolvedConfig, date_input: Option<&str>) -> Result<()> {
     let week = resolve_log_date(date_input.unwrap_or(""), today)?;
     let (week_start, week_end) = week_start_end(week);
 
-    let log_dir = cfg.vault_root.join("41 projects/block-buster");
+    let log_dir = cfg.vault_root.join(&cfg.log_project_path);
     let week_str = format_week(week);
     let log_file = log_dir.join(format!("{}.md", week_str.to_lowercase()));
 

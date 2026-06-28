@@ -242,22 +242,42 @@ fn resolve_config(cli: &Cli) -> Result<config::ResolvedConfig> {
     )
 }
 
+/// Resolve config but tolerate its absence: `Ok(None)` when no vault config is
+/// present, `Err` only when a present config fails to read or parse. Used by the
+/// `read` arm so a bare `read FILE` works outside a vault while a *broken* config
+/// still surfaces as an error instead of being silently treated as absent.
+fn resolve_config_optional(cli: &Cli) -> Result<Option<config::ResolvedConfig>> {
+    let home = dirs_home()?;
+    let cwd = std::env::current_dir()?;
+    config::resolve_optional(
+        &cwd,
+        &home,
+        cli.project.as_deref(),
+        cli.vault_root.as_deref(),
+        !cli.no_ignore,
+    )
+}
+
 fn dirs_home() -> Result<PathBuf> {
     std::env::var("HOME")
         .map(PathBuf::from)
         .map_err(|_| anyhow::anyhow!("HOME not set"))
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
+/// Run the parsed command and return its process exit code. The single
+/// `process::exit` lives in `main`; every command path here propagates errors
+/// with `?` and yields a code, so error and non-zero branches stay testable and
+/// Drop-based cleanup runs before the process tears down.
+fn dispatch(cli: &Cli) -> Result<i32> {
+    // Commands whose config resolution differs (or that need no config) stay
+    // explicit; everything else shares the one `resolve_config(cli)?` below.
     match &cli.command {
-        Commands::Query {
-            base_path,
-            view,
-            format,
-        } => {
-            let cfg = resolve_config(&cli)?;
-            commands::query::run(base_path, view, &cfg, *format)
+        Commands::Properties { file, path, format } => {
+            return commands::properties::run(file, path.as_deref(), *format);
+        }
+        Commands::Links { file } => {
+            commands::links::run(file)?;
+            return Ok(0);
         }
         Commands::Read {
             file,
@@ -269,8 +289,9 @@ fn main() -> Result<()> {
         } => {
             // Resolve config so vault-relative pointer paths work from any cwd;
             // fall back to None (cwd-only) when no vault config is present so a
-            // bare `read FILE` still works outside a vault.
-            let vault_root = resolve_config(&cli).ok().map(|c| c.vault_root);
+            // bare `read FILE` still works outside a vault. A present-but-broken
+            // config surfaces as an error rather than silently degrading.
+            let vault_root = resolve_config_optional(cli)?.map(|c| c.vault_root);
             commands::read::run(
                 file,
                 vault_root.as_deref(),
@@ -279,28 +300,32 @@ fn main() -> Result<()> {
                 *full,
                 *threshold,
                 *format,
-            )
+            )?;
+            return Ok(0);
         }
-        Commands::Properties { file, path, format } => {
-            commands::properties::run(file, path.as_deref(), *format)
+        _ => {}
+    }
+
+    // All remaining commands share identical vault-config resolution.
+    let cfg = resolve_config(cli)?;
+    let code = match &cli.command {
+        Commands::Query {
+            base_path,
+            view,
+            format,
+        } => {
+            commands::query::run(base_path, view, &cfg, *format)?;
+            0
         }
         Commands::Tags { sort } => {
-            let cfg = resolve_config(&cli)?;
-            commands::tags::run(&cfg, sort)
+            commands::tags::run(&cfg, sort)?;
+            0
         }
-        Commands::Links { file } => commands::links::run(file),
         Commands::Backlinks { file, no_superseded } => {
-            let cfg = resolve_config(&cli)?;
-            commands::backlinks::run(file, &cfg, *no_superseded)
+            commands::backlinks::run(file, &cfg, *no_superseded)?;
+            0
         }
-        Commands::Lint { format, rule } => {
-            let cfg = resolve_config(&cli)?;
-            let exit = commands::lint::run(&cfg, *format, rule)?;
-            if exit != 0 {
-                std::process::exit(exit);
-            }
-            Ok(())
-        }
+        Commands::Lint { format, rule } => commands::lint::run(&cfg, *format, rule)?,
         Commands::Search {
             query,
             context,
@@ -311,72 +336,64 @@ fn main() -> Result<()> {
             types,
             no_superseded,
         } => {
-            let cfg = resolve_config(&cli)?;
-            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format, types, *no_superseded)
+            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format, types, *no_superseded)?;
+            0
         }
-        Commands::Resolve { slug } => {
-            let cfg = resolve_config(&cli)?;
-            let found = commands::resolve::run(slug, &cfg)?;
-            if !found {
-                std::process::exit(1);
-            }
-            Ok(())
-        }
+        Commands::Resolve { slug } => commands::resolve::run(slug, &cfg)?,
         Commands::List { folder, fields, no_superseded } => {
-            let cfg = resolve_config(&cli)?;
-            commands::list::run(&cfg, folder, fields, *no_superseded)
+            commands::list::run(&cfg, folder, fields, *no_superseded)?;
+            0
         }
         Commands::Files {
             folder,
             count,
             tag,
         } => {
-            let cfg = resolve_config(&cli)?;
-            commands::files::run(&cfg, folder.as_deref(), *count, tag.as_deref())
+            commands::files::run(&cfg, folder.as_deref(), *count, tag.as_deref())?;
+            0
         }
         Commands::Config => {
-            let cfg = resolve_config(&cli)?;
-            commands::config_cmd::run(&cfg)
+            commands::config_cmd::run(&cfg)?;
+            0
         }
         Commands::Context => {
-            let cfg = resolve_config(&cli)?;
-            commands::context::run(&cfg)
+            commands::context::run(&cfg)?;
+            0
         }
         Commands::Tracks { view, format } => {
-            let cfg = resolve_config(&cli)?;
-            commands::tracks::run(&cfg, view, *format)
+            commands::tracks::run(&cfg, view, *format)?;
+            0
         }
         Commands::TracksInit => {
-            let cfg = resolve_config(&cli)?;
-            commands::tracks::init(&cfg)
+            commands::tracks::init(&cfg)?;
+            0
         }
         Commands::Get { fragment, no_superseded } => {
-            let cfg = resolve_config(&cli)?;
-            commands::get::run(fragment, &cfg, *no_superseded)
+            commands::get::run(fragment, &cfg, *no_superseded)?
         }
         Commands::Cards => {
-            let cfg = resolve_config(&cli)?;
-            commands::list::run_by_type(&cfg, "card", &["reference".to_string()], false)
+            commands::list::run_by_type(&cfg, "card", &["reference".to_string()], false)?;
+            0
         }
         Commands::Notes => {
-            let cfg = resolve_config(&cli)?;
-            commands::list::run_by_type(&cfg, "note", &[], false)
+            commands::list::run_by_type(&cfg, "note", &[], false)?;
+            0
         }
         Commands::Experiments => {
-            let cfg = resolve_config(&cli)?;
-            commands::list::run_by_type(&cfg, "experiment", &[], false)
+            commands::list::run_by_type(&cfg, "experiment", &[], false)?;
+            0
         }
         Commands::Projects { view } => {
-            let cfg = resolve_config(&cli)?;
-            commands::projects::run(&cfg, view)
+            commands::projects::run(&cfg, view)?;
+            0
         }
         Commands::Log { date } => {
-            let cfg = resolve_config(&cli)?;
-            commands::log::run(&cfg, date.as_deref())
+            commands::log::run(&cfg, date.as_deref())?;
+            0
         }
         Commands::Xp { year } => {
-            let cfg = resolve_config(&cli)?;
-            commands::xp::run(&cfg, *year)
+            commands::xp::run(&cfg, *year)?;
+            0
         }
         Commands::Consult {
             task,
@@ -387,23 +404,34 @@ fn main() -> Result<()> {
             no_log,
             log_path,
             include_superseded,
-        } => {
-            let cfg = resolve_config(&cli)?;
-            let exit_code = commands::consult_cmd::run(
-                task,
-                &cfg,
-                types,
-                *ambient,
-                *format,
-                *threshold,
-                *no_log,
-                log_path.as_deref(),
-                *include_superseded,
-            )?;
-            if exit_code != 0 {
-                std::process::exit(exit_code);
-            }
-            Ok(())
+        } => commands::consult_cmd::run(
+            task,
+            &cfg,
+            types,
+            *ambient,
+            *format,
+            *threshold,
+            *no_log,
+            log_path.as_deref(),
+            *include_superseded,
+        )?,
+        // Handled by the early-return match above.
+        Commands::Properties { .. } | Commands::Links { .. } | Commands::Read { .. } => {
+            unreachable!("config-free commands are dispatched before config resolution")
         }
-    }
+    };
+    Ok(code)
+}
+
+fn main() {
+    let cli = Cli::parse();
+    let code = match dispatch(&cli) {
+        Ok(code) => code,
+        Err(e) => {
+            // Match anyhow's default Termination output (full cause chain via Debug).
+            eprintln!("Error: {e:?}");
+            1
+        }
+    };
+    std::process::exit(code);
 }

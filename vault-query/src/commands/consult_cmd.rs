@@ -191,6 +191,10 @@ struct LogRecord<'a> {
     max_top3_coverage: Option<f32>,
     elbow_ratio: Option<f32>,
     num_returned: usize,
+    /// Parser error message when the sanitized query failed to parse; `null`
+    /// otherwise. Lets log analysis tell a parse-failure abstain apart from a
+    /// genuine no-results abstain (§4.2).
+    query_error: Option<&'a str>,
     // Selection summary
     num_selected: usize,
     total_tokens: usize,
@@ -235,50 +239,49 @@ fn append_log(
         .unwrap_or_default()
         .as_millis();
 
+    // Shared base: the timing, query, mode/format, and gate diagnostics are
+    // identical across outcomes. Each arm overrides only the outcome-specific
+    // fields via struct-update so the common shape is written once.
+    let base = LogRecord {
+        timestamp_ms,
+        duration_ms,
+        query,
+        mode: mode_str,
+        format: format_str,
+        outcome: "",
+        reason: None,
+        top_score: diag.top_score,
+        median_score: diag.median_score,
+        coverage: diag.coverage,
+        max_top3_coverage: diag.max_top3_coverage,
+        elbow_ratio: diag.elbow_ratio,
+        num_returned: diag.num_returned,
+        query_error: diag.query_error.as_deref(),
+        num_selected: 0,
+        total_tokens: 0,
+        selected_paths: vec![],
+        num_pointers: 0,
+        pointer_paths: vec![],
+        near_miss_titles: vec![],
+        near_miss_scores: vec![],
+    };
+
     let record: LogRecord = match outcome {
         ConsultOutcome::Selected { docs, total_tokens, pointers, .. } => LogRecord {
-            timestamp_ms,
-            duration_ms,
-            query,
-            mode: mode_str,
-            format: format_str,
             outcome: "selected",
-            reason: None,
-            top_score: diag.top_score,
-            median_score: diag.median_score,
-            coverage: diag.coverage,
-            max_top3_coverage: diag.max_top3_coverage,
-            elbow_ratio: diag.elbow_ratio,
-            num_returned: diag.num_returned,
             num_selected: docs.len(),
             total_tokens: *total_tokens,
             selected_paths: docs.iter().map(|d| d.path.as_str()).collect(),
             num_pointers: pointers.len(),
             pointer_paths: pointers.iter().map(|p| p.path.as_str()).collect(),
-            near_miss_titles: vec![],
-            near_miss_scores: vec![],
+            ..base
         },
         ConsultOutcome::Abstain { near_misses, reason, .. } => LogRecord {
-            timestamp_ms,
-            duration_ms,
-            query,
-            mode: mode_str,
-            format: format_str,
             outcome: "abstain",
             reason: Some(reason.as_str()),
-            top_score: diag.top_score,
-            median_score: diag.median_score,
-            coverage: diag.coverage,
-            max_top3_coverage: diag.max_top3_coverage,
-            elbow_ratio: diag.elbow_ratio,
-            num_returned: diag.num_returned,
-            num_selected: 0,
-            total_tokens: 0,
-            selected_paths: vec![],
-            num_pointers: 0,
-            pointer_paths: vec![],
             near_miss_titles: near_misses.iter().map(|nm| nm.title.as_str()).collect(),
             near_miss_scores: near_misses.iter().map(|nm| nm.score).collect(),
+            ..base
         },
     };
 
