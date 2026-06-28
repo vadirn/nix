@@ -26,16 +26,10 @@ impl Rule for UntypedEntry {
         let mut findings = Vec::new();
 
         for file in ctx.files {
-            if frontmatter::is_template(&file.frontmatter) {
-                continue;
-            }
-            if frontmatter::is_superseded(&file.frontmatter) {
+            if crate::epistemic::is_lint_exempt(&file.frontmatter) {
                 continue;
             }
             let type_val = frontmatter::get_display(&file.frontmatter, "type");
-            if type_val == "checkpoint" {
-                continue;
-            }
             if type_val.is_empty() {
                 findings.push(Finding {
                     rule: self.name(),

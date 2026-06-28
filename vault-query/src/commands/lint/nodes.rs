@@ -29,7 +29,7 @@
 //! section headings (`## Glossary`, `## Workflow`) are emitted in English by BUILD
 //! regardless of the note's language, so the slug match is language-stable.
 
-use super::relations::heading_text;
+use crate::markdown::{fence_marker, heading_text};
 
 /// The local-node slug set of one file: Glossary term-slugs and Workflow step-slugs,
 /// each normalized by [`crate::slug::segment`]. These are the labels a bare local
@@ -70,24 +70,24 @@ pub fn parse_local_nodes(content: &str) -> LocalNodes {
     for raw in content.lines() {
         let trimmed = raw.trim_start();
 
-        // Skip fenced code blocks entirely.
-        if let Some(f) = fence {
-            if trimmed.starts_with(f) && trimmed.chars().take_while(|&c| c == f).count() >= 3 {
-                fence = None;
+        // Skip fenced code blocks entirely. A mismatched marker inside a fence
+        // is literal content, not a close (canonical `markdown` semantics).
+        if let Some(marker) = fence_marker(trimmed) {
+            match fence {
+                None => fence = Some(marker),
+                Some(open) if open == marker => fence = None,
+                Some(_) => {}
             }
             continue;
         }
-        if trimmed.starts_with("```") {
-            fence = Some('`');
-            continue;
-        }
-        if trimmed.starts_with("~~~") {
-            fence = Some('~');
+        if fence.is_some() {
             continue;
         }
 
         // A heading switches sections; reset the table latch on each entry.
-        if let Some(text) = heading_text(trimmed) {
+        // Detection runs against the raw line, so an indented heading is not a
+        // section boundary.
+        if let Some(text) = heading_text(raw) {
             section = match crate::slug::segment(text).as_str() {
                 "glossary" => Section::Glossary,
                 "workflow" => Section::Workflow,
@@ -263,6 +263,25 @@ mod tests {
         assert!(nodes.contains("aim-point"));
         assert!(nodes.contains("range-the-target"));
         assert!(!nodes.contains("windage"));
+    }
+
+    #[test]
+    fn indented_glossary_heading_does_not_open_section() {
+        // Semantics change (Step 1): the shared `markdown` heading rule runs
+        // against the raw line, so an indented `## Glossary` is no longer a
+        // section boundary and its rows are not collected. The pre-Step-1 copy
+        // trimmed first and would have collected `concept`.
+        let md = "  ## Glossary\n\n| Term | Def |\n| ---- | --- |\n| Concept | x |\n";
+        let nodes = parse_local_nodes(md);
+        assert!(nodes.terms.is_empty());
+    }
+
+    #[test]
+    fn tab_after_hashes_opens_glossary() {
+        // A tab after the hashes is a valid separator under the canonical rule.
+        let md = "##\tGlossary\n\n| Term | Def |\n| ---- | --- |\n| Concept | x |\n";
+        let nodes = parse_local_nodes(md);
+        assert_eq!(nodes.terms, vec!["concept"]);
     }
 
     #[test]

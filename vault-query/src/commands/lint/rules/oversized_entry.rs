@@ -31,12 +31,7 @@ impl Rule for OversizedEntry {
         let mut findings = Vec::new();
 
         for file in ctx.files {
-            if frontmatter::is_template(&file.frontmatter) {
-                continue;
-            }
-            if frontmatter::is_superseded(&file.frontmatter)
-                || frontmatter::get_display(&file.frontmatter, "type").as_str() == "checkpoint"
-            {
+            if crate::epistemic::is_lint_exempt(&file.frontmatter) {
                 continue;
             }
 

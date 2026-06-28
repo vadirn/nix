@@ -3,12 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{anyhow, bail, Result};
 
 use super::rule::Severity;
-
-#[derive(Debug, Clone, Default, serde::Deserialize)]
-pub struct LintConfig {
-    #[serde(default)]
-    pub rules: BTreeMap<String, Severity>,
-}
+use crate::config::LintConfig;
 
 /// Merge root config and CLI overrides into a per-rule effective severity map.
 ///

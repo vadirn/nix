@@ -150,6 +150,15 @@ pub(crate) fn normalize(s: &str) -> String {
         .collect()
 }
 
+/// Canonical join key for the backlink index: the resolved note name
+/// ([`resolve_name`]) run through [`normalize`]. Both index construction and
+/// lookup MUST key through this one function so a wikilink target and the note
+/// it points at collapse to the same key regardless of folder prefix,
+/// `.md`/`#anchor` suffix, or NFKC/case differences.
+pub fn backlink_key(target: &str) -> String {
+    normalize(resolve_name(target))
+}
+
 /// Strip wikilink syntax from a string, keeping display text.
 pub fn strip(text: &str) -> String {
     WIKILINK_RE
@@ -184,7 +193,7 @@ pub fn build_backlink_index_with(
     for (file, links) in files.iter().zip(body_links) {
         // Wikilinks from the Markdown body.
         for link in links {
-            let target_name = resolve_name(&link.target).to_lowercase();
+            let target_name = backlink_key(&link.target);
             index
                 .entry(target_name)
                 .or_default()
@@ -193,7 +202,7 @@ pub fn build_backlink_index_with(
         // Wikilinks from every YAML frontmatter scalar value.
         for value in file.frontmatter.values() {
             walk_frontmatter_links(value, &mut |link| {
-                let target_name = resolve_name(&link.target).to_lowercase();
+                let target_name = backlink_key(&link.target);
                 index
                     .entry(target_name)
                     .or_default()

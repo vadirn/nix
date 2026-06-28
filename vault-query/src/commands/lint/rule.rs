@@ -1,13 +1,9 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Severity {
-    Off,
-    Warn,
-    Error,
-}
-
+// `Severity` now lives in `crate::config` (the foundation layer) to break the
+// `config`↔`lint` import cycle. Re-exported here so the rule files keep
+// addressing it as `crate::commands::lint::rule::Severity`.
+pub use crate::config::Severity;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Finding {

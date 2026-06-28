@@ -1,8 +1,12 @@
 pub mod base;
 pub mod commands;
 pub mod config;
+pub mod epistemic;
 pub mod frontmatter;
+pub mod index;
+pub mod markdown;
 pub mod output;
+pub mod section;
 pub mod slug;
 pub mod tokens;
 pub mod vault;

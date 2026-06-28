@@ -2,69 +2,171 @@ use anyhow::Result;
 use serde_yaml::Value;
 use std::collections::BTreeMap;
 
-/// Extract YAML frontmatter from markdown content.
-/// Returns None if no frontmatter delimiters found.
-pub fn parse(content: &str) -> Result<Option<BTreeMap<String, Value>>> {
-    let content = content.trim_start_matches('\u{feff}'); // strip BOM
-    let mut lines = content.lines();
-
-    match lines.next() {
-        Some(line) if line.trim() == "---" => {}
-        _ => return Ok(None),
-    }
-
-    let mut yaml_lines = Vec::new();
-    for line in lines {
-        if line.trim() == "---" {
-            let yaml = yaml_lines.join("\n");
-            let map: BTreeMap<String, Value> = serde_yaml::from_str(&yaml)?;
-            return Ok(Some(map));
-        }
-        yaml_lines.push(line);
-    }
-
-    Ok(None)
+/// The leading frontmatter block of a document, scanned once.
+///
+/// `frontmatter` is the sole owner of delimiter/BOM scanning: `parse`, `body`,
+/// `field_order`, and `body_start_line` all derive from one [`block`] pass
+/// rather than re-implementing the open/close `---` scan. A block opens when the
+/// first line (BOM-stripped, trimmed) is exactly `---` and closes at the first
+/// later line whose trim is `---`.
+struct Block<'a> {
+    /// BOM-stripped view of the original content. `body` slices against this.
+    stripped: &'a str,
+    /// Top-level key names between the delimiters in source order (or to EOF when
+    /// the block is unclosed). Empty when there is no opening delimiter.
+    fields: Vec<String>,
+    /// Inner YAML text (lines between the delimiters joined with `\n`), present
+    /// only when a closing delimiter was found.
+    yaml: Option<String>,
+    /// Byte offset into `stripped` of the newline terminating the closing
+    /// delimiter line (or `stripped.len()` at EOF); `None` when there is no
+    /// complete block. `body` returns the slice from here.
+    body_offset: Option<usize>,
+    /// 1-based line number of the first body line, or 1 when there is no
+    /// complete block.
+    body_line: usize,
 }
 
-/// Return the content body after frontmatter (stripping the YAML block).
-/// Accepts both LF and CRLF line endings.
-pub fn body(content: &str) -> &str {
-    let trimmed = content.trim_start_matches('\u{feff}');
-    if !trimmed.starts_with("---") {
-        return content;
-    }
-    let bytes = trimmed.as_bytes();
-
-    // Skip the opening "---" line up to and including its trailing newline.
-    let mut i = 3;
+/// Index of the next `\n` at or after `from`, or `bytes.len()` if none.
+fn next_newline(bytes: &[u8], from: usize) -> usize {
+    let mut i = from;
     while i < bytes.len() && bytes[i] != b'\n' {
         i += 1;
     }
-    if i == bytes.len() {
-        return content;
-    }
-    i += 1;
+    i
+}
 
-    // Scan subsequent lines for a closing "---" delimiter, mirroring `parse()`.
-    while i < bytes.len() {
-        let line_start = i;
-        while i < bytes.len() && bytes[i] != b'\n' {
-            i += 1;
-        }
-        let line_end = if i > line_start && bytes[i - 1] == b'\r' {
-            i - 1
-        } else {
-            i
-        };
-        if trimmed[line_start..line_end].trim() == "---" {
-            return if i < bytes.len() { &trimmed[i..] } else { "" };
-        }
-        if i == bytes.len() {
-            break;
-        }
-        i += 1;
+/// End of a line's content within `[start, nl)`, excluding a trailing `\r` so
+/// CRLF and LF endings compare equal.
+fn line_content_end(bytes: &[u8], start: usize, nl: usize) -> usize {
+    if nl > start && bytes[nl - 1] == b'\r' {
+        nl - 1
+    } else {
+        nl
     }
-    content
+}
+
+/// Top-level key names from the inner block lines, in source order. A key starts
+/// in column 0 (no leading whitespace), is non-empty, and precedes a `:`; blank
+/// and `#`-comment lines are skipped, as are indented (nested) lines.
+fn collect_fields(inner: &[&str]) -> Vec<String> {
+    let mut fields = Vec::new();
+    for line in inner {
+        if line.starts_with(|c: char| c.is_whitespace()) {
+            continue;
+        }
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(colon) = trimmed.find(':') {
+            let key = &trimmed[..colon];
+            if !key.is_empty() {
+                fields.push(key.to_string());
+            }
+        }
+    }
+    fields
+}
+
+/// Scan the leading frontmatter block once. BOM is stripped up front; the open
+/// and close `---` delimiters are matched by trimmed line equality, the same
+/// rule `parse` and the former `read` scanners used.
+fn block(content: &str) -> Block<'_> {
+    let stripped = content.trim_start_matches('\u{feff}');
+    let bytes = stripped.as_bytes();
+
+    let none = |stripped| Block {
+        stripped,
+        fields: Vec::new(),
+        yaml: None,
+        body_offset: None,
+        body_line: 1,
+    };
+
+    // Opening delimiter: the first line, trimmed, must be exactly "---".
+    let first_nl = next_newline(bytes, 0);
+    let first_line = &stripped[0..line_content_end(bytes, 0, first_nl)];
+    if first_line.trim() != "---" {
+        return none(stripped);
+    }
+    if first_nl == bytes.len() {
+        // Opening "---" with no trailing newline: open, but nothing follows.
+        return none(stripped);
+    }
+
+    let mut i = first_nl + 1; // start of the second line
+    let mut line_no = 1usize; // line 1 is the opening delimiter
+    let mut inner: Vec<&str> = Vec::new();
+
+    while i < bytes.len() {
+        line_no += 1;
+        let line_start = i;
+        let nl = next_newline(bytes, line_start);
+        let line = &stripped[line_start..line_content_end(bytes, line_start, nl)];
+        if line.trim() == "---" {
+            // Closing delimiter: body begins at this line's terminating newline.
+            return Block {
+                stripped,
+                fields: collect_fields(&inner),
+                yaml: Some(inner.join("\n")),
+                body_offset: Some(nl),
+                body_line: line_no + 1,
+            };
+        }
+        inner.push(line);
+        if nl == bytes.len() {
+            break; // last line, no trailing newline, no closing delimiter
+        }
+        i = nl + 1;
+    }
+
+    // No closing delimiter: `field_order` still reports the keys it scanned, but
+    // `parse`/`body`/`body_start_line` see no complete block.
+    Block {
+        fields: collect_fields(&inner),
+        ..none(stripped)
+    }
+}
+
+/// Extract YAML frontmatter from markdown content.
+/// Returns None if no frontmatter delimiters found.
+pub fn parse(content: &str) -> Result<Option<BTreeMap<String, Value>>> {
+    match block(content).yaml {
+        Some(yaml) => Ok(Some(serde_yaml::from_str(&yaml)?)),
+        None => Ok(None),
+    }
+}
+
+/// Return the content body after frontmatter (stripping the YAML block).
+/// Accepts both LF and CRLF line endings. The returned slice begins at the
+/// newline terminating the closing `---`, so it leads with that newline; when
+/// there is no complete block the original content is returned unchanged.
+pub fn body(content: &str) -> &str {
+    let b = block(content);
+    match b.body_offset {
+        Some(off) => &b.stripped[off..],
+        None => content,
+    }
+}
+
+/// Top-level frontmatter key names in their on-disk order.
+///
+/// `parse` returns a BTreeMap, losing source order; this scans the raw block for
+/// top-level keys so a caller (e.g. `read`'s overview `fields:` line) reflects
+/// the file rather than an alphabetization. Empty when there is no frontmatter
+/// block. Indented lines (nested map entries, list items), blank lines, and
+/// `#`-comment lines are skipped.
+pub fn field_order(content: &str) -> Vec<String> {
+    block(content).fields
+}
+
+/// 1-based line number where the body begins (the line after the closing `---`).
+/// Returns 1 when there is no complete frontmatter block. A leading BOM is
+/// stripped, so a BOM-prefixed `---` still opens the block without shifting the
+/// returned line number.
+pub fn body_start_line(content: &str) -> usize {
+    block(content).body_line
 }
 
 /// Get a value from frontmatter by key, returning a display string.
@@ -153,62 +255,10 @@ pub fn is_superseded(fm: &BTreeMap<String, Value>) -> bool {
     get_bool(fm, "superseded") == Some(true)
 }
 
-/// Machine-legible per-node trust level (Decision 18). Retrieval ranks entries
-/// by tier so unverified content cannot be served as ground (Decision 7). Ordered
-/// worst-to-best; `multiplier()` gives the post-retrieval BM25 score factor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EpistemicTier {
-    /// Currency lapsed: legacy `superseded: true`, `type: checkpoint`, or an
-    /// explicit `epistemic_status: superseded`. Excluded from consult by default;
-    /// labeled and heavily downranked in search.
-    Superseded,
-    /// Filed but not yet curated (e.g. agent-distilled output, D27). Real ground
-    /// for a thin query, so downranked rather than excluded.
-    Provisional,
-    /// Curated / human-gated, and the trusted default for the ~955 existing notes
-    /// that carry no `epistemic_status` key — an absent key MUST resolve here so
-    /// the curated vault is not mass-downranked.
-    Certified,
-}
-
-impl EpistemicTier {
-    /// Post-retrieval score multiplier. Certified is neutral (1.0); the
-    /// superseded factor matches the historical binary downrank (Decision 7).
-    /// Both non-neutral values are uncalibrated — revisit with real data.
-    pub fn multiplier(self) -> f32 {
-        match self {
-            EpistemicTier::Certified => 1.0,
-            EpistemicTier::Provisional => 0.6,
-            EpistemicTier::Superseded => 0.3,
-        }
-    }
-
-    /// Whether this is the bottom tier: excluded from consult by default,
-    /// dropped by search `--no-superseded`, and carried as the `superseded`
-    /// output label. The single definition of "which tiers are retired", so
-    /// call sites classify by intent rather than comparing to a variant.
-    pub fn is_bottom(self) -> bool {
-        self == EpistemicTier::Superseded
-    }
-}
-
-/// Resolve a node's trust tier from frontmatter. The legacy `superseded: true`
-/// flag and `type: checkpoint` collapse into `Superseded` so the existing
-/// downrank is subsumed, not double-counted; an explicit `epistemic_status`
-/// value otherwise wins. An absent or unrecognized key resolves to `Certified`
-/// (the trusted default), keeping the unkeyed curated vault at full rank.
-pub fn epistemic_tier(fm: &BTreeMap<String, Value>) -> EpistemicTier {
-    // Legacy bottom-tier signals fold in first: a checkpoint or superseded-flagged
-    // entry is bottom-tier regardless of any `epistemic_status` value.
-    if is_superseded(fm) || fm.get("type").and_then(Value::as_str) == Some("checkpoint") {
-        return EpistemicTier::Superseded;
-    }
-    match fm.get("epistemic_status").and_then(Value::as_str) {
-        Some("superseded") => EpistemicTier::Superseded,
-        Some("provisional") => EpistemicTier::Provisional,
-        _ => EpistemicTier::Certified, // "certified", absent, or unrecognized
-    }
-}
+/// Trust policy lives in [`crate::epistemic`]. Re-exported here so existing
+/// `frontmatter::EpistemicTier` / `frontmatter::epistemic_tier` call sites keep
+/// compiling after the relocation.
+pub use crate::epistemic::{epistemic_tier, EpistemicTier};
 
 /// Parse a comma-separated type filter string into a `Vec<String>`.
 /// Trims whitespace and drops empty tokens.
@@ -320,6 +370,48 @@ mod tests {
     }
 
     #[test]
+    fn field_order_follows_source() {
+        // Source order differs from alphabetical (type, created, aliases). Moved
+        // from read.rs when block scanning consolidated here.
+        let content = "---\ntype: note\ncreated: 2026-01-01\naliases:\n  - alt\n---\n\nbody\n";
+        assert_eq!(
+            field_order(content),
+            vec!["type".to_string(), "created".to_string(), "aliases".to_string()]
+        );
+    }
+
+    #[test]
+    fn field_order_empty_without_block() {
+        assert!(field_order("# Heading\n\nbody\n").is_empty());
+    }
+
+    #[test]
+    fn field_order_collects_through_missing_close() {
+        // Without a closing delimiter there is no complete block, yet the field
+        // scan still reports the top-level keys it saw (preserved behavior).
+        assert_eq!(field_order("---\nfoo: 1\nbar: 2\n"), vec!["foo".to_string(), "bar".to_string()]);
+    }
+
+    #[test]
+    fn body_start_line_after_closing_delimiter() {
+        // Opening `---` line 1, key line 2, closing `---` line 3 → body line 4.
+        assert_eq!(body_start_line("---\nfoo: 1\n---\nbody\n"), 4);
+    }
+
+    #[test]
+    fn body_start_line_bom_does_not_shift() {
+        // A leading BOM does not add a line, so the body still begins at line 4.
+        assert_eq!(body_start_line("\u{feff}---\nfoo: 1\n---\nbody\n"), 4);
+    }
+
+    #[test]
+    fn body_start_line_one_without_block() {
+        assert_eq!(body_start_line("# Heading\n\nbody\n"), 1);
+        // Open but never closed: whole file is body, line 1.
+        assert_eq!(body_start_line("---\nfoo: 1\nno close\n"), 1);
+    }
+
+    #[test]
     fn matches_type_empty_allowed_matches_anything() {
         assert!(matches_type("card", &[]), "non-empty type with empty allowed should match");
         assert!(matches_type("", &[]), "empty type with empty allowed should match");
@@ -331,51 +423,6 @@ mod tests {
         assert!(matches_type("card", &allowed), "exact match should return true");
         assert!(!matches_type("note", &allowed), "non-matching type should return false");
         assert!(!matches_type("", &allowed), "empty type with non-empty allowed should return false");
-    }
-
-    #[test]
-    fn epistemic_tier_absent_key_is_certified() {
-        // The ~955 existing notes carry no epistemic_status key; absent MUST be
-        // the trusted default (multiplier 1.0) so they are never mass-downranked.
-        let fm = parse("---\ntype: card\n---\n").unwrap().unwrap();
-        assert_eq!(epistemic_tier(&fm), EpistemicTier::Certified);
-        assert_eq!(epistemic_tier(&fm).multiplier(), 1.0);
-    }
-
-    #[test]
-    fn epistemic_tier_reads_explicit_status() {
-        let prov = parse("---\nepistemic_status: provisional\n---\n").unwrap().unwrap();
-        assert_eq!(epistemic_tier(&prov), EpistemicTier::Provisional);
-        let cert = parse("---\nepistemic_status: certified\n---\n").unwrap().unwrap();
-        assert_eq!(epistemic_tier(&cert), EpistemicTier::Certified);
-        let sup = parse("---\nepistemic_status: superseded\n---\n").unwrap().unwrap();
-        assert_eq!(epistemic_tier(&sup), EpistemicTier::Superseded);
-    }
-
-    #[test]
-    fn epistemic_tier_folds_legacy_bottom_signals() {
-        // superseded: true and type: checkpoint collapse into the bottom tier,
-        // subsuming the historical binary downrank without double-counting.
-        let flag = parse("---\nsuperseded: true\n---\n").unwrap().unwrap();
-        assert_eq!(epistemic_tier(&flag), EpistemicTier::Superseded);
-        let chk = parse("---\ntype: checkpoint\n---\n").unwrap().unwrap();
-        assert_eq!(epistemic_tier(&chk), EpistemicTier::Superseded);
-        // A legacy flag overrides a stray non-bottom epistemic_status value.
-        let mixed = parse("---\nsuperseded: true\nepistemic_status: certified\n---\n")
-            .unwrap()
-            .unwrap();
-        assert_eq!(epistemic_tier(&mixed), EpistemicTier::Superseded);
-    }
-
-    #[test]
-    fn epistemic_tier_multiplier_ordering() {
-        // certified > provisional > superseded — the load-bearing rank order.
-        assert!(
-            EpistemicTier::Certified.multiplier() > EpistemicTier::Provisional.multiplier()
-        );
-        assert!(
-            EpistemicTier::Provisional.multiplier() > EpistemicTier::Superseded.multiplier()
-        );
     }
 
     #[test]

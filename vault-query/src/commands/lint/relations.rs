@@ -85,24 +85,23 @@ pub fn parse_relations(content: &str) -> Vec<RelationEdge> {
         let line_no = idx + 1;
         let trimmed = raw.trim_start();
 
-        // Skip fenced code blocks entirely.
-        if let Some(f) = fence {
-            if trimmed.starts_with(f) && trimmed.chars().take_while(|&c| c == f).count() >= 3 {
-                fence = None;
+        // Skip fenced code blocks entirely. A mismatched marker inside a fence
+        // is literal content, not a close (canonical `markdown` semantics).
+        if let Some(marker) = crate::markdown::fence_marker(trimmed) {
+            match fence {
+                None => fence = Some(marker),
+                Some(open) if open == marker => fence = None,
+                Some(_) => {}
             }
             continue;
         }
-        if trimmed.starts_with("```") {
-            fence = Some('`');
-            continue;
-        }
-        if trimmed.starts_with("~~~") {
-            fence = Some('~');
+        if fence.is_some() {
             continue;
         }
 
-        // A heading toggles section membership.
-        if let Some(text) = heading_text(trimmed) {
+        // A heading toggles section membership. Detection runs against the raw
+        // line, so an indented heading is not a section boundary.
+        if let Some(text) = crate::markdown::heading_text(raw) {
             in_relations = crate::slug::segment(text) == "relations";
             continue;
         }
@@ -122,26 +121,6 @@ pub fn parse_relations(content: &str) -> Vec<RelationEdge> {
     }
 
     edges
-}
-
-/// Return the text of an ATX heading line (`#{1,6} text`), or `None`.
-///
-/// Shared with [`super::nodes`], which runs the same fence/heading scanner to find
-/// its `## Glossary` / `## Workflow` sections.
-pub(crate) fn heading_text(trimmed: &str) -> Option<&str> {
-    if !trimmed.starts_with('#') {
-        return None;
-    }
-    let hashes = trimmed.chars().take_while(|&c| c == '#').count();
-    if hashes == 0 || hashes > 6 {
-        return None;
-    }
-    let after = &trimmed[hashes..];
-    if !after.starts_with(' ') {
-        return None;
-    }
-    let text = after.trim();
-    if text.is_empty() { None } else { Some(text) }
 }
 
 /// Parse one edge list-item body (the text after the `- `).
@@ -318,5 +297,28 @@ mod tests {
         let md = "## Relations\n\n- a contrast-to:: [[real-target|Display]]\n";
         let edges = parse_relations(md);
         assert_eq!(edges[0].endpoint, Endpoint::File("real-target".into()));
+    }
+
+    #[test]
+    fn indented_heading_does_not_open_section() {
+        // Semantics change (Step 1): this scanner now shares `markdown`'s canonical
+        // heading rule, which runs against the raw line. An indented `## Relations`
+        // is therefore NOT a section boundary, so the list item below it is never
+        // collected. Before the shared scanner this copy trimmed first and the
+        // indented heading opened the section (yielding one edge).
+        let md = "  ## Relations\n\n- a subsumes:: b\n";
+        let edges = parse_relations(md);
+        assert!(edges.is_empty());
+    }
+
+    #[test]
+    fn tab_after_hashes_opens_section() {
+        // Same semantics change: a tab (not just a space) after the hashes is a
+        // valid heading separator under the canonical rule, so `##\tRelations`
+        // opens the section. The old space-only copy ignored it.
+        let md = "##\tRelations\n\n- a subsumes:: b\n";
+        let edges = parse_relations(md);
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].rel, "subsumes");
     }
 }
