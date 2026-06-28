@@ -558,8 +558,7 @@ pub fn run_consult(
             let file_type = frontmatter::get_display(&f.frontmatter, "type");
             // Bottom tier (superseded:true / checkpoint / epistemic_status:superseded)
             // is excluded by default; one tier check subsumes both legacy signals.
-            let is_bottom = frontmatter::epistemic_tier(&f.frontmatter)
-                == frontmatter::EpistemicTier::Superseded;
+            let is_bottom = frontmatter::epistemic_tier(&f.frontmatter).is_bottom();
             frontmatter::matches_type(&file_type, scope_types)
                 && !frontmatter::is_template(&f.frontmatter)
                 && (include_superseded || !is_bottom)
@@ -778,8 +777,7 @@ pub fn run_consult(
                 let v = vf.get_property("type");
                 if v.is_empty() { None } else { Some(v) }
             };
-            let sup = frontmatter::epistemic_tier(&vf.frontmatter)
-                == frontmatter::EpistemicTier::Superseded;
+            let sup = frontmatter::epistemic_tier(&vf.frontmatter).is_bottom();
             (t, wikilink::collect_all_link_targets(vf), sup)
         } else {
             (None, vec![], false)

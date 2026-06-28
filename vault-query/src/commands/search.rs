@@ -221,7 +221,7 @@ pub fn collect_bm25_results_filtered(
 
         // Bottom tier (superseded:true / checkpoint / epistemic_status:superseded)
         // is what `--no-superseded` filters and the `superseded` label marks.
-        let is_sup = tier == frontmatter::EpistemicTier::Superseded;
+        let is_sup = tier.is_bottom();
         if no_superseded && is_sup {
             continue;
         }
@@ -312,7 +312,7 @@ fn run_bm25(
             .get(&path_val)
             .map(|vf| frontmatter::epistemic_tier(&vf.frontmatter))
             .unwrap_or(frontmatter::EpistemicTier::Certified);
-        let is_sup = tier == frontmatter::EpistemicTier::Superseded;
+        let is_sup = tier.is_bottom();
 
         if no_superseded && is_sup {
             continue;
@@ -361,8 +361,7 @@ fn run_regex(
     for file in &files {
         // Regex mode has no scores, so it only filters and labels — the bottom
         // tier (superseded:true / checkpoint / epistemic_status:superseded).
-        let is_sup =
-            frontmatter::epistemic_tier(&file.frontmatter) == frontmatter::EpistemicTier::Superseded;
+        let is_sup = frontmatter::epistemic_tier(&file.frontmatter).is_bottom();
 
         if no_superseded && is_sup {
             continue;

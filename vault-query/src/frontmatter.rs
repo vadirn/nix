@@ -182,6 +182,14 @@ impl EpistemicTier {
             EpistemicTier::Superseded => 0.3,
         }
     }
+
+    /// Whether this is the bottom tier: excluded from consult by default,
+    /// dropped by search `--no-superseded`, and carried as the `superseded`
+    /// output label. The single definition of "which tiers are retired", so
+    /// call sites classify by intent rather than comparing to a variant.
+    pub fn is_bottom(self) -> bool {
+        self == EpistemicTier::Superseded
+    }
 }
 
 /// Resolve a node's trust tier from frontmatter. The legacy `superseded: true`
@@ -192,7 +200,7 @@ impl EpistemicTier {
 pub fn epistemic_tier(fm: &BTreeMap<String, Value>) -> EpistemicTier {
     // Legacy bottom-tier signals fold in first: a checkpoint or superseded-flagged
     // entry is bottom-tier regardless of any `epistemic_status` value.
-    if is_superseded(fm) || get_display(fm, "type") == "checkpoint" {
+    if is_superseded(fm) || fm.get("type").and_then(Value::as_str) == Some("checkpoint") {
         return EpistemicTier::Superseded;
     }
     match fm.get("epistemic_status").and_then(Value::as_str) {
