@@ -1,5 +1,6 @@
 use crate::base::{BaseFile, SortDirection, ViewDef};
 use crate::frontmatter;
+use crate::output::Format;
 use crate::vault::VaultFile;
 use std::collections::{BTreeMap, HashSet};
 
@@ -8,6 +9,100 @@ pub struct ViewResult {
     pub headers: Vec<String>,
     pub groups: Vec<Group>,
     pub summaries: Option<Vec<String>>,
+}
+
+impl ViewResult {
+    /// Render this result in the requested output format.
+    pub fn render(&self, format: &Format) -> String {
+        match format {
+            Format::Table => render_table(self),
+            Format::Json => render_json(self),
+            Format::Tsv => render_tsv(self),
+        }
+    }
+}
+
+fn render_table(result: &ViewResult) -> String {
+    let mut output = String::new();
+
+    for group in &result.groups {
+        if let Some(ref label) = group.label {
+            if !output.is_empty() {
+                output.push('\n');
+            }
+            output.push_str(&format!("## {}\n\n", label));
+        }
+
+        // Markdown table
+        let headers = &result.headers;
+        output.push_str("| ");
+        output.push_str(&headers.join(" | "));
+        output.push_str(" |\n");
+
+        output.push('|');
+        for _ in headers {
+            output.push_str(" --- |");
+        }
+        output.push('\n');
+
+        for row in &group.rows {
+            let cells: Vec<String> = row
+                .iter()
+                .map(|c| c.replace('|', "\\|").replace('\n', " "))
+                .collect();
+            output.push_str("| ");
+            output.push_str(&cells.join(" | "));
+            output.push_str(" |\n");
+        }
+
+        if let Some(ref summaries) = result.summaries {
+            let cells: Vec<String> = summaries
+                .iter()
+                .map(|c| if c.is_empty() { String::new() } else { format!("**{}**", c) })
+                .collect();
+            output.push_str("| ");
+            output.push_str(&cells.join(" | "));
+            output.push_str(" |\n");
+        }
+
+        output.push('\n');
+    }
+
+    output
+}
+
+fn render_json(result: &ViewResult) -> String {
+    let mut records = Vec::new();
+    for group in &result.groups {
+        for row in &group.rows {
+            let mut map = serde_json::Map::new();
+            for (i, header) in result.headers.iter().enumerate() {
+                let value = row.get(i).cloned().unwrap_or_default();
+                map.insert(header.clone(), serde_json::Value::String(value));
+            }
+            if let Some(ref label) = group.label {
+                map.insert("_group".to_string(), serde_json::Value::String(label.clone()));
+            }
+            records.push(serde_json::Value::Object(map));
+        }
+    }
+    serde_json::to_string_pretty(&records).unwrap_or_default()
+}
+
+fn render_tsv(result: &ViewResult) -> String {
+    let mut output = String::new();
+    output.push_str(&result.headers.join("\t"));
+    output.push('\n');
+    for group in &result.groups {
+        for row in &group.rows {
+            // Sanitize tab/newline/CR so a multiline cell can't shift columns,
+            // matching render_table's collapse of in-cell newlines.
+            let cells: Vec<String> = row.iter().map(|c| c.replace(['\t', '\n', '\r'], " ")).collect();
+            output.push_str(&cells.join("\t"));
+            output.push('\n');
+        }
+    }
+    output
 }
 
 pub struct Group {
@@ -313,5 +408,53 @@ mod tests {
         // 2024-01-01 00:00 UTC = 1704067200
         let s = chrono_format(1704067200);
         assert_eq!(s, "2024-01-01 00:00");
+    }
+
+    #[test]
+    fn test_render_json() {
+        let result = ViewResult {
+            headers: vec!["Name".into(), "Status".into()],
+            groups: vec![Group {
+                label: None,
+                rows: vec![vec!["test".into(), "done".into()]],
+            }],
+            summaries: None,
+        };
+        let json = render_json(&result);
+        assert!(json.contains("\"Name\": \"test\""));
+        assert!(json.contains("\"Status\": \"done\""));
+    }
+
+    #[test]
+    fn test_render_tsv() {
+        let result = ViewResult {
+            headers: vec!["Name".into(), "Status".into()],
+            groups: vec![Group {
+                label: None,
+                rows: vec![
+                    vec!["a".into(), "done".into()],
+                    vec!["b".into(), "pending".into()],
+                ],
+            }],
+            summaries: None,
+        };
+        let tsv = render_tsv(&result);
+        assert_eq!(tsv, "Name\tStatus\na\tdone\nb\tpending\n");
+    }
+
+    #[test]
+    fn test_render_tsv_sanitizes_cell_separators() {
+        // A cell containing a tab, newline, or CR must not shift TSV columns;
+        // each is collapsed to a space, mirroring render_table's newline handling.
+        let result = ViewResult {
+            headers: vec!["Name".into(), "Note".into()],
+            groups: vec![Group {
+                label: None,
+                rows: vec![vec!["a".into(), "line1\nline2\tcol\rend".into()]],
+            }],
+            summaries: None,
+        };
+        let tsv = render_tsv(&result);
+        assert_eq!(tsv, "Name\tNote\na\tline1 line2 col end\n");
     }
 }

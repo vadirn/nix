@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::commands::lint::config::LintConfig;
 use crate::vault_ignore::{self, VaultIgnore};
 
 // ---------------------------------------------------------------------------
@@ -113,6 +113,28 @@ impl Default for ConsultConfig {
             log_path: None,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// LintConfig
+// ---------------------------------------------------------------------------
+
+/// Severity level for a lint rule. Lives here (not in `commands::lint`) so the
+/// foundation `config` layer owns the type and the `config`↔`lint` import cycle
+/// is broken; `lint::rule` re-exports it so the rule files address it unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Off,
+    Warn,
+    Error,
+}
+
+/// The `[lint]` block of the root config: per-rule severity overrides.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct LintConfig {
+    #[serde(default)]
+    pub rules: BTreeMap<String, Severity>,
 }
 
 // ---------------------------------------------------------------------------

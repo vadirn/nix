@@ -9,9 +9,13 @@ use tantivy::schema::*;
 use tantivy::SnippetGenerator;
 
 use crate::{
-    commands::consult::{build_index, sanitize_query},
     config::{DEFAULT_DESCRIPTION_BOOST, DEFAULT_TITLE_BOOST},
-    frontmatter, output::TextJson, vault, vault_ignore::VaultIgnore, wikilink,
+    frontmatter,
+    index::{build_index, sanitize_query},
+    output::TextJson,
+    vault,
+    vault_ignore::VaultIgnore,
+    wikilink,
 };
 
 /// One result in the JSON envelope.
@@ -79,7 +83,7 @@ fn scan_and_filter(
 struct Bm25Hits {
     files: Vec<vault::VaultFile>,
     searcher: tantivy::Searcher,
-    fields: crate::commands::consult::IndexFields,
+    fields: crate::index::IndexFields,
     top_docs: Vec<(f32, tantivy::DocAddress)>,
     snippet_generator: SnippetGenerator,
 }

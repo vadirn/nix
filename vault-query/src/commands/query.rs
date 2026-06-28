@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::base;
 use crate::base::filter;
 use crate::base::view;
-use crate::output::{self, Format};
+use crate::output::Format;
 use crate::vault;
 
 pub fn run(base_path: &Path, view_name: &str, cfg: &crate::config::ResolvedConfig, format: Format) -> Result<()> {
@@ -35,7 +35,7 @@ pub fn run(base_path: &Path, view_name: &str, cfg: &crate::config::ResolvedConfi
     );
 
     let result = view::apply(&target_view, &base_file, &mut filtered);
-    print!("{}", output::render(&result, &format));
+    print!("{}", result.render(&format));
 
     Ok(())
 }

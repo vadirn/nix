@@ -67,7 +67,7 @@ fn parse_document(content: &str) -> Document<'_> {
     // Determine the 1-based line index at which the body begins, i.e. the line
     // after the closing frontmatter `---`. If there is no frontmatter, the body
     // begins at line 1.
-    let body_start = frontmatter_end_line(&lines);
+    let body_start = crate::frontmatter::body_start_line(content);
 
     // First pass: collect heading (level, text, line), skipping fenced code.
     struct RawHeading {
@@ -85,7 +85,7 @@ fn parse_document(content: &str) -> Document<'_> {
         }
         let trimmed = raw_line.trim_start();
         // Fence toggling: a line starting with ``` or ~~~ opens/closes a fence.
-        if let Some(marker) = fence_marker(trimmed) {
+        if let Some(marker) = crate::markdown::fence_marker(trimmed) {
             match fence {
                 None => fence = Some(marker),
                 Some(open) if open == marker => fence = None,
@@ -96,7 +96,7 @@ fn parse_document(content: &str) -> Document<'_> {
         if fence.is_some() {
             continue;
         }
-        if let Some((level, text)) = atx_heading(raw_line) {
+        if let Some((level, text)) = crate::markdown::atx_heading(raw_line) {
             raw.push(RawHeading { level, text, line: lineno });
         }
     }
@@ -264,102 +264,6 @@ fn node_at_path_mut<'a>(roots: &'a mut [Node], path: &[usize]) -> &'a mut Node {
     node
 }
 
-/// Return the 1-based line number where the body begins (line after the closing
-/// frontmatter delimiter). Returns 1 when there is no frontmatter block.
-fn frontmatter_end_line(lines: &[&str]) -> usize {
-    // Strip a leading BOM so a BOM-prefixed `---` still opens the frontmatter
-    // block, matching `frontmatter::parse`/`body` (which strip `\u{feff}`).
-    let first = lines
-        .first()
-        .map(|l| l.trim_start_matches('\u{feff}').trim());
-    if first != Some("---") {
-        return 1;
-    }
-    for (idx, line) in lines.iter().enumerate().skip(1) {
-        if line.trim() == "---" {
-            return idx + 2; // line after the closing `---` (1-based)
-        }
-    }
-    // No closing delimiter: treat the whole file as body.
-    1
-}
-
-/// Top-level frontmatter key names in their on-disk order.
-///
-/// `frontmatter::parse` returns a BTreeMap, losing source order; this scans the
-/// raw block (the lines between the opening and closing `---`) for top-level
-/// keys matching `^([^\s:][^:]*):`, so the overview `fields:` line reflects the
-/// file rather than an alphabetization. Returns empty when there is no
-/// frontmatter block. Indented lines (nested map entries, list items) are
-/// skipped, as are blank and comment lines.
-fn frontmatter_field_order(content: &str) -> Vec<String> {
-    let content = content.trim_start_matches('\u{feff}'); // strip BOM
-    let mut lines = content.lines();
-    if lines.next().map(|l| l.trim()) != Some("---") {
-        return Vec::new();
-    }
-    let mut fields = Vec::new();
-    for line in lines {
-        if line.trim() == "---" {
-            break;
-        }
-        // A top-level key starts in column 0 (no leading whitespace) with a
-        // non-`:` name followed by `:`.
-        if line.starts_with(|c: char| c.is_whitespace()) {
-            continue;
-        }
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some(colon) = trimmed.find(':') {
-            let key = &trimmed[..colon];
-            if !key.is_empty() {
-                fields.push(key.to_string());
-            }
-        }
-    }
-    fields
-}
-
-/// If `trimmed` (already left-trimmed) opens or closes a fence, return its
-/// marker char (backtick or tilde). A fence line is three or more of the same.
-fn fence_marker(trimmed: &str) -> Option<char> {
-    for marker in ['`', '~'] {
-        if trimmed.starts_with(marker) {
-            let count = trimmed.chars().take_while(|&c| c == marker).count();
-            if count >= 3 {
-                return Some(marker);
-            }
-        }
-    }
-    None
-}
-
-/// Parse an ATX heading line `^(#{1,6})\s+(.+)$`. Leading whitespace before `#`
-/// is not allowed (matches CommonMark's indented-code rule only loosely, but is
-/// adequate for vault files and avoids treating `   # comment` as a heading).
-fn atx_heading(line: &str) -> Option<(usize, String)> {
-    let bytes = line.as_bytes();
-    let mut hashes = 0;
-    while hashes < bytes.len() && bytes[hashes] == b'#' {
-        hashes += 1;
-    }
-    if hashes == 0 || hashes > 6 {
-        return None;
-    }
-    // Require at least one space/tab after the hashes, then non-empty text.
-    let rest = &line[hashes..];
-    if !rest.starts_with(' ') && !rest.starts_with('\t') {
-        return None;
-    }
-    let text = rest.trim();
-    if text.is_empty() {
-        return None;
-    }
-    Some((hashes, text.to_string()))
-}
-
 // ---- Address resolution --------------------------------------------------
 
 /// Why an address failed to resolve. Carries the data each variant needs to
@@ -385,41 +289,6 @@ fn flatten<'a>(tree: &'a [Node], out: &mut Vec<&'a Node>) {
         out.push(n);
         flatten(&n.children, out);
     }
-}
-
-/// A section's structural address and the inclusive 1-based line range it owns,
-/// for callers that map positions onto sections without rendering the tree.
-#[derive(Debug, Clone)]
-pub struct SectionRange {
-    pub address: String,
-    pub level: usize,
-    pub start: usize,
-    pub end: usize,
-}
-
-/// Parse `body` and return its section ranges depth-first: the synthetic
-/// `(text)` region (address `"0"`) leads when present, then the heading tree.
-/// Empty when the body has no headings and no pre-heading prose.
-///
-/// Line numbers are relative to `body`. Addresses are structural (slug/numeric),
-/// so an address computed from a frontmatter-stripped body still resolves
-/// against the on-disk file via `read <path> <address>`.
-pub fn section_ranges(body: &str) -> Vec<SectionRange> {
-    let doc = parse_document(body);
-    let mut nodes: Vec<&Node> = Vec::new();
-    if let Some(t) = &doc.text {
-        nodes.push(t);
-    }
-    flatten(&doc.tree, &mut nodes);
-    nodes
-        .into_iter()
-        .map(|n| SectionRange {
-            address: n.address.clone(),
-            level: n.level,
-            start: n.start,
-            end: n.end,
-        })
-        .collect()
 }
 
 /// Pure address resolution: all the descent/match logic, no process exit.
@@ -764,7 +633,7 @@ fn emit_overview(file: &Path, content: &str, doc: &Document, format: TextJson) -
     // `frontmatter::parse` returns a BTreeMap (alphabetized), which would
     // misrepresent the file's on-disk field order. Scan the raw frontmatter
     // block for top-level keys in source order instead.
-    let fields: Vec<String> = frontmatter_field_order(content);
+    let fields: Vec<String> = crate::frontmatter::field_order(content);
     let link_count = wikilink::extract(content).len();
 
     if format == TextJson::Json {
@@ -1157,21 +1026,6 @@ mod tests {
     }
 
     #[test]
-    fn frontmatter_field_order_follows_source() {
-        // Source order differs from alphabetical (type, created, aliases).
-        let content = "---\ntype: note\ncreated: 2026-01-01\naliases:\n  - alt\n---\n\nbody\n";
-        assert_eq!(
-            frontmatter_field_order(content),
-            vec!["type".to_string(), "created".to_string(), "aliases".to_string()]
-        );
-    }
-
-    #[test]
-    fn frontmatter_field_order_empty_without_block() {
-        assert!(frontmatter_field_order("# Heading\n\nbody\n").is_empty());
-    }
-
-    #[test]
     fn bom_prefixed_frontmatter_is_skipped() {
         // A BOM before the opening `---` must not shift heading line numbers:
         // parsing with and without the BOM yields the same tree lines.
@@ -1186,6 +1040,6 @@ mod tests {
         assert_eq!(bommed.tree[0].line, plain.tree[0].line);
         assert_eq!(bommed.tree[0].heading, "Heading");
         // Field order still recovered through the BOM.
-        assert_eq!(frontmatter_field_order(&with_bom), vec!["type".to_string()]);
+        assert_eq!(crate::frontmatter::field_order(&with_bom), vec!["type".to_string()]);
     }
 }
