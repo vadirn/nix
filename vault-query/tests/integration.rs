@@ -1559,7 +1559,7 @@ fn test_get_multi_match_no_superseded_resolves_single_survivor() {
     let cfg = cfg_for(&vault_root);
 
     // Verify that without --no-superseded we do get two matches (multi-match case).
-    let paths_all = vault_query::commands::get::resolve_paths("shared-name", &cfg).unwrap();
+    let paths_all = vault_query::slug::resolve_paths("shared-name", &cfg).unwrap();
     assert_eq!(paths_all.len(), 2, "expected 2 matches before filtering; got {:?}", paths_all);
 
     // With --no-superseded the superseded candidate should be dropped and the

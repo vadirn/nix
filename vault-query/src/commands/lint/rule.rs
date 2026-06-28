@@ -34,6 +34,13 @@ pub struct LintContext<'a> {
     /// rules reuse the parse instead of re-running it per rule.
     pub body_links: Vec<Vec<crate::wikilink::Wikilink>>,
     pub backlink_index: HashMap<String, Vec<String>>,
+    /// Structural-relation edges per file, parallel to `files`. Parsed once here
+    /// (lossy, D29) so the relations rules reuse one scan.
+    pub relations: Vec<Vec<super::relations::RelationEdge>>,
+    /// Local-node slug set per file, parallel to `files`. The Glossary terms +
+    /// Workflow steps (STEP 3a) that a bare local relation endpoint resolves
+    /// against; parsed once here.
+    pub local_nodes: Vec<super::nodes::LocalNodes>,
 }
 
 impl<'a> LintContext<'a> {
@@ -60,6 +67,16 @@ impl<'a> LintContext<'a> {
             .collect();
         let backlink_index = crate::wikilink::build_backlink_index_with(files, &body_links);
 
+        let relations: Vec<Vec<super::relations::RelationEdge>> = files
+            .iter()
+            .map(|f| super::relations::parse_relations(&f.content))
+            .collect();
+
+        let local_nodes: Vec<super::nodes::LocalNodes> = files
+            .iter()
+            .map(|f| super::nodes::parse_local_nodes(&f.content))
+            .collect();
+
         LintContext {
             vault_root,
             files,
@@ -68,6 +85,8 @@ impl<'a> LintContext<'a> {
             references,
             body_links,
             backlink_index,
+            relations,
+            local_nodes,
         }
     }
 }

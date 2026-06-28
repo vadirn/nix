@@ -66,6 +66,24 @@ const TIMEOUT_MS = 180_000;
 // headroom for the longest gate input (rationale-carrying workflow steps).
 const FIDELITY_TOKENS = 16_384;
 
+// Relations registry — TS-native copy of the open relation vocabulary (structural
+// channel only, D32). Mirror of vault-query/src/commands/lint/rel-registry.json, the
+// test-only canonical ground truth; parity is pinned by distill.test.ts (which reads
+// that JSON and asserts equality with this const). Read at runtime from here, never
+// from the JSON, so emit stays file-I/O-free. Three tokens the extractor already emits
+// (subsumes / precondition-for / contrast-to) plus four it is starting to emit
+// (depends-on / part-of / instance-of / refines). supersedes and contradicts are
+// excluded by channel (frontmatter- and merge-gated respectively).
+export const REL_REGISTRY: readonly string[] = [
+  "subsumes",
+  "precondition-for",
+  "contrast-to",
+  "depends-on",
+  "part-of",
+  "instance-of",
+  "refines",
+];
+
 // Workflow-gate recovery ladder (stage-5 loop). A flagged step is repaired from
 // the gate's own finding (judge-guided), then — if the repair still fails the
 // re-grade within --max-retries — falls back to the source's verbatim imperative,
@@ -141,7 +159,12 @@ const PASS_RU: Pass[] = [
 
 type Block = { id: string; text: string };
 type Grade = "drop" | "distill" | "retain";
-type GlossEntry = { term: string; def: string; relations: string[]; source: string[] };
+// A relation is one STRUCTURAL edge (D29): `rel` an open hyphenated token, `to` an
+// endpoint (a bare local term-slug or a [[file-slug]] wikilink), `predicate` an
+// optional one-clause gloss (null when none). The from-label is NOT a field — it is
+// the entry's own `term`, supplied by the assembler (emitRelationsBlock).
+type Relation = { rel: string; to: string; predicate: string | null };
+type GlossEntry = { term: string; def: string; relations: Relation[]; source: string[] };
 // a workflow step is an ACTIONABLE directive the note prescribes (a practice, a
 // procedure step) — the procedural sink the glossary (concepts) cannot hold. The
 // step carries a source-stated reason ("do X because Y") when the source gives
@@ -226,6 +249,49 @@ function normalizeTypography(s: string): string {
     .replace(/ /g, " "); // nbsp → space
 }
 
+// Slug a single label — TS-native mirror of vault-query slug.rs::segment /
+// normalize_segment (the unified slugifier). Strip wikilink syntax (keeping an
+// alias over its target), drop backtick/`*`/`_`, lowercase, collapse every run of
+// non-alphanumerics (Unicode letters+digits, so Cyrillic survives) to a single
+// `-`, trim leading/trailing `-`. A second cross-language duplication (REL_REGISTRY
+// is the first); the round-trip fixture pins it. BUILD emits PRE-slugified labels so
+// the `## Relations` block is byte-stable for the REBUILD parser.
+export function slugSegment(s: string): string {
+  const stripped = s.replace(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g, (_m, target, alias) =>
+    alias != null && alias !== "" ? alias : target,
+  );
+  return stripped
+    .replace(/[`*_]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Render a structural relation as readable `rel :: to (predicate)` for the
+// prose-synth prompts — they only need a human-readable form of the edge, not the
+// emit grammar. Used wherever relations were previously joined as bare strings.
+const relText = (r: Relation): string =>
+  `${r.rel} :: ${r.to}${r.predicate ? ` (${r.predicate})` : ""}`;
+
+// Coerce one extracted relation into a typed edge. LOSSY (D29): keep every
+// well-formed edge — drop ONLY when `rel` or `to` is missing. An unknown rel or an
+// unresolved endpoint is a REBUILD lint finding, never a BUILD drop. Relations skip
+// revise(), so typography is normalized here. The rel is lowercased and hyphenated
+// (residual space-forms like "precondition for" → "precondition-for") so the open
+// token matches the registry's shape; predicate is null when empty.
+function normalizeRelation(r: unknown): Relation | null {
+  if (!r || typeof r !== "object") return null;
+  const o = r as { rel?: unknown; to?: unknown; predicate?: unknown };
+  const rel = normalizeTypography(String(o.rel ?? ""))
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+  const to = normalizeTypography(String(o.to ?? "")).trim();
+  if (!rel || !to) return null;
+  const pred = o.predicate == null ? "" : normalizeTypography(String(o.predicate)).trim();
+  return { rel, to, predicate: pred || null };
+}
+
 // ---- frontmatter: YAML metadata block fenced by --- at the very start ----
 // Split off leading frontmatter so it passes through verbatim — it is metadata,
 // not prose, and must never be segmented, graded, or reworded. Returns the
@@ -258,6 +324,19 @@ function parseDescription(front: string): string {
   const v = m[1].trim().replace(/^["']|["']$/g, "");
   if (!v || v === "|" || v === ">") return "";
   return v;
+}
+
+// Pull the frontmatter `type:` value (note / card / reference / …). distill never
+// authors `type` and today never emits a reference body, so this feeds ONLY the D30
+// defensive guard: a future reference-distill path must stay link-free (no `##
+// Relations` block in a type:reference body). Returns "" when absent.
+function parseType(front: string): string {
+  const m = front.match(/^type:[ \t]*(.+)$/m);
+  if (!m) return "";
+  return m[1]
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .toLowerCase();
 }
 
 function detectLang(text: string): "en" | "ru" {
@@ -378,10 +457,10 @@ function extractComboPrompt(blocks: Block[], frontDescription: string, lang: "en
   return `You are a concept cartographer. Read the note below (block IDs in [Bn] markers) and produce its compressed idea-graph as JSON. ${langRule(lang)}
 - "description": ${descRule}
 - "thesis": the single spine claim the whole note argues, one sentence.
-- "glossary": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out of the glossary. For each: "term" (the concept's name), "def" (dense, in YOUR OWN words, <=20 words), "relations" (array of strings: how it ties to OTHER terms — "subsumes X", "precondition for Y", "contrast to Z"; NOT a bare restatement of def), "source" (array of [Bn] id strings where it is defined or used, at least one).
+- "glossary": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out of the glossary. For each: "term" (the concept's name), "def" (dense, in YOUR OWN words, <=20 words), "relations" (array of OBJECTS naming how it ties to OTHER terms; each {"rel","to","predicate"}: "rel" is a single hyphenated token (e.g. subsumes, precondition-for, contrast-to), "to" is EITHER a bare term-slug naming ANOTHER glossary term in this note OR a [[file-slug]] wikilink, "predicate" is an optional one-clause gloss or null — use null when there is no gloss; NOT a bare restatement of def), "source" (array of [Bn] id strings where it is defined or used, at least one).
 - "workflow": the note's ACTIONABLE directives — the practices, steps, or procedure the note tells the reader to DO, in the order the note gives them. A directive earns an entry only when the note PRESCRIBES an action (an imperative, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives — leave them to the thesis and glossary. For each: "step" (one imperative clause in YOUR OWN words, dense; if the SOURCE gives a reason for the action — "do X because Y", "do X so that Y" — append that source-stated reason to the step; if the source states no reason, keep the step terse), "source" (array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
 Collapse restatements of the SAME concept into ONE entry whose "source" lists all the blocks that state it — do not emit a separate entry per surface form.
-Return ONLY JSON {"description":"...","thesis":"...","glossary":[{"term":"...","def":"...","relations":["..."],"source":["Bn"]}],"workflow":[{"step":"...","source":["Bn"]}]}.
+Return ONLY JSON {"description":"...","thesis":"...","glossary":[{"term":"...","def":"...","relations":[{"rel":"...","to":"...","predicate":null}],"source":["Bn"]}],"workflow":[{"step":"...","source":["Bn"]}]}.
 
 TEXT (block IDs in [Bn] markers):
 ${render(blocks)}`;
@@ -398,11 +477,13 @@ async function extractCombo(
     .map((e) => ({
       term: (e.term ?? "").trim(),
       def: (e.def ?? "").trim(),
-      // relations skip revise(), so normalize their typography here (the extractor
-      // emits non-breaking hyphens / typeset glyphs the same way the revise model does)
+      // relations skip revise(), so coerce + normalize here (the extractor emits
+      // non-breaking hyphens / typeset glyphs the same way the revise model does).
+      // LOSSY (D29): drop only edges missing rel or to; keep unknown rels / unresolved
+      // endpoints (those are REBUILD lint findings, not BUILD drops).
       relations: (Array.isArray(e.relations) ? e.relations : [])
-        .map((r) => normalizeTypography(String(r)).trim())
-        .filter(Boolean),
+        .map((r) => normalizeRelation(r))
+        .filter((r): r is Relation => r !== null),
       source: (e.source ?? []).filter((id) => ids.has(id)),
     }))
     // an entry with no valid source block cannot be rendered grounded or graded — drop it
@@ -484,7 +565,7 @@ function synthEntriesPrompt(
     const concepts = entries
       .map((e) =>
         DEF_RELATIONS === "keep"
-          ? `### ${e.term}\nrelations: ${e.relations.join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`
+          ? `### ${e.term}\nrelations: ${e.relations.map(relText).join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`
           : `### ${e.term}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
       )
       .join("\n\n");
@@ -500,7 +581,7 @@ ${concepts}`;
   const concepts = entries
     .map((e) =>
       DEF_RELATIONS === "keep"
-        ? `### ${e.term}\ndef(draft): ${e.def}\nrelations: ${e.relations.join("; ")}`
+        ? `### ${e.term}\ndef(draft): ${e.def}\nrelations: ${e.relations.map(relText).join("; ")}`
         : `### ${e.term}\ndef(draft): ${e.def}`,
     )
     .join("\n\n");
@@ -662,7 +743,7 @@ function verbatimDirectives(sourceText: string): string[] {
 function renderEntryPrompt(entry: GlossEntry, sourceText: string, lang: "en" | "ru"): string {
   const relRule =
     DEF_RELATIONS === "keep"
-      ? `keep every relation (${entry.relations.join("; ")}); use only claims the source states.`
+      ? `keep every relation (${entry.relations.map(relText).join("; ")}); use only claims the source states.`
       : `define the concept itself; state no relations to other terms (the connective prose carries those); use only claims the source states.`;
   return `Write the glossary definition for "${entry.term}" using ONLY the source text below. One dense sentence; ${relRule} ${langRule(lang)} Return ONLY JSON {"def":"..."}.
 
@@ -706,7 +787,7 @@ function connectiveProsePrompt(
   const concepts = orderedEntries
     .map(
       (e) =>
-        `### ${e.term}\nrelations: ${e.relations.join("; ")}\ndef (context only — do NOT restate in the prose): ${defByTerm.get(e.term) ?? e.def}`,
+        `### ${e.term}\nrelations: ${e.relations.map(relText).join("; ")}\ndef (context only — do NOT restate in the prose): ${defByTerm.get(e.term) ?? e.def}`,
     )
     .join("\n\n");
   return `You are writing the readable body of a note. Its definitions live in a separate "## Glossary" table directly below your prose, which the reader can consult — so your job is the connective tissue, not the definitions. Write flowing prose (connected markdown paragraphs) that develops how the terms relate to one another, building on the relations listed for each concept. Bold each glossary term on its first mention (e.g. **Target distance**) so the bold marks it as a term defined in the glossary below; leave its full definition to the glossary table; add a brief gloss only where the flow needs it.
@@ -1017,6 +1098,33 @@ function escCell(s: string): string {
 const escAttr = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
+// Build the `## Relations` block body (D29 structural channel). One markdown list
+// item per edge, in entry order then each entry's relation order. A single-atom card
+// (orderedEntries.length === 1) OMITS the from-label, emitting `- <rel>:: <endpoint>`;
+// a multi-node note PREFIXES each edge with the source entry's own slug as the
+// from-label. Endpoint scope is marked by brackets: a `[[file-slug]]` stays a
+// wikilink (inner re-slugged), a bare label becomes a local term-slug. Labels are
+// pre-slugified so the block is byte-stable. Exported for isolated unit testing.
+// Returns "" when no entry carries an edge.
+export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
+  const singleAtom = orderedEntries.length === 1;
+  const lines: string[] = [];
+  for (const entry of orderedEntries) {
+    for (const r of entry.relations) {
+      const wl = /^\[\[(.+)\]\]$/.exec(r.to.trim());
+      const endpoint = wl ? `[[${slugSegment(wl[1])}]]` : slugSegment(r.to);
+      if (!endpoint) continue; // an endpoint that slugs to empty is unrenderable
+      const pred = r.predicate ? ` (${r.predicate})` : "";
+      lines.push(
+        singleAtom
+          ? `- ${r.rel}:: ${endpoint}${pred}`
+          : `- ${slugSegment(entry.term)} ${r.rel}:: ${endpoint}${pred}`,
+      );
+    }
+  }
+  return lines.length ? `## Relations\n\n${lines.join("\n")}` : "";
+}
+
 function assembleBody(
   h1: string,
   head: string,
@@ -1024,6 +1132,7 @@ function assembleBody(
   orderedEntries: GlossEntry[],
   defByTerm: Map<string, string>,
   retained: Block[],
+  isReference: boolean,
 ): string {
   const parts: string[] = [];
   if (h1) parts.push(h1);
@@ -1044,6 +1153,13 @@ function assembleBody(
       .map((e) => `| ${escCell(e.term)} | ${escCell(defByTerm.get(e.term) ?? e.def)} |`)
       .join("\n");
     parts.push(`## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n${rows}`);
+  }
+  // D30: a type:reference body stays link-free — never emit a `## Relations` block
+  // into one. distill emits no references today, so this guard is currently a no-op
+  // kept for a future reference-distill path. Section order = push order.
+  if (!isReference) {
+    const rel = emitRelationsBlock(orderedEntries);
+    if (rel) parts.push(rel);
   }
   if (retained.length) parts.push(retained.map((b) => b.text).join("\n\n"));
   return parts.join("\n\n");
@@ -1199,7 +1315,14 @@ async function distill(
   text: string,
   lang: "en" | "ru",
   frontDescription: string,
-  opts: { synth: Synth; maxRetries: number; noRevise: boolean; noGate: boolean; coreOnly: boolean },
+  opts: {
+    synth: Synth;
+    maxRetries: number;
+    noRevise: boolean;
+    noGate: boolean;
+    coreOnly: boolean;
+    isReference: boolean;
+  },
 ): Promise<{ out: string; footer: string; residue: Residue[] }> {
   const passes = lang === "ru" ? PASS_RU : PASS_EN;
   const blocks = segment(text);
@@ -1273,7 +1396,15 @@ async function distill(
   // the prose is the un-gated readable derivative, and feeding it to the judge
   // made it mark every terse def as "missing" the detail the prose elaborates.
   // Gate `gloss`; build the final `out` (prose head by default) after recovery.
-  let gloss = assembleBody(h1, tie, workflowSteps, orderedEntries, defByTerm, retained);
+  let gloss = assembleBody(
+    h1,
+    tie,
+    workflowSteps,
+    orderedEntries,
+    defByTerm,
+    retained,
+    opts.isReference,
+  );
 
   // group steps by their shared source block-set so the workflow gate judges them
   // the way they exist: a practices/procedure list (one block) is one group whose
@@ -1381,7 +1512,15 @@ async function distill(
           }
         }),
       ]);
-      gloss = assembleBody(h1, tie, workflowSteps, orderedEntries, defByTerm, retained);
+      gloss = assembleBody(
+        h1,
+        tie,
+        workflowSteps,
+        orderedEntries,
+        defByTerm,
+        retained,
+        opts.isReference,
+      );
       // re-grade only the patched items, not the full set (budget)
       const patchC = new Set(failC.map((c) => c.term));
       const patchG = new Set(failG.map((g) => g.id));
@@ -1435,7 +1574,15 @@ async function distill(
       }
       failG = stillFail;
       if (keptVerbatim) {
-        gloss = assembleBody(h1, tie, workflowSteps, orderedEntries, defByTerm, retained);
+        gloss = assembleBody(
+          h1,
+          tie,
+          workflowSteps,
+          orderedEntries,
+          defByTerm,
+          retained,
+          opts.isReference,
+        );
       }
     }
     // surviving residue (incl. an unrecoverable thesis) is surfaced, never silent
@@ -1506,6 +1653,7 @@ async function distill(
     orderedEntries,
     defByTerm,
     retained,
+    opts.isReference,
   );
 
   const afterWords = wordCount(out);
@@ -1628,6 +1776,9 @@ async function main() {
   }
   const resolved = lang === "auto" ? detectLang(body) : lang;
   const frontDescription = parseDescription(front);
+  // D30: a type:reference body must stay link-free (no ## Relations). distill emits
+  // no references today, so this only future-proofs a reference-distill path.
+  const isReference = parseType(front) === "reference";
   try {
     const { out, footer, residue } = await distill(body, resolved, frontDescription, {
       synth,
@@ -1635,6 +1786,7 @@ async function main() {
       noRevise,
       noGate,
       coreOnly,
+      isReference,
     });
     // <result> wraps exactly the text to write back to source: frontmatter
     // (verbatim, if any) + distilled body. <residue> carries one <entry> per
@@ -1658,4 +1810,6 @@ async function main() {
   }
 }
 
-main();
+// Guard the CLI entrypoint so test imports (e.g. distill.test.ts importing
+// REL_REGISTRY) can load this module without running the pipeline against stdin.
+if (import.meta.main) main();

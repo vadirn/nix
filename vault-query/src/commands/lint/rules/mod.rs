@@ -1,5 +1,6 @@
 pub mod broken_wikilink;
 pub mod dangling_reference;
+pub mod dangling_relation_label;
 pub mod duplicate_h1;
 pub mod invalid_frontmatter;
 pub mod missing_required_field;
@@ -7,5 +8,6 @@ pub mod orphan_card;
 pub mod oversized_entry;
 pub mod reference_not_wikilink;
 pub mod singleton_tag;
+pub mod unknown_rel;
 pub mod untagged_card;
 pub mod untyped_entry;

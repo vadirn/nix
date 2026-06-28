@@ -6,6 +6,7 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
     vec![
         Box::new(super::rules::broken_wikilink::BrokenWikilink),
         Box::new(super::rules::dangling_reference::DanglingReference),
+        Box::new(super::rules::dangling_relation_label::DanglingRelationLabel),
         Box::new(super::rules::duplicate_h1::DuplicateH1),
         Box::new(super::rules::invalid_frontmatter::InvalidFrontmatter),
         Box::new(super::rules::missing_required_field::MissingRequiredField),
@@ -13,6 +14,7 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::oversized_entry::OversizedEntry { per_doc_token_cap }),
         Box::new(super::rules::reference_not_wikilink::ReferenceNotWikilink),
         Box::new(super::rules::singleton_tag::SingletonTag),
+        Box::new(super::rules::unknown_rel::UnknownRel),
         Box::new(super::rules::untagged_card::UntaggedCard),
         Box::new(super::rules::untyped_entry::UntypedEntry),
     ]

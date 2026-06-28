@@ -1,6 +1,8 @@
 pub mod config;
 pub mod format;
+pub mod nodes;
 pub mod registry;
+pub mod relations;
 pub mod rule;
 pub mod rules;
 
