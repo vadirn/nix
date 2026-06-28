@@ -3,6 +3,7 @@ pub mod commands;
 pub mod config;
 pub mod frontmatter;
 pub mod output;
+pub mod slug;
 pub mod tokens;
 pub mod vault;
 pub mod vault_ignore;
