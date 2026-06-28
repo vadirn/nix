@@ -88,8 +88,7 @@ async function initializeConditionalAutofill() {
   const capabilities = await PublicKeyCredential.getClientCapabilities();
   if (capabilities.conditionalGet === true) {
     const loginOptionsJSON = await optionsFetch();
-    const publicKey =
-      PublicKeyCredential.parseRequestOptionsFromJSON(loginOptionsJSON);
+    const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(loginOptionsJSON);
 
     try {
       // Initiate Conditional UI form autofill suggestions
@@ -127,8 +126,7 @@ async function triggerButtonAuthentication() {
   autofillAbortController = new AbortController(); // Reset controller for next triggers
 
   const loginOptionsJSON = await optionsFetch();
-  const publicKey =
-    PublicKeyCredential.parseRequestOptionsFromJSON(loginOptionsJSON);
+  const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(loginOptionsJSON);
 
   let credential;
   try {
@@ -176,11 +174,11 @@ Baseline status for the api.PublicKeyCredential.getClientCapabilities_static cap
 Supported by: Chrome 133 (Feb 2025), Edge 133 (Feb 2025), Firefox 135 (Feb 2025), and Safari 17.4 (Mar 2024).
 
 Always install 'webauthn-polyfills' and import it in the context.
-Consider as long as  `PublicKeyCredential` is supported, `PublicKeyCredential.getClientCapabilities` is also supported. 
+Consider as long as `PublicKeyCredential` is supported, `PublicKeyCredential.getClientCapabilities` is also supported.
 
-```js 
-import 'webauthn-polyfills';
-``` 
+```js
+import "webauthn-polyfills";
+```
 
 ### Signal API Synchronization Fallback
 
@@ -198,8 +196,8 @@ Baseline status for the api.PublicKeyCredential.parseRequestOptionsFromJSON_stat
 Supported by: Chrome 129 (Sep 2024), Edge 129 (Sep 2024), Firefox 119 (Oct 2023), and Safari 18.4 (Mar 2025).
 
 Always install 'webauthn-polyfills' and import it in the context.
-Consider as long as  `PublicKeyCredential` is supported, `PublicKeyCredential.parseRequestOptionsFromJSON` and `PublicKeyCredential.prototype.toJSON` are also supported. 
+Consider as long as `PublicKeyCredential` is supported, `PublicKeyCredential.parseRequestOptionsFromJSON` and `PublicKeyCredential.prototype.toJSON` are also supported.
 
-```js 
-import 'webauthn-polyfills';
-``` 
+```js
+import "webauthn-polyfills";
+```

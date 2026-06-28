@@ -1,0 +1,20 @@
+{
+  "note": "Two concepts, each defined 3x in scattered paraphrases. A correct distill collapses each set to exactly ONE glossary entry.",
+  "baseWords": 470,
+  "concepts": [
+    {
+      "term": "replay key",
+      "match": ["replay key"],
+      "restatements": 3,
+      "expected_entries": 1,
+      "must_not_drop": true
+    },
+    {
+      "term": "settlement window",
+      "match": ["settlement window"],
+      "restatements": 3,
+      "expected_entries": 1,
+      "must_not_drop": true
+    }
+  ]
+}

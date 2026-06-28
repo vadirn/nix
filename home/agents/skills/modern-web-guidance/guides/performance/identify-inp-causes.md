@@ -21,15 +21,15 @@ The `web-vitals` library is a tiny library used to measure Core Web Vitals and o
 ```javascript
 // Use the attribution build to get Long Animation Frame data
 // alongside the INP metric value.
-import { onINP } from 'web-vitals/attribution';
+import { onINP } from "web-vitals/attribution";
 
 onINP((metric) => {
   // Beacon script attribution for the longest script during the INP
   // interaction, so you can identify the root cause in production.
   navigator.sendBeacon(
-    '/analytics',
+    "/analytics",
     JSON.stringify({
-      name: 'INP',
+      name: "INP",
       value: metric.value,
       // These fields give the INP subparts:
       inputDelay: metric.attribution.inputDelay,
@@ -45,8 +45,8 @@ onINP((metric) => {
       // subpart indicates which phase (input delay, processing, or
       // presentation delay) the longest script overlapped with most.
       subpart: metric.attribution.longestScript.subpart,
-      intersectingDuration: metric.attribution.longestScript.intersectingDuration
-    })
+      intersectingDuration: metric.attribution.longestScript.intersectingDuration,
+    }),
   );
 });
 ```

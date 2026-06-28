@@ -55,32 +55,6 @@ fn range_slice(lines: &[&str], start: usize, end: usize) -> String {
     lines[s..e].join("\n")
 }
 
-/// Slugify a heading's text: drop wikilink syntax, strip backticks/`*`/`_`,
-/// lowercase, map non-alphanumerics to `-`, collapse and trim `-`.
-fn heading_slug(text: &str) -> String {
-    let stripped = wikilink::strip(text);
-    let mut s = String::with_capacity(stripped.len());
-    for ch in stripped.chars() {
-        match ch {
-            '`' | '*' | '_' => {}
-            _ => s.push(ch),
-        }
-    }
-    let lower = s.to_lowercase();
-    let mut out = String::with_capacity(lower.len());
-    let mut prev_dash = false;
-    for ch in lower.chars() {
-        if ch.is_alphanumeric() {
-            out.push(ch);
-            prev_dash = false;
-        } else if !prev_dash {
-            out.push('-');
-            prev_dash = true;
-        }
-    }
-    out.trim_matches('-').to_string()
-}
-
 /// Detect ATX headings and the text/heading structure of the body.
 ///
 /// Scans the full file by 1-based line, skipping the leading frontmatter block
@@ -170,7 +144,7 @@ fn parse_document(content: &str) -> Document<'_> {
         .map(|h| FlatHeadingImpl {
             level: h.level,
             text: h.text.clone(),
-            slug: heading_slug(&h.text),
+            slug: crate::slug::segment(&h.text),
             line: h.line,
         })
         .collect();
@@ -486,8 +460,8 @@ fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, ResolveErro
         return Ok(current.expect("numeric address yields a node"));
     }
 
-    // Slug: collect nodes whose `heading_slug == needle`.
-    let needle = heading_slug(address);
+    // Slug: collect nodes whose `slug == needle`.
+    let needle = crate::slug::segment(address);
     let mut all: Vec<&Node> = Vec::new();
     flatten(&doc.tree, &mut all);
     let matches: Vec<&Node> = all.into_iter().filter(|n| n.slug == needle).collect();
@@ -951,6 +925,7 @@ mod tests {
 
     #[test]
     fn slug_basic() {
+        use crate::slug::segment as heading_slug;
         assert_eq!(heading_slug("Direction"), "direction");
         assert_eq!(heading_slug("Sub one"), "sub-one");
         assert_eq!(heading_slug("Log & Notes"), "log-notes");
@@ -1090,7 +1065,7 @@ mod tests {
     fn ambiguous_slug_detected() {
         let doc = parse_document(SAMPLE);
         // "Log & Notes" and "Log Notes" both slugify to "log-notes".
-        let needle = heading_slug("log-notes");
+        let needle = crate::slug::segment("log-notes");
         let mut all = Vec::new();
         flatten(&doc.tree, &mut all);
         let matches: Vec<&Node> = all.into_iter().filter(|n| n.slug == needle).collect();

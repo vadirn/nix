@@ -1,0 +1,20 @@
+{
+  "note": "Two concepts, each defined 3x in scattered paraphrases, embedded in a longer note with many competing filler concepts (HNSW, recall, quantization, distance metric). A correct distill collapses each injected set to exactly ONE glossary entry.",
+  "baseWords": 720,
+  "concepts": [
+    {
+      "term": "recall cliff",
+      "match": ["recall cliff"],
+      "restatements": 3,
+      "expected_entries": 1,
+      "must_not_drop": true
+    },
+    {
+      "term": "fanout budget",
+      "match": ["fanout budget"],
+      "restatements": 3,
+      "expected_entries": 1,
+      "must_not_drop": true
+    }
+  ]
+}

@@ -4,7 +4,7 @@ When building tooltips or popovers with CSS Anchor Positioning, the browser can 
 
 ## The problem
 
-Imagine a tooltip that appears above its anchor by default. It has a "down" arrow at the bottom. If the user scrolls and the tooltip flips to appear *below* the anchor, the arrow is now pointing the wrong way and is on the wrong side of the tooltip.
+Imagine a tooltip that appears above its anchor by default. It has a "down" arrow at the bottom. If the user scrolls and the tooltip flips to appear _below_ the anchor, the arrow is now pointing the wrong way and is on the wrong side of the tooltip.
 
 ## The solution: Anchored Container Queries
 
@@ -83,11 +83,10 @@ If you need to change properties on the container itself (like `margin` or `back
 1. Apply `container-type: anchored` to the outer positioned element.
 2. Target the inner element inside the `@container` block.
 
-
 ```css
 @container anchored(fallback: flip-block) {
   .tooltip-content {
-    border-radius: 0 0 .5rem .5rem;
+    border-radius: 0 0 0.5rem 0.5rem;
     margin-block-start: 0.25rem;
   }
 }
@@ -97,7 +96,6 @@ If you need to change properties on the container itself (like `margin` or `back
 
 - **Prefer logical fallbacks**: Use keywords like `flip-block` and `flip-inline` in `position-try-fallbacks` for simpler queries that handle RTL and different writing modes automatically.
 - **Use pseudo-elements for arrows**: Tooltip arrows are purely decorative and are perfect candidates for `::before` or `::after`, which can be styled via anchored container queries without extra DOM.
-
 
 ## Fallback strategies
 
@@ -129,8 +127,8 @@ Install the package (`npm install @oddbird/popover-polyfill`).
 
 ```javascript
 // MANDATORY: Feature detect 'popover' on HTMLElement.prototype.
-if (!('popover' in HTMLElement.prototype)) {
-  import('@oddbird/popover-polyfill/fn').then(({ apply }) => {
+if (!("popover" in HTMLElement.prototype)) {
+  import("@oddbird/popover-polyfill/fn").then(({ apply }) => {
     apply();
   });
 }
@@ -143,10 +141,12 @@ If you are not using a package manager, dynamically import the polyfill directly
 <script type="module">
   // MANDATORY: Feature detect 'popover' on HTMLElement.prototype.
   // Conditionally load the popover-polyfill from a CDN only in browsers lacking native support.
-  if (!('popover' in HTMLElement.prototype)) {
-    import('https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover-fn.js').then(({ apply }) => {
-      apply();
-    });
+  if (!("popover" in HTMLElement.prototype)) {
+    import("https://unpkg.com/@oddbird/popover-polyfill@latest/dist/popover-fn.js").then(
+      ({ apply }) => {
+        apply();
+      },
+    );
   }
 </script>
 ```

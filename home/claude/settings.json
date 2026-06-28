@@ -1,4 +1,5 @@
 {
+  "outputStyle": "default",
   "skillListingBudgetFraction": 0.015,
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50",
@@ -17,8 +18,7 @@
   },
   "permissions": {
     "allow": [
-      "Skill(writing-ru)",
-      "Skill(writing-en)",
+      "Skill(cut)",
       "Skill(firecrawl-cli)",
       "Skill(firecrawl-search)",
       "Skill(firecrawl-scrape)",
@@ -262,6 +262,7 @@
         "api.doppler.com",
         "cli.doppler.com",
         "generativelanguage.googleapis.com",
+        "api.fireworks.ai",
         "fal.run",
         "*.fal.run",
         "*.fal.media",

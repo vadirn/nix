@@ -12,7 +12,7 @@ When an element moves in or out of the top layer, it must transition the `overla
 
 ### 3. Entry Animations with `@starting-style`
 
-Use the `@starting-style` at-rule to define the styles an element should transition *from* when it is first rendered or its `display` changes from `none`.
+Use the `@starting-style` at-rule to define the styles an element should transition _from_ when it is first rendered or its `display` changes from `none`.
 
 ### 4. Animating the Backdrop
 
@@ -112,8 +112,8 @@ For browsers that do not support these features, top-layer elements will appear 
 // Feature detection for top-layer animations
 const supportsTopLayerAnimation =
   window.CSS &&
-  CSS.supports('transition-behavior', 'allow-discrete') &&
-  CSS.supports('overlay', 'auto');
+  CSS.supports("transition-behavior", "allow-discrete") &&
+  CSS.supports("overlay", "auto");
 
 if (!supportsTopLayerAnimation) {
   // Manual JS fallback for entry/exit animations:
@@ -131,8 +131,8 @@ If the browser does not support Popover, use the `@oddbird/popover-polyfill`:
 
 ```html
 <script type="module">
-  if (!HTMLElement.prototype.hasOwnProperty('popover')) {
-    await import('https://unpkg.com/@oddbird/popover-polyfill');
+  if (!HTMLElement.prototype.hasOwnProperty("popover")) {
+    await import("https://unpkg.com/@oddbird/popover-polyfill");
   }
 </script>
 ```

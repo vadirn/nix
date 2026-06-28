@@ -1,6 +1,6 @@
 # Tracer bullet and walking skeleton workflow (retained)
 
-Use when the intent is retained: the prototype is the first commit of production. Sources: Hunt & Thomas, *The Pragmatic Programmer* (1999), tracer bullets chapter; Cockburn, *Crystal Clear* (2004), walking skeleton.
+Use when the intent is retained: the prototype is the first commit of production. Sources: Hunt & Thomas, _The Pragmatic Programmer_ (1999), tracer bullets chapter; Cockburn, _Crystal Clear_ (2004), walking skeleton.
 
 The two methods share a workflow. They differ only in scope:
 

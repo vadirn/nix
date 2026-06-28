@@ -14,12 +14,12 @@ This skill is the fal.ai worker for the `/imagen` hub — invoke it directly onl
 
 ## Models
 
-| Model ID | Notes |
-|---|---|
-| `fal-ai/kling-image/v3/text-to-image` | **Default for text-only prompts.** Kling V3 Standard, pure text-to-image. 1K/2K, $0.028/image. Auto-selected when `--source` is not provided. |
-| `fal-ai/kling-image/o1` | **Default for multi-reference prompts.** Kling O1 image-to-image / multi-ref remix (1–10 reference images required). Auto-selected when `--source` is provided. 1K/2K, $0.028/image. |
-| `fal-ai/nano-banana-2` | Gemini 3.1 Flash Image via fal. Explicit override only — costs 3–10x more than the direct Google path used by `imagen-nanobanana`. |
-| `fal-ai/nano-banana-pro` | Gemini 3 Pro Image via fal. Same cost caveat. |
+| Model ID                              | Notes                                                                                                                                                                                |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fal-ai/kling-image/v3/text-to-image` | **Default for text-only prompts.** Kling V3 Standard, pure text-to-image. 1K/2K, $0.028/image. Auto-selected when `--source` is not provided.                                        |
+| `fal-ai/kling-image/o1`               | **Default for multi-reference prompts.** Kling O1 image-to-image / multi-ref remix (1–10 reference images required). Auto-selected when `--source` is provided. 1K/2K, $0.028/image. |
+| `fal-ai/nano-banana-2`                | Gemini 3.1 Flash Image via fal. Explicit override only — costs 3–10x more than the direct Google path used by `imagen-nanobanana`.                                                   |
+| `fal-ai/nano-banana-pro`              | Gemini 3 Pro Image via fal. Same cost caveat.                                                                                                                                        |
 
 The script auto-selects between `v3/text-to-image` and `o1` based on whether `--source` is supplied. Override with `--model` when needed.
 
@@ -38,18 +38,18 @@ Replace `<skill-dir>` with this skill's base directory at invocation time. Pass 
 
 ## Flag reference
 
-| Flag | Description |
-|---|---|
-| `--source <path>` | One or more reference image paths, comma-separated for multi-ref (e.g. `a.png,b.png`). Up to 10. Presence of `--source` auto-switches the default model to `fal-ai/kling-image/o1` (i2i). Each file is uploaded to fal storage and passed as `image_urls`. |
-| `--drafts <N>` | Number of variant images to generate (1–9, default: 1). |
-| `--model <id>` | Model identifier. Default auto-picks `fal-ai/kling-image/v3/text-to-image` for t2i or `fal-ai/kling-image/o1` for i2i. |
-| `--aspect <ratio>` | Aspect ratio enum, one of `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `21:9`. The `o1` (i2i) endpoint also accepts `auto`. Other ratios are rejected by fal. Default: `auto` for image-to-image (`--source` provided), `1:1` for text-to-image. |
-| `--resolution <1k\|2k\|4k>` | Output resolution (default: `2k`). Maps to Kling's `1K`/`2K` enum. fal Kling does not support `4k` — passing it triggers a warning and caps to `2k`. |
-| `--name <slug>` | Output filename prefix (default: full prompt slugified, truncated to 40 chars). |
-| `--out <dir>` | Output directory (default: `~/Pictures/imagen`). |
-| `--transparent` | After generation, run the cutout step (controlled by `--cutout`). The original Kling PNG is kept; BiRefNet result is written to a sibling `<base>-alpha.png`. Both paths are emitted. |
-| `--cutout <birefnet\|none>` | Controls the cutout step when `--transparent` is set. `birefnet` (default): run BiRefNet v2 and write `<base>-alpha.png`. `none`: skip BiRefNet; only the raw Kling PNG is saved. |
-| `--dry-run` | Print the resolved request payload as JSON and exit without making an API call. No `FAL_KEY` required. |
+| Flag                        | Description                                                                                                                                                                                                                                                |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--source <path>`           | One or more reference image paths, comma-separated for multi-ref (e.g. `a.png,b.png`). Up to 10. Presence of `--source` auto-switches the default model to `fal-ai/kling-image/o1` (i2i). Each file is uploaded to fal storage and passed as `image_urls`. |
+| `--drafts <N>`              | Number of variant images to generate (1–9, default: 1).                                                                                                                                                                                                    |
+| `--model <id>`              | Model identifier. Default auto-picks `fal-ai/kling-image/v3/text-to-image` for t2i or `fal-ai/kling-image/o1` for i2i.                                                                                                                                     |
+| `--aspect <ratio>`          | Aspect ratio enum, one of `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `21:9`. The `o1` (i2i) endpoint also accepts `auto`. Other ratios are rejected by fal. Default: `auto` for image-to-image (`--source` provided), `1:1` for text-to-image.     |
+| `--resolution <1k\|2k\|4k>` | Output resolution (default: `2k`). Maps to Kling's `1K`/`2K` enum. fal Kling does not support `4k` — passing it triggers a warning and caps to `2k`.                                                                                                       |
+| `--name <slug>`             | Output filename prefix (default: full prompt slugified, truncated to 40 chars).                                                                                                                                                                            |
+| `--out <dir>`               | Output directory (default: `~/Pictures/imagen`).                                                                                                                                                                                                           |
+| `--transparent`             | After generation, run the cutout step (controlled by `--cutout`). The original Kling PNG is kept; BiRefNet result is written to a sibling `<base>-alpha.png`. Both paths are emitted.                                                                      |
+| `--cutout <birefnet\|none>` | Controls the cutout step when `--transparent` is set. `birefnet` (default): run BiRefNet v2 and write `<base>-alpha.png`. `none`: skip BiRefNet; only the raw Kling PNG is saved.                                                                          |
+| `--dry-run`                 | Print the resolved request payload as JSON and exit without making an API call. No `FAL_KEY` required.                                                                                                                                                     |
 
 ## Workflow
 

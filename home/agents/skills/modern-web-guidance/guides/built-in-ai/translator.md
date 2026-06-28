@@ -1,6 +1,5 @@
 The **Translator API** allows developers to perform client-side text translation using built-in AI models in Chrome. This approach eliminates the need for cloud-based translation services for ephemeral content, reducing costs and improving privacy by keeping data on the user's device.
 
-
 ## Prerequisites & Requirements
 
 ### Browser Support
@@ -31,19 +30,19 @@ To run Gemini Nano and associated models, the system needs:
 
 ```javascript
 const options = {
-  sourceLanguage: 'es',
-  targetLanguage: 'fr',
+  sourceLanguage: "es",
+  targetLanguage: "fr",
 };
 
 const availability = await Translator.availability(options);
 
-if (availability === 'available' || availability === 'downloadable') {
+if (availability === "available" || availability === "downloadable") {
   // A user gesture is strictly required to trigger create when downloadable
-  document.getElementById('start-translation-btn').addEventListener('click', async () => {
+  document.getElementById("start-translation-btn").addEventListener("click", async () => {
     const translator = await Translator.create({
       ...options,
       monitor(m) {
-        m.addEventListener('downloadprogress', (e) => {
+        m.addEventListener("downloadprogress", (e) => {
           console.log(`Downloaded ${Math.round(e.loaded * 100)}%`);
         });
       },
@@ -60,13 +59,11 @@ The API supports both static and streaming responses.
 
 ```javascript
 const translator = await Translator.create({
-  sourceLanguage: 'en',
-  targetLanguage: 'fr',
+  sourceLanguage: "en",
+  targetLanguage: "fr",
 });
 
-const result = await translator.translate(
-  'Where is the next bus stop, please?',
-);
+const result = await translator.translate("Where is the next bus stop, please?");
 console.log(result);
 // Output: "Où est le prochain arrêt de bus, s'il vous plaît ?"
 ```
@@ -144,16 +141,17 @@ Unsupported in: Edge, Firefox, and Safari.
 Before use, check if the `Translator` object is available in the global scope:
 
 ```javascript
-if ('Translator' in self) {
+if ("Translator" in self) {
   // The Translator API is supported.
 } else {
   // Execute fallback strategy
 }
 ```
 
-If the `Translator` API is unsupported or availability checks return `'unavailable'`, you must gracefully fall back. 
+If the `Translator` API is unsupported or availability checks return `'unavailable'`, you must gracefully fall back.
 
 Recommended options:
+
 1. **Remote API Fallback**: Redirect the translation request to a server endpoint or cloud remote API (such as the Vertex AI Gemini API) to deliver translation functionality.
 2. **Graceful Degradation**: Visually disable translation control elements or buttons while showing an end-user friendly note (e.g., `"Client-side translation is currently unsupported in this browser"`). Do not allow unhandled exceptions.
 3. **Polyfill Fallback**: You can use community-maintained polyfills like `built-in-ai-task-apis-polyfills` or `prompt-api-polyfill` to emulate the API surface using remote services.

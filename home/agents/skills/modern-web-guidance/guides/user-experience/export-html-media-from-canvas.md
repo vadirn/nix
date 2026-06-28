@@ -38,9 +38,7 @@ const observer = new ResizeObserver(([entry]) => {
 const supportsDevicePixelContentBox =
   typeof ResizeObserverEntry !== "undefined" &&
   "devicePixelContentBoxSize" in ResizeObserverEntry.prototype;
-const options = supportsDevicePixelContentBox
-  ? { box: "device-pixel-content-box" }
-  : {};
+const options = supportsDevicePixelContentBox ? { box: "device-pixel-content-box" } : {};
 observer.observe(canvas, options);
 ```
 
@@ -61,14 +59,7 @@ canvas.onpaint = () => {
 ```js
 canvas.onpaint = () => {
   if (gl.texElementImage2D) {
-    gl.texElementImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      uiElement,
-    );
+    gl.texElementImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, uiElement);
   }
 };
 ```
@@ -83,23 +74,22 @@ canvas.onpaint = () => {
 };
 ```
 
-
 When using a `requestAnimationFrame` loop to render the scene, call `canvas.requestPaint()` within the loop to ensure that the HTML content is rendered to the canvas. Make sure you only re-render the canvas if there has been an update to the descendant HTML elements:
 
-  ```js
-  function render() {
-    // Request to update the canvas
-    canvas.requestPaint();
-    requestAnimationFrame(render);
-  }
+```js
+function render() {
+  // Request to update the canvas
+  canvas.requestPaint();
   requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
 
-  canvas.onpaint = (event) => {
-    if (event.changedElements && event.changedElements.length > 0) {
-      // Update the texture with drawElementImage, texElementImage2D, or copyElementImageToTexture, and update the CSS transform as shown in step 5
-    }
-  };
-  ```
+canvas.onpaint = (event) => {
+  if (event.changedElements && event.changedElements.length > 0) {
+    // Update the texture with drawElementImage, texElementImage2D, or copyElementImageToTexture, and update the CSS transform as shown in step 5
+  }
+};
+```
 
 5. Update the CSS transform.
 
@@ -120,7 +110,7 @@ canvas.onpaint = () => {
   - Convert WebGL MVP Matrix to DOM Matrix.
   - Normalize the HTML element. HTML elements are sized in pixels (for example, 200px wide). WebGL, however, usually treats objects as "unit squares", for example, ranging from 0 to 1. If you don't normalize, your 200px button will look 200 times larger.
   - Map to the canvas viewport. This step is the "re-scaling" phase: it stretches that unit-space math back out to match the actual pixel dimensions of your `<canvas>` element on the screen. It also flips the Y-axis, because in WebGL, up is positive, but in CSS, down is positive.
-  - Calculate the final transform. Multiply the matrices in order: Viewport * MVP * Normalization. Combining them into one final transform produces a "map" that tells the browser exactly where that HTML element layer should sit to align with the 3D drawing.
+  - Calculate the final transform. Multiply the matrices in order: Viewport _ MVP _ Normalization. Combining them into one final transform produces a "map" that tells the browser exactly where that HTML element layer should sit to align with the 3D drawing.
   - Apply the transform to the HTML element. This moves the HTML element layer to sit directly on top of its rendered pixels. This ensures that when a user clicks a button or selects text, they are actually hitting the real HTML element.
 
   ```js
@@ -148,15 +138,10 @@ canvas.onpaint = () => {
       .scale(canvas.width / 2, -canvas.height / 2, canvas.height / 2);
 
     // 4. Multiply: (Clip -> Pixels) * (MVP) * (pixels -> unit square)
-    const screenSpaceTransform = clipToCanvasViewport
-      .multiply(mvpDOM)
-      .multiply(toGLModel);
+    const screenSpaceTransform = clipToCanvasViewport.multiply(mvpDOM).multiply(toGLModel);
 
     // 5. Apply to the transform
-    const computedTransform = canvas.getElementTransform(
-      targetHTMLElement,
-      screenSpaceTransform,
-    );
+    const computedTransform = canvas.getElementTransform(targetHTMLElement, screenSpaceTransform);
     targetHTMLElement.style.transform = computedTransform.toString();
   }
   ```
@@ -180,48 +165,52 @@ targetHTMLElement.style.transform = computedTransform.toString();
 
 ```html
 <body>
-    <canvas id="canvas" style="width: 400px; height: 200px;" layoutsubtree>
-        <input id="element">
-    </canvas>
-    
-    <button id="download">Download Image</button>
+  <canvas id="canvas" style="width: 400px; height: 200px;" layoutsubtree>
+    <input id="element" />
+  </canvas>
 
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const element = document.getElementById('element');
-        const download = document.getElementById('download');
+  <button id="download">Download Image</button>
 
-        canvas.onpaint = (event) => {
-            ctx.reset();
-            // Draw the element into the canvas
-            const transform = ctx.drawElementImage(element, 10, 10);
-            // Synchronize DOM position for hit testing (typing)
-            element.style.transform = transform.toString();
-        };
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const element = document.getElementById("element");
+    const download = document.getElementById("download");
 
-        download.onclick = () => {
-            // Export the canvas content as an image
-            const dataURL = canvas.toDataURL('image/png');
-            const link = document.createElement('a');
-            link.download = 'exported-canvas.png';
-            link.href = dataURL;
-            link.click();
-        };
+    canvas.onpaint = (event) => {
+      ctx.reset();
+      // Draw the element into the canvas
+      const transform = ctx.drawElementImage(element, 10, 10);
+      // Synchronize DOM position for hit testing (typing)
+      element.style.transform = transform.toString();
+    };
 
-        // Re-initialize canvas size on screen resize
-        const observer = new ResizeObserver(([entry]) => {
-            const dpc = entry.devicePixelContentBoxSize;
-            canvas.width = dpc ? dpc[0].inlineSize : Math.round(entry.contentRect.width * window.devicePixelRatio);
-            canvas.height = dpc ? dpc[0].blockSize : Math.round(entry.contentRect.height * window.devicePixelRatio);
-            canvas.requestPaint();
-        });
-        const supportsDevicePixelContentBox = 
-            typeof ResizeObserverEntry !== 'undefined' && 
-            'devicePixelContentBoxSize' in ResizeObserverEntry.prototype;
-        const options = supportsDevicePixelContentBox ? { box: 'device-pixel-content-box' } : {};
-        observer.observe(canvas, options);
-    </script>
+    download.onclick = () => {
+      // Export the canvas content as an image
+      const dataURL = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = "exported-canvas.png";
+      link.href = dataURL;
+      link.click();
+    };
+
+    // Re-initialize canvas size on screen resize
+    const observer = new ResizeObserver(([entry]) => {
+      const dpc = entry.devicePixelContentBoxSize;
+      canvas.width = dpc
+        ? dpc[0].inlineSize
+        : Math.round(entry.contentRect.width * window.devicePixelRatio);
+      canvas.height = dpc
+        ? dpc[0].blockSize
+        : Math.round(entry.contentRect.height * window.devicePixelRatio);
+      canvas.requestPaint();
+    });
+    const supportsDevicePixelContentBox =
+      typeof ResizeObserverEntry !== "undefined" &&
+      "devicePixelContentBoxSize" in ResizeObserverEntry.prototype;
+    const options = supportsDevicePixelContentBox ? { box: "device-pixel-content-box" } : {};
+    observer.observe(canvas, options);
+  </script>
 </body>
 ```
 
@@ -242,8 +231,8 @@ HTML in canvas is not natively supported by any major browser yet.
 
 The HTML-in-Canvas API is not currently supported in all modern browsers, thus a fallback strategy is typically required. However, given the improved performance benefits of this API, HTML-in-Canvas should be used if the browser supports it.
 
-For the use case where HTML content needs to be exported from a canvas, use libraries like `html2canvas`, `dom-to-image`, or `snapdom`. 
+For the use case where HTML content needs to be exported from a canvas, use libraries like `html2canvas`, `dom-to-image`, or `snapdom`.
 
-To capture HTML interactions frame by frame, for example, for streaming, capture DOM mutations using libraries like `rrweb`. 
+To capture HTML interactions frame by frame, for example, for streaming, capture DOM mutations using libraries like `rrweb`.
 
 Alternatively, implement a warning that HTML media export is not supported in the browser because it doesn't support HTML-in-Canvas.

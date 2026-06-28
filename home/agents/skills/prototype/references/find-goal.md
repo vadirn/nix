@@ -9,7 +9,7 @@ This workflow extracts a stateable design question. If it cannot, the prototype 
 - The user describes a method instead of a question. ("Let's prototype Redis." Redis is the answer; what is the question?)
 - The user describes a feeling instead of a problem. ("The app feels slow." Where, for whom, doing what, slower than what?)
 - The user describes an outcome two steps removed. ("We need to increase retention.") Retention is a goal; the design question is the next layer down.
-- The user can describe the prototype but not what the prototype would *prove*.
+- The user can describe the prototype but not what the prototype would _prove_.
 
 ## Procedure
 
@@ -56,7 +56,7 @@ If the harm is named ("if we do not validate this, we will build six weeks of fe
 
 For each candidate question, ask:
 
-> "I will know this prototype answered the question when ___."
+> "I will know this prototype answered the question when \_\_\_."
 
 Fill the blank with the user. A clean answer makes the design question precise:
 

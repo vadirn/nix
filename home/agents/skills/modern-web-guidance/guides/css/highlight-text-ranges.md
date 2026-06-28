@@ -5,6 +5,7 @@ The CSS Custom Highlight API lets you style arbitrary text ranges on a page with
 To highlight text ranges, you must collect the target text nodes, create `Range` and `Highlight` objects, register them in the `HighlightRegistry`, and then style them with the `::highlight()` pseudo-element.
 
 #### 1. Collect text nodes and create ranges
+
 Use a `TreeWalker` to collect all text nodes in the target element, then create `Range` objects pointing at the character offsets you want to highlight.
 
 ```javascript
@@ -28,6 +29,7 @@ range.setEnd(textNode, matchEndIndex);
 Cache the text-node list and only rebuild it when the DOM content actually changes, since walking the tree is expensive.
 
 #### 2. Create a Highlight from the ranges
+
 Group one or more `Range` objects into a `Highlight`. Multiple ranges that share the same style belong in a single highlight.
 
 ```javascript
@@ -35,6 +37,7 @@ const searchHighlight = new Highlight(...matchingRanges);
 ```
 
 #### 3. Register the highlight in the registry
+
 Register each `Highlight` under a custom name using `CSS.highlights`, which is a `Map`-like `HighlightRegistry`.
 
 ```javascript
@@ -59,6 +62,7 @@ CSS.highlights.set("secondary", secondary);
 ```
 
 #### 4. Style with `::highlight()`
+
 Use the `::highlight()` pseudo-element in CSS to style each registered highlight by name.
 
 ```css

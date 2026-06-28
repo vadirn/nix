@@ -1323,14 +1323,15 @@ fn test_list_no_superseded_excludes() {
     );
 }
 
-/// get: a superseded entry shows the [superseded] marker line.
+/// get: a superseded entry resolves to its bare path (exit 0) without --no-superseded.
 #[test]
-fn test_get_shows_superseded_marker() {
+fn test_get_resolves_superseded_path() {
     let (stdout, code) = run_get(&["superseded-card"]);
     assert_eq!(code, 0, "get must exit 0 for superseded entry without --no-superseded; stdout: {}", stdout);
+    let line = stdout.trim();
     assert!(
-        stdout.contains("[superseded]"),
-        "get must emit [superseded] marker for superseded entries; stdout: {}",
+        line.ends_with(".md") && !line.contains("[superseded]"),
+        "get must emit only the resolved path, no marker; stdout: {}",
         stdout
     );
 }
@@ -1531,7 +1532,7 @@ fn test_search_downrank_displaces_superseded_at_limit_1() {
 
 /// When a fragment matches multiple paths and --no-superseded is set, all
 /// superseded candidates are dropped. If exactly one non-superseded candidate
-/// survives, get must resolve it normally (print path + content).
+/// survives, get must resolve it normally (print its path).
 #[test]
 fn test_get_multi_match_no_superseded_resolves_single_survivor() {
     // Use a temp vault with two files sharing the slug "shared-name":
@@ -1558,11 +1559,11 @@ fn test_get_multi_match_no_superseded_resolves_single_survivor() {
     let cfg = cfg_for(&vault_root);
 
     // Verify that without --no-superseded we do get two matches (multi-match case).
-    let paths_all = vault_query::commands::get::resolve_paths("shared-name", &cfg).unwrap();
+    let paths_all = vault_query::slug::resolve_paths("shared-name", &cfg).unwrap();
     assert_eq!(paths_all.len(), 2, "expected 2 matches before filtering; got {:?}", paths_all);
 
     // With --no-superseded the superseded candidate should be dropped and the
-    // single survivor resolved normally (exit 0, content printed to stdout).
+    // single survivor resolved normally (exit 0, its path printed to stdout).
     // We test via the binary to capture stdout and exit code.
     let output = Command::new(cargo_bin())
         .args([
@@ -1585,21 +1586,21 @@ fn test_get_multi_match_no_superseded_resolves_single_survivor() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        stdout.contains("Fresh content"),
-        "get must print the fresh content; stdout: {}",
+        stdout.contains("folder-b"),
+        "get must print the surviving (non-superseded) candidate's path; stdout: {}",
         stdout
     );
     assert!(
-        !stdout.contains("Superseded content"),
-        "get must not print superseded content when --no-superseded is set; stdout: {}",
+        !stdout.contains("folder-a"),
+        "get must not print the superseded candidate's path when --no-superseded is set; stdout: {}",
         stdout
     );
 }
 
-/// In the multi-match listing (no --no-superseded), superseded candidates are
-/// labeled with [superseded] appended to their path line.
+/// In the multi-match listing (no --no-superseded), every candidate is listed as
+/// a bare absolute path, one per line, with no [superseded] labels.
 #[test]
-fn test_get_multi_match_labels_superseded_candidate() {
+fn test_get_multi_match_lists_bare_paths() {
     let tmp = tempfile::tempdir().unwrap();
     let vault_root = tmp.path().to_path_buf();
 
@@ -1640,20 +1641,19 @@ fn test_get_multi_match_labels_superseded_candidate() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // Exactly one line must contain [superseded].
-    let sup_lines: Vec<&str> = stdout.lines().filter(|l| l.contains("[superseded]")).collect();
-    assert_eq!(
-        sup_lines.len(),
-        1,
-        "expected exactly one [superseded]-labeled line in multi-match listing; stdout: {}",
+    // No labels: the listing is bare paths only.
+    assert!(
+        !stdout.contains("[superseded]"),
+        "multi-match listing must not carry [superseded] labels; stdout: {}",
         stdout
     );
 
-    // The non-superseded candidate line must not carry the label.
-    let non_sup_lines: Vec<&str> = stdout.lines().filter(|l| l.contains("folder-b") && !l.contains("[superseded]")).collect();
+    // Both candidates appear, one bare path per line.
+    let lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
+    assert_eq!(lines.len(), 2, "expected both candidate paths listed; stdout: {}", stdout);
     assert!(
-        !non_sup_lines.is_empty(),
-        "non-superseded candidate must appear without [superseded] label; stdout: {}",
+        stdout.contains("folder-a") && stdout.contains("folder-b"),
+        "both candidate paths must appear in the listing; stdout: {}",
         stdout
     );
 }
