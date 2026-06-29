@@ -7,6 +7,7 @@ import {
   type Grade,
   type GlossEntry,
   type IR,
+  type LinkInventory,
   type Relation,
   type WorkStep,
   glossList,
@@ -19,7 +20,7 @@ import {
   relText,
   render,
 } from "./text.ts";
-import { askJson, EXTRACT, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
+import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
 // carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while
@@ -82,7 +83,45 @@ export const PASS_RU: Pass[] = [
 ];
 
 // ---- stage 1: extract the combo (description, thesis, glossary) ----
-function extractComboPrompt(blocks: Block[], frontDescription: string, lang: "en" | "ru"): string {
+// Render the deterministic link inventory as a MUST-COVER checklist appended to the
+// prompt: every [[wikilink]] the harvest found (the classify-into-three-lanes answer
+// key) plus every external [text](url) (the citation lane, kept OUT of relations). The
+// instruction text is always English — langRule pins the OUTPUT values' language, and a
+// quoted predicate is a verbatim source span already in the note's language. Returns ""
+// when the note has no links, so a link-free note keeps the original lean prompt.
+function linkInventorySection(inventory: LinkInventory, selfSlug: string): string {
+  if (inventory.wikilinks.length === 0 && inventory.external.length === 0) return "";
+  const self = selfSlug.trim();
+  const wl = inventory.wikilinks.length
+    ? inventory.wikilinks.map((w) => `  - ${w.markup}`).join("\n")
+    : "  (none)";
+  const ex = inventory.external.length
+    ? inventory.external.map((e) => `  - ${e.markup}`).join("\n")
+    : "  (none)";
+  // The SELF slug is the classification anchor: it lets the model recognize a link
+  // back to the note itself and route it correctly. The note-level emit lane is gone —
+  // every hostless link is a SEE-ALSO, never a fabricated cross-note edge.
+  return `
+
+SELF: this note's own slug is ${self ? `[[${self}]]` : "(unresolved)"}.
+LINK INVENTORY (a MUST-COVER checklist — classify EVERY vault link below into EXACTLY ONE lane; omit none):
+${wl}
+Each entry is a vault link ([[wikilink]] or [text](path.md)) the note states. Assign each to exactly one lane:
+1. TERM-SCOPED edge — the link's target IS one of the glossary terms above: encode it as that term's "relations" entry with "to" set to the bare term-slug.
+2. NOTE-LEVEL edge — UNAVAILABLE for this note: treat every hostless link as SEE-ALSO instead.
+3. SEE-ALSO — every other link: an associative mention with no stated directional relation. Do NOT emit a relation for it; leave it in place for the curator's see-also list.
+A link that fails the note-level test stays SEE-ALSO. NEVER fabricate a "rel" to type an associative link: if no directional predicate is quotable from the prose, the link is SEE-ALSO, not an edge. The quoted predicate is the audit trail — without a quotable directional phrase, do not emit a note-level edge.
+EXTERNAL LINKS (citations / sources, NOT vault relations — NEVER encode a URL as a relation; leave them in the prose as the sources they cite):
+${ex}`;
+}
+
+export function extractComboPrompt(
+  blocks: Block[],
+  frontDescription: string,
+  lang: "en" | "ru",
+  inventory: LinkInventory = { wikilinks: [], external: [] },
+  selfSlug = "",
+): string {
   const descRule = frontDescription
     ? `Use this authored description VERBATIM: "${frontDescription}"`
     : `Write ONE sentence naming what the note is about.`;
@@ -93,6 +132,7 @@ function extractComboPrompt(blocks: Block[], frontDescription: string, lang: "en
 - "workflow": the note's ACTIONABLE directives — the practices, steps, or procedure the note tells the reader to DO, in the order the note gives them. A directive earns an entry only when the note PRESCRIBES an action (an imperative, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives — leave them to the thesis and glossary. For each: "step" (one imperative clause in YOUR OWN words, dense; if the SOURCE gives a reason for the action — "do X because Y", "do X so that Y" — append that source-stated reason to the step; if the source states no reason, keep the step terse), "source" (array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
 Collapse restatements of the SAME concept into ONE entry whose "source" lists all the blocks that state it — do not emit a separate entry per surface form.
 Return ONLY JSON {"description":"...","thesis":"...","glossary":[{"term":"...","def":"...","relations":[{"rel":"...","to":"...","predicate":null}],"source":["Bn"]}],"workflow":[{"step":"...","source":["Bn"]}]}.
+${linkInventorySection(inventory, selfSlug)}
 
 TEXT (block IDs in [Bn] markers):
 ${render(blocks)}`;
@@ -102,8 +142,14 @@ export async function extractCombo(
   blocks: Block[],
   frontDescription: string,
   lang: "en" | "ru",
+  inventory: LinkInventory = { wikilinks: [], external: [] },
+  selfSlug = "",
 ): Promise<IR> {
-  const ir = await askJson<IR>(EXTRACT, extractComboPrompt(blocks, frontDescription, lang), 4096);
+  const ir = await askJson<IR>(
+    EXTRACT,
+    extractComboPrompt(blocks, frontDescription, lang, inventory, selfSlug),
+    EXTRACT_TOKENS,
+  );
   const ids = new Set(blocks.map((b) => b.id));
   const glossary = (ir.glossary ?? [])
     .map((e) => ({
@@ -154,7 +200,7 @@ export async function gradeBlocks(ir: IR, blocks: Block[]): Promise<Map<string, 
   const judged = await askJson<{ grades: { id: string; grade: Grade }[] }>(
     EXTRACT,
     gradeBlocksPrompt(ir, blocks),
-    2048,
+    EXTRACT_TOKENS,
   );
   const byId = new Map<string, Grade>();
   for (const g of judged.grades ?? []) {
@@ -241,7 +287,7 @@ export async function synthEntries(
   const res = await askJson<{ entries: { term: string; def: string }[] }>(
     EXTRACT,
     synthEntriesPrompt(ir, entries, mode, blockById, lang),
-    4096,
+    EXTRACT_TOKENS,
   );
   for (const e of res.entries ?? []) if (e.term && e.def) out.set(e.term.trim(), e.def.trim());
   return out;
@@ -289,7 +335,7 @@ export async function synthWorkflow(
     const res = await askJson<{ steps: { id: string; step: string }[] }>(
       EXTRACT,
       synthWorkflowPrompt(steps, mode, blockById, lang),
-      4096,
+      EXTRACT_TOKENS,
     );
     for (const e of res.steps ?? []) {
       const m = /^S(\d+)$/.exec((e.id ?? "").trim());
@@ -339,7 +385,7 @@ export async function repairWorkflowGroup(
     const res = await askJson<{ steps: { id: string; step: string }[] }>(
       EXTRACT,
       repairWorkflowGroupPrompt(steps, missing, sourceText, lang),
-      4096,
+      EXTRACT_TOKENS,
     );
     for (const e of res.steps ?? []) {
       const m = /^S(\d+)$/.exec((e.id ?? "").trim());
@@ -450,7 +496,7 @@ export async function connectiveProse(
     const res = await askJson<{ prose: string }>(
       EXTRACT,
       connectiveProsePrompt(ir, orderedEntries, defByTerm, lang),
-      4096,
+      EXTRACT_TOKENS,
     );
     return (res.prose ?? "").trim() || ir.thesis;
   } catch (e) {
@@ -520,7 +566,11 @@ export async function proseFix(
   lang: "en" | "ru",
 ): Promise<string> {
   try {
-    const r = await askJson<{ prose?: string }>(EXTRACT, proseFixPrompt(prose, issues, lang), 4096);
+    const r = await askJson<{ prose?: string }>(
+      EXTRACT,
+      proseFixPrompt(prose, issues, lang),
+      EXTRACT_TOKENS,
+    );
     return (r.prose ?? "").trim() || prose; // an empty fix keeps the prior prose
   } catch (e) {
     rethrowIfBug(e, "proseFix");
@@ -589,7 +639,7 @@ export async function revise(
       const { blocks: rev } = await askJson<{ blocks: { id: string; text: string }[] }>(
         EXTRACT,
         revisePrompt(cur, pass),
-        4096,
+        EXTRACT_TOKENS,
       );
       const byId = new Map(rev.map((r) => [r.id, r.text]));
       cur = cur.map((b) => ({ id: b.id, text: byId.get(b.id) ?? b.text }));

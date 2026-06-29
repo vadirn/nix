@@ -11,6 +11,15 @@ export class TransientError extends Error {
   override readonly name = "TransientError";
 }
 
+// A length-truncation: the model hit its max_tokens cap and returned a partial
+// response (finish_reason "length"). Distinct from TransientError because retrying
+// the same call burns another timeout and truncates identically — the cap, not the
+// network, is the fault. A throw exits fw's attempt loop, so it is never
+// network-retried; the message names the model and cap so the cure is actionable.
+export class TruncationError extends Error {
+  override readonly name = "TruncationError";
+}
+
 export function isTransient(e: unknown): boolean {
   return e instanceof TransientError;
 }
@@ -21,7 +30,12 @@ export function isTransient(e: unknown): boolean {
 // masquerade as a judge flake and ship an unverified result. `stage` names the
 // failing stage in the log line.
 export function rethrowIfBug(e: unknown, stage: string): void {
-  if (isTransient(e)) return;
+  // A truncation rides out the same way a transient flake does: at every
+  // degrade-site the caller's safe fallback (inconclusive / thesis / kept draft)
+  // is the right outcome — a cap exhausted on a thinking model (glm legitimately
+  // spends FIDELITY_TOKENS) must never abort the whole distill. The clean
+  // actionable skip for a truncation in a NO-CATCH core stage lives in main().
+  if (isTransient(e) || e instanceof TruncationError) return;
   console.error(`distill: ${stage} failed with a non-transient error (propagating):`, e);
   throw e;
 }
@@ -36,6 +50,17 @@ const TIMEOUT_MS = 180_000;
 // extractJson and drops the whole run to the passthrough failsafe. Sized with
 // headroom for the longest gate input (rationale-carrying workflow steps).
 export const FIDELITY_TOKENS = 16_384;
+// Output ceiling for the content-scaling EXTRACT stages (extractCombo, gradeBlocks,
+// synth*, revise, connectiveProse, proseFix, renderProse). gpt-oss inlines reasoning in
+// the content, so the budget must cover reasoning + JSON; a dense note overran the old
+// per-stage caps (4096/2048) and truncated. max_tokens is a CEILING, not a target — a
+// normal note generates only what its content needs (~3-5k) and costs the same at any
+// ceiling, so this is sized generously to never truncate a real note. The 180s
+// TIMEOUT_MS is the de-facto limit (a runaway times out long before 96k); a genuine
+// length-truncation now surfaces as an actionable TruncationError (D39), not silent loss.
+// The intentionally-tiny stages (tieTogether, recover-def: ~1024) keep their small caps
+// as sanity bounds.
+export const EXTRACT_TOKENS = 96_000;
 
 // ---- Fireworks call with retry ----
 // Retry once, but only on transient failures: a network/timeout throw, or a
@@ -84,8 +109,21 @@ async function fw(
       const msg = `FW ${res.status}: ${JSON.stringify(j).slice(0, 300)}`;
       throw res.status === 429 || res.status >= 500 ? new TransientError(msg) : new Error(msg);
     }
-    const content = (j as { choices?: { message?: { content?: unknown } }[] }).choices?.[0]?.message
-      ?.content;
+    const choice = (
+      j as { choices?: { message?: { content?: unknown }; finish_reason?: unknown }[] }
+    ).choices?.[0];
+    // PRIMARY truncation signal: a "length" finish_reason means the model hit the
+    // cap mid-output. Check it regardless of whether content is present (a
+    // length-truncation usually carries truncated content) and throw a distinct,
+    // non-retried TruncationError naming the model + cap. The extractJson
+    // "unbalanced JSON" path stays as the fallback for when finish_reason is absent.
+    if (choice?.finish_reason === "length") {
+      const shortModel = model.split("/").pop() ?? model;
+      throw new TruncationError(
+        `output truncated at max_tokens=${body.max_tokens} (${shortModel}) — raise this stage's cap`,
+      );
+    }
+    const content = choice?.message?.content;
     if (typeof content !== "string") {
       // model returned no content: a model-output flake, retryable — transient.
       throw new TransientError(`FW empty choices: ${JSON.stringify(j).slice(0, 300)}`);

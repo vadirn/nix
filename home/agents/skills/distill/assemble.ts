@@ -23,13 +23,17 @@ export const escAttr = (s: string) =>
 // wikilink (inner re-slugged), a bare label becomes a local term-slug. Labels are
 // pre-slugified so the block is byte-stable. Exported for isolated unit testing.
 // Returns "" when no entry carries an edge.
+function endpointOf(to: string): string {
+  const wl = /^\[\[(.+)\]\]$/.exec(to.trim());
+  return wl ? `[[${slugSegment(wl[1])}]]` : slugSegment(to);
+}
+
 export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
   const singleAtom = orderedEntries.length === 1;
   const lines: string[] = [];
   for (const entry of orderedEntries) {
     for (const r of entry.relations) {
-      const wl = /^\[\[(.+)\]\]$/.exec(r.to.trim());
-      const endpoint = wl ? `[[${slugSegment(wl[1])}]]` : slugSegment(r.to);
+      const endpoint = endpointOf(r.to);
       if (!endpoint) continue; // an endpoint that slugs to empty is unrenderable
       const pred = r.predicate ? ` (${r.predicate})` : "";
       lines.push(

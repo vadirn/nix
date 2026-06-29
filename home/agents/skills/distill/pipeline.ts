@@ -2,16 +2,21 @@
 // arg parsing, the temp-file sink, and main(). Sequences the stages from prompts.ts
 // behind the seams the leaf modules stabilize; main() is invoked by the entrypoint.
 import { readFileSync, writeFileSync } from "node:fs";
+import { basename } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   type Block,
   type Grade,
   type GlossEntry,
   type IR,
+  type LinkInventory,
   type WorkStep,
   detectLang,
+  harvestExternalLinks,
+  harvestVaultEdges,
   normalizeTypography,
   segment,
+  slugSegment,
   wordCount,
 } from "./text.ts";
 import {
@@ -20,7 +25,7 @@ import {
   parseFrontmatter,
   parseType,
 } from "./frontmatter.ts";
-import { askJson, EXTRACT, isTransient, rethrowIfBug } from "./fw.ts";
+import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
 import {
   type Concept,
   type StepVerdict,
@@ -471,6 +476,74 @@ export function buildFooter(m: {
   return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}`;
 }
 
+// edge-coverage gate (deterministic, pure). A vault edge — a [[wikilink]] or a
+// scheme-less [text](path) markdown link — is a deliberate cross-note relation, but the
+// fidelity gate grades only concept defs + workflow coverage — never edges. So an
+// extractor that fails to encode a source link as a relation, plus the prose-fold that
+// dissolves the inline link, drops the edge with ZERO residue. This diffs the source
+// edge set (harvestVaultEdges) against the final output's; every source target absent
+// from output surfaces as residue — flipping the loss from silent to loud on a one-way
+// door (distilled output overwrites the non-git-tracked source). A link covered ANYWHERE
+// in output — a retained see-also list, the `## Relations` block, or the prose — is not
+// residue. Both source and covered sets run through harvestVaultEdges, so an output
+// markdown link covers a source wikilink to the same note and vice versa.
+// Both harvest lanes route through normalizeEdgeTarget, which strips a trailing
+// `#fragment` before slugging, so a fragment-bearing source edge (`[[note#heading]]`)
+// slugs to `note` and is covered by an output `[[note]]` — no anchor-downgrade false
+// positive. emitRelationsBlock's `[[file-slug]]` endpoints carry no fragment, so the
+// REBUILD round-trip is byte-stable through the change.
+// This narrows the guarantee to note→note edges, NOT anchor precision: several
+// distinct-anchor links to ONE note (`[[note#a]]` + `[[note#b]]`) collapse to slug
+// `note`, so dropping one anchor while any link to `note` survives reads as covered,
+// not residue. Section-anchor loss is outside the net by design (the vault is
+// navigational; no note's meaning depends on which anchor survives, audited 2026-06-29).
+export function wikilinkResidue(sourceText: string, outputText: string): Residue[] {
+  const covered = new Set(harvestVaultEdges(outputText).map((w) => w.slug));
+  // Group source edges by slug, tracking the DISTINCT normalized targets and the
+  // first-appearance markups under each. The discriminator is the distinct target
+  // (target.trim().toLowerCase()), NOT the distinct markup: alias/bare/case-only
+  // spellings of ONE target ([[foo]] + [[foo|a]] + [[Foo]], or [[foo]] + [foo](foo.md))
+  // collapse to a single distinct target and run the normal covered/dropped logic; only
+  // two genuinely different targets that slug alike (e.g. [[foo bar]] and [[foo/bar]])
+  // are a real collision, where output's single endpoint cannot be attributed to one.
+  // Map preserves first-insertion order over its keys, so it carries the slug order itself.
+  const bySlug = new Map<string, { markups: string[]; targets: Set<string> }>();
+  for (const { markup, slug, target } of harvestVaultEdges(sourceText)) {
+    let g = bySlug.get(slug);
+    if (!g) {
+      g = { markups: [], targets: new Set() };
+      bySlug.set(slug, g);
+    }
+    if (!g.markups.includes(markup)) g.markups.push(markup); // dedup exact markups, keep order
+    g.targets.add(target.trim().toLowerCase());
+  }
+  const residue: Residue[] = [];
+  for (const [slug, g] of bySlug) {
+    // collision: >1 distinct target shares the slug, so coverage is ambiguous — don't
+    // trust it. Surface every colliding markup as residue even when the slug is covered:
+    // a loud false positive the curator dismisses, not a silent drop on a one-way write.
+    if (g.targets.size > 1) {
+      for (const markup of g.markups) {
+        residue.push({
+          term: markup,
+          reason:
+            "wikilink slug-collision: distinct source edges share a slug; output coverage is ambiguous — verify each manually",
+          source: markup,
+        });
+      }
+      continue;
+    }
+    if (covered.has(slug)) continue;
+    const markup = g.markups[0];
+    residue.push({
+      term: markup,
+      reason: "wikilink dropped: source edge absent from output (no relation, no retained block)",
+      source: markup,
+    });
+  }
+  return residue;
+}
+
 // orchestrator: thread the stages above, holding the shared state (segmented
 // blocks, ordering, and the two mutable carriers defByTerm + workflowSteps). The
 // output is identical to the pre-decomposition single function; the stages only
@@ -487,14 +560,28 @@ async function distill(
     coreOnly: boolean;
     isReference: boolean;
   },
+  selfSlug = "",
 ): Promise<{ out: string; footer: string; residue: Residue[] }> {
   const blocks = segment(text);
   const blockById = new Map(blocks.map((b) => [b.id, b]));
   const beforeWords = wordCount(text);
 
+  // The note's own slug — the source endpoint of a note-level edge (D38) and the SELF
+  // anchor the extractor classifies links against. Prefer the filename slug (what other
+  // vault notes wikilink to); fall back to the H1 title slug when reading from stdin (no
+  // filename). Computed before extract so prompt and emit use one consistent slug.
+  const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
+  const effectiveSelfSlug = selfSlug || slugSegment(h1.replace(/^#+\s*/, ""));
+
   // 1. extract the idea-graph; nothing to distill (no concepts, no directives) →
-  // passthrough, footer notes it.
-  const ir = await extractCombo(blocks, frontDescription, lang);
+  // passthrough, footer notes it. The deterministic link inventory (every vault edge —
+  // [[wikilink]] or scheme-less [text](path) — UNION every external [text](url)) is fed
+  // to the extractor as a MUST-COVER checklist.
+  const linkInventory: LinkInventory = {
+    wikilinks: harvestVaultEdges(text),
+    external: harvestExternalLinks(text),
+  };
+  const ir = await extractCombo(blocks, frontDescription, lang, linkInventory, effectiveSelfSlug);
   if (ir.glossary.length === 0 && ir.workflow.length === 0) {
     return { out: text, footer: `— nothing to distill · ${beforeWords} words`, residue: [] };
   }
@@ -524,8 +611,6 @@ async function distill(
     prose = revised.prose;
     workflowSteps = revised.workflowSteps;
   }
-
-  const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
 
   // 5. fidelity gate + recovery (defs/steps repaired in place; --no-gate skips it)
   let residue: Residue[] = [];
@@ -581,6 +666,12 @@ async function distill(
       residue: [],
     };
   }
+  // edge-coverage gate: surface any source [[wikilink]] the distilled output dropped
+  // as residue. Deterministic and free, so it runs even under --no-gate — a dropped
+  // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the
+  // final body (prose + ## Relations + retained), so a link surviving in any of them
+  // counts as covered.
+  residue = residue.concat(wikilinkResidue(text, out));
   const footer = buildFooter({
     beforeWords,
     afterWords,
@@ -695,15 +786,24 @@ export async function main() {
   // D30: a type:reference body must stay link-free (no ## Relations). distill emits
   // no references today, so this only future-proofs a reference-distill path.
   const isReference = parseType(front) === "reference";
+  // the note's canonical self-slug is its filename slug (what other vault notes
+  // wikilink to); empty when reading from stdin, where distill() falls back to the H1.
+  const selfSlug = inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
   try {
-    const { out, footer, residue } = await distill(body, resolved, frontDescription, {
-      synth,
-      maxRetries,
-      noRevise,
-      noGate,
-      coreOnly,
-      isReference,
-    });
+    const { out, footer, residue } = await distill(
+      body,
+      resolved,
+      frontDescription,
+      {
+        synth,
+        maxRetries,
+        noRevise,
+        noGate,
+        coreOnly,
+        isReference,
+      },
+      selfSlug,
+    );
     // <result> wraps exactly the text to write back to source: frontmatter
     // (verbatim except the injected epistemic_status default) + distilled body.
     // <residue> carries one <entry> per definition that failed the gate, with
@@ -728,6 +828,13 @@ export async function main() {
     // A non-transient throw is a real bug — surface it (a stage catch has already
     // logged it on its way up; anything thrown outside a stage prints its own stack
     // on propagation) instead of shipping the original as a silent passthrough.
+    // a truncation in a NO-CATCH core stage (extractCombo, gradeBlocks) is not a
+    // transient flake and not a code bug: it skips THIS note with a clear actionable
+    // footer (raise the stage's cap), never a raw stack crash or a "transient" label.
+    if (e instanceof TruncationError) {
+      emit(input, `— distill skipped: output TRUNCATED — ${e.message}`);
+      process.exit(0);
+    }
     if (!isTransient(e)) throw e;
     // transient failsafe: temp file holds the original (passthrough); path still printed
     emit(input, `— distill skipped (error): ${String(e).slice(0, 160)}`);

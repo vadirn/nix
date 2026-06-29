@@ -39,6 +39,20 @@ export type IR = {
   glossary: GlossEntry[];
   workflow: WorkStep[];
 };
+// A vault edge: a [[wikilink]] OR a scheme-less [text](path) markdown link, both
+// intra-vault cross-note relations. `markup` is the verbatim span, `slug` its target
+// slugged for byte-stable comparison, `target` the raw alias/path-cleaned endpoint
+// carried alongside `slug` as the collision discriminator in wikilinkResidue. The shared
+// return shape of all three harvesters, so harvestVaultEdges concats them without an adapter.
+export type VaultEdge = { markup: string; slug: string; target: string };
+
+// The deterministic link inventory fed to the extractor as a MUST-COVER checklist:
+// every [[wikilink]] (intra-vault edges) UNION every external [text](url) (citation /
+// source links, a distinct lane that grounds to a reference node, NOT a vault relation).
+export type LinkInventory = {
+  wikilinks: VaultEdge[];
+  external: { markup: string; text: string; url: string }[];
+};
 
 // ---- segmentation: fence-aware, split on blank lines; code fences stay whole ----
 export function segment(text: string): Block[] {
@@ -90,6 +104,125 @@ export const glossList = (entries: { term: string; def: string }[]): string =>
 // deterministic so the protection cannot miss one.
 const WIKILINK = /\[\[[^\]]+\]\]/;
 export const hasWikilink = (text: string): boolean => WIKILINK.test(text);
+
+// Asset extensions an Obsidian embed renders inline (image/av/pdf) — NOT a cross-note
+// relation. Anchored at `$`, case-insensitive, tested against the alias-stripped target
+// (so `![[diagram.png|caption]]` is caught). The single source of truth for the
+// asset gate in both harvestWikilinks (embed filter) and harvestInternalLinks.
+export const ASSET_RE =
+  /\.(png|jpe?g|gif|svg|webp|avif|bmp|ico|mp4|mov|webm|mkv|ogv|3gp|mp3|wav|m4a|ogg|flac|pdf)$/i;
+
+// A markdown-link url is an EXTERNAL citation when it carries a scheme (http:, mailto:,
+// tel:, ftp:) or is protocol-relative (//host); everything else is an in-vault relative
+// path (a vault edge). Splits harvestExternalLinks (external-only) from harvestInternalLinks.
+export const isExternalUrl = (url: string): boolean =>
+  /^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith("//");
+
+// The Markdown inline-link grammar `[text](url "title")`, shared by harvestExternalLinks
+// and harvestInternalLinks so the two complementary lanes (split by isExternalUrl) can
+// never drift. Excludes images (`!` lookbehind) and wikilinks (`]` lookbehind). The url
+// group `[^)\s]+` forbids a literal space, so a spaced path must be %20-encoded. Safe to
+// share at module scope: String.prototype.matchAll clones the regex, so lastIndex never
+// carries between calls.
+const MD_LINK_RE = /(?<![!\]])\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+
+// Strip a trailing `#fragment` (a section/block anchor like `note#heading` or
+// `note.md#page=2`) from an edge target BEFORE it is slugged, so an anchored link and
+// its bare form harvest to the SAME slug — `[[note#heading]]` and `[x](note.md#heading)`
+// both yield `note`, not `note-heading`. Runs OUTSIDE slugSegment (which must keep
+// mirroring vault-query slug.rs::segment); the fragment strip is a harvest concern, not
+// a slug-grammar one. Shared by both harvest lanes so the two never drift. Without this,
+// a fragment-bearing source edge slugged WITH its anchor and read as dropped against an
+// output that links the bare note — a wikilinkResidue false positive.
+export function normalizeEdgeTarget(raw: string): string {
+  return raw.replace(/#.*$/, "");
+}
+
+// Harvest every [[wikilink]] (and ![[embed]]) in `text` as {markup, slug, target}:
+// `markup` is the verbatim span, `slug` its target slugged for byte-stable comparison,
+// `target` the raw alias-stripped endpoint (the collision discriminator wikilinkResidue
+// keys on). An alias `[[t|a]]` harvests target `t`; the slug matches emitRelationsBlock's
+// pre-slugged file endpoints and a retained block's verbatim link alike, since
+// slugSegment is idempotent. ITEM B: an asset embed (`![[diagram.png]]`, `![[doc.pdf#page=2]]`)
+// is NOT an edge — it renders inline, so it is skipped here lest it surface as a phantom
+// dropped-wikilink; a bare `[[x.png]]` (no `!` embed) and a note transclusion `![[some-note]]`
+// or `![[some-note#heading]]` (no asset ext) stay real edges. Part of harvestVaultEdges, the source-of-truth for a note's
+// cross-note edges: pipeline.ts::wikilinkResidue diffs source against output over these
+// slugs, so an edge the extractor failed to encode — and the prose-fold dissolved —
+// surfaces as residue instead of vanishing silently.
+export function harvestWikilinks(text: string): VaultEdge[] {
+  const out: VaultEdge[] = [];
+  for (const m of text.matchAll(/!?\[\[([^\]]+)\]\]/g)) {
+    // strip the alias, then the `#fragment` (normalizeEdgeTarget) BEFORE slugging, so
+    // `[[note#heading]]` harvests slug `note` — the same slug the bare `[[note]]` and
+    // the markdown-link lane yield. The asset gate then runs on the fragment-stripped
+    // target (ASSET_RE is `$`-anchored), so a page/section embed `![[doc.pdf#page=2]]`
+    // is still caught. slug and target both drop the fragment, so anchored and bare
+    // forms unify on the cross-component join key (harvest ↔ emit ↔ coverage).
+    const target = normalizeEdgeTarget(m[1].split("|")[0].trim());
+    if (m[0].startsWith("!") && ASSET_RE.test(target)) continue;
+    const slug = slugSegment(target);
+    if (slug) out.push({ markup: m[0], slug, target });
+  }
+  return out;
+}
+
+// Harvest every EXTERNAL [text](url) Markdown link — the citation/source lane (D38),
+// distinct from vault edges. Keeps ONLY links whose url is external (isExternalUrl):
+// a scheme-less `[x](foo.md)` is a vault edge and moves to harvestInternalLinks. Excludes
+// images (![alt](url), rejected by the `!` lookbehind) and wikilinks (the `]` lookbehind
+// rejects the `](...)` trailing a `[[..]]` close, and a `[[x]]` has no `(url)` anyway).
+// The optional title suffix ([t](url "title")) is tolerated and dropped. The inventory
+// key is the URL (the grounding target of a cites/source edge), not a vault slug.
+export function harvestExternalLinks(
+  text: string,
+): { markup: string; text: string; url: string }[] {
+  const out: { markup: string; text: string; url: string }[] = [];
+  for (const m of text.matchAll(MD_LINK_RE)) {
+    const url = m[2].trim();
+    if (url && isExternalUrl(url)) out.push({ markup: m[0], text: m[1].trim(), url });
+  }
+  return out;
+}
+
+// Harvest every INTERNAL [text](path) Markdown link — a scheme-less relative path is a
+// cross-note edge (D38), the markdown-syntax sibling of a [[wikilink]]. Mirrors
+// harvestWikilinks' shape so harvestVaultEdges can concat the two lanes. Shares
+// MD_LINK_RE with harvestExternalLinks (so `[^)\s]+` forbids a literal space — a path with
+// spaces must be %20-encoded, which the decode step below restores) but keeps only the
+// !isExternalUrl matches. Each path is cleaned to a comparable vault target: strip a
+// leading `./`, drop a `#fragment`, decode `%20`, then strip a trailing `.md` — so a
+// `[x](foo.md)` and a `[[foo]]` yield the SAME target `foo` and never false-collide in
+// wikilinkResidue. Skips asset links (ASSET_RE) and a bare `#anchor` (cleans to empty).
+// SPECULATIVE LANE: the vault is wikilink-only today (zero scheme-less markdown-link
+// callers measured 2026-06-29); this lane exists on spec for a future mixed vault. Kept,
+// not deleted, so harvestVaultEdges already unifies both syntaxes the day one appears.
+export function harvestInternalLinks(text: string): VaultEdge[] {
+  const out: VaultEdge[] = [];
+  for (const m of text.matchAll(MD_LINK_RE)) {
+    const raw = m[2].trim();
+    if (!raw || isExternalUrl(raw)) continue;
+    // strip a leading `./` then the `#fragment` (normalizeEdgeTarget) before slugging
+    let path = normalizeEdgeTarget(raw.replace(/^\.\//, ""));
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // malformed %-sequence: keep the raw path (still comparable, just not decoded)
+    }
+    if (ASSET_RE.test(path)) continue;
+    const target = path.replace(/\.md$/i, "");
+    const slug = slugSegment(target);
+    if (slug) out.push({ markup: m[0], slug, target });
+  }
+  return out;
+}
+
+// The single source of truth for a note's cross-note edges: every [[wikilink]] UNION
+// every scheme-less [text](path) markdown link. Both lanes share the VaultEdge shape, so
+// wikilinkResidue and the extractor's MUST-COVER inventory consume one unified edge set.
+export function harvestVaultEdges(text: string): VaultEdge[] {
+  return [...harvestWikilinks(text), ...harvestInternalLinks(text)];
+}
 
 // a block carries operational tokens that must survive verbatim — code, CLI
 // flags, file paths. Used by the wikilink clamp to choose retain over distill.
