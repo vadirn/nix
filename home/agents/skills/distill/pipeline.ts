@@ -487,6 +487,12 @@ export function buildFooter(m: {
 // in output — a retained see-also list, the `## Relations` block, or the prose — is not
 // residue. Both source and covered sets run through harvestVaultEdges, so an output
 // markdown link covers a source wikilink to the same note and vice versa.
+// KNOWN false-positive (deferred): a fragment-bearing wikilink slugs WITH the fragment
+// (`[[note#heading]]` → `note-heading`), so if output covers it as `[[note]]` (slug `note`)
+// the anchor downgrade reads as a dropped edge — loud, never silent. The fix is to unify
+// both lanes under one normalizeEdgeTarget that strips the fragment before slugging, but
+// that re-pins emitRelationsBlock's byte-stable `[[file-slug]]` endpoint — do it WITH the
+// REBUILD round-trip, not standalone.
 export function wikilinkResidue(sourceText: string, outputText: string): Residue[] {
   const covered = new Set(harvestVaultEdges(outputText).map((w) => w.slug));
   // Group source edges by slug, tracking the DISTINCT normalized targets and the
@@ -496,21 +502,19 @@ export function wikilinkResidue(sourceText: string, outputText: string): Residue
   // collapse to a single distinct target and run the normal covered/dropped logic; only
   // two genuinely different targets that slug alike (e.g. [[foo bar]] and [[foo/bar]])
   // are a real collision, where output's single endpoint cannot be attributed to one.
+  // Map preserves first-insertion order over its keys, so it carries the slug order itself.
   const bySlug = new Map<string, { markups: string[]; targets: Set<string> }>();
-  const slugOrder: string[] = [];
   for (const { markup, slug, target } of harvestVaultEdges(sourceText)) {
     let g = bySlug.get(slug);
     if (!g) {
       g = { markups: [], targets: new Set() };
       bySlug.set(slug, g);
-      slugOrder.push(slug);
     }
     if (!g.markups.includes(markup)) g.markups.push(markup); // dedup exact markups, keep order
     g.targets.add(target.trim().toLowerCase());
   }
   const residue: Residue[] = [];
-  for (const slug of slugOrder) {
-    const g = bySlug.get(slug)!;
+  for (const [slug, g] of bySlug) {
     // collision: >1 distinct target shares the slug, so coverage is ambiguous — don't
     // trust it. Surface every colliding markup as residue even when the slug is covered:
     // a loud false positive the curator dismisses, not a silent drop on a one-way write.

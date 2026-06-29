@@ -295,6 +295,20 @@ test("harvestWikilinks: pdf and av embeds are excluded", () => {
   expect(harvestWikilinks("![[clip.mp4]] ![[doc.pdf]] ![[song.mp3]]")).toEqual([]);
 });
 
+test("harvestWikilinks: a fragment-bearing asset embed is still excluded", () => {
+  // ASSET_RE is `$`-anchored; the asset test runs on the fragment-stripped target so a
+  // page/section embed is caught despite the trailing #fragment.
+  expect(harvestWikilinks("![[doc.pdf#page=2]] and ![[image.png#small]]")).toEqual([]);
+});
+
+test("harvestWikilinks: a fragment-bearing note transclusion stays an edge (slug keeps the fragment)", () => {
+  // not an asset, so it survives; slug/target retain the fragment — the cross-component
+  // join key is unchanged (sub-case-2 fragment downgrade is a known, deferred residue).
+  expect(harvestWikilinks("![[some-note#heading]]")).toEqual([
+    { markup: "![[some-note#heading]]", slug: "some-note-heading", target: "some-note#heading" },
+  ]);
+});
+
 // ---- text.ts: external-link harvest (the citation lane, D38) ----
 test("harvestExternalLinks: collects [text](url) with text+url, strips a title suffix", () => {
   expect(
