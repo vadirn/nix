@@ -10,6 +10,7 @@ import {
   type IR,
   type WorkStep,
   detectLang,
+  harvestWikilinks,
   normalizeTypography,
   segment,
   wordCount,
@@ -471,6 +472,60 @@ export function buildFooter(m: {
   return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}`;
 }
 
+// edge-coverage gate (deterministic, pure). A [[wikilink]] is a deliberate cross-note
+// edge, but the fidelity gate grades only concept defs + workflow coverage — never
+// edges. So an extractor that fails to encode a source link as a relation, plus the
+// prose-fold that dissolves the inline link, drops the edge with ZERO residue. This
+// diffs the source wikilink set against the final output's; every source target absent
+// from output surfaces as residue — flipping the loss from silent to loud on a one-way
+// door (distilled output overwrites the non-git-tracked source). A link covered ANYWHERE
+// in output — a retained see-also list, the `## Relations` block, or the prose — is not
+// residue. Deduped by target slug; the first source occurrence supplies the markup.
+export function wikilinkResidue(sourceText: string, outputText: string): Residue[] {
+  const covered = new Set(harvestWikilinks(outputText).map((w) => w.slug));
+  // group the DISTINCT source markups carried by each slug, first-appearance order.
+  // A slug with one markup is the common case; a slug with more than one is a
+  // collision — two unlike source edges (e.g. [[foo bar]] and [[foo/bar]]) slug to
+  // the same key, so output's single endpoint cannot be attributed to one of them.
+  const bySlug = new Map<string, Set<string>>();
+  const slugOrder: string[] = [];
+  for (const { markup, slug } of harvestWikilinks(sourceText)) {
+    let markups = bySlug.get(slug);
+    if (!markups) {
+      markups = new Set();
+      bySlug.set(slug, markups);
+      slugOrder.push(slug);
+    }
+    markups.add(markup);
+  }
+  const residue: Residue[] = [];
+  for (const slug of slugOrder) {
+    const markups = bySlug.get(slug)!;
+    // collision: slug coverage is ambiguous, so don't trust it. Surface every
+    // colliding markup as residue even when the slug is covered — a loud false
+    // positive the curator dismisses, not a silent drop on a one-way write-back.
+    if (markups.size > 1) {
+      for (const markup of markups) {
+        residue.push({
+          term: markup,
+          reason:
+            "wikilink slug-collision: distinct source edges share a slug; output coverage is ambiguous — verify each manually",
+          source: markup,
+        });
+      }
+      continue;
+    }
+    if (covered.has(slug)) continue;
+    const markup = [...markups][0];
+    residue.push({
+      term: markup,
+      reason: "wikilink dropped: source edge absent from output (no relation, no retained block)",
+      source: markup,
+    });
+  }
+  return residue;
+}
+
 // orchestrator: thread the stages above, holding the shared state (segmented
 // blocks, ordering, and the two mutable carriers defByTerm + workflowSteps). The
 // output is identical to the pre-decomposition single function; the stages only
@@ -581,6 +636,12 @@ async function distill(
       residue: [],
     };
   }
+  // edge-coverage gate: surface any source [[wikilink]] the distilled output dropped
+  // as residue. Deterministic and free, so it runs even under --no-gate — a dropped
+  // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the
+  // final body (prose + ## Relations + retained), so a link surviving in any of them
+  // counts as covered.
+  residue = residue.concat(wikilinkResidue(text, out));
   const footer = buildFooter({
     beforeWords,
     afterWords,

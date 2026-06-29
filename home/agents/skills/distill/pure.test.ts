@@ -11,6 +11,7 @@ import { expect, test } from "bun:test";
 import {
   detectLang,
   glossList,
+  harvestWikilinks,
   hasOperational,
   hasWikilink,
   normalizeRelation,
@@ -206,4 +207,26 @@ test("parseDistilled: a single-cell row (no definition column) is skipped, not a
   const body = ["## Glossary", "", "| gamma |", "| delta | real def |"].join("\n");
   const { entries } = parseDistilled(body);
   expect(entries).toEqual([{ term: "delta", def: "real def" }]);
+});
+
+test("harvestWikilinks: extracts targets as slugs, strips alias and embed syntax", () => {
+  expect(
+    harvestWikilinks("see [[30 notes/Elegant solution]] and ![[img.png]] and [[Foo|bar]]"),
+  ).toEqual([
+    { markup: "[[30 notes/Elegant solution]]", slug: "30-notes-elegant-solution" },
+    { markup: "![[img.png]]", slug: "img-png" },
+    { markup: "[[Foo|bar]]", slug: "foo" },
+  ]);
+});
+
+test("harvestWikilinks: plain prose yields nothing", () => {
+  expect(harvestWikilinks("no links here")).toEqual([]);
+});
+
+test("harvestWikilinks: a pre-slugged ## Relations endpoint is idempotent", () => {
+  // emitRelationsBlock emits [[30-notes-elegant-solution]]; harvesting it must yield
+  // the SAME slug as the source [[30 notes/Elegant solution]], so coverage matches.
+  expect(harvestWikilinks("[[30-notes-elegant-solution]]")[0].slug).toBe(
+    "30-notes-elegant-solution",
+  );
 });

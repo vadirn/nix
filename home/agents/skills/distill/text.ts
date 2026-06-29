@@ -91,6 +91,24 @@ export const glossList = (entries: { term: string; def: string }[]): string =>
 const WIKILINK = /\[\[[^\]]+\]\]/;
 export const hasWikilink = (text: string): boolean => WIKILINK.test(text);
 
+// Harvest every [[wikilink]] (and ![[embed]]) in `text` as {markup, slug} pairs:
+// `markup` is the verbatim span, `slug` its target slugged for byte-stable comparison
+// (an alias `[[t|a]]` harvests target `t`; the slug matches emitRelationsBlock's
+// pre-slugged file endpoints and a retained block's verbatim link alike, since
+// slugSegment is idempotent). The deterministic source-of-truth for a note's
+// cross-note edges: the edge-coverage gate (pipeline.ts::wikilinkResidue) diffs the
+// source set against the output set over these slugs, so a wikilink the extractor
+// failed to encode as a relation — and the prose-fold then dissolved — surfaces as
+// residue instead of vanishing silently.
+export function harvestWikilinks(text: string): { markup: string; slug: string }[] {
+  const out: { markup: string; slug: string }[] = [];
+  for (const m of text.matchAll(/!?\[\[([^\]]+)\]\]/g)) {
+    const slug = slugSegment(m[1].split("|")[0]);
+    if (slug) out.push({ markup: m[0], slug });
+  }
+  return out;
+}
+
 // a block carries operational tokens that must survive verbatim — code, CLI
 // flags, file paths. Used by the wikilink clamp to choose retain over distill.
 export const hasOperational = (text: string): boolean =>
