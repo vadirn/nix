@@ -270,11 +270,25 @@ test("harvestWikilinks: a fragment-bearing asset embed is still excluded", () =>
   expect(harvestWikilinks("![[doc.pdf#page=2]] and ![[image.png#small]]")).toEqual([]);
 });
 
-test("harvestWikilinks: a fragment-bearing note transclusion stays an edge (slug keeps the fragment)", () => {
-  // not an asset, so it survives; slug/target retain the fragment — the cross-component
-  // join key is unchanged (sub-case-2 fragment downgrade is a known, deferred residue).
+test("harvestWikilinks: a fragment-bearing note transclusion stays an edge, slug drops the fragment", () => {
+  // not an asset, so it survives; normalizeEdgeTarget strips the #fragment before
+  // slugging, so the anchored form unifies on slug `some-note` with the bare `[[some-note]]`.
   expect(harvestWikilinks("![[some-note#heading]]")).toEqual([
-    { markup: "![[some-note#heading]]", slug: "some-note-heading", target: "some-note#heading" },
+    { markup: "![[some-note#heading]]", slug: "some-note", target: "some-note" },
+  ]);
+});
+
+// ---- text.ts: CHANGE #1 — normalizeEdgeTarget unifies anchored and bare edges ----
+test("harvestWikilinks: a fragment-bearing wikilink [[note#heading]] harvests slug `note`", () => {
+  expect(harvestWikilinks("[[note#heading]]")).toEqual([
+    { markup: "[[note#heading]]", slug: "note", target: "note" },
+  ]);
+});
+
+test("harvestVaultEdges: [[note#heading]] and [x](note.md#heading) both harvest slug `note`", () => {
+  expect(harvestVaultEdges("[[note#heading]] and [x](note.md#heading)")).toEqual([
+    { markup: "[[note#heading]]", slug: "note", target: "note" },
+    { markup: "[x](note.md#heading)", slug: "note", target: "note" },
   ]);
 });
 
@@ -447,4 +461,18 @@ test("wikilinkResidue: an asset embed covered nowhere is still not residue", () 
 
 test("wikilinkResidue: an asset-extension markdown link is not an edge", () => {
   expect(wikilinkResidue("[chart](chart.png)", "")).toEqual([]);
+});
+
+// ---- pipeline.ts: CHANGE #1 — fragment strip kills the anchor-downgrade false positive ----
+test("wikilinkResidue: source [[note#heading]] covered by output [[note]] yields no residue", () => {
+  // both slug to `note` now (normalizeEdgeTarget strips the anchor before slugging), so
+  // the output's bare link covers the source's anchored one — no false-positive residue.
+  expect(wikilinkResidue("see [[note#heading]]", "see [[note]]")).toEqual([]);
+});
+
+test("wikilinkResidue: a dropped [[dropped]] absent from output STILL surfaces (safety net intact)", () => {
+  const r = wikilinkResidue("see [[dropped]]", "no links here");
+  expect(r.length).toBe(1);
+  expect(r[0].term).toBe("[[dropped]]");
+  expect(r[0].reason).toMatch(/^wikilink dropped/);
 });

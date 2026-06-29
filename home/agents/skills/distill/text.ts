@@ -126,6 +126,18 @@ export const isExternalUrl = (url: string): boolean =>
 // carries between calls.
 const MD_LINK_RE = /(?<![!\]])\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 
+// Strip a trailing `#fragment` (a section/block anchor like `note#heading` or
+// `note.md#page=2`) from an edge target BEFORE it is slugged, so an anchored link and
+// its bare form harvest to the SAME slug — `[[note#heading]]` and `[x](note.md#heading)`
+// both yield `note`, not `note-heading`. Runs OUTSIDE slugSegment (which must keep
+// mirroring vault-query slug.rs::segment); the fragment strip is a harvest concern, not
+// a slug-grammar one. Shared by both harvest lanes so the two never drift. Without this,
+// a fragment-bearing source edge slugged WITH its anchor and read as dropped against an
+// output that links the bare note — a wikilinkResidue false positive.
+export function normalizeEdgeTarget(raw: string): string {
+  return raw.replace(/#.*$/, "");
+}
+
 // Harvest every [[wikilink]] (and ![[embed]]) in `text` as {markup, slug, target}:
 // `markup` is the verbatim span, `slug` its target slugged for byte-stable comparison,
 // `target` the raw alias-stripped endpoint (the collision discriminator wikilinkResidue
@@ -141,12 +153,14 @@ const MD_LINK_RE = /(?<![!\]])\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 export function harvestWikilinks(text: string): VaultEdge[] {
   const out: VaultEdge[] = [];
   for (const m of text.matchAll(/!?\[\[([^\]]+)\]\]/g)) {
-    const target = m[1].split("|")[0].trim();
-    // asset gate runs on a fragment-STRIPPED target (ASSET_RE is `$`-anchored), so a
-    // page/section embed like `![[doc.pdf#page=2]]` is still caught — aligning this gate
-    // with harvestInternalLinks. slug/target keep the fragment, so the cross-component
-    // join key (harvest ↔ emitRelationsBlock ↔ coverage) is byte-for-byte unchanged.
-    if (m[0].startsWith("!") && ASSET_RE.test(target.replace(/#.*$/, ""))) continue;
+    // strip the alias, then the `#fragment` (normalizeEdgeTarget) BEFORE slugging, so
+    // `[[note#heading]]` harvests slug `note` — the same slug the bare `[[note]]` and
+    // the markdown-link lane yield. The asset gate then runs on the fragment-stripped
+    // target (ASSET_RE is `$`-anchored), so a page/section embed `![[doc.pdf#page=2]]`
+    // is still caught. slug and target both drop the fragment, so anchored and bare
+    // forms unify on the cross-component join key (harvest ↔ emit ↔ coverage).
+    const target = normalizeEdgeTarget(m[1].split("|")[0].trim());
+    if (m[0].startsWith("!") && ASSET_RE.test(target)) continue;
     const slug = slugSegment(target);
     if (slug) out.push({ markup: m[0], slug, target });
   }
@@ -180,12 +194,16 @@ export function harvestExternalLinks(
 // leading `./`, drop a `#fragment`, decode `%20`, then strip a trailing `.md` — so a
 // `[x](foo.md)` and a `[[foo]]` yield the SAME target `foo` and never false-collide in
 // wikilinkResidue. Skips asset links (ASSET_RE) and a bare `#anchor` (cleans to empty).
+// SPECULATIVE LANE: the vault is wikilink-only today (zero scheme-less markdown-link
+// callers measured 2026-06-29); this lane exists on spec for a future mixed vault. Kept,
+// not deleted, so harvestVaultEdges already unifies both syntaxes the day one appears.
 export function harvestInternalLinks(text: string): VaultEdge[] {
   const out: VaultEdge[] = [];
   for (const m of text.matchAll(MD_LINK_RE)) {
     const raw = m[2].trim();
     if (!raw || isExternalUrl(raw)) continue;
-    let path = raw.replace(/^\.\//, "").replace(/#.*$/, "");
+    // strip a leading `./` then the `#fragment` (normalizeEdgeTarget) before slugging
+    let path = normalizeEdgeTarget(raw.replace(/^\.\//, ""));
     try {
       path = decodeURIComponent(path);
     } catch {

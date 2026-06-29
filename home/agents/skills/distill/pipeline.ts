@@ -487,12 +487,16 @@ export function buildFooter(m: {
 // in output — a retained see-also list, the `## Relations` block, or the prose — is not
 // residue. Both source and covered sets run through harvestVaultEdges, so an output
 // markdown link covers a source wikilink to the same note and vice versa.
-// KNOWN false-positive (deferred): a fragment-bearing wikilink slugs WITH the fragment
-// (`[[note#heading]]` → `note-heading`), so if output covers it as `[[note]]` (slug `note`)
-// the anchor downgrade reads as a dropped edge — loud, never silent. The fix is to unify
-// both lanes under one normalizeEdgeTarget that strips the fragment before slugging, but
-// that re-pins emitRelationsBlock's byte-stable `[[file-slug]]` endpoint — do it WITH the
-// REBUILD round-trip, not standalone.
+// Both harvest lanes route through normalizeEdgeTarget, which strips a trailing
+// `#fragment` before slugging, so a fragment-bearing source edge (`[[note#heading]]`)
+// slugs to `note` and is covered by an output `[[note]]` — no anchor-downgrade false
+// positive. emitRelationsBlock's `[[file-slug]]` endpoints carry no fragment, so the
+// REBUILD round-trip is byte-stable through the change.
+// This narrows the guarantee to note→note edges, NOT anchor precision: several
+// distinct-anchor links to ONE note (`[[note#a]]` + `[[note#b]]`) collapse to slug
+// `note`, so dropping one anchor while any link to `note` survives reads as covered,
+// not residue. Section-anchor loss is outside the net by design (the vault is
+// navigational; no note's meaning depends on which anchor survives, audited 2026-06-29).
 export function wikilinkResidue(sourceText: string, outputText: string): Residue[] {
   const covered = new Set(harvestVaultEdges(outputText).map((w) => w.slug));
   // Group source edges by slug, tracking the DISTINCT normalized targets and the
