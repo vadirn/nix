@@ -649,8 +649,6 @@ async function distill(
     defByTerm,
     retained,
     opts.isReference,
-    ir.noteRelations,
-    effectiveSelfSlug,
   );
 
   const afterWords = wordCount(out);

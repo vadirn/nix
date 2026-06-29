@@ -38,11 +38,6 @@ export type IR = {
   thesis: string;
   glossary: GlossEntry[];
   workflow: WorkStep[];
-  // note-level edges (D38): hostless cross-note relations whose source endpoint is
-  // the note ITSELF (not a glossary term). Emitted in `## Relations` with the note's
-  // own [[self-slug]] as the from-label. A separate channel from glossary[].relations
-  // so it needs no glossary-term host and no synthetic carrier entry.
-  noteRelations: Relation[];
 };
 // A vault edge: a [[wikilink]] OR a scheme-less [text](path) markdown link, both
 // intra-vault cross-note relations. `markup` is the verbatim span, `slug` its target
@@ -278,18 +273,6 @@ export function normalizeRelation(r: unknown): Relation | null {
   if (!rel || !to) return null;
   const pred = o.predicate == null ? "" : normalizeTypography(String(o.predicate)).trim();
   return { rel, to, predicate: pred || null };
-}
-
-// Note-level edges (D37): a hostless `[[self-slug]] → [[file-slug]]` edge is admissible
-// ONLY with a quotable directional predicate — that quoted source phrase is the audit
-// trail that keeps the edge D36-compliant (no fabricated `rel`). The gate is load-bearing
-// (D37a), so enforce it in CODE, not by model-trust: normalize each edge, then DROP any
-// whose predicate is null/empty. A dropped link is not lost — it falls through to
-// `wikilinkResidue` as loud residue for the curator, never ships as an untraceable edge.
-export function normalizeNoteRelations(raw: unknown): Relation[] {
-  return (Array.isArray(raw) ? raw : [])
-    .map((r) => normalizeRelation(r))
-    .filter((r): r is Relation => r !== null && r.predicate !== null);
 }
 
 export function detectLang(text: string): "en" | "ru" {

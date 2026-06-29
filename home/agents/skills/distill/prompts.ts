@@ -15,7 +15,6 @@ import {
   hasWikilink,
   langRule,
   MASK_RE,
-  normalizeNoteRelations,
   normalizeRelation,
   normalizeTypography,
   relText,
@@ -38,18 +37,6 @@ const DEF_RELATIONS: "keep" | "drop" =
   process.env.DISTILL_DEF_RELATIONS === "keep" ? "keep" : "drop";
 const DEF_GATE: "block" | "definition" =
   process.env.DISTILL_DEF_GATE === "block" ? "block" : "definition";
-
-// Note-level [[self-slug]] edge lane (D37/D38). This is the FABRICATING channel:
-// it asks the model to emit a `[[self-slug]] → [[file-slug]]` edge from a quoted
-// predicate, the only lane that can invent a cross-note `rel` the source never
-// typed. Gated OFF by default (mirrors DEF_RELATIONS/DEF_GATE). The term-scoped
-// lane, the see-also lane, the link inventory, harvestExternalLinks, and the
-// null-predicate backstop all stay live regardless of this flag.
-//   DISTILL_NOTE_LEVEL_LANE: "off" (default) demotes every hostless link to
-//     see-also and drops any noteRelations the model emits anyway; "emit" restores
-//     the note-level channel (the prior behavior).
-const NOTE_LEVEL_LANE: "emit" | "off" =
-  process.env.DISTILL_NOTE_LEVEL_LANE === "emit" ? "emit" : "off";
 
 // ---- writing passes (the revise-stage rubric — inline single source) ----
 // Four focused rule sets applied in sequence (words → sentences → paragraphs →
@@ -102,11 +89,7 @@ export const PASS_RU: Pass[] = [
 // instruction text is always English — langRule pins the OUTPUT values' language, and a
 // quoted predicate is a verbatim source span already in the note's language. Returns ""
 // when the note has no links, so a link-free note keeps the original lean prompt.
-function linkInventorySection(
-  inventory: LinkInventory,
-  selfSlug: string,
-  laneOn = NOTE_LEVEL_LANE === "emit",
-): string {
+function linkInventorySection(inventory: LinkInventory, selfSlug: string): string {
   if (inventory.wikilinks.length === 0 && inventory.external.length === 0) return "";
   const self = selfSlug.trim();
   const wl = inventory.wikilinks.length
@@ -115,22 +98,17 @@ function linkInventorySection(
   const ex = inventory.external.length
     ? inventory.external.map((e) => `  - ${e.markup}`).join("\n")
     : "  (none)";
-  // the note-level lane is the fabricating channel — emit it only when the lane is ON
-  // AND the note has a resolvable self-slug to be the edge's source endpoint. When the
-  // lane is off (default) or there is no self-slug (stdin, no filename), demote every
-  // hostless-but-related link to see-also instead.
-  const noteLevelLane =
-    laneOn && self
-      ? `2. NOTE-LEVEL edge — the target is NOT a glossary term, BUT the prose states a real DIRECTIONAL relation to it AND you can QUOTE a directional predicate phrase from the note. Emit it in the top-level "noteRelations" array as {"rel": a single hyphenated directional token, "to": "[[file-slug]]" (the link target verbatim), "predicate": the QUOTED source phrase that states the direction}. The note's own slug is the implicit source endpoint. Emit this lane ONLY when ALL THREE conditions hold.`
-      : `2. NOTE-LEVEL edge — UNAVAILABLE for this note: treat every hostless link as SEE-ALSO instead.`;
+  // The SELF slug is the classification anchor: it lets the model recognize a link
+  // back to the note itself and route it correctly. The note-level emit lane is gone —
+  // every hostless link is a SEE-ALSO, never a fabricated cross-note edge.
   return `
 
-SELF: this note's own slug is ${self ? `[[${self}]]` : "(unresolved — no note-level edges)"}.
+SELF: this note's own slug is ${self ? `[[${self}]]` : "(unresolved)"}.
 LINK INVENTORY (a MUST-COVER checklist — classify EVERY vault link below into EXACTLY ONE lane; omit none):
 ${wl}
 Each entry is a vault link ([[wikilink]] or [text](path.md)) the note states. Assign each to exactly one lane:
 1. TERM-SCOPED edge — the link's target IS one of the glossary terms above: encode it as that term's "relations" entry with "to" set to the bare term-slug.
-${noteLevelLane}
+2. NOTE-LEVEL edge — UNAVAILABLE for this note: treat every hostless link as SEE-ALSO instead.
 3. SEE-ALSO — every other link: an associative mention with no stated directional relation. Do NOT emit a relation for it; leave it in place for the curator's see-also list.
 A link that fails the note-level test stays SEE-ALSO. NEVER fabricate a "rel" to type an associative link: if no directional predicate is quotable from the prose, the link is SEE-ALSO, not an edge. The quoted predicate is the audit trail — without a quotable directional phrase, do not emit a note-level edge.
 EXTERNAL LINKS (citations / sources, NOT vault relations — NEVER encode a URL as a relation; leave them in the prose as the sources they cite):
@@ -143,7 +121,6 @@ export function extractComboPrompt(
   lang: "en" | "ru",
   inventory: LinkInventory = { wikilinks: [], external: [] },
   selfSlug = "",
-  laneOn = NOTE_LEVEL_LANE === "emit",
 ): string {
   const descRule = frontDescription
     ? `Use this authored description VERBATIM: "${frontDescription}"`
@@ -153,10 +130,9 @@ export function extractComboPrompt(
 - "thesis": the single spine claim the whole note argues, one sentence.
 - "glossary": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out of the glossary. For each: "term" (the concept's name), "def" (dense, in YOUR OWN words, <=20 words), "relations" (array of OBJECTS naming how it ties to OTHER terms; each {"rel","to","predicate"}: "rel" is a single hyphenated token (e.g. subsumes, precondition-for, contrast-to), "to" is EITHER a bare term-slug naming ANOTHER glossary term in this note OR a [[file-slug]] wikilink, "predicate" is an optional one-clause gloss or null — use null when there is no gloss; NOT a bare restatement of def), "source" (array of [Bn] id strings where it is defined or used, at least one).
 - "workflow": the note's ACTIONABLE directives — the practices, steps, or procedure the note tells the reader to DO, in the order the note gives them. A directive earns an entry only when the note PRESCRIBES an action (an imperative, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives — leave them to the thesis and glossary. For each: "step" (one imperative clause in YOUR OWN words, dense; if the SOURCE gives a reason for the action — "do X because Y", "do X so that Y" — append that source-stated reason to the step; if the source states no reason, keep the step terse), "source" (array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
-- "noteRelations": note-level edges only (the NOTE-LEVEL lane of the LINK INVENTORY below); each {"rel","to","predicate"} with "to" a [[file-slug]] wikilink and "predicate" the QUOTED directional source phrase. Use [] when no link qualifies.
 Collapse restatements of the SAME concept into ONE entry whose "source" lists all the blocks that state it — do not emit a separate entry per surface form.
-Return ONLY JSON {"description":"...","thesis":"...","glossary":[{"term":"...","def":"...","relations":[{"rel":"...","to":"...","predicate":null}],"source":["Bn"]}],"workflow":[{"step":"...","source":["Bn"]}],"noteRelations":[{"rel":"...","to":"[[file-slug]]","predicate":"..."}]}.
-${linkInventorySection(inventory, selfSlug, laneOn)}
+Return ONLY JSON {"description":"...","thesis":"...","glossary":[{"term":"...","def":"...","relations":[{"rel":"...","to":"...","predicate":null}],"source":["Bn"]}],"workflow":[{"step":"...","source":["Bn"]}]}.
+${linkInventorySection(inventory, selfSlug)}
 
 TEXT (block IDs in [Bn] markers):
 ${render(blocks)}`;
@@ -168,11 +144,10 @@ export async function extractCombo(
   lang: "en" | "ru",
   inventory: LinkInventory = { wikilinks: [], external: [] },
   selfSlug = "",
-  laneOn = NOTE_LEVEL_LANE === "emit",
 ): Promise<IR> {
-  const ir = await askJson<IR & { noteRelations?: unknown[] }>(
+  const ir = await askJson<IR>(
     EXTRACT,
-    extractComboPrompt(blocks, frontDescription, lang, inventory, selfSlug, laneOn),
+    extractComboPrompt(blocks, frontDescription, lang, inventory, selfSlug),
     EXTRACT_TOKENS,
   );
   const ids = new Set(blocks.map((b) => b.id));
@@ -198,16 +173,9 @@ export async function extractCombo(
     }))
     // a step with no valid source block cannot be grounded or gated — drop it
     .filter((s) => s.step && s.source.length > 0);
-  // note-level edges (D37/D38): the deterministic CODE gate for the fabricating
-  // lane. When the lane is off (default) drop every emitted noteRelation even if the
-  // model produced them anyway; when on, coerce and enforce the load-bearing
-  // predicate gate (normalizeNoteRelations) — an edge missing its quotable predicate
-  // (the D36 audit trail) is dropped there, not trusted to the model's compliance.
-  // The from-label is supplied at emit (the note's own [[self-slug]]).
-  const noteRelations = laneOn ? normalizeNoteRelations(ir.noteRelations) : [];
   // the authored frontmatter description overrides the model's: the one anchor never paraphrased
   const description = frontDescription || (ir.description ?? "").trim();
-  return { description, thesis: (ir.thesis ?? "").trim(), glossary, workflow, noteRelations };
+  return { description, thesis: (ir.thesis ?? "").trim(), glossary, workflow };
 }
 
 // ---- stage 2: grade each block drop / distill / retain ----

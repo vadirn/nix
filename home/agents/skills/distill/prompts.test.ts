@@ -51,7 +51,6 @@ test("extractComboPrompt: states the three-lane D37 classification and the D36 g
   expect(p).toContain("TERM-SCOPED edge");
   expect(p).toContain("NOTE-LEVEL edge");
   expect(p).toContain("SEE-ALSO");
-  expect(p).toContain("noteRelations");
   // note-level lane names the note's own slug as the source endpoint
   expect(p).toContain(
     "SELF: this note's own slug is [[pragmatic-first-is-reconnaissance-for-elegance]]",
@@ -61,33 +60,19 @@ test("extractComboPrompt: states the three-lane D37 classification and the D36 g
   expect(p).toContain("audit trail");
 });
 
-test("extractComboPrompt: with no self-slug, demotes the note-level lane to see-also", () => {
-  const p = extractComboPrompt(blocks, "", "en", inventory, "");
-  expect(p).toContain("UNAVAILABLE for this note");
-  expect(p).not.toContain('"from"'); // no per-edge from field in this data model
-});
-
-test("extractComboPrompt: lane OFF forces the UNAVAILABLE branch even with a self-slug", () => {
-  // the fabricating note-level channel is gated off by default; a resolvable self-slug
-  // does NOT re-enable it — every hostless link demotes to see-also.
-  const p = extractComboPrompt(blocks, "", "en", inventory, "self-slug-here", false);
+test("extractComboPrompt: the note-level lane is permanently demoted to see-also", () => {
+  // the fabricating note-level channel is gone; every hostless link is a SEE-ALSO and
+  // the emit-only instruction is never present.
+  const p = extractComboPrompt(blocks, "", "en", inventory, "self-slug-here");
   expect(p).toContain("UNAVAILABLE for this note");
   expect(p).toContain("treat every hostless link as SEE-ALSO");
-  // the emit-only instruction is absent when the lane is off
   expect(p).not.toContain("The note's own slug is the implicit source endpoint");
-});
-
-test("extractComboPrompt: lane ON keeps the note-level emit instructions", () => {
-  const p = extractComboPrompt(blocks, "", "en", inventory, "self-slug-here", true);
-  expect(p).toContain("The note's own slug is the implicit source endpoint");
-  expect(p).toContain("Emit this lane ONLY when ALL THREE conditions hold");
-  expect(p).not.toContain("UNAVAILABLE for this note");
+  expect(p).not.toContain('"from"'); // no per-edge from field in this data model
 });
 
 test("extractComboPrompt: a link-free note keeps the lean prompt (no inventory checklist)", () => {
   const p = extractComboPrompt(blocks, "", "en");
-  // the checklist section and its SELF anchor are absent; only the JSON-shape mention
-  // of noteRelations (which the model returns as []) remains.
+  // the checklist section and its SELF anchor are absent for a link-free note.
   expect(p).not.toContain("MUST-COVER");
   expect(p).not.toContain("SELF: this note's own slug");
   expect(p).not.toContain("TERM-SCOPED edge");

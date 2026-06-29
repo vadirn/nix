@@ -18,7 +18,6 @@ import {
   hasOperational,
   hasWikilink,
   isExternalUrl,
-  normalizeNoteRelations,
   normalizeRelation,
   normalizeTypography,
   relText,
@@ -112,36 +111,6 @@ test("normalizeRelation: drops an edge missing rel or to, or a non-object", () =
   expect(normalizeRelation({ rel: "subsumes" })).toBeNull();
   expect(normalizeRelation(null)).toBeNull();
   expect(normalizeRelation("not an object")).toBeNull();
-});
-
-test("normalizeNoteRelations: drops a note-level edge with no quotable predicate (D37/D36 backstop)", () => {
-  // the predicate is the audit trail; without it the hostless edge is a fabricated rel
-  expect(normalizeNoteRelations([{ rel: "subsumes", to: "[[Some Associative Link]]" }])).toEqual(
-    [],
-  );
-  expect(
-    normalizeNoteRelations([
-      { rel: "refines", to: "[[Tech debt multiplied by AI]]", predicate: "" },
-    ]),
-  ).toEqual([]);
-});
-
-test("normalizeNoteRelations: keeps a note-level edge carrying a quoted predicate", () => {
-  expect(
-    normalizeNoteRelations([
-      {
-        rel: "refines",
-        to: "[[Tech debt multiplied by AI]]",
-        predicate: "the same dynamic AI multiplies",
-      },
-    ]),
-  ).toEqual([
-    {
-      rel: "refines",
-      to: "[[Tech debt multiplied by AI]]",
-      predicate: "the same dynamic AI multiplies",
-    },
-  ]);
 });
 
 test("relText: renders `rel :: to` and appends a present predicate", () => {
