@@ -126,9 +126,9 @@ function linkInventorySection(
   return `
 
 SELF: this note's own slug is ${self ? `[[${self}]]` : "(unresolved — no note-level edges)"}.
-LINK INVENTORY (a MUST-COVER checklist — classify EVERY wikilink below into EXACTLY ONE lane; omit none):
+LINK INVENTORY (a MUST-COVER checklist — classify EVERY vault link below into EXACTLY ONE lane; omit none):
 ${wl}
-Each entry is a [[wikilink]] the note states. Assign each to exactly one lane:
+Each entry is a vault link ([[wikilink]] or [text](path.md)) the note states. Assign each to exactly one lane:
 1. TERM-SCOPED edge — the link's target IS one of the glossary terms above: encode it as that term's "relations" entry with "to" set to the bare term-slug.
 ${noteLevelLane}
 3. SEE-ALSO — every other link: an associative mention with no stated directional relation. Do NOT emit a relation for it; leave it in place for the curator's see-also list.

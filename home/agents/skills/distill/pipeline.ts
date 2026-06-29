@@ -13,7 +13,7 @@ import {
   type WorkStep,
   detectLang,
   harvestExternalLinks,
-  harvestWikilinks,
+  harvestVaultEdges,
   normalizeTypography,
   segment,
   slugSegment,
@@ -476,40 +476,46 @@ export function buildFooter(m: {
   return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}`;
 }
 
-// edge-coverage gate (deterministic, pure). A [[wikilink]] is a deliberate cross-note
-// edge, but the fidelity gate grades only concept defs + workflow coverage — never
-// edges. So an extractor that fails to encode a source link as a relation, plus the
-// prose-fold that dissolves the inline link, drops the edge with ZERO residue. This
-// diffs the source wikilink set against the final output's; every source target absent
+// edge-coverage gate (deterministic, pure). A vault edge — a [[wikilink]] or a
+// scheme-less [text](path) markdown link — is a deliberate cross-note relation, but the
+// fidelity gate grades only concept defs + workflow coverage — never edges. So an
+// extractor that fails to encode a source link as a relation, plus the prose-fold that
+// dissolves the inline link, drops the edge with ZERO residue. This diffs the source
+// edge set (harvestVaultEdges) against the final output's; every source target absent
 // from output surfaces as residue — flipping the loss from silent to loud on a one-way
 // door (distilled output overwrites the non-git-tracked source). A link covered ANYWHERE
 // in output — a retained see-also list, the `## Relations` block, or the prose — is not
-// residue. Deduped by target slug; the first source occurrence supplies the markup.
+// residue. Both source and covered sets run through harvestVaultEdges, so an output
+// markdown link covers a source wikilink to the same note and vice versa.
 export function wikilinkResidue(sourceText: string, outputText: string): Residue[] {
-  const covered = new Set(harvestWikilinks(outputText).map((w) => w.slug));
-  // group the DISTINCT source markups carried by each slug, first-appearance order.
-  // A slug with one markup is the common case; a slug with more than one is a
-  // collision — two unlike source edges (e.g. [[foo bar]] and [[foo/bar]]) slug to
-  // the same key, so output's single endpoint cannot be attributed to one of them.
-  const bySlug = new Map<string, Set<string>>();
+  const covered = new Set(harvestVaultEdges(outputText).map((w) => w.slug));
+  // Group source edges by slug, tracking the DISTINCT normalized targets and the
+  // first-appearance markups under each. The discriminator is the distinct target
+  // (target.trim().toLowerCase()), NOT the distinct markup: alias/bare/case-only
+  // spellings of ONE target ([[foo]] + [[foo|a]] + [[Foo]], or [[foo]] + [foo](foo.md))
+  // collapse to a single distinct target and run the normal covered/dropped logic; only
+  // two genuinely different targets that slug alike (e.g. [[foo bar]] and [[foo/bar]])
+  // are a real collision, where output's single endpoint cannot be attributed to one.
+  const bySlug = new Map<string, { markups: string[]; targets: Set<string> }>();
   const slugOrder: string[] = [];
-  for (const { markup, slug } of harvestWikilinks(sourceText)) {
-    let markups = bySlug.get(slug);
-    if (!markups) {
-      markups = new Set();
-      bySlug.set(slug, markups);
+  for (const { markup, slug, target } of harvestVaultEdges(sourceText)) {
+    let g = bySlug.get(slug);
+    if (!g) {
+      g = { markups: [], targets: new Set() };
+      bySlug.set(slug, g);
       slugOrder.push(slug);
     }
-    markups.add(markup);
+    if (!g.markups.includes(markup)) g.markups.push(markup); // dedup exact markups, keep order
+    g.targets.add(target.trim().toLowerCase());
   }
   const residue: Residue[] = [];
   for (const slug of slugOrder) {
-    const markups = bySlug.get(slug)!;
-    // collision: slug coverage is ambiguous, so don't trust it. Surface every
-    // colliding markup as residue even when the slug is covered — a loud false
-    // positive the curator dismisses, not a silent drop on a one-way write-back.
-    if (markups.size > 1) {
-      for (const markup of markups) {
+    const g = bySlug.get(slug)!;
+    // collision: >1 distinct target shares the slug, so coverage is ambiguous — don't
+    // trust it. Surface every colliding markup as residue even when the slug is covered:
+    // a loud false positive the curator dismisses, not a silent drop on a one-way write.
+    if (g.targets.size > 1) {
+      for (const markup of g.markups) {
         residue.push({
           term: markup,
           reason:
@@ -520,7 +526,7 @@ export function wikilinkResidue(sourceText: string, outputText: string): Residue
       continue;
     }
     if (covered.has(slug)) continue;
-    const markup = [...markups][0];
+    const markup = g.markups[0];
     residue.push({
       term: markup,
       reason: "wikilink dropped: source edge absent from output (no relation, no retained block)",
@@ -560,10 +566,11 @@ async function distill(
   const effectiveSelfSlug = selfSlug || slugSegment(h1.replace(/^#+\s*/, ""));
 
   // 1. extract the idea-graph; nothing to distill (no concepts, no directives) →
-  // passthrough, footer notes it. The deterministic link inventory (every [[wikilink]]
-  // UNION every external [text](url)) is fed to the extractor as a MUST-COVER checklist.
+  // passthrough, footer notes it. The deterministic link inventory (every vault edge —
+  // [[wikilink]] or scheme-less [text](path) — UNION every external [text](url)) is fed
+  // to the extractor as a MUST-COVER checklist.
   const linkInventory: LinkInventory = {
-    wikilinks: harvestWikilinks(text),
+    wikilinks: harvestVaultEdges(text),
     external: harvestExternalLinks(text),
   };
   const ir = await extractCombo(blocks, frontDescription, lang, linkInventory, effectiveSelfSlug);

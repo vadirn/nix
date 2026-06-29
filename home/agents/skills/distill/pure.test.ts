@@ -12,9 +12,12 @@ import {
   detectLang,
   glossList,
   harvestExternalLinks,
+  harvestInternalLinks,
+  harvestVaultEdges,
   harvestWikilinks,
   hasOperational,
   hasWikilink,
+  isExternalUrl,
   normalizeNoteRelations,
   normalizeRelation,
   normalizeTypography,
@@ -24,6 +27,7 @@ import {
   wordCount,
 } from "./text.ts";
 import { extractJson } from "./fw.ts";
+import { wikilinkResidue } from "./pipeline.ts";
 import { parseDistilled } from "./render-mode.ts";
 
 // ---- text.ts: segmentation ----
@@ -242,17 +246,53 @@ test("parseDistilled: a single-cell row (no definition column) is skipped, not a
 });
 
 test("harvestWikilinks: extracts targets as slugs, strips alias and embed syntax", () => {
+  // ITEM B: ![[img.png]] is an asset embed (renders inline), not an edge — it is now
+  // EXCLUDED. The surviving real edges carry the alias-stripped raw target.
   expect(
     harvestWikilinks("see [[30 notes/Elegant solution]] and ![[img.png]] and [[Foo|bar]]"),
   ).toEqual([
-    { markup: "[[30 notes/Elegant solution]]", slug: "30-notes-elegant-solution" },
-    { markup: "![[img.png]]", slug: "img-png" },
-    { markup: "[[Foo|bar]]", slug: "foo" },
+    {
+      markup: "[[30 notes/Elegant solution]]",
+      slug: "30-notes-elegant-solution",
+      target: "30 notes/Elegant solution",
+    },
+    { markup: "[[Foo|bar]]", slug: "foo", target: "Foo" },
   ]);
 });
 
 test("harvestWikilinks: plain prose yields nothing", () => {
   expect(harvestWikilinks("no links here")).toEqual([]);
+});
+
+// ---- text.ts: ITEM B — asset embeds are not vault edges ----
+test("harvestWikilinks: asset embed ![[diagram.png]] is not an edge", () => {
+  expect(harvestWikilinks("![[diagram.png]]")).toEqual([]);
+});
+
+test("harvestWikilinks: note transclusion ![[some-note]] stays an edge", () => {
+  expect(harvestWikilinks("![[some-note]]")).toEqual([
+    { markup: "![[some-note]]", slug: "some-note", target: "some-note" },
+  ]);
+});
+
+test("harvestWikilinks: bare [[chart.png]] (no ! embed) stays an edge", () => {
+  expect(harvestWikilinks("[[chart.png]]")).toEqual([
+    { markup: "[[chart.png]]", slug: "chart-png", target: "chart.png" },
+  ]);
+});
+
+test("harvestWikilinks: asset ext match is case-insensitive", () => {
+  expect(harvestWikilinks("![[Photo.JPG]]")).toEqual([]);
+});
+
+test("harvestWikilinks: alias is stripped before the asset test", () => {
+  // target = "diagram.png" after split("|")[0], so the embed is excluded — proves
+  // ASSET_RE runs on the alias-stripped target, not the raw inner text.
+  expect(harvestWikilinks("![[diagram.png|caption]]")).toEqual([]);
+});
+
+test("harvestWikilinks: pdf and av embeds are excluded", () => {
+  expect(harvestWikilinks("![[clip.mp4]] ![[doc.pdf]] ![[song.mp3]]")).toEqual([]);
 });
 
 // ---- text.ts: external-link harvest (the citation lane, D38) ----
@@ -280,4 +320,148 @@ test("harvestWikilinks: a pre-slugged ## Relations endpoint is idempotent", () =
   expect(harvestWikilinks("[[30-notes-elegant-solution]]")[0].slug).toBe(
     "30-notes-elegant-solution",
   );
+});
+
+// ---- text.ts: ITEM C — internal markdown links are vault edges ----
+test("harvestExternalLinks: excludes a scheme-less [x](foo.md) (now a vault edge)", () => {
+  expect(harvestExternalLinks("[x](foo.md)")).toEqual([]);
+});
+
+test("harvestExternalLinks: keeps mailto and protocol-relative urls", () => {
+  expect(harvestExternalLinks("[m](mailto:a@b.test) and [r](//cdn.test/p)")).toEqual([
+    { markup: "[m](mailto:a@b.test)", text: "m", url: "mailto:a@b.test" },
+    { markup: "[r](//cdn.test/p)", text: "r", url: "//cdn.test/p" },
+  ]);
+});
+
+test("isExternalUrl: classifies schemes and protocol-relative as external", () => {
+  expect(isExternalUrl("https://x")).toBe(true);
+  expect(isExternalUrl("mailto:a")).toBe(true);
+  expect(isExternalUrl("//h")).toBe(true);
+  expect(isExternalUrl("foo.md")).toBe(false);
+  expect(isExternalUrl("./x")).toBe(false);
+  expect(isExternalUrl("#a")).toBe(false);
+});
+
+test("harvestInternalLinks: slugs a %20-encoded relative .md path", () => {
+  // the shared [^)\s]+ grammar forbids a literal space, so a spaced path is %20-encoded;
+  // the decode step restores it before slugging.
+  expect(harvestInternalLinks("[x](30%20notes/Elegant%20solution.md)")).toEqual([
+    {
+      markup: "[x](30%20notes/Elegant%20solution.md)",
+      slug: "30-notes-elegant-solution",
+      target: "30 notes/Elegant solution",
+    },
+  ]);
+});
+
+test("harvestInternalLinks: strips a leading ./", () => {
+  expect(harvestInternalLinks("[r](./folder/note.md)")).toEqual([
+    { markup: "[r](./folder/note.md)", slug: "folder-note", target: "folder/note" },
+  ]);
+});
+
+test("harvestInternalLinks: skips an external url", () => {
+  expect(harvestInternalLinks("[x](https://e.test)")).toEqual([]);
+});
+
+test("harvestInternalLinks: skips an asset link", () => {
+  expect(harvestInternalLinks("[c](chart.png)")).toEqual([]);
+});
+
+test("harvestInternalLinks: skips a bare #anchor", () => {
+  expect(harvestInternalLinks("[a](#sec)")).toEqual([]);
+});
+
+test("harvestVaultEdges: unions wikilinks and internal markdown links", () => {
+  expect(harvestVaultEdges("[[foo]] and [b](bar.md)")).toEqual([
+    { markup: "[[foo]]", slug: "foo", target: "foo" },
+    { markup: "[b](bar.md)", slug: "bar", target: "bar" },
+  ]);
+});
+
+// ---- pipeline.ts: wikilinkResidue — ITEM A (collision) + ITEM B/C (lanes) ----
+test("wikilinkResidue: alias pair [[foo]] + [[foo|alias]] uncovered → ONE dropped residue", () => {
+  const r = wikilinkResidue("see [[foo]] and [[foo|alias]]", "");
+  expect(r.length).toBe(1);
+  expect(r[0].term).toBe("[[foo]]");
+  expect(r[0].reason).toMatch(/^wikilink dropped/);
+  expect(r[0].reason).not.toMatch(/collision/);
+});
+
+test("wikilinkResidue: alias pair covered by [[foo]] → no residue", () => {
+  expect(wikilinkResidue("see [[foo]] and [[foo|alias]]", "[[foo]]")).toEqual([]);
+});
+
+test("wikilinkResidue: genuine [[foo bar]] + [[foo/bar]] → collision over both, even when covered", () => {
+  const r = wikilinkResidue("[[foo bar]] and [[foo/bar]]", "[[foo-bar]]");
+  expect(r.map((x) => x.term)).toEqual(["[[foo bar]]", "[[foo/bar]]"]);
+  for (const x of r) expect(x.reason).toMatch(/slug-collision/);
+});
+
+test("wikilinkResidue: case-only [[Foo]] + [[foo]] → collapses, one dropped, no collision", () => {
+  const r = wikilinkResidue("[[Foo]] and [[foo]]", "");
+  expect(r.length).toBe(1);
+  expect(r[0].term).toBe("[[Foo]]");
+  expect(r[0].reason).toMatch(/^wikilink dropped/);
+  expect(r[0].reason).not.toMatch(/collision/);
+});
+
+test("wikilinkResidue: three same-target spellings collapse to one dropped residue", () => {
+  const r = wikilinkResidue("[[foo]] [[foo|x]] [[Foo]]", "");
+  expect(r.length).toBe(1);
+  expect(r[0].term).toBe("[[foo]]");
+});
+
+test("wikilinkResidue: distinct slugs [[a]] + [[b]] → two dropped, no collision", () => {
+  const r = wikilinkResidue("[[a]] and [[b]]", "");
+  expect(r.map((x) => x.term)).toEqual(["[[a]]", "[[b]]"]);
+  for (const x of r) expect(x.reason).toMatch(/^wikilink dropped/);
+});
+
+test("wikilinkResidue: 2 distinct targets over 3 markups → collision pushes all three markups", () => {
+  const r = wikilinkResidue("[[foo bar]] [[foo bar|x]] [[foo/bar]]", "");
+  expect(r.map((x) => x.term)).toEqual(["[[foo bar]]", "[[foo bar|x]]", "[[foo/bar]]"]);
+  for (const x of r) expect(x.reason).toMatch(/slug-collision/);
+});
+
+test("wikilinkResidue: cross-lane [[foo]] + [foo](foo.md) same note → not a collision", () => {
+  // both denote note 'foo' with normalized target 'foo' — one distinct target, covered.
+  expect(wikilinkResidue("[[foo]] and [foo](foo.md)", "see [[foo]]")).toEqual([]);
+});
+
+test("wikilinkResidue: a dropped internal link [x](foo.md) surfaces as residue", () => {
+  const r = wikilinkResidue("[x](foo.md)", "");
+  expect(r.length).toBe(1);
+  expect(r[0].term).toBe("[x](foo.md)");
+  expect(r[0].reason).toMatch(/dropped/);
+});
+
+test("wikilinkResidue: an internal link covered by a wikilink in output is not residue", () => {
+  expect(wikilinkResidue("[x](foo.md)", "see [[foo]]")).toEqual([]);
+});
+
+test("wikilinkResidue: a dropped asset embed ![[diagram.png]] yields no residue", () => {
+  expect(wikilinkResidue("![[diagram.png]]", "")).toEqual([]);
+});
+
+test("wikilinkResidue: a dropped note transclusion ![[some-note]] still surfaces", () => {
+  const r = wikilinkResidue("![[some-note]]", "");
+  expect(r.length).toBe(1);
+  expect(r[0].term).toBe("![[some-note]]");
+  expect(r[0].reason).toMatch(/dropped/);
+});
+
+test("wikilinkResidue: a dropped bare [[img.png]] still surfaces (no ! embed)", () => {
+  const r = wikilinkResidue("[[img.png]]", "");
+  expect(r.length).toBe(1);
+  expect(r[0].term).toBe("[[img.png]]");
+});
+
+test("wikilinkResidue: an asset embed covered nowhere is still not residue", () => {
+  expect(wikilinkResidue("text ![[diagram.png]] more", "text more")).toEqual([]);
+});
+
+test("wikilinkResidue: an asset-extension markdown link is not an edge", () => {
+  expect(wikilinkResidue("[chart](chart.png)", "")).toEqual([]);
 });
