@@ -3,7 +3,7 @@
 // artifact); the prose is its regenerable derivative.
 import { detectLang, glossList, langRule, segment, wordCount } from "./text.ts";
 import { parseDescription, parseFrontmatter } from "./frontmatter.ts";
-import { askJson, EXTRACT, rethrowIfBug } from "./fw.ts";
+import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "./fw.ts";
 import { PASS_EN, PASS_RU, revise } from "./prompts.ts";
 
 // ---- render mode: reconstruct a prose note from a distilled glossary ----
@@ -114,7 +114,7 @@ async function renderProse(
   const res = await askJson<{ prose: string }>(
     EXTRACT,
     renderPrompt(description, tie, entries, lang),
-    4096,
+    EXTRACT_TOKENS,
   );
   return (res.prose ?? "").trim();
 }

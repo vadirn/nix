@@ -50,6 +50,17 @@ const TIMEOUT_MS = 180_000;
 // extractJson and drops the whole run to the passthrough failsafe. Sized with
 // headroom for the longest gate input (rationale-carrying workflow steps).
 export const FIDELITY_TOKENS = 16_384;
+// Output ceiling for the content-scaling EXTRACT stages (extractCombo, gradeBlocks,
+// synth*, revise, connectiveProse, proseFix, renderProse). gpt-oss inlines reasoning in
+// the content, so the budget must cover reasoning + JSON; a dense note overran the old
+// per-stage caps (4096/2048) and truncated. max_tokens is a CEILING, not a target — a
+// normal note generates only what its content needs (~3-5k) and costs the same at any
+// ceiling, so this is sized generously to never truncate a real note. The 180s
+// TIMEOUT_MS is the de-facto limit (a runaway times out long before 96k); a genuine
+// length-truncation now surfaces as an actionable TruncationError (D39), not silent loss.
+// The intentionally-tiny stages (tieTogether, recover-def: ~1024) keep their small caps
+// as sanity bounds.
+export const EXTRACT_TOKENS = 96_000;
 
 // ---- Fireworks call with retry ----
 // Retry once, but only on transient failures: a network/timeout throw, or a

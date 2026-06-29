@@ -21,7 +21,7 @@ import {
   relText,
   render,
 } from "./text.ts";
-import { askJson, EXTRACT, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
+import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
 // carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while
@@ -173,11 +173,7 @@ export async function extractCombo(
   const ir = await askJson<IR & { noteRelations?: unknown[] }>(
     EXTRACT,
     extractComboPrompt(blocks, frontDescription, lang, inventory, selfSlug, laneOn),
-    // the combo is the largest single output (description + thesis + glossary{def,
-    // relations} + workflow + noteRelations); a dense note overruns 4096 and the model
-    // returns truncated JSON that surfaces as a misleading "transient" parse error
-    // (fw.ts does not read finish_reason). 16384 (the FIDELITY budget) gives headroom.
-    16_384,
+    EXTRACT_TOKENS,
   );
   const ids = new Set(blocks.map((b) => b.id));
   const glossary = (ir.glossary ?? [])
@@ -236,7 +232,7 @@ export async function gradeBlocks(ir: IR, blocks: Block[]): Promise<Map<string, 
   const judged = await askJson<{ grades: { id: string; grade: Grade }[] }>(
     EXTRACT,
     gradeBlocksPrompt(ir, blocks),
-    2048,
+    EXTRACT_TOKENS,
   );
   const byId = new Map<string, Grade>();
   for (const g of judged.grades ?? []) {
@@ -323,7 +319,7 @@ export async function synthEntries(
   const res = await askJson<{ entries: { term: string; def: string }[] }>(
     EXTRACT,
     synthEntriesPrompt(ir, entries, mode, blockById, lang),
-    4096,
+    EXTRACT_TOKENS,
   );
   for (const e of res.entries ?? []) if (e.term && e.def) out.set(e.term.trim(), e.def.trim());
   return out;
@@ -371,7 +367,7 @@ export async function synthWorkflow(
     const res = await askJson<{ steps: { id: string; step: string }[] }>(
       EXTRACT,
       synthWorkflowPrompt(steps, mode, blockById, lang),
-      4096,
+      EXTRACT_TOKENS,
     );
     for (const e of res.steps ?? []) {
       const m = /^S(\d+)$/.exec((e.id ?? "").trim());
@@ -421,7 +417,7 @@ export async function repairWorkflowGroup(
     const res = await askJson<{ steps: { id: string; step: string }[] }>(
       EXTRACT,
       repairWorkflowGroupPrompt(steps, missing, sourceText, lang),
-      4096,
+      EXTRACT_TOKENS,
     );
     for (const e of res.steps ?? []) {
       const m = /^S(\d+)$/.exec((e.id ?? "").trim());
@@ -532,7 +528,7 @@ export async function connectiveProse(
     const res = await askJson<{ prose: string }>(
       EXTRACT,
       connectiveProsePrompt(ir, orderedEntries, defByTerm, lang),
-      4096,
+      EXTRACT_TOKENS,
     );
     return (res.prose ?? "").trim() || ir.thesis;
   } catch (e) {
@@ -602,7 +598,11 @@ export async function proseFix(
   lang: "en" | "ru",
 ): Promise<string> {
   try {
-    const r = await askJson<{ prose?: string }>(EXTRACT, proseFixPrompt(prose, issues, lang), 4096);
+    const r = await askJson<{ prose?: string }>(
+      EXTRACT,
+      proseFixPrompt(prose, issues, lang),
+      EXTRACT_TOKENS,
+    );
     return (r.prose ?? "").trim() || prose; // an empty fix keeps the prior prose
   } catch (e) {
     rethrowIfBug(e, "proseFix");
@@ -671,7 +671,7 @@ export async function revise(
       const { blocks: rev } = await askJson<{ blocks: { id: string; text: string }[] }>(
         EXTRACT,
         revisePrompt(cur, pass),
-        4096,
+        EXTRACT_TOKENS,
       );
       const byId = new Map(rev.map((r) => [r.id, r.text]));
       cur = cur.map((b) => ({ id: b.id, text: byId.get(b.id) ?? b.text }));

@@ -101,7 +101,9 @@ test("fidelityGate: a transient judge flake degrades every concept to inconclusi
 test("fidelityGate: a TruncationError rides out to inconclusive (run not aborted)", async () => {
   // glm legitimately exhausts FIDELITY_TOKENS; the gate must degrade, not abort
   mockAskJson(() => {
-    throw new TruncationError("output truncated at max_tokens=16384 (glm-5p2) — raise this stage's cap");
+    throw new TruncationError(
+      "output truncated at max_tokens=16384 (glm-5p2) — raise this stage's cap",
+    );
   });
   const { fidelityGate } = await import(PROMPTS);
   const r = await fidelityGate("thesis", "body", [{ term: "x", def: "d", sourceText: "s" }]);
