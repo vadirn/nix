@@ -5,9 +5,10 @@
 // call): orderContent (grade→order), computeStepGroups (group by shared source),
 // and buildFooter (the success-footer renderer). The async stages route through
 // the network and are covered by the end-to-end + degradation suites.
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import type { Block, IR, Grade, WorkStep } from "./text.ts";
 import { buildFooter, computeStepGroups, orderContent, wikilinkResidue } from "./pipeline.ts";
+import { extractCombo } from "./prompts.ts";
 
 // ---- orderContent: retain selection + note-order entries/steps ----
 test("orderContent: orders entries by first source block, drops fully-retained steps", () => {
@@ -32,6 +33,7 @@ test("orderContent: orders entries by first source block, drops fully-retained s
       { step: "do z", source: ["B1"] }, // B1 is distill → kept
       { step: "do w", source: ["B2"] }, // every source block retained → dropped
     ],
+    noteRelations: [],
   };
   const { retained, retainedIds, orderedEntries, orderedSteps } = orderContent(ir, blocks, grades);
   expect(retained).toEqual([{ id: "B2", text: "b" }]);
@@ -120,6 +122,19 @@ test("wikilinkResidue: full coverage yields no residue", () => {
   expect(wikilinkResidue("[[x]] [[y]]", "[[x]] and [[y]]")).toEqual([]);
 });
 
+test("wikilinkResidue: a captured note-level edge counts as covered, not residue", () => {
+  // the acceptance failure mode: two stated-relation hostless links were dropped to
+  // residue. Once captured as a note-level edge in the ## Relations block (its to is a
+  // pre-slugged [[file-slug]]), the slug matches the source and drops out of residue.
+  const source =
+    "Pragmatic first relates to [[Not all shipped work looks the same]] and [[Tech debt multiplied by AI]].";
+  const out =
+    "## Relations\n\n" +
+    "- [[pragmatic-first-is-reconnaissance-for-elegance]] contrast-to:: [[not-all-shipped-work-looks-the-same]] (a)\n" +
+    "- [[pragmatic-first-is-reconnaissance-for-elegance]] refines:: [[tech-debt-multiplied-by-ai]] (b)";
+  expect(wikilinkResidue(source, out)).toEqual([]);
+});
+
 test("wikilinkResidue: slug-colliding source edges both surface even when output covers one", () => {
   // [[foo bar]] and [[foo/bar]] both slug to foo-bar; output covers the slug once.
   // Slug coverage cannot be attributed to a single edge, so both surface as residue
@@ -127,4 +142,71 @@ test("wikilinkResidue: slug-colliding source edges both surface even when output
   const res = wikilinkResidue("[[foo bar]] and [[foo/bar]]", "see [[foo bar]]");
   expect(res.map((r) => r.term).sort()).toEqual(["[[foo bar]]", "[[foo/bar]]"]);
   expect(res[0].reason).toMatch(/slug-collision/);
+});
+
+// ---- extractCombo: the note-level lane CODE gate (deterministic, model-independent) ----
+// The lane is gated at BOTH the prompt and the code. This pins the code gate: even
+// when the model emits a WELL-FORMED noteRelation (quoted predicate present, so the
+// null-predicate backstop would otherwise keep it), extractCombo drops it to [] when
+// the lane is off, and keeps it when on — proving the drop is the lane gate, not the
+// backstop. fetch is mocked so the real transport runs without a network call.
+const IR_WITH_NOTE_REL = {
+  description: "d",
+  thesis: "t",
+  glossary: [],
+  workflow: [],
+  noteRelations: [
+    { rel: "refines", to: "[[Tech debt multiplied by AI]]", predicate: "the same dynamic" },
+  ],
+};
+
+function mockFetchIR(ir: unknown): typeof fetch {
+  const m = mock(
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ finish_reason: "stop", message: { content: JSON.stringify(ir) } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+  );
+  return m as unknown as typeof fetch;
+}
+
+test("extractCombo: lane OFF drops an emitted noteRelation despite a valid predicate", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = mockFetchIR(IR_WITH_NOTE_REL);
+  try {
+    const ir = await extractCombo(
+      [{ id: "B1", text: "x" }],
+      "",
+      "en",
+      { wikilinks: [], external: [] },
+      "self",
+      false,
+    );
+    expect(ir.noteRelations).toEqual([]); // the code gate drops the model's output
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("extractCombo: lane ON keeps a noteRelation carrying a quoted predicate", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = mockFetchIR(IR_WITH_NOTE_REL);
+  try {
+    const ir = await extractCombo(
+      [{ id: "B1", text: "x" }],
+      "",
+      "en",
+      { wikilinks: [], external: [] },
+      "self",
+      true,
+    );
+    expect(ir.noteRelations).toEqual([
+      { rel: "refines", to: "[[Tech debt multiplied by AI]]", predicate: "the same dynamic" },
+    ]);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

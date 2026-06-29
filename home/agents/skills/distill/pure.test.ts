@@ -11,9 +11,11 @@ import { expect, test } from "bun:test";
 import {
   detectLang,
   glossList,
+  harvestExternalLinks,
   harvestWikilinks,
   hasOperational,
   hasWikilink,
+  normalizeNoteRelations,
   normalizeRelation,
   normalizeTypography,
   relText,
@@ -106,6 +108,36 @@ test("normalizeRelation: drops an edge missing rel or to, or a non-object", () =
   expect(normalizeRelation({ rel: "subsumes" })).toBeNull();
   expect(normalizeRelation(null)).toBeNull();
   expect(normalizeRelation("not an object")).toBeNull();
+});
+
+test("normalizeNoteRelations: drops a note-level edge with no quotable predicate (D37/D36 backstop)", () => {
+  // the predicate is the audit trail; without it the hostless edge is a fabricated rel
+  expect(normalizeNoteRelations([{ rel: "subsumes", to: "[[Some Associative Link]]" }])).toEqual(
+    [],
+  );
+  expect(
+    normalizeNoteRelations([
+      { rel: "refines", to: "[[Tech debt multiplied by AI]]", predicate: "" },
+    ]),
+  ).toEqual([]);
+});
+
+test("normalizeNoteRelations: keeps a note-level edge carrying a quoted predicate", () => {
+  expect(
+    normalizeNoteRelations([
+      {
+        rel: "refines",
+        to: "[[Tech debt multiplied by AI]]",
+        predicate: "the same dynamic AI multiplies",
+      },
+    ]),
+  ).toEqual([
+    {
+      rel: "refines",
+      to: "[[Tech debt multiplied by AI]]",
+      predicate: "the same dynamic AI multiplies",
+    },
+  ]);
 });
 
 test("relText: renders `rel :: to` and appends a present predicate", () => {
@@ -221,6 +253,25 @@ test("harvestWikilinks: extracts targets as slugs, strips alias and embed syntax
 
 test("harvestWikilinks: plain prose yields nothing", () => {
   expect(harvestWikilinks("no links here")).toEqual([]);
+});
+
+// ---- text.ts: external-link harvest (the citation lane, D38) ----
+test("harvestExternalLinks: collects [text](url) with text+url, strips a title suffix", () => {
+  expect(
+    harvestExternalLinks('see [Pólya](https://x.test/heuristic) and [t](http://y.test "title")'),
+  ).toEqual([
+    { markup: "[Pólya](https://x.test/heuristic)", text: "Pólya", url: "https://x.test/heuristic" },
+    { markup: '[t](http://y.test "title")', text: "t", url: "http://y.test" },
+  ]);
+});
+
+test("harvestExternalLinks: excludes images and [[wikilinks]]", () => {
+  // ![alt](url) is an image (lookbehind on !), [[wiki]] has no (url) to match.
+  expect(harvestExternalLinks("![logo](img.png) and [[a/B]] and [[Foo|bar]]")).toEqual([]);
+});
+
+test("harvestExternalLinks: plain prose and bare wikilinks yield nothing", () => {
+  expect(harvestExternalLinks("no links, just [[a wikilink]] here")).toEqual([]);
 });
 
 test("harvestWikilinks: a pre-slugged ## Relations endpoint is idempotent", () => {

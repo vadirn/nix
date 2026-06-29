@@ -1,7 +1,7 @@
 // assemble — turn the settled IR (prose head, workflow steps, glossary entries,
 // retained blocks) into the final markdown body, and emit the `## Relations`
 // block. Pure formatting; no I/O, no model calls.
-import { slugSegment, type Block, type GlossEntry } from "./text.ts";
+import { slugSegment, type Block, type GlossEntry, type Relation } from "./text.ts";
 
 // ---- assembly: head prose + glossary table + retained-verbatim blocks ----
 // `head` is the prose that sits above the table: the full connective note in the
@@ -23,13 +23,27 @@ export const escAttr = (s: string) =>
 // wikilink (inner re-slugged), a bare label becomes a local term-slug. Labels are
 // pre-slugified so the block is byte-stable. Exported for isolated unit testing.
 // Returns "" when no entry carries an edge.
-export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
+//
+// note-level edges (D38) render AFTER the term-scoped edges: a hostless cross-note
+// edge whose source is the note itself, emitted as `- [[self-slug]] <rel>:: [[file-slug]]
+// (pred)`. The from-label is the note's own slug, bracketed (a glossary-term from-label
+// stays bare). Skipped entirely when no `selfSlug` resolves (e.g. stdin with no
+// filename) so a note-level edge never ships without a real source endpoint.
+function endpointOf(to: string): string {
+  const wl = /^\[\[(.+)\]\]$/.exec(to.trim());
+  return wl ? `[[${slugSegment(wl[1])}]]` : slugSegment(to);
+}
+
+export function emitRelationsBlock(
+  orderedEntries: GlossEntry[],
+  noteRelations: Relation[] = [],
+  selfSlug = "",
+): string {
   const singleAtom = orderedEntries.length === 1;
   const lines: string[] = [];
   for (const entry of orderedEntries) {
     for (const r of entry.relations) {
-      const wl = /^\[\[(.+)\]\]$/.exec(r.to.trim());
-      const endpoint = wl ? `[[${slugSegment(wl[1])}]]` : slugSegment(r.to);
+      const endpoint = endpointOf(r.to);
       if (!endpoint) continue; // an endpoint that slugs to empty is unrenderable
       const pred = r.predicate ? ` (${r.predicate})` : "";
       lines.push(
@@ -37,6 +51,15 @@ export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
           ? `- ${r.rel}:: ${endpoint}${pred}`
           : `- ${slugSegment(entry.term)} ${r.rel}:: ${endpoint}${pred}`,
       );
+    }
+  }
+  const self = slugSegment(selfSlug);
+  if (self) {
+    for (const r of noteRelations) {
+      const endpoint = endpointOf(r.to);
+      if (!endpoint) continue;
+      const pred = r.predicate ? ` (${r.predicate})` : "";
+      lines.push(`- [[${self}]] ${r.rel}:: ${endpoint}${pred}`);
     }
   }
   return lines.length ? `## Relations\n\n${lines.join("\n")}` : "";
@@ -50,6 +73,8 @@ export function assembleBody(
   defByTerm: Map<string, string>,
   retained: Block[],
   isReference: boolean,
+  noteRelations: Relation[] = [],
+  selfSlug = "",
 ): string {
   const parts: string[] = [];
   if (h1) parts.push(h1);
@@ -75,7 +100,7 @@ export function assembleBody(
   // into one. distill emits no references today, so this guard is currently a no-op
   // kept for a future reference-distill path. Section order = push order.
   if (!isReference) {
-    const rel = emitRelationsBlock(orderedEntries);
+    const rel = emitRelationsBlock(orderedEntries, noteRelations, selfSlug);
     if (rel) parts.push(rel);
   }
   if (retained.length) parts.push(retained.map((b) => b.text).join("\n\n"));

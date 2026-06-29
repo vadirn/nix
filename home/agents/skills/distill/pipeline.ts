@@ -2,17 +2,21 @@
 // arg parsing, the temp-file sink, and main(). Sequences the stages from prompts.ts
 // behind the seams the leaf modules stabilize; main() is invoked by the entrypoint.
 import { readFileSync, writeFileSync } from "node:fs";
+import { basename } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   type Block,
   type Grade,
   type GlossEntry,
   type IR,
+  type LinkInventory,
   type WorkStep,
   detectLang,
+  harvestExternalLinks,
   harvestWikilinks,
   normalizeTypography,
   segment,
+  slugSegment,
   wordCount,
 } from "./text.ts";
 import {
@@ -21,7 +25,7 @@ import {
   parseFrontmatter,
   parseType,
 } from "./frontmatter.ts";
-import { askJson, EXTRACT, isTransient, rethrowIfBug } from "./fw.ts";
+import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
 import {
   type Concept,
   type StepVerdict,
@@ -542,14 +546,27 @@ async function distill(
     coreOnly: boolean;
     isReference: boolean;
   },
+  selfSlug = "",
 ): Promise<{ out: string; footer: string; residue: Residue[] }> {
   const blocks = segment(text);
   const blockById = new Map(blocks.map((b) => [b.id, b]));
   const beforeWords = wordCount(text);
 
+  // The note's own slug — the source endpoint of a note-level edge (D38) and the SELF
+  // anchor the extractor classifies links against. Prefer the filename slug (what other
+  // vault notes wikilink to); fall back to the H1 title slug when reading from stdin (no
+  // filename). Computed before extract so prompt and emit use one consistent slug.
+  const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
+  const effectiveSelfSlug = selfSlug || slugSegment(h1.replace(/^#+\s*/, ""));
+
   // 1. extract the idea-graph; nothing to distill (no concepts, no directives) →
-  // passthrough, footer notes it.
-  const ir = await extractCombo(blocks, frontDescription, lang);
+  // passthrough, footer notes it. The deterministic link inventory (every [[wikilink]]
+  // UNION every external [text](url)) is fed to the extractor as a MUST-COVER checklist.
+  const linkInventory: LinkInventory = {
+    wikilinks: harvestWikilinks(text),
+    external: harvestExternalLinks(text),
+  };
+  const ir = await extractCombo(blocks, frontDescription, lang, linkInventory, effectiveSelfSlug);
   if (ir.glossary.length === 0 && ir.workflow.length === 0) {
     return { out: text, footer: `— nothing to distill · ${beforeWords} words`, residue: [] };
   }
@@ -579,8 +596,6 @@ async function distill(
     prose = revised.prose;
     workflowSteps = revised.workflowSteps;
   }
-
-  const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
 
   // 5. fidelity gate + recovery (defs/steps repaired in place; --no-gate skips it)
   let residue: Residue[] = [];
@@ -623,6 +638,8 @@ async function distill(
     defByTerm,
     retained,
     opts.isReference,
+    ir.noteRelations,
+    effectiveSelfSlug,
   );
 
   const afterWords = wordCount(out);
@@ -756,15 +773,24 @@ export async function main() {
   // D30: a type:reference body must stay link-free (no ## Relations). distill emits
   // no references today, so this only future-proofs a reference-distill path.
   const isReference = parseType(front) === "reference";
+  // the note's canonical self-slug is its filename slug (what other vault notes
+  // wikilink to); empty when reading from stdin, where distill() falls back to the H1.
+  const selfSlug = inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
   try {
-    const { out, footer, residue } = await distill(body, resolved, frontDescription, {
-      synth,
-      maxRetries,
-      noRevise,
-      noGate,
-      coreOnly,
-      isReference,
-    });
+    const { out, footer, residue } = await distill(
+      body,
+      resolved,
+      frontDescription,
+      {
+        synth,
+        maxRetries,
+        noRevise,
+        noGate,
+        coreOnly,
+        isReference,
+      },
+      selfSlug,
+    );
     // <result> wraps exactly the text to write back to source: frontmatter
     // (verbatim except the injected epistemic_status default) + distilled body.
     // <residue> carries one <entry> per definition that failed the gate, with
@@ -789,6 +815,13 @@ export async function main() {
     // A non-transient throw is a real bug — surface it (a stage catch has already
     // logged it on its way up; anything thrown outside a stage prints its own stack
     // on propagation) instead of shipping the original as a silent passthrough.
+    // a truncation in a NO-CATCH core stage (extractCombo, gradeBlocks) is not a
+    // transient flake and not a code bug: it skips THIS note with a clear actionable
+    // footer (raise the stage's cap), never a raw stack crash or a "transient" label.
+    if (e instanceof TruncationError) {
+      emit(input, `— distill skipped: output TRUNCATED — ${e.message}`);
+      process.exit(0);
+    }
     if (!isTransient(e)) throw e;
     // transient failsafe: temp file holds the original (passthrough); path still printed
     emit(input, `— distill skipped (error): ${String(e).slice(0, 160)}`);

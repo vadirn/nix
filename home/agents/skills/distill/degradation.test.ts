@@ -9,7 +9,7 @@
 // (i) a non-transient code bug surfaces/propagates, (ii) a transient judge flake
 // still degrades gracefully.
 import { afterAll, expect, mock, test } from "bun:test";
-import { TransientError, isTransient, rethrowIfBug } from "./fw.ts";
+import { EXTRACT, TransientError, TruncationError, isTransient, rethrowIfBug } from "./fw.ts";
 
 // ---- the classifier + the gate it backs (pure, no network) ----
 test("isTransient: only TransientError is transient", () => {
@@ -25,6 +25,48 @@ test("rethrowIfBug: a transient flake returns; a code bug logs and propagates", 
   // non-transient: re-thrown verbatim so it cannot masquerade as a flake
   const bug = new TypeError("real bug");
   expect(() => rethrowIfBug(bug, "stage")).toThrow(bug);
+});
+
+test("rethrowIfBug: a truncation is swallowed like a transient flake", () => {
+  // a cap exhausted mid-output rides out to the caller's safe fallback, never aborts
+  expect(() =>
+    rethrowIfBug(new TruncationError("output truncated at max_tokens=16384"), "stage"),
+  ).not.toThrow();
+  expect(isTransient(new TruncationError("x"))).toBe(false); // distinct from TransientError
+});
+
+// ---- the truncation signal: finish_reason "length" → TruncationError, no retry ----
+// A length-truncation throws TruncationError out of fw's attempt loop, so it is never
+// network-retried; askJson awaits fw OUTSIDE its parse-retry, so it propagates
+// immediately with no wasted parse-retry either. We mock fetch (not the module) to
+// drive the real transport and count the calls.
+test("askJson: a length finish_reason throws TruncationError, not retried", async () => {
+  const fetchMock = mock(
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ finish_reason: "length", message: { content: '{"partial":' } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+  );
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  try {
+    let err: unknown;
+    try {
+      await real.askJson(EXTRACT, "prompt", 16384);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(TruncationError);
+    expect(isTransient(err)).toBe(false); // a truncation is NOT a transient flake
+    expect((err as Error).message).toContain("max_tokens=16384");
+    expect((err as Error).message).toContain("gpt-oss-120b");
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no network retry, no parse retry
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 // ---- the wiring: an actual stage degrades on transient, propagates on a bug ----
@@ -48,6 +90,18 @@ afterAll(() => mock.module(FW, () => real));
 test("fidelityGate: a transient judge flake degrades every concept to inconclusive", async () => {
   mockAskJson(() => {
     throw new TransientError("judge returned no JSON");
+  });
+  const { fidelityGate } = await import(PROMPTS);
+  const r = await fidelityGate("thesis", "body", [{ term: "x", def: "d", sourceText: "s" }]);
+  expect(r.thesisRecoverable).toBe(true);
+  expect(r.concepts).toHaveLength(1);
+  expect(r.concepts[0].grade).toBe("inconclusive");
+});
+
+test("fidelityGate: a TruncationError rides out to inconclusive (run not aborted)", async () => {
+  // glm legitimately exhausts FIDELITY_TOKENS; the gate must degrade, not abort
+  mockAskJson(() => {
+    throw new TruncationError("output truncated at max_tokens=16384 (glm-5p2) — raise this stage's cap");
   });
   const { fidelityGate } = await import(PROMPTS);
   const r = await fidelityGate("thesis", "body", [{ term: "x", def: "d", sourceText: "s" }]);

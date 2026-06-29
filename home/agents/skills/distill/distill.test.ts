@@ -113,6 +113,49 @@ test("emitRelationsBlock: no edges yields empty string", () => {
   expect(emitRelationsBlock([{ term: "x", def: "", source: ["B1"], relations: [] }])).toBe("");
 });
 
+// ---- D38 note-level edges: hostless [[self-slug]] → [[file-slug]] with quoted pred ----
+const noteLevel = [
+  {
+    rel: "refines",
+    to: "[[Tech debt multiplied by AI]]",
+    predicate: "pragmatic first refines how tech debt compounds",
+  },
+];
+const selfSlug = "pragmatic-first-is-reconnaissance-for-elegance";
+
+test("emitRelationsBlock: a note-level edge renders [[self-slug]] from-label with re-slugged to", () => {
+  expect(emitRelationsBlock([], noteLevel, selfSlug)).toBe(
+    "## Relations\n\n" +
+      "- [[pragmatic-first-is-reconnaissance-for-elegance]] refines:: [[tech-debt-multiplied-by-ai]] " +
+      "(pragmatic first refines how tech debt compounds)",
+  );
+});
+
+test("emitRelationsBlock: term-scoped edges precede note-level edges in one block", () => {
+  expect(emitRelationsBlock(noteIR, noteLevel, selfSlug)).toBe(
+    "## Relations\n\n" +
+      "- target-distance precondition-for:: aim-point (you must range before you can hold)\n" +
+      "- target-distance contrast-to:: [[note-line-of-sight]]\n" +
+      "- aim-point subsumes:: holdover\n" +
+      "- [[pragmatic-first-is-reconnaissance-for-elegance]] refines:: [[tech-debt-multiplied-by-ai]] " +
+      "(pragmatic first refines how tech debt compounds)",
+  );
+});
+
+test("emitRelationsBlock: an empty self-slug suppresses note-level edges (no source endpoint)", () => {
+  expect(emitRelationsBlock([], noteLevel, "")).toBe("");
+});
+
+test("emitRelationsBlock: note-level edges do not regress the existing one-arg golden form", () => {
+  // a default call (no noteRelations, no selfSlug) is byte-identical to before D38.
+  expect(emitRelationsBlock(noteIR)).toBe(
+    "## Relations\n\n" +
+      "- target-distance precondition-for:: aim-point (you must range before you can hold)\n" +
+      "- target-distance contrast-to:: [[note-line-of-sight]]\n" +
+      "- aim-point subsumes:: holdover",
+  );
+});
+
 // ---- epistemic_status default: distilled output is provisional until curated ----
 test("ensureEpistemicStatus: inserts before the closing fence, other lines byte-stable", () => {
   const front = "---\ntype: note\ndescription: A pinned anchor\n---\n";

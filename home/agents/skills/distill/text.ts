@@ -38,6 +38,18 @@ export type IR = {
   thesis: string;
   glossary: GlossEntry[];
   workflow: WorkStep[];
+  // note-level edges (D38): hostless cross-note relations whose source endpoint is
+  // the note ITSELF (not a glossary term). Emitted in `## Relations` with the note's
+  // own [[self-slug]] as the from-label. A separate channel from glossary[].relations
+  // so it needs no glossary-term host and no synthetic carrier entry.
+  noteRelations: Relation[];
+};
+// The deterministic link inventory fed to the extractor as a MUST-COVER checklist:
+// every [[wikilink]] (intra-vault edges) UNION every external [text](url) (citation /
+// source links, a distinct lane that grounds to a reference node, NOT a vault relation).
+export type LinkInventory = {
+  wikilinks: { markup: string; slug: string }[];
+  external: { markup: string; text: string; url: string }[];
 };
 
 // ---- segmentation: fence-aware, split on blank lines; code fences stay whole ----
@@ -109,6 +121,24 @@ export function harvestWikilinks(text: string): { markup: string; slug: string }
   return out;
 }
 
+// Harvest every external [text](url) Markdown link — the citation/source lane (D38),
+// distinct from [[wikilinks]]. Excludes images (![alt](url), rejected by the `!`
+// lookbehind) and wikilinks (the `]` lookbehind rejects the `](...)` trailing a
+// `[[..]]` close, and a `[[x]]` has no `(url)` to match anyway). The optional title
+// suffix ([t](url "title")) is tolerated and dropped. Unlike harvestWikilinks the
+// inventory key is the URL (the grounding target of a cites/source edge), not a vault
+// slug — external links are a separate lane and never become vault relations.
+export function harvestExternalLinks(
+  text: string,
+): { markup: string; text: string; url: string }[] {
+  const out: { markup: string; text: string; url: string }[] = [];
+  for (const m of text.matchAll(/(?<![!\]])\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+    const url = m[2].trim();
+    if (url) out.push({ markup: m[0], text: m[1].trim(), url });
+  }
+  return out;
+}
+
 // a block carries operational tokens that must survive verbatim — code, CLI
 // flags, file paths. Used by the wikilink clamp to choose retain over distill.
 export const hasOperational = (text: string): boolean =>
@@ -176,6 +206,18 @@ export function normalizeRelation(r: unknown): Relation | null {
   if (!rel || !to) return null;
   const pred = o.predicate == null ? "" : normalizeTypography(String(o.predicate)).trim();
   return { rel, to, predicate: pred || null };
+}
+
+// Note-level edges (D37): a hostless `[[self-slug]] → [[file-slug]]` edge is admissible
+// ONLY with a quotable directional predicate — that quoted source phrase is the audit
+// trail that keeps the edge D36-compliant (no fabricated `rel`). The gate is load-bearing
+// (D37a), so enforce it in CODE, not by model-trust: normalize each edge, then DROP any
+// whose predicate is null/empty. A dropped link is not lost — it falls through to
+// `wikilinkResidue` as loud residue for the curator, never ships as an untraceable edge.
+export function normalizeNoteRelations(raw: unknown): Relation[] {
+  return (Array.isArray(raw) ? raw : [])
+    .map((r) => normalizeRelation(r))
+    .filter((r): r is Relation => r !== null && r.predicate !== null);
 }
 
 export function detectLang(text: string): "en" | "ru" {

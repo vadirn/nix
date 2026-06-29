@@ -11,6 +11,15 @@ export class TransientError extends Error {
   override readonly name = "TransientError";
 }
 
+// A length-truncation: the model hit its max_tokens cap and returned a partial
+// response (finish_reason "length"). Distinct from TransientError because retrying
+// the same call burns another timeout and truncates identically — the cap, not the
+// network, is the fault. A throw exits fw's attempt loop, so it is never
+// network-retried; the message names the model and cap so the cure is actionable.
+export class TruncationError extends Error {
+  override readonly name = "TruncationError";
+}
+
 export function isTransient(e: unknown): boolean {
   return e instanceof TransientError;
 }
@@ -21,7 +30,12 @@ export function isTransient(e: unknown): boolean {
 // masquerade as a judge flake and ship an unverified result. `stage` names the
 // failing stage in the log line.
 export function rethrowIfBug(e: unknown, stage: string): void {
-  if (isTransient(e)) return;
+  // A truncation rides out the same way a transient flake does: at every
+  // degrade-site the caller's safe fallback (inconclusive / thesis / kept draft)
+  // is the right outcome — a cap exhausted on a thinking model (glm legitimately
+  // spends FIDELITY_TOKENS) must never abort the whole distill. The clean
+  // actionable skip for a truncation in a NO-CATCH core stage lives in main().
+  if (isTransient(e) || e instanceof TruncationError) return;
   console.error(`distill: ${stage} failed with a non-transient error (propagating):`, e);
   throw e;
 }
@@ -84,8 +98,21 @@ async function fw(
       const msg = `FW ${res.status}: ${JSON.stringify(j).slice(0, 300)}`;
       throw res.status === 429 || res.status >= 500 ? new TransientError(msg) : new Error(msg);
     }
-    const content = (j as { choices?: { message?: { content?: unknown } }[] }).choices?.[0]?.message
-      ?.content;
+    const choice = (
+      j as { choices?: { message?: { content?: unknown }; finish_reason?: unknown }[] }
+    ).choices?.[0];
+    // PRIMARY truncation signal: a "length" finish_reason means the model hit the
+    // cap mid-output. Check it regardless of whether content is present (a
+    // length-truncation usually carries truncated content) and throw a distinct,
+    // non-retried TruncationError naming the model + cap. The extractJson
+    // "unbalanced JSON" path stays as the fallback for when finish_reason is absent.
+    if (choice?.finish_reason === "length") {
+      const shortModel = model.split("/").pop() ?? model;
+      throw new TruncationError(
+        `output truncated at max_tokens=${body.max_tokens} (${shortModel}) — raise this stage's cap`,
+      );
+    }
+    const content = choice?.message?.content;
     if (typeof content !== "string") {
       // model returned no content: a model-output flake, retryable — transient.
       throw new TransientError(`FW empty choices: ${JSON.stringify(j).slice(0, 300)}`);
