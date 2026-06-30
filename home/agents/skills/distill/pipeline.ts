@@ -86,6 +86,11 @@ const WF_RECOVERY: WfRecovery = ((): WfRecovery => {
 
 // ---- pipeline ----
 type Residue = { term: string; reason: string; source: string };
+// Did distill rewrite the body, or pass it through unchanged? The producer knows this at each
+// return site (nothing-to-distill and expand-guard pass through; the normal path compresses);
+// the routed build reads it to tag the footer rather than re-deriving it by byte-comparison.
+type DistillStatus = "compressed" | "passthrough";
+type DistillResult = { out: string; footer: string; residue: Residue[]; status: DistillStatus };
 // one workflow group: steps sharing a source block-set, judged together by the
 // workflow gate. `idxs` index into the ordered workflowSteps array.
 type StepGroup = { id: string; idxs: number[]; sourceText: string };
@@ -744,7 +749,7 @@ async function distill(
   },
   selfSlug = "",
   routed = false,
-): Promise<{ out: string; footer: string; residue: Residue[] }> {
+): Promise<DistillResult> {
   // Per-section render-router (D12/D16, Backlog 10). When a note carries any payload-dense
   // section, route: re-author the idea sections into ONE compact head (recurse — the head is
   // itself a homogeneous distill, which gives the expand guard scoped to its own source), hold
@@ -778,7 +783,12 @@ async function distill(
   };
   const ir = await extractCombo(blocks, frontDescription, lang, linkInventory, effectiveSelfSlug);
   if (ir.glossary.length === 0 && ir.workflow.length === 0) {
-    return { out: text, footer: `— nothing to distill · ${beforeWords} words`, residue: [] };
+    return {
+      out: text,
+      footer: `— nothing to distill · ${beforeWords} words`,
+      residue: [],
+      status: "passthrough",
+    };
   }
 
   // 2. grade blocks, then order entries/steps (pure)
@@ -859,6 +869,7 @@ async function distill(
       out: text,
       footer: `— distillation expanded ${beforeWords}→${afterWords} words; kept original`,
       residue: [],
+      status: "passthrough",
     };
   }
   // prose-list-item gate (D46): a glm matcher over a deterministic inventory of explicit
@@ -900,7 +911,7 @@ async function distill(
     // skipped it above — flag the disabled loss detector instead of dropping it silently.
     proseGateOffFactsDump: !opts.noGate && !opts.coreOnly && opts.factsDump,
   });
-  return { out, footer, residue };
+  return { out, footer, residue, status: "compressed" };
 }
 
 // The heterogeneous (per-section-routed) build (D12/D16, Backlog 10). Re-author the idea
@@ -920,7 +931,7 @@ async function distillRouted(
   frontDescription: string,
   opts: Parameters<typeof distill>[3],
   selfSlug: string,
-): Promise<{ out: string; footer: string; residue: Residue[] }> {
+): Promise<DistillResult> {
   const reauthorText = units
     .filter((u) => u.route === "re-author")
     .map((u) => u.text)
@@ -928,15 +939,21 @@ async function distillRouted(
     .trim();
   const head = reauthorText
     ? await distill(reauthorText, lang, frontDescription, opts, selfSlug, true)
-    : { out: "", footer: "", residue: [] as Residue[] };
-  return assembleRoutedNote({
-    source: text,
-    title,
-    reauthorText,
-    head,
-    preserveTexts: preserve.map((u) => u.text),
-    reCount: units.length - preserve.length,
-  });
+    : { out: "", footer: "", residue: [] as Residue[], status: "passthrough" as const };
+  // The routed note is itself a compression (prose re-authored, payload compacted); its own
+  // status is "compressed". Unconsumed today (the routed=true guard blocks nesting), but the
+  // contract is honest and a constant, so it cannot drift.
+  return {
+    ...assembleRoutedNote({
+      source: text,
+      title,
+      reauthorText,
+      head,
+      preserveTexts: preserve.map((u) => u.text),
+      reCount: units.length - preserve.length,
+    }),
+    status: "compressed",
+  };
 }
 
 // Pure seam of the per-section routed build (the no-LLM tail of distillRouted): reassemble the
@@ -946,13 +963,13 @@ async function distillRouted(
 // edgePayloadResidue and so contributed none), called here over (source, reassembled out): a link
 // surviving in a preserve section reads as covered (no false drop) and a real drop counts once (no
 // double-count). The verbatim-head tag surfaces a head the inner expand or nothing-to-distill guard
-// returned unchanged; reauthorText !== "" excludes the empty-head / all-preserve route (where
-// head.out === reauthorText === "") from tagging.
+// returned unchanged, read from the head's own `status` (the producer is the authority); reauthorText
+// !== "" excludes the empty-head / all-preserve route (a passthrough head with no prose) from tagging.
 export function assembleRoutedNote(a: {
   source: string;
   title: string;
   reauthorText: string;
-  head: { out: string; residue: Residue[] };
+  head: { out: string; residue: Residue[]; status: DistillStatus };
   preserveTexts: string[];
   reCount: number;
 }): { out: string; footer: string; residue: Residue[] } {
@@ -961,7 +978,7 @@ export function assembleRoutedNote(a: {
   const out = reassembleNote(a.title, a.head.out, preserves);
   const afterWords = wordCount(out);
   const residue = a.head.residue.concat(edgePayloadResidue(a.source, out));
-  const headVerbatim = a.reauthorText !== "" && a.head.out === a.reauthorText;
+  const headVerbatim = a.reauthorText !== "" && a.head.status === "passthrough";
   const footer =
     `— per-section route: ${a.reCount} re-author / ${a.preserveTexts.length} preserve` +
     ` · ${beforeWords}→${afterWords} words` +

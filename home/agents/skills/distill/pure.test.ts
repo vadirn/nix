@@ -300,7 +300,7 @@ test("assembleRoutedNote: empty-head holds the preserve verbatim, reCount 0, no 
     source: "# T\n\n## Data\n\n`x`",
     title: "# T",
     reauthorText: "",
-    head: { out: "", residue: [] },
+    head: { out: "", residue: [], status: "passthrough" },
     preserveTexts: ["## Data\n\n`x`"],
     reCount: 0,
   });
@@ -316,7 +316,7 @@ test("assembleRoutedNote: all-preserve keeps both sections in source order, reCo
     source: "## A\n\n`a`\n\n## B\n\n`b`",
     title: "",
     reauthorText: "",
-    head: { out: "", residue: [] },
+    head: { out: "", residue: [], status: "passthrough" },
     preserveTexts: ["## A\n\n`a`", "## B\n\n`b`"],
     reCount: 0,
   });
@@ -331,7 +331,7 @@ test("assembleRoutedNote: title-less note emits head first with no leading title
     source: "## Idea\n\nidea\n\n## Data\n\n`x`",
     title: "",
     reauthorText: "## Idea\n\nidea",
-    head: { out: "Head prose.", residue: [] },
+    head: { out: "Head prose.", residue: [], status: "compressed" },
     preserveTexts: ["## Data\n\n`x`"],
     reCount: 1,
   });
@@ -347,7 +347,7 @@ test("assembleRoutedNote: link dropped from head but alive in a preserve section
     source,
     title: "",
     reauthorText: "## Idea\n\nsee [[foo]]",
-    head: { out: "Idea prose, link gone.", residue: [] },
+    head: { out: "Idea prose, link gone.", residue: [], status: "compressed" },
     preserveTexts: ["## Data\n\n`code` [[foo]]"],
     reCount: 1,
   });
@@ -363,7 +363,7 @@ test("assembleRoutedNote: a genuinely dropped link surfaces exactly once, not do
     source,
     title: "",
     reauthorText: "## Idea\n\nsee [[bar]]",
-    head: { out: "Idea prose, link gone.", residue: [] },
+    head: { out: "Idea prose, link gone.", residue: [], status: "compressed" },
     preserveTexts: ["## Data\n\n`code`"],
     reCount: 1,
   });
@@ -380,7 +380,7 @@ test("assembleRoutedNote: verbatim head passthrough tags the footer (fix 3)", ()
     source: "# T\n\n" + rt + "\n\n## Data\n\n`z`",
     title: "# T",
     reauthorText: rt,
-    head: { out: rt, residue: [] },
+    head: { out: rt, residue: [], status: "passthrough" },
     preserveTexts: ["## Data\n\n`z`"],
     reCount: 1,
   });
@@ -392,7 +392,37 @@ test("assembleRoutedNote: a compressed head is not tagged (fix 3 no false-positi
     source: "# T\n\n## Notes\n\nlong original prose\n\n## Data\n\n`z`",
     title: "# T",
     reauthorText: "## Notes\n\nlong original prose",
-    head: { out: "Tight distilled prose.", residue: [] },
+    head: { out: "Tight distilled prose.", residue: [], status: "compressed" },
+    preserveTexts: ["## Data\n\n`z`"],
+    reCount: 1,
+  });
+  expect(r.footer).not.toContain("kept verbatim");
+});
+
+test("assembleRoutedNote: a passthrough head whose out differs from reauthorText still tags (status, not byte-compare)", () => {
+  // The producer (distill) is the authority on whether the head compressed; the discriminant
+  // reads its status, not byte-equality. A passthrough head can legitimately differ in bytes
+  // (e.g. reauthorText carried a heading the empty-output guard stripped) — byte-compare misses it.
+  const r = assembleRoutedNote({
+    source: "# T\n\n## Notes\n\np\n\n## Data\n\n`z`",
+    title: "# T",
+    reauthorText: "## Notes\n\np",
+    head: { out: "different bytes", residue: [], status: "passthrough" },
+    preserveTexts: ["## Data\n\n`z`"],
+    reCount: 1,
+  });
+  expect(r.footer).toContain("head kept verbatim (prose not compressed)");
+});
+
+test("assembleRoutedNote: a compressed head whose out equals reauthorText is not tagged (no byte-compare false-positive)", () => {
+  // A genuinely compressed head can land byte-identical to its source (short note, tight rewrite);
+  // byte-compare would falsely tag it "kept verbatim". The status read does not.
+  const rt = "## Notes\n\nidentical";
+  const r = assembleRoutedNote({
+    source: "# T\n\n" + rt + "\n\n## Data\n\n`z`",
+    title: "# T",
+    reauthorText: rt,
+    head: { out: rt, residue: [], status: "compressed" },
     preserveTexts: ["## Data\n\n`z`"],
     reCount: 1,
   });
