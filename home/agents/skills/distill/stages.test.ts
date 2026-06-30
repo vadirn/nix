@@ -6,12 +6,16 @@
 // and buildFooter (the success-footer renderer). The async stages route through
 // the network and are covered by the end-to-end + degradation suites.
 import { expect, test } from "bun:test";
-import type { Block, IR, Grade, WorkStep } from "./text.ts";
+import type { Block, IR, Grade, ProseUnit, WorkStep } from "./text.ts";
+import { normalizeForContainment } from "./text.ts";
+import type { ProseVerdict } from "./prompts.ts";
 import {
+  anchored,
   buildFooter,
   computeStepGroups,
   orderContent,
   payloadResidue,
+  proseResidue,
   wikilinkResidue,
 } from "./pipeline.ts";
 
@@ -195,4 +199,101 @@ test("payloadResidue: a bare year is not flagged as a dropped statistic", () => 
 test("payloadResidue: URL path digits are not phantom statistics (covered URL → no residue)", () => {
   const u = "see https://x.example/2010/390755 for detail";
   expect(payloadResidue(u, "kept " + u)).toEqual([]);
+});
+
+// ---- proseResidue + anchored: the prose-judge mapping (D46) ----
+// surfaced is the DEFAULT; a unit clears only on an explicit covered verdict whose anchor is
+// verified present in the output AND on-topic for the judged item.
+const pu = (id: string, span: string): ProseUnit => ({ id, heading: "Sec", depth: 4, span });
+const pv = (id: string, grade: "covered" | "dropped", anchor = "", missing = ""): ProseVerdict => ({
+  id,
+  grade,
+  anchor,
+  missing,
+});
+
+test("proseResidue: a dropped verdict surfaces as residue", () => {
+  const units = [pu("sec-0", "weaken preconditions in a subtype, never strengthen them")];
+  const verdicts = new Map([
+    ["sec-0", pv("sec-0", "dropped", "", "the precondition rule is absent")],
+  ]);
+  const res = proseResidue(units, verdicts, new Set(), "an unrelated compressed body");
+  expect(res).toHaveLength(1);
+  expect(res[0].reason).toMatch(/prose dropped/);
+});
+
+test("proseResidue: the core invariant — a covered+anchored verdict clears to zero residue", () => {
+  const span = "weaken preconditions in a subtype, never strengthen them";
+  const out = "Subtypes may weaken preconditions in a subtype but never strengthen them.";
+  const verdicts = new Map([
+    ["sec-0", pv("sec-0", "covered", "weaken preconditions in a subtype")],
+  ]);
+  expect(proseResidue([pu("sec-0", span)], verdicts, new Set(), out)).toEqual([]);
+});
+
+test("proseResidue: an unrelated anchor cannot launder a dropped item (F3 relevance binding)", () => {
+  const span = "weaken preconditions in a subtype, never strengthen them";
+  // the anchor exists verbatim in out but is the THESIS — it shares no content word with the item
+  const out = "The thesis is that clean architecture pays its way over the long run.";
+  const verdicts = new Map([["sec-0", pv("sec-0", "covered", "clean architecture pays its way")]]);
+  const res = proseResidue([pu("sec-0", span)], verdicts, new Set(), out);
+  expect(res).toHaveLength(1);
+  expect(res[0].reason).toMatch(/not anchored/);
+});
+
+test("proseResidue: an omitted id surfaces (default-to-surfaced)", () => {
+  const res = proseResidue(
+    [pu("sec-0", "a must-cover enumerated claim about something")],
+    new Map(),
+    new Set(),
+    "out",
+  );
+  expect(res).toHaveLength(1);
+  expect(res[0].reason).toMatch(/omitted this item/);
+});
+
+test("proseResidue: a flaked-batch id surfaces with a distinct reason", () => {
+  const res = proseResidue(
+    [pu("sec-0", "a must-cover enumerated claim about something")],
+    new Map(),
+    new Set(["sec-0"]),
+    "out",
+  );
+  expect(res).toHaveLength(1);
+  expect(res[0].reason).toMatch(/no verdict for this item's batch/);
+});
+
+test("proseResidue: a surviving sibling never clears a dropped sibling (single-survivor / F4)", () => {
+  const out =
+    "We keep only the first moat: a proprietary data network effect competitors cannot copy.";
+  const units = [
+    pu("moats-0", "a proprietary data network effect competitors cannot copy"),
+    pu("moats-1", "a regulatory licence barrier that takes years to clear"),
+    pu("moats-2", "a switching-cost lock-in from deep workflow integration"),
+  ];
+  const verdicts = new Map<string, ProseVerdict>([
+    [
+      "moats-0",
+      pv("moats-0", "covered", "a proprietary data network effect competitors cannot copy"),
+    ],
+    ["moats-1", pv("moats-1", "dropped", "", "the regulatory licence barrier is gone")],
+    ["moats-2", pv("moats-2", "dropped", "", "the switching-cost lock-in is gone")],
+  ]);
+  expect(
+    proseResidue(units, verdicts, new Set(), out)
+      .map((r) => r.term)
+      .sort(),
+  ).toEqual(["moats-1", "moats-2"]);
+});
+
+test("anchored: rejects a too-short anchor or one absent from output, accepts an on-topic one", () => {
+  const span = "weaken preconditions in a subtype, never strengthen them";
+  const normOut = normalizeForContainment(
+    "Subtypes weaken preconditions in a subtype, never strengthen them.",
+  );
+  expect(anchored(pv("x", "covered", "weaken"), span, normOut)).toBe(false); // < 16 chars
+  expect(anchored(pv("x", "covered", "a totally absent phrase here"), span, normOut)).toBe(false); // not in out
+  expect(anchored(pv("x", "covered", "weaken preconditions in a subtype"), span, normOut)).toBe(
+    true,
+  );
 });

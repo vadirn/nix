@@ -113,3 +113,10 @@ export function parseType(front: string): string {
     .replace(/^["']|["']$/g, "")
     .toLowerCase();
 }
+
+// A `superseded: true` note is retired content the curator has moved past — distill is
+// licensed to drop it wholesale, so the prose-list-item gate (D46) skips it rather than
+// flooding the footer with advisory residue. Returns false when absent or any non-true value.
+export function parseSuperseded(front: string): boolean {
+  return /^superseded:[ \t]*true[ \t]*$/im.test(front);
+}

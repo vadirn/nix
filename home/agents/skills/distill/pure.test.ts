@@ -19,10 +19,12 @@ import {
   harvestInternalLinks,
   harvestMath,
   harvestNumbers,
+  harvestProseListItems,
   harvestTableRows,
   harvestVaultEdges,
   harvestWikilinks,
   hasOperational,
+  normalizeForContainment,
   hasWikilink,
   isExternalUrl,
   normalizeRelation,
@@ -562,4 +564,90 @@ test("harvestNumbers: digits inside a URL or footnote definition are not phantom
 
 test("harvestNumbers: comma-grouped and plain forms share a key", () => {
   expect(harvestNumbers("1,200 items").map((r) => r.key)).toEqual(["1200"]);
+});
+
+// ---- harvestProseListItems: the prose-judge inventory (D46) ----
+test("normalizeForContainment: lowercases, strips markdown punctuation, collapses whitespace", () => {
+  expect(normalizeForContainment("  **Foo**  `bar`  (Baz)!  ")).toBe("foo bar baz");
+});
+
+test("harvestProseListItems: list-items under a depth≥2 heading become per-item units", () => {
+  const src = [
+    "# Title",
+    "",
+    "## OCP",
+    "",
+    "#### Признаки нарушения",
+    "",
+    "- coupling through concrete classes instead of interfaces",
+    "- using singletons raises coupling far too high",
+  ].join("\n");
+  const units = harvestProseListItems(src, []);
+  expect(units).toHaveLength(2);
+  expect(units[0].id).toBe("признаки-нарушения-0");
+  expect(units[1].id).toBe("признаки-нарушения-1");
+  expect(units[0].depth).toBe(4);
+});
+
+test("harvestProseListItems: a lead item before the first heading is excluded (EXCL-1)", () => {
+  const src =
+    "# Title\n\n- a lead bullet with no owning section heading above\n\n## Sec\n\n- a real item under the section heading line";
+  const units = harvestProseListItems(src, []);
+  expect(units).toHaveLength(1);
+  expect(units[0].id).toBe("sec-0");
+});
+
+test("harvestProseListItems: a payload-only bullet (wikilink / image) is excluded (EXCL-2)", () => {
+  const src =
+    "## Sec\n\n- [[some/other-note|an alias]]\n- ![[diagram.png]]\n- a genuine prose claim that must be covered";
+  const units = harvestProseListItems(src, []);
+  expect(units).toHaveLength(1);
+  expect(units[0].span).toContain("genuine prose claim");
+});
+
+test("harvestProseListItems: an item folded into a claimed def/step is excluded (EXCL-3)", () => {
+  const src =
+    "## Sec\n\n- weaken preconditions in a subtype, never strengthen them\n- a different uncovered claim about class invariants";
+  const claimed = ["source: weaken preconditions in a subtype, never strengthen them, per LSP"];
+  const units = harvestProseListItems(src, claimed);
+  expect(units).toHaveLength(1);
+  expect(units.map((u) => u.span).join(" ")).not.toContain("weaken preconditions");
+});
+
+test("harvestProseListItems: a too-thin bullet is excluded (EXCL-4)", () => {
+  const src = "## Sec\n\n- ok\n- a substantive enumerated claim long enough to carry meaning";
+  const units = harvestProseListItems(src, []);
+  expect(units).toHaveLength(1);
+});
+
+test("harvestProseListItems: a wrapped item folds continuation lines into one span", () => {
+  const src =
+    "## Sec\n\n- first part of the claim\n  and its indented continuation line\n- second independent claim about something";
+  const units = harvestProseListItems(src, []);
+  expect(units).toHaveLength(2);
+  expect(units[0].span).toContain("continuation line");
+});
+
+test("harvestProseListItems: identical headings yield distinct per-item ids (collision proof)", () => {
+  const src =
+    "## A\n\n#### Итого\n\n- first summary point worth keeping around\n\n## B\n\n#### Итого\n\n- second summary point worth keeping too";
+  const units = harvestProseListItems(src, []);
+  expect(units).toHaveLength(2);
+  expect(units[0].id).toBe("итого-0");
+  expect(units[1].id).toBe("итого-1");
+});
+
+test("harvestProseListItems: a list-looking line inside a code fence is not inventoried", () => {
+  const src =
+    "## Sec\n\n```\n- this is code, not a prose list item to cover\n```\n\n- a real prose claim outside the fence here";
+  const units = harvestProseListItems(src, []);
+  expect(units).toHaveLength(1);
+  expect(units[0].span).toContain("real prose claim");
+});
+
+test("harvestProseListItems: enum markers (F1. / A)) are recognized as list items", () => {
+  const src =
+    "## Moats\n\nF1. the first structural moat that filters competitors out\nA) the first scenario branch worth enumerating";
+  const units = harvestProseListItems(src, []);
+  expect(units).toHaveLength(2);
 });

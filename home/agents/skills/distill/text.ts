@@ -468,6 +468,102 @@ export function harvestNumbers(text: string): PayloadSpan[] {
   return out;
 }
 
+// ---- prose-list-item inventory (the prose-judge tier, Backlog 40 / D46) ----
+// The payload spine above catches LITERAL/STRUCTURAL loss but is blind to a dropped pure-
+// prose list-item — a `Признаки нарушения` bullet, a `Шаблоны` pattern, an F1–F7 enumerated
+// claim — and so are the fidelity/workflow gates (they only judge the defs and steps the
+// extractor lifted). This harvester does NOT decide coverage; it only enumerates the must-
+// cover CLASS (explicit list-items under a depth≥2 heading) as an answer key for the glm
+// matcher (pipeline.ts::runProseGate). A list-item is an ATOMIC enumerated claim, not
+// restatement-collapsible prose, which is why per-item judging is false-flag-free where a
+// coarse prose-span judge is not — worked examples, thesis spans, and heading-less essays
+// stay deferred. Four deterministic exclusions narrow the inventory to must-cover items;
+// none is a meaning judgment — the layer enumerates and excludes, it never declares survival.
+export type ProseUnit = { id: string; heading: string; depth: number; span: string };
+
+// Lowercase, strip markdown punctuation, collapse whitespace — a containment-comparable
+// form shared by EXCLUSION-3 (extractor-claimed) here and the anchor relevance re-check in
+// the matcher (pipeline.ts::anchored).
+export const normalizeForContainment = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[`*_>#|[\]()!~-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export function harvestProseListItems(text: string, claimed: string[]): ProseUnit[] {
+  const claimNorm = claimed.map(normalizeForContainment).filter((c) => c.length > 0);
+  const lines = text.split("\n");
+  const units: ProseUnit[] = [];
+  let inFence = false;
+  let tok = "";
+  let curHeading = "";
+  let curDepth = 0;
+  let sawHeading = false;
+  let n = 0;
+  const HEAD = /^(#{2,6})\s+(.*)$/;
+  // markdown bullets (- * +), numbered (1. / 1)), and the A–F / Cyrillic enum markers the
+  // vault's scenario / moat / worked-example lists use (F1. A) Сценарий-Б.). The uppercase
+  // A–F restriction keeps a prose abbreviation ("e.g.") from registering as a list marker.
+  const ITEM = /^\s*(?:[-*+]|\d+[.)]|[A-FА-Я]\d*[.)])\s+(.*\S)\s*$/;
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    const f = /^\s*(`{3,}|~{3,})/.exec(ln);
+    if (f) {
+      if (!inFence) {
+        inFence = true;
+        tok = f[1][0];
+      } else if (ln.includes(tok.repeat(3))) {
+        inFence = false;
+      }
+      continue;
+    }
+    if (inFence) continue;
+    const h = ln.match(HEAD);
+    if (h) {
+      curDepth = h[1].length;
+      curHeading = h[2];
+      sawHeading = true;
+      continue;
+    }
+    if (!sawHeading) continue; // EXCL-1 intro/thesis-owned lead (before the first ## heading)
+    const m = ln.match(ITEM);
+    if (!m) continue;
+    let body = m[1];
+    // gather deeper-indented continuation lines (a wrapped item) into one span
+    while (
+      i + 1 < lines.length &&
+      /^\s+\S/.test(lines[i + 1]) &&
+      !ITEM.test(lines[i + 1]) &&
+      !HEAD.test(lines[i + 1])
+    ) {
+      body += " " + lines[++i].trim();
+    }
+    // EXCL-2 payload/spine-owned: a bullet that is wholly a wikilink / image / table row /
+    // citation / inline-code / number is already covered by the seven payload lanes — strip
+    // those and require residual prose before inventorying.
+    const probe = stripFences(body)
+      .replace(MASK_RE, " ")
+      .replace(/!\[[^\]]*\]\([^)]*\)|!\[\[[^\]]+\]\]/g, " ")
+      .replace(/^\s*\|.*\|?\s*$/g, " ");
+    if (!/\S/.test(probe)) continue;
+    const norm = normalizeForContainment(body);
+    if (norm.length < 12) continue; // EXCL-4 too thin to carry a claim (heading echo, scaffold)
+    // EXCL-3 extractor-claimed: the item was folded into a def or step the extractor lifted,
+    // so fidelityGate/workflowGate already judge it. Information-grounded (the extractor's own
+    // source attribution), a best-effort REDUCER — a non-contiguously cited item may slip to
+    // the matcher, costing a token, never a false residue.
+    if (claimNorm.some((c) => c.includes(norm))) continue;
+    units.push({
+      id: `${slugSegment(curHeading) || "prose"}-${n++}`,
+      heading: oneLine(curHeading, 60),
+      depth: curDepth,
+      span: oneLine(body, 300),
+    });
+  }
+  return units;
+}
+
 // a block carries operational tokens that must survive verbatim — code, CLI
 // flags, file paths. Used by the wikilink clamp to choose retain over distill.
 export const hasOperational = (text: string): boolean =>

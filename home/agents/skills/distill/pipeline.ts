@@ -10,6 +10,7 @@ import {
   type GlossEntry,
   type IR,
   type LinkInventory,
+  type ProseUnit,
   type WorkStep,
   type PayloadSpan,
   detectLang,
@@ -20,8 +21,10 @@ import {
   harvestImages,
   harvestMath,
   harvestNumbers,
+  harvestProseListItems,
   harvestTableRows,
   harvestVaultEdges,
+  normalizeForContainment,
   normalizeTypography,
   segment,
   slugSegment,
@@ -31,6 +34,7 @@ import {
   ensureEpistemicStatus,
   parseDescription,
   parseFrontmatter,
+  parseSuperseded,
   parseType,
 } from "./frontmatter.ts";
 import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
@@ -44,7 +48,9 @@ import {
   gradeBlocks,
   PASS_EN,
   PASS_RU,
+  type ProseVerdict,
   proseFix,
+  proseGate,
   proseJudge,
   renderEntryPrompt,
   repairWorkflowGroup,
@@ -613,6 +619,89 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
   return residue;
 }
 
+// ---- prose-list-item gate (the prose-judge tier, D46) ----
+// The deterministic spine above catches dropped literal/structural payload; this gate catches
+// a dropped pure-prose list-item, the must-cover class the spine AND the fidelity/workflow
+// gates are all blind to. text.ts::harvestProseListItems is the deterministic answer key;
+// prompts.ts::proseGate (glm, the model that did not write the compression) is the matcher;
+// the covered→clear decision is made HERE — surfaced is the DEFAULT for every outcome except
+// an explicit covered verdict whose anchor is verified present and on-topic.
+
+// EN+RU stoplist: function words the anchor-relevance test must not count as a shared content
+// word (else a "the of and" overlap could clear an off-topic anchor). Over-inclusion here is
+// safe — it raises the bar to clear, surfacing more (loud), never clearing more (silent).
+const STOPWORDS = new Set(
+  (
+    "the a an of to in on at for and or but is are was were be been being it its this that these those with as by from not no " +
+    "и в во не на он его но что а то все так да ты к у же вы за бы по только ее мне было вот от меня для о из ему при до или это " +
+    "как мы их кто чтобы бы ли если"
+  ).split(/\s+/),
+);
+const contentWords = (s: string): string[] =>
+  normalizeForContainment(s)
+    .split(" ")
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+
+// A "covered" verdict clears a unit only when its quoted anchor (i) is a real ≥16-char
+// substring of the output AND (ii) shares ≥2 content words with the item it claims to cover.
+// (ii) is the load-bearing fix: existence alone let glm launder a dropped item by quoting
+// unrelated true output text (e.g. the thesis); requiring shared content words binds the
+// anchor to the JUDGED item, so the model cannot point at the thesis to clear a dropped caveat.
+export function anchored(v: ProseVerdict, span: string, normOut: string): boolean {
+  const a = normalizeForContainment(v.anchor ?? "");
+  if (a.length < 16 || !normOut.includes(a)) return false;
+  const aw = new Set(contentWords(a));
+  return contentWords(span).filter((w) => aw.has(w)).length >= 2;
+}
+
+// Pure mapping: inventory units + the matcher's verdicts → residue. A unit clears to zero
+// residue ONLY on an explicit covered verdict whose anchor is verified present and on-topic
+// (anchored). An omitted id, an unanchored covered, a non-covered grade, or a flaked batch all
+// surface — the model that caused the loss never clears a span by silence or a vague anchor.
+export function proseResidue(
+  units: ProseUnit[],
+  verdicts: Map<string, ProseVerdict>,
+  flaked: Set<string>,
+  outputText: string,
+): Residue[] {
+  const normOut = normalizeForContainment(outputText);
+  const residue: Residue[] = [];
+  for (const u of units) {
+    const v = verdicts.get(u.id);
+    if (!v) {
+      residue.push({
+        term: u.id,
+        source: u.span,
+        reason: flaked.has(u.id)
+          ? "prose-inconclusive: judge returned no verdict for this item's batch"
+          : "prose-inconclusive: judge omitted this item from its verdict",
+      });
+      continue;
+    }
+    if (v.grade === "covered" && anchored(v, u.span, normOut)) continue; // the ONLY clear
+    residue.push({
+      term: u.id,
+      source: u.span,
+      reason:
+        v.grade === "dropped"
+          ? `prose dropped: ${v.missing || "list-item information absent from output"}`
+          : "prose-inconclusive: covered verdict not anchored to a verifiable, on-topic output location",
+    });
+  }
+  return residue;
+}
+
+// orchestrate the gate: match the harvested inventory (glm, batched) and map to residue.
+async function runProseGate(
+  units: ProseUnit[],
+  outputText: string,
+  lang: "en" | "ru",
+): Promise<Residue[]> {
+  if (units.length === 0) return [];
+  const { verdicts, flaked } = await proseGate(units, outputText, lang);
+  return proseResidue(units, verdicts, flaked, outputText);
+}
+
 // orchestrator: thread the stages above, holding the shared state (segmented
 // blocks, ordering, and the two mutable carriers defByTerm + workflowSteps). The
 // output is identical to the pre-decomposition single function; the stages only
@@ -628,6 +717,7 @@ async function distill(
     noGate: boolean;
     coreOnly: boolean;
     isReference: boolean;
+    factsDump: boolean;
   },
   selfSlug = "",
 ): Promise<{ out: string; footer: string; residue: Residue[] }> {
@@ -735,6 +825,22 @@ async function distill(
       residue: [],
     };
   }
+  // prose-list-item gate (D46): a glm matcher over a deterministic inventory of explicit
+  // list-items under a heading — the must-cover prose class the spine is blind to and the
+  // fidelity/workflow gates never see. An LLM call, so it rides --no-gate like runFidelityGate;
+  // skipped in --core-only (no prose body to cover into) and on facts/context dumps (wholesale
+  // drop is licensed there, so the inventory would only flood the footer). EXCLUSION-3 drops
+  // items already folded into a graded def or step (sourceTextFor / StepGroup.sourceText), so
+  // the matcher only judges list-items the existing gates do not. Appends to residue only.
+  if (!opts.noGate && !opts.coreOnly && !opts.factsDump) {
+    const claimed = [
+      ...orderedEntries.map((e) => sourceTextFor(e, blockById)),
+      ...computeStepGroups(orderedSteps, blockById).map((g) => g.sourceText),
+    ];
+    const units = harvestProseListItems(text, claimed);
+    residue = residue.concat(await runProseGate(units, out, lang));
+  }
+
   // edge-coverage gate: surface any source [[wikilink]] the distilled output dropped
   // as residue. Deterministic and free, so it runs even under --no-gate — a dropped
   // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the
@@ -855,6 +961,10 @@ export async function main() {
   // D30: a type:reference body must stay link-free (no ## Relations). distill emits
   // no references today, so this only future-proofs a reference-distill path.
   const isReference = parseType(front) === "reference";
+  // D46 genre gate: a superseded note or a "Context document" is licensed to drop wholesale,
+  // so the prose-list-item gate would only flood the footer — skip it there (the deterministic
+  // spine still runs). Computed here, where the raw frontmatter is in scope.
+  const factsDump = parseSuperseded(front) || /context document/i.test(frontDescription);
   // the note's canonical self-slug is its filename slug (what other vault notes
   // wikilink to); empty when reading from stdin, where distill() falls back to the H1.
   const selfSlug = inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
@@ -870,6 +980,7 @@ export async function main() {
         noGate,
         coreOnly,
         isReference,
+        factsDump,
       },
       selfSlug,
     );

@@ -8,6 +8,7 @@ import {
   type GlossEntry,
   type IR,
   type LinkInventory,
+  type ProseUnit,
   type Relation,
   type WorkStep,
   glossList,
@@ -787,4 +788,71 @@ export async function workflowGate(
       missing: "judge returned no verdict",
     }));
   }
+}
+
+// ---- prose gate: list-item coverage (the prose-judge tier, D46) ----
+// A deterministic inventory (text.ts::harvestProseListItems) is the answer key; glm — the
+// DIFFERENT model from the one that wrote the compression — is the MATCHER ONLY, deciding
+// per item whether its information SURVIVED somewhere in the output (covered) or was DROPPED.
+// It never decides the key. A "covered" verdict must quote a verbatim output anchor; the
+// covered→clear decision and the anchor re-check live in pipeline.ts::proseResidue, which
+// DEFAULTS TO SURFACED for an omitted id, an unanchored covered, or a parse flake — the
+// model that caused the loss never clears a span by silence.
+export type ProseVerdict = {
+  id: string;
+  grade: "covered" | "dropped";
+  anchor: string;
+  missing: string;
+};
+
+function proseMatchPrompt(outputBody: string, units: ProseUnit[], lang: "en" | "ru"): string {
+  const items = units
+    .map((u) => `### ${u.id}\nFROM SECTION "${u.heading}":\n${u.span}`)
+    .join("\n\n");
+  return `You are an independent coverage judge. You did NOT write this compression — a different model did, and it was ALLOWED to compress, merge, paraphrase, re-author, and re-order freely. Below is the full compressed OUTPUT, then a list of ITEMS taken verbatim from the original note (each a single list entry). For EACH item decide ONE thing: did the item's INFORMATION survive ANYWHERE in the OUTPUT — in any compressed, paraphrased, merged-into-a-definition, or folded-into-prose form — (grade "covered"), or was it DROPPED entirely (grade "dropped")?
+Rules:
+- "covered" REQUIRES an anchor: quote in "anchor" a verbatim substring of at least 4 words copied from the OUTPUT, AND that quote must be the place where THIS item's information survives — not unrelated true text from elsewhere in the OUTPUT. If no such quotable OUTPUT substring exists, you may NOT grade it covered.
+- An item is "covered" even if ALL its wording, examples, emphasis, and ordering are gone and only its CLAIM remains. Compression and re-authoring are NOT loss.
+- "dropped" only when the item's information appears NOWHERE in the OUTPUT; name what is absent in "missing".
+- Judge each item independently; never grade one covered because a sibling item was covered.
+${langRule(lang)}
+Return ONLY JSON {"units":[{"id":"...","grade":"covered|dropped","anchor":"<verbatim OUTPUT substring>","missing":"..."}]} — echo each id exactly once.
+
+OUTPUT (the compressed note):
+${outputBody}
+
+ITEMS:
+${items}`;
+}
+
+// Match the inventory against the output, in batches of 5 (each payload stays under
+// FIDELITY_TOKENS). Returns the raw verdicts keyed by id plus the set of ids whose batch
+// flaked (transient / no-parse), so proseResidue can surface a flaked id distinctly from one
+// the judge simply omitted. The covered/dropped→residue MAPPING and anchor re-check are pure
+// and live in pipeline.ts::proseResidue. A real bug propagates through rethrowIfBug.
+export async function proseGate(
+  units: ProseUnit[],
+  outputBody: string,
+  lang: "en" | "ru",
+): Promise<{ verdicts: Map<string, ProseVerdict>; flaked: Set<string> }> {
+  const verdicts = new Map<string, ProseVerdict>();
+  const flaked = new Set<string>();
+  const BATCH = 5;
+  for (let i = 0; i < units.length; i += BATCH) {
+    const batch = units.slice(i, i + BATCH);
+    try {
+      const res = await askJson<{ units?: ProseVerdict[] }>(
+        FIDELITY,
+        proseMatchPrompt(outputBody, batch, lang),
+        FIDELITY_TOKENS,
+      );
+      for (const v of res.units ?? []) if (v.id) verdicts.set(v.id, v);
+    } catch (e) {
+      rethrowIfBug(e, "proseGate");
+      // transient / no-parse flake: leave this batch's ids un-verdicted AND flag them, so
+      // proseResidue surfaces each as inconclusive — never silently cleared.
+      for (const u of batch) flaked.add(u.id);
+    }
+  }
+  return { verdicts, flaked };
 }
