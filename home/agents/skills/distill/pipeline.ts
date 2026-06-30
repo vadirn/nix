@@ -870,7 +870,14 @@ async function distill(
   // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the
   // final body (prose + ## Relations + retained), so a link surviving in any of them
   // counts as covered.
-  residue = residue.concat(wikilinkResidue(text, out), payloadResidue(text, out));
+  // The routed head (routed=true) skips this: distillRouted runs these gates ONCE at
+  // whole-note scope (assembleRoutedNote, over source + reassembled out), so a link
+  // surviving in a preserve section is not false-flagged against the head's narrower
+  // subset and a real drop is not double-counted. The head still contributes its
+  // fidelity/workflow/prose-list residue above.
+  if (!routed) {
+    residue = residue.concat(wikilinkResidue(text, out), payloadResidue(text, out));
+  }
   const footer = buildFooter({
     beforeWords,
     afterWords,
@@ -908,7 +915,6 @@ async function distillRouted(
   opts: Parameters<typeof distill>[3],
   selfSlug: string,
 ): Promise<{ out: string; footer: string; residue: Residue[] }> {
-  const beforeWords = wordCount(text);
   const reauthorText = units
     .filter((u) => u.route === "re-author")
     .map((u) => u.text)
@@ -917,14 +923,47 @@ async function distillRouted(
   const head = reauthorText
     ? await distill(reauthorText, lang, frontDescription, opts, selfSlug, true)
     : { out: "", footer: "", residue: [] as Residue[] };
-  const preserves = preserve.map((u) => compactSection(u.text));
-  const out = reassembleNote(title, head.out, preserves);
+  return assembleRoutedNote({
+    source: text,
+    title,
+    reauthorText,
+    head,
+    preserveTexts: preserve.map((u) => u.text),
+    reCount: units.length - preserve.length,
+  });
+}
+
+// Pure seam of the per-section routed build (the no-LLM tail of distillRouted): reassemble the
+// routed note, run the deterministic edge+payload gates ONCE at whole-note scope, and build the
+// footer. No model and no I/O, so distillRouted's wiring is unit-testable in pure.test.ts. The
+// residue-scope fix lives here: the routed head call (routed=true) now skips its own per-subset
+// edge/payload run (see distill's !routed guard), so these wikilinkResidue/payloadResidue calls
+// over (source, reassembled out) are the only such gates on a routed build — a link surviving in
+// a preserve section reads as covered (no false drop) and a real drop counts once (no double-
+// count). The verbatim-head tag surfaces a head the inner expand or nothing-to-distill guard
+// returned unchanged; reauthorText !== "" excludes the empty-head / all-preserve route (where
+// head.out === reauthorText === "") from tagging.
+export function assembleRoutedNote(a: {
+  source: string;
+  title: string;
+  reauthorText: string;
+  head: { out: string; residue: Residue[] };
+  preserveTexts: string[];
+  reCount: number;
+}): { out: string; footer: string; residue: Residue[] } {
+  const beforeWords = wordCount(a.source);
+  const preserves = a.preserveTexts.map((t) => compactSection(t));
+  const out = reassembleNote(a.title, a.head.out, preserves);
   const afterWords = wordCount(out);
-  const residue = head.residue.concat(wikilinkResidue(text, out), payloadResidue(text, out));
-  const reCount = units.length - preserve.length;
+  const residue = a.head.residue.concat(
+    wikilinkResidue(a.source, out),
+    payloadResidue(a.source, out),
+  );
+  const headVerbatim = a.reauthorText !== "" && a.head.out === a.reauthorText;
   const footer =
-    `— per-section route: ${reCount} re-author / ${preserve.length} preserve` +
+    `— per-section route: ${a.reCount} re-author / ${a.preserveTexts.length} preserve` +
     ` · ${beforeWords}→${afterWords} words` +
+    (headVerbatim ? " · head kept verbatim (prose not compressed)" : "") +
     (residue.length ? ` · ${residue.length} residue` : "");
   return { out, footer, residue };
 }

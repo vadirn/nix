@@ -44,7 +44,7 @@ import {
   wordCount,
 } from "./text.ts";
 import { extractJson } from "./fw.ts";
-import { wikilinkResidue } from "./pipeline.ts";
+import { assembleRoutedNote, wikilinkResidue } from "./pipeline.ts";
 import { parseDistilled } from "./render-mode.ts";
 
 // ---- text.ts: segmentation ----
@@ -292,6 +292,111 @@ test("reassembleNote: title first, head, preserves in source order; demotes a co
   expect(out.indexOf("## Config")).toBeLessThan(out.indexOf("### Glossary"));
   // payload held verbatim
   expect(out).toContain("port: 8080");
+});
+
+// ---- pipeline.ts: routed-build seam (distillRouted's no-LLM tail; Backlog 14) ----
+test("assembleRoutedNote: empty-head holds the preserve verbatim, reCount 0, no verbatim tag", () => {
+  const r = assembleRoutedNote({
+    source: "# T\n\n## Data\n\n`x`",
+    title: "# T",
+    reauthorText: "",
+    head: { out: "", residue: [] },
+    preserveTexts: ["## Data\n\n`x`"],
+    reCount: 0,
+  });
+  expect(r.out.startsWith("# T")).toBe(true);
+  expect(r.out).toContain("`x`");
+  expect(r.footer).toContain("0 re-author / 1 preserve");
+  expect(r.footer).not.toContain("kept verbatim");
+  expect(r.residue).toEqual([]);
+});
+
+test("assembleRoutedNote: all-preserve keeps both sections in source order, reCount 0, no tag", () => {
+  const r = assembleRoutedNote({
+    source: "## A\n\n`a`\n\n## B\n\n`b`",
+    title: "",
+    reauthorText: "",
+    head: { out: "", residue: [] },
+    preserveTexts: ["## A\n\n`a`", "## B\n\n`b`"],
+    reCount: 0,
+  });
+  expect(r.footer).toContain("0 re-author / 2 preserve");
+  expect(r.footer).not.toContain("kept verbatim");
+  expect(r.out.indexOf("## A")).toBeLessThan(r.out.indexOf("## B"));
+  expect(r.residue).toEqual([]);
+});
+
+test("assembleRoutedNote: title-less note emits head first with no leading title line", () => {
+  const r = assembleRoutedNote({
+    source: "## Idea\n\nidea\n\n## Data\n\n`x`",
+    title: "",
+    reauthorText: "## Idea\n\nidea",
+    head: { out: "Head prose.", residue: [] },
+    preserveTexts: ["## Data\n\n`x`"],
+    reCount: 1,
+  });
+  expect(r.out.startsWith("Head prose.")).toBe(true);
+  expect(r.out).toContain("`x`");
+  expect(r.footer).toContain("1 re-author / 1 preserve");
+  expect(r.footer).not.toContain("kept verbatim");
+});
+
+test("assembleRoutedNote: link dropped from head but alive in a preserve section yields no residue (fix 1 scope)", () => {
+  const source = "## Idea\n\nsee [[foo]]\n\n## Data\n\n`code` [[foo]]";
+  const r = assembleRoutedNote({
+    source,
+    title: "",
+    reauthorText: "## Idea\n\nsee [[foo]]",
+    head: { out: "Idea prose, link gone.", residue: [] },
+    preserveTexts: ["## Data\n\n`code` [[foo]]"],
+    reCount: 1,
+  });
+  // [[foo]] survives in the reassembled preserve, so the single whole-note run reads it
+  // covered; at head scope it would have false-flagged a drop.
+  expect(r.residue).toEqual([]);
+  expect(r.footer).not.toContain("residue");
+});
+
+test("assembleRoutedNote: a genuinely dropped link surfaces exactly once, not double-counted (fix 1)", () => {
+  const source = "## Idea\n\nsee [[bar]]\n\n## Data\n\n`code`";
+  const r = assembleRoutedNote({
+    source,
+    title: "",
+    reauthorText: "## Idea\n\nsee [[bar]]",
+    head: { out: "Idea prose, link gone.", residue: [] },
+    preserveTexts: ["## Data\n\n`code`"],
+    reCount: 1,
+  });
+  // head.residue is [] (post-fix the routed head no longer runs the edge gate), so the
+  // whole-note run is the sole source — one residue, no double-count.
+  expect(r.residue.length).toBe(1);
+  expect(r.residue[0].term).toBe("[[bar]]");
+  expect(r.footer).toContain("1 residue");
+});
+
+test("assembleRoutedNote: verbatim head passthrough tags the footer (fix 3)", () => {
+  const rt = "## Notes\n\nshort prose";
+  const r = assembleRoutedNote({
+    source: "# T\n\n" + rt + "\n\n## Data\n\n`z`",
+    title: "# T",
+    reauthorText: rt,
+    head: { out: rt, residue: [] },
+    preserveTexts: ["## Data\n\n`z`"],
+    reCount: 1,
+  });
+  expect(r.footer).toContain("head kept verbatim (prose not compressed)");
+});
+
+test("assembleRoutedNote: a compressed head is not tagged (fix 3 no false-positive)", () => {
+  const r = assembleRoutedNote({
+    source: "# T\n\n## Notes\n\nlong original prose\n\n## Data\n\n`z`",
+    title: "# T",
+    reauthorText: "## Notes\n\nlong original prose",
+    head: { out: "Tight distilled prose.", residue: [] },
+    preserveTexts: ["## Data\n\n`z`"],
+    reCount: 1,
+  });
+  expect(r.footer).not.toContain("kept verbatim");
 });
 
 // ---- text.ts: small utilities ----
