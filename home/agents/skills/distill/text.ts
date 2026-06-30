@@ -367,7 +367,9 @@ export function harvestTableRows(text: string): PayloadSpan[] {
     if (!isTableDataRow(mLines[i])) continue;
     out.push({
       markup: oneLine((rawLines[i] ?? mLines[i]).trim()),
-      key: tableCells(mLines[i]).map((c) => c.toLowerCase()).join("␟"),
+      key: tableCells(mLines[i])
+        .map((c) => c.toLowerCase())
+        .join("␟"),
     });
   }
   return out;
@@ -413,7 +415,11 @@ const MATH_OP =
   /[=<>+\-*/^_{}\\]|\\(?:le|ge|leq|geq|neq|cdot|times|frac|sum|prod|int|sqrt|approx|propto|to)\b/;
 // Display-math spans (`$$…$$`, `\[…\]`, `\(…\)`), inner captured, multiline. Shared by
 // harvestMath (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
-export const DISPLAY_MATH_PATTERNS = [/\$\$([\s\S]+?)\$\$/g, /\\\[([\s\S]+?)\\\]/g, /\\\(([\s\S]+?)\\\)/g];
+export const DISPLAY_MATH_PATTERNS = [
+  /\$\$([\s\S]+?)\$\$/g,
+  /\\\[([\s\S]+?)\\\]/g,
+  /\\\(([\s\S]+?)\\\)/g,
+];
 export function harvestMath(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const src = stripFences(text);
@@ -642,11 +648,14 @@ export function payloadMask(text: string): string {
   // Display-math + image lanes blank in place, replacing each non-newline char with a space
   // so multi-line spans keep their line count. Markdown images blank unconditionally; embeds
   // only when the target is an asset (the same ASSET_RE filter harvestImages applies).
-  const blankKeepingLines = (s: string, re: RegExp) => s.replace(re, (m) => m.replace(/[^\n]/g, " "));
+  const blankKeepingLines = (s: string, re: RegExp) =>
+    s.replace(re, (m) => m.replace(/[^\n]/g, " "));
   for (const re of DISPLAY_MATH_PATTERNS) masked = blankKeepingLines(masked, re);
   masked = blankKeepingLines(masked, MD_IMAGE_RE);
   masked = masked.replace(EMBED_RE, (m, inner) =>
-    ASSET_RE.test(normalizeEdgeTarget(String(inner).split("|")[0].trim())) ? m.replace(/[^\n]/g, " ") : m,
+    ASSET_RE.test(normalizeEdgeTarget(String(inner).split("|")[0].trim()))
+      ? m.replace(/[^\n]/g, " ")
+      : m,
   );
   return masked;
 }
@@ -673,7 +682,12 @@ export type SectionRoute = { heading: string; depth: number; density: number; ro
 export function routeNote(text: string, tau: number = DEFAULT_TAU): SectionRoute[] {
   return sections(text).map((s) => {
     const density = payloadDensity(s.text);
-    return { heading: s.heading, depth: s.depth, density, route: density >= tau ? "preserve" : "re-author" };
+    return {
+      heading: s.heading,
+      depth: s.depth,
+      density,
+      route: density >= tau ? "preserve" : "re-author",
+    };
   });
 }
 
@@ -684,7 +698,9 @@ export function formatDryRun(path: string, rows: SectionRoute[]): string {
   const re = rows.filter((r) => r.route === "re-author").length;
   const pr = rows.length - re;
   const head = `${path} · ${re} re-author / ${pr} preserve`;
-  const body = rows.map((r) => `  ${r.heading || "(intro)"} · ${r.density.toFixed(2)} · ${r.route}`);
+  const body = rows.map(
+    (r) => `  ${r.heading || "(intro)"} · ${r.density.toFixed(2)} · ${r.route}`,
+  );
   return [head, ...body].join("\n");
 }
 
