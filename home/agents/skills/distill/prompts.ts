@@ -830,6 +830,9 @@ ${items}`;
 // flaked (transient / no-parse), so proseResidue can surface a flaked id distinctly from one
 // the judge simply omitted. The covered/dropped→residue MAPPING and anchor re-check are pure
 // and live in pipeline.ts::proseResidue. A real bug propagates through rethrowIfBug.
+// The batches are independent full-output matches, so they fire concurrently (mirrors the
+// Promise.all over independent glm calls in runFidelityGate); the try/catch is PER batch so a
+// flake flags only its own ids while a real bug rejects Promise.all and propagates.
 export async function proseGate(
   units: ProseUnit[],
   outputBody: string,
@@ -838,21 +841,24 @@ export async function proseGate(
   const verdicts = new Map<string, ProseVerdict>();
   const flaked = new Set<string>();
   const BATCH = 5;
-  for (let i = 0; i < units.length; i += BATCH) {
-    const batch = units.slice(i, i + BATCH);
-    try {
-      const res = await askJson<{ units?: ProseVerdict[] }>(
-        FIDELITY,
-        proseMatchPrompt(outputBody, batch, lang),
-        FIDELITY_TOKENS,
-      );
-      for (const v of res.units ?? []) if (v.id) verdicts.set(v.id, v);
-    } catch (e) {
-      rethrowIfBug(e, "proseGate");
-      // transient / no-parse flake: leave this batch's ids un-verdicted AND flag them, so
-      // proseResidue surfaces each as inconclusive — never silently cleared.
-      for (const u of batch) flaked.add(u.id);
-    }
-  }
+  const batches: ProseUnit[][] = [];
+  for (let i = 0; i < units.length; i += BATCH) batches.push(units.slice(i, i + BATCH));
+  await Promise.all(
+    batches.map(async (batch) => {
+      try {
+        const res = await askJson<{ units?: ProseVerdict[] }>(
+          FIDELITY,
+          proseMatchPrompt(outputBody, batch, lang),
+          FIDELITY_TOKENS,
+        );
+        for (const v of res.units ?? []) if (v.id) verdicts.set(v.id, v);
+      } catch (e) {
+        rethrowIfBug(e, "proseGate");
+        // transient / no-parse flake: leave this batch's ids un-verdicted AND flag them, so
+        // proseResidue surfaces each as inconclusive — never silently cleared.
+        for (const u of batch) flaked.add(u.id);
+      }
+    }),
+  );
   return { verdicts, flaked };
 }

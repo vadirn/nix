@@ -84,6 +84,15 @@ function mockAskJson(throwing: () => never) {
   }));
 }
 
+// per-call variant: the mock inspects each prompt so independent batches can succeed
+// or flake separately (proseGate fires its batches concurrently via Promise.all).
+function mockAskJsonBy(handler: (prompt: string) => unknown) {
+  mock.module(FW, () => ({
+    ...real,
+    askJson: mock(async (_model: unknown, prompt: string) => handler(prompt)),
+  }));
+}
+
 // restore the real transport so the mock cannot leak into other test files
 afterAll(() => mock.module(FW, () => real));
 
@@ -142,5 +151,35 @@ test("synthWorkflow: a non-transient code bug propagates", async () => {
   const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
   await expect(synthWorkflow(steps, "regenerate", blockById, "en")).rejects.toThrow(
     "undefined helper",
+  );
+});
+
+// ---- proseGate: parallel batches keep the per-batch flake isolation (D46 / FIX B) ----
+// The batches now fire concurrently, but a flake must still flag ONLY its own ids while a
+// sibling batch's verdicts survive — never collapsing into one outer catch.
+const proseUnits = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: `u${i}`, heading: "H", depth: 2, span: "s" }));
+
+test("proseGate: a transient flake on one batch flags only that batch's ids", async () => {
+  // 7 units → two batches (u0-u4, u5-u6); the second batch flakes, the first verdicts.
+  mockAskJsonBy((prompt) => {
+    if (prompt.includes("### u5")) throw new TransientError("judge returned no JSON");
+    const ids = [...prompt.matchAll(/### (u\d+)/g)].map((m) => m[1]);
+    return { units: ids.map((id) => ({ id, grade: "covered", anchor: "abcd", missing: "" })) };
+  });
+  const { proseGate } = await import(PROMPTS);
+  const { verdicts, flaked } = await proseGate(proseUnits(7), "body", "en");
+  expect(flaked).toEqual(new Set(["u5", "u6"])); // only the flaked batch, not the whole run
+  for (const id of ["u0", "u1", "u2", "u3", "u4"]) expect(verdicts.has(id)).toBe(true);
+  for (const id of ["u5", "u6"]) expect(verdicts.has(id)).toBe(false);
+});
+
+test("proseGate: a non-transient code bug rejects the parallel batches", async () => {
+  mockAskJson(() => {
+    throw new TypeError("cannot read property of undefined");
+  });
+  const { proseGate } = await import(PROMPTS);
+  await expect(proseGate(proseUnits(7), "body", "en")).rejects.toThrow(
+    "cannot read property of undefined",
   );
 });
