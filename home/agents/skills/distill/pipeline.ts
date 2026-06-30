@@ -629,6 +629,18 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
   return residue;
 }
 
+// The single origin of a build's deterministic edge+payload residue: dropped [[wikilink]] edges
+// (wikilinkResidue) and dropped payload spans (payloadResidue), surfaced for rollback (D16). Both
+// distill (homogeneous build) and assembleRoutedNote (the routed whole-note run) call THIS, so the
+// pair is never duplicated and the routed-skip rule lives in one tested place. A routed head
+// (routed=true) contributes nothing: assembleRoutedNote owns the whole-note run, so a head running
+// these gates over its own narrower subset would false-flag a link alive in a preserve section and
+// double-count a real drop. Returning [] for the routed head IS the residue-scope fix, and it is
+// the invariant assembleRoutedNote relies on when it concats head.residue.
+export function edgePayloadResidue(text: string, out: string, routed = false): Residue[] {
+  return routed ? [] : [...wikilinkResidue(text, out), ...payloadResidue(text, out)];
+}
+
 // ---- prose-list-item gate (the prose-judge tier, D46) ----
 // The deterministic spine above catches dropped literal/structural payload; this gate catches
 // a dropped pure-prose list-item, the must-cover class the spine AND the fidelity/workflow
@@ -865,19 +877,13 @@ async function distill(
     residue = residue.concat(await runProseGate(units, out, lang));
   }
 
-  // edge-coverage gate: surface any source [[wikilink]] the distilled output dropped
-  // as residue. Deterministic and free, so it runs even under --no-gate — a dropped
-  // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the
-  // final body (prose + ## Relations + retained), so a link surviving in any of them
-  // counts as covered.
-  // The routed head (routed=true) skips this: distillRouted runs these gates ONCE at
-  // whole-note scope (assembleRoutedNote, over source + reassembled out), so a link
-  // surviving in a preserve section is not false-flagged against the head's narrower
-  // subset and a real drop is not double-counted. The head still contributes its
-  // fidelity/workflow/prose-list residue above.
-  if (!routed) {
-    residue = residue.concat(wikilinkResidue(text, out), payloadResidue(text, out));
-  }
+  // edge-coverage gate: surface any source [[wikilink]] or payload span the distilled output
+  // dropped as residue. Deterministic and free, so it runs even under --no-gate — a dropped
+  // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the final body
+  // (prose + ## Relations + retained), so a link surviving in any of them counts as covered. The
+  // routed head passes routed=true and contributes nothing here (assembleRoutedNote owns the one
+  // whole-note run); the routed-skip and its rationale live in edgePayloadResidue.
+  residue = residue.concat(edgePayloadResidue(text, out, routed));
   const footer = buildFooter({
     beforeWords,
     afterWords,
@@ -935,12 +941,11 @@ async function distillRouted(
 
 // Pure seam of the per-section routed build (the no-LLM tail of distillRouted): reassemble the
 // routed note, run the deterministic edge+payload gates ONCE at whole-note scope, and build the
-// footer. No model and no I/O, so distillRouted's wiring is unit-testable in pure.test.ts. The
-// residue-scope fix lives here: the routed head call (routed=true) now skips its own per-subset
-// edge/payload run (see distill's !routed guard), so these wikilinkResidue/payloadResidue calls
-// over (source, reassembled out) are the only such gates on a routed build — a link surviving in
-// a preserve section reads as covered (no false drop) and a real drop counts once (no double-
-// count). The verbatim-head tag surfaces a head the inner expand or nothing-to-distill guard
+// footer. No model and no I/O, so distillRouted's wiring is unit-testable in pure.test.ts. This is
+// the whole-note edge/payload run the routed head defers to (the head passed routed=true to
+// edgePayloadResidue and so contributed none), called here over (source, reassembled out): a link
+// surviving in a preserve section reads as covered (no false drop) and a real drop counts once (no
+// double-count). The verbatim-head tag surfaces a head the inner expand or nothing-to-distill guard
 // returned unchanged; reauthorText !== "" excludes the empty-head / all-preserve route (where
 // head.out === reauthorText === "") from tagging.
 export function assembleRoutedNote(a: {
@@ -955,10 +960,7 @@ export function assembleRoutedNote(a: {
   const preserves = a.preserveTexts.map((t) => compactSection(t));
   const out = reassembleNote(a.title, a.head.out, preserves);
   const afterWords = wordCount(out);
-  const residue = a.head.residue.concat(
-    wikilinkResidue(a.source, out),
-    payloadResidue(a.source, out),
-  );
+  const residue = a.head.residue.concat(edgePayloadResidue(a.source, out));
   const headVerbatim = a.reauthorText !== "" && a.head.out === a.reauthorText;
   const footer =
     `— per-section route: ${a.reCount} re-author / ${a.preserveTexts.length} preserve` +

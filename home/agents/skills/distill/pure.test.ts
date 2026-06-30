@@ -44,7 +44,7 @@ import {
   wordCount,
 } from "./text.ts";
 import { extractJson } from "./fw.ts";
-import { assembleRoutedNote, wikilinkResidue } from "./pipeline.ts";
+import { assembleRoutedNote, edgePayloadResidue, wikilinkResidue } from "./pipeline.ts";
 import { parseDistilled } from "./render-mode.ts";
 
 // ---- text.ts: segmentation ----
@@ -397,6 +397,22 @@ test("assembleRoutedNote: a compressed head is not tagged (fix 3 no false-positi
     reCount: 1,
   });
   expect(r.footer).not.toContain("kept verbatim");
+});
+
+test("edgePayloadResidue: a routed head contributes no edge/payload residue (the scope guard)", () => {
+  const src = "see [[bar]]\n\n```js\nconst x = 1;\n```";
+  const out = "tight prose, link and code gone";
+  // routed head: assembleRoutedNote owns the single whole-note run, so the head skips it.
+  // Deleting the routed-skip in edgePayloadResidue reddens this line.
+  expect(edgePayloadResidue(src, out, true)).toEqual([]);
+  // homogeneous build: the same drop surfaces (dropped link + dropped fence)
+  const res = edgePayloadResidue(src, out, false);
+  expect(res.some((r) => r.term === "[[bar]]")).toBe(true);
+  expect(res.length).toBeGreaterThanOrEqual(2);
+});
+
+test("edgePayloadResidue: a covered link surfaces nothing (homogeneous build, default routed)", () => {
+  expect(edgePayloadResidue("see [[bar]]", "still see [[bar]] here")).toEqual([]);
 });
 
 // ---- text.ts: small utilities ----
