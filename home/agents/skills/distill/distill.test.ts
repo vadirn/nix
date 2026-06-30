@@ -109,6 +109,27 @@ test("emitRelationsBlock: multi-node note byte-stable entry-grouped form", () =>
   );
 });
 
+test("emitRelationsBlock: drops a self-loop edge but keeps a distinct-endpoint edge", () => {
+  // multi-node note so each edge keeps its from-label prefix (not the single-atom form).
+  const ir = [
+    {
+      term: "four-reasons-to-change-code",
+      def: "",
+      source: ["B1"],
+      relations: [
+        // self-loop: from-slug === bare-local to-endpoint slug — vacuous, must drop.
+        { rel: "reference", to: "four-reasons-to-change-code", predicate: null },
+        // distinct endpoint — must still emit.
+        { rel: "subsumes", to: "rule-of-three", predicate: null },
+      ],
+    },
+    { term: "rule-of-three", def: "", source: ["B1"], relations: [] },
+  ];
+  expect(emitRelationsBlock(ir)).toBe(
+    "## Relations\n\n- four-reasons-to-change-code subsumes:: rule-of-three",
+  );
+});
+
 test("emitRelationsBlock: no edges yields empty string", () => {
   expect(emitRelationsBlock([{ term: "x", def: "", source: ["B1"], relations: [] }])).toBe("");
 });

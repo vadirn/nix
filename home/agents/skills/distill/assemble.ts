@@ -32,14 +32,16 @@ export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
   const singleAtom = orderedEntries.length === 1;
   const lines: string[] = [];
   for (const entry of orderedEntries) {
+    const fromSlug = slugSegment(entry.term);
     for (const r of entry.relations) {
       const endpoint = endpointOf(r.to);
       if (!endpoint) continue; // an endpoint that slugs to empty is unrenderable
+      if (endpoint === fromSlug) continue; // self-loop (from==to) is vacuous extraction junk
       const pred = r.predicate ? ` (${r.predicate})` : "";
       lines.push(
         singleAtom
           ? `- ${r.rel}:: ${endpoint}${pred}`
-          : `- ${slugSegment(entry.term)} ${r.rel}:: ${endpoint}${pred}`,
+          : `- ${fromSlug} ${r.rel}:: ${endpoint}${pred}`,
       );
     }
   }
