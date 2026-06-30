@@ -304,6 +304,10 @@ export function harvestFences(text: string): PayloadSpan[] {
 // non-English source citation, the tool may not reword. key = inner text, whitespace
 // collapsed, lowercased; a quote re-authored into bare prose (no `>`) is not covered → a
 // loud, correct residue. A retained blockquote keeps its `>`, so it covers its source twin.
+// A `>`-prefixed blockquote line, capturing its inner text. Shared by harvestBlockquotes
+// (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
+export const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
+
 export function harvestBlockquotes(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   let raw: string[] = [];
@@ -317,7 +321,7 @@ export function harvestBlockquotes(text: string): PayloadSpan[] {
     inner = [];
   };
   for (const line of text.split("\n")) {
-    const m = /^\s*>+\s?(.*)$/.exec(line);
+    const m = BLOCKQUOTE_LINE.exec(line);
     if (m) {
       raw.push(line);
       inner.push(m[1]);
@@ -333,23 +337,37 @@ export function harvestBlockquotes(text: string): PayloadSpan[] {
 // then maps each surviving row back to its raw line for the label. key = trimmed lowercased
 // cells joined on an unlikely separator (the row payload, order-preserving). The delimiter
 // row (every cell `:?-+:?`) and all-empty rows are skipped.
+// Split a fence- and inline-span-masked table line into trimmed cells (outer pipes dropped,
+// `\|` kept literal). The shared cell decomposition behind both the data-row predicate and
+// the harvested key.
+function tableCells(maskedLine: string): string[] {
+  return maskedLine
+    .trim()
+    .replace(/^\||\|$/g, "")
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim());
+}
+
+// A fence- and inline-span-masked line is a GFM table DATA row: it carries a pipe, splits
+// into ≥2 non-empty cells, and is not the `:?-+:?` delimiter row. One detection, two uses
+// (D2): harvestTableRows inventories the payload, payloadMask blanks it for the router signal.
+export function isTableDataRow(maskedLine: string): boolean {
+  if (!maskedLine.includes("|")) return false;
+  const cells = tableCells(maskedLine);
+  if (cells.length < 2 || cells.every((c) => c === "")) return false;
+  if (cells.every((c) => /^:?-+:?$/.test(c))) return false; // delimiter row
+  return true;
+}
+
 export function harvestTableRows(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const rawLines = text.split("\n");
   const mLines = stripFences(text).replace(MASK_RE, " ").split("\n");
   for (let i = 0; i < mLines.length; i++) {
-    const line = mLines[i];
-    if (!line.includes("|")) continue;
-    const cells = line
-      .trim()
-      .replace(/^\||\|$/g, "")
-      .split(/(?<!\\)\|/)
-      .map((c) => c.trim());
-    if (cells.length < 2 || cells.every((c) => c === "")) continue;
-    if (cells.every((c) => /^:?-+:?$/.test(c))) continue; // delimiter row
+    if (!isTableDataRow(mLines[i])) continue;
     out.push({
-      markup: oneLine((rawLines[i] ?? line).trim()),
-      key: cells.map((c) => c.toLowerCase()).join("␟"),
+      markup: oneLine((rawLines[i] ?? mLines[i]).trim()),
+      key: tableCells(mLines[i]).map((c) => c.toLowerCase()).join("␟"),
     });
   }
   return out;
@@ -359,9 +377,14 @@ export function harvestTableRows(text: string): PayloadSpan[] {
 // a dropped image falls through BOTH gates. Markdown `![alt](url)` keyed by url slug; asset
 // embed `![[x.png]]` (ASSET_RE) keyed by target slug. Both fragment-stripped + decoded, so
 // an embed surviving in a retained block covers its source twin.
+// Markdown image `![alt](url)` (url captured) and Obsidian embed `![[target]]` (target
+// captured). Shared by harvestImages (payload inventory, asset-filtered) and payloadMask
+// (router signal) — one detection, two uses (D2).
+export const MD_IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+export const EMBED_RE = /!\[\[([^\]]+)\]\]/g;
 export function harvestImages(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  for (const m of text.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+  for (const m of text.matchAll(MD_IMAGE_RE)) {
     let u = normalizeEdgeTarget(m[1].trim());
     try {
       u = decodeURIComponent(u);
@@ -371,7 +394,7 @@ export function harvestImages(text: string): PayloadSpan[] {
     const key = slugSegment(u);
     if (key) out.push({ markup: oneLine(m[0]), key });
   }
-  for (const m of text.matchAll(/!\[\[([^\]]+)\]\]/g)) {
+  for (const m of text.matchAll(EMBED_RE)) {
     const t = normalizeEdgeTarget(m[1].split("|")[0].trim());
     if (ASSET_RE.test(t)) {
       const key = slugSegment(t);
@@ -388,6 +411,9 @@ export function harvestImages(text: string): PayloadSpan[] {
 // = symbol body, whitespace stripped, lowercased.
 const MATH_OP =
   /[=<>+\-*/^_{}\\]|\\(?:le|ge|leq|geq|neq|cdot|times|frac|sum|prod|int|sqrt|approx|propto|to)\b/;
+// Display-math spans (`$$…$$`, `\[…\]`, `\(…\)`), inner captured, multiline. Shared by
+// harvestMath (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
+export const DISPLAY_MATH_PATTERNS = [/\$\$([\s\S]+?)\$\$/g, /\\\[([\s\S]+?)\\\]/g, /\\\(([\s\S]+?)\\\)/g];
 export function harvestMath(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const src = stripFences(text);
@@ -395,10 +421,8 @@ export function harvestMath(text: string): PayloadSpan[] {
     const key = inner.replace(/\s+/g, "").toLowerCase();
     if (key) out.push({ markup: oneLine(markup), key });
   };
-  for (const m of src.matchAll(/\$\$([\s\S]+?)\$\$/g)) push(m[0], m[1]);
-  for (const m of src.matchAll(/\\\[([\s\S]+?)\\\]/g)) push(m[0], m[1]);
-  for (const m of src.matchAll(/\\\(([\s\S]+?)\\\)/g)) push(m[0], m[1]);
-  const noDisplay = src.replace(/\$\$[\s\S]+?\$\$/g, " ");
+  for (const re of DISPLAY_MATH_PATTERNS) for (const m of src.matchAll(re)) push(m[0], m[1]);
+  const noDisplay = src.replace(DISPLAY_MATH_PATTERNS[0], " ");
   for (const m of noDisplay.matchAll(/(?<![\d\\$])\$([^$\n]+?)\$(?![\d$])/g)) {
     const inner = m[1];
     if (!MATH_OP.test(inner)) continue; // no operator → a currency/number span, not a formula
@@ -562,6 +586,106 @@ export function harvestProseListItems(text: string, claimed: string[]): ProseUni
     });
   }
   return units;
+}
+
+// ---- per-section density router (D12/D2; the --dry-run + Backlog 10 spine) ----
+// The up-front classification: split a note into heading-delimited sections and route each
+// on its own payload density (D12 per-section grain). Density is the harvest applied a THIRD
+// way (D2 "one harvest, three uses"): the same structural-payload detection that feeds the
+// residue gate and the protected-span set is reused here to MASK payload and measure the
+// prose word-share that remains. High payload-share → preserve (structural compaction); low
+// → re-author (compact prose). Deterministic and free — no LLM, no model consulted.
+export type Section = { heading: string; depth: number; text: string };
+export type Route = "re-author" | "preserve";
+
+// Starting threshold only — the real value is calibrated against 00 inbox/ via --dry-run
+// (Backlog 7/9). A section whose payload word-share meets τ routes to preserve.
+export const DEFAULT_TAU = 0.5;
+
+// Split on every ATX heading (depth 1–6). The lead before the first heading is the intro
+// section (heading "", depth 0); it is dropped when blank. Each section's text includes its
+// own heading line; `heading` holds the title text (markers stripped), `depth` the level.
+const ATX_HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+export function sections(text: string): Section[] {
+  const out: Section[] = [];
+  let cur: Section = { heading: "", depth: 0, text: "" }; // lead / intro
+  const push = () => {
+    if (cur.depth > 0 || /\S/.test(cur.text)) out.push(cur);
+  };
+  for (const line of text.split("\n")) {
+    const m = ATX_HEADING.exec(line);
+    if (m) {
+      push();
+      cur = { heading: m[2].trim(), depth: m[1].length, text: line };
+    } else {
+      cur.text = cur.text === "" ? line : cur.text + "\n" + line;
+    }
+  }
+  push();
+  return out;
+}
+
+// Blank the structural payload spans (fenced code, table rows, blockquotes, display math,
+// image lines), preserving line count so the masked copy aligns with the source. Reuses the
+// harvest detection — the router's signal is the same primitive as the residue gate's.
+export function payloadMask(text: string): string {
+  const fenceMasked = stripFences(text); // fence lane: owns fenced code/output
+  const rowProbe = fenceMasked.replace(MASK_RE, " ").split("\n"); // table-row detection copy
+  let masked = fenceMasked
+    .split("\n")
+    .map((line, i) => {
+      if (isTableDataRow(rowProbe[i])) return ""; // table-row lane
+      if (BLOCKQUOTE_LINE.test(line)) return ""; // blockquote lane
+      return line;
+    })
+    .join("\n");
+  // Display-math + image lanes blank in place, replacing each non-newline char with a space
+  // so multi-line spans keep their line count. Markdown images blank unconditionally; embeds
+  // only when the target is an asset (the same ASSET_RE filter harvestImages applies).
+  const blankKeepingLines = (s: string, re: RegExp) => s.replace(re, (m) => m.replace(/[^\n]/g, " "));
+  for (const re of DISPLAY_MATH_PATTERNS) masked = blankKeepingLines(masked, re);
+  masked = blankKeepingLines(masked, MD_IMAGE_RE);
+  masked = masked.replace(EMBED_RE, (m, inner) =>
+    ASSET_RE.test(normalizeEdgeTarget(String(inner).split("|")[0].trim())) ? m.replace(/[^\n]/g, " ") : m,
+  );
+  return masked;
+}
+
+// Payload word-share ∈ [0,1]: the fraction of a section's words that live in structural
+// payload, = (words − words(payloadMask)) / words. 0 when the section has no words.
+export function payloadDensity(text: string): number {
+  const total = wordCount(text);
+  if (!total) return 0;
+  const prose = wordCount(payloadMask(text));
+  return (total - prose) / total;
+}
+
+// Route a section on its density: density ≥ τ → preserve, else re-author.
+export function routeSection(text: string, tau: number = DEFAULT_TAU): Route {
+  return payloadDensity(text) >= tau ? "preserve" : "re-author";
+}
+
+// One routed section: its heading/depth plus the computed density and route. The dry-run
+// row — pure data, no I/O.
+export type SectionRoute = { heading: string; depth: number; density: number; route: Route };
+
+// Segment a note and route every section on its own density (D12 per-section grain).
+export function routeNote(text: string, tau: number = DEFAULT_TAU): SectionRoute[] {
+  return sections(text).map((s) => {
+    const density = payloadDensity(s.text);
+    return { heading: s.heading, depth: s.depth, density, route: density >= tau ? "preserve" : "re-author" };
+  });
+}
+
+// Render a note's routed sections as a deterministic dry-run report: a note line
+// (`path · N re-author / M preserve`) then one indented line per section
+// (`heading · density · route`); the unnamed intro section prints as `(intro)`.
+export function formatDryRun(path: string, rows: SectionRoute[]): string {
+  const re = rows.filter((r) => r.route === "re-author").length;
+  const pr = rows.length - re;
+  const head = `${path} · ${re} re-author / ${pr} preserve`;
+  const body = rows.map((r) => `  ${r.heading || "(intro)"} · ${r.density.toFixed(2)} · ${r.route}`);
+  return [head, ...body].join("\n");
 }
 
 // a block carries operational tokens that must survive verbatim — code, CLI

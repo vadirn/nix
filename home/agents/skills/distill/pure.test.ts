@@ -27,9 +27,15 @@ import {
   normalizeForContainment,
   hasWikilink,
   isExternalUrl,
+  formatDryRun,
   normalizeRelation,
   normalizeTypography,
+  payloadDensity,
+  payloadMask,
   relText,
+  routeNote,
+  routeSection,
+  sections,
   segment,
   slugSegment,
   wordCount,
@@ -50,6 +56,131 @@ test("segment: a fenced code block stays one whole block, blank line included", 
   const blocks = segment("```\ncode\n\nmore\n```");
   expect(blocks).toHaveLength(1);
   expect(blocks[0].text).toBe("```\ncode\n\nmore\n```");
+});
+
+// ---- text.ts: per-section density router (D12) ----
+test("routeSection: payload-dense routes to preserve, idea-dense to re-author", () => {
+  const codeHeavy = [
+    "## Usage",
+    "",
+    "```ts",
+    "const router = createRouter();",
+    "router.add('/a', handlerA);",
+    "router.add('/b', handlerB);",
+    "export default router.listen(3000);",
+    "```",
+  ].join("\n");
+  expect(routeSection(codeHeavy)).toBe("preserve");
+
+  const idea = [
+    "## Thesis",
+    "",
+    "Distillation re-expresses a note as compact prose, collapsing many surface",
+    "restatements of one idea into a single entry while keeping the thesis and the",
+    "relations among the terms intact and readable.",
+  ].join("\n");
+  expect(routeSection(idea)).toBe("re-author");
+});
+
+test("routeSection: a table-dense section routes to preserve", () => {
+  const tableHeavy = [
+    "## Limits",
+    "",
+    "| Plan | Requests | Burst |",
+    "| --- | --- | --- |",
+    "| Free | 100 | 10 |",
+    "| Pro | 10000 | 500 |",
+    "| Enterprise | unlimited | custom |",
+  ].join("\n");
+  expect(routeSection(tableHeavy)).toBe("preserve");
+});
+
+test("routeSection: a blockquote-heavy section routes to preserve", () => {
+  const quoteHeavy = [
+    "## Source",
+    "",
+    "> The price of reliability is the pursuit of the utmost simplicity.",
+    "> It is a price which the very rich find most hard to pay.",
+    "> Simplicity and elegance are unpopular because they require hard work",
+    "> and discipline to achieve and education to be appreciated.",
+  ].join("\n");
+  expect(routeSection(quoteHeavy)).toBe("preserve");
+});
+
+test("routeSection: a display-math / image-line section routes to preserve", () => {
+  const mathHeavy = [
+    "## Model",
+    "",
+    "![architecture diagram](https://example.com/arch.png)",
+    "",
+    "$$",
+    "\\text{density} = \\frac{w - w_{\\text{mask}}}{w} \\geq \\tau",
+    "$$",
+  ].join("\n");
+  expect(routeSection(mathHeavy)).toBe("preserve");
+});
+
+test("sections: splits on every ATX heading; lead is the intro section", () => {
+  const note = ["intro paragraph", "", "# Top", "top body", "", "## Sub", "sub body"].join("\n");
+  const secs = sections(note);
+  expect(secs.map((s) => [s.heading, s.depth])).toEqual([
+    ["", 0],
+    ["Top", 1],
+    ["Sub", 2],
+  ]);
+  expect(secs[0].text.trim()).toBe("intro paragraph"); // lead kept as intro
+  expect(secs[1].text).toBe("# Top\ntop body\n"); // section text includes its own heading line
+});
+
+test("sections: a note opening on a heading has no intro section", () => {
+  expect(sections("# Only\nbody").map((s) => s.heading)).toEqual(["Only"]);
+});
+
+test("sections + routeSection: a heterogeneous note routes per section (D12)", () => {
+  const note = [
+    "## Idea",
+    "",
+    "Distillation re-expresses a note as compact prose, collapsing many surface",
+    "restatements of one idea into a single readable entry kept faithful to source.",
+    "",
+    "## Usage",
+    "",
+    "```ts",
+    "const r = createRouter();",
+    "r.add('/a', a);",
+    "r.add('/b', b);",
+    "```",
+  ].join("\n");
+  expect(sections(note).map((s) => routeSection(s.text))).toEqual(["re-author", "preserve"]);
+});
+
+test("payloadDensity: empty section is 0, all-payload section is ~1", () => {
+  expect(payloadDensity("")).toBe(0);
+  expect(payloadDensity("   \n  ")).toBe(0);
+  expect(payloadDensity("```\nx\ny\nz\n```")).toBeGreaterThan(0.9);
+});
+
+test("routeNote: labels the intro and computes per-section density + route", () => {
+  const note = ["lead text here", "", "## Code", "```", "x", "y", "```"].join("\n");
+  const rows = routeNote(note);
+  expect(rows.map((r) => [r.heading, r.route])).toEqual([
+    ["", "re-author"],
+    ["Code", "preserve"],
+  ]);
+});
+
+test("formatDryRun: one note line with route-mix, one line per section", () => {
+  const rows = [
+    { heading: "Idea", depth: 2, density: 0, route: "re-author" as const },
+    { heading: "Usage", depth: 2, density: 1, route: "preserve" as const },
+  ];
+  expect(formatDryRun("notes/x.md", rows)).toBe(
+    [
+      "notes/x.md · 1 re-author / 1 preserve",
+      "  Idea · 0.00 · re-author",
+      "  Usage · 1.00 · preserve",
+    ].join("\n"),
+  );
 });
 
 // ---- text.ts: small utilities ----

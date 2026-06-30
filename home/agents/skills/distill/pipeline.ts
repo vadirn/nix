@@ -13,7 +13,9 @@ import {
   type ProseUnit,
   type WorkStep,
   type PayloadSpan,
+  DEFAULT_TAU,
   detectLang,
+  formatDryRun,
   harvestBlockquotes,
   harvestCitations,
   harvestExternalLinks,
@@ -26,6 +28,7 @@ import {
   harvestVaultEdges,
   normalizeForContainment,
   normalizeTypography,
+  routeNote,
   segment,
   slugSegment,
   wordCount,
@@ -882,11 +885,14 @@ function parseArgs(argv: string[]): {
   noRevise: boolean;
   noGate: boolean;
   coreOnly: boolean;
+  dryRun: boolean;
+  tau: number;
   path?: string;
 } {
   let lang: "en" | "ru" | "auto" = "auto";
   let synth: Synth = "render";
   let maxRetries = 2;
+  let tau = DEFAULT_TAU;
   let path: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -903,6 +909,11 @@ function parseArgs(argv: string[]): {
       if (Number.isFinite(n) && n >= 0) maxRetries = n;
       continue;
     }
+    if (a === "--tau" && argv[i + 1]) {
+      const n = parseFloat(argv[++i]);
+      if (Number.isFinite(n) && n >= 0 && n <= 1) tau = n;
+      continue;
+    }
     if (path === undefined && !a.startsWith("--")) path = a;
   }
   return {
@@ -912,6 +923,8 @@ function parseArgs(argv: string[]): {
     noRevise: argv.includes("--no-revise"),
     noGate: argv.includes("--no-gate"),
     coreOnly: argv.includes("--core-only"),
+    dryRun: argv.includes("--dry-run"),
+    tau,
     path,
   };
 }
@@ -924,12 +937,6 @@ function tempMdPath(): string {
 }
 
 export async function main() {
-  if (!process.env.FIREWORKS_API_KEY) {
-    console.error(
-      "FIREWORKS_API_KEY not set (run under: doppler run --project claude-code --config std --)",
-    );
-    process.exit(1);
-  }
   // The first positional `render` selects prose-render mode (the inverse flow);
   // it is sliced off before flag parsing so the next token is the input path.
   const rawArgv = process.argv.slice(2);
@@ -941,8 +948,25 @@ export async function main() {
     noRevise,
     noGate,
     coreOnly,
+    dryRun,
+    tau,
     path: inputPath,
   } = parseArgs(mode === "render" ? rawArgv.slice(1) : rawArgv);
+  // --dry-run (Backlog 9): the deterministic front half only — segment → per-section
+  // payload density → route. Prints the report and returns, writing nothing, making no
+  // LLM call, needing no API key. Runs on the note body (frontmatter stripped).
+  if (dryRun) {
+    const input = readFileSync(inputPath ?? 0, "utf8");
+    const { body } = parseFrontmatter(input);
+    process.stdout.write(formatDryRun(inputPath ?? "(stdin)", routeNote(body, tau)) + "\n");
+    return;
+  }
+  if (!process.env.FIREWORKS_API_KEY) {
+    console.error(
+      "FIREWORKS_API_KEY not set (run under: doppler run --project claude-code --config std --)",
+    );
+    process.exit(1);
+  }
   const input = readFileSync(inputPath ?? 0, "utf8");
   if (!input.trim()) process.exit(0);
   const path = tempMdPath();
