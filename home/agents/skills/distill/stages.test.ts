@@ -83,6 +83,7 @@ test("buildFooter: compressed run renders size + steps tags, omits the zero tags
       retries: 0,
       proseFixes: 0,
       coreOnly: false,
+      proseGateOffFactsDump: false,
     }),
   ).toBe(
     "— distilled prose+gloss · 100→60 words (-40%) · 3 entries · 2 steps · 1 verbatim · 0 residue",
@@ -103,9 +104,31 @@ test("buildFooter: ±0% on no shrink, --core-only shape, gate-skipped + retries 
       retries: 2,
       proseFixes: 0,
       coreOnly: true,
+      proseGateOffFactsDump: false,
     }),
   ).toBe(
     "— distilled gloss · 50→50 words (±0%) · 2 entries · 0 verbatim · 1 residue · 1 gate-skipped · 2 retries",
+  );
+});
+
+test("buildFooter: facts-dump skip of the in-scope prose gate surfaces as a tag", () => {
+  expect(
+    buildFooter({
+      beforeWords: 100,
+      afterWords: 70,
+      entries: 4,
+      steps: 0,
+      verbatim: 0,
+      residue: 0,
+      gateSkipped: 0,
+      keptVerbatim: 0,
+      retries: 0,
+      proseFixes: 0,
+      coreOnly: false,
+      proseGateOffFactsDump: true,
+    }),
+  ).toBe(
+    "— distilled prose+gloss · 100→70 words (-30%) · 4 entries · 0 verbatim · 0 residue · prose-gate off (facts-dump)",
   );
 });
 

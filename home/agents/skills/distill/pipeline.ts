@@ -472,6 +472,7 @@ export function buildFooter(m: {
   retries: number;
   proseFixes: number;
   coreOnly: boolean;
+  proseGateOffFactsDump: boolean;
 }): string {
   const pct = m.beforeWords
     ? Math.round((100 * (m.beforeWords - m.afterWords)) / m.beforeWords)
@@ -487,7 +488,10 @@ export function buildFooter(m: {
   // imperative — faithful but uncompressed, distinct from a cleared step
   const verbatimTag = m.keptVerbatim ? ` · ${m.keptVerbatim} kept-verbatim` : "";
   const shapeTag = m.coreOnly ? "gloss" : "prose+gloss";
-  return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}`;
+  // the prose gate would have run (!noGate && !coreOnly) but the facts-dump genre gate
+  // skipped it — surface the skip so disabling a loss detector is never silent.
+  const proseGateTag = m.proseGateOffFactsDump ? ` · prose-gate off (facts-dump)` : "";
+  return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}${proseGateTag}`;
 }
 
 // edge-coverage gate (deterministic, pure). A vault edge — a [[wikilink]] or a
@@ -859,6 +863,9 @@ async function distill(
     retries,
     proseFixes,
     coreOnly: opts.coreOnly,
+    // the prose gate is in scope (!noGate && !coreOnly) but the facts-dump genre gate
+    // skipped it above — flag the disabled loss detector instead of dropping it silently.
+    proseGateOffFactsDump: !opts.noGate && !opts.coreOnly && opts.factsDump,
   });
   return { out, footer, residue };
 }
