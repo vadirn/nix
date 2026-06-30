@@ -7,7 +7,13 @@
 // the network and are covered by the end-to-end + degradation suites.
 import { expect, test } from "bun:test";
 import type { Block, IR, Grade, WorkStep } from "./text.ts";
-import { buildFooter, computeStepGroups, orderContent, wikilinkResidue } from "./pipeline.ts";
+import {
+  buildFooter,
+  computeStepGroups,
+  orderContent,
+  payloadResidue,
+  wikilinkResidue,
+} from "./pipeline.ts";
 
 // ---- orderContent: retain selection + note-order entries/steps ----
 test("orderContent: orders entries by first source block, drops fully-retained steps", () => {
@@ -140,4 +146,53 @@ test("wikilinkResidue: slug-colliding source edges both surface even when output
   const res = wikilinkResidue("[[foo bar]] and [[foo/bar]]", "see [[foo bar]]");
   expect(res.map((r) => r.term).sort()).toEqual(["[[foo bar]]", "[[foo/bar]]"]);
   expect(res[0].reason).toMatch(/slug-collision/);
+});
+
+// ---- payloadResidue: dropped non-edge payload surfaces; compressed prose does not ----
+
+test("payloadResidue: a dropped table, image, stat, blockquote, fence, and citation all surface", () => {
+  const source =
+    "Intro.\n\n" +
+    "| Sign | Defect |\n| --- | --- |\n| coupling | rigidity |\n\n" +
+    "![[diagram.png]]\n\n" +
+    "CISQ found $1.52 trillion in waste.\n\n" +
+    "> A verbatim law.\n\n" +
+    "```sql\nSELECT 1;\n```\n\n" +
+    "Source: [report](https://x.example/r).";
+  const out = "A tightened one-paragraph restatement that keeps none of the payload.";
+  const reasons = payloadResidue(source, out).map((r) => r.reason);
+  expect(reasons.some((r) => /table-row/.test(r))).toBe(true);
+  expect(reasons.some((r) => /image-embed/.test(r))).toBe(true);
+  expect(reasons.some((r) => /numeric-token/.test(r))).toBe(true);
+  expect(reasons.some((r) => /blockquote/.test(r))).toBe(true);
+  expect(reasons.some((r) => /fenced-block/.test(r))).toBe(true);
+  expect(reasons.some((r) => /citation-url/.test(r))).toBe(true);
+});
+
+test("payloadResidue: the core invariant — a pure-prose restatement-collapse yields zero residue", () => {
+  const source =
+    "The first paragraph restates the thesis at length. The second paragraph restates " +
+    "it again from another angle. The third paragraph restates it once more for emphasis.";
+  const out = "One sentence that captures the thesis.";
+  expect(payloadResidue(source, out)).toEqual([]);
+});
+
+test("payloadResidue: payload surviving anywhere in output (a retained block) is covered", () => {
+  const source = "```js\nconst x = 1;\n```\n\nand a stat: 47%.";
+  const out = "Prose mentioning 47%.\n\n```js\nconst x = 1;\n```";
+  expect(payloadResidue(source, out)).toEqual([]);
+});
+
+test("payloadResidue: a span dropped twice in source is reported once", () => {
+  const source = "first 47% then again 47%";
+  expect(payloadResidue(source, "no figures")).toHaveLength(1);
+});
+
+test("payloadResidue: a bare year is not flagged as a dropped statistic", () => {
+  expect(payloadResidue("Written back in 2024.", "A reworded summary.")).toEqual([]);
+});
+
+test("payloadResidue: URL path digits are not phantom statistics (covered URL → no residue)", () => {
+  const u = "see https://x.example/2010/390755 for detail";
+  expect(payloadResidue(u, "kept " + u)).toEqual([]);
 });

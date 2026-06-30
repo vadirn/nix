@@ -11,8 +11,16 @@ import {
   type IR,
   type LinkInventory,
   type WorkStep,
+  type PayloadSpan,
   detectLang,
+  harvestBlockquotes,
+  harvestCitations,
   harvestExternalLinks,
+  harvestFences,
+  harvestImages,
+  harvestMath,
+  harvestNumbers,
+  harvestTableRows,
   harvestVaultEdges,
   normalizeTypography,
   segment,
@@ -544,6 +552,67 @@ export function wikilinkResidue(sourceText: string, outputText: string): Residue
   return residue;
 }
 
+// payloadResidue — the prose-payload analogue of wikilinkResidue. Catches dropped NON-edge,
+// NON-prose payload the distiller is not licensed to compress: verbatim fenced blocks,
+// verbatim blockquotes, table data rows, image/asset embeds, math/formulas, external
+// citations, and substantive statistics (the seven text.ts harvesters). The principal
+// contradiction — catch real loss WITHOUT false-flagging prose the tool is entitled to
+// compress — is resolved by EXCLUSION at harvest, not by scoring: only literal/structural
+// classes enter the inventory, so a restatement-collapse yields zero residue by
+// construction (no model consulted, the strongest form of "don't trust the model that
+// caused the loss"). Per lane: build the covered key-set by running the SAME harvester over
+// the final `out` (a span surviving ANYWHERE in output — prose, a glossary cell, a retained
+// block — is covered), dedup source keys, surface each uncovered key once. No slug-collision
+// branch (unlike wikilinkResidue): the key is a content signature, not a lossy slug, so two
+// source spans sharing a key ARE the same payload. Deterministic and free, so it runs even
+// under --no-gate. Known residual: a pure-prose dropped sub-section / worked example /
+// qualifier carries no harvestable token and stays silent here — that is the deferred judge
+// tier's job, gated on eval evidence, not this deterministic spine's.
+const PAYLOAD_LANES: { harvest: (t: string) => PayloadSpan[]; reason: string }[] = [
+  {
+    harvest: harvestFences,
+    reason: "fenced-block dropped: verbatim code/output block absent from output (not retained)",
+  },
+  {
+    harvest: harvestBlockquotes,
+    reason: "blockquote dropped: verbatim quotation absent from output (reworded or cut)",
+  },
+  {
+    harvest: harvestTableRows,
+    reason: "table-row dropped: data row absent from output (structure dissolved into prose)",
+  },
+  {
+    harvest: harvestImages,
+    reason: "image-embed dropped: image/asset cannot be recovered from prose",
+  },
+  {
+    harvest: harvestMath,
+    reason: "math dropped: formula absent from output (not recoverable from prose)",
+  },
+  {
+    harvest: harvestCitations,
+    reason: "citation-url dropped: external source link absent from output",
+  },
+  {
+    harvest: harvestNumbers,
+    reason:
+      "numeric-token dropped: source statistic absent from output (figure lost in re-authoring)",
+  },
+];
+export function payloadResidue(sourceText: string, outputText: string): Residue[] {
+  const residue: Residue[] = [];
+  for (const lane of PAYLOAD_LANES) {
+    const covered = new Set(lane.harvest(outputText).map((s) => s.key));
+    const seen = new Set<string>();
+    for (const s of lane.harvest(sourceText)) {
+      if (covered.has(s.key) || seen.has(s.key)) continue;
+      seen.add(s.key);
+      residue.push({ term: s.markup, source: s.markup, reason: lane.reason });
+    }
+  }
+  return residue;
+}
+
 // orchestrator: thread the stages above, holding the shared state (segmented
 // blocks, ordering, and the two mutable carriers defByTerm + workflowSteps). The
 // output is identical to the pre-decomposition single function; the stages only
@@ -671,7 +740,7 @@ async function distill(
   // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the
   // final body (prose + ## Relations + retained), so a link surviving in any of them
   // counts as covered.
-  residue = residue.concat(wikilinkResidue(text, out));
+  residue = residue.concat(wikilinkResidue(text, out), payloadResidue(text, out));
   const footer = buildFooter({
     beforeWords,
     afterWords,

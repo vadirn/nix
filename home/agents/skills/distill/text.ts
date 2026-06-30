@@ -224,6 +224,250 @@ export function harvestVaultEdges(text: string): VaultEdge[] {
   return [...harvestWikilinks(text), ...harvestInternalLinks(text)];
 }
 
+// ---- payload harvest: the NON-edge, NON-prose loss surface (the payloadResidue spine) ----
+// wikilinkResidue makes a dropped cross-note EDGE loud; these harvesters extend the same
+// deterministic move to the five other span classes whose information is LITERAL or
+// STRUCTURAL — and therefore unrecoverable from re-authored prose, so distillation is not
+// licensed to compress them: verbatim fenced code, verbatim blockquotes, table data rows,
+// image/asset embeds, math/formulas, external citations, and substantive statistics. Each
+// returns {markup, key}: `markup` is a single-line capped label (the <entry term=…>
+// attribute must not carry a newline), `key` a content-signature compared against the SAME
+// harvester run over the final output — a span surviving anywhere in output is covered.
+// Prose-compressible classes (headings, list items, sub-sections, qualifiers) are
+// deliberately OUT: a deterministic test over them would flag every source span the tool
+// is licensed to collapse. That residual prose-payload gap is named, not papered over.
+export type PayloadSpan = { markup: string; key: string };
+
+// Collapse a span to a single short line for the residue <entry term/source> label.
+const oneLine = (s: string, n = 80): string => {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > n ? t.slice(0, n - 1) + "…" : t;
+};
+
+// Blank every fenced region (``` / ~~~, 3+ markers) line-for-line, preserving line count
+// so a caller can align scrubbed lines with raw ones. A `|`, `$`, or digit inside a code
+// block is code, never a table cell / formula / statistic, so the number/table/math/citation
+// lanes scrub fences first; harvestFences itself owns the fenced class.
+function stripFences(text: string): string {
+  const out: string[] = [];
+  let open: string | null = null;
+  for (const line of text.split("\n")) {
+    const m = /^[ \t]*(`{3,}|~{3,})/.exec(line);
+    if (!open && m) {
+      open = m[1][0];
+      out.push("");
+      continue;
+    }
+    if (open && m && line.trimStart().startsWith(open.repeat(3))) {
+      open = null;
+      out.push("");
+      continue;
+    }
+    out.push(open ? "" : line);
+  }
+  return out.join("\n");
+}
+
+// Verbatim fenced code/output blocks. key = the inner body, each line right-trimmed,
+// leading/trailing blank lines dropped — the language tag and fence width are excluded, so
+// a retained block (assembleBody pushes b.text verbatim) covers its source twin regardless
+// of info-string. Internal whitespace is KEPT: code indentation is load-bearing.
+export function harvestFences(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const lines = text.split("\n");
+  let open: string | null = null;
+  let body: string[] = [];
+  let head = "";
+  for (const line of lines) {
+    const m = /^[ \t]*(`{3,}|~{3,})/.exec(line);
+    if (!open && m) {
+      open = m[1][0];
+      body = [];
+      head = line.trim();
+      continue;
+    }
+    if (open && m && line.trimStart().startsWith(open.repeat(3))) {
+      const key = body
+        .map((l) => l.replace(/\s+$/, ""))
+        .join("\n")
+        .replace(/^\n+|\n+$/g, "");
+      if (key) out.push({ markup: oneLine(head + " " + (body[0] ?? "")), key });
+      open = null;
+      continue;
+    }
+    if (open) body.push(line);
+  }
+  return out;
+}
+
+// Verbatim blockquotes (`>`-prefixed runs) — a deliberate literal quotation, especially a
+// non-English source citation, the tool may not reword. key = inner text, whitespace
+// collapsed, lowercased; a quote re-authored into bare prose (no `>`) is not covered → a
+// loud, correct residue. A retained blockquote keeps its `>`, so it covers its source twin.
+export function harvestBlockquotes(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  let raw: string[] = [];
+  let inner: string[] = [];
+  const flush = () => {
+    if (inner.length) {
+      const key = inner.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
+      if (key) out.push({ markup: oneLine(inner.join(" ")), key });
+    }
+    raw = [];
+    inner = [];
+  };
+  for (const line of text.split("\n")) {
+    const m = /^\s*>+\s?(.*)$/.exec(line);
+    if (m) {
+      raw.push(line);
+      inner.push(m[1]);
+    } else flush();
+  }
+  flush();
+  return out;
+}
+
+// GFM pipe-table DATA rows — structured payload the tool dissolves into prose. Runs on a
+// fence- and inline-span-masked copy (MASK_RE blanks wikilinks/embeds/inline-code) so a
+// prose line bearing a `[[a|b]]` alias pipe or a code-fence pipe is never mis-read as a row,
+// then maps each surviving row back to its raw line for the label. key = trimmed lowercased
+// cells joined on an unlikely separator (the row payload, order-preserving). The delimiter
+// row (every cell `:?-+:?`) and all-empty rows are skipped.
+export function harvestTableRows(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const rawLines = text.split("\n");
+  const mLines = stripFences(text).replace(MASK_RE, " ").split("\n");
+  for (let i = 0; i < mLines.length; i++) {
+    const line = mLines[i];
+    if (!line.includes("|")) continue;
+    const cells = line
+      .trim()
+      .replace(/^\||\|$/g, "")
+      .split(/(?<!\\)\|/)
+      .map((c) => c.trim());
+    if (cells.length < 2 || cells.every((c) => c === "")) continue;
+    if (cells.every((c) => /^:?-+:?$/.test(c))) continue; // delimiter row
+    out.push({
+      markup: oneLine((rawLines[i] ?? line).trim()),
+      key: cells.map((c) => c.toLowerCase()).join("␟"),
+    });
+  }
+  return out;
+}
+
+// Images + Obsidian asset embeds — the inline-render lane harvestWikilinks SKIPS, so today
+// a dropped image falls through BOTH gates. Markdown `![alt](url)` keyed by url slug; asset
+// embed `![[x.png]]` (ASSET_RE) keyed by target slug. Both fragment-stripped + decoded, so
+// an embed surviving in a retained block covers its source twin.
+export function harvestImages(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  for (const m of text.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+    let u = normalizeEdgeTarget(m[1].trim());
+    try {
+      u = decodeURIComponent(u);
+    } catch {
+      // malformed %-sequence: keep raw (still a comparable key)
+    }
+    const key = slugSegment(u);
+    if (key) out.push({ markup: oneLine(m[0]), key });
+  }
+  for (const m of text.matchAll(/!\[\[([^\]]+)\]\]/g)) {
+    const t = normalizeEdgeTarget(m[1].split("|")[0].trim());
+    if (ASSET_RE.test(t)) {
+      const key = slugSegment(t);
+      if (key) out.push({ markup: oneLine(m[0]), key });
+    }
+  }
+  return out;
+}
+
+// Math / formulas — literal non-prose-compressible payload by the same criterion as fenced
+// code. Display math (`$$…$$`, `\[…\]`, `\(…\)`) is unambiguous. Inline `$…$` is admitted
+// ONLY when the span carries a math operator AND is not a pure number, so a currency span
+// (`$1.52 trillion`, two separate `$5 … $10` mentions) is never mis-read as a formula. key
+// = symbol body, whitespace stripped, lowercased.
+const MATH_OP =
+  /[=<>+\-*/^_{}\\]|\\(?:le|ge|leq|geq|neq|cdot|times|frac|sum|prod|int|sqrt|approx|propto|to)\b/;
+export function harvestMath(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const src = stripFences(text);
+  const push = (markup: string, inner: string) => {
+    const key = inner.replace(/\s+/g, "").toLowerCase();
+    if (key) out.push({ markup: oneLine(markup), key });
+  };
+  for (const m of src.matchAll(/\$\$([\s\S]+?)\$\$/g)) push(m[0], m[1]);
+  for (const m of src.matchAll(/\\\[([\s\S]+?)\\\]/g)) push(m[0], m[1]);
+  for (const m of src.matchAll(/\\\(([\s\S]+?)\\\)/g)) push(m[0], m[1]);
+  const noDisplay = src.replace(/\$\$[\s\S]+?\$\$/g, " ");
+  for (const m of noDisplay.matchAll(/(?<![\d\\$])\$([^$\n]+?)\$(?![\d$])/g)) {
+    const inner = m[1];
+    if (!MATH_OP.test(inner)) continue; // no operator → a currency/number span, not a formula
+    if (/^[\s\d.,]+$/.test(inner)) continue;
+    push(m[0], inner);
+  }
+  return out;
+}
+
+// External citations — the source/grounding links wikilinkResidue never covered (they are
+// not vault edges). Unions the three forms the vault actually uses: markdown `[text](url)`,
+// footnote definitions `[^id]: url` (which harvestExternalLinks never sees), and bare/
+// autolink URLs. Fences scrubbed first (a URL in a code sample is not a citation). key =
+// the URL, lowercased, trailing punctuation trimmed.
+export function harvestCitations(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const src = stripFences(text);
+  const push = (markup: string, url: string) => {
+    const u = url.trim().replace(/[.,;:)\]>]+$/, "");
+    if (u && /^(?:https?|ftp):\/\//i.test(u))
+      out.push({ markup: oneLine(markup), key: u.toLowerCase() });
+  };
+  for (const l of harvestExternalLinks(src)) push(l.markup, l.url);
+  for (const m of src.matchAll(/^[ \t]*\[\^[^\]]+\]:\s*(\S+)/gm)) push(m[0].trim(), m[1]);
+  for (const m of src.matchAll(/<((?:https?|ftp):\/\/[^>\s]+)>/gi)) push(m[0], m[1]);
+  for (const m of src.matchAll(/(?<![("<\]])\b(?:https?|ftp):\/\/[^\s)\]>]+/gi)) push(m[0], m[0]);
+  return out;
+}
+
+// Substantive numeric statistics — a figure prose cannot recover. Scrubbed first (fences,
+// footnote-definition lines, autolinks, URLs, markdown-link/image targets, MASK_RE spans)
+// so a digit inside a URL path, a footnote id, or inline code is never harvested as a
+// phantom statistic. SUBSTANCE GATE: keep a token only when it bears %, $, a decimal,
+// comma-grouping, or a ≥2-digit run; bare single digits (step 1, v2, [1]) are idiom. A bare
+// 4-digit year (1900–2099) is dropped UNLESS a scale word follows it, so `2024` is not a
+// statistic but `2024 deaths`-style stays. Multipliers (`8x`, `2x`, `8-fold`) — the form
+// GitClear/Faros findings use, which the substance gate alone would drop — are a sub-lane.
+const NUM_RE = /(?<![\w.])\$?\d[\d,]*(?:\.\d+)?%?/g;
+const MULT_RE = /\b\d+(?:\.\d+)?\s*(?:x|×|-?fold)\b/gi;
+const SCALE_WORD =
+  /^\W*(trillion|billion|million|thousand|hundred|percent|deaths|cases|people|users)\b/i;
+function scrubForNumbers(text: string): string {
+  return stripFences(text)
+    .replace(/^[ \t]*\[\^[^\]]+\]:.*$/gm, " ") // footnote definitions (incl their URLs)
+    .replace(/<[^>\s]+>/g, " ") // autolinks
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, " ") // scheme://… URLs
+    .replace(/\]\([^)\s]+\)/g, "]()") // markdown link/image targets
+    .replace(MASK_RE, " "); // wikilinks/embeds/inline-code
+}
+export function harvestNumbers(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const clean = scrubForNumbers(text);
+  for (const m of clean.matchAll(MULT_RE)) {
+    out.push({ markup: m[0].trim(), key: m[0].replace(/\s+/g, "").toLowerCase() });
+  }
+  for (const m of clean.matchAll(NUM_RE)) {
+    const tok = m[0];
+    const intRun = tok.replace(/[$,%]/g, "").split(".")[0];
+    const marked = /[%$.]/.test(tok) || /\d,\d/.test(tok);
+    if (!marked && intRun.length < 2) continue; // bare single digit → idiom
+    if (!marked && /^(?:19|20)\d\d$/.test(intRun)) {
+      const after = clean.slice((m.index ?? 0) + tok.length, (m.index ?? 0) + tok.length + 16);
+      if (!SCALE_WORD.test(after)) continue; // bare year, no scale word → not a statistic
+    }
+    out.push({ markup: tok, key: tok.replace(/[$,]/g, "") });
+  }
+  return out;
+}
+
 // a block carries operational tokens that must survive verbatim — code, CLI
 // flags, file paths. Used by the wikilink clamp to choose retain over distill.
 export const hasOperational = (text: string): boolean =>

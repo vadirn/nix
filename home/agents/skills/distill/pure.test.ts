@@ -11,8 +11,15 @@ import { expect, test } from "bun:test";
 import {
   detectLang,
   glossList,
+  harvestBlockquotes,
+  harvestCitations,
   harvestExternalLinks,
+  harvestFences,
+  harvestImages,
   harvestInternalLinks,
+  harvestMath,
+  harvestNumbers,
+  harvestTableRows,
   harvestVaultEdges,
   harvestWikilinks,
   hasOperational,
@@ -475,4 +482,84 @@ test("wikilinkResidue: a dropped [[dropped]] absent from output STILL surfaces (
   expect(r.length).toBe(1);
   expect(r[0].term).toBe("[[dropped]]");
   expect(r[0].reason).toMatch(/^wikilink dropped/);
+});
+
+// ---- payload harvesters: the non-edge, non-prose loss surface ----
+
+test("harvestFences: keys the body, ignoring the language tag and fence width", () => {
+  const a = harvestFences("```js\nconst x = 1;\n```");
+  const b = harvestFences("````\nconst x = 1;\n````");
+  expect(a).toHaveLength(1);
+  expect(a[0].key).toBe("const x = 1;");
+  expect(b[0].key).toBe(a[0].key); // info-string + fence width excluded from the key
+});
+
+test("harvestFences: internal indentation is load-bearing (kept in the key)", () => {
+  const a = harvestFences("```\n  indented\n```");
+  const b = harvestFences("```\nindented\n```");
+  expect(a[0].key).not.toBe(b[0].key);
+});
+
+test("harvestBlockquotes: a quote keys its inner text, lowercased and whitespace-collapsed", () => {
+  const r = harvestBlockquotes("> The sum of\n> the parts.\n\nprose");
+  expect(r).toHaveLength(1);
+  expect(r[0].key).toBe("the sum of the parts.");
+});
+
+test("harvestTableRows: data rows key their cells; the delimiter row is skipped", () => {
+  const t = "| Sign | Defect |\n| --- | --- |\n| a | b |\n| c | d |";
+  const keys = harvestTableRows(t).map((r) => r.key);
+  expect(keys).toEqual(["sign␟defect", "a␟b", "c␟d"]);
+});
+
+test("harvestTableRows: a wikilink-alias pipe in prose is not mistaken for a table row", () => {
+  expect(harvestTableRows("see [[Foo|bar]] and [[Baz|qux]] here")).toEqual([]);
+});
+
+test("harvestImages: a markdown image and an asset embed each key by target slug", () => {
+  const r = harvestImages("![alt](diagram.png) and ![[Service locator.jpeg]]");
+  expect(r.map((x) => x.key).sort()).toEqual(["diagram-png", "service-locator-jpeg"]);
+});
+
+test("harvestImages: a non-asset transclusion ![[some-note]] is not an image", () => {
+  expect(harvestImages("![[some-note]]")).toEqual([]);
+});
+
+test("harvestMath: display math keys its symbols; inline currency is not a formula", () => {
+  expect(harvestMath("$$N \\le c$$").map((x) => x.key)).toEqual(["n\\lec"]);
+  expect(harvestMath("it cost $5 and saved $10 overall")).toEqual([]);
+});
+
+test("harvestMath: inline $…$ with an operator is a formula", () => {
+  expect(harvestMath("the bound $a < b$ holds").map((x) => x.key)).toEqual(["a<b"]);
+});
+
+test("harvestCitations: markdown, footnote-definition, and bare URLs all surface", () => {
+  const src =
+    "see [docs](https://a.example/x) and bare https://b.example/y\n\n[^c]: https://c.example/z";
+  const keys = harvestCitations(src).map((r) => r.key);
+  expect(keys).toContain("https://a.example/x");
+  expect(keys).toContain("https://b.example/y");
+  expect(keys).toContain("https://c.example/z");
+});
+
+test("harvestNumbers: keeps substantive figures and a multiplier, drops idiom and bare years", () => {
+  const keys = harvestNumbers(
+    "CISQ put it at $1.52 trillion, churn 47% with an 8x rise since 2024; see step 1 and v2",
+  ).map((r) => r.key);
+  expect(keys).toContain("1.52"); // $ + decimal
+  expect(keys).toContain("47%"); // percent
+  expect(keys).toContain("8x"); // multiplier
+  expect(keys).not.toContain("2024"); // bare year, no scale word
+  expect(keys).not.toContain("1"); // 'step 1' single digit
+  expect(keys).not.toContain("2"); // 'v2' single digit
+});
+
+test("harvestNumbers: digits inside a URL or footnote definition are not phantom statistics", () => {
+  expect(harvestNumbers("ref https://x.example/2014/390755 here")).toEqual([]);
+  expect(harvestNumbers("[^a]: https://x.example/2010/22795459")).toEqual([]);
+});
+
+test("harvestNumbers: comma-grouped and plain forms share a key", () => {
+  expect(harvestNumbers("1,200 items").map((r) => r.key)).toEqual(["1200"]);
 });
