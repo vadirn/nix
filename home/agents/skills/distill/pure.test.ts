@@ -27,6 +27,7 @@ import {
   normalizeForContainment,
   hasWikilink,
   isExternalUrl,
+  isContentfulStep,
   formatDryRun,
   compactSection,
   reassembleNote,
@@ -46,6 +47,7 @@ import {
 import { extractJson } from "./fw.ts";
 import { assembleRoutedNote, edgePayloadResidue, wikilinkResidue } from "./pipeline.ts";
 import { parseDistilled } from "./render-mode.ts";
+import { assembleBody } from "./assemble.ts";
 
 // ---- text.ts: segmentation ----
 test("segment: splits on blank lines into B-indexed blocks", () => {
@@ -1043,4 +1045,34 @@ test("harvestProseListItems: enum markers (F1. / A)) are recognized as list item
     "## Moats\n\nF1. the first structural moat that filters competitors out\nA) the first scenario branch worth enumerating";
   const units = harvestProseListItems(src, []);
   expect(units).toHaveLength(2);
+});
+
+// ---- text.ts: workflow-step content guard (a model echoing a list ordinal as the step) ----
+test("isContentfulStep: a marker-only token (an echoed ordinal) carries no content", () => {
+  for (const empty of ["", "  ", "3.", "3", "1)", "-", "*", "#", " 4) "]) {
+    expect(isContentfulStep(empty)).toBe(false);
+  }
+  for (const real of [
+    "Tune the detector for recall",
+    "3x faster on the hot path",
+    "run `bun test`",
+  ]) {
+    expect(isContentfulStep(real)).toBe(true);
+  }
+});
+
+test("assembleBody: a content-free workflow step is dropped and the rest renumbered", () => {
+  // regression: the model returned "3." as a tightened step; the old filter(Boolean) kept it,
+  // rendering "3. 3.". The content guard drops it and renumbers over what remains.
+  const out = assembleBody(
+    "",
+    "",
+    ["Emit a certificate", "3.", "Tune for recall"],
+    [],
+    new Map(),
+    [],
+    false,
+  );
+  expect(out).toContain("## Workflow\n\n1. Emit a certificate\n2. Tune for recall");
+  expect(out).not.toContain("3. 3.");
 });

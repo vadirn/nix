@@ -154,6 +154,17 @@ test("synthWorkflow: a non-transient code bug propagates", async () => {
   );
 });
 
+test("synthWorkflow: a marker-only model step is rejected, the draft kept (no '3. 3.')", async () => {
+  // the model "tightened" S0 into the bare ordinal "3." (a real failure seen in output);
+  // accepting it would overwrite the draft and render "3. 3." — reject it, keep the draft.
+  mockAskJsonBy(() => ({ steps: [{ id: "S0", step: "3." }] }));
+  const { synthWorkflow } = await import(PROMPTS);
+  const steps = [{ step: "do the thing", source: ["B1"] }];
+  const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
+  const out = await synthWorkflow(steps, "regenerate", blockById, "en");
+  expect(out).toEqual(["do the thing"]);
+});
+
 // ---- proseGate: parallel batches keep the per-batch flake isolation (D46 / FIX B) ----
 // The batches now fire concurrently, but a flake must still flag ONLY its own ids while a
 // sibling batch's verdicts survive — never collapsing into one outer catch.

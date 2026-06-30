@@ -105,6 +105,14 @@ export const glossList = (entries: { term: string; def: string }[]): string =>
 const WIKILINK = /\[\[[^\]]+\]\]/;
 export const hasWikilink = (text: string): boolean => WIKILINK.test(text);
 
+// A workflow step carries no content when, stripped to its bare token, nothing but a list
+// marker / ordinal / punctuation remains (e.g. "3." — the synth model echoing a list number
+// instead of tightening the step). Such a token must never render as a step ("3. 3."): synth
+// rejects it (keeping the extracted draft) and assembly filters it (dropping + renumbering).
+const STEP_MARKER_ONLY = /^[\s\d.)\]\-*+#:]*$/;
+export const isContentfulStep = (s: string): boolean =>
+  !STEP_MARKER_ONLY.test(s.replace(/\s+/g, " ").trim());
+
 // Asset extensions an Obsidian embed renders inline (image/av/pdf) — NOT a cross-note
 // relation. Anchored at `$`, case-insensitive, tested against the alias-stripped target
 // (so `![[diagram.png|caption]]` is caught). The single source of truth for the

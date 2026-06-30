@@ -14,6 +14,7 @@ import {
   glossList,
   hasOperational,
   hasWikilink,
+  isContentfulStep,
   langRule,
   MASK_RE,
   normalizeRelation,
@@ -340,7 +341,9 @@ export async function synthWorkflow(
     );
     for (const e of res.steps ?? []) {
       const m = /^S(\d+)$/.exec((e.id ?? "").trim());
-      if (m && e.step) {
+      // reject a marker-only "tightened" step (the model echoing an ordinal like "3."):
+      // keep the extracted draft rather than overwrite real content with a list number.
+      if (m && e.step && isContentfulStep(e.step)) {
         const idx = parseInt(m[1], 10);
         if (idx >= 0 && idx < out.length) out[idx] = e.step.trim();
       }
@@ -390,7 +393,9 @@ export async function repairWorkflowGroup(
     );
     for (const e of res.steps ?? []) {
       const m = /^S(\d+)$/.exec((e.id ?? "").trim());
-      if (m && e.step) {
+      // reject a marker-only "tightened" step (the model echoing an ordinal like "3."):
+      // keep the extracted draft rather than overwrite real content with a list number.
+      if (m && e.step && isContentfulStep(e.step)) {
         const idx = parseInt(m[1], 10);
         if (idx >= 0 && idx < out.length) out[idx] = e.step.trim();
       }

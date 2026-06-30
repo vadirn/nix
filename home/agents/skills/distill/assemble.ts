@@ -1,7 +1,7 @@
 // assemble — turn the settled IR (prose head, workflow steps, glossary entries,
 // retained blocks) into the final markdown body, and emit the `## Relations`
 // block. Pure formatting; no I/O, no model calls.
-import { slugSegment, type Block, type GlossEntry } from "./text.ts";
+import { isContentfulStep, slugSegment, type Block, type GlossEntry } from "./text.ts";
 
 // ---- assembly: head prose + glossary table + retained-verbatim blocks ----
 // `head` is the prose that sits above the table: the full connective note in the
@@ -64,7 +64,7 @@ export function assembleBody(
     // so renumber over what remains rather than emitting a gap.
     const items = workflowSteps
       .map((s) => s.replace(/\n+/g, " ").trim())
-      .filter(Boolean)
+      .filter(isContentfulStep)
       .map((s, i) => `${i + 1}. ${s}`)
       .join("\n");
     if (items) parts.push(`## Workflow\n\n${items}`);
