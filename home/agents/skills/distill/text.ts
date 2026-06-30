@@ -310,22 +310,18 @@ export const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
 
 export function harvestBlockquotes(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  let raw: string[] = [];
   let inner: string[] = [];
   const flush = () => {
     if (inner.length) {
       const key = inner.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
       if (key) out.push({ markup: oneLine(inner.join(" ")), key });
     }
-    raw = [];
     inner = [];
   };
   for (const line of text.split("\n")) {
     const m = BLOCKQUOTE_LINE.exec(line);
-    if (m) {
-      raw.push(line);
-      inner.push(m[1]);
-    } else flush();
+    if (m) inner.push(m[1]);
+    else flush();
   }
   flush();
   return out;
@@ -702,6 +698,77 @@ export function formatDryRun(path: string, rows: SectionRoute[]): string {
     (r) => `  ${r.heading || "(intro)"} · ${r.density.toFixed(2)} · ${r.route}`,
   );
   return [head, ...body].join("\n");
+}
+
+// ---- per-section build partition (D12/D16; Backlog 10) ----
+// One routed build unit: a top-level section (its heading line + body) with the route
+// the build acts on — re-author (folds into the one compact head) or preserve (held by
+// compactSection). Carries heading/depth so reassembly can demote a structural-name clash.
+export type Unit = { heading: string; depth: number; text: string; route: Route };
+
+// Partition a note for the per-section build: lift the leading H1 as the note title
+// (emitted first, independent of any section's route — fix #1), then route each remaining
+// top-level section. Sections deeper than the top level fold into their parent unit so a
+// payload subsection is never torn from its prose parent (fix #2). Pure; no I/O, no model.
+export function partition(
+  text: string,
+  tau: number = DEFAULT_TAU,
+): { title: string; units: Unit[] } {
+  let secs = sections(text);
+  let title = "";
+  // A leading `# Title` is the note title, not a routable unit: lift its heading line out
+  // and keep any prose beneath it as a depth-0 intro unit.
+  if (secs[0]?.depth === 1 && /^#\s/.test(secs[0].text)) {
+    const [first, ...rest] = secs[0].text.split("\n");
+    title = first.trim();
+    const body = rest.join("\n");
+    secs = (/\S/.test(body) ? [{ heading: "", depth: 0, text: body }] : []).concat(secs.slice(1));
+  }
+  // Group into top-level units: a depth-0 intro stands alone; a heading deeper than the
+  // current unit's anchor depth folds into it (keeping a subsection with its parent, fix #2);
+  // any other heading opens a new unit. Route is computed over the whole folded unit text.
+  const grouped: { heading: string; depth: number; text: string }[] = [];
+  let cur: { heading: string; depth: number; text: string } | null = null;
+  for (const s of secs) {
+    if (cur && cur.depth > 0 && s.depth > cur.depth) {
+      cur.text += "\n" + s.text;
+    } else {
+      cur = { heading: s.heading, depth: s.depth, text: s.text };
+      grouped.push(cur);
+    }
+  }
+  const units: Unit[] = grouped.map((u) => ({ ...u, route: routeSection(u.text, tau) }));
+  return { title, units };
+}
+
+// Structurally compact a preserve (payload-dense) unit. v1 is identity passthrough: the
+// payload — code, tables, exact numbers — is held byte-verbatim (D16 forbids paraphrase).
+// Lossy row/boilerplate dropping is deferred to v2, which must surface each drop out-of-band
+// (payloadResidue marks a key covered if it survives anywhere, so a key-collision delete
+// would be silent — the unsafe path this v1 declines to take).
+export function compactSection(text: string): string {
+  return text;
+}
+
+// Reassemble the per-section build into one note: the lifted title first (fix #1), then the
+// single re-author head (its one prose → ## Workflow → ## Glossary → ## Relations), then the
+// compacted preserve sections in source order (fix #4 — head-first is the accepted v1 shape:
+// the head is an aggregate with no single source position, so order is honored where defined,
+// among the preserves). A preserve heading that collides with a structural H2 name
+// (## Glossary/Workflow/Relations) is demoted one level so the note carries exactly one of each
+// and the render-mode inverse (parseDistilled) still finds the head's. Pure; no I/O, no model.
+const STRUCT_HEAD = /^##\s+(glossary|workflow|relations)\b/i;
+export function reassembleNote(title: string, head: string, preserves: string[]): string {
+  const demote = (t: string) =>
+    t
+      .split("\n")
+      .map((l) => (STRUCT_HEAD.test(l) ? "#" + l : l))
+      .join("\n");
+  const parts: string[] = [];
+  if (title.trim()) parts.push(title.trim());
+  if (head.trim()) parts.push(head.trim());
+  for (const p of preserves) if (p.trim()) parts.push(demote(p.trim()));
+  return parts.join("\n\n");
 }
 
 // a block carries operational tokens that must survive verbatim — code, CLI

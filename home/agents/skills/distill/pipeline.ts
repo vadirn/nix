@@ -14,6 +14,7 @@ import {
   type WorkStep,
   type PayloadSpan,
   DEFAULT_TAU,
+  compactSection,
   detectLang,
   formatDryRun,
   harvestBlockquotes,
@@ -28,6 +29,8 @@ import {
   harvestVaultEdges,
   normalizeForContainment,
   normalizeTypography,
+  partition,
+  reassembleNote,
   routeNote,
   segment,
   slugSegment,
@@ -725,9 +728,23 @@ async function distill(
     coreOnly: boolean;
     isReference: boolean;
     factsDump: boolean;
+    tau: number;
   },
   selfSlug = "",
+  routed = false,
 ): Promise<{ out: string; footer: string; residue: Residue[] }> {
+  // Per-section render-router (D12/D16, Backlog 10). When a note carries any payload-dense
+  // section, route: re-author the idea sections into ONE compact head (recurse — the head is
+  // itself a homogeneous distill, which gives the expand guard scoped to its own source), hold
+  // the payload sections verbatim (compactSection v1), reassemble in source order into one
+  // note. `routed` guards the one-level recursion: the head re-enters with routing skipped.
+  if (!routed && !opts.coreOnly) {
+    const { title, units } = partition(text, opts.tau);
+    const preserve = units.filter((u) => u.route === "preserve");
+    if (preserve.length > 0) {
+      return distillRouted(text, title, units, preserve, lang, frontDescription, opts, selfSlug);
+    }
+  }
   const blocks = segment(text);
   const blockById = new Map(blocks.map((b) => [b.id, b]));
   const beforeWords = wordCount(text);
@@ -873,6 +890,45 @@ async function distill(
   return { out, footer, residue };
 }
 
+// The heterogeneous (per-section-routed) build (D12/D16, Backlog 10). Re-author the idea
+// sections as one head — a homogeneous distill() of their concatenation, so the head carries
+// its own thesis/glossary/workflow/relations and its own scoped expand guard — then hold the
+// payload sections verbatim (compactSection v1) and reassemble in source order into one note.
+// The deterministic edge/payload residue gates re-run over (whole source, reassembled out) so
+// any dropped link or payload still surfaces (D16: surface-for-rollback). The whole-note
+// expand guard is intentionally NOT applied here: the preserve sections are held verbatim and
+// cannot shrink, so a whole-note size compare would no-op the route on its target class.
+async function distillRouted(
+  text: string,
+  title: string,
+  units: { route: string; text: string }[],
+  preserve: { text: string }[],
+  lang: "en" | "ru",
+  frontDescription: string,
+  opts: Parameters<typeof distill>[3],
+  selfSlug: string,
+): Promise<{ out: string; footer: string; residue: Residue[] }> {
+  const beforeWords = wordCount(text);
+  const reauthorText = units
+    .filter((u) => u.route === "re-author")
+    .map((u) => u.text)
+    .join("\n\n")
+    .trim();
+  const head = reauthorText
+    ? await distill(reauthorText, lang, frontDescription, opts, selfSlug, true)
+    : { out: "", footer: "", residue: [] as Residue[] };
+  const preserves = preserve.map((u) => compactSection(u.text));
+  const out = reassembleNote(title, head.out, preserves);
+  const afterWords = wordCount(out);
+  const residue = head.residue.concat(wikilinkResidue(text, out), payloadResidue(text, out));
+  const reCount = units.length - preserve.length;
+  const footer =
+    `— per-section route: ${reCount} re-author / ${preserve.length} preserve` +
+    ` · ${beforeWords}→${afterWords} words` +
+    (residue.length ? ` · ${residue.length} residue` : "");
+  return { out, footer, residue };
+}
+
 // ---- arg parsing + io ----
 // Flags may appear in any position. Value-flags (--lang/--synth/--max-retries)
 // consume the following token as their value, so that token is never mistaken for
@@ -1004,15 +1060,7 @@ export async function main() {
       body,
       resolved,
       frontDescription,
-      {
-        synth,
-        maxRetries,
-        noRevise,
-        noGate,
-        coreOnly,
-        isReference,
-        factsDump,
-      },
+      { synth, maxRetries, noRevise, noGate, coreOnly, isReference, factsDump, tau },
       selfSlug,
     );
     // <result> wraps exactly the text to write back to source: frontmatter

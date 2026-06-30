@@ -28,8 +28,11 @@ import {
   hasWikilink,
   isExternalUrl,
   formatDryRun,
+  compactSection,
+  reassembleNote,
   normalizeRelation,
   normalizeTypography,
+  partition,
   payloadDensity,
   payloadMask,
   relText,
@@ -181,6 +184,114 @@ test("formatDryRun: one note line with route-mix, one line per section", () => {
       "  Usage · 1.00 · preserve",
     ].join("\n"),
   );
+});
+
+// ---- text.ts: per-section build partition (D12/D16; Backlog 10) ----
+test("partition: extracts the H1 title and routes flat top-level units (fix #1)", () => {
+  const note = [
+    "# Homelab Guide",
+    "",
+    "A short intro paragraph explaining the overall setup in plain prose, carrying",
+    "the reasoning rather than configuration the reader would only scan past.",
+    "",
+    "## Rationale",
+    "",
+    "We choose this approach because it keeps the surface small and lets the prose",
+    "carry the reasoning instead of a wall of settings to read line by line.",
+    "",
+    "## Config",
+    "",
+    "```yaml",
+    "service:",
+    "  port: 8080",
+    "  retries: 3",
+    "```",
+  ].join("\n");
+  const { title, units } = partition(note);
+  expect(title).toBe("# Homelab Guide");
+  expect(units.map((u) => [u.heading, u.route])).toEqual([
+    ["", "re-author"], // intro prose under the title
+    ["Rationale", "re-author"],
+    ["Config", "preserve"],
+  ]);
+  // the title line is lifted out — present in no unit
+  expect(units.every((u) => !u.text.includes("# Homelab Guide"))).toBe(true);
+  // the preserve unit holds its code fence verbatim
+  expect(units[2].text).toContain("port: 8080");
+});
+
+test("partition: a payload subsection folds into its prose parent, not torn out (fix #2)", () => {
+  const note = [
+    "## Algorithm",
+    "",
+    "The router classifies each section by payload density and sends it to the surface",
+    "that fits, re-authoring prose and holding payload so the note stays one coherent whole.",
+    "",
+    "### Pseudocode",
+    "",
+    "```",
+    "for s in sections: route(s)",
+    "```",
+    "",
+    "## Notes",
+    "",
+    "A closing remark in plain prose that simply restates the idea once more for the reader.",
+  ].join("\n");
+  const { units } = partition(note);
+  // the ### Pseudocode block stays inside the ## Algorithm unit — two top-level units, not three
+  expect(units.map((u) => u.heading)).toEqual(["Algorithm", "Notes"]);
+  expect(units[0].text).toContain("### Pseudocode");
+  expect(units[0].text).toContain("for s in sections");
+  // the prose-dominated Algorithm subtree routes re-author as a whole
+  expect(units[0].route).toBe("re-author");
+});
+
+test("compactSection: v1 holds a payload section byte-verbatim (fix #3)", () => {
+  const section = [
+    "## Config",
+    "",
+    "```yaml",
+    "service:",
+    "  port: 8080",
+    "  retries: 3",
+    "```",
+    "",
+    "| metric | value |",
+    "| ------ | ----- |",
+    "| p99    | 12ms  |",
+    "| p99    | 12ms  |",
+  ].join("\n");
+  // identity passthrough: no row-dedup, code + exact numbers untouched (the duplicate
+  // p99 row survives — silent loss is the deferred v2's job, with surfacing)
+  expect(compactSection(section)).toBe(section);
+});
+
+test("reassembleNote: title first, head, preserves in source order; demotes a colliding ## Glossary (fix #1/#4)", () => {
+  const title = "# Homelab Guide";
+  const head = [
+    "Intro prose carrying the thesis.",
+    "",
+    "## Glossary",
+    "",
+    "| Term | Definition |",
+    "| ---- | ---------- |",
+    "| Router | routes sections |",
+  ].join("\n");
+  const preserves = [
+    "## Config\n\n```yaml\nport: 8080\n```",
+    "## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| TTL | time to live |",
+  ];
+  const out = reassembleNote(title, head, preserves);
+  // title is emitted first (fix #1)
+  expect(out.startsWith("# Homelab Guide\n")).toBe(true);
+  // exactly one H2 ## Glossary — the head's; the preserve's own glossary is demoted to ###
+  expect(out.match(/^## Glossary$/gm)?.length).toBe(1);
+  expect(out).toContain("### Glossary");
+  // head before preserves; preserves kept in source order (fix #4: head-first, order among preserves)
+  expect(out.indexOf("## Glossary")).toBeLessThan(out.indexOf("## Config"));
+  expect(out.indexOf("## Config")).toBeLessThan(out.indexOf("### Glossary"));
+  // payload held verbatim
+  expect(out).toContain("port: 8080");
 });
 
 // ---- text.ts: small utilities ----
