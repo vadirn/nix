@@ -43,15 +43,19 @@
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
 // `doppler run --project claude-code --config std --`).
 //
-// Usage:  distill-text input.md                      # prose + ## Glossary (auto-detect language)
+// Usage (full text: distill-text --help):
+//         distill-text input.md                      # prose + ## Glossary (auto-detect language)
 //         distill-text < input.txt                   # read from stdin
 //         distill-text --core-only input.md          # glossary only (tie + definitions), no prose
 //         distill-text --lang ru < input.txt         # force Russian rubric
 //         distill-text --synth regenerate input.md   # denser dial (default: render)
 //         distill-text --max-retries 1 input.md      # cap stage-5 recovery (default: 2)
+//         distill-text --tau 0.6 input.md            # payload-density routing threshold (default: 0.5)
 //         distill-text --no-gate input.md            # skip stage-5 fidelity gate
 //         distill-text --no-revise input.md          # skip stage-4 writing passes
+//         distill-text --no-expand-guard input.md    # disable the expand-guard (alias of --max-words 0)
 //         distill-text --max-words 0 input.md        # disable the expand-guard (debugging: see the model's output even if it grew)
+//         distill-text --dry-run input.md            # deterministic front half only (segment→route report); no API call
 //         distill-text render glossary.md            # separate, on-demand: prose note FROM a distilled glossary
 //
 // Module layout (split along the pipeline's phase seams; this file is the entrypoint

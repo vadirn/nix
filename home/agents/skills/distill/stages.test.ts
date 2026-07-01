@@ -17,6 +17,7 @@ import {
   expandGuardCap,
   groupStepsByOwner,
   orderContent,
+  parseArgs,
   payloadResidue,
   proseResidue,
   tagOwnedBlocks,
@@ -405,4 +406,160 @@ test("anchored: rejects a too-short anchor or one absent from output, accepts an
   expect(anchored(pv("x", "covered", "weaken preconditions in a subtype"), span, normOut)).toBe(
     true,
   );
+});
+
+// ---- parseArgs: the CLI surface (help / validation / render subcommand / flag composition) ----
+// A pure argv→result function: it returns a discriminated result (help | error | ok) so the
+// help path and every misuse fail loudly BEFORE main() reaches the API-key gate or any network
+// call. `ok` carries the resolved mode + options bag.
+function ok(argv: string[]) {
+  const r = parseArgs(argv);
+  if (r.kind !== "ok") throw new Error(`expected ok, got ${r.kind}: ${JSON.stringify(r)}`);
+  return r;
+}
+function err(argv: string[]) {
+  const r = parseArgs(argv);
+  if (r.kind !== "error") throw new Error(`expected error, got ${r.kind}`);
+  return r.message;
+}
+
+test("parseArgs: --help and -h short-circuit to the help result", () => {
+  expect(parseArgs(["--help"]).kind).toBe("help");
+  expect(parseArgs(["-h"]).kind).toBe("help");
+  // help wins even alongside otherwise-valid args, so `distill-text input.md --help` shows help.
+  expect(parseArgs(["input.md", "--help"]).kind).toBe("help");
+});
+
+test("parseArgs: bare invocation reads stdin with defaults", () => {
+  const r = ok([]);
+  expect(r.mode).toBe("compress");
+  expect(r.opts.path).toBeUndefined();
+  expect(r.opts).toMatchObject({
+    lang: "auto",
+    synth: "render",
+    maxRetries: 2,
+    noRevise: false,
+    noGate: false,
+    coreOnly: false,
+    dryRun: false,
+  });
+  expect(r.opts.maxWords).toBeUndefined();
+});
+
+test("parseArgs: a positional is taken as the input path; flags compose", () => {
+  const r = ok(["--core-only", "--no-gate", "--no-revise", "input.md"]);
+  expect(r.opts.path).toBe("input.md");
+  expect(r.opts.coreOnly).toBe(true);
+  expect(r.opts.noGate).toBe(true);
+  expect(r.opts.noRevise).toBe(true);
+});
+
+test("parseArgs: an unknown flag errors and names the offending token", () => {
+  expect(err(["--frobnicate", "input.md"])).toContain("--frobnicate");
+});
+
+test("parseArgs: --synth rejects an out-of-set value and lists the choices", () => {
+  const m = err(["--synth", "foo"]);
+  expect(m).toContain("--synth");
+  expect(m).toContain("render");
+  expect(m).toContain("regenerate");
+  expect(m).toContain("foo");
+});
+
+test("parseArgs: --synth regenerate is accepted", () => {
+  expect(ok(["--synth", "regenerate", "in.md"]).opts.synth).toBe("regenerate");
+});
+
+test("parseArgs: --lang rejects a missing value and an out-of-set value", () => {
+  expect(err(["--lang"])).toContain("--lang");
+  const m = err(["--lang", "fr"]);
+  expect(m).toContain("--lang");
+  expect(m).toContain("fr");
+});
+
+test("parseArgs: --lang ru is accepted", () => {
+  expect(ok(["--lang", "ru", "in.md"]).opts.lang).toBe("ru");
+});
+
+test("parseArgs: numeric flags reject non-numbers and out-of-range values", () => {
+  expect(err(["--max-retries", "abc"])).toContain("--max-retries");
+  expect(err(["--max-retries", "-1"])).toContain("--max-retries");
+  expect(err(["--max-words", "-5"])).toContain("--max-words");
+  expect(err(["--tau", "2"])).toContain("--tau");
+  expect(err(["--tau", "nope"])).toContain("--tau");
+  // valid values pass
+  expect(ok(["--max-retries", "1", "in.md"]).opts.maxRetries).toBe(1);
+  expect(ok(["--tau", "0.7", "in.md"]).opts.tau).toBe(0.7);
+});
+
+test("parseArgs: a value flag with no following token errors instead of silently defaulting", () => {
+  expect(err(["--max-retries"])).toContain("--max-retries");
+});
+
+test("parseArgs: --max-words 0 disables the guard; a positive value is an absolute ceiling", () => {
+  expect(ok(["--max-words", "0", "in.md"]).opts.maxWords).toBe(0);
+  expect(ok(["--max-words", "500", "in.md"]).opts.maxWords).toBe(500);
+});
+
+test("parseArgs: --no-expand-guard is sugar for --max-words 0", () => {
+  expect(ok(["--no-expand-guard", "in.md"]).opts.maxWords).toBe(0);
+  // agreeing --max-words 0 is not a conflict
+  expect(ok(["--no-expand-guard", "--max-words", "0", "in.md"]).opts.maxWords).toBe(0);
+});
+
+test("parseArgs: --no-expand-guard conflicting with a positive --max-words errors", () => {
+  const m = err(["--no-expand-guard", "--max-words", "500", "in.md"]);
+  expect(m).toContain("--no-expand-guard");
+  expect(m).toContain("--max-words");
+});
+
+test("parseArgs: `render` as the first positional selects render mode", () => {
+  const r = ok(["render", "glossary.md"]);
+  expect(r.mode).toBe("render");
+  expect(r.opts.path).toBe("glossary.md");
+});
+
+test("parseArgs: a flag may precede the render subcommand without breaking detection", () => {
+  const r = ok(["--lang", "ru", "render", "glossary.md"]);
+  expect(r.mode).toBe("render");
+  expect(r.opts.path).toBe("glossary.md");
+  expect(r.opts.lang).toBe("ru");
+});
+
+test("parseArgs: `render` as a second positional errors instead of misparsing to ENOENT", () => {
+  const m = err(["foo.md", "render"]);
+  expect(m).toMatch(/extra|unexpected/i);
+});
+
+test("parseArgs: an extra positional argument errors", () => {
+  const m = err(["a.md", "b.md"]);
+  expect(m).toMatch(/extra|unexpected/i);
+  expect(m).toContain("b.md");
+});
+
+// A blank/whitespace-only value (a common `--flag "$UNSET"` shell footgun) must fail loudly
+// like every other non-number, NOT coerce to 0 via Number("") — for --max-words that would
+// silently disable the expand-guard, the very footgun this flag exists to make explicit.
+test("parseArgs: a blank numeric value errors instead of silently coercing to 0", () => {
+  expect(err(["--max-words", "", "in.md"])).toContain("--max-words");
+  expect(err(["--max-words", "   ", "in.md"])).toContain("--max-words");
+  expect(err(["--tau", " ", "in.md"])).toContain("--tau");
+  expect(err(["--max-retries", "", "in.md"])).toContain("--max-retries");
+});
+
+// `--` is the conventional end-of-options separator: everything after it is a positional,
+// so a dash-prefixed filename can still be passed as the input path.
+test("parseArgs: `--` ends option parsing; a following dash-prefixed token is the path", () => {
+  expect(ok(["--", "input.md"]).opts.path).toBe("input.md");
+  expect(ok(["--", "-weird-name.md"]).opts.path).toBe("-weird-name.md");
+});
+
+// A single-dash unknown token is a flag typo, not a positional: name it, don't misattribute
+// the error to the following values or ENOENT-crash on it as a bogus path.
+test("parseArgs: a single-dash unknown token errors and names the offending token", () => {
+  expect(err(["-x", "in.md"])).toContain("-x");
+  const m = err(["-tau", "0.6", "in.md"]);
+  expect(m).toContain("-tau");
+  // the values must not be misattributed as the problem
+  expect(m).not.toContain("0.6");
 });

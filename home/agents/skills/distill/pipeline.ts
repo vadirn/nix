@@ -1120,11 +1120,31 @@ export function assembleRoutedNote(a: {
 }
 
 // ---- arg parsing + io ----
-// Flags may appear in any position. Value-flags (--lang/--synth/--max-retries)
-// consume the following token as their value, so that token is never mistaken for
-// the positional path. The first token that is neither a flag nor a flag's
-// consumed value is the input file path.
-function parseArgs(argv: string[]): {
+export const USAGE = `distill-text — abstractive idea-compression: rewrite a note as connective prose
+backed by a certified glossary (and an optional ## Workflow of its directives).
+
+Usage:
+  distill-text [options] [input.md]              compress a note (reads stdin if no path)
+  distill-text render [options] [glossary.md]    render prose FROM an already-distilled glossary
+
+Options:
+  --core-only            emit just the glossary (tie + definitions), no prose
+  --lang <en|ru|auto>    language rubric (default: auto-detect)
+  --synth <render|regenerate>
+                         synthesis fidelity dial (default: render; regenerate is denser)
+  --max-retries <n>      cap stage-5 gate recovery retries (default: 2)
+  --tau <0..1>           payload-density routing threshold (default: ${DEFAULT_TAU})
+  --no-gate              skip the stage-5 fidelity gate
+  --no-revise            skip the stage-4 writing passes
+  --no-expand-guard      disable the whole-note expand-guard (alias: --max-words 0)
+  --max-words <n>        expand-guard cap: 0 disables it, a positive n is an absolute ceiling
+  --dry-run              deterministic front half only (segment→route report); no API call
+  -h, --help             show this help and exit
+
+Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
+`;
+
+export type CliOpts = {
   lang: "en" | "ru" | "auto";
   synth: Synth;
   maxRetries: number;
@@ -1135,55 +1155,163 @@ function parseArgs(argv: string[]): {
   tau: number;
   maxWords?: number;
   path?: string;
-} {
-  let lang: "en" | "ru" | "auto" = "auto";
+};
+
+// parseArgs is the whole CLI surface as one pure argv→result function so main() can act
+// on help/misuse BEFORE the API-key gate or any network call, and so the surface is unit-
+// testable without spawning the binary. It returns a discriminated result:
+//   { kind: "help" }                     -> print USAGE, exit 0
+//   { kind: "error", message }           -> print to stderr, exit 2 (misuse)
+//   { kind: "ok", mode, opts }           -> run
+// Flags may appear in any position. Value-flags consume the following token, so that token
+// is never mistaken for the positional path. Unknown flags (any dash-prefixed token that is
+// not a known flag, single- or double-dash), out-of-set enum values, non-numeric/blank/out-of-
+// range numbers, missing values, and extra positionals all fail loudly rather than silently
+// falling back to a default (the pre-hardening behavior). `--` is the end-of-options marker: it
+// stops flag parsing so a dash-prefixed input path can follow; a bare `-` stays a positional.
+// The optional `render` subcommand is recognized as the FIRST positional (so a leading flag no
+// longer hides it, and a stray `render` in second position errors instead of misparsing).
+export type ParseResult =
+  | { kind: "help" }
+  | { kind: "error"; message: string }
+  | { kind: "ok"; mode: "compress" | "render"; opts: CliOpts };
+
+export function parseArgs(argv: string[]): ParseResult {
+  let lang: CliOpts["lang"] = "auto";
   let synth: Synth = "render";
   let maxRetries = 2;
   let tau = DEFAULT_TAU;
   let maxWords: number | undefined;
-  let path: string | undefined;
+  let noExpandGuard = false;
+  let noRevise = false;
+  let noGate = false;
+  let coreOnly = false;
+  let dryRun = false;
+  const positionals: string[] = [];
+
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--lang" && argv[i + 1]) {
-      lang = argv[++i] as "en" | "ru" | "auto";
+    if (a === "-h" || a === "--help") return { kind: "help" };
+    // `--` is the end-of-options marker: everything after it is a positional, so a
+    // dash-prefixed input path (e.g. a file literally named `-notes.md`) can be passed.
+    if (a === "--") {
+      for (let j = i + 1; j < argv.length; j++) positionals.push(argv[j]);
+      break;
+    }
+    if (a === "--no-revise") {
+      noRevise = true;
       continue;
     }
-    if (a === "--synth" && argv[i + 1]) {
-      synth = argv[++i] === "regenerate" ? "regenerate" : "render";
+    if (a === "--no-gate") {
+      noGate = true;
       continue;
     }
-    if (a === "--max-retries" && argv[i + 1]) {
-      const n = parseInt(argv[++i], 10);
-      if (Number.isFinite(n) && n >= 0) maxRetries = n;
+    if (a === "--core-only") {
+      coreOnly = true;
       continue;
     }
-    if (a === "--tau" && argv[i + 1]) {
-      const n = parseFloat(argv[++i]);
-      if (Number.isFinite(n) && n >= 0 && n <= 1) tau = n;
+    if (a === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
+    if (a === "--no-expand-guard") {
+      noExpandGuard = true;
+      continue;
+    }
+    if (a === "--lang") {
+      const v = argv[++i];
+      if (v === undefined)
+        return { kind: "error", message: "--lang expects a value (en, ru, or auto)" };
+      if (v !== "en" && v !== "ru" && v !== "auto")
+        return { kind: "error", message: `--lang expects one of: en, ru, auto (got '${v}')` };
+      lang = v;
+      continue;
+    }
+    if (a === "--synth") {
+      const v = argv[++i];
+      if (v === undefined)
+        return { kind: "error", message: "--synth expects a value (render or regenerate)" };
+      if (v !== "render" && v !== "regenerate")
+        return {
+          kind: "error",
+          message: `--synth expects one of: render, regenerate (got '${v}')`,
+        };
+      synth = v;
+      continue;
+    }
+    if (a === "--max-retries") {
+      const v = argv[++i];
+      if (v === undefined || v.trim() === "")
+        return { kind: "error", message: "--max-retries expects a non-negative integer" };
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0)
+        return {
+          kind: "error",
+          message: `--max-retries expects a non-negative integer (got '${v}')`,
+        };
+      maxRetries = n;
+      continue;
+    }
+    if (a === "--tau") {
+      const v = argv[++i];
+      if (v === undefined || v.trim() === "")
+        return { kind: "error", message: "--tau expects a number in [0, 1]" };
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0 || n > 1)
+        return { kind: "error", message: `--tau expects a number in [0, 1] (got '${v}')` };
+      tau = n;
       continue;
     }
     // --max-words <n>: customizes the expand-guard cap (expandGuardCap). 0 disables the
     // guard entirely — a debugging escape hatch to see what the model produced even when it
     // grew the note; a positive n sets an absolute ceiling; omitted keeps today's default
-    // (revert on any growth past the note's own input size).
-    if (a === "--max-words" && argv[i + 1]) {
-      const n = parseInt(argv[++i], 10);
-      if (Number.isFinite(n) && n >= 0) maxWords = n;
+    // (revert on any growth past the note's own input size). --no-expand-guard is its alias for 0.
+    if (a === "--max-words") {
+      const v = argv[++i];
+      if (v === undefined || v.trim() === "")
+        return { kind: "error", message: "--max-words expects a non-negative integer" };
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0)
+        return {
+          kind: "error",
+          message: `--max-words expects a non-negative integer (got '${v}')`,
+        };
+      maxWords = n;
       continue;
     }
-    if (path === undefined && !a.startsWith("--")) path = a;
+    // Any other dash-prefixed token is a flag typo (single- or double-dash), not a path —
+    // name it, rather than misattributing an "extra argument" error to the following values
+    // or ENOENT-crashing on it as a bogus filename. A bare `-` stays a positional.
+    if (a.startsWith("-") && a !== "-") return { kind: "error", message: `unknown flag '${a}'` };
+    positionals.push(a);
   }
+
+  // Interpret positionals: an optional leading `render` subcommand, then the input path.
+  let mode: "compress" | "render" = "compress";
+  let rest = positionals;
+  if (positionals[0] === "render") {
+    mode = "render";
+    rest = positionals.slice(1);
+  }
+  const path = rest[0];
+  if (rest.length > 1)
+    return { kind: "error", message: `unexpected extra argument(s): ${rest.slice(1).join(", ")}` };
+
+  // --no-expand-guard is sugar for --max-words 0; a conflicting positive --max-words is a
+  // contradiction, so reject it rather than silently letting one win.
+  if (noExpandGuard) {
+    if (maxWords !== undefined && maxWords !== 0)
+      return {
+        kind: "error",
+        message: `--no-expand-guard conflicts with --max-words ${maxWords} (it means --max-words 0)`,
+      };
+    maxWords = 0;
+  }
+
   return {
-    lang,
-    synth,
-    maxRetries,
-    maxWords,
-    noRevise: argv.includes("--no-revise"),
-    noGate: argv.includes("--no-gate"),
-    coreOnly: argv.includes("--core-only"),
-    dryRun: argv.includes("--dry-run"),
-    tau,
-    path,
+    kind: "ok",
+    mode,
+    opts: { lang, synth, maxRetries, noRevise, noGate, coreOnly, dryRun, tau, maxWords, path },
   };
 }
 
@@ -1195,10 +1323,20 @@ function tempMdPath(): string {
 }
 
 export async function main() {
-  // The first positional `render` selects prose-render mode (the inverse flow);
-  // it is sliced off before flag parsing so the next token is the input path.
-  const rawArgv = process.argv.slice(2);
-  const mode: "compress" | "render" = rawArgv[0] === "render" ? "render" : "compress";
+  // The whole CLI surface resolves in parseArgs (help/misuse/ok). Act on help and misuse
+  // here, before the API-key gate or any network call: help prints usage to stdout and exits
+  // 0; a parse error prints to stderr and exits 2 (distinct from the runtime exit 1/0 paths).
+  const parsed = parseArgs(process.argv.slice(2));
+  if (parsed.kind === "help") {
+    process.stdout.write(USAGE);
+    return;
+  }
+  if (parsed.kind === "error") {
+    console.error(`distill: ${parsed.message}\nTry 'distill-text --help' for usage.`);
+    process.exit(2);
+    return; // process.exit ends the run; the explicit return also narrows `parsed` to "ok" below
+  }
+  const { mode } = parsed;
   const {
     lang,
     synth,
@@ -1210,7 +1348,7 @@ export async function main() {
     tau,
     maxWords,
     path: inputPath,
-  } = parseArgs(mode === "render" ? rawArgv.slice(1) : rawArgv);
+  } = parsed.opts;
   // --dry-run (Backlog 9): the deterministic front half only — segment → per-section
   // payload density → route. Prints the report and returns, writing nothing, making no
   // LLM call, needing no API key. Runs on the note body (frontmatter stripped).
