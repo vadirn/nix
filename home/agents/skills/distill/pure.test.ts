@@ -471,7 +471,12 @@ test("assembleRoutedNote: a re-author section's steps splice in at its position,
     source: "## One\n\nprose\n\n## Two\n\n```js\ncode\n```\n\n## Three\n\nsteps live here",
     title: "",
     reauthorText: "## One\n\nprose\n\n## Three\n\nsteps live here",
-    head: { out: "Synthesized prose.", residue: [], status: "compressed", workflowByOwner: [[], ["step1", "step2"]] },
+    head: {
+      out: "Synthesized prose.",
+      residue: [],
+      status: "compressed",
+      workflowByOwner: [[], ["step1", "step2"]],
+    },
     sections: [
       { route: "re-author", text: "## One\n\nprose" },
       { route: "preserve", text: "## Two\n\n```js\ncode\n```" },
@@ -495,7 +500,12 @@ test("assembleRoutedNote: two re-author owners split by a preserve section each 
     source: "## A\n\nsteps A\n\n## B\n\n`code`\n\n## C\n\nsteps C",
     title: "",
     reauthorText: "## A\n\nsteps A\n\n## C\n\nsteps C",
-    head: { out: "Prose.", residue: [], status: "compressed", workflowByOwner: [["stepA1", "stepA2"], ["stepC1"]] },
+    head: {
+      out: "Prose.",
+      residue: [],
+      status: "compressed",
+      workflowByOwner: [["stepA1", "stepA2"], ["stepC1"]],
+    },
     sections: [
       { route: "re-author", text: "## A\n\nsteps A" },
       { route: "preserve", text: "## B\n\n`code`" },
@@ -513,7 +523,12 @@ test("assembleRoutedNote: two adjacent re-author owners (no intervening preserve
     source: "## A\n\nsteps A\n\n## B\n\nsteps B\n\n## C\n\n`code`",
     title: "",
     reauthorText: "## A\n\nsteps A\n\n## B\n\nsteps B",
-    head: { out: "Prose.", residue: [], status: "compressed", workflowByOwner: [["stepA"], ["stepB"]] },
+    head: {
+      out: "Prose.",
+      residue: [],
+      status: "compressed",
+      workflowByOwner: [["stepA"], ["stepB"]],
+    },
     sections: [
       { route: "re-author", text: "## A\n\nsteps A" },
       { route: "re-author", text: "## B\n\nsteps B" },
@@ -553,7 +568,8 @@ test("assembleRoutedNote: an owner whose steps are all content-free renders no f
 });
 
 test("assembleRoutedNote: head.out bytes pass through unchanged (prose/Glossary/Relations shape untouched)", () => {
-  const headOut = "Prose.\n\n## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| X | def |";
+  const headOut =
+    "Prose.\n\n## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| X | def |";
   const r = assembleRoutedNote({
     source: "## A\n\nprose\n\n## B\n\n`code`",
     title: "",

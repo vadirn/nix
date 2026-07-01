@@ -115,6 +115,17 @@ type StepGroup = { id: string; idxs: number[]; sourceText: string };
 // so its slice can be exercised on its own (the pure ones — orderContent,
 // computeStepGroups, buildFooter — without a model call).
 
+// The whole-note (and, via the routed head's recursive call, per-head-scoped) expand-guard's
+// threshold, customizable via --max-words: unset defaults to the note's own input size
+// (today's behavior — any growth at all reverts to the original); a positive value sets an
+// absolute ceiling instead; 0 disables the guard entirely, returning null (a debugging escape
+// hatch to inspect what the model actually produced even when it grew).
+export function expandGuardCap(beforeWords: number, maxWords?: number): number | null {
+  if (maxWords === 0) return null;
+  if (maxWords !== undefined && maxWords > 0) return maxWords;
+  return beforeWords;
+}
+
 // stage 2: grade + order (pure). Given the extracted Combo, the segmented blocks, and
 // their per-block grades, pick the retained-verbatim blocks and put the glossary
 // entries and workflow steps in the note's own order (first appearance of their
@@ -809,6 +820,7 @@ async function distill(
     isReference: boolean;
     factsDump: boolean;
     tau: number;
+    maxWords?: number;
   },
   selfSlug = "",
   routed = false,
@@ -932,8 +944,12 @@ async function distill(
   const afterWords = wordCount(out);
   // passthrough guard: a distillation that expands the note has failed its one job.
   // Ship the original body rather than the larger output. (the footer's +N% only
-  // flagged this after the fact; this prevents it.)
-  if (afterWords > beforeWords) {
+  // flagged this after the fact; this prevents it.) Customizable via --max-words: null
+  // (--max-words 0) disables the guard entirely — a debugging escape hatch to inspect what
+  // the model actually produced even when it grew, without risking a worse note shipping by
+  // default (the flag must be passed explicitly every time; there is no sticky/silent bypass).
+  const cap = expandGuardCap(beforeWords, opts.maxWords);
+  if (cap !== null && afterWords > cap) {
     return {
       out: text,
       footer: `— distillation expanded ${beforeWords}→${afterWords} words; kept original`,
@@ -1117,12 +1133,14 @@ function parseArgs(argv: string[]): {
   coreOnly: boolean;
   dryRun: boolean;
   tau: number;
+  maxWords?: number;
   path?: string;
 } {
   let lang: "en" | "ru" | "auto" = "auto";
   let synth: Synth = "render";
   let maxRetries = 2;
   let tau = DEFAULT_TAU;
+  let maxWords: number | undefined;
   let path: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -1144,12 +1162,22 @@ function parseArgs(argv: string[]): {
       if (Number.isFinite(n) && n >= 0 && n <= 1) tau = n;
       continue;
     }
+    // --max-words <n>: customizes the expand-guard cap (expandGuardCap). 0 disables the
+    // guard entirely — a debugging escape hatch to see what the model produced even when it
+    // grew the note; a positive n sets an absolute ceiling; omitted keeps today's default
+    // (revert on any growth past the note's own input size).
+    if (a === "--max-words" && argv[i + 1]) {
+      const n = parseInt(argv[++i], 10);
+      if (Number.isFinite(n) && n >= 0) maxWords = n;
+      continue;
+    }
     if (path === undefined && !a.startsWith("--")) path = a;
   }
   return {
     lang,
     synth,
     maxRetries,
+    maxWords,
     noRevise: argv.includes("--no-revise"),
     noGate: argv.includes("--no-gate"),
     coreOnly: argv.includes("--core-only"),
@@ -1180,6 +1208,7 @@ export async function main() {
     coreOnly,
     dryRun,
     tau,
+    maxWords,
     path: inputPath,
   } = parseArgs(mode === "render" ? rawArgv.slice(1) : rawArgv);
   // --dry-run (Backlog 9): the deterministic front half only — segment → per-section
@@ -1234,7 +1263,7 @@ export async function main() {
       body,
       resolved,
       frontDescription,
-      { synth, maxRetries, noRevise, noGate, coreOnly, isReference, factsDump, tau },
+      { synth, maxRetries, noRevise, noGate, coreOnly, isReference, factsDump, tau, maxWords },
       selfSlug,
     );
     // <result> wraps exactly the text to write back to source: frontmatter

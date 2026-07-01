@@ -14,6 +14,7 @@ import {
   anchored,
   buildFooter,
   computeStepGroups,
+  expandGuardCap,
   groupStepsByOwner,
   orderContent,
   payloadResidue,
@@ -21,6 +22,20 @@ import {
   tagOwnedBlocks,
   wikilinkResidue,
 } from "./pipeline.ts";
+
+// ---- expandGuardCap: the passthrough guard's threshold, customizable via --max-words ----
+test("expandGuardCap: unset maxWords defaults to the note's own input size (today's behavior)", () => {
+  expect(expandGuardCap(100, undefined)).toBe(100);
+});
+
+test("expandGuardCap: maxWords 0 disables the guard (debugging escape hatch)", () => {
+  expect(expandGuardCap(100, 0)).toBeNull();
+});
+
+test("expandGuardCap: a positive maxWords sets an absolute ceiling, ignoring input size", () => {
+  expect(expandGuardCap(100, 500)).toBe(500);
+  expect(expandGuardCap(100, 10)).toBe(10);
+});
 
 // ---- orderContent: retain selection + note-order entries/steps ----
 test("orderContent: orders entries by first source block, drops fully-retained steps", () => {
@@ -98,16 +113,19 @@ test("groupStepsByOwner: buckets steps by owning section, preserving order withi
     { step: "s2", source: [owned.blocks[1].id] },
     { step: "s3", source: [owned.blocks[0].id] },
   ];
-  const byOwner = groupStepsByOwner(orderedSteps, ["s1 rendered", "s2 rendered", "s3 rendered"], owned);
-  expect(byOwner).toEqual([
-    ["s1 rendered", "s3 rendered"],
-    ["s2 rendered"],
-  ]);
+  const byOwner = groupStepsByOwner(
+    orderedSteps,
+    ["s1 rendered", "s2 rendered", "s3 rendered"],
+    owned,
+  );
+  expect(byOwner).toEqual([["s1 rendered", "s3 rendered"], ["s2 rendered"]]);
 });
 
 test("groupStepsByOwner: a step sourced from two owners resolves to the earlier one", () => {
   const owned = tagOwnedBlocks([{ text: "first" }, { text: "second" }]);
-  const orderedSteps: WorkStep[] = [{ step: "cross", source: [owned.blocks[1].id, owned.blocks[0].id] }];
+  const orderedSteps: WorkStep[] = [
+    { step: "cross", source: [owned.blocks[1].id, owned.blocks[0].id] },
+  ];
   const byOwner = groupStepsByOwner(orderedSteps, ["cross rendered"], owned);
   expect(byOwner).toEqual([["cross rendered"], []]);
 });

@@ -51,6 +51,7 @@
 //         distill-text --max-retries 1 input.md      # cap stage-5 recovery (default: 2)
 //         distill-text --no-gate input.md            # skip stage-5 fidelity gate
 //         distill-text --no-revise input.md          # skip stage-4 writing passes
+//         distill-text --max-words 0 input.md        # disable the expand-guard (debugging: see the model's output even if it grew)
 //         distill-text render glossary.md            # separate, on-demand: prose note FROM a distilled glossary
 //
 // Module layout (split along the pipeline's phase seams; this file is the entrypoint
