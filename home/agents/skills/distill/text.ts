@@ -622,9 +622,12 @@ export function sections(text: string): Section[] {
   const push = () => {
     if (cur.depth > 0 || /\S/.test(cur.text)) out.push(cur);
   };
-  for (const line of text.split("\n")) {
-    const m = ATX_HEADING.exec(line);
-    if (m) {
+  const lines = text.split("\n");
+  const masked = stripFences(text).split("\n"); // a fenced `#`-comment reads as blank, never a heading
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (ATX_HEADING.test(masked[i])) {
+      const m = ATX_HEADING.exec(line)!;
       push();
       cur = { heading: m[2].trim(), depth: m[1].length, text: line };
     } else {

@@ -141,6 +141,23 @@ test("sections: a note opening on a heading has no intro section", () => {
   expect(sections("# Only\nbody").map((s) => s.heading)).toEqual(["Only"]);
 });
 
+test("sections: a `#`-comment inside a fenced code block is not a heading boundary", () => {
+  const note = [
+    "## First",
+    "",
+    "```bash",
+    "# a comment that looks like a heading",
+    "echo hi",
+    "```",
+    "",
+    "## Second",
+    "body",
+  ].join("\n");
+  const secs = sections(note);
+  expect(secs.map((s) => s.heading)).toEqual(["First", "Second"]);
+  expect(secs[0].text).toContain("# a comment that looks like a heading\necho hi");
+});
+
 test("sections + routeSection: a heterogeneous note routes per section (D12)", () => {
   const note = [
     "## Idea",
