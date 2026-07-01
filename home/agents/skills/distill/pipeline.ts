@@ -13,6 +13,8 @@ import {
   type ProseUnit,
   type WorkStep,
   type PayloadSpan,
+  type Route,
+  type RoutedSection,
   DEFAULT_TAU,
   compactSection,
   detectLang,
@@ -68,7 +70,7 @@ import {
   verbatimDirectives,
   workflowGate,
 } from "./prompts.ts";
-import { assembleBody, escAttr } from "./assemble.ts";
+import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
 import { runRender } from "./render-mode.ts";
 
 // Workflow-gate recovery ladder (stage-5 loop). A flagged step is repaired from
@@ -90,7 +92,17 @@ type Residue = { label: string; reason: string; source: string };
 // return site (nothing-to-distill and expand-guard pass through; the normal path compresses);
 // the routed build reads it to tag the footer rather than re-deriving it by byte-comparison.
 type DistillStatus = "compressed" | "passthrough";
-type DistillResult = { out: string; footer: string; residue: Residue[]; status: DistillStatus };
+// workflowByOwner is set only on a routed head's compressed return (owned is passed): the
+// orderedSteps' rendered strings, bucketed by originating re-author section (groupStepsByOwner),
+// so assembleRoutedNote can splice each owner's steps back at its section's position instead of
+// the flat "## Workflow" this same run still carries inline in the gated/shared `out` below.
+type DistillResult = {
+  out: string;
+  footer: string;
+  residue: Residue[];
+  status: DistillStatus;
+  workflowByOwner?: string[][];
+};
 // one workflow group: steps sharing a source block-set, judged together by the
 // workflow gate. `idxs` index into the ordered workflowSteps array.
 type StepGroup = { id: string; idxs: number[]; sourceText: string };
@@ -129,6 +141,57 @@ export function orderContent(
     .filter((s) => !s.source.every((id) => payloadBlockIds.has(id)))
     .sort((a, b) => orderKey(a) - orderKey(b));
   return { payloadBlocks, payloadBlockIds, orderedEntries, orderedSteps };
+}
+
+// Owner-tagged blocks for the routed head (D12/D16, WorkStep-splice build): segments each
+// re-author RoutedSection's text INDEPENDENTLY, then reassigns sequential B-ids across the
+// whole set — the same id scheme a single segment(reauthorText) call produces today, since
+// segment() (text.ts:58-88) flushes at every fence-aware blank line and always flushes at
+// end-of-input, and distillRouted's own "\n\n" join already forces a blank-line boundary at
+// every section seam. The owner index lives in a side-map, not the id string, so the
+// extraction prompt's literal "[Bn]" markers (prompts.ts) are byte-identical to today — this
+// is what lets a WorkStep's existing `source: string[]` (block ids) be traced back to the
+// section it came from without perturbing extraction.
+export type OwnedBlocks = { blocks: Block[]; owner: Map<string, number>; ownerCount: number };
+
+export function tagOwnedBlocks(reauthorSections: { text: string }[]): OwnedBlocks {
+  const blocks: Block[] = [];
+  const owner = new Map<string, number>();
+  let n = 0;
+  reauthorSections.forEach((sec, idx) => {
+    for (const b of segment(sec.text)) {
+      n++;
+      blocks.push({ id: `B${n}`, text: b.text });
+      owner.set(`B${n}`, idx);
+    }
+  });
+  return { blocks, owner, ownerCount: reauthorSections.length };
+}
+
+// Which re-author section a step traces back to: the earliest owner among its source block
+// ids, mirroring orderContent's own Math.min tie-break (:126). A step whose source spans two
+// owners (possible — extraction runs over the whole concatenated reauthorText as one blob)
+// resolves to the earlier section, matching the note's own reading order.
+function ownerOfStep(step: WorkStep, owner: Map<string, number>): number {
+  let best: number | undefined;
+  for (const id of step.source) {
+    const o = owner.get(id);
+    if (o !== undefined && (best === undefined || o < best)) best = o;
+  }
+  return best ?? 0; // unreachable in practice: orderContent already drops all-payload-sourced steps
+}
+
+// Bucket the already-ordered, already-synthesized workflowSteps strings by owning section
+// (parallel array to orderedSteps), so the routed build can splice each owner's steps back at
+// its section's position instead of bundling every step into the one head block.
+export function groupStepsByOwner(
+  orderedSteps: WorkStep[],
+  workflowSteps: string[],
+  owned: OwnedBlocks,
+): string[][] {
+  const byOwner: string[][] = Array.from({ length: owned.ownerCount }, () => []);
+  orderedSteps.forEach((s, i) => byOwner[ownerOfStep(s, owned.owner)].push(workflowSteps[i]));
+  return byOwner;
 }
 
 // group steps by their shared source block-set (pure) so the workflow gate judges
@@ -749,6 +812,7 @@ async function distill(
   },
   selfSlug = "",
   routed = false,
+  owned?: OwnedBlocks,
 ): Promise<DistillResult> {
   // Per-section render-router (D12/D16, Backlog 10). When a note carries any payload-dense
   // section, route: re-author the idea sections into ONE compact head (recurse — the head is
@@ -757,12 +821,11 @@ async function distill(
   // note. `routed` guards the one-level recursion: the head re-enters with routing skipped.
   if (!routed && !opts.coreOnly) {
     const { title, sections } = partition(text, opts.tau);
-    const preserve = sections.filter((u) => u.route === "preserve");
-    if (preserve.length > 0) {
-      return distillRouted(text, title, sections, preserve, lang, frontDescription, opts, selfSlug);
+    if (sections.some((u) => u.route === "preserve")) {
+      return distillRouted(text, title, sections, lang, frontDescription, opts, selfSlug);
     }
   }
-  const blocks = segment(text);
+  const blocks = owned?.blocks ?? segment(text);
   const blockById = new Map(blocks.map((b) => [b.id, b]));
   const beforeWords = wordCount(text);
 
@@ -917,7 +980,27 @@ async function distill(
     // skipped it above — flag the disabled loss detector instead of dropping it silently.
     proseGateOffFactsDump: !opts.noGate && !opts.coreOnly && opts.factsDump,
   });
-  return { out, footer, residue, status: "compressed" };
+  // Routed head only: derive the split view for assembleRoutedNote WITHOUT touching the
+  // gated/shared `out` above — everything graded/guarded against it (the expand guard, the
+  // prose-list-item gate, edgePayloadResidue, buildFooter) stays byte-identical to the
+  // homogeneous build. This second, disposable render carries prose + Glossary + Relations
+  // only (workflowSteps: [] skips assembleBody's own "## Workflow" emission); the steps
+  // themselves are exposed separately, bucketed by owning section, for the caller to splice.
+  let workflowByOwner: string[][] | undefined;
+  let exposedOut = out;
+  if (routed && owned) {
+    workflowByOwner = groupStepsByOwner(orderedSteps, workflowSteps, owned);
+    exposedOut = assembleBody(
+      h1,
+      opts.coreOnly ? tie : prose,
+      [],
+      orderedEntries,
+      defByTerm,
+      payloadBlocks,
+      opts.isReference,
+    );
+  }
+  return { out: exposedOut, footer, residue, status: "compressed", workflowByOwner };
 }
 
 // The heterogeneous (per-section-routed) build (D12/D16, Backlog 10). Re-author the idea
@@ -931,39 +1014,33 @@ async function distill(
 async function distillRouted(
   text: string,
   title: string,
-  sections: { route: string; text: string }[],
-  preserve: { text: string }[],
+  sections: RoutedSection[],
   lang: "en" | "ru",
   frontDescription: string,
   opts: Parameters<typeof distill>[3],
   selfSlug: string,
 ): Promise<DistillResult> {
-  const reauthorText = sections
-    .filter((u) => u.route === "re-author")
+  const reauthorSections = sections.filter((u) => u.route === "re-author");
+  const reauthorText = reauthorSections
     .map((u) => u.text)
     .join("\n\n")
     .trim();
+  const owned = tagOwnedBlocks(reauthorSections);
   const head = reauthorText
-    ? await distill(reauthorText, lang, frontDescription, opts, selfSlug, true)
+    ? await distill(reauthorText, lang, frontDescription, opts, selfSlug, true, owned)
     : { out: "", footer: "", residue: [] as Residue[], status: "passthrough" as const };
   // The routed note is itself a compression (prose re-authored, payload compacted); its own
   // status is "compressed". Unconsumed today (the routed=true guard blocks nesting), but the
   // contract is honest and a constant, so it cannot drift.
   return {
-    ...assembleRoutedNote({
-      source: text,
-      title,
-      reauthorText,
-      head,
-      preserveTexts: preserve.map((u) => u.text),
-      reCount: sections.length - preserve.length,
-    }),
+    ...assembleRoutedNote({ source: text, title, reauthorText, head, sections }),
     status: "compressed",
   };
 }
 
 // Pure seam of the per-section routed build (the no-LLM tail of distillRouted): reassemble the
-// routed note, run the deterministic edge+payload gates ONCE at whole-note scope, and build the
+// routed note, splice the head's per-owner workflow steps back at their originating section's
+// position, run the deterministic edge+payload gates ONCE at whole-note scope, and build the
 // footer. No model and no I/O, so distillRouted's wiring is unit-testable in pure.test.ts. This is
 // the whole-note edge/payload run the routed head defers to (the head passed routed=true to
 // edgePayloadResidue and so contributed none), called here over (source, reassembled out): a link
@@ -971,22 +1048,55 @@ async function distillRouted(
 // double-count). The verbatim-head tag surfaces a head the inner expand or nothing-to-distill guard
 // returned unchanged, read from the head's own `status` (the producer is the authority); reauthorText
 // !== "" excludes the empty-head / all-preserve route (a passthrough head with no prose) from tagging.
+//
+// Prose + Glossary + Relations stay ONE synthesized, head-first block exactly as before — only
+// the "## Workflow" steps split out of that block (head.out no longer carries one; see distill's
+// routed-return branch) and get spliced in at their owning section's position. Walking `sections`
+// once accumulates steps across consecutive re-author owners into `pending`, flushing (rendering,
+// numbering continuing from the running total) whenever a preserve section or the note's end is
+// hit — this is what naturally coalesces adjacent re-author owners into a single fragment. Each
+// rendered fragment is still plain "## Workflow" text pushed into reassembleNote's existing
+// `preserves` array, so its own demote() sweep (text.ts) turns it into "### Workflow" exactly as
+// it would a genuine preserve section's own colliding heading — no new heading logic needed.
 export function assembleRoutedNote(a: {
   source: string;
   title: string;
   reauthorText: string;
-  head: { out: string; residue: Residue[]; status: DistillStatus };
-  preserveTexts: string[];
-  reCount: number;
+  head: { out: string; residue: Residue[]; status: DistillStatus; workflowByOwner?: string[][] };
+  sections: { route: Route; text: string }[];
 }): { out: string; footer: string; residue: Residue[] } {
   const beforeWords = wordCount(a.source);
-  const preserves = a.preserveTexts.map((t) => compactSection(t));
-  const out = reassembleNote(a.title, a.head.out, preserves);
+  const chunks: string[] = [];
+  let reauthorIdx = 0;
+  let running = 0;
+  let pending: string[] = [];
+  const flush = () => {
+    if (!pending.length) return;
+    const { text, count } = renderWorkflowBlock(pending, running + 1);
+    if (text) {
+      chunks.push(text);
+      running += count;
+    }
+    pending = [];
+  };
+  for (const u of a.sections) {
+    if (u.route === "preserve") {
+      flush();
+      chunks.push(compactSection(u.text));
+    } else {
+      pending = pending.concat(a.head.workflowByOwner?.[reauthorIdx] ?? []);
+      reauthorIdx++;
+    }
+  }
+  flush();
+  const out = reassembleNote(a.title, a.head.out, chunks);
   const afterWords = wordCount(out);
   const residue = a.head.residue.concat(edgePayloadResidue(a.source, out));
   const headVerbatim = a.reauthorText !== "" && a.head.status === "passthrough";
+  const reCount = a.sections.filter((u) => u.route === "re-author").length;
+  const preserveCount = a.sections.length - reCount;
   const footer =
-    `— per-section route: ${a.reCount} re-author / ${a.preserveTexts.length} preserve` +
+    `— per-section route: ${reCount} re-author / ${preserveCount} preserve` +
     ` · ${beforeWords}→${afterWords} words` +
     (headVerbatim ? " · head kept verbatim (prose not compressed)" : "") +
     (residue.length ? ` · ${residue.length} residue` : "");

@@ -47,7 +47,7 @@ import {
 import { extractJson } from "./fw.ts";
 import { assembleRoutedNote, edgePayloadResidue, wikilinkResidue } from "./pipeline.ts";
 import { parseDistilled } from "./render-mode.ts";
-import { assembleBody } from "./assemble.ts";
+import { assembleBody, renderWorkflowBlock } from "./assemble.ts";
 
 // ---- text.ts: segmentation ----
 test("segment: splits on blank lines into B-indexed blocks", () => {
@@ -313,15 +313,14 @@ test("reassembleNote: title first, head, preserves in source order; demotes a co
   expect(out).toContain("port: 8080");
 });
 
-// ---- pipeline.ts: routed-build seam (distillRouted's no-LLM tail; Backlog 14) ----
+// ---- pipeline.ts: routed-build seam (distillRouted's no-LLM tail; Backlog 14/WorkStep-splice) ----
 test("assembleRoutedNote: empty-head holds the preserve verbatim, reCount 0, no verbatim tag", () => {
   const r = assembleRoutedNote({
     source: "# T\n\n## Data\n\n`x`",
     title: "# T",
     reauthorText: "",
     head: { out: "", residue: [], status: "passthrough" },
-    preserveTexts: ["## Data\n\n`x`"],
-    reCount: 0,
+    sections: [{ route: "preserve", text: "## Data\n\n`x`" }],
   });
   expect(r.out.startsWith("# T")).toBe(true);
   expect(r.out).toContain("`x`");
@@ -336,8 +335,10 @@ test("assembleRoutedNote: all-preserve keeps both sections in source order, reCo
     title: "",
     reauthorText: "",
     head: { out: "", residue: [], status: "passthrough" },
-    preserveTexts: ["## A\n\n`a`", "## B\n\n`b`"],
-    reCount: 0,
+    sections: [
+      { route: "preserve", text: "## A\n\n`a`" },
+      { route: "preserve", text: "## B\n\n`b`" },
+    ],
   });
   expect(r.footer).toContain("0 re-author / 2 preserve");
   expect(r.footer).not.toContain("kept verbatim");
@@ -351,8 +352,10 @@ test("assembleRoutedNote: title-less note emits head first with no leading title
     title: "",
     reauthorText: "## Idea\n\nidea",
     head: { out: "Head prose.", residue: [], status: "compressed" },
-    preserveTexts: ["## Data\n\n`x`"],
-    reCount: 1,
+    sections: [
+      { route: "re-author", text: "## Idea\n\nidea" },
+      { route: "preserve", text: "## Data\n\n`x`" },
+    ],
   });
   expect(r.out.startsWith("Head prose.")).toBe(true);
   expect(r.out).toContain("`x`");
@@ -367,8 +370,10 @@ test("assembleRoutedNote: link dropped from head but alive in a preserve section
     title: "",
     reauthorText: "## Idea\n\nsee [[foo]]",
     head: { out: "Idea prose, link gone.", residue: [], status: "compressed" },
-    preserveTexts: ["## Data\n\n`code` [[foo]]"],
-    reCount: 1,
+    sections: [
+      { route: "re-author", text: "## Idea\n\nsee [[foo]]" },
+      { route: "preserve", text: "## Data\n\n`code` [[foo]]" },
+    ],
   });
   // [[foo]] survives in the reassembled preserve, so the single whole-note run reads it
   // covered; at head scope it would have false-flagged a drop.
@@ -383,8 +388,10 @@ test("assembleRoutedNote: a genuinely dropped link surfaces exactly once, not do
     title: "",
     reauthorText: "## Idea\n\nsee [[bar]]",
     head: { out: "Idea prose, link gone.", residue: [], status: "compressed" },
-    preserveTexts: ["## Data\n\n`code`"],
-    reCount: 1,
+    sections: [
+      { route: "re-author", text: "## Idea\n\nsee [[bar]]" },
+      { route: "preserve", text: "## Data\n\n`code`" },
+    ],
   });
   // head.residue is [] (post-fix the routed head no longer runs the edge gate), so the
   // whole-note run is the sole source — one residue, no double-count.
@@ -400,8 +407,10 @@ test("assembleRoutedNote: verbatim head passthrough tags the footer (fix 3)", ()
     title: "# T",
     reauthorText: rt,
     head: { out: rt, residue: [], status: "passthrough" },
-    preserveTexts: ["## Data\n\n`z`"],
-    reCount: 1,
+    sections: [
+      { route: "re-author", text: rt },
+      { route: "preserve", text: "## Data\n\n`z`" },
+    ],
   });
   expect(r.footer).toContain("head kept verbatim (prose not compressed)");
 });
@@ -412,8 +421,10 @@ test("assembleRoutedNote: a compressed head is not tagged (fix 3 no false-positi
     title: "# T",
     reauthorText: "## Notes\n\nlong original prose",
     head: { out: "Tight distilled prose.", residue: [], status: "compressed" },
-    preserveTexts: ["## Data\n\n`z`"],
-    reCount: 1,
+    sections: [
+      { route: "re-author", text: "## Notes\n\nlong original prose" },
+      { route: "preserve", text: "## Data\n\n`z`" },
+    ],
   });
   expect(r.footer).not.toContain("kept verbatim");
 });
@@ -427,8 +438,10 @@ test("assembleRoutedNote: a passthrough head whose out differs from reauthorText
     title: "# T",
     reauthorText: "## Notes\n\np",
     head: { out: "different bytes", residue: [], status: "passthrough" },
-    preserveTexts: ["## Data\n\n`z`"],
-    reCount: 1,
+    sections: [
+      { route: "re-author", text: "## Notes\n\np" },
+      { route: "preserve", text: "## Data\n\n`z`" },
+    ],
   });
   expect(r.footer).toContain("head kept verbatim (prose not compressed)");
 });
@@ -442,10 +455,116 @@ test("assembleRoutedNote: a compressed head whose out equals reauthorText is not
     title: "# T",
     reauthorText: rt,
     head: { out: rt, residue: [], status: "compressed" },
-    preserveTexts: ["## Data\n\n`z`"],
-    reCount: 1,
+    sections: [
+      { route: "re-author", text: rt },
+      { route: "preserve", text: "## Data\n\n`z`" },
+    ],
   });
   expect(r.footer).not.toContain("kept verbatim");
+});
+
+// ---- assembleRoutedNote: WorkStep splicing by originating section ----
+test("assembleRoutedNote: a re-author section's steps splice in at its position, not before the preceding preserve", () => {
+  // The regression fixture: §1 re-author (no steps), §2 preserve (fence), §3 re-author (2 steps).
+  // Before the splice, ALL steps rode the head, landing before §2 no matter their source section.
+  const r = assembleRoutedNote({
+    source: "## One\n\nprose\n\n## Two\n\n```js\ncode\n```\n\n## Three\n\nsteps live here",
+    title: "",
+    reauthorText: "## One\n\nprose\n\n## Three\n\nsteps live here",
+    head: { out: "Synthesized prose.", residue: [], status: "compressed", workflowByOwner: [[], ["step1", "step2"]] },
+    sections: [
+      { route: "re-author", text: "## One\n\nprose" },
+      { route: "preserve", text: "## Two\n\n```js\ncode\n```" },
+      { route: "re-author", text: "## Three\n\nsteps live here" },
+    ],
+  });
+  const iHead = r.out.indexOf("Synthesized prose.");
+  const iPreserve = r.out.indexOf("```js");
+  const iWorkflow = r.out.indexOf("### Workflow");
+  expect(iHead).toBeGreaterThanOrEqual(0);
+  expect(iHead).toBeLessThan(iPreserve);
+  expect(iPreserve).toBeLessThan(iWorkflow);
+  expect(r.out).toContain("### Workflow\n\n1. step1\n2. step2");
+  // exactly one Workflow fragment, demoted (no stray ## Workflow H2 anywhere)
+  expect(r.out.match(/^## Workflow$/gm)).toBeNull();
+  expect(r.out.match(/^### Workflow$/gm)?.length).toBe(1);
+});
+
+test("assembleRoutedNote: two re-author owners split by a preserve section each get their own fragment, numbering continues", () => {
+  const r = assembleRoutedNote({
+    source: "## A\n\nsteps A\n\n## B\n\n`code`\n\n## C\n\nsteps C",
+    title: "",
+    reauthorText: "## A\n\nsteps A\n\n## C\n\nsteps C",
+    head: { out: "Prose.", residue: [], status: "compressed", workflowByOwner: [["stepA1", "stepA2"], ["stepC1"]] },
+    sections: [
+      { route: "re-author", text: "## A\n\nsteps A" },
+      { route: "preserve", text: "## B\n\n`code`" },
+      { route: "re-author", text: "## C\n\nsteps C" },
+    ],
+  });
+  expect(r.out).toContain("### Workflow\n\n1. stepA1\n2. stepA2");
+  expect(r.out).toContain("### Workflow\n\n3. stepC1");
+  expect(r.out.indexOf("stepA1")).toBeLessThan(r.out.indexOf("`code`"));
+  expect(r.out.indexOf("`code`")).toBeLessThan(r.out.indexOf("stepC1"));
+});
+
+test("assembleRoutedNote: two adjacent re-author owners (no intervening preserve) coalesce into one fragment", () => {
+  const r = assembleRoutedNote({
+    source: "## A\n\nsteps A\n\n## B\n\nsteps B\n\n## C\n\n`code`",
+    title: "",
+    reauthorText: "## A\n\nsteps A\n\n## B\n\nsteps B",
+    head: { out: "Prose.", residue: [], status: "compressed", workflowByOwner: [["stepA"], ["stepB"]] },
+    sections: [
+      { route: "re-author", text: "## A\n\nsteps A" },
+      { route: "re-author", text: "## B\n\nsteps B" },
+      { route: "preserve", text: "## C\n\n`code`" },
+    ],
+  });
+  expect(r.out.match(/### Workflow/g)?.length).toBe(1);
+  expect(r.out).toContain("### Workflow\n\n1. stepA\n2. stepB");
+});
+
+test("assembleRoutedNote: an owner with zero steps contributes no fragment", () => {
+  const r = assembleRoutedNote({
+    source: "## A\n\nprose\n\n## B\n\n`code`",
+    title: "",
+    reauthorText: "## A\n\nprose",
+    head: { out: "Prose.", residue: [], status: "compressed", workflowByOwner: [[]] },
+    sections: [
+      { route: "re-author", text: "## A\n\nprose" },
+      { route: "preserve", text: "## B\n\n`code`" },
+    ],
+  });
+  expect(r.out).not.toContain("Workflow");
+});
+
+test("assembleRoutedNote: an owner whose steps are all content-free renders no fragment", () => {
+  const r = assembleRoutedNote({
+    source: "## A\n\nprose\n\n## B\n\n`code`",
+    title: "",
+    reauthorText: "## A\n\nprose",
+    head: { out: "Prose.", residue: [], status: "compressed", workflowByOwner: [["3."]] },
+    sections: [
+      { route: "re-author", text: "## A\n\nprose" },
+      { route: "preserve", text: "## B\n\n`code`" },
+    ],
+  });
+  expect(r.out).not.toContain("Workflow");
+});
+
+test("assembleRoutedNote: head.out bytes pass through unchanged (prose/Glossary/Relations shape untouched)", () => {
+  const headOut = "Prose.\n\n## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| X | def |";
+  const r = assembleRoutedNote({
+    source: "## A\n\nprose\n\n## B\n\n`code`",
+    title: "",
+    reauthorText: "## A\n\nprose",
+    head: { out: headOut, residue: [], status: "compressed", workflowByOwner: [["step1"]] },
+    sections: [
+      { route: "re-author", text: "## A\n\nprose" },
+      { route: "preserve", text: "## B\n\n`code`" },
+    ],
+  });
+  expect(r.out).toContain(headOut);
 });
 
 test("edgePayloadResidue: a routed head contributes no edge/payload residue (the scope guard)", () => {
@@ -1092,4 +1211,16 @@ test("assembleBody: a content-free workflow step is dropped and the rest renumbe
   );
   expect(out).toContain("## Workflow\n\n1. Emit a certificate\n2. Tune for recall");
   expect(out).not.toContain("3. 3.");
+});
+
+test("renderWorkflowBlock: numbers from a given start, filtering content-free steps", () => {
+  expect(renderWorkflowBlock(["a", "b"], 5)).toEqual({
+    text: "## Workflow\n\n5. a\n6. b",
+    count: 2,
+  });
+});
+
+test("renderWorkflowBlock: no contentful steps yields an empty render and zero count", () => {
+  expect(renderWorkflowBlock([], 1)).toEqual({ text: "", count: 0 });
+  expect(renderWorkflowBlock(["3."], 1)).toEqual({ text: "", count: 0 });
 });

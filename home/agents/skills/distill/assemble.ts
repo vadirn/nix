@@ -48,6 +48,23 @@ export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
   return lines.length ? `## Relations\n\n${lines.join("\n")}` : "";
 }
 
+// Render a "## Workflow" block from a flat step list, numbering from `startAt` so a
+// fragment spliced in after an earlier one can continue the sequence (a routed note's
+// workflow is one procedure split across the note by section position, not several
+// independent lists — see reassembleNote/assembleRoutedNote in pipeline.ts). Filter empties
+// before numbering: the verbatim fallback blanks surplus slots when a group's source yields
+// fewer directive clauses than it had draft steps, so renumber over what remains rather than
+// emitting a gap.
+export function renderWorkflowBlock(steps: string[], startAt = 1): { text: string; count: number } {
+  const items = steps.map((s) => s.replace(/\n+/g, " ").trim()).filter(isContentfulStep);
+  return {
+    text: items.length
+      ? `## Workflow\n\n${items.map((s, i) => `${startAt + i}. ${s}`).join("\n")}`
+      : "",
+    count: items.length,
+  };
+}
+
 export function assembleBody(
   h1: string,
   head: string,
@@ -61,15 +78,8 @@ export function assembleBody(
   if (h1) parts.push(h1);
   if (head) parts.push(head);
   if (workflowSteps.length) {
-    // filter empties before numbering: the verbatim fallback blanks surplus slots
-    // when a group's source yields fewer directive clauses than it had draft steps,
-    // so renumber over what remains rather than emitting a gap.
-    const items = workflowSteps
-      .map((s) => s.replace(/\n+/g, " ").trim())
-      .filter(isContentfulStep)
-      .map((s, i) => `${i + 1}. ${s}`)
-      .join("\n");
-    if (items) parts.push(`## Workflow\n\n${items}`);
+    const { text } = renderWorkflowBlock(workflowSteps);
+    if (text) parts.push(text);
   }
   if (orderedEntries.length) {
     const rows = orderedEntries

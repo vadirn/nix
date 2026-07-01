@@ -9,13 +9,16 @@ import { expect, test } from "bun:test";
 import type { Block, Combo, Grade, ProseUnit, WorkStep } from "./text.ts";
 import { normalizeForContainment } from "./text.ts";
 import type { ProseVerdict } from "./prompts.ts";
+import { segment } from "./text.ts";
 import {
   anchored,
   buildFooter,
   computeStepGroups,
+  groupStepsByOwner,
   orderContent,
   payloadResidue,
   proseResidue,
+  tagOwnedBlocks,
   wikilinkResidue,
 } from "./pipeline.ts";
 
@@ -52,6 +55,67 @@ test("orderContent: orders entries by first source block, drops fully-retained s
   expect([...payloadBlockIds]).toEqual(["B2"]);
   expect(orderedEntries.map((e) => e.term)).toEqual(["Y", "X"]);
   expect(orderedSteps.map((s) => s.step)).toEqual(["do z"]);
+});
+
+// ---- tagOwnedBlocks: owner-section tagging at segmentation time (routed-build splice) ----
+test("tagOwnedBlocks: assigns sequential ids across sections, tagging each block's owner index", () => {
+  const owned = tagOwnedBlocks([{ text: "para one" }, { text: "para two" }]);
+  expect(owned.blocks).toEqual([
+    { id: "B1", text: "para one" },
+    { id: "B2", text: "para two" },
+  ]);
+  expect([...owned.owner]).toEqual([
+    ["B1", 0],
+    ["B2", 1],
+  ]);
+  expect(owned.ownerCount).toBe(2);
+});
+
+test("tagOwnedBlocks: a section with two blank-line-separated paragraphs contributes two blocks, same owner", () => {
+  const owned = tagOwnedBlocks([{ text: "first\n\nsecond" }, { text: "third" }]);
+  expect(owned.blocks.map((b) => b.id)).toEqual(["B1", "B2", "B3"]);
+  expect(owned.owner.get("B1")).toBe(0);
+  expect(owned.owner.get("B2")).toBe(0);
+  expect(owned.owner.get("B3")).toBe(1);
+});
+
+test("tagOwnedBlocks: segmenting per-section then concatenating agrees, block-for-block, with segmenting the join", () => {
+  const sections = [
+    { text: "## Idea\n\nsome prose\n\nmore prose" },
+    { text: "## Mixed\n\n- a list\n\n```js\nconst x = 1;\n```" },
+    { text: "## Tail\n\ntrailing prose" },
+  ];
+  const owned = tagOwnedBlocks(sections);
+  const wholeText = sections.map((s) => s.text).join("\n\n");
+  expect(owned.blocks.map((b) => b.text)).toEqual(segment(wholeText).map((b) => b.text));
+});
+
+// ---- groupStepsByOwner: bucket already-ordered/synthesized steps by their source section ----
+test("groupStepsByOwner: buckets steps by owning section, preserving order within a bucket", () => {
+  const owned = tagOwnedBlocks([{ text: "first" }, { text: "second" }]);
+  const orderedSteps: WorkStep[] = [
+    { step: "s1", source: [owned.blocks[0].id] },
+    { step: "s2", source: [owned.blocks[1].id] },
+    { step: "s3", source: [owned.blocks[0].id] },
+  ];
+  const byOwner = groupStepsByOwner(orderedSteps, ["s1 rendered", "s2 rendered", "s3 rendered"], owned);
+  expect(byOwner).toEqual([
+    ["s1 rendered", "s3 rendered"],
+    ["s2 rendered"],
+  ]);
+});
+
+test("groupStepsByOwner: a step sourced from two owners resolves to the earlier one", () => {
+  const owned = tagOwnedBlocks([{ text: "first" }, { text: "second" }]);
+  const orderedSteps: WorkStep[] = [{ step: "cross", source: [owned.blocks[1].id, owned.blocks[0].id] }];
+  const byOwner = groupStepsByOwner(orderedSteps, ["cross rendered"], owned);
+  expect(byOwner).toEqual([["cross rendered"], []]);
+});
+
+test("groupStepsByOwner: an owner with zero steps yields an empty array at that position", () => {
+  const owned = tagOwnedBlocks([{ text: "first" }, { text: "second" }, { text: "third" }]);
+  const byOwner = groupStepsByOwner([], [], owned);
+  expect(byOwner).toEqual([[], [], []]);
 });
 
 // ---- computeStepGroups: steps sharing a source block group together ----
