@@ -6,7 +6,7 @@ import {
   type Block,
   type Grade,
   type GlossEntry,
-  type IR,
+  type Combo,
   type LinkInventory,
   type ProseUnit,
   type Relation,
@@ -146,14 +146,14 @@ export async function extractCombo(
   lang: "en" | "ru",
   inventory: LinkInventory = { wikilinks: [], external: [] },
   selfSlug = "",
-): Promise<IR> {
-  const ir = await askJson<IR>(
+): Promise<Combo> {
+  const combo = await askJson<Combo>(
     EXTRACT,
     extractComboPrompt(blocks, frontDescription, lang, inventory, selfSlug),
     EXTRACT_TOKENS,
   );
   const ids = new Set(blocks.map((b) => b.id));
-  const glossary = (ir.glossary ?? [])
+  const glossary = (combo.glossary ?? [])
     .map((e) => ({
       term: (e.term ?? "").trim(),
       def: (e.def ?? "").trim(),
@@ -168,7 +168,7 @@ export async function extractCombo(
     }))
     // an entry with no valid source block cannot be rendered grounded or graded — drop it
     .filter((e) => e.term && e.source.length > 0);
-  const workflow = (ir.workflow ?? [])
+  const workflow = (combo.workflow ?? [])
     .map((s) => ({
       step: (s.step ?? "").trim(),
       source: (s.source ?? []).filter((id) => ids.has(id)),
@@ -176,20 +176,20 @@ export async function extractCombo(
     // a step with no valid source block cannot be grounded or gated — drop it
     .filter((s) => s.step && s.source.length > 0);
   // the authored frontmatter description overrides the model's: the one anchor never paraphrased
-  const description = frontDescription || (ir.description ?? "").trim();
-  return { description, thesis: (ir.thesis ?? "").trim(), glossary, workflow };
+  const description = frontDescription || (combo.description ?? "").trim();
+  return { description, thesis: (combo.thesis ?? "").trim(), glossary, workflow };
 }
 
 // ---- stage 2: grade each block drop / distill / retain ----
-function gradeBlocksPrompt(ir: IR, blocks: Block[]): string {
-  const gloss = glossList(ir.glossary);
+function gradeBlocksPrompt(combo: Combo, blocks: Block[]): string {
+  const gloss = glossList(combo.glossary);
   return `You are grading each block of a note for an abstractive compression. You have the note's thesis and its glossary of concepts. Grade EVERY block:
 - "drop": off-thesis, OR its content is already captured by a glossary entry (a restatement).
 - "distill": on-thesis prose whose ideas should be re-expressed densely — it folds into the glossary and a short prose tie-together. This is the DEFAULT for explanatory text.
 - "retain": ONLY content that is already compact and would be destroyed by rewording — a fenced code block, a command line, a file path, a flag, literal output, or a list made mostly of [[wikilink]] references (a "related"/"see also" list). Narrative or explanatory PROSE is NEVER "retain", even when it is important, names an example, or contains a [[wikilink]] — that prose is "distill". When unsure between distill and retain, choose distill.
 Return ONLY JSON {"grades":[{"id":"Bn","grade":"drop|distill|retain"}]} — one entry per block, ids matching.
 
-THESIS: ${ir.thesis}
+THESIS: ${combo.thesis}
 
 GLOSSARY:
 ${gloss}
@@ -198,10 +198,10 @@ BLOCKS (ids in [Bn] markers):
 ${render(blocks)}`;
 }
 
-export async function gradeBlocks(ir: IR, blocks: Block[]): Promise<Map<string, Grade>> {
+export async function gradeBlocks(combo: Combo, blocks: Block[]): Promise<Map<string, Grade>> {
   const judged = await askJson<{ grades: { id: string; grade: Grade }[] }>(
     EXTRACT,
-    gradeBlocksPrompt(ir, blocks),
+    gradeBlocksPrompt(combo, blocks),
     EXTRACT_TOKENS,
   );
   const byId = new Map<string, Grade>();
@@ -233,7 +233,7 @@ export function sourceTextFor(entry: { source: string[] }, blockById: Map<string
 }
 
 function synthEntriesPrompt(
-  ir: IR,
+  combo: Combo,
   entries: GlossEntry[],
   mode: Synth,
   blockById: Map<string, Block>,
@@ -271,24 +271,24 @@ ${concepts}`;
       : 'write a maximally dense "def" that defines the concept itself, stating no relations to other terms (the prose carries those)';
   return `You are writing glossary definitions for a compressed note from its extracted idea-graph alone. For each concept, ${defRule}. Stay on the thesis; introduce NO new concept. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
 
-THESIS: ${ir.thesis}
+THESIS: ${combo.thesis}
 
 CONCEPTS:
 ${concepts}`;
 }
 
 export async function synthEntries(
-  ir: IR,
+  combo: Combo,
   entries: GlossEntry[],
   mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): Promise<Map<string, string>> {
-  const out = new Map<string, string>(entries.map((e) => [e.term, e.def])); // fall back to IR def
+  const out = new Map<string, string>(entries.map((e) => [e.term, e.def])); // fall back to Combo def
   if (entries.length === 0) return out;
   const res = await askJson<{ entries: { term: string; def: string }[] }>(
     EXTRACT,
-    synthEntriesPrompt(ir, entries, mode, blockById, lang),
+    synthEntriesPrompt(combo, entries, mode, blockById, lang),
     EXTRACT_TOKENS,
   );
   for (const e of res.entries ?? []) if (e.term && e.def) out.set(e.term.trim(), e.def.trim());
@@ -441,24 +441,24 @@ SOURCE:
 ${sourceText}`;
 }
 
-function tieTogetherPrompt(ir: IR, lang: "en" | "ru"): string {
-  const gloss = glossList(ir.glossary);
+function tieTogetherPrompt(combo: Combo, lang: "en" | "ru"): string {
+  const gloss = glossList(combo.glossary);
   return `In 2-4 sentences, state the note's thesis and how its main glossary terms connect. Use only concepts already in the glossary. Plain declarative prose — no heading, no list. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
 
-THESIS: ${ir.thesis}
+THESIS: ${combo.thesis}
 
 GLOSSARY:
 ${gloss}`;
 }
 
-export async function tieTogether(ir: IR, lang: "en" | "ru"): Promise<string> {
-  if (ir.glossary.length === 0) return "";
+export async function tieTogether(combo: Combo, lang: "en" | "ru"): Promise<string> {
+  if (combo.glossary.length === 0) return "";
   try {
-    const res = await askJson<{ prose: string }>(EXTRACT, tieTogetherPrompt(ir, lang), 1024);
+    const res = await askJson<{ prose: string }>(EXTRACT, tieTogetherPrompt(combo, lang), 1024);
     return (res.prose ?? "").trim();
   } catch (e) {
     rethrowIfBug(e, "tieTogether");
-    return ir.thesis; // a transient tie-together flake degrades to the bare thesis sentence
+    return combo.thesis; // a transient tie-together flake degrades to the bare thesis sentence
   }
 }
 
@@ -470,7 +470,7 @@ export async function tieTogether(ir: IR, lang: "en" | "ru"): Promise<string> {
 // context (so it places terms correctly), with an explicit instruction not to copy
 // them in. Relations are the spine the paragraphs are built on.
 function connectiveProsePrompt(
-  ir: IR,
+  combo: Combo,
   orderedEntries: GlossEntry[],
   defByTerm: Map<string, string>,
   lang: "en" | "ru",
@@ -485,14 +485,14 @@ function connectiveProsePrompt(
 Write about the SUBJECT, not about the document: open the FIRST sentence by asserting the thesis directly as a plain claim about the subject (e.g. "Target distance is the gap between …, closed only by …"). NEVER refer to "the note", "this note", "the thesis", "this concept", "the author", or describe what the text does — state every point as a fact about the subject itself.
 Use only claims, terms, and relations the input states. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings. Keep \`inline code\`, file paths, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
 
-THESIS (assert this in your own words as the opening claim — do not announce it as "the thesis"): ${ir.thesis}
+THESIS (assert this in your own words as the opening claim — do not announce it as "the thesis"): ${combo.thesis}
 
 CONCEPTS (term, its relations, and its definition for context):
 ${concepts}`;
 }
 
 export async function connectiveProse(
-  ir: IR,
+  combo: Combo,
   orderedEntries: GlossEntry[],
   defByTerm: Map<string, string>,
   lang: "en" | "ru",
@@ -501,13 +501,13 @@ export async function connectiveProse(
   try {
     const res = await askJson<{ prose: string }>(
       EXTRACT,
-      connectiveProsePrompt(ir, orderedEntries, defByTerm, lang),
+      connectiveProsePrompt(combo, orderedEntries, defByTerm, lang),
       EXTRACT_TOKENS,
     );
-    return (res.prose ?? "").trim() || ir.thesis;
+    return (res.prose ?? "").trim() || combo.thesis;
   } catch (e) {
     rethrowIfBug(e, "connectiveProse");
-    return ir.thesis; // a transient render flake degrades to the bare thesis sentence
+    return combo.thesis; // a transient render flake degrades to the bare thesis sentence
   }
 }
 
@@ -662,7 +662,7 @@ export async function revise(
 // the judge returns no parseable verdict (no JSON after askJson's retry). It is kept
 // distinct from "residue": inconclusive items skip recovery (re-rendering cannot fix
 // a judge that will not parse) and surface directly, so a flake never discards the run.
-export type Concept = {
+export type ConceptVerdict = {
   term: string;
   grade: "translated" | "residue" | "inconclusive";
   direction: string;
@@ -704,9 +704,9 @@ export async function fidelityGate(
   thesis: string,
   outputBody: string,
   rendered: { term: string; def: string; sourceText: string }[],
-): Promise<{ thesisRecoverable: boolean; concepts: Concept[] }> {
+): Promise<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }> {
   try {
-    const res = await askJson<{ thesisRecoverable?: boolean; concepts?: Concept[] }>(
+    const res = await askJson<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
       FIDELITY,
       fidelityPrompt(thesis, outputBody, rendered),
       FIDELITY_TOKENS,

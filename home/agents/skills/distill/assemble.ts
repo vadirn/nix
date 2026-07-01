@@ -1,4 +1,4 @@
-// assemble — turn the settled IR (prose head, workflow steps, glossary entries,
+// assemble — turn the settled combo (prose head, workflow steps, glossary entries,
 // retained blocks) into the final markdown body, and emit the `## Relations`
 // block. Pure formatting; no I/O, no model calls.
 import { isContentfulStep, slugSegment, type Block, type GlossEntry } from "./text.ts";
@@ -52,7 +52,7 @@ export function assembleBody(
   workflowSteps: string[],
   orderedEntries: GlossEntry[],
   defByTerm: Map<string, string>,
-  retained: Block[],
+  payloadBlocks: Block[],
   isReference: boolean,
 ): string {
   const parts: string[] = [];
@@ -82,6 +82,6 @@ export function assembleBody(
     const rel = emitRelationsBlock(orderedEntries);
     if (rel) parts.push(rel);
   }
-  if (retained.length) parts.push(retained.map((b) => b.text).join("\n\n"));
+  if (payloadBlocks.length) parts.push(payloadBlocks.map((b) => b.text).join("\n\n"));
   return parts.join("\n\n");
 }

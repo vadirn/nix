@@ -8,7 +8,7 @@ import {
   type Block,
   type Grade,
   type GlossEntry,
-  type IR,
+  type Combo,
   type LinkInventory,
   type ProseUnit,
   type WorkStep,
@@ -45,7 +45,7 @@ import {
 } from "./frontmatter.ts";
 import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
 import {
-  type Concept,
+  type ConceptVerdict,
   type StepVerdict,
   type Synth,
   connectiveProse,
@@ -85,7 +85,7 @@ const WF_RECOVERY: WfRecovery = ((): WfRecovery => {
 })();
 
 // ---- pipeline ----
-type Residue = { term: string; reason: string; source: string };
+type Residue = { label: string; reason: string; source: string };
 // Did distill rewrite the body, or pass it through unchanged? The producer knows this at each
 // return site (nothing-to-distill and expand-guard pass through; the normal path compresses);
 // the routed build reads it to tag the footer rather than re-deriving it by byte-comparison.
@@ -103,32 +103,32 @@ type StepGroup = { id: string; idxs: number[]; sourceText: string };
 // so its slice can be exercised on its own (the pure ones — orderContent,
 // computeStepGroups, buildFooter — without a model call).
 
-// stage 2: grade + order (pure). Given the extracted IR, the segmented blocks, and
+// stage 2: grade + order (pure). Given the extracted Combo, the segmented blocks, and
 // their per-block grades, pick the retained-verbatim blocks and put the glossary
 // entries and workflow steps in the note's own order (first appearance of their
 // lowest source block, Array.sort stable across a shared block). A step whose every
 // source block is retained verbatim is already carried by that block — drop it so
 // the directive is not duplicated as both a fence and a step. Deterministic.
 export function orderContent(
-  ir: IR,
+  combo: Combo,
   blocks: Block[],
   grades: Map<string, Grade>,
 ): {
-  retained: Block[];
-  retainedIds: Set<string>;
+  payloadBlocks: Block[];
+  payloadBlockIds: Set<string>;
   orderedEntries: GlossEntry[];
   orderedSteps: WorkStep[];
 } {
   const blockIndex = new Map(blocks.map((b, i) => [b.id, i]));
-  const retained = blocks.filter((b) => grades.get(b.id) === "retain");
-  const retainedIds = new Set(retained.map((b) => b.id));
+  const payloadBlocks = blocks.filter((b) => grades.get(b.id) === "retain");
+  const payloadBlockIds = new Set(payloadBlocks.map((b) => b.id));
   const orderKey = (e: { source: string[] }) =>
     Math.min(...e.source.map((id) => blockIndex.get(id) ?? 1e9));
-  const orderedEntries = [...ir.glossary].sort((a, b) => orderKey(a) - orderKey(b));
-  const orderedSteps = ir.workflow
-    .filter((s) => !s.source.every((id) => retainedIds.has(id)))
+  const orderedEntries = [...combo.glossary].sort((a, b) => orderKey(a) - orderKey(b));
+  const orderedSteps = combo.workflow
+    .filter((s) => !s.source.every((id) => payloadBlockIds.has(id)))
     .sort((a, b) => orderKey(a) - orderKey(b));
-  return { retained, retainedIds, orderedEntries, orderedSteps };
+  return { payloadBlocks, payloadBlockIds, orderedEntries, orderedSteps };
 }
 
 // group steps by their shared source block-set (pure) so the workflow gate judges
@@ -158,7 +158,7 @@ export function computeStepGroups(
 // the per-step workflow. These three are independent, so they run concurrently; the
 // connective prose body needs the defs, so it follows (skipped in --core-only).
 async function synthesize(
-  ir: IR,
+  combo: Combo,
   orderedEntries: GlossEntry[],
   orderedSteps: WorkStep[],
   opts: { synth: Synth; coreOnly: boolean },
@@ -171,11 +171,11 @@ async function synthesize(
   prose: string;
 }> {
   const [defByTerm, tie, workflowSteps] = await Promise.all([
-    synthEntries(ir, orderedEntries, opts.synth, blockById, lang),
-    tieTogether(ir, lang),
+    synthEntries(combo, orderedEntries, opts.synth, blockById, lang),
+    tieTogether(combo, lang),
     synthWorkflow(orderedSteps, opts.synth, blockById, lang),
   ]);
-  const prose = opts.coreOnly ? "" : await connectiveProse(ir, orderedEntries, defByTerm, lang);
+  const prose = opts.coreOnly ? "" : await connectiveProse(combo, orderedEntries, defByTerm, lang);
   return { defByTerm, tie, workflowSteps, prose };
 }
 
@@ -225,14 +225,14 @@ async function reviseDistilled(
 // never the prose. Definitions and steps are repaired in place (defByTerm,
 // workflowSteps); the metrics + residue are returned.
 async function runFidelityGate(
-  ir: IR,
+  combo: Combo,
   h1: string,
   tie: string,
   orderedEntries: GlossEntry[],
   orderedSteps: WorkStep[],
   defByTerm: Map<string, string>,
   workflowSteps: string[],
-  retained: Block[],
+  payloadBlocks: Block[],
   blockById: Map<string, Block>,
   lang: "en" | "ru",
   opts: { maxRetries: number; isReference: boolean },
@@ -244,7 +244,7 @@ async function runFidelityGate(
     workflowSteps,
     orderedEntries,
     defByTerm,
-    retained,
+    payloadBlocks,
     opts.isReference,
   );
 
@@ -265,13 +265,13 @@ async function runFidelityGate(
       sourceText: g.sourceText,
     }));
   const [graded, gradedG] = await Promise.all([
-    fidelityGate(ir.thesis, gloss, renderedC()),
+    fidelityGate(combo.thesis, gloss, renderedC()),
     workflowGate(renderedG(), lang),
   ]);
   const thesisRecoverable = graded.thesisRecoverable;
   // inconclusive verdicts (judge returned no JSON) are set aside from the start:
   // recovery cannot fix them, so they bypass the retry loop and surface directly.
-  const inconclusiveC = new Map<string, Concept>();
+  const inconclusiveC = new Map<string, ConceptVerdict>();
   const inconclusiveG = new Map<string, StepVerdict>();
   for (const c of graded.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
   for (const g of gradedG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
@@ -338,7 +338,7 @@ async function runFidelityGate(
       workflowSteps,
       orderedEntries,
       defByTerm,
-      retained,
+      payloadBlocks,
       opts.isReference,
     );
     // re-grade only the patched items, not the full set (budget)
@@ -347,11 +347,11 @@ async function runFidelityGate(
     const [reg, regG] = await Promise.all([
       patchC.size
         ? fidelityGate(
-            ir.thesis,
+            combo.thesis,
             gloss,
             renderedC().filter((r) => patchC.has(r.term)),
           )
-        : Promise.resolve({ thesisRecoverable, concepts: [] as Concept[] }),
+        : Promise.resolve({ thesisRecoverable, concepts: [] as ConceptVerdict[] }),
       patchG.size
         ? workflowGate(
             renderedG().filter((r) => patchG.has(r.id)),
@@ -400,7 +400,7 @@ async function runFidelityGate(
         workflowSteps,
         orderedEntries,
         defByTerm,
-        retained,
+        payloadBlocks,
         opts.isReference,
       );
     }
@@ -409,7 +409,7 @@ async function runFidelityGate(
   for (const c of failC) {
     const entry = orderedEntries.find((e) => e.term === c.term);
     residue.push({
-      term: c.term,
+      label: c.term,
       reason: `${c.direction || "residue"}: ${c.missing || "failed round-trip entailment"}`,
       source: entry ? sourceTextFor(entry, blockById) : "",
     });
@@ -417,16 +417,16 @@ async function runFidelityGate(
   for (const v of failG) {
     const g = stepGroups.find((x) => x.id === v.id);
     residue.push({
-      term: v.id,
+      label: v.id,
       reason: `workflow: ${v.missing || "directive coverage failed"}`,
       source: g ? g.sourceText : "",
     });
   }
   if (!thesisRecoverable) {
     residue.unshift({
-      term: "(thesis)",
+      label: "(thesis)",
       reason: "thesis not recoverable from output",
-      source: ir.thesis,
+      source: combo.thesis,
     });
   }
   // gate-inconclusive items: the judge could not render a verdict (no JSON after
@@ -435,7 +435,7 @@ async function runFidelityGate(
   for (const c of inconclusiveC.values()) {
     const entry = orderedEntries.find((e) => e.term === c.term);
     residue.push({
-      term: c.term,
+      label: c.term,
       reason: `gate-inconclusive: ${c.missing || "judge returned no verdict"}`,
       source: entry ? sourceTextFor(entry, blockById) : "",
     });
@@ -443,7 +443,7 @@ async function runFidelityGate(
   for (const v of inconclusiveG.values()) {
     const g = stepGroups.find((x) => x.id === v.id);
     residue.push({
-      term: v.id,
+      label: v.id,
       reason: `gate-inconclusive: ${v.missing || "judge returned no verdict"}`,
       source: g ? g.sourceText : "",
     });
@@ -554,7 +554,7 @@ export function wikilinkResidue(sourceText: string, outputText: string): Residue
     if (g.targets.size > 1) {
       for (const markup of g.markups) {
         residue.push({
-          term: markup,
+          label: markup,
           reason:
             "wikilink slug-collision: distinct source edges share a slug; output coverage is ambiguous — verify each manually",
           source: markup,
@@ -565,7 +565,7 @@ export function wikilinkResidue(sourceText: string, outputText: string): Residue
     if (covered.has(slug)) continue;
     const markup = g.markups[0];
     residue.push({
-      term: markup,
+      label: markup,
       reason: "wikilink dropped: source edge absent from output (no relation, no retained block)",
       source: markup,
     });
@@ -628,7 +628,7 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
     for (const s of lane.harvest(sourceText)) {
       if (covered.has(s.key) || seen.has(s.key)) continue;
       seen.add(s.key);
-      residue.push({ term: s.markup, source: s.markup, reason: lane.reason });
+      residue.push({ label: s.markup, source: s.markup, reason: lane.reason });
     }
   }
   return residue;
@@ -697,7 +697,7 @@ export function proseResidue(
     const v = verdicts.get(u.id);
     if (!v) {
       residue.push({
-        term: u.id,
+        label: u.id,
         source: u.span,
         reason: flaked.has(u.id)
           ? "prose-inconclusive: judge returned no verdict for this item's batch"
@@ -707,7 +707,7 @@ export function proseResidue(
     }
     if (v.grade === "covered" && anchored(v, u.span, normOut)) continue; // the ONLY clear
     residue.push({
-      term: u.id,
+      label: u.id,
       source: u.span,
       reason:
         v.grade === "dropped"
@@ -756,10 +756,10 @@ async function distill(
   // the payload sections verbatim (compactSection v1), reassemble in source order into one
   // note. `routed` guards the one-level recursion: the head re-enters with routing skipped.
   if (!routed && !opts.coreOnly) {
-    const { title, units } = partition(text, opts.tau);
-    const preserve = units.filter((u) => u.route === "preserve");
+    const { title, sections } = partition(text, opts.tau);
+    const preserve = sections.filter((u) => u.route === "preserve");
     if (preserve.length > 0) {
-      return distillRouted(text, title, units, preserve, lang, frontDescription, opts, selfSlug);
+      return distillRouted(text, title, sections, preserve, lang, frontDescription, opts, selfSlug);
     }
   }
   const blocks = segment(text);
@@ -781,8 +781,14 @@ async function distill(
     wikilinks: harvestVaultEdges(text),
     external: harvestExternalLinks(text),
   };
-  const ir = await extractCombo(blocks, frontDescription, lang, linkInventory, effectiveSelfSlug);
-  if (ir.glossary.length === 0 && ir.workflow.length === 0) {
+  const combo = await extractCombo(
+    blocks,
+    frontDescription,
+    lang,
+    linkInventory,
+    effectiveSelfSlug,
+  );
+  if (combo.glossary.length === 0 && combo.workflow.length === 0) {
     return {
       out: text,
       footer: `— nothing to distill · ${beforeWords} words`,
@@ -792,11 +798,11 @@ async function distill(
   }
 
   // 2. grade blocks, then order entries/steps (pure)
-  const grades = await gradeBlocks(ir, blocks);
-  const { retained, orderedEntries, orderedSteps } = orderContent(ir, blocks, grades);
+  const grades = await gradeBlocks(combo, blocks);
+  const { payloadBlocks, orderedEntries, orderedSteps } = orderContent(combo, blocks, grades);
 
   // 3. synthesize defs + tie + workflow + connective prose body
-  const synth = await synthesize(ir, orderedEntries, orderedSteps, opts, blockById, lang);
+  const synth = await synthesize(combo, orderedEntries, orderedSteps, opts, blockById, lang);
   const defByTerm = synth.defByTerm;
   let tie = synth.tie;
   let workflowSteps = synth.workflowSteps;
@@ -824,14 +830,14 @@ async function distill(
   let keptVerbatim = 0;
   if (!opts.noGate) {
     ({ residue, retries, gateSkipped, keptVerbatim } = await runFidelityGate(
-      ir,
+      combo,
       h1,
       tie,
       orderedEntries,
       orderedSteps,
       defByTerm,
       workflowSteps,
-      retained,
+      payloadBlocks,
       blockById,
       lang,
       { maxRetries: opts.maxRetries, isReference: opts.isReference },
@@ -842,7 +848,7 @@ async function distill(
   // --no-gate switch; no-op in --core-only (no prose).
   let proseFixes = 0;
   if (prose && !opts.noGate) {
-    const qa = await runProseQA(ir.thesis, prose, lang);
+    const qa = await runProseQA(combo.thesis, prose, lang);
     prose = qa.prose;
     proseFixes = qa.proseFixes;
   }
@@ -856,7 +862,7 @@ async function distill(
     workflowSteps,
     orderedEntries,
     defByTerm,
-    retained,
+    payloadBlocks,
     opts.isReference,
   );
 
@@ -900,7 +906,7 @@ async function distill(
     afterWords,
     entries: orderedEntries.length,
     steps: orderedSteps.length,
-    verbatim: retained.length,
+    verbatim: payloadBlocks.length,
     residue: residue.length,
     gateSkipped,
     keptVerbatim,
@@ -925,14 +931,14 @@ async function distill(
 async function distillRouted(
   text: string,
   title: string,
-  units: { route: string; text: string }[],
+  sections: { route: string; text: string }[],
   preserve: { text: string }[],
   lang: "en" | "ru",
   frontDescription: string,
   opts: Parameters<typeof distill>[3],
   selfSlug: string,
 ): Promise<DistillResult> {
-  const reauthorText = units
+  const reauthorText = sections
     .filter((u) => u.route === "re-author")
     .map((u) => u.text)
     .join("\n\n")
@@ -950,7 +956,7 @@ async function distillRouted(
       reauthorText,
       head,
       preserveTexts: preserve.map((u) => u.text),
-      reCount: units.length - preserve.length,
+      reCount: sections.length - preserve.length,
     }),
     status: "compressed",
   };
@@ -1132,7 +1138,7 @@ export async function main() {
       const entries = residue
         .map(
           (r) =>
-            `<entry term="${escAttr(r.term)}" reason="${escAttr(r.reason)}">\n<source>\n${r.source}\n</source>\n</entry>`,
+            `<entry term="${escAttr(r.label)}" reason="${escAttr(r.reason)}">\n<source>\n${r.source}\n</source>\n</entry>`,
         )
         .join("\n");
       fileBody += `\n<residue>\n${entries}\n</residue>\n`;

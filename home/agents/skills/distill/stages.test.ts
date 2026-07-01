@@ -6,7 +6,7 @@
 // and buildFooter (the success-footer renderer). The async stages route through
 // the network and are covered by the end-to-end + degradation suites.
 import { expect, test } from "bun:test";
-import type { Block, IR, Grade, ProseUnit, WorkStep } from "./text.ts";
+import type { Block, Combo, Grade, ProseUnit, WorkStep } from "./text.ts";
 import { normalizeForContainment } from "./text.ts";
 import type { ProseVerdict } from "./prompts.ts";
 import {
@@ -31,7 +31,7 @@ test("orderContent: orders entries by first source block, drops fully-retained s
     ["B2", "retain"],
     ["B3", "distill"],
   ]);
-  const ir: IR = {
+  const combo: Combo = {
     description: "",
     thesis: "t",
     glossary: [
@@ -43,9 +43,13 @@ test("orderContent: orders entries by first source block, drops fully-retained s
       { step: "do w", source: ["B2"] }, // every source block retained → dropped
     ],
   };
-  const { retained, retainedIds, orderedEntries, orderedSteps } = orderContent(ir, blocks, grades);
-  expect(retained).toEqual([{ id: "B2", text: "b" }]);
-  expect([...retainedIds]).toEqual(["B2"]);
+  const { payloadBlocks, payloadBlockIds, orderedEntries, orderedSteps } = orderContent(
+    combo,
+    blocks,
+    grades,
+  );
+  expect(payloadBlocks).toEqual([{ id: "B2", text: "b" }]);
+  expect([...payloadBlockIds]).toEqual(["B2"]);
   expect(orderedEntries.map((e) => e.term)).toEqual(["Y", "X"]);
   expect(orderedSteps.map((s) => s.step)).toEqual(["do z"]);
 });
@@ -141,7 +145,7 @@ test("wikilinkResidue: a dropped source wikilink surfaces; a relation/retained o
   const out =
     "## Relations\n\n- a subsumes:: [[30-notes-elegant-solution]]\n\n## References\n- [[30 notes/Kept link]]";
   const res = wikilinkResidue(source, out);
-  expect(res.map((r) => r.term)).toEqual(["[[20 cards/Outline speedrunning]]"]);
+  expect(res.map((r) => r.label)).toEqual(["[[20 cards/Outline speedrunning]]"]);
   expect(res[0].reason).toMatch(/wikilink dropped/);
 });
 
@@ -171,7 +175,7 @@ test("wikilinkResidue: slug-colliding source edges both surface even when output
   // Slug coverage cannot be attributed to a single edge, so both surface as residue
   // (loud false positive) rather than the dropped one passing silently.
   const res = wikilinkResidue("[[foo bar]] and [[foo/bar]]", "see [[foo bar]]");
-  expect(res.map((r) => r.term).sort()).toEqual(["[[foo bar]]", "[[foo/bar]]"]);
+  expect(res.map((r) => r.label).sort()).toEqual(["[[foo bar]]", "[[foo/bar]]"]);
   expect(res[0].reason).toMatch(/slug-collision/);
 });
 
@@ -304,7 +308,7 @@ test("proseResidue: a surviving sibling never clears a dropped sibling (single-s
   ]);
   expect(
     proseResidue(units, verdicts, new Set(), out)
-      .map((r) => r.term)
+      .map((r) => r.label)
       .sort(),
   ).toEqual(["moats-1", "moats-2"]);
 });

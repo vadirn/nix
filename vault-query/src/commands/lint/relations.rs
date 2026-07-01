@@ -114,7 +114,7 @@ pub fn parse_relations(content: &str) -> Vec<RelationEdge> {
         if let Some(edge) = trimmed
             .strip_prefix("- ")
             .or_else(|| trimmed.strip_prefix("* "))
-            .and_then(|item| parse_edge_line(item, line_no))
+            .and_then(|edge_text| parse_edge_line(edge_text, line_no))
         {
             edges.push(edge);
         }
@@ -124,8 +124,8 @@ pub fn parse_relations(content: &str) -> Vec<RelationEdge> {
 }
 
 /// Parse one edge list-item body (the text after the `- `).
-fn parse_edge_line(item: &str, line: usize) -> Option<RelationEdge> {
-    let (left, right) = item.split_once("::")?;
+fn parse_edge_line(edge_text: &str, line: usize) -> Option<RelationEdge> {
+    let (left, right) = edge_text.split_once("::")?;
     let left = left.trim();
     let right = right.trim();
     if left.is_empty() || right.is_empty() {

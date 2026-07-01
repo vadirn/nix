@@ -209,17 +209,17 @@ test("partition: extracts the H1 title and routes flat top-level units (fix #1)"
     "  retries: 3",
     "```",
   ].join("\n");
-  const { title, units } = partition(note);
+  const { title, sections } = partition(note);
   expect(title).toBe("# Homelab Guide");
-  expect(units.map((u) => [u.heading, u.route])).toEqual([
+  expect(sections.map((u) => [u.heading, u.route])).toEqual([
     ["", "re-author"], // intro prose under the title
     ["Rationale", "re-author"],
     ["Config", "preserve"],
   ]);
-  // the title line is lifted out — present in no unit
-  expect(units.every((u) => !u.text.includes("# Homelab Guide"))).toBe(true);
-  // the preserve unit holds its code fence verbatim
-  expect(units[2].text).toContain("port: 8080");
+  // the title line is lifted out — present in no section
+  expect(sections.every((u) => !u.text.includes("# Homelab Guide"))).toBe(true);
+  // the preserve section holds its code fence verbatim
+  expect(sections[2].text).toContain("port: 8080");
 });
 
 test("partition: a payload subsection folds into its prose parent, not torn out (fix #2)", () => {
@@ -239,13 +239,13 @@ test("partition: a payload subsection folds into its prose parent, not torn out 
     "",
     "A closing remark in plain prose that simply restates the idea once more for the reader.",
   ].join("\n");
-  const { units } = partition(note);
-  // the ### Pseudocode block stays inside the ## Algorithm unit — two top-level units, not three
-  expect(units.map((u) => u.heading)).toEqual(["Algorithm", "Notes"]);
-  expect(units[0].text).toContain("### Pseudocode");
-  expect(units[0].text).toContain("for s in sections");
+  const { sections } = partition(note);
+  // the ### Pseudocode block stays inside the ## Algorithm section — two top-level sections, not three
+  expect(sections.map((u) => u.heading)).toEqual(["Algorithm", "Notes"]);
+  expect(sections[0].text).toContain("### Pseudocode");
+  expect(sections[0].text).toContain("for s in sections");
   // the prose-dominated Algorithm subtree routes re-author as a whole
-  expect(units[0].route).toBe("re-author");
+  expect(sections[0].route).toBe("re-author");
 });
 
 test("compactSection: v1 holds a payload section byte-verbatim (fix #3)", () => {
@@ -372,7 +372,7 @@ test("assembleRoutedNote: a genuinely dropped link surfaces exactly once, not do
   // head.residue is [] (post-fix the routed head no longer runs the edge gate), so the
   // whole-note run is the sole source — one residue, no double-count.
   expect(r.residue.length).toBe(1);
-  expect(r.residue[0].term).toBe("[[bar]]");
+  expect(r.residue[0].label).toBe("[[bar]]");
   expect(r.footer).toContain("1 residue");
 });
 
@@ -439,7 +439,7 @@ test("edgePayloadResidue: a routed head contributes no edge/payload residue (the
   expect(edgePayloadResidue(src, out, true)).toEqual([]);
   // homogeneous build: the same drop surfaces (dropped link + dropped fence)
   const res = edgePayloadResidue(src, out, false);
-  expect(res.some((r) => r.term === "[[bar]]")).toBe(true);
+  expect(res.some((r) => r.label === "[[bar]]")).toBe(true);
   expect(res.length).toBeGreaterThanOrEqual(2);
 });
 
@@ -785,7 +785,7 @@ test("harvestVaultEdges: unions wikilinks and internal markdown links", () => {
 test("wikilinkResidue: alias pair [[foo]] + [[foo|alias]] uncovered → ONE dropped residue", () => {
   const r = wikilinkResidue("see [[foo]] and [[foo|alias]]", "");
   expect(r.length).toBe(1);
-  expect(r[0].term).toBe("[[foo]]");
+  expect(r[0].label).toBe("[[foo]]");
   expect(r[0].reason).toMatch(/^wikilink dropped/);
   expect(r[0].reason).not.toMatch(/collision/);
 });
@@ -796,14 +796,14 @@ test("wikilinkResidue: alias pair covered by [[foo]] → no residue", () => {
 
 test("wikilinkResidue: genuine [[foo bar]] + [[foo/bar]] → collision over both, even when covered", () => {
   const r = wikilinkResidue("[[foo bar]] and [[foo/bar]]", "[[foo-bar]]");
-  expect(r.map((x) => x.term)).toEqual(["[[foo bar]]", "[[foo/bar]]"]);
+  expect(r.map((x) => x.label)).toEqual(["[[foo bar]]", "[[foo/bar]]"]);
   for (const x of r) expect(x.reason).toMatch(/slug-collision/);
 });
 
 test("wikilinkResidue: case-only [[Foo]] + [[foo]] → collapses, one dropped, no collision", () => {
   const r = wikilinkResidue("[[Foo]] and [[foo]]", "");
   expect(r.length).toBe(1);
-  expect(r[0].term).toBe("[[Foo]]");
+  expect(r[0].label).toBe("[[Foo]]");
   expect(r[0].reason).toMatch(/^wikilink dropped/);
   expect(r[0].reason).not.toMatch(/collision/);
 });
@@ -811,18 +811,18 @@ test("wikilinkResidue: case-only [[Foo]] + [[foo]] → collapses, one dropped, n
 test("wikilinkResidue: three same-target spellings collapse to one dropped residue", () => {
   const r = wikilinkResidue("[[foo]] [[foo|x]] [[Foo]]", "");
   expect(r.length).toBe(1);
-  expect(r[0].term).toBe("[[foo]]");
+  expect(r[0].label).toBe("[[foo]]");
 });
 
 test("wikilinkResidue: distinct slugs [[a]] + [[b]] → two dropped, no collision", () => {
   const r = wikilinkResidue("[[a]] and [[b]]", "");
-  expect(r.map((x) => x.term)).toEqual(["[[a]]", "[[b]]"]);
+  expect(r.map((x) => x.label)).toEqual(["[[a]]", "[[b]]"]);
   for (const x of r) expect(x.reason).toMatch(/^wikilink dropped/);
 });
 
 test("wikilinkResidue: 2 distinct targets over 3 markups → collision pushes all three markups", () => {
   const r = wikilinkResidue("[[foo bar]] [[foo bar|x]] [[foo/bar]]", "");
-  expect(r.map((x) => x.term)).toEqual(["[[foo bar]]", "[[foo bar|x]]", "[[foo/bar]]"]);
+  expect(r.map((x) => x.label)).toEqual(["[[foo bar]]", "[[foo bar|x]]", "[[foo/bar]]"]);
   for (const x of r) expect(x.reason).toMatch(/slug-collision/);
 });
 
@@ -834,7 +834,7 @@ test("wikilinkResidue: cross-lane [[foo]] + [foo](foo.md) same note → not a co
 test("wikilinkResidue: a dropped internal link [x](foo.md) surfaces as residue", () => {
   const r = wikilinkResidue("[x](foo.md)", "");
   expect(r.length).toBe(1);
-  expect(r[0].term).toBe("[x](foo.md)");
+  expect(r[0].label).toBe("[x](foo.md)");
   expect(r[0].reason).toMatch(/dropped/);
 });
 
@@ -849,14 +849,14 @@ test("wikilinkResidue: a dropped asset embed ![[diagram.png]] yields no residue"
 test("wikilinkResidue: a dropped note transclusion ![[some-note]] still surfaces", () => {
   const r = wikilinkResidue("![[some-note]]", "");
   expect(r.length).toBe(1);
-  expect(r[0].term).toBe("![[some-note]]");
+  expect(r[0].label).toBe("![[some-note]]");
   expect(r[0].reason).toMatch(/dropped/);
 });
 
 test("wikilinkResidue: a dropped bare [[img.png]] still surfaces (no ! embed)", () => {
   const r = wikilinkResidue("[[img.png]]", "");
   expect(r.length).toBe(1);
-  expect(r[0].term).toBe("[[img.png]]");
+  expect(r[0].label).toBe("[[img.png]]");
 });
 
 test("wikilinkResidue: an asset embed covered nowhere is still not residue", () => {
@@ -877,7 +877,7 @@ test("wikilinkResidue: source [[note#heading]] covered by output [[note]] yields
 test("wikilinkResidue: a dropped [[dropped]] absent from output STILL surfaces (safety net intact)", () => {
   const r = wikilinkResidue("see [[dropped]]", "no links here");
   expect(r.length).toBe(1);
-  expect(r[0].term).toBe("[[dropped]]");
+  expect(r[0].label).toBe("[[dropped]]");
   expect(r[0].reason).toMatch(/^wikilink dropped/);
 });
 

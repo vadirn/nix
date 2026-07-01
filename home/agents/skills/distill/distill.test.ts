@@ -48,10 +48,10 @@ const goldenEdges = (): { note: string[]; card: string[] } => {
   return { note: lines.slice(0, 3), card: lines.slice(3) };
 };
 
-// multi-node note IR (Glossary term-slugs: target-distance, aim-point, holdover).
+// multi-node note combo (Glossary term-slugs: target-distance, aim-point, holdover).
 // Edges live on their FROM entry; emit is entry-grouped, so target-distance's two
 // edges render together (the golden interleaves them — round-trip is set-based).
-const noteIR = [
+const noteCombo = [
   {
     term: "target-distance",
     def: "",
@@ -69,8 +69,8 @@ const noteIR = [
   },
 ];
 
-// single-atom card IR (single atom: holdover) — from-label omitted.
-const cardIR = [
+// single-atom card combo (single atom: holdover) — from-label omitted.
+const cardCombo = [
   {
     term: "holdover",
     def: "",
@@ -87,12 +87,12 @@ const cardIR = [
 
 test("emitRelationsBlock: single-atom card omits from-label, byte-equals golden card block", () => {
   const { card } = goldenEdges();
-  expect(emitRelationsBlock(cardIR)).toBe(`## Relations\n\n${card.join("\n")}`);
+  expect(emitRelationsBlock(cardCombo)).toBe(`## Relations\n\n${card.join("\n")}`);
 });
 
 test("emitRelationsBlock: multi-node note prefixes from-label, round-trips the golden edge set", () => {
   const { note } = goldenEdges();
-  const emitted = emitRelationsBlock(noteIR)
+  const emitted = emitRelationsBlock(noteCombo)
     .split("\n")
     .filter((l) => l.startsWith("- "));
   // set equality: emit is entry-grouped, the golden hand-authored order interleaves;
@@ -101,7 +101,7 @@ test("emitRelationsBlock: multi-node note prefixes from-label, round-trips the g
 });
 
 test("emitRelationsBlock: multi-node note byte-stable entry-grouped form", () => {
-  expect(emitRelationsBlock(noteIR)).toBe(
+  expect(emitRelationsBlock(noteCombo)).toBe(
     "## Relations\n\n" +
       "- target-distance precondition-for:: aim-point (you must range before you can hold)\n" +
       "- target-distance contrast-to:: [[note-line-of-sight]]\n" +

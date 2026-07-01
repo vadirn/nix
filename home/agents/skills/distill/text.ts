@@ -1,4 +1,4 @@
-// text — segmentation, typography, slugging, relation/IR types, and the language
+// text — segmentation, typography, slugging, relation/Combo types, and the language
 // helpers. The leaf module of the distill pipeline: pure string/data utilities
 // with no I/O and no dependency on any other distill module.
 
@@ -33,7 +33,7 @@ export type GlossEntry = { term: string; def: string; relations: Relation[]; sou
 // step carries a source-stated reason ("do X because Y") when the source gives
 // one; the gate tolerates a dropped reason but forbids an invented one.
 export type WorkStep = { step: string; source: string[] };
-export type IR = {
+export type Combo = {
   description: string;
   thesis: string;
   glossary: GlossEntry[];
@@ -712,7 +712,7 @@ export function formatDryRun(path: string, rows: SectionRoute[]): string {
 // One routed build unit: a top-level section (its heading line + body) with the route
 // the build acts on — re-author (folds into the one compact head) or preserve (held by
 // compactSection). Carries heading/depth so reassembly can demote a structural-name clash.
-export type Unit = { heading: string; depth: number; text: string; route: Route };
+export type RoutedSection = { heading: string; depth: number; text: string; route: Route };
 
 // Partition a note for the per-section build: lift the leading H1 as the note title
 // (emitted first, independent of any section's route — fix #1), then route each remaining
@@ -721,7 +721,7 @@ export type Unit = { heading: string; depth: number; text: string; route: Route 
 export function partition(
   text: string,
   tau: number = DEFAULT_TAU,
-): { title: string; units: Unit[] } {
+): { title: string; sections: RoutedSection[] } {
   let secs = sections(text);
   let title = "";
   // A leading `# Title` is the note title, not a routable unit: lift its heading line out
@@ -745,8 +745,8 @@ export function partition(
       grouped.push(cur);
     }
   }
-  const units: Unit[] = grouped.map((u) => ({ ...u, route: routeSection(u.text, tau) }));
-  return { title, units };
+  const routed: RoutedSection[] = grouped.map((u) => ({ ...u, route: routeSection(u.text, tau) }));
+  return { title, sections: routed };
 }
 
 // Structurally compact a preserve (payload-dense) unit. v1 is identity passthrough: the
