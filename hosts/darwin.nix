@@ -51,8 +51,12 @@
       "syncthing"
 
       "dopplerhq/cli/doppler"
+      "glow"
+      "gum"
+      "hyperfine"
       "micro"
       "rustup"
+      "tealdeer"
       "zig"
       "arimxyer/tap/models"
       "oven-sh/bun/bun"
