@@ -98,6 +98,18 @@ export type StageRunResult =
   | { mode: "dry-run"; total: number; entries: DryRunEntry[] }
   | { mode: "staged"; total: number; staged: number; flagCounts: StagedFlagCounts };
 
+// distill writes its emitted note inside an XML envelope (`<result>…</result>`,
+// plus an optional `<residue>` sibling) for a parent process to consume; the note
+// itself — frontmatter and all — is the envelope's payload. Since that file IS the
+// D13 handshake artifact, accept it directly: unwrap when present, pass a bare
+// note through untouched. Without this, parseFrontmatter sees `<result>` at byte 0,
+// the tie reads as absent, and the thesis candidate silently vanishes (live-run
+// finding).
+export function unwrapResult(text: string): string {
+  const m = /^\s*<result>\n?([\s\S]*?)<\/result>/.exec(text);
+  return m ? m[1] : text;
+}
+
 // The whole staging flow, deps injected so cards/stage.test.ts drives every
 // degradation lane with fakes and asserts dry-run calls neither ask nor writeFile.
 export async function stageNote(
@@ -106,7 +118,7 @@ export async function stageNote(
   opts: StageOpts,
   deps: StageDeps,
 ): Promise<StageRunResult> {
-  const { front, body } = parseFrontmatter(noteText);
+  const { front, body } = parseFrontmatter(unwrapResult(noteText));
   const tie = parseDescription(front);
   const noteName = basename(notePath).replace(/\.md$/i, "");
   const title = extractTitle(body) || noteName;

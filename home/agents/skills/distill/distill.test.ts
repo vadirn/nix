@@ -418,3 +418,45 @@ test("parseConceptGraph: an unslugged, human-typed from-label over a multi-word 
     { term: "Holdover", def: "keep the same aim point", source: [], relations: [] },
   ]);
 });
+
+test("parse: a demoted ### Glossary / ### Relations in a preserve section is source material, not channel", () => {
+  // Routed-note shape (live-run finding): the emitted H2 channels are followed by a
+  // preserved source section whose own colliding headings the routed build demoted to
+  // H3. Any-depth section opening read that source table back as 20 card candidates;
+  // only the H2 channels may parse.
+  const md = [
+    "## Glossary",
+    "",
+    "| Term | Definition |",
+    "| ---- | ---------- |",
+    "| quality | how well a text fulfills its purpose |",
+    "",
+    "## Relations",
+    "",
+    "- quality subsumes:: satisficers",
+    "",
+    "### Glossary",
+    "",
+    "Rows whose Term is bolded are pinned.",
+    "",
+    "| Term | Definition |",
+    "| ---- | ---------- |",
+    "| **Purpose** | the intended work a text does |",
+    "| Accuracy | claims are true |",
+    "",
+    "### Relations",
+    "",
+    "- accuracy contrast-to:: precision",
+  ].join("\n");
+  expect(parseConceptGraph(md)).toEqual([
+    {
+      term: "quality",
+      def: "how well a text fulfills its purpose",
+      source: [],
+      relations: [{ rel: "subsumes", to: "satisficers", predicate: null }],
+    },
+  ]);
+  expect(parseRelationsBlock(md)).toEqual([
+    { from: "quality", rel: "subsumes", to: "satisficers", predicate: null },
+  ]);
+});

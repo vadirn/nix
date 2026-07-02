@@ -867,14 +867,21 @@ export type ParsedRelationEdge = {
   predicate: string | null;
 };
 
-// Toggle-based section extraction, mirroring vault-query's canonical heading rule
-// (relations.rs::parse_relations / markdown::heading_text): ANY heading (depth 1-6)
-// whose slugged text equals `name` opens the section; ANY other heading closes it;
-// `collecting` is recomputed on every heading rather than latched, so a same-named
-// heading appearing again later reopens the section (matches Rust, not a simplification
-// to "next ## heading"). Heading detection runs on a fence-masked copy so a fenced
-// `# comment` cannot toggle the section (the sections() fix, d06c6fa) while the
-// returned text keeps the RAW lines (fences intact) for the caller to re-scan.
+// Toggle-based section extraction: an H2 heading whose slugged text equals `name`
+// opens the section; ANY other heading (any depth) closes it; `collecting` is
+// recomputed on every heading rather than latched, so a same-named H2 appearing
+// again later reopens the section. Heading detection runs on a fence-masked copy so
+// a fenced `# comment` cannot toggle the section (the sections() fix, d06c6fa) while
+// the returned text keeps the RAW lines (fences intact) for the caller to re-scan.
+//
+// DIVERGENCE from vault-query's canonical rule (relations.rs::parse_relations /
+// markdown::heading_text), which opens on ANY depth 1-6: this is the REBUILD inverse
+// of assembleBody's emit grammar, whose channels are exactly `## Glossary` /
+// `## Relations` — and the routed build DEMOTES a preserved section's colliding
+// `## Glossary` to `### Glossary` (assembleRoutedNote's demote sweep) precisely to
+// mark it as source material, not channel. Any-depth opening reads those demoted
+// source tables back as channel rows (live-run finding: a preserve section's 20-row
+// property table enumerated as 20 card candidates), so depth is load-bearing here.
 function extractSection(md: string, name: string): string {
   const lines = md.split("\n");
   const masked = stripFences(md).split("\n");
@@ -883,7 +890,7 @@ function extractSection(md: string, name: string): string {
   for (let i = 0; i < lines.length; i++) {
     const h = ATX_HEADING.exec(masked[i]);
     if (h) {
-      collecting = slugSegment(h[2]) === name;
+      collecting = h[1] === "##" && slugSegment(h[2]) === name;
       continue;
     }
     if (collecting) out.push(lines[i]);

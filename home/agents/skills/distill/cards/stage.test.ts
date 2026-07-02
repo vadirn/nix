@@ -10,6 +10,7 @@ import {
   formatDryRunReport,
   formatSummary,
   stageNote,
+  unwrapResult,
   type AskFn,
   type FetchNeighboursFn,
   type WriteFn,
@@ -359,4 +360,21 @@ test("formatSummary: staged/total plus per-flag counts", () => {
     "staged 3/3 · judge-inconclusive: 1, draft-failed: 2",
   );
   expect(formatSummary(2, 2, {})).toBe("staged 2/2");
+});
+
+test("unwrapResult: a distill <result> envelope unwraps to its payload; a bare note passes through", () => {
+  const note = "---\ndescription: the tie\n---\n\n# T\n\nbody";
+  expect(unwrapResult(`<result>\n${note}</result>\n<residue><entry/></residue>`)).toBe(`${note}`);
+  expect(unwrapResult(note)).toBe(note);
+});
+
+test("stageNote: a wrapped note still yields the thesis candidate from the enveloped frontmatter", async () => {
+  const note = "---\ndescription: the tie\n---\n\n# T\n\n## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| alpha | first |";
+  const res = await stageNote(`<result>\n${note}</result>`, "/x/T.md", { vaultRoot: "/v", stagingDir: "/s", topK: 5, dryRun: true }, {
+    ask: async () => { throw new Error("dry-run must not ask"); },
+    fetchNeighbours: async () => ({ hits: [], ok: true }),
+    writeFile: async () => { throw new Error("dry-run must not write"); },
+  });
+  if (res.mode !== "dry-run") throw new Error("expected dry-run");
+  expect(res.entries.map((e) => e.arm).sort()).toEqual(["concept", "thesis"]);
 });
