@@ -73,7 +73,9 @@ test("renderStagingFile: every header field is present", () => {
   expect(content).toContain(`[${candidate.sourceNote}](<${candidate.sourceNote}>)`);
   expect(content).toContain("## On commit");
   expect(content).toContain("- [ ] Rewrite the draft in your own words");
-  expect(content).toContain("- [ ] Add the `reference:` backlink");
+  expect(content).toContain(
+    "- [ ] Add the `reference:` frontmatter field (a card requires it)",
+  );
   expect(content).toContain("- [ ] Move to `20 cards/`");
   expect(content).toContain("- [ ] If the draft names a split, split first");
   expect(content).toContain("---");
