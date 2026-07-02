@@ -214,7 +214,13 @@ test("main: the input's trailing newline survives; none is invented", () => {
   const run = (name: string, content: string): string => {
     const p = join(dir, name);
     write(p, content);
-    const proc = Bun.spawnSync(["bun", join(import.meta.dir, "polish.ts"), "--no-revise", "--no-spell", p]);
+    const proc = Bun.spawnSync([
+      "bun",
+      join(import.meta.dir, "polish.ts"),
+      "--no-revise",
+      "--no-spell",
+      p,
+    ]);
     const out = proc.stdout.toString();
     expect(proc.exitCode).toBe(0);
     return read(out.split("\n")[0], "utf8");
