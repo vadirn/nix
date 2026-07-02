@@ -9,6 +9,7 @@ import { relText, slugSegment } from "../text.ts";
 import {
   formatDryRunReport,
   formatSummary,
+  parseArgs,
   stageNote,
   unwrapResult,
   type AskFn,
@@ -73,9 +74,7 @@ test("renderStagingFile: every header field is present", () => {
   expect(content).toContain(`[${candidate.sourceNote}](<${candidate.sourceNote}>)`);
   expect(content).toContain("## On commit");
   expect(content).toContain("- [ ] Rewrite the draft in your own words");
-  expect(content).toContain(
-    "- [ ] Add the `reference:` frontmatter field (a card requires it)",
-  );
+  expect(content).toContain("- [ ] Add the `reference:` frontmatter field (a card requires it)");
   expect(content).toContain("- [ ] Move to `20 cards/`");
   expect(content).toContain("- [ ] If the draft names a split, split first");
   expect(content).toContain("---");
@@ -193,6 +192,41 @@ const STAGE_OPTS = {
   topK: 5,
   dryRun: false,
 };
+
+test("parseArgs: --source takes a path and a bare --source errors", () => {
+  const ok = parseArgs(["note.md", "--source", "00 inbox/Stub.md"]);
+  expect(ok.kind).toBe("ok");
+  if (ok.kind !== "ok") throw new Error("unreachable");
+  expect(ok.opts.source).toBe("00 inbox/Stub.md");
+  const err = parseArgs(["note.md", "--source"]);
+  expect(err.kind).toBe("error");
+});
+
+// Pins the live-run finding: distill hands card-stage a temp file that is dead by
+// commit time, so --source (the durable stub) must drive the Source line, the
+// staging filename prefix, AND the thesis-term fallback — not the temp path.
+test("stageNote: opts.source overrides Source line, filename prefix, and thesis fallback", async () => {
+  const { writeFile, calls } = recordingWriteFile();
+  const ask: AskFn = (async (model: string) => {
+    if (model === FIDELITY) return { band: "mint", rationale: "close" };
+    return { draft: "A draft." };
+  }) as AskFn;
+  const noTitle = NOTE_MD.replace("# My Note\n", ""); // force the thesis-term fallback
+  const result = await stageNote(
+    noTitle,
+    "/tmp/claude-501/tmp.abc123.md",
+    { ...STAGE_OPTS, source: "/vault/00 inbox/Real Stub.md" },
+    { ask, fetchNeighbours: okNoHits, writeFile },
+  );
+  expect(result.mode).toBe("staged");
+  for (const c of calls) {
+    expect(c.content).toContain("[/vault/00 inbox/Real Stub.md](</vault/00 inbox/Real Stub.md>)");
+    expect(c.content).not.toContain("tmp.abc123");
+    expect(c.path).toContain("real-stub--");
+  }
+  // the thesis candidate's term falls back to the source name, not the temp name
+  expect(calls.some((c) => c.content.includes("# Real Stub"))).toBe(true);
+});
 
 test("stageNote: a transient band-judge failure degrades to judge-inconclusive; drafting still runs", async () => {
   const { writeFile, calls } = recordingWriteFile();
@@ -371,12 +405,22 @@ test("unwrapResult: a distill <result> envelope unwraps to its payload; a bare n
 });
 
 test("stageNote: a wrapped note still yields the thesis candidate from the enveloped frontmatter", async () => {
-  const note = "---\ndescription: the tie\n---\n\n# T\n\n## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| alpha | first |";
-  const res = await stageNote(`<result>\n${note}</result>`, "/x/T.md", { vaultRoot: "/v", stagingDir: "/s", topK: 5, dryRun: true }, {
-    ask: async () => { throw new Error("dry-run must not ask"); },
-    fetchNeighbours: async () => ({ hits: [], ok: true }),
-    writeFile: async () => { throw new Error("dry-run must not write"); },
-  });
+  const note =
+    "---\ndescription: the tie\n---\n\n# T\n\n## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| alpha | first |";
+  const res = await stageNote(
+    `<result>\n${note}</result>`,
+    "/x/T.md",
+    { vaultRoot: "/v", stagingDir: "/s", topK: 5, dryRun: true },
+    {
+      ask: async () => {
+        throw new Error("dry-run must not ask");
+      },
+      fetchNeighbours: async () => ({ hits: [], ok: true }),
+      writeFile: async () => {
+        throw new Error("dry-run must not write");
+      },
+    },
+  );
   if (res.mode !== "dry-run") throw new Error("expected dry-run");
   expect(res.entries.map((e) => e.arm).sort()).toEqual(["concept", "thesis"]);
 });

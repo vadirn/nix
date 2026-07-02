@@ -70,6 +70,11 @@ export type StageOpts = {
   stagingDir: string;
   topK: number;
   dryRun: boolean;
+  // The durable source entry (e.g. the inbox reference stub) when the note path is
+  // ephemeral — distill hands over a temp file that is dead by commit time (live-run
+  // finding). Overrides the staged Source line, the staging filename prefix, and the
+  // thesis-term fallback.
+  source?: string;
 };
 
 // The extension a title falls back to when the note carries no H1 — the first `#`
@@ -120,9 +125,9 @@ export async function stageNote(
 ): Promise<StageRunResult> {
   const { front, body } = parseFrontmatter(unwrapResult(noteText));
   const tie = parseDescription(front);
-  const noteName = basename(notePath).replace(/\.md$/i, "");
+  const noteName = basename(opts.source ?? notePath).replace(/\.md$/i, "");
   const title = extractTitle(body) || noteName;
-  const sourceNote = resolve(notePath);
+  const sourceNote = resolve(opts.source ?? notePath);
   const glossary = parseConceptGraph(body);
   const candidates = enumerateCandidates(glossary, { tie, title, sourceNote });
   const lang = detectLang(body);
@@ -233,6 +238,9 @@ Options:
   --staging-dir <dir>   where staging files are written (default: <vault-root>/00 inbox/card-staging)
   --vault-root <dir>    the vault root recall searches (default: $HOME/Documents/vault)
   --top-k <n>           neighbours to recall per candidate (default: 5)
+  --source <file.md>    the durable source entry (e.g. the inbox reference stub) when
+                        <note.md> is a temp file; drives the Source line, the staging
+                        filename prefix, and the thesis-term fallback
   --dry-run             enumerate + fetch neighbours only; no LLM call, writes nothing
   -h, --help            show this help and exit
 
@@ -244,6 +252,7 @@ export type RawOpts = {
   stagingDir?: string;
   topK: number;
   dryRun: boolean;
+  source?: string;
   notePath: string;
 };
 
@@ -257,6 +266,7 @@ export function parseArgs(argv: string[]): ParseResult {
   let stagingDir: string | undefined;
   let topK = 5;
   let dryRun = false;
+  let source: string | undefined;
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -278,6 +288,12 @@ export function parseArgs(argv: string[]): ParseResult {
       if (v === undefined)
         return { kind: "error", message: "--vault-root expects a directory path" };
       vaultRoot = v;
+      continue;
+    }
+    if (a === "--source") {
+      const v = argv[++i];
+      if (v === undefined) return { kind: "error", message: "--source expects a file path" };
+      source = v;
       continue;
     }
     if (a === "--top-k") {
@@ -304,7 +320,10 @@ export function parseArgs(argv: string[]): ParseResult {
       message: `unexpected extra argument(s): ${positionals.slice(1).join(", ")}`,
     };
 
-  return { kind: "ok", opts: { vaultRoot, stagingDir, topK, dryRun, notePath: positionals[0] } };
+  return {
+    kind: "ok",
+    opts: { vaultRoot, stagingDir, topK, dryRun, source, notePath: positionals[0] },
+  };
 }
 
 // Default vault-root/staging-dir are relative to $HOME — injected here (rather
@@ -313,7 +332,14 @@ export function parseArgs(argv: string[]): ParseResult {
 export function resolveOpts(raw: RawOpts, homeDir: string): StageOpts & { notePath: string } {
   const vaultRoot = raw.vaultRoot ?? join(homeDir, "Documents", "vault");
   const stagingDir = raw.stagingDir ?? join(vaultRoot, "00 inbox", "card-staging");
-  return { vaultRoot, stagingDir, topK: raw.topK, dryRun: raw.dryRun, notePath: raw.notePath };
+  return {
+    vaultRoot,
+    stagingDir,
+    topK: raw.topK,
+    dryRun: raw.dryRun,
+    source: raw.source,
+    notePath: raw.notePath,
+  };
 }
 
 // Real write: mkdir -p the staging dir, then write the file. The only non-injected
