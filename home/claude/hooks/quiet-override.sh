@@ -57,9 +57,11 @@ try_quiet \
   '(-q|--quiet|\|)' \
   's/^(docker[[:space:]]+(build|pull))/\1 -q/'
 
+# Anchor to command position (start or after |, &, ;, subshell) so that
+# ffmpeg as an *argument* — e.g. `brew reinstall ffmpeg` — is left alone.
 try_quiet \
-  '(^|[[:space:]])ffmpeg[[:space:]]' \
+  '(^|[|&;(][[:space:]]*)ffmpeg[[:space:]]' \
   '-nostats' \
-  's/(^|[[:space:]])ffmpeg[[:space:]]/\1ffmpeg -nostats -loglevel error /'
+  's/(^|[|&;(][[:space:]]*)ffmpeg[[:space:]]/\1ffmpeg -nostats -loglevel error /'
 
 exit 0

@@ -78,7 +78,10 @@ assert_unchanged "docker run"          "docker run nginx"
 
 # ffmpeg
 assert_rewrite  "ffmpeg"              "ffmpeg -i in.mp4 out.mp3"  "ffmpeg -nostats -loglevel error -i in.mp4 out.mp3"
+assert_rewrite  "ffmpeg after pipe"   "cat list.txt | ffmpeg -i - out.mp4" "cat list.txt | ffmpeg -nostats -loglevel error -i - out.mp4"
 assert_unchanged "ffmpeg already"      "ffmpeg -nostats -i in.mp4 out.mp3"
+assert_unchanged "ffmpeg as argument"  "brew reinstall ffmpeg 2>&1 | tail -5"
+assert_unchanged "ffmpeg as argument2" "brew deps ffmpeg | rg sdl"
 
 # unrelated commands
 assert_unchanged "ls"                  "ls -la"
