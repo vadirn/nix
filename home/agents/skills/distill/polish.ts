@@ -1,21 +1,30 @@
 #!/usr/bin/env bun
-// polish-text — copy-edit a markdown note in place: four writing passes, a
-// spell/grammar pass, typography normalization, and a self-consistency name lint.
-// No compression, no glossary, no fidelity gate — the text's claims are untouched.
+// polish-text — copy-edit a markdown note: four writing passes, a spell/grammar
+// pass, typography normalization, and a self-consistency name lint. No
+// compression, no glossary, no fidelity gate — the text's claims are untouched.
+// The input file is never modified (unversioned vault, fallible LLM pass).
 // Shares the writing-core (writing/) with distill: revise() and spellPass() mask
 // reference spans before rewriting and normalize typography on the way out.
 //
-// Frontmatter passes through verbatim. Output is written raw to a fresh temp .md
-// file — no <result> XML envelope (that envelope exists to carry residue; polish
-// has no residue channel and its output IS the file content). stdout is two
-// lines: the file path, then a one-line summary footer.
+// Frontmatter passes through verbatim. Default output: the polished content on
+// stdout as exact bytes (frontmatter + body, the input's trailing-newline
+// behavior preserved) so `polish-text in.md > out.md` composes; the report
+// footer and all diagnostics go to stderr. No <result> XML envelope (that
+// envelope exists to carry residue; polish has no residue channel and its
+// output IS the file content). -o/--temp-file keeps the parent-loop contract
+// instead: output written to a fresh temp .md, stdout two lines (path, footer).
 //
 // Failsafe mirrors distill: a TruncationError or transient throw escaping the
-// passes writes the ORIGINAL input to the temp file with a "polish skipped"
-// footer instead of aborting; a non-transient throw (a code bug) propagates.
+// passes ships the ORIGINAL input with a "polish skipped" footer instead of
+// aborting; a non-transient throw (a code bug) propagates.
 //
-// Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
-// `doppler run --project claude-code --config std --`).
+// Exit codes: 0 polished (a requested --no-revise --no-spell run counts);
+// 2 arg misuse; 3 passthrough — the output is valid but unpolished (truncation
+// failsafe, transient-error failsafe, empty input).
+//
+// Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (the deployed
+// wrapper bin/polish-text fills it from the macOS Keychain, service
+// fireworks-api; `doppler run --project claude-code --config std --` also works).
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseFrontmatter } from "./frontmatter.ts";
@@ -29,26 +38,37 @@ import {
 import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { spellPass } from "./writing/spell.ts";
 
-export const USAGE = `polish-text — copy-edit a markdown note in place: four writing passes, a
-spell/grammar pass, typography normalization, and a self-consistency name lint.
+export const USAGE = `polish-text — copy-edit a markdown note: four writing passes, a spell/grammar
+pass, typography normalization, and a self-consistency name lint.
 No compression, no glossary, no fidelity gate — the text's claims are untouched.
 
 Usage:
-  polish-text [options] [input.md]    polish a note (reads stdin if no path)
+  polish-text [options] [input.md]    polish a note (stdin when no path or '-')
 
 Options:
   --lang <en|ru>    force the language rubric (default: auto-detect)
   --no-revise       skip the four writing passes
   --no-spell        skip the spell/grammar pass
+  -o, --temp-file   write to a fresh temp .md; stdout: the path, then the footer
   -h, --help        show this help and exit
 
-Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
+Output:
+  The input file is never modified. Polished content goes to stdout as exact
+  bytes (frontmatter + body, trailing newline preserved), so
+  \`polish-text in.md > out.md\` composes; the report footer and all
+  diagnostics go to stderr.
+  Exit: 0 polished · 2 usage error · 3 passthrough (failsafe or empty input —
+  the output is the unpolished input).
+
+Env: FIREWORKS_API_KEY (the deployed wrapper fills it from the macOS Keychain,
+service fireworks-api; or doppler run --project claude-code --config std --)
 `;
 
 export type PolishOpts = {
   lang: "en" | "ru" | "auto";
   noRevise: boolean;
   noSpell: boolean;
+  tempFile: boolean;
   path?: string;
 };
 
@@ -67,6 +87,7 @@ export function parseArgs(argv: string[]): ParseResult {
   let lang: PolishOpts["lang"] = "auto";
   let noRevise = false;
   let noSpell = false;
+  let tempFile = false;
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -82,6 +103,10 @@ export function parseArgs(argv: string[]): ParseResult {
     }
     if (a === "--no-spell") {
       noSpell = true;
+      continue;
+    }
+    if (a === "-o" || a === "--temp-file") {
+      tempFile = true;
       continue;
     }
     if (a === "--lang") {
@@ -103,7 +128,7 @@ export function parseArgs(argv: string[]): ParseResult {
       message: `unexpected extra argument(s): ${positionals.slice(1).join(", ")}`,
     };
 
-  return { kind: "ok", opts: { lang, noRevise, noSpell, path } };
+  return { kind: "ok", opts: { lang, noRevise, noSpell, tempFile, path } };
 }
 
 export function buildPolishFooter(m: {
@@ -150,18 +175,43 @@ export async function main(): Promise<void> {
     process.exit(2);
     return; // process.exit ends the run; the explicit return also narrows `parsed` to "ok" below
   }
-  const { lang, noRevise, noSpell, path: inputPath } = parsed.opts;
+  const { lang, noRevise, noSpell, tempFile, path: inputPath } = parsed.opts;
   // Both passes skipped: nothing calls out, so the key gate would only block a
   // typography-only no-op run for no reason.
   if (!(noRevise && noSpell) && !process.env.FIREWORKS_API_KEY) {
     console.error(
-      "FIREWORKS_API_KEY not set (run under: doppler run --project claude-code --config std --)",
+      "FIREWORKS_API_KEY not set — the deployed wrapper (bin/polish-text) fills it from the " +
+        "macOS Keychain (service fireworks-api), or prefix: " +
+        "doppler run --project claude-code --config std --",
     );
     process.exit(1);
   }
-  const input = readFileSync(inputPath ?? 0, "utf8");
-  if (!input.trim()) process.exit(0);
-  const path = tempMdPath();
+  const fromStdin = inputPath === undefined || inputPath === "-";
+  // A bare `polish-text` at a terminal would hang silently on fd 0; say so.
+  if (fromStdin && process.stdin.isTTY)
+    console.error("polish: reading stdin — pass a file or pipe input (ctrl-d ends input)");
+  const input = readFileSync(fromStdin ? 0 : inputPath, "utf8");
+  if (!input.trim()) {
+    console.error("polish skipped: empty input");
+    process.exit(3);
+  }
+  // Default: content → stdout (exact bytes), footer → stderr. --temp-file keeps
+  // the parent-loop contract: a fresh temp .md, stdout two lines (path, footer).
+  const emit = (content: string, footer: string): void => {
+    if (tempFile) {
+      const path = tempMdPath();
+      writeFileSync(path, content);
+      process.stdout.write(`${path}\n${footer}\n`);
+    } else {
+      process.stdout.write(content);
+      process.stderr.write(`${footer}\n`);
+    }
+  };
+  // A full run is tens of seconds of LLM calls; tick per pass, TTY-gated so
+  // scripts and parent loops never see it.
+  const progress = process.stderr.isTTY
+    ? (line: string): void => void process.stderr.write(`${line}\n`)
+    : undefined;
   try {
     const { front, body } = parseFrontmatter(input);
     const resolvedLang = lang === "auto" ? detectLang(body) : lang;
@@ -169,8 +219,12 @@ export async function main(): Promise<void> {
     let blocks = segment(body);
     let reverted: string[] = [];
     let spellFailed = false;
-    if (!noRevise) blocks = await revise(blocks, resolvedLang === "ru" ? PASS_RU : PASS_EN);
+    if (!noRevise)
+      blocks = await revise(blocks, resolvedLang === "ru" ? PASS_RU : PASS_EN, [], (i, n) =>
+        progress?.(`revise ${i}/${n}`),
+      );
     if (!noSpell) {
+      progress?.("spell…");
       const r = await spellPass(blocks, resolvedLang);
       blocks = r.blocks;
       reverted = r.reverted;
@@ -183,7 +237,6 @@ export async function main(): Promise<void> {
     // file round-trips POSIX-complete when the input was
     const nl = input.endsWith("\n") ? "\n" : "";
     const result = (front ? front + "\n" + outBody : outBody) + nl;
-    writeFileSync(path, result);
     const footer = buildPolishFooter({
       beforeWords,
       afterWords,
@@ -193,20 +246,19 @@ export async function main(): Promise<void> {
       spellFailed,
       nameLint,
     });
-    process.stdout.write(`${path}\n${footer}\n`);
+    emit(result, footer);
   } catch (e) {
     // Failsafe (mirrors distill's pipeline.ts main): a truncation or a transient
     // flake escaping the passes ships the ORIGINAL input rather than aborting; a
-    // non-transient throw (a code bug) propagates.
+    // non-transient throw (a code bug) propagates. Exit 3: valid but unpolished.
     if (e instanceof TruncationError) {
-      writeFileSync(path, input);
-      process.stdout.write(`${path}\n— polish skipped: output TRUNCATED — ${e.message}\n`);
-      process.exit(0);
+      emit(input, `— polish skipped: output TRUNCATED — ${e.message}`);
+      process.exit(3);
     }
     if (!isTransient(e)) throw e;
-    writeFileSync(path, input);
-    process.stdout.write(`${path}\n— polish skipped (error): ${String(e).slice(0, 160)}\n`);
-    process.exit(0);
+    // newlines folded so the --temp-file footer stays one line
+    emit(input, `— polish skipped (error): ${String(e).replace(/\n/g, " ").slice(0, 160)}`);
+    process.exit(3);
   }
 }
 

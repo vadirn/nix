@@ -85,6 +85,9 @@ export async function revise(
   blocks: Block[],
   passes: Pass[],
   literals: string[] = [],
+  // progress seam for CLIs: fires as pass `index` of `total` starts (1-based);
+  // the passes themselves are unchanged
+  onPass?: (index: number, total: number) => void,
 ): Promise<Block[]> {
   // Mask reference spans ([[wikilinks]], ![[embeds]], inline code) to opaque ⟦N⟧
   // tokens before the passes so the rewriting model cannot reword or drop them;
@@ -102,7 +105,8 @@ export async function revise(
   // paragraphs → AI patterns). A failed pass (parse/network) keeps the current
   // blocks so prior improvements survive; the loop continues.
   let cur = blocks.map((b) => ({ id: b.id, text: mask(b.text) }));
-  for (const pass of passes) {
+  for (const [i, pass] of passes.entries()) {
+    onPass?.(i + 1, passes.length);
     try {
       const { blocks: rev } = await askJson<{ blocks: { id: string; text: string }[] }>(
         EXTRACT,

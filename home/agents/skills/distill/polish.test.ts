@@ -22,9 +22,19 @@ test("USAGE: names the flags and the env requirement", () => {
   expect(USAGE).toContain("--lang <en|ru>");
   expect(USAGE).toContain("--no-revise");
   expect(USAGE).toContain("--no-spell");
+  expect(USAGE).toContain("-o, --temp-file");
   expect(USAGE).toContain("-h, --help");
   expect(USAGE).toContain("Env: FIREWORKS_API_KEY");
   expect(USAGE).toContain("No compression, no glossary, no fidelity gate");
+});
+
+test("USAGE: states the output contract — never in place, content→stdout, footer→stderr, exit codes", () => {
+  expect(USAGE).toContain("The input file is never modified");
+  expect(USAGE).not.toContain("in place");
+  expect(USAGE).toContain("diagnostics go to stderr");
+  expect(USAGE).toContain("0 polished");
+  expect(USAGE).toContain("2 usage error");
+  expect(USAGE).toContain("3 passthrough");
 });
 
 // ---- parseArgs ----
@@ -36,7 +46,18 @@ test("parseArgs: --help and -h short-circuit to the help result, even alongside 
 
 test("parseArgs: bare invocation reads stdin with auto lang and no flags", () => {
   const r = ok([]);
-  expect(r.opts).toEqual({ lang: "auto", noRevise: false, noSpell: false, path: undefined });
+  expect(r.opts).toEqual({
+    lang: "auto",
+    noRevise: false,
+    noSpell: false,
+    tempFile: false,
+    path: undefined,
+  });
+});
+
+test("parseArgs: -o / --temp-file select the temp-file output mode", () => {
+  expect(ok(["-o", "in.md"]).opts.tempFile).toBe(true);
+  expect(ok(["--temp-file"]).opts.tempFile).toBe(true);
 });
 
 test("parseArgs: a positional is taken as the input path; flags compose", () => {
@@ -203,28 +224,58 @@ test("pipeline order: revise's output is what spellPass receives, not the origin
   expect(calls[4]).toContain("You are a proofreader");
 });
 
-// ---- newline round-trip: block-join used to drop the input's final newline; the
-// typography-only path (--no-revise --no-spell) exercises main() end-to-end with
-// no API key and no LLM call. ----
-test("main: the input's trailing newline survives; none is invented", () => {
-  const { mkdtempSync, readFileSync: read, writeFileSync: write } = require("node:fs");
-  const { tmpdir } = require("node:os");
-  const { join } = require("node:path");
-  const dir = mkdtempSync(join(tmpdir(), "polish-nl-"));
-  const run = (name: string, content: string): string => {
+// ---- main() end-to-end over the typography-only path (--no-revise --no-spell:
+// no API key, no LLM call): the output contract (content→stdout exact bytes,
+// footer→stderr), the temp-file mode, stdin via '-', and the empty-input exit. ----
+const { mkdtempSync, readFileSync: read, writeFileSync: write } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { join } = require("node:path");
+const POLISH = join(import.meta.dir, "polish.ts");
+const dir = mkdtempSync(join(tmpdir(), "polish-main-"));
+
+test("main: content is stdout's exact bytes (trailing newline preserved); the footer is on stderr", () => {
+  const run = (name: string, content: string) => {
     const p = join(dir, name);
     write(p, content);
-    const proc = Bun.spawnSync([
-      "bun",
-      join(import.meta.dir, "polish.ts"),
-      "--no-revise",
-      "--no-spell",
-      p,
-    ]);
-    const out = proc.stdout.toString();
+    const proc = Bun.spawnSync(["bun", POLISH, "--no-revise", "--no-spell", p]);
     expect(proc.exitCode).toBe(0);
-    return read(out.split("\n")[0], "utf8");
+    expect(proc.stderr.toString()).toStartWith("— polished ·");
+    return proc.stdout.toString();
   };
-  expect(run("with-nl.md", "One paragraph of plain text here.\n")).toEndWith("here.\n");
-  expect(run("without-nl.md", "One paragraph of plain text here.")).toEndWith("here.");
+  expect(run("with-nl.md", "One paragraph of plain text here.\n")).toBe(
+    "One paragraph of plain text here.\n",
+  );
+  expect(run("without-nl.md", "One paragraph of plain text here.")).toBe(
+    "One paragraph of plain text here.",
+  );
+});
+
+test("main: -o writes a temp .md and keeps the two-line stdout (path, footer)", () => {
+  const p = join(dir, "temp-mode.md");
+  write(p, "One paragraph of plain text here.\n");
+  const proc = Bun.spawnSync(["bun", POLISH, "-o", "--no-revise", "--no-spell", p]);
+  expect(proc.exitCode).toBe(0);
+  const lines = proc.stdout.toString().split("\n");
+  expect(lines.length).toBe(3); // path, footer, trailing newline's empty tail
+  expect(lines[0]).toEndWith(".md");
+  expect(lines[1]).toStartWith("— polished ·");
+  expect(lines[2]).toBe("");
+  expect(read(lines[0], "utf8")).toBe("One paragraph of plain text here.\n");
+});
+
+test("main: '-' reads stdin instead of a file named '-'", () => {
+  const proc = Bun.spawnSync(["bun", POLISH, "--no-revise", "--no-spell", "-"], {
+    stdin: Buffer.from("Piped through the dash convention.\n"),
+  });
+  expect(proc.exitCode).toBe(0);
+  expect(proc.stdout.toString()).toBe("Piped through the dash convention.\n");
+});
+
+test("main: empty input exits 3 with a stderr note and no stdout", () => {
+  const proc = Bun.spawnSync(["bun", POLISH, "--no-revise", "--no-spell"], {
+    stdin: Buffer.from("  \n"),
+  });
+  expect(proc.exitCode).toBe(3);
+  expect(proc.stdout.toString()).toBe("");
+  expect(proc.stderr.toString()).toContain("polish skipped: empty input");
 });
