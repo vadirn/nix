@@ -69,6 +69,47 @@ test("nameLintAgainstSource: exclusion zones suppress a corrupted spelling", () 
   expect(nameLintAgainstSource(masked, source)).toEqual({ corrupted: [], invented: [] });
 });
 
+// live miss: revise fronted "Firecurl" to sentence-initial position and the
+// initial-only dampener swallowed the flag. The corrupted lane now skips an
+// initial-only group only when the word also occurs uncapitalized.
+test("corrupted lane: sentence-initial-only corruption is still flagged (both modes)", () => {
+  const output = "Firecurl skills let any agent crawl the web. The pipeline is fast.";
+  const source = "Firecrawl is a scraping API. Teams adopt Firecrawl.";
+  expect(nameLintAgainstSource(output, source)).toEqual({
+    corrupted: [{ found: "Firecurl", wanted: "Firecrawl" }],
+    invented: [],
+  });
+  const doc = "Firecurl skills let agents crawl. Firecrawl is fast. Teams adopt Firecrawl daily.";
+  expect(nameLintSelfConsistency(doc)).toEqual({
+    corrupted: [{ found: "Firecurl", wanted: "Firecrawl" }],
+    invented: [],
+  });
+});
+
+test("corrupted lane: initial-only word with an uncapitalized sighting stays damped", () => {
+  const doc =
+    "Vault stores notes. The Vault syncs data. Fault tolerance matters, and a fault is survivable.";
+  expect(nameLintSelfConsistency(doc)).toEqual({ corrupted: [], invented: [] });
+  const source = "The Vault syncs data across devices. Vault storage is local.";
+  const output = "Fault tolerance matters. The design survives a fault without losing data.";
+  expect(nameLintAgainstSource(output, source)).toEqual({ corrupted: [], invented: [] });
+});
+
+test("corrupted lane: structurally capitalized ordinary-word pair stays damped", () => {
+  // Definition (table header) vs Destination (checklist label): distance 3,
+  // no uncapitalized sighting of either — but no mid-sentence attestation of
+  // the majority either, so neither is evidenced as a proper noun
+  const doc =
+    "- Destination: discard after cards\n- [ ] Destination confirmed\n\n| Term | Definition |\n| --- | --- |";
+  expect(nameLintSelfConsistency(doc)).toEqual({ corrupted: [], invented: [] });
+});
+
+test("invented lane: sentence-initial-only tokens stay excluded", () => {
+  const output = "Zanzibar ships the release. The team reviews it.";
+  const source = "A completely unrelated write-up about deployment cadence and reviews.";
+  expect(nameLintAgainstSource(output, source)).toEqual({ corrupted: [], invented: [] });
+});
+
 test("total: never throws on empty input", () => {
   expect(nameLintAgainstSource("", "")).toEqual({ corrupted: [], invented: [] });
   expect(nameLintSelfConsistency("")).toEqual({ corrupted: [], invented: [] });

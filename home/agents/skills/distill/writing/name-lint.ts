@@ -84,13 +84,18 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
   const srcToks = tokens(source);
   const srcSet = new Set(srcToks.flatMap((t) => foldSet(t.word))); // ALL source words, folded
   const srcCapSurface = new Map<string, string>(); // lc key -> first-seen surface form
+  const srcNonInitial = new Set<string>(); // lc keys attested mid-sentence in source
   for (const t of srcToks) {
-    if (isCandidateShape(t.word) && !srcCapSurface.has(t.word.toLowerCase()))
-      srcCapSurface.set(t.word.toLowerCase(), t.word);
+    if (!isCandidateShape(t.word)) continue;
+    const lc = t.word.toLowerCase();
+    if (!srcCapSurface.has(lc)) srcCapSurface.set(lc, t.word);
+    if (!t.initial) srcNonInitial.add(lc);
   }
   const srcCaps = [...srcCapSurface.keys()];
   const outToks = tokens(output);
   const groups = new Map<string, { word: string; nonInitial: number }>();
+  const outLower = new Set<string>(); // words seen uncapitalized in the output
+  for (const t of outToks) if (!isCapWord(t.word)) outLower.add(t.word.toLowerCase());
   const covered = (w: string) => foldSet(w).some((a) => srcSet.has(a));
   const inKnownRun = new Map<string, boolean>(); // adjacency dampener
   for (let i = 0; i < outToks.length; i++) {
@@ -120,8 +125,14 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
   const invented: string[] = [];
   for (const [k, g] of groups) {
     // first-occurrence order
-    if (g.nonInitial === 0) continue; // sentence-initial-only: skip (ordinary capitalization)
     if (covered(g.word)) continue; // present in source (case-insensitive, folded)
+    // Sentence-initial-only groups are usually ordinary capitalization ("So",
+    // "Note", table headers), but a revise pass can front a corrupted name too.
+    // The corrupted lane flags an initial-only group when the word never occurs
+    // uncapitalized AND its near-neighbor is attested mid-sentence (a real
+    // proper noun, not another structurally capitalized ordinary word); the
+    // advisory invented lane keeps the strict skip — it has no such evidence.
+    const initialOnly = g.nonInitial === 0;
     let best: string | null = null,
       bestD = Infinity;
     for (const s of srcCaps) {
@@ -132,15 +143,18 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
       }
     }
     const cap = best ? Math.min(3, Math.floor(Math.max(k.length, best.length) / 3)) : 0;
-    if (best && bestD >= 1 && bestD <= cap)
+    if (best && bestD >= 1 && bestD <= cap) {
+      if (initialOnly && (outLower.has(k) || !srcNonInitial.has(best))) continue;
       corrupted.push({ found: g.word, wanted: srcCapSurface.get(best) ?? best });
-    else if (!inKnownRun.get(k)) invented.push(g.word);
+    } else if (!initialOnly && !inKnownRun.get(k)) invented.push(g.word);
   }
   return { corrupted, invented };
 }
 
 export function nameLintSelfConsistency(output: string): NameLintResult {
   const toks = tokens(output);
+  const lower = new Set<string>(); // words seen uncapitalized in the doc
+  for (const t of toks) if (!isCapWord(t.word)) lower.add(t.word.toLowerCase());
   const groups = new Map<string, { word: string; count: number; nonInitial: number }>();
   for (const t of toks) {
     if (!isCandidateShape(t.word)) continue;
@@ -163,7 +177,15 @@ export function nameLintSelfConsistency(output: string): NameLintResult {
       if (d < 1 || d > cap) continue;
       const [minor, major] = ga.count < gb.count ? [ga, gb] : [gb, ga];
       if (minor.count === major.count) continue; // tie: no direction, skip
-      if (minor.nonInitial === 0) continue;
+      // same relaxation as against-source: an initial-only minority is flagged
+      // only when it never occurs uncapitalized and the majority spelling is
+      // attested mid-sentence (kills Definition/Destination-style table-header
+      // pairs while keeping a fronted corrupted name)
+      if (
+        minor.nonInitial === 0 &&
+        (lower.has(minor.word.toLowerCase()) || major.nonInitial === 0)
+      )
+        continue;
       corrupted.push({ found: minor.word, wanted: major.word }); // minority spelling is the suspect
     }
   return { corrupted, invented: [] }; // self mode has no invented lane
