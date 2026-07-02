@@ -1,6 +1,8 @@
 // text — segmentation, typography, slugging, relation/Combo types, and the language
 // helpers. The leaf module of the distill pipeline: pure string/data utilities
-// with no I/O and no dependency on any other distill module.
+// with no I/O; its only dependency is writing/typography.ts, the writing-core's
+// own leaf (normalizeTypography moved there, re-exported here).
+import { normalizeTypography } from "./writing/typography.ts";
 
 // Relations registry — TS-native copy of the open relation vocabulary (structural
 // channel only, D32). Mirror of vault-query/src/commands/lint/rel-registry.json, the
@@ -792,21 +794,10 @@ export const hasOperational = (text: string): boolean =>
 // opaque ⟦N⟧ tokens for the duration of revise, then restored (see revise()).
 export const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
 
-// Deterministic typographic normalization. The revise model substitutes typeset
-// glyphs (curly quotes, a non-breaking hyphen) regardless of prompt instruction;
-// this maps the finite set back. Em dashes (—) are kept as clause breaks (the
-// source notes use them) but normalized to spaced form ( — ), since the model
-// emits them tight (model—assuming) about half the time. It touches only
-// substitutes — it leaves Cyrillic and source guillemets alone, safe for RU.
-export function normalizeTypography(s: string): string {
-  return s
-    .replace(/[‘’‚‛]/g, "'")
-    .replace(/[“”„‟]/g, '"')
-    .replace(/[‐‑‒–]/g, "-") // hyphen/nbhyphen/figure/en (ranges) → bare - (em dash — is kept)
-    .replace(/[ \t]*[—―][ \t]*/g, " — ") // em dash / bar → spaced em dash; never eats a newline
-    .replace(/…/g, "...")
-    .replace(/ /g, " "); // nbsp → space
-}
+// Deterministic typographic normalization — owned by writing/typography.ts (the
+// core), re-exported here so text.ts's existing importers (pure.test.ts:35 and
+// every internal user below) keep working unchanged.
+export { normalizeTypography } from "./writing/typography.ts";
 
 // Slug a single label — TS-native mirror of vault-query slug.rs::segment /
 // normalize_segment (the unified slugifier). Strip wikilink syntax (keeping an

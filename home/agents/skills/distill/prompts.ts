@@ -1,7 +1,8 @@
 // prompts — the LLM stages: every prompt builder and the async stage function that
 // calls it. Each stage maps a typed input to a typed output through fw's askJson;
-// the pipeline (pipeline.ts) sequences them. Prompt-shaping config knobs and the
-// writing-pass rubric live here too, beside the stages that read them.
+// the pipeline (pipeline.ts) sequences them. The writing-core stages (the four
+// writing passes and the prose judge/fix) moved to writing/ and are re-exported
+// below for callers that still import them from here.
 import {
   type Block,
   type Grade,
@@ -16,13 +17,13 @@ import {
   hasWikilink,
   isContentfulStep,
   langRule,
-  MASK_RE,
   normalizeRelation,
-  normalizeTypography,
   relText,
   render,
 } from "./text.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
+export { type Pass, PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
+export { proseJudge, proseFix } from "./writing/prose-qa.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
 // carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while
@@ -39,50 +40,6 @@ const DEF_RELATIONS: "keep" | "drop" =
   process.env.DISTILL_DEF_RELATIONS === "keep" ? "keep" : "drop";
 const DEF_GATE: "block" | "definition" =
   process.env.DISTILL_DEF_GATE === "block" ? "block" : "definition";
-
-// ---- writing passes (the revise-stage rubric — inline single source) ----
-// Four focused rule sets applied in sequence (words → sentences → paragraphs →
-// AI patterns); each call refines the prior pass's output. These condensed rules
-// are the whole rubric; there is no separate reference file to keep in sync.
-export type Pass = { name: string; rules: string };
-
-export const PASS_EN: Pass[] = [
-  {
-    name: "words",
-    rules: `WORDS: turn nominalizations (-tion/-ment/-ance) into verbs; prefer the shortest word that means the same; cut filler ("it is important to note", "due to the fact that", "in order to"); use affirmative not negative forms ("is absent" not "is not present"); replace dead metaphors with literal statements; use everyday English over formal/Latin words ("use" not "utilize", "end" not "terminate").`,
-  },
-  {
-    name: "sentences",
-    rules: `SENTENCES: make the actor the subject; use active voice; get to the main verb within ~7 words; open with familiar information, close with the new; chain known→new across sentences; keep one topic per sentence; replace verbless fragments ("Fast, but fragile") with a subject+verb; split sentences carrying more than one idea, reconnect with a transition if the ideas depend on each other.`,
-  },
-  {
-    name: "paragraphs",
-    rules: `PARAGRAPHS: lead with the main point; keep one topic per paragraph; where headings are used, make them informative (not "Introduction"/"Discussion"), but do not add headings to prose that has none; explain prerequisites before the things that depend on them; keep paragraphs short enough to scan.`,
-  },
-  {
-    name: "ai",
-    rules: `AI PATTERNS: cut filler openings ("Here's how", "In this section", "Let's dive in"); replace promotional adjectives (innovative/robust/scalable/seamless) with facts; cut significance inflation ("pivotal moment", "underscores its significance"); restore plain copulas (is/has, not "serves as"/"boasts"/"represents"); cut canned constructions ("not just X but Y", rule-of-three padding); thin out AI vocabulary (delve, underscore, leverage, robust, intricate, tapestry, navigate); vary sentence length.`,
-  },
-];
-
-export const PASS_RU: Pass[] = [
-  {
-    name: "words",
-    rules: `СЛОВА: отглагольные существительные (-ание/-ение/-ция) → глаголы; выбирай короткое слово; убирай мусор («следует отметить», «ввиду того что», «в принципе», «таким образом»); утверждение вместо отрицания; мёртвые метафоры → конкретику; живой язык вместо канцелярита («использовать» вместо «осуществлять», «делать» вместо «производить»).`,
-  },
-  {
-    name: "sentences",
-    rules: `ПРЕДЛОЖЕНИЯ: деятель в подлежащем; активный залог; сказуемое ближе к началу (в предложениях длиннее 20 слов проверь); известное → начало, новое → конец; цепочка known-new между предложениями; единая тема в абзаце; безглагольные обрывки («Быстро, но хрупко») → подлежащее + сказуемое; одно предложение — одна мысль, разбей и склей если нужно.`,
-  },
-  {
-    name: "paragraphs",
-    rules: `АБЗАЦЫ: главное первым; один абзац — одна мысль; где есть заголовки — делай их конкретными (не «Введение»/«Заключение»), не добавляй заголовки в текст без них; объясняй предпосылки раньше того, что от них зависит; структурируй для сканирования (подзаголовки, списки, короткие абзацы).`,
-  },
-  {
-    name: "ai",
-    rules: `AI-ПАТТЕРНЫ: убирай маркеры («важно отметить», «в современном мире», «следует учитывать»); рекламные штампы → факты; раздувание значимости → конкретный факт; «является»/«представляет собой» → тире или прямой глагол; шаблонные конструкции («не просто X, а Y», тройка-перечисление) → скажи прямо; прорежай AI-лексику (подчёркивает, отражает, играет ключевую роль, ландшафт, палитра, многогранный); чередуй длину предложений; упрощай пунктуацию (больше трёх запятых — разбей на два).`,
-  },
-];
 
 // ---- stage 1: extract the combo (description, thesis, glossary) ----
 // Render the deterministic link inventory as a MUST-COVER checklist appended to the
@@ -509,169 +466,6 @@ export async function connectiveProse(
     rethrowIfBug(e, "connectiveProse");
     return combo.thesis; // a transient render flake degrades to the bare thesis sentence
   }
-}
-
-// ---- prose QA: an independent judge for the connective prose ----
-// The prose is the un-gated readable head; it carries its own contract from
-// connectiveProsePrompt (thesis-first opening, no document self-reference, no
-// closing meta-summary, no AI vocabulary) that the generic revise pass enforces
-// unreliably. A DIFFERENT model than the writer (the FIDELITY model judges the
-// EXTRACT model's prose, mirroring the fidelity gate) flags those defects; one
-// fix pass repairs them. This sits BELOW the fidelity line — prose defects never
-// block output, they are repaired best-effort.
-function proseJudgePrompt(thesis: string, prose: string): string {
-  return `You are an independent prose editor. You did NOT write this text. Judge ONLY these four defects and ignore everything else:
-1. CLOSING META-SUMMARY: a final paragraph that summarizes, ties together, or comments on the preceding text ("Thus, the interplay of these concepts...", "In summary...", "Together, these ideas...") rather than stating a fact about the subject.
-2. DOCUMENT SELF-REFERENCE: any mention of "the note", "this note", "the text", "the thesis", "this concept", "the author", or any description of what the text itself does.
-3. AI VOCABULARY: interplay, tapestry, underscore, delve, leverage, robust, intricate, navigate, realm, landscape, multifaceted, seamless, pivotal, and similar.
-4. OPENING: the FIRST sentence must assert the thesis as a plain claim about the subject; flag it if instead it announces the topic ("This covers...", "Here we explore...").
-Return ONLY JSON {"pass":true|false,"issues":["specific located finding", ...]}. pass=true ONLY when there are zero defects. Each issue names the exact offending span and which defect it is.
-
-THESIS: ${thesis}
-
-PROSE:
-${prose}`;
-}
-
-export async function proseJudge(
-  thesis: string,
-  prose: string,
-): Promise<{ pass: boolean; issues: string[] }> {
-  try {
-    const r = await askJson<{ pass?: boolean; issues?: string[] }>(
-      FIDELITY,
-      proseJudgePrompt(thesis, prose),
-      FIDELITY_TOKENS,
-    );
-    return {
-      pass: r.pass !== false,
-      issues: (r.issues ?? []).filter((s) => typeof s === "string"),
-    };
-  } catch (e) {
-    rethrowIfBug(e, "proseJudge");
-    return { pass: true, issues: [] }; // a transient judge flake never blocks the prose
-  }
-}
-
-// The fix pass is NOT revise(): revise is forbidden from dropping content, but a
-// closing meta-summary must be DELETED, not reworded. This pass permits deletion
-// while freezing every claim, bold term span, and verbatim token.
-function proseFixPrompt(prose: string, issues: string[], lang: "en" | "ru"): string {
-  return `You are a copy editor. Rewrite the PROSE below to fix EXACTLY these issues and change nothing else. You MAY delete whole sentences or paragraphs that are pure meta-summary or AI filler — for a closing summary paragraph, deletion is preferred over rewording. Preserve every factual claim about the subject, keep the thesis-first opening, and reproduce all **bold** term spans, \`inline code\`, file paths, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
-
-ISSUES:
-${issues.map((s) => `- ${s}`).join("\n")}
-
-PROSE:
-${prose}`;
-}
-
-export async function proseFix(
-  prose: string,
-  issues: string[],
-  lang: "en" | "ru",
-): Promise<string> {
-  try {
-    const r = await askJson<{ prose?: string }>(
-      EXTRACT,
-      proseFixPrompt(prose, issues, lang),
-      EXTRACT_TOKENS,
-    );
-    return (r.prose ?? "").trim() || prose; // an empty fix keeps the prior prose
-  } catch (e) {
-    rethrowIfBug(e, "proseFix");
-    return prose; // a transient fix flake keeps the prior prose
-  }
-}
-
-// ---- writing passes (stage 4): reuse cut's four sequential rewrites ----
-function revisePrompt(blocks: Block[], pass: Pass): string {
-  return `You are a copy editor. This is the ${pass.name.toUpperCase()} pass. Revise each block below applying only the rules below. Preserve its claims, keep all its content, and match the original's structure exactly (same headings, bullets, and formatting). Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged. Preserve emphasis (**bold**, _italic_). Write straight quotes; keep em dashes (—) as written. Return ONLY JSON {"blocks":[{"id":"B1","text":"revised text"}, ...]} — one entry per block, ids matching.
-
-${pass.rules}
-
-TEXT:
-${render(blocks)}`;
-}
-
-export async function revise(
-  blocks: Block[],
-  passes: Pass[],
-  literals: string[] = [],
-): Promise<Block[]> {
-  // Mask reference spans ([[wikilinks]], ![[embeds]], inline code) to opaque ⟦N⟧
-  // tokens before the passes so the rewriting model cannot reword or drop them;
-  // restored verbatim at the end. General emphasis is left unmasked (it spans words
-  // that legitimately get reworded) and relies on the prompt instruction instead.
-  // `literals` are exact spans to freeze too — the bolded glossary terms (**Term**),
-  // so the term text stays verbatim and keeps matching its glossary key.
-  const masks = new Map<string, string>();
-  const litToken = new Map<string, string>();
-  let n = 0;
-  // freeze the literal spans first (longest first, so a term that contains another
-  // is masked whole before its substring), then the reference-span regex.
-  const orderedLiterals = [...new Set(literals.filter(Boolean))].sort(
-    (a, b) => b.length - a.length,
-  );
-  const maskLiterals = (text: string): string => {
-    let out = text;
-    for (const lit of orderedLiterals) {
-      if (!out.includes(lit)) continue;
-      let key = litToken.get(lit);
-      if (!key) {
-        key = `⟦${n++}⟧`;
-        litToken.set(lit, key);
-        masks.set(key, lit);
-      }
-      out = out.split(lit).join(key);
-    }
-    return out;
-  };
-  const mask = (text: string): string =>
-    maskLiterals(text).replace(MASK_RE, (m) => {
-      const key = `⟦${n++}⟧`;
-      masks.set(key, m);
-      return key;
-    });
-  const unmask = (text: string): string =>
-    masks.size === 0 ? text : text.replace(/⟦\d+⟧/g, (m) => masks.get(m) ?? m);
-
-  // render() shows each block to the model as "[id] text"; the model occasionally
-  // echoes the marker back inside its returned text, and sequential passes would
-  // then compound it. Strip only the ids minted for THIS call, so legitimate
-  // bracketed spans in the content survive.
-  const idMarkers = blocks.map((b) => `[${b.id}]`);
-  const stripIdMarkers = (text: string): string => {
-    let out = text;
-    for (const m of idMarkers) {
-      if (!out.includes(m)) continue;
-      out = out.split(`${m} `).join("").split(m).join("");
-    }
-    return out.trim();
-  };
-
-  // sequential passes: each refines the prior pass's output (words → sentences →
-  // paragraphs → AI patterns). A failed pass (parse/network) keeps the current
-  // blocks so prior improvements survive; the loop continues.
-  let cur = blocks.map((b) => ({ id: b.id, text: mask(b.text) }));
-  for (const pass of passes) {
-    try {
-      const { blocks: rev } = await askJson<{ blocks: { id: string; text: string }[] }>(
-        EXTRACT,
-        revisePrompt(cur, pass),
-        EXTRACT_TOKENS,
-      );
-      const byId = new Map(rev.map((r) => [r.id, r.text]));
-      cur = cur.map((b) => {
-        const t = byId.get(b.id);
-        return { id: b.id, text: t != null ? stripIdMarkers(t) : b.text };
-      });
-    } catch (e) {
-      rethrowIfBug(e, "revise");
-      // a transient pass flake keeps the current blocks (see above); continue
-    }
-  }
-  return cur.map((b) => ({ id: b.id, text: unmask(normalizeTypography(b.text)) }));
 }
 
 // ---- stage 5: fidelity gate (round-trip entailment, different model) ----

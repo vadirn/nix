@@ -59,9 +59,10 @@
 //         distill-text render glossary.md            # separate, on-demand: prose note FROM a distilled glossary
 //
 // Module layout (split along the pipeline's phase seams; this file is the entrypoint
-// and the stable public surface): text · frontmatter · fw · prompts · assemble ·
-// render-mode · pipeline. The four exports below are the public API the test suite
-// (and any importer) depends on; everything else is an internal module detail.
+// and the stable public surface): text · frontmatter · fw · prompts · writing/
+// (writing-core: typography, mask, passes, prose-qa) · assemble · render-mode ·
+// pipeline. The four exports below are the public API the test suite (and any
+// importer) depends on; everything else is an internal module detail.
 export { REL_REGISTRY, slugSegment } from "./text.ts";
 export { ensureEpistemicStatus } from "./frontmatter.ts";
 export { emitRelationsBlock } from "./assemble.ts";

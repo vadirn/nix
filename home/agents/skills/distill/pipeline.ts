@@ -30,7 +30,6 @@ import {
   harvestTableRows,
   harvestVaultEdges,
   normalizeForContainment,
-  normalizeTypography,
   partition,
   reassembleNote,
   routeNote,
@@ -54,15 +53,10 @@ import {
   extractCombo,
   fidelityGate,
   gradeBlocks,
-  PASS_EN,
-  PASS_RU,
   type ProseVerdict,
-  proseFix,
   proseGate,
-  proseJudge,
   renderEntryPrompt,
   repairWorkflowGroup,
-  revise,
   sourceTextFor,
   synthEntries,
   synthWorkflow,
@@ -70,6 +64,9 @@ import {
   verbatimDirectives,
   workflowGate,
 } from "./prompts.ts";
+import { normalizeTypography } from "./writing/typography.ts";
+import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
+import { proseFix, proseJudge } from "./writing/prose-qa.ts";
 import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
 import { runRender } from "./render-mode.ts";
 
