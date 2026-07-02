@@ -7,6 +7,7 @@ import { expect, test } from "bun:test";
 import {
   formatNameLint,
   levenshtein,
+  levenshteinBounded,
   nameLintAgainstSource,
   nameLintSelfConsistency,
 } from "./name-lint.ts";
@@ -46,6 +47,46 @@ test("nameLintSelfConsistency: catches the Firecurl/Firecrawl split inside one d
 test("nameLintSelfConsistency: DHH staged doc is clean", () => {
   const staged = read("name-lint-dhh-staged.md");
   expect(nameLintSelfConsistency(staged)).toEqual({ corrupted: [], invented: [] });
+});
+
+test("levenshteinBounded: agrees with levenshtein within the bound, saturates beyond", () => {
+  expect(levenshteinBounded("firecurl", "firecrawl", 3)).toBe(3);
+  expect(levenshteinBounded("firecurl", "firecrawl", 2)).toBe(3); // saturated: bound+1
+  expect(levenshteinBounded("same", "same", 0)).toBe(0);
+  expect(levenshteinBounded("", "abc", 5)).toBe(3);
+  expect(levenshteinBounded("abc", "", 2)).toBe(3); // length delta short-circuit
+  // trim + row-min early exit keep a 20k-char near-identical pair instant
+  const big = "lorem ipsum dolor sit amet ".repeat(800);
+  const edited = `${big.slice(0, 10000)}X${big.slice(10001)}`;
+  expect(levenshteinBounded(big, edited, Math.ceil(0.15 * big.length))).toBe(1);
+  const rewritten = "something else entirely here ".repeat(750);
+  const bound = Math.ceil(0.15 * big.length);
+  expect(levenshteinBounded(big, rewritten, bound)).toBe(bound + 1);
+});
+
+test("unicode: NFC/NFD spellings of one name do not false-flag (either mode)", () => {
+  const nfd = "Beyoncé"; // e + combining acute
+  const nfc = "Beyoncé"; // precomposed é
+  const sourceNfd = `Fans adore ${nfd} worldwide. The tour features ${nfd} nightly.`;
+  const outputNfc = `${nfc} released an album. Critics praise ${nfc}.`;
+  expect(nameLintAgainstSource(outputNfc, sourceNfd)).toEqual({ corrupted: [], invented: [] });
+  expect(nameLintSelfConsistency(`${outputNfc} Fans queue for ${nfd}.`)).toEqual({
+    corrupted: [],
+    invented: [],
+  });
+});
+
+test("unicode: a Cyrillic stress mark neither truncates the token nor flags", () => {
+  // и́/а́ have no precomposed forms, so NFC alone cannot fold them — \p{M} keeps
+  // the token whole and foldKey drops the mark
+  const stressed = "Обсидиа́н";
+  const doc = `Мы установили ${stressed} вчера. Сегодня Обсидиан хранит заметки.`;
+  expect(nameLintSelfConsistency(doc)).toEqual({ corrupted: [], invented: [] });
+  const source = "Обсидиан хранит заметки. Мы любим Обсидиан.";
+  expect(nameLintAgainstSource(`Мы пишем в программе ${stressed} каждый день.`, source)).toEqual({
+    corrupted: [],
+    invented: [],
+  });
 });
 
 test("nameLintAgainstSource: Cyrillic corruption is caught", () => {

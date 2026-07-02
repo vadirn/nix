@@ -202,3 +202,23 @@ test("pipeline order: revise's output is what spellPass receives, not the origin
   expect(calls.slice(0, 4).every((p) => p.includes("You are a copy editor"))).toBe(true);
   expect(calls[4]).toContain("You are a proofreader");
 });
+
+// ---- newline round-trip: block-join used to drop the input's final newline; the
+// typography-only path (--no-revise --no-spell) exercises main() end-to-end with
+// no API key and no LLM call. ----
+test("main: the input's trailing newline survives; none is invented", () => {
+  const { mkdtempSync, readFileSync: read, writeFileSync: write } = require("node:fs");
+  const { tmpdir } = require("node:os");
+  const { join } = require("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "polish-nl-"));
+  const run = (name: string, content: string): string => {
+    const p = join(dir, name);
+    write(p, content);
+    const proc = Bun.spawnSync(["bun", join(import.meta.dir, "polish.ts"), "--no-revise", "--no-spell", p]);
+    const out = proc.stdout.toString();
+    expect(proc.exitCode).toBe(0);
+    return read(out.split("\n")[0], "utf8");
+  };
+  expect(run("with-nl.md", "One paragraph of plain text here.\n")).toEndWith("here.\n");
+  expect(run("without-nl.md", "One paragraph of plain text here.")).toEndWith("here.");
+});

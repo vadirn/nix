@@ -21,6 +21,42 @@ export function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
+// Bounded variant: exact distance when <= bound, else bound+1. Trims the common
+// prefix/suffix, short-circuits on the length delta (a Levenshtein lower bound),
+// and abandons the DP once a whole row exceeds the bound — so spell verify's hot
+// case (a huge block returned nearly unchanged) costs O(len), and a wholesale
+// rewrite exits after ~bound rows instead of filling the full len² table.
+// Residual: a large block with edits scattered at both ends still pays the DP on
+// the untrimmed middle.
+export function levenshteinBounded(a: string, b: string, bound: number): number {
+  if (a === b) return 0;
+  let s = 0,
+    ae = a.length,
+    be = b.length;
+  while (s < ae && s < be && a[s] === b[s]) s++;
+  while (ae > s && be > s && a[ae - 1] === b[be - 1]) {
+    ae--;
+    be--;
+  }
+  const x = a.slice(s, ae),
+    y = b.slice(s, be);
+  if (Math.abs(x.length - y.length) > bound) return bound + 1;
+  const m = x.length,
+    n = y.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    let rowMin = i;
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+      if (cur[j] < rowMin) rowMin = cur[j];
+    }
+    if (rowMin > bound) return bound + 1;
+    prev = cur;
+  }
+  return Math.min(prev[n], bound + 1);
+}
+
 function stripZones(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ") // fenced code
@@ -35,8 +71,11 @@ type Tok = { word: string; initial: boolean; idx: number; line: number };
 
 function tokens(text: string): Tok[] {
   const out: Tok[] = [];
-  const re = /[\p{L}\p{N}][\p{L}\p{N}'’]*/gu; // Unicode-aware; Cyrillic included
-  const lines = stripZones(text).split("\n");
+  // Unicode-aware; Cyrillic included. \p{M} keeps combining marks (Cyrillic
+  // stress, decomposed accents) inside the token instead of splitting it; NFC
+  // canonicalizes the surface form so `found`/`wanted` render composed.
+  const re = /[\p{L}\p{N}][\p{L}\p{N}\p{M}'’]*/gu;
+  const lines = stripZones(text.normalize("NFC")).split("\n");
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
     let m: RegExpExecArray | null;
@@ -57,10 +96,19 @@ function tokens(text: string): Tok[] {
   return out;
 }
 
-// membership folds: lowercase, strip possessive 's / trailing apostrophe, plural s/es
+// mark-insensitive lowercase key: NFC/NFD spellings of one name compare equal,
+// and accent/stress variants fold into one group (an accent is never the
+// letter-mangling corruption this lint chases)
+const foldKey = (w: string): string =>
+  w
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase();
+
+// membership folds: mark-insensitive lowercase, strip possessive 's / trailing
+// apostrophe, plural s/es
 const foldSet = (w: string): string[] => {
-  const l = w
-    .toLowerCase()
+  const l = foldKey(w)
     .replace(/[’']s$/, "")
     .replace(/[’']$/, "");
   const alts = [l];
@@ -74,10 +122,10 @@ const foldSet = (w: string): string[] => {
 // (digit-bearing tokens excluded); >=4 letters ignoring apostrophes
 const isCandidateShape = (w: string): boolean =>
   /^\p{Lu}/u.test(w) &&
-  !/^[\p{Lu}\p{N}'’]+$/u.test(w) &&
-  !/^[\p{Lu}\p{N}]+[’']?s$/u.test(w) &&
-  /^[\p{L}'’]+$/u.test(w) &&
-  w.replace(/[’']/g, "").length >= 4;
+  !/^[\p{Lu}\p{N}\p{M}'’]+$/u.test(w) &&
+  !/^[\p{Lu}\p{N}\p{M}]+[’']?s$/u.test(w) &&
+  /^[\p{L}\p{M}'’]+$/u.test(w) &&
+  w.replace(/[’']|\p{M}/gu, "").length >= 4;
 const isCapWord = (w: string): boolean => /^\p{Lu}/u.test(w);
 
 export function nameLintAgainstSource(output: string, source: string): NameLintResult {
@@ -87,7 +135,7 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
   const srcNonInitial = new Set<string>(); // lc keys attested mid-sentence in source
   for (const t of srcToks) {
     if (!isCandidateShape(t.word)) continue;
-    const lc = t.word.toLowerCase();
+    const lc = foldKey(t.word);
     if (!srcCapSurface.has(lc)) srcCapSurface.set(lc, t.word);
     if (!t.initial) srcNonInitial.add(lc);
   }
@@ -95,13 +143,13 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
   const outToks = tokens(output);
   const groups = new Map<string, { word: string; nonInitial: number }>();
   const outLower = new Set<string>(); // words seen uncapitalized in the output
-  for (const t of outToks) if (!isCapWord(t.word)) outLower.add(t.word.toLowerCase());
+  for (const t of outToks) if (!isCapWord(t.word)) outLower.add(foldKey(t.word));
   const covered = (w: string) => foldSet(w).some((a) => srcSet.has(a));
   const inKnownRun = new Map<string, boolean>(); // adjacency dampener
   for (let i = 0; i < outToks.length; i++) {
     const t = outToks[i];
     if (!isCandidateShape(t.word)) continue;
-    const k = t.word.toLowerCase();
+    const k = foldKey(t.word);
     const g = groups.get(k) ?? { word: t.word, nonInitial: 0 };
     if (!t.initial) g.nonInitial++;
     groups.set(k, g);
@@ -154,11 +202,11 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
 export function nameLintSelfConsistency(output: string): NameLintResult {
   const toks = tokens(output);
   const lower = new Set<string>(); // words seen uncapitalized in the doc
-  for (const t of toks) if (!isCapWord(t.word)) lower.add(t.word.toLowerCase());
+  for (const t of toks) if (!isCapWord(t.word)) lower.add(foldKey(t.word));
   const groups = new Map<string, { word: string; count: number; nonInitial: number }>();
   for (const t of toks) {
     if (!isCandidateShape(t.word)) continue;
-    const k = t.word.toLowerCase();
+    const k = foldKey(t.word);
     const g = groups.get(k) ?? { word: t.word, count: 0, nonInitial: 0 };
     g.count++;
     if (!t.initial) g.nonInitial++;
@@ -181,10 +229,7 @@ export function nameLintSelfConsistency(output: string): NameLintResult {
       // only when it never occurs uncapitalized and the majority spelling is
       // attested mid-sentence (kills Definition/Destination-style table-header
       // pairs while keeping a fronted corrupted name)
-      if (
-        minor.nonInitial === 0 &&
-        (lower.has(minor.word.toLowerCase()) || major.nonInitial === 0)
-      )
+      if (minor.nonInitial === 0 && (lower.has(foldKey(minor.word)) || major.nonInitial === 0))
         continue;
       corrupted.push({ found: minor.word, wanted: major.word }); // minority spelling is the suspect
     }

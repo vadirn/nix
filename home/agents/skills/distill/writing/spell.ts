@@ -6,7 +6,7 @@
 import { type Block, render } from "../text.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "../fw.ts";
 import { MASK_TOKEN_RE, createMasker } from "./mask.ts";
-import { levenshtein } from "./name-lint.ts";
+import { levenshtein, levenshteinBounded } from "./name-lint.ts";
 import { makeIdMarkerStripper } from "./passes.ts";
 import { normalizeTypography } from "./typography.ts";
 
@@ -40,7 +40,10 @@ export function verifySpellBlock(input: string, output: string): { ok: boolean; 
     return { ok: false, reason: "mask tokens changed" };
   if (input.split("\n").length !== output.split("\n").length)
     return { ok: false, reason: "line structure changed" };
-  if (levenshtein(input, output) > Math.max(4, Math.ceil(0.15 * input.length)))
+  // bounded variant: the full DP on a 20k-char block costs seconds; the verify
+  // only needs "within bound or not", never the exact distance beyond it
+  const bound = Math.max(4, Math.ceil(0.15 * input.length));
+  if (levenshteinBounded(input, output, bound) > bound)
     return { ok: false, reason: "diff exceeds bound" };
   const inWords = new Set(wordsOf(input));
   for (const w of new Set(wordsOf(output))) {

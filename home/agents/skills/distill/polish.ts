@@ -179,7 +179,10 @@ export async function main(): Promise<void> {
     const outBody = blocks.map((b) => b.text).join("\n\n");
     const nameLint = nameLintSelfConsistency(outBody);
     const afterWords = wordCount(outBody);
-    const result = front ? front + "\n" + outBody : outBody;
+    // block-join drops the source's final newline; restore it so a polished
+    // file round-trips POSIX-complete when the input was
+    const nl = input.endsWith("\n") ? "\n" : "";
+    const result = (front ? front + "\n" + outBody : outBody) + nl;
     writeFileSync(path, result);
     const footer = buildPolishFooter({
       beforeWords,
