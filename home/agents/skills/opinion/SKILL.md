@@ -30,6 +30,7 @@ opinion stays uncolored by the surrounding chat.
 | `performance-engineer` | latency, bundle size, rendering, memory, measurement           | "slow", janky, large, "optimize", render path, perf budgets                      |
 | `product-manager`      | user value, scope, prioritization, why-now                     | features, roadmap, MVP, cut-or-keep, "is this worth building"                    |
 | `product-designer`     | usability, interaction, hierarchy, accessibility               | UI, flows, forms, on-screen copy, "is this usable", a11y                         |
+| `cli-toolsmith`        | invocation ergonomics, composability, stdout/stderr contracts  | CLI flags, --help, piping, exit codes, TUIs, defaults, "is this tool ergonomic"  |
 | `marketer`             | positioning, messaging, audience, distribution                 | landing copy, naming, launch, "how do I pitch this", growth                      |
 | `founder`              | viability, ROI, opportunity cost, business risk                | "should I do this at all", pricing, market, time-vs-payoff                       |
 | `editor`               | clarity, concision, structure, AI tells                        | prose, READMEs, posts, "does this read well", tighten                            |
