@@ -8,6 +8,7 @@
 //   D22  — decideCard/buildStagingRecord treat the band verdict as an ANNOTATION.
 //          enumerateCandidates never filters on it — every candidate is staged.
 import { REL_REGISTRY, type GlossEntry, type Relation } from "../text.ts";
+import type { NameLintResult } from "../writing/name-lint.ts";
 import type {
   Band,
   BandJudgeReply,
@@ -85,6 +86,7 @@ export function buildStagingRecord(args: {
   flags: CandidateFlag[];
   lang: "en" | "ru";
   draft: string;
+  nameLint?: NameLintResult;
 }): StagingRecord {
   const inconclusive = args.flags.includes("judge-inconclusive");
   if (args.verdict === null && !inconclusive) {
@@ -100,5 +102,6 @@ export function buildStagingRecord(args: {
     flags: args.flags,
     lang: args.lang,
     draft: args.draft,
+    nameLint: args.nameLint,
   };
 }

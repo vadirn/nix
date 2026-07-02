@@ -10,6 +10,7 @@
 //          exist to be rewritten, not accepted.
 
 import type { GlossEntry, Relation } from "../text.ts";
+import type { NameLintResult } from "../writing/name-lint.ts";
 
 // Which lexicographer form the draft takes. v1 ships two arms; inference is
 // excluded by the vault typology (its surface is prose, governed by validity —
@@ -74,6 +75,7 @@ export type StagingRecord = {
   flags: CandidateFlag[];
   lang: "en" | "ru";
   draft: string; // delta-first LLM draft body; "" when drafting failed
+  nameLint?: NameLintResult; // deterministic corrupted/invented-name lint of draft vs. body
 };
 
 // Raw judge replies (the prompts.ts <-> stage wiring contract; validated by the

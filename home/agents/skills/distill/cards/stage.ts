@@ -105,7 +105,13 @@ export function renderStagingFile(
   ];
   lines.push(...renderVerdictSection(record));
   lines.push(...renderRelationsSection(record));
-  lines.push(`- **Flags:** ${flags.length ? flags.join(", ") : "(none)"}`);
+  const lint = record.nameLint ?? { corrupted: [], invented: [] };
+  const flagParts = [
+    ...flags,
+    ...lint.corrupted.map((p) => `corrupted-name: ${p.found} ← ${p.wanted}`),
+    ...(lint.invented.length ? [`invented-names: ${lint.invented.join(", ")}`] : []),
+  ];
+  lines.push(`- **Flags:** ${flagParts.length ? flagParts.join(", ") : "(none)"}`);
   lines.push(`- **Source:** [${candidate.sourceNote}](<${candidate.sourceNote}>)`);
   lines.push(
     "",

@@ -583,6 +583,38 @@ test("assembleRoutedNote: head.out bytes pass through unchanged (prose/Glossary/
   expect(r.out).toContain(headOut);
 });
 
+test("assembleRoutedNote: footer carries the name-lint fragment when the reassembled out corrupts a source name", () => {
+  const source = "## Idea\n\nFirecrawl is the tool.\n\n## Data\n\n`x`";
+  const r = assembleRoutedNote({
+    source,
+    title: "",
+    reauthorText: "## Idea\n\nFirecrawl is the tool.",
+    // "Firecurl" corrupted from source's "Firecrawl" — non-initial (mid-sentence).
+    head: { out: "We used Firecurl for this.", residue: [], status: "compressed" },
+    sections: [
+      { route: "re-author", text: "## Idea\n\nFirecrawl is the tool." },
+      { route: "preserve", text: "## Data\n\n`x`" },
+    ],
+  });
+  expect(r.footer).toContain(" · name-lint: 1 probable corrupted name (Firecurl ← Firecrawl)");
+});
+
+test("assembleRoutedNote: a clean routed note's footer is unchanged (no name-lint fragment)", () => {
+  const source = "## Idea\n\nFirecrawl is the tool.\n\n## Data\n\n`x`";
+  const r = assembleRoutedNote({
+    source,
+    title: "",
+    reauthorText: "## Idea\n\nFirecrawl is the tool.",
+    head: { out: "We used Firecrawl for this.", residue: [], status: "compressed" },
+    sections: [
+      { route: "re-author", text: "## Idea\n\nFirecrawl is the tool." },
+      { route: "preserve", text: "## Data\n\n`x`" },
+    ],
+  });
+  expect(r.footer).not.toContain("name-lint");
+  expect(r.footer).toBe("— per-section route: 1 re-author / 1 preserve · 9→8 words");
+});
+
 test("edgePayloadResidue: a routed head contributes no edge/payload residue (the scope guard)", () => {
   const src = "see [[bar]]\n\n```js\nconst x = 1;\n```";
   const out = "tight prose, link and code gone";

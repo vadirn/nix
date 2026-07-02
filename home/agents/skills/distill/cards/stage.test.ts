@@ -10,6 +10,7 @@ import {
   formatDryRunReport,
   formatSummary,
   parseArgs,
+  resolveOpts,
   stageNote,
   unwrapResult,
   type AskFn,
@@ -128,6 +129,22 @@ test("renderStagingFile: empty draft renders the draft-failed notice", () => {
   );
 });
 
+test("renderStagingFile: a corrupted-name lint finding merges into the Flags line after existing flags", () => {
+  const { content } = renderStagingFile(
+    record({
+      flags: ["draft-failed"],
+      nameLint: { corrupted: [{ found: "Firecurl", wanted: "Firecrawl" }], invented: [] },
+    }),
+    "My Note",
+  );
+  expect(content).toContain("- **Flags:** draft-failed, corrupted-name: Firecurl ← Firecrawl");
+});
+
+test("renderStagingFile: a record without nameLint renders exactly as before (pins the '(none)' snapshot)", () => {
+  const { content } = renderStagingFile(record(), "My Note");
+  expect(content).toContain("- **Flags:** (none)");
+});
+
 // Pins Finding 1: two candidates whose (noteName, term) pairs slug to the SAME base
 // filename — a thesis candidate's term equals the note's H1 title, exactly the
 // collision the finding names — must still land on two distinct filenames when threaded
@@ -228,6 +245,43 @@ test("stageNote: opts.source overrides Source line, filename prefix, and thesis 
   expect(calls.some((c) => c.content.includes("# Real Stub"))).toBe(true);
 });
 
+// Regression for the dropped-field bug: main() built the StageOpts object passed to
+// stageNote by hand-listing fields, and `source` was missing from that literal, so
+// `--source` had no effect from the CLI even though parseArgs/resolveOpts threaded it
+// correctly. This mirrors main()'s exact resolveOpts -> stageNote wiring (not stageNote
+// called directly with a hand-built opts object) so it reddens if the field is dropped
+// again.
+test("resolveOpts + stageNote round-trip: --source flows through main()'s wiring to the Source line", async () => {
+  const parsed = parseArgs(["/tmp/claude-501/tmp.abc123.md", "--source", "/vault/00 inbox/Real Stub.md"]);
+  expect(parsed.kind).toBe("ok");
+  if (parsed.kind !== "ok") throw new Error("unreachable");
+  const opts = resolveOpts(parsed.opts, "/home/vadim");
+  expect(opts.source).toBe("/vault/00 inbox/Real Stub.md");
+
+  const { writeFile, calls } = recordingWriteFile();
+  const ask: AskFn = (async (model: string) => {
+    if (model === FIDELITY) return { band: "mint", rationale: "close" };
+    return { draft: "A draft." };
+  }) as AskFn;
+  const result = await stageNote(
+    NOTE_MD,
+    opts.notePath,
+    {
+      vaultRoot: opts.vaultRoot,
+      stagingDir: opts.stagingDir,
+      topK: opts.topK,
+      dryRun: opts.dryRun,
+      source: opts.source,
+    },
+    { ask, fetchNeighbours: okNoHits, writeFile },
+  );
+  expect(result.mode).toBe("staged");
+  expect(calls.length).toBeGreaterThan(0);
+  for (const c of calls) {
+    expect(c.content).toContain("[/vault/00 inbox/Real Stub.md](</vault/00 inbox/Real Stub.md>)");
+  }
+});
+
 test("stageNote: a transient band-judge failure degrades to judge-inconclusive; drafting still runs", async () => {
   const { writeFile, calls } = recordingWriteFile();
   const ask: AskFn = (async (model: string) => {
@@ -267,6 +321,28 @@ test("stageNote: a truncation on the draft call degrades to draft-failed; the ba
   expect(result.flagCounts["draft-failed"]).toBe(3);
   expect(result.flagCounts["judge-inconclusive"]).toBeUndefined();
   for (const c of calls) expect(c.content).toContain("draft-failed");
+});
+
+test("stageNote: a draft that corrupts a source name carries the pair through to the staged Flags line and the corruptedNames summary count", async () => {
+  const { writeFile, calls } = recordingWriteFile();
+  const noteWithFirecrawl = NOTE_MD.replace(
+    "# My Note\n",
+    "# My Note\n\nWe rely on Firecrawl for scraping.\n",
+  );
+  const ask: AskFn = (async (model: string) => {
+    if (model === FIDELITY) return { band: "mint", rationale: "close" };
+    // "Firecurl" (mid-sentence, non-initial) corrupts the body's "Firecrawl".
+    return { draft: "We used Firecurl again for this one." };
+  }) as AskFn;
+  const result = await stageNote(noteWithFirecrawl, "/abs/note.md", STAGE_OPTS, {
+    ask,
+    fetchNeighbours: okNoHits,
+    writeFile,
+  });
+  expect(result.mode).toBe("staged");
+  if (result.mode !== "staged") throw new Error("unreachable");
+  expect(result.corruptedNames).toBeGreaterThan(0);
+  expect(calls.some((c) => c.content.includes("corrupted-name: Firecurl ← Firecrawl"))).toBe(true);
 });
 
 test("stageNote: a non-transient error from the band judge propagates instead of degrading", async () => {
@@ -395,6 +471,12 @@ test("formatSummary: staged/total plus per-flag counts", () => {
   expect(formatSummary(3, 3, { "judge-inconclusive": 1, "draft-failed": 2 })).toBe(
     "staged 3/3 · judge-inconclusive: 1, draft-failed: 2",
   );
+  expect(formatSummary(2, 2, {})).toBe("staged 2/2");
+});
+
+test("formatSummary: a nonzero corrupted-names count appends its own tag; zero (or omitted) stays silent", () => {
+  expect(formatSummary(2, 2, {}, 1)).toBe("staged 2/2 · corrupted-names: 1");
+  expect(formatSummary(2, 2, {}, 0)).toBe("staged 2/2");
   expect(formatSummary(2, 2, {})).toBe("staged 2/2");
 });
 

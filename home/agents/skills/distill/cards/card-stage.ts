@@ -36,6 +36,7 @@ import {
   rethrowIfBug,
 } from "../fw.ts";
 import { detectLang, parseConceptGraph, sections } from "../text.ts";
+import { nameLintAgainstSource } from "../writing/name-lint.ts";
 import { annotateEdges, buildStagingRecord, decideCard, enumerateCandidates } from "./cards.ts";
 import { fetchNeighbours } from "./neighbours.ts";
 import { cardDraftPrompt, noveltyBandPrompt } from "./prompts.ts";
@@ -101,7 +102,13 @@ export type StagedFlagCounts = Partial<Record<CandidateFlag, number>>;
 
 export type StageRunResult =
   | { mode: "dry-run"; total: number; entries: DryRunEntry[] }
-  | { mode: "staged"; total: number; staged: number; flagCounts: StagedFlagCounts };
+  | {
+      mode: "staged";
+      total: number;
+      staged: number;
+      flagCounts: StagedFlagCounts;
+      corruptedNames: number;
+    };
 
 // distill writes its emitted note inside an XML envelope (`<result>…</result>`,
 // plus an optional `<residue>` sibling) for a parent process to consume; the note
@@ -154,6 +161,7 @@ export async function stageNote(
 
   const flagCounts: StagedFlagCounts = {};
   let staged = 0;
+  let corruptedNames = 0;
   // Threaded across every candidate of this note so renderStagingFile can dedupe a
   // filename collision (Finding 1: a thesis term equal to a glossary term, a
   // case/punctuation variant, or two terms that both slug to "" would otherwise
@@ -193,14 +201,21 @@ export async function stageNote(
     }
     if (!draft) flags.push("draft-failed");
 
-    const record = buildStagingRecord({ candidate, verdict, flags, lang, draft });
+    // deterministic, zero-LLM, never blocks. The draft is the only newly generated
+    // text — candidate.def is copied verbatim from the note, so linting it is a no-op.
+    const nameLint = draft
+      ? nameLintAgainstSource(draft, body)
+      : { corrupted: [], invented: [] };
+    corruptedNames += nameLint.corrupted.length;
+
+    const record = buildStagingRecord({ candidate, verdict, flags, lang, draft, nameLint });
     const { filename, content } = renderStagingFile(record, noteName, usedFilenames);
     await deps.writeFile(join(opts.stagingDir, filename), content);
     staged++;
     for (const f of flags) flagCounts[f] = (flagCounts[f] ?? 0) + 1;
   }
 
-  return { mode: "staged", total: candidates.length, staged, flagCounts };
+  return { mode: "staged", total: candidates.length, staged, flagCounts, corruptedNames };
 }
 
 // ---- pure stdout formatting (kept apart from I/O so it's unit-testable too) ----
@@ -216,11 +231,20 @@ export function formatDryRunReport(entries: DryRunEntry[]): string {
     .join("\n");
 }
 
-export function formatSummary(total: number, staged: number, flagCounts: StagedFlagCounts): string {
+export function formatSummary(
+  total: number,
+  staged: number,
+  flagCounts: StagedFlagCounts,
+  corruptedNames = 0,
+): string {
   const flagPart = Object.entries(flagCounts)
     .map(([flag, n]) => `${flag}: ${n}`)
     .join(", ");
-  return `staged ${staged}/${total}` + (flagPart ? ` · ${flagPart}` : "");
+  return (
+    `staged ${staged}/${total}` +
+    (flagPart ? ` · ${flagPart}` : "") +
+    (corruptedNames > 0 ? ` · corrupted-names: ${corruptedNames}` : "")
+  );
 }
 
 // ---- arg parsing (pure, mirrors pipeline.ts's parseArgs discipline: unknown
@@ -378,6 +402,7 @@ async function main(): Promise<void> {
       stagingDir: opts.stagingDir,
       topK: opts.topK,
       dryRun: opts.dryRun,
+      source: opts.source,
     },
     { ask: askJson, fetchNeighbours, writeFile: writeStagingFile },
   );
@@ -385,7 +410,9 @@ async function main(): Promise<void> {
     process.stdout.write(formatDryRunReport(result.entries) + "\n");
     return;
   }
-  process.stdout.write(formatSummary(result.total, result.staged, result.flagCounts) + "\n");
+  process.stdout.write(
+    formatSummary(result.total, result.staged, result.flagCounts, result.corruptedNames) + "\n",
+  );
 }
 
 if (import.meta.main) main();

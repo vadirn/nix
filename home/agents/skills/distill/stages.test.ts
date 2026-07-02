@@ -219,6 +219,35 @@ test("buildFooter: facts-dump skip of the in-scope prose gate surfaces as a tag"
   );
 });
 
+test("buildFooter: nameLint findings append the fragment; omitted nameLint is unchanged (pins the compressed-run string above)", () => {
+  const base = {
+    beforeWords: 100,
+    afterWords: 60,
+    entries: 3,
+    steps: 2,
+    verbatim: 1,
+    residue: 0,
+    gateSkipped: 0,
+    keptVerbatim: 0,
+    retries: 0,
+    proseFixes: 0,
+    coreOnly: false,
+    proseGateOffFactsDump: false,
+  };
+  expect(buildFooter(base)).toBe(
+    "— distilled prose+gloss · 100→60 words (-40%) · 3 entries · 2 steps · 1 verbatim · 0 residue",
+  );
+  expect(
+    buildFooter({
+      ...base,
+      nameLint: { corrupted: [{ found: "Firecurl", wanted: "Firecrawl" }], invented: [] },
+    }),
+  ).toBe(
+    "— distilled prose+gloss · 100→60 words (-40%) · 3 entries · 2 steps · 1 verbatim · 0 residue" +
+      " · name-lint: 1 probable corrupted name (Firecurl ← Firecrawl)",
+  );
+});
+
 // ---- wikilinkResidue: dropped source edges surface; covered ones don't ----
 test("wikilinkResidue: a dropped source wikilink surfaces; a relation/retained one does not", () => {
   const source =

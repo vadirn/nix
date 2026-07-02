@@ -67,6 +67,11 @@ import {
 import { normalizeTypography } from "./writing/typography.ts";
 import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { proseFix, proseJudge } from "./writing/prose-qa.ts";
+import {
+  formatNameLint,
+  nameLintAgainstSource,
+  type NameLintResult,
+} from "./writing/name-lint.ts";
 import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
 import { runRender } from "./render-mode.ts";
 
@@ -555,6 +560,7 @@ export function buildFooter(m: {
   proseFixes: number;
   coreOnly: boolean;
   proseGateOffFactsDump: boolean;
+  nameLint?: NameLintResult;
 }): string {
   const pct = m.beforeWords
     ? Math.round((100 * (m.beforeWords - m.afterWords)) / m.beforeWords)
@@ -573,7 +579,7 @@ export function buildFooter(m: {
   // the prose gate would have run (!noGate && !coreOnly) but the facts-dump genre gate
   // skipped it — surface the skip so disabling a loss detector is never silent.
   const proseGateTag = m.proseGateOffFactsDump ? ` · prose-gate off (facts-dump)` : "";
-  return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}${proseGateTag}`;
+  return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
 }
 
 // edge-coverage gate (deterministic, pure). A vault edge — a [[wikilink]] or a
@@ -977,6 +983,10 @@ async function distill(
   // routed head passes routed=true and contributes nothing here (assembleRoutedNote owns the one
   // whole-note run); the routed-skip and its rationale live in edgePayloadResidue.
   residue = residue.concat(edgePayloadResidue(text, out, routed));
+  // deterministic, zero-LLM, never blocks — findings go to the footer only, never
+  // into residue. Skipped on the routed head (its subset lint would false-flag names
+  // living only in preserve sections; assembleRoutedNote owns the whole-note run).
+  const nameLint = routed ? undefined : nameLintAgainstSource(out, text);
   const footer = buildFooter({
     beforeWords,
     afterWords,
@@ -992,6 +1002,7 @@ async function distill(
     // the prose gate is in scope (!noGate && !coreOnly) but the facts-dump genre gate
     // skipped it above — flag the disabled loss detector instead of dropping it silently.
     proseGateOffFactsDump: !opts.noGate && !opts.coreOnly && opts.factsDump,
+    nameLint,
   });
   // Routed head only: derive the split view for assembleRoutedNote WITHOUT touching the
   // gated/shared `out` above — everything graded/guarded against it (the expand guard, the
@@ -1108,11 +1119,15 @@ export function assembleRoutedNote(a: {
   const headVerbatim = a.reauthorText !== "" && a.head.status === "passthrough";
   const reCount = a.sections.filter((u) => u.route === "re-author").length;
   const preserveCount = a.sections.length - reCount;
+  // deterministic, zero-LLM, never blocks — the routed head's own run skips this lint
+  // (see pipeline.ts distill()), so assembleRoutedNote owns the one whole-note check.
+  const nameLint = nameLintAgainstSource(out, a.source);
   const footer =
     `— per-section route: ${reCount} re-author / ${preserveCount} preserve` +
     ` · ${beforeWords}→${afterWords} words` +
     (headVerbatim ? " · head kept verbatim (prose not compressed)" : "") +
-    (residue.length ? ` · ${residue.length} residue` : "");
+    (residue.length ? ` · ${residue.length} residue` : "") +
+    formatNameLint(nameLint);
   return { out, footer, residue };
 }
 
