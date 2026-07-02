@@ -19,7 +19,7 @@ export const PASS_EN: Pass[] = [
   },
   {
     name: "sentences",
-    rules: `SENTENCES: make the actor the subject; use active voice; get to the main verb within ~7 words; open with familiar information, close with the new; chain known→new across sentences; keep one topic per sentence; replace verbless fragments ("Fast, but fragile") with a subject+verb; split sentences carrying more than one idea, reconnect with a transition if the ideas depend on each other.`,
+    rules: `SENTENCES: make the actor the subject and use active voice — but the subject must be an actor the text names or implies; never invent one (no "you"/"we" unless the text already speaks in that person); when no actor is identifiable, keep the thing itself as the subject or use passive voice; get to the main verb within ~7 words; open with familiar information, close with the new; chain known→new across sentences; keep one topic per sentence; replace verbless fragments ("Fast, but fragile") with a subject+verb drawn from the surrounding text; split sentences carrying more than one idea, reconnect with a transition if the ideas depend on each other.`,
   },
   {
     name: "paragraphs",
@@ -38,7 +38,7 @@ export const PASS_RU: Pass[] = [
   },
   {
     name: "sentences",
-    rules: `ПРЕДЛОЖЕНИЯ: деятель в подлежащем; активный залог; сказуемое ближе к началу (в предложениях длиннее 20 слов проверь); известное → начало, новое → конец; цепочка known-new между предложениями; единая тема в абзаце; безглагольные обрывки («Быстро, но хрупко») → подлежащее + сказуемое; одно предложение — одна мысль, разбей и склей если нужно.`,
+    rules: `ПРЕДЛОЖЕНИЯ: деятель в подлежащем, активный залог — но подлежащим ставь только деятеля, названного или подразумеваемого текстом; не выдумывай («вы»/«мы» — только если текст сам так говорит); если деятель неизвестен — оставь предмет подлежащим или используй пассив; сказуемое ближе к началу (в предложениях длиннее 20 слов проверь); известное → начало, новое → конец; цепочка known-new между предложениями; единая тема в абзаце; безглагольные обрывки («Быстро, но хрупко») → подлежащее + сказуемое из контекста; одно предложение — одна мысль, разбей и склей если нужно.`,
   },
   {
     name: "paragraphs",
