@@ -3,15 +3,21 @@
 // candidate fails verification ships as its input, so the pass can only lose a
 // correction, never meaning. Consumed only by polish.ts — distill's pipeline does
 // not gain a spell stage.
-import { type Block, langRule, render } from "../text.ts";
+import { type Block, render } from "../text.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "../fw.ts";
 import { MASK_TOKEN_RE, createMasker } from "./mask.ts";
 import { levenshtein } from "./name-lint.ts";
 import { makeIdMarkerStripper } from "./passes.ts";
 import { normalizeTypography } from "./typography.ts";
 
-export function spellPassPrompt(blocks: Block[], lang: "en" | "ru"): string {
-  return `You are a proofreader. Fix ONLY objective spelling, typo, and grammatical-agreement errors in each block below: misspelled words, wrong case/number/gender/tense agreement, misused homophones, and incorrect compound spelling (e.g. "in stead" vs "instead"). Change NOTHING else: no rephrasing, no reordering, no synonym substitutions, no added or removed words beyond the minimal correction, no punctuation-style changes. Keep every line break, heading, list marker, and table cell exactly where it is. Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged, exactly as many times as they appear. Preserve emphasis (**bold**, _italic_). If a block has no errors, return its text unchanged. ${langRule(lang)} Return ONLY JSON {"blocks":[{"id":"B1","text":"corrected text"}, ...]} — one entry per block, ids matching.
+// `lang` stays in the signature (frozen API; polish.ts threads it through) but the
+// prompt's language rule is proofreader-specific and language-neutral: langRule()
+// was written for abstractive generation and instructs the model to WRITE in the
+// note's language, which on code-switched (mixed RU/EN) notes reads as an order to
+// translate the other language's clauses — observed live, small translations fit
+// inside the 15% diff bound. A proofreader must never translate.
+export function spellPassPrompt(blocks: Block[], _lang: "en" | "ru"): string {
+  return `You are a proofreader. Fix ONLY objective spelling, typo, and grammatical-agreement errors in each block below: misspelled words, wrong case/number/gender/tense agreement, misused homophones, and incorrect compound spelling (e.g. "in stead" vs "instead"). Change NOTHING else: no rephrasing, no reordering, no synonym substitutions, no added or removed words beyond the minimal correction, no punctuation-style changes. Keep every word in the language it is written in; never translate. Keep every line break, heading, list marker, and table cell exactly where it is. Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged, exactly as many times as they appear. Preserve emphasis (**bold**, _italic_). If a block has no errors, return its text unchanged. Return ONLY JSON {"blocks":[{"id":"B1","text":"corrected text"}, ...]} — one entry per block, ids matching.
 
 TEXT:
 ${render(blocks)}`;
@@ -21,7 +27,12 @@ ${render(blocks)}`;
 // names the reason. (1) mask-token multiset equality — every ⟦N⟧ present exactly as
 // often as in input; (2) line-count equality; (3) bounded diff — character-level
 // Levenshtein within 15% of the input, absolute floor 4 so a one-word block can
-// still be corrected.
+// still be corrected; (4) word-level replacement distance — every output word absent
+// from the input must sit within Levenshtein 2 of some input word: a spelling fix
+// stays close to the misspelling, a synonym substitution does not (observed live:
+// "bruited" → "broadcast" shipped inside the 15% bound). A false positive here only
+// reverts a block to its input, losing a correction, never meaning.
+const wordsOf = (s: string): string[] => s.toLowerCase().match(/[\p{L}][\p{L}'’]*/gu) ?? [];
 export function verifySpellBlock(input: string, output: string): { ok: boolean; reason?: string } {
   const inTokens = (input.match(MASK_TOKEN_RE) ?? []).sort();
   const outTokens = (output.match(MASK_TOKEN_RE) ?? []).sort();
@@ -31,6 +42,19 @@ export function verifySpellBlock(input: string, output: string): { ok: boolean; 
     return { ok: false, reason: "line structure changed" };
   if (levenshtein(input, output) > Math.max(4, Math.ceil(0.15 * input.length)))
     return { ok: false, reason: "diff exceeds bound" };
+  const inWords = new Set(wordsOf(input));
+  for (const w of new Set(wordsOf(output))) {
+    if (inWords.has(w)) continue;
+    let close = false;
+    for (const iw of inWords) {
+      if (Math.abs(iw.length - w.length) > 2) continue;
+      if (levenshtein(w, iw) <= 2) {
+        close = true;
+        break;
+      }
+    }
+    if (!close) return { ok: false, reason: "word replaced beyond spelling distance" };
+  }
   return { ok: true };
 }
 

@@ -203,9 +203,7 @@ export async function stageNote(
 
     // deterministic, zero-LLM, never blocks. The draft is the only newly generated
     // text — candidate.def is copied verbatim from the note, so linting it is a no-op.
-    const nameLint = draft
-      ? nameLintAgainstSource(draft, body)
-      : { corrupted: [], invented: [] };
+    const nameLint = draft ? nameLintAgainstSource(draft, body) : { corrupted: [], invented: [] };
     corruptedNames += nameLint.corrupted.length;
 
     const record = buildStagingRecord({ candidate, verdict, flags, lang, draft, nameLint });

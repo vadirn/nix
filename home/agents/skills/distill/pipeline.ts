@@ -67,11 +67,7 @@ import {
 import { normalizeTypography } from "./writing/typography.ts";
 import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { proseFix, proseJudge } from "./writing/prose-qa.ts";
-import {
-  formatNameLint,
-  nameLintAgainstSource,
-  type NameLintResult,
-} from "./writing/name-lint.ts";
+import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
 import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
 import { runRender } from "./render-mode.ts";
 

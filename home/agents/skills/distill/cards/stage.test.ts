@@ -252,7 +252,11 @@ test("stageNote: opts.source overrides Source line, filename prefix, and thesis 
 // called directly with a hand-built opts object) so it reddens if the field is dropped
 // again.
 test("resolveOpts + stageNote round-trip: --source flows through main()'s wiring to the Source line", async () => {
-  const parsed = parseArgs(["/tmp/claude-501/tmp.abc123.md", "--source", "/vault/00 inbox/Real Stub.md"]);
+  const parsed = parseArgs([
+    "/tmp/claude-501/tmp.abc123.md",
+    "--source",
+    "/vault/00 inbox/Real Stub.md",
+  ]);
   expect(parsed.kind).toBe("ok");
   if (parsed.kind !== "ok") throw new Error("unreachable");
   const opts = resolveOpts(parsed.opts, "/home/vadim");

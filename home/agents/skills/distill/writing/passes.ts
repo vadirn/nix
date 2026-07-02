@@ -53,16 +53,21 @@ export const PASS_RU: Pass[] = [
 // render() shows each block to the model as "[id] text"; the model occasionally
 // echoes the marker back inside its returned text. The stripper removes only the
 // ids minted for one call's blocks, so legitimate bracketed spans in the content
-// survive. Shared by revise() and spellPass().
+// survive. Trimming happens only when a marker was actually removed (to clean the
+// slack it leaves behind): a marker-free candidate returns byte-identical, so
+// indented blocks — nested list items, 4-space code — keep their leading
+// whitespace. Shared by revise() and spellPass().
 export function makeIdMarkerStripper(blocks: { id: string }[]): (text: string) => string {
   const idMarkers = blocks.map((b) => `[${b.id}]`);
   return (text: string): string => {
     let out = text;
+    let stripped = false;
     for (const m of idMarkers) {
       if (!out.includes(m)) continue;
+      stripped = true;
       out = out.split(`${m} `).join("").split(m).join("");
     }
-    return out.trim();
+    return stripped ? out.trim() : out;
   };
 }
 

@@ -13,6 +13,10 @@ export type Masker = {
 // literals: exact spans frozen first (longest-first so a containing span masks
 // whole before its substring); then MASK_RE spans ([[wikilinks]], ![[embeds]],
 // inline code). Token numbering is per-factory-call, monotonically increasing.
+// A ⟦N⟧ span already present in the incoming text (a note documenting the mask
+// engine itself) is frozen first to a fresh minted token mapping back to the
+// literal, so every token in masked text is minted here and unmask can never
+// rewrite a pre-existing literal into another span's content.
 export function createMasker(literals: string[] = []): Masker {
   const masks = new Map<string, string>();
   const litToken = new Map<string, string>();
@@ -36,8 +40,17 @@ export function createMasker(literals: string[] = []): Masker {
     }
     return out;
   };
+  // freeze pre-existing ⟦N⟧ literals to fresh tokens BEFORE literal/reference
+  // masking, so a minted key never collides with (or gets confused for) a span
+  // the source text spelled out itself.
+  const freezeExistingTokens = (text: string): string =>
+    text.replace(MASK_TOKEN_RE, (m) => {
+      const key = `⟦${n++}⟧`;
+      masks.set(key, m);
+      return key;
+    });
   const mask = (text: string): string =>
-    maskLiterals(text).replace(MASK_RE, (m) => {
+    maskLiterals(freezeExistingTokens(text)).replace(MASK_RE, (m) => {
       const key = `⟦${n++}⟧`;
       masks.set(key, m);
       return key;

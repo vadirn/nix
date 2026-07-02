@@ -11,14 +11,18 @@ import { spellPassPrompt, verifySpellBlock } from "./spell.ts";
 const read = (name: string) => readFileSync(resolve(import.meta.dir, "../fixtures", name), "utf8");
 
 // ---- the frozen prompt (pure) ----
-test("spellPassPrompt: frozen sentences and JSON shape pinned; bilingual via langRule", () => {
+test("spellPassPrompt: frozen sentences and JSON shape pinned; proofreader never translates", () => {
   const blocks = [{ id: "B1", text: "Teh text." }];
   const en = spellPassPrompt(blocks, "en");
   expect(en).toContain("Change NOTHING else:");
   expect(en).toContain('Return ONLY JSON {"blocks":');
   expect(en).toContain("[B1] Teh text.");
-  expect(en).toContain(langRule("en"));
-  expect(spellPassPrompt(blocks, "ru")).toContain(langRule("ru"));
+  expect(en).toContain("Keep every word in the language it is written in; never translate.");
+  // langRule is an abstractive-generation rule ("write everything in X"): on a
+  // code-switched RU/EN note it reads as an order to translate the other language's
+  // clauses (observed live). It must stay out of the proofreader prompt.
+  expect(en).not.toContain(langRule("en"));
+  expect(spellPassPrompt(blocks, "ru")).not.toContain(langRule("ru"));
 });
 
 // ---- the deterministic verifier (pure) ----
@@ -65,6 +69,24 @@ test("verifySpellBlock: a full rephrase fails as diff exceeds bound", () => {
 
 test("verifySpellBlock: a 1-word block correction rides the absolute floor of 4", () => {
   expect(verifySpellBlock("Teh", "The")).toEqual({ ok: true });
+});
+
+test("verifySpellBlock: a synonym swap inside the diff bound fails the word-distance check", () => {
+  // observed live: "bruited" → "broadcast" (9-char edit in a 208-char block) sailed
+  // under the 15% bound; a synonym is far from every input word, a spelling fix is not.
+  const input =
+    "Consider the enormity of what the old pipeline did: it bruited every failure to every subscriber, twice. Nobody was nonplussed. The fix comprises three parts, each smaller than the last. Which is the point.";
+  expect(verifySpellBlock(input, input.replace("bruited", "broadcast"))).toEqual({
+    ok: false,
+    reason: "word replaced beyond spelling distance",
+  });
+});
+
+test("verifySpellBlock: a real spelling fix stays within word distance (irregardless → regardless)", () => {
+  const input = "A user reports lag; they are right, irregardless of what the dashboard says.";
+  expect(verifySpellBlock(input, input.replace("irregardless", "regardless"))).toEqual({
+    ok: true,
+  });
 });
 
 // ---- spellPass wiring: mocked fw, no network (degradation.test.ts pattern) ----
@@ -170,6 +192,33 @@ test("spellPass: EN fixture's masked spans survive a mocked fix byte-identical",
   expect(out.blocks[0].text).toContain("receives");
   expect(out.blocks[1].text).toContain("`--tau 0.5`");
   expect(out.blocks[1].text).toContain("the results");
+});
+
+test("spellPass: a live-observed synonym swap reverts its block; the legit fix beside it ships", async () => {
+  mockAskJsonBy((prompt) => ({
+    blocks: promptBlocks(prompt).map((b) => ({
+      id: b.id,
+      text: b.text.replace("bruited", "broadcast").replace("irregardless", "regardless"),
+    })),
+  }));
+  const { spellPass } = await import(SPELL);
+  const out = await spellPass(segment(read("spell-quirks-en.md")), "en");
+  expect(out.failed).toBe(false);
+  expect(out.reverted).toEqual(["B2"]);
+  expect(out.blocks[1].text).toContain("bruited"); // rare-but-correct word survives
+  expect(out.blocks[2].text).toContain("right, regardless of"); // the real fix ships
+});
+
+test("spellPass: an indented block echoed byte-identical keeps its leading whitespace", async () => {
+  // regression: the id-marker stripper's unconditional trim flattened nested list
+  // items and 4-space code blocks even when the model changed nothing.
+  mockAskJsonBy((prompt) => ({
+    blocks: promptBlocks(prompt).map((b) => ({ id: b.id, text: b.text })),
+  }));
+  const { spellPass } = await import(SPELL);
+  const out = await spellPass(segment("- parent\n\n  - child one\n  - child two"), "en");
+  expect(out.reverted).toEqual([]);
+  expect(out.blocks[1].text).toBe("  - child one\n  - child two");
 });
 
 test("spellPass: RU fixture's masked spans survive a mocked fix byte-identical", async () => {
