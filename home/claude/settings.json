@@ -1,5 +1,4 @@
 {
-  "outputStyle": "default",
   "skillListingBudgetFraction": 0.015,
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50",
@@ -238,6 +237,7 @@
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {},
+  "outputStyle": "default",
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
@@ -294,5 +294,6 @@
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "model": "claude-fable-5[1m]"
 }
