@@ -1,0 +1,76 @@
+// writing/spell — the spell/grammar pass (B22): one rewrite on EXTRACT under a
+// change-nothing-else contract, verified deterministically per block. A block whose
+// candidate fails verification ships as its input, so the pass can only lose a
+// correction, never meaning. Consumed only by polish.ts — distill's pipeline does
+// not gain a spell stage.
+import { type Block, langRule, render } from "../text.ts";
+import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "../fw.ts";
+import { MASK_TOKEN_RE, createMasker } from "./mask.ts";
+import { levenshtein } from "./name-lint.ts";
+import { makeIdMarkerStripper } from "./passes.ts";
+import { normalizeTypography } from "./typography.ts";
+
+export function spellPassPrompt(blocks: Block[], lang: "en" | "ru"): string {
+  return `You are a proofreader. Fix ONLY objective spelling, typo, and grammatical-agreement errors in each block below: misspelled words, wrong case/number/gender/tense agreement, misused homophones, and incorrect compound spelling (e.g. "in stead" vs "instead"). Change NOTHING else: no rephrasing, no reordering, no synonym substitutions, no added or removed words beyond the minimal correction, no punctuation-style changes. Keep every line break, heading, list marker, and table cell exactly where it is. Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged, exactly as many times as they appear. Preserve emphasis (**bold**, _italic_). If a block has no errors, return its text unchanged. ${langRule(lang)} Return ONLY JSON {"blocks":[{"id":"B1","text":"corrected text"}, ...]} — one entry per block, ids matching.
+
+TEXT:
+${render(blocks)}`;
+}
+
+// Deterministic verification on the MASKED text, in this order; the first failure
+// names the reason. (1) mask-token multiset equality — every ⟦N⟧ present exactly as
+// often as in input; (2) line-count equality; (3) bounded diff — character-level
+// Levenshtein within 15% of the input, absolute floor 4 so a one-word block can
+// still be corrected.
+export function verifySpellBlock(input: string, output: string): { ok: boolean; reason?: string } {
+  const inTokens = (input.match(MASK_TOKEN_RE) ?? []).sort();
+  const outTokens = (output.match(MASK_TOKEN_RE) ?? []).sort();
+  if (inTokens.length !== outTokens.length || inTokens.some((t, i) => t !== outTokens[i]))
+    return { ok: false, reason: "mask tokens changed" };
+  if (input.split("\n").length !== output.split("\n").length)
+    return { ok: false, reason: "line structure changed" };
+  if (levenshtein(input, output) > Math.max(4, Math.ceil(0.15 * input.length)))
+    return { ok: false, reason: "diff exceeds bound" };
+  return { ok: true };
+}
+
+export async function spellPass(
+  blocks: Block[],
+  lang: "en" | "ru",
+  literals: string[] = [],
+): Promise<{ blocks: Block[]; reverted: string[]; failed: boolean }> {
+  // same masking engine as revise(): reference spans (and caller literals) are
+  // frozen to ⟦N⟧ tokens the model cannot reword, restored verbatim at the end.
+  const { mask, unmask } = createMasker(literals);
+  const stripIdMarkers = makeIdMarkerStripper(blocks);
+  const masked = blocks.map((b) => ({ id: b.id, text: mask(b.text) }));
+  const reverted: string[] = [];
+  let cur = masked;
+  try {
+    const { blocks: fixed } = await askJson<{ blocks: { id: string; text: string }[] }>(
+      EXTRACT,
+      spellPassPrompt(masked, lang),
+      EXTRACT_TOKENS,
+    );
+    const byId = new Map(fixed.map((r) => [r.id, r.text]));
+    cur = masked.map((b) => {
+      const t = byId.get(b.id);
+      if (t == null) return b; // dropped by the model: keep the input (revise idiom)
+      const candidate = stripIdMarkers(t);
+      if (!verifySpellBlock(b.text, candidate).ok) {
+        reverted.push(b.id);
+        return b;
+      }
+      return { id: b.id, text: candidate };
+    });
+  } catch (e) {
+    rethrowIfBug(e, "spell");
+    // transient/truncation: the caller reports "spell pass failed"; input unchanged
+    return { blocks, reverted: [], failed: true };
+  }
+  return {
+    blocks: cur.map((b) => ({ id: b.id, text: unmask(normalizeTypography(b.text)) })),
+    reverted,
+    failed: false,
+  };
+}

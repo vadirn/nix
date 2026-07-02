@@ -50,6 +50,22 @@ export const PASS_RU: Pass[] = [
   },
 ];
 
+// render() shows each block to the model as "[id] text"; the model occasionally
+// echoes the marker back inside its returned text. The stripper removes only the
+// ids minted for one call's blocks, so legitimate bracketed spans in the content
+// survive. Shared by revise() and spellPass().
+export function makeIdMarkerStripper(blocks: { id: string }[]): (text: string) => string {
+  const idMarkers = blocks.map((b) => `[${b.id}]`);
+  return (text: string): string => {
+    let out = text;
+    for (const m of idMarkers) {
+      if (!out.includes(m)) continue;
+      out = out.split(`${m} `).join("").split(m).join("");
+    }
+    return out.trim();
+  };
+}
+
 // ---- writing passes (stage 4): reuse cut's four sequential rewrites ----
 function revisePrompt(blocks: Block[], pass: Pass): string {
   return `You are a copy editor. This is the ${pass.name.toUpperCase()} pass. Revise each block below applying only the rules below. Preserve its claims, keep all its content, and match the original's structure exactly (same headings, bullets, and formatting). Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged. Preserve emphasis (**bold**, _italic_). Write straight quotes; keep em dashes (—) as written. Return ONLY JSON {"blocks":[{"id":"B1","text":"revised text"}, ...]} — one entry per block, ids matching.
@@ -73,19 +89,9 @@ export async function revise(
   // so the term text stays verbatim and keeps matching its glossary key.
   const { mask, unmask } = createMasker(literals);
 
-  // render() shows each block to the model as "[id] text"; the model occasionally
-  // echoes the marker back inside its returned text, and sequential passes would
-  // then compound it. Strip only the ids minted for THIS call, so legitimate
-  // bracketed spans in the content survive.
-  const idMarkers = blocks.map((b) => `[${b.id}]`);
-  const stripIdMarkers = (text: string): string => {
-    let out = text;
-    for (const m of idMarkers) {
-      if (!out.includes(m)) continue;
-      out = out.split(`${m} `).join("").split(m).join("");
-    }
-    return out.trim();
-  };
+  // sequential passes would compound an echoed "[id]" marker; strip only the ids
+  // minted for THIS call (see makeIdMarkerStripper above).
+  const stripIdMarkers = makeIdMarkerStripper(blocks);
 
   // sequential passes: each refines the prior pass's output (words → sentences →
   // paragraphs → AI patterns). A failed pass (parse/network) keeps the current
