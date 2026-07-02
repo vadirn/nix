@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Deploy seam for polish-text: fill FIREWORKS_API_KEY from the macOS Keychain
+# (service: fireworks-api) unless the caller already provided one, then exec the
+# real entrypoint. Seed/rotate with:
+#   doppler secrets get FIREWORKS_API_KEY --plain --project claude-code --config std \
+#     | xargs -I{} security add-generic-password -U -s fireworks-api -a "$USER" -w {}
+set -u
+if [ -z "${FIREWORKS_API_KEY:-}" ]; then
+  FIREWORKS_API_KEY="$(security find-generic-password -s fireworks-api -w 2>/dev/null)" && export FIREWORKS_API_KEY
+fi
+exec bun "$(dirname "$(readlink -f "$0")")/../polish.ts" "$@"
