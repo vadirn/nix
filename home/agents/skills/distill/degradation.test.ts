@@ -154,6 +154,27 @@ test("synthWorkflow: a non-transient code bug propagates", async () => {
   );
 });
 
+test("revise: an echoed block-id marker is stripped from the returned text (live [__G0__] leak)", async () => {
+  // a real vault run shipped glossary defs carrying literal [__G0__]–[__G4__] tokens:
+  // render() shows blocks as "[id] text" and the model echoed the marker back.
+  mockAskJsonBy(() => ({
+    blocks: [
+      { id: "__G0__", text: "[__G0__] A clean definition." },
+      { id: "__G1__", text: "Mid-sentence [__G1__] echo survives content." },
+    ],
+  }));
+  const { revise } = await import(PROMPTS);
+  const out = await revise(
+    [
+      { id: "__G0__", text: "orig def 0" },
+      { id: "__G1__", text: "orig def 1" },
+    ],
+    [{ name: "words", rules: "- tighten" }],
+  );
+  expect(out[0].text).toBe("A clean definition.");
+  expect(out[1].text).toBe("Mid-sentence echo survives content.");
+});
+
 test("synthWorkflow: a marker-only model step is rejected, the draft kept (no '3. 3.')", async () => {
   // the model "tightened" S0 into the bare ordinal "3." (a real failure seen in output);
   // accepting it would overwrite the draft and render "3. 3." — reject it, keep the draft.

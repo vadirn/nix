@@ -636,6 +636,20 @@ export async function revise(
   const unmask = (text: string): string =>
     masks.size === 0 ? text : text.replace(/⟦\d+⟧/g, (m) => masks.get(m) ?? m);
 
+  // render() shows each block to the model as "[id] text"; the model occasionally
+  // echoes the marker back inside its returned text, and sequential passes would
+  // then compound it. Strip only the ids minted for THIS call, so legitimate
+  // bracketed spans in the content survive.
+  const idMarkers = blocks.map((b) => `[${b.id}]`);
+  const stripIdMarkers = (text: string): string => {
+    let out = text;
+    for (const m of idMarkers) {
+      if (!out.includes(m)) continue;
+      out = out.split(`${m} `).join("").split(m).join("");
+    }
+    return out.trim();
+  };
+
   // sequential passes: each refines the prior pass's output (words → sentences →
   // paragraphs → AI patterns). A failed pass (parse/network) keeps the current
   // blocks so prior improvements survive; the loop continues.
@@ -648,7 +662,10 @@ export async function revise(
         EXTRACT_TOKENS,
       );
       const byId = new Map(rev.map((r) => [r.id, r.text]));
-      cur = cur.map((b) => ({ id: b.id, text: byId.get(b.id) ?? b.text }));
+      cur = cur.map((b) => {
+        const t = byId.get(b.id);
+        return { id: b.id, text: t != null ? stripIdMarkers(t) : b.text };
+      });
     } catch (e) {
       rethrowIfBug(e, "revise");
       // a transient pass flake keeps the current blocks (see above); continue
