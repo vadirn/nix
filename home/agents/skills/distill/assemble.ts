@@ -25,7 +25,13 @@ export const escAttr = (s: string) =>
 // Returns "" when no entry carries an edge.
 function endpointOf(to: string): string {
   const wl = /^\[\[(.+)\]\]$/.exec(to.trim());
-  return wl ? `[[${slugSegment(wl[1])}]]` : slugSegment(to);
+  if (!wl) return slugSegment(to);
+  // Strip the alias BEFORE slugging (harvestWikilinks does the same split, text.ts:170)
+  // — `[[note-aliased|Display Text]]` must endpoint on `note-aliased`, not on a slug of
+  // the whole "target|alias" string, or the emitted wikilink targets a note that was
+  // never the edge's actual endpoint (Finding 2).
+  const target = wl[1].split("|")[0].trim();
+  return `[[${slugSegment(target)}]]`;
 }
 
 export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {

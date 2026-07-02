@@ -851,6 +851,182 @@ export function normalizeRelation(r: unknown): Relation | null {
   return { rel, to, predicate: pred || null };
 }
 
+// ---- relations/glossary REBUILD (W1; inverts assemble.ts::emitRelationsBlock /
+// assembleBody's Glossary table). Lives here, not cards/, so cards/ modules read an
+// emitted note's structural channels through one leaf-module seam (D13). ----
+
+// One structural edge parsed off a `## Relations` list item. `from` is the entry's
+// own slug (multi-node form) or null (single-atom form omits the from-label, D26).
+// `to` keeps the endpoint's EMITTED form verbatim — `[[file-slug]]` stays bracketed,
+// a bare term-slug stays bare — so a caller that re-emits via emitRelationsBlock
+// (which itself re-derives scope from the brackets) round-trips byte-for-byte.
+export type ParsedRelationEdge = {
+  from: string | null;
+  rel: string;
+  to: string;
+  predicate: string | null;
+};
+
+// Toggle-based section extraction, mirroring vault-query's canonical heading rule
+// (relations.rs::parse_relations / markdown::heading_text): ANY heading (depth 1-6)
+// whose slugged text equals `name` opens the section; ANY other heading closes it;
+// `collecting` is recomputed on every heading rather than latched, so a same-named
+// heading appearing again later reopens the section (matches Rust, not a simplification
+// to "next ## heading"). Heading detection runs on a fence-masked copy so a fenced
+// `# comment` cannot toggle the section (the sections() fix, d06c6fa) while the
+// returned text keeps the RAW lines (fences intact) for the caller to re-scan.
+function extractSection(md: string, name: string): string {
+  const lines = md.split("\n");
+  const masked = stripFences(md).split("\n");
+  let collecting = false;
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const h = ATX_HEADING.exec(masked[i]);
+    if (h) {
+      collecting = slugSegment(h[2]) === name;
+      continue;
+    }
+    if (collecting) out.push(lines[i]);
+  }
+  return out.join("\n");
+}
+
+// Split a `<endpoint> (<predicate>)` tail into its two parts.
+//
+// DIVERGENCE from vault-query/src/commands/lint/relations.rs::split_predicate: the Rust
+// scanner takes the LAST `(` in the string (`rfind`), which mis-splits whenever the
+// predicate itself carries a parenthetical — the predicate's own inner `(` wins over the
+// wrap's outer one, truncating the endpoint and corrupting the predicate (verified: Rust's
+// algorithm, mirrored naively, turns `endpoint (a (b))` into endpoint `"endpoint (a"` /
+// predicate `"b)"`). This mirror instead finds the `(` whose matching `)` is the string's
+// own LAST character (depth-balanced scan from the end), so a predicate containing "(...)"
+// round-trips correctly. The two algorithms agree on every case without nested parens
+// (the golden fixture, every emitted note today), so this is invisible parity for existing
+// output and only helps a future nested-predicate emission. Rust's lint side is unaffected
+// (out of scope here) — flagged for a follow-up there.
+function splitPredicate(right: string): { endpoint: string; predicate: string | null } {
+  if (!right.endsWith(")")) return { endpoint: right, predicate: null };
+  let depth = 0;
+  let open = -1;
+  for (let i = right.length - 1; i >= 0; i--) {
+    const c = right[i];
+    if (c === ")") depth++;
+    else if (c === "(") {
+      depth--;
+      if (depth === 0) {
+        open = i;
+        break;
+      }
+    }
+  }
+  if (open < 0) return { endpoint: right, predicate: null };
+  const predicate = right.slice(open + 1, -1).trim();
+  const endpoint = right.slice(0, open).trim();
+  return { endpoint, predicate: predicate || null };
+}
+
+// Parse one `## Relations` list-item body (the text after the `- `/`* ` marker):
+// `[<from> ]<rel>:: <to>[ (<predicate>)]`. Lossy (D29): returns null on anything
+// short of well-formed rather than throwing — a missing `::`, an empty rel/endpoint,
+// or an all-parenthetical tail with no endpoint before it.
+function parseEdgeLine(edgeText: string): ParsedRelationEdge | null {
+  const sep = edgeText.indexOf("::");
+  if (sep < 0) return null;
+  const left = edgeText.slice(0, sep).trim();
+  const right = edgeText.slice(sep + 2).trim();
+  if (!left || !right) return null;
+  const tokens = left.split(/\s+/).filter(Boolean);
+  const rel = tokens.pop();
+  if (!rel) return null;
+  const from = tokens.length ? tokens.join(" ") : null;
+  const { endpoint, predicate } = splitPredicate(right);
+  if (!endpoint) return null;
+  return { from, rel, to: endpoint, predicate };
+}
+
+// Parse a full note body's `## Relations` section back into structural edges — the
+// REBUILD inverse of assemble.ts::emitRelationsBlock. Grammar mirrors
+// vault-query/src/commands/lint/relations.rs::parse_relations line-for-line (fence
+// tracking, heading toggle, `- `/`* ` list-item prefix, `::` split); see splitPredicate
+// for the one intentional divergence. Lossy-tolerant like normalizeRelation: a
+// malformed line yields no edge and parsing never throws.
+export function parseRelationsBlock(md: string): ParsedRelationEdge[] {
+  const edges: ParsedRelationEdge[] = [];
+  let fence: string | null = null;
+  for (const raw of extractSection(md, "relations").split("\n")) {
+    const trimmed = raw.trimStart();
+    const fm = /^(`{3,}|~{3,})/.exec(trimmed);
+    if (fm) {
+      const marker = fm[1][0];
+      if (fence === null) fence = marker;
+      else if (fence === marker) fence = null;
+      // else: a mismatched marker inside an open fence is literal content, not a close.
+      continue;
+    }
+    if (fence) continue;
+    const item = /^[-*] (.*)$/.exec(trimmed);
+    if (!item) continue;
+    const edge = parseEdgeLine(item[1]);
+    if (edge) edges.push(edge);
+  }
+  return edges;
+}
+
+// Undo assembleBody's escCell pipe-escaping (`\|` → `|`). escCell also collapses a
+// def's internal newlines to spaces before emit, so that fold is not (and cannot be)
+// reversed here — a documented one-way loss, not a bug.
+const unescCell = (s: string): string => s.replace(/\\\|/g, "|").trim();
+
+// Split a `| a | b |` table row into trimmed, unescaped cells. Outer pipes are
+// dropped; the split runs on unescaped `|` only (negative lookbehind), so a def
+// carrying a real `|` (escCell-escaped) never mis-splits into a phantom column.
+function glossaryRowCells(line: string): string[] | null {
+  const t = line.trim();
+  if (t.length < 2 || !t.startsWith("|") || !t.endsWith("|")) return null;
+  return t
+    .slice(1, -1)
+    .split(/(?<!\\)\|/)
+    .map(unescCell);
+}
+
+// A GFM table delimiter row (`| ---- | ---------- |`): every cell is bare dashes,
+// optionally colon-anchored. Shared by the header/delimiter skip below.
+const isDelimiterRow = (cells: string[]): boolean => cells.every((c) => /^:?-+:?$/.test(c));
+
+// Parse an emitted note's `## Glossary` table AND `## Relations` block into
+// GlossEntry[] — the REBUILD inverse of assembleBody's Glossary+Relations
+// rendering. Each row becomes one entry (term, def unescaped, source: [] — not
+// recoverable from an emitted note, D13); each parsed edge attaches to the entry
+// whose slug matches its `from`. A single-atom edge (`from === null`) attaches to
+// the sole entry when the table has exactly one row; over a multi-row table it has
+// no unambiguous owner and is dropped (lossy, matches parseRelationsBlock's tolerance).
+export function parseConceptGraph(md: string): GlossEntry[] {
+  const entries: GlossEntry[] = [];
+  for (const line of extractSection(md, "glossary").split("\n")) {
+    const cells = glossaryRowCells(line);
+    if (!cells || cells.length < 2) continue;
+    if (cells[0] === "Term" && cells[1] === "Definition") continue; // header row
+    if (isDelimiterRow(cells)) continue;
+    entries.push({ term: cells[0], def: cells[1], relations: [], source: [] });
+  }
+  for (const edge of parseRelationsBlock(md)) {
+    const rel: Relation = { rel: edge.rel, to: edge.to, predicate: edge.predicate };
+    if (edge.from !== null) {
+      // Slug BOTH sides before comparing (Finding 3): emitted notes pre-slug the
+      // from-label so a raw comparison happens to match, but Log 10 makes human
+      // editing of the Relations line the expected path, and a hand-typed unslugged
+      // label ("Target Distance" over a glossary row "Target Distance") must still
+      // resolve to its entry instead of silently detaching the whole relation.
+      const fromSlug = slugSegment(edge.from);
+      entries.find((e) => slugSegment(e.term) === fromSlug)?.relations.push(rel);
+    } else if (entries.length === 1) {
+      entries[0].relations.push(rel);
+    }
+    // else: single-atom edge over a 0- or multi-row table has no unambiguous owner — drop.
+  }
+  return entries;
+}
+
 export function detectLang(text: string): "en" | "ru" {
   const letters = text.match(/[a-zA-Zа-яА-ЯёЁ]/g) ?? [];
   if (letters.length === 0) return "en";
