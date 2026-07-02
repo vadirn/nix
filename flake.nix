@@ -6,8 +6,8 @@
     nix-darwin.url = "github:LnL7/nix-darwin/nix-darwin-25.11";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
     nix-homebrew = {
-      url = "github:zhaofengli-wip/nix-homebrew/aeb2069920";
-      inputs.brew-src.url = "github:Homebrew/brew/5.1.10";
+      url = "github:zhaofengli/nix-homebrew/de7953a0";
+      inputs.brew-src.url = "github:Homebrew/brew/6.0.5";
     };
 
     homebrew-dopplerhq-cli = {

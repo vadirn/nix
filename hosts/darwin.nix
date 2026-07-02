@@ -107,9 +107,19 @@
 
   nix-homebrew = {
     enable = true;
-    enableRosetta = true;
+    enableRosetta = false;
     user = "vadim";
     mutableTaps = false;
+    # Homebrew 6 requires third-party taps to be trusted; safe to trust
+    # wholesale since taps are pinned flake inputs (immutable until
+    # `nix flake update`). Entries persist; remove with `brew untrust`.
+    trust.taps = [
+      "dopplerhq/cli"
+      "arimxyer/tap"
+      "oven-sh/bun"
+      "anomalyco/tap"
+      "basecamp/tap"
+    ];
     taps = {
       "dopplerhq/homebrew-cli" = inputs.homebrew-dopplerhq-cli;
       "arimxyer/homebrew-tap" = inputs.homebrew-arimxyer-tap;
