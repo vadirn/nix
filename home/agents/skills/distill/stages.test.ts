@@ -341,6 +341,42 @@ test("payloadResidue: URL path digits are not phantom statistics (covered URL �
   expect(payloadResidue(u, "kept " + u)).toEqual([]);
 });
 
+// ---- Residue structured identity (Phase 3 threading): the pure lanes must stamp
+// kind + reasonClass so triage.ts picks verbs structurally, never by reason-string
+// sniffing. The fidelity-gate sites (def/steps/thesis, gate-inconclusive) are pinned
+// end-to-end by emit.test.ts's mocked success run. ----
+test("residue threading: wikilinkResidue stamps kind=edge reasonClass=dropped on both push sites", () => {
+  const dropped = wikilinkResidue("see [[foo]]", "");
+  expect(dropped[0]).toMatchObject({ kind: "edge", reasonClass: "dropped" });
+  const collision = wikilinkResidue("[[foo bar]] and [[foo/bar]]", "");
+  for (const r of collision) expect(r).toMatchObject({ kind: "edge", reasonClass: "dropped" });
+});
+
+test("residue threading: payloadResidue stamps kind=payload reasonClass=dropped", () => {
+  const r = payloadResidue("| a | b |\n| - | - |\n| 1 | 2 |", "reworded prose");
+  expect(r.length).toBeGreaterThan(0);
+  for (const x of r) expect(x).toMatchObject({ kind: "payload", reasonClass: "dropped" });
+});
+
+test("residue threading: proseResidue distinguishes dropped from prose-inconclusive", () => {
+  const units: ProseUnit[] = [
+    { id: "P1", heading: "H", depth: 0, span: "alpha beta gamma delta" },
+    { id: "P2", heading: "H", depth: 0, span: "epsilon zeta eta theta" },
+  ];
+  const verdicts = new Map([
+    ["P1", { id: "P1", grade: "dropped" as const, anchor: "", missing: "gone" }],
+  ]);
+  const r = proseResidue(units, verdicts, new Set(["P2"]), "unrelated output text");
+  expect(r.find((x) => x.label === "P1")).toMatchObject({
+    kind: "prose",
+    reasonClass: "dropped",
+  });
+  expect(r.find((x) => x.label === "P2")).toMatchObject({
+    kind: "prose",
+    reasonClass: "prose-inconclusive",
+  });
+});
+
 // ---- proseResidue + anchored: the prose-judge mapping (D46) ----
 // surfaced is the DEFAULT; a unit clears only on an explicit covered verdict whose anchor is
 // verified present in the output AND on-topic for the judged item.
@@ -585,10 +621,39 @@ test("parseArgs: a single-dash unknown token errors and names the offending toke
   expect(m).not.toContain("0.6");
 });
 
+// ---- parseArgs: --out (Phase 3) — the compress-mode destination override. Value-checked at
+// parse time; the stdin-requires---out refusal itself is RUNTIME (it fires only when a run
+// reaches the emit, so the empty/no-body stdin exit-3 paths stay byte-identical — see
+// emit.test.ts and the unmodified recipe test below). ----
+test("parseArgs: --out sets the destination override and threads into opts", () => {
+  expect(ok(["--out", "dest.md", "in.md"]).opts.out).toBe("dest.md");
+  expect(ok(["--out", "dest.md", "-"]).opts.out).toBe("dest.md");
+  expect(ok(["in.md"]).opts.out).toBeUndefined();
+});
+
+test("parseArgs: --out rejects a missing value", () => {
+  expect(err(["--out"])).toContain("--out");
+  expect(err(["--out", "", "in.md"])).toContain("--out");
+});
+
+test("parseArgs: --out must name a .md destination, never an intermediary", () => {
+  expect(err(["--out", "dest.txt", "in.md"])).toContain("--out");
+  expect(err(["--out", "dest.tmp.md", "in.md"])).toContain(".tmp.md");
+});
+
+test("parseArgs: --out is compress-only — render rejects it", () => {
+  expect(err(["render", "--out", "x.md", "g.md"])).toContain("--out");
+  expect(err(["--out", "x.md", "render", "g.md"])).toContain("--out");
+});
+
 // ---- USAGE: pins the output contract (temp-file envelope, two-line stdout, exit codes) ----
-test("USAGE: states the output contract — temp-file envelope, two-line stdout, exit codes", () => {
+test("USAGE: states the output contract — intermediary envelope, two-line stdout, exit codes", () => {
   expect(USAGE).toContain("Output:");
   expect(USAGE).toContain("never modified");
+  // success now writes the review intermediary sibling to the destination…
+  expect(USAGE).toContain(".tmp.md");
+  expect(USAGE).toContain("--out");
+  // …while the exit-3 passthrough paths keep the mktemp <result> envelope
   expect(USAGE).toContain("<result>");
   // the capture recipe must preserve the exit code: a bare `| head -1` makes $?
   // report head's status (always 0), so exit 3/1 would be unobservable
@@ -597,6 +662,7 @@ test("USAGE: states the output contract — temp-file envelope, two-line stdout,
   expect(USAGE).toContain("0 distilled");
   expect(USAGE).toContain("2 usage");
   expect(USAGE).toContain("3 passthrough");
+  expect(USAGE).toContain("4 pending intermediary");
   // exit 3 is compress-scoped: render-mode skips exit 0
   expect(USAGE).toContain("compress mode");
   expect(USAGE).toContain("stdin when no path or '-'");

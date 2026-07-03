@@ -178,9 +178,7 @@ export function parseInteract(text: string): {
   blocks: Block[];
   errors: InteractError[];
 } {
-  const rawLines = text
-    .split("\n")
-    .map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
+  const rawLines = text.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
   if (text.endsWith("\n")) rawLines.pop();
 
   const blocks: Block[] = [];
@@ -360,7 +358,11 @@ export function parseInteract(text: string): {
         continue;
       }
       if (CLOSE_RE.test(raw)) {
-        errors.push({ code: "unopened-close", line: lineNo, message: "close without an open block" });
+        errors.push({
+          code: "unopened-close",
+          line: lineNo,
+          message: "close without an open block",
+        });
         continue;
       }
       continue; // passthrough
@@ -636,6 +638,13 @@ export type BlockSpec = {
     state: ItemState;
     verb: string;
     target: string;
+    /// Render the target wrapped in backticks — the reading-view cue for a
+    /// glossary term (plan-§5 fixture: def targets are backticked, workflow/gate
+    /// targets are not). Purely presentational: parse strips the backticks back
+    /// to the same semantic target, so the round-trip law still holds. The
+    /// backtick-in-target throw is unaffected — the semantic target itself may
+    /// never carry one.
+    targetCode?: boolean;
     note?: string;
     payload?: string;
   }[];
@@ -723,7 +732,8 @@ export function renderBlock(spec: BlockSpec): string {
   const chunks: string[] = [];
   spec.items.forEach((it, idx) => {
     if (idx > 0) chunks.push("");
-    const targetRaw = needsBacktick(it.target) ? `\`${it.target}\`` : it.target;
+    const targetRaw =
+      it.targetCode || needsBacktick(it.target) ? `\`${it.target}\`` : it.target;
     let line = `- [${it.state === "checked" ? "x" : " "}] ${it.verb}: ${targetRaw}`;
     if (it.note !== undefined) line += ` — ${it.note}`;
     chunks.push(line);

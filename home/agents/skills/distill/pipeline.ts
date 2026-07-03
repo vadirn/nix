@@ -1,9 +1,17 @@
 // pipeline — the orchestration layer: the five-stage compress pipeline (distill),
 // arg parsing, the temp-file sink, and main(). Sequences the stages from prompts.ts
 // behind the seams the leaf modules stabilize; main() is invoked by the entrypoint.
-import { readFileSync, writeFileSync } from "node:fs";
-import { basename } from "node:path";
+import {
+  existsSync,
+  linkSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   type Block,
   type Grade,
@@ -44,7 +52,13 @@ import {
   parseSuperseded,
   parseType,
 } from "./frontmatter.ts";
-import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
+import {
+  askJson,
+  EXTRACT,
+  isTransient,
+  rethrowIfBug,
+  TruncationError,
+} from "./fw.ts";
 import {
   type ConceptVerdict,
   type StepVerdict,
@@ -66,9 +80,14 @@ import {
 import { normalizeTypography } from "./writing/typography.ts";
 import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { proseFix, proseJudge } from "./writing/prose-qa.ts";
-import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
+import {
+  formatNameLint,
+  nameLintAgainstSource,
+  type NameLintResult,
+} from "./writing/name-lint.ts";
 import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
 import { runRender } from "./render-mode.ts";
+import { buildIntermediary } from "./triage.ts";
 
 // Workflow-gate recovery ladder (stage-5 loop). A flagged step is repaired from
 // the gate's own finding (judge-guided), then — if the repair still fails the
@@ -84,7 +103,31 @@ const WF_RECOVERY: WfRecovery = ((): WfRecovery => {
 })();
 
 // ---- pipeline ----
-type Residue = { label: string; reason: string; source: string };
+// What failed and where, carried structurally (not re-derived from the reason string)
+// so triage.ts can pick the decision verb and target per entry (plan §1: D1's
+// residueToBlocks + kind/stepIdxs threading).
+export type ResidueKind =
+  "def" | "steps" | "thesis" | "edge" | "payload" | "prose";
+// Why the item is residue: "failed" — a gate judged it unfaithful (def/steps/thesis);
+// "gate-inconclusive" — the fidelity/workflow judge returned no verdict, so the entry
+// SHIPPED in the body surfaced-but-unverified (the one class triage maps to `keep:`);
+// "dropped" — a coverage lane found it absent from output (incl. the wikilink
+// slug-collision "verify manually" case, whose recover semantics match a drop's);
+// "prose-inconclusive" — the coverage judge returned no usable verdict for an item
+// that is NOT known to be in the body, so it triages as recover, not keep.
+export type ResidueClass =
+  "failed" | "gate-inconclusive" | "dropped" | "prose-inconclusive";
+export type Residue = {
+  label: string;
+  reason: string;
+  source: string;
+  kind: ResidueKind;
+  reasonClass: ResidueClass;
+  /// 0-based indices into the emitted `## Workflow` list; set iff kind === "steps".
+  /// The group id ("workflow:N") is group-numbered and pipeline-internal — these
+  /// indices are the only mapping to the flat list a reviewer sees at apply time.
+  stepIdxs?: number[];
+};
 // Did distill rewrite the body, or pass it through unchanged? The producer knows this at each
 // return site (nothing-to-distill and expand-guard pass through; the normal path compresses);
 // the routed build reads it to tag the footer rather than re-deriving it by byte-comparison.
@@ -119,7 +162,10 @@ type StepGroup = { id: string; idxs: number[]; sourceText: string };
 // (today's behavior — any growth at all reverts to the original); a positive value sets an
 // absolute ceiling instead; 0 disables the guard entirely, returning null (a debugging escape
 // hatch to inspect what the model actually produced even when it grew).
-export function expandGuardCap(beforeWords: number, maxWords?: number): number | null {
+export function expandGuardCap(
+  beforeWords: number,
+  maxWords?: number,
+): number | null {
   if (maxWords === 0) return null;
   if (maxWords !== undefined && maxWords > 0) return maxWords;
   return beforeWords;
@@ -146,7 +192,9 @@ export function orderContent(
   const payloadBlockIds = new Set(payloadBlocks.map((b) => b.id));
   const orderKey = (e: { source: string[] }) =>
     Math.min(...e.source.map((id) => blockIndex.get(id) ?? 1e9));
-  const orderedEntries = [...combo.glossary].sort((a, b) => orderKey(a) - orderKey(b));
+  const orderedEntries = [...combo.glossary].sort(
+    (a, b) => orderKey(a) - orderKey(b),
+  );
   const orderedSteps = combo.workflow
     .filter((s) => !s.source.every((id) => payloadBlockIds.has(id)))
     .sort((a, b) => orderKey(a) - orderKey(b));
@@ -162,9 +210,15 @@ export function orderContent(
 // extraction prompt's literal "[Bn]" markers (prompts.ts) are byte-identical to today — this
 // is what lets a WorkStep's existing `source: string[]` (block ids) be traced back to the
 // section it came from without perturbing extraction.
-export type OwnedBlocks = { blocks: Block[]; owner: Map<string, number>; ownerCount: number };
+export type OwnedBlocks = {
+  blocks: Block[];
+  owner: Map<string, number>;
+  ownerCount: number;
+};
 
-export function tagOwnedBlocks(reauthorSections: { text: string }[]): OwnedBlocks {
+export function tagOwnedBlocks(
+  reauthorSections: { text: string }[],
+): OwnedBlocks {
   const blocks: Block[] = [];
   const owner = new Map<string, number>();
   let n = 0;
@@ -199,8 +253,13 @@ export function groupStepsByOwner(
   workflowSteps: string[],
   owned: OwnedBlocks,
 ): string[][] {
-  const byOwner: string[][] = Array.from({ length: owned.ownerCount }, () => []);
-  orderedSteps.forEach((s, i) => byOwner[ownerOfStep(s, owned.owner)].push(workflowSteps[i]));
+  const byOwner: string[][] = Array.from(
+    { length: owned.ownerCount },
+    () => [],
+  );
+  orderedSteps.forEach((s, i) =>
+    byOwner[ownerOfStep(s, owned.owner)].push(workflowSteps[i]),
+  );
   return byOwner;
 }
 
@@ -248,7 +307,9 @@ async function synthesize(
     tieTogether(combo, lang),
     synthWorkflow(orderedSteps, blockById, lang),
   ]);
-  const prose = opts.coreOnly ? "" : await connectiveProse(combo, orderedEntries, defByTerm, lang);
+  const prose = opts.coreOnly
+    ? ""
+    : await connectiveProse(combo, orderedEntries, defByTerm, lang);
   return { defByTerm, tie, workflowSteps, prose };
 }
 
@@ -310,7 +371,12 @@ async function runFidelityGate(
   blockById: Map<string, Block>,
   lang: "en" | "ru",
   opts: { maxRetries: number; isReference: boolean },
-): Promise<{ residue: Residue[]; retries: number; gateSkipped: number; keptVerbatim: number }> {
+): Promise<{
+  residue: Residue[];
+  retries: number;
+  gateSkipped: number;
+  keptVerbatim: number;
+}> {
   const stepGroups = computeStepGroups(orderedSteps, blockById);
   let gloss = assembleBody(
     h1,
@@ -347,8 +413,10 @@ async function runFidelityGate(
   // recovery cannot fix them, so they bypass the retry loop and surface directly.
   const inconclusiveC = new Map<string, ConceptVerdict>();
   const inconclusiveG = new Map<string, StepVerdict>();
-  for (const c of graded.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
-  for (const g of gradedG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
+  for (const c of graded.concepts)
+    if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
+  for (const g of gradedG)
+    if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
   let failC = graded.concepts.filter((c) => c.grade === "residue");
   let failG = gradedG.filter((g) => g.grade === "residue");
   while ((failC.length > 0 || failG.length > 0) && retries < opts.maxRetries) {
@@ -365,7 +433,8 @@ async function runFidelityGate(
             renderEntryPrompt(entry, sourceTextFor(entry, blockById), lang),
             1024,
           );
-          if (r.def) defByTerm.set(entry.term, normalizeTypography(r.def.trim()));
+          if (r.def)
+            defByTerm.set(entry.term, normalizeTypography(r.def.trim()));
         } catch (e) {
           rethrowIfBug(e, "recover-def");
           // a transient re-render flake keeps the prior def; the gate re-grades it next
@@ -384,7 +453,8 @@ async function runFidelityGate(
               lang,
             );
             g.idxs.forEach((i, k) => {
-              if (tightened[k]) workflowSteps[i] = normalizeTypography(tightened[k]);
+              if (tightened[k])
+                workflowSteps[i] = normalizeTypography(tightened[k]);
             });
           } else {
             // judge-guided repair: feed the gate's finding back so the rewrite fixes
@@ -396,7 +466,8 @@ async function runFidelityGate(
               lang,
             );
             g.idxs.forEach((i, k) => {
-              if (repaired[k]) workflowSteps[i] = normalizeTypography(repaired[k]);
+              if (repaired[k])
+                workflowSteps[i] = normalizeTypography(repaired[k]);
             });
           }
         } catch (e) {
@@ -424,7 +495,10 @@ async function runFidelityGate(
             gloss,
             renderedC().filter((r) => patchC.has(r.term)),
           )
-        : Promise.resolve({ thesisRecoverable, concepts: [] as ConceptVerdict[] }),
+        : Promise.resolve({
+            thesisRecoverable,
+            concepts: [] as ConceptVerdict[],
+          }),
       patchG.size
         ? workflowGate(
             renderedG().filter((r) => patchG.has(r.id)),
@@ -434,8 +508,10 @@ async function runFidelityGate(
     ]);
     // a re-grade can itself come back inconclusive — capture those too, then drop
     // them from the recoverable sets so the loop never retries an unparseable verdict.
-    for (const c of reg.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
-    for (const g of regG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
+    for (const c of reg.concepts)
+      if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
+    for (const g of regG)
+      if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
     failC = reg.concepts.filter((c) => c.grade === "residue");
     failG = regG.filter((g) => g.grade === "residue");
   }
@@ -485,6 +561,8 @@ async function runFidelityGate(
       label: c.term,
       reason: `${c.direction || "residue"}: ${c.missing || "failed round-trip entailment"}`,
       source: entry ? sourceTextFor(entry, blockById) : "",
+      kind: "def",
+      reasonClass: "failed",
     });
   }
   for (const v of failG) {
@@ -493,6 +571,9 @@ async function runFidelityGate(
       label: v.id,
       reason: `workflow: ${v.missing || "directive coverage failed"}`,
       source: g ? g.sourceText : "",
+      kind: "steps",
+      reasonClass: "failed",
+      stepIdxs: g ? g.idxs : [],
     });
   }
   if (!thesisRecoverable) {
@@ -500,6 +581,8 @@ async function runFidelityGate(
       label: "(thesis)",
       reason: "thesis not recoverable from output",
       source: combo.thesis,
+      kind: "thesis",
+      reasonClass: "failed",
     });
   }
   // gate-inconclusive items: the judge could not render a verdict (no JSON after
@@ -511,6 +594,8 @@ async function runFidelityGate(
       label: c.term,
       reason: `gate-inconclusive: ${c.missing || "judge returned no verdict"}`,
       source: entry ? sourceTextFor(entry, blockById) : "",
+      kind: "def",
+      reasonClass: "gate-inconclusive",
     });
   }
   for (const v of inconclusiveG.values()) {
@@ -519,6 +604,9 @@ async function runFidelityGate(
       label: v.id,
       reason: `gate-inconclusive: ${v.missing || "judge returned no verdict"}`,
       source: g ? g.sourceText : "",
+      kind: "steps",
+      reasonClass: "gate-inconclusive",
+      stepIdxs: g ? g.idxs : [],
     });
   }
   gateSkipped = inconclusiveC.size + inconclusiveG.size;
@@ -536,7 +624,10 @@ async function runProseQA(
 ): Promise<{ prose: string; proseFixes: number }> {
   const pj = await proseJudge(thesis, prose);
   if (!pj.pass && pj.issues.length) {
-    return { prose: await proseFix(prose, pj.issues, lang), proseFixes: pj.issues.length };
+    return {
+      prose: await proseFix(prose, pj.issues, lang),
+      proseFixes: pj.issues.length,
+    };
   }
   return { prose, proseFixes: 0 };
 }
@@ -571,11 +662,15 @@ export function buildFooter(m: {
   const gateTag = m.gateSkipped ? ` · ${m.gateSkipped} gate-skipped` : "";
   // steps the repair ladder could not clear and that shipped the source's verbatim
   // imperative — faithful but uncompressed, distinct from a cleared step
-  const verbatimTag = m.keptVerbatim ? ` · ${m.keptVerbatim} kept-verbatim` : "";
+  const verbatimTag = m.keptVerbatim
+    ? ` · ${m.keptVerbatim} kept-verbatim`
+    : "";
   const shapeTag = m.coreOnly ? "gloss" : "prose+gloss";
   // the prose gate would have run (!noGate && !coreOnly) but the facts-dump genre gate
   // skipped it — surface the skip so disabling a loss detector is never silent.
-  const proseGateTag = m.proseGateOffFactsDump ? ` · prose-gate off (facts-dump)` : "";
+  const proseGateTag = m.proseGateOffFactsDump
+    ? ` · prose-gate off (facts-dump)`
+    : "";
   return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
 }
 
@@ -600,7 +695,10 @@ export function buildFooter(m: {
 // `note`, so dropping one anchor while any link to `note` survives reads as covered,
 // not residue. Section-anchor loss is outside the net by design (the vault is
 // navigational; no note's meaning depends on which anchor survives, audited 2026-06-29).
-export function wikilinkResidue(sourceText: string, outputText: string): Residue[] {
+export function wikilinkResidue(
+  sourceText: string,
+  outputText: string,
+): Residue[] {
   const covered = new Set(harvestVaultEdges(outputText).map((w) => w.slug));
   // Group source edges by slug, tracking the DISTINCT normalized targets and the
   // first-appearance markups under each. The discriminator is the distinct target
@@ -632,6 +730,8 @@ export function wikilinkResidue(sourceText: string, outputText: string): Residue
           reason:
             "wikilink slug-collision: distinct source edges share a slug; output coverage is ambiguous — verify each manually",
           source: markup,
+          kind: "edge",
+          reasonClass: "dropped",
         });
       }
       continue;
@@ -640,8 +740,11 @@ export function wikilinkResidue(sourceText: string, outputText: string): Residue
     const markup = g.markups[0];
     residue.push({
       label: markup,
-      reason: "wikilink dropped: source edge absent from output (no relation, no retained block)",
+      reason:
+        "wikilink dropped: source edge absent from output (no relation, no retained block)",
       source: markup,
+      kind: "edge",
+      reasonClass: "dropped",
     });
   }
   return residue;
@@ -663,18 +766,24 @@ export function wikilinkResidue(sourceText: string, outputText: string): Residue
 // under --no-gate. Known residual: a pure-prose dropped sub-section / worked example /
 // qualifier carries no harvestable token and stays silent here — that is the deferred judge
 // tier's job, gated on eval evidence, not this deterministic spine's.
-const PAYLOAD_LANES: { harvest: (t: string) => PayloadSpan[]; reason: string }[] = [
+const PAYLOAD_LANES: {
+  harvest: (t: string) => PayloadSpan[];
+  reason: string;
+}[] = [
   {
     harvest: harvestFences,
-    reason: "fenced-block dropped: verbatim code/output block absent from output (not retained)",
+    reason:
+      "fenced-block dropped: verbatim code/output block absent from output (not retained)",
   },
   {
     harvest: harvestBlockquotes,
-    reason: "blockquote dropped: verbatim quotation absent from output (reworded or cut)",
+    reason:
+      "blockquote dropped: verbatim quotation absent from output (reworded or cut)",
   },
   {
     harvest: harvestTableRows,
-    reason: "table-row dropped: data row absent from output (structure dissolved into prose)",
+    reason:
+      "table-row dropped: data row absent from output (structure dissolved into prose)",
   },
   {
     harvest: harvestImages,
@@ -682,7 +791,8 @@ const PAYLOAD_LANES: { harvest: (t: string) => PayloadSpan[]; reason: string }[]
   },
   {
     harvest: harvestMath,
-    reason: "math dropped: formula absent from output (not recoverable from prose)",
+    reason:
+      "math dropped: formula absent from output (not recoverable from prose)",
   },
   {
     harvest: harvestCitations,
@@ -694,7 +804,10 @@ const PAYLOAD_LANES: { harvest: (t: string) => PayloadSpan[]; reason: string }[]
       "numeric-token dropped: source statistic absent from output (figure lost in re-authoring)",
   },
 ];
-export function payloadResidue(sourceText: string, outputText: string): Residue[] {
+export function payloadResidue(
+  sourceText: string,
+  outputText: string,
+): Residue[] {
   const residue: Residue[] = [];
   for (const lane of PAYLOAD_LANES) {
     const covered = new Set(lane.harvest(outputText).map((s) => s.key));
@@ -702,7 +815,13 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
     for (const s of lane.harvest(sourceText)) {
       if (covered.has(s.key) || seen.has(s.key)) continue;
       seen.add(s.key);
-      residue.push({ label: s.markup, source: s.markup, reason: lane.reason });
+      residue.push({
+        label: s.markup,
+        source: s.markup,
+        reason: lane.reason,
+        kind: "payload",
+        reasonClass: "dropped",
+      });
     }
   }
   return residue;
@@ -716,8 +835,14 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
 // these gates over its own narrower subset would false-flag a link alive in a preserve section and
 // double-count a real drop. Returning [] for the routed head IS the residue-scope fix, and it is
 // the invariant assembleRoutedNote relies on when it concats head.residue.
-export function edgePayloadResidue(text: string, out: string, routed = false): Residue[] {
-  return routed ? [] : [...wikilinkResidue(text, out), ...payloadResidue(text, out)];
+export function edgePayloadResidue(
+  text: string,
+  out: string,
+  routed = false,
+): Residue[] {
+  return routed
+    ? []
+    : [...wikilinkResidue(text, out), ...payloadResidue(text, out)];
 }
 
 // ---- prose-list-item gate (the prose-judge tier, D46) ----
@@ -748,7 +873,11 @@ const contentWords = (s: string): string[] =>
 // (ii) is the load-bearing fix: existence alone let glm launder a dropped item by quoting
 // unrelated true output text (e.g. the thesis); requiring shared content words binds the
 // anchor to the JUDGED item, so the model cannot point at the thesis to clear a dropped caveat.
-export function anchored(v: ProseVerdict, span: string, normOut: string): boolean {
+export function anchored(
+  v: ProseVerdict,
+  span: string,
+  normOut: string,
+): boolean {
   const a = normalizeForContainment(v.anchor ?? "");
   if (a.length < 16 || !normOut.includes(a)) return false;
   const aw = new Set(contentWords(a));
@@ -776,6 +905,8 @@ export function proseResidue(
         reason: flaked.has(u.id)
           ? "prose-inconclusive: judge returned no verdict for this item's batch"
           : "prose-inconclusive: judge omitted this item from its verdict",
+        kind: "prose",
+        reasonClass: "prose-inconclusive",
       });
       continue;
     }
@@ -787,6 +918,8 @@ export function proseResidue(
         v.grade === "dropped"
           ? `prose dropped: ${v.missing || "list-item information absent from output"}`
           : "prose-inconclusive: covered verdict not anchored to a verifiable, on-topic output location",
+      kind: "prose",
+      reasonClass: v.grade === "dropped" ? "dropped" : "prose-inconclusive",
     });
   }
   return residue;
@@ -834,7 +967,15 @@ async function distill(
   if (!routed && !opts.coreOnly) {
     const { title, sections } = partition(text, opts.tau);
     if (sections.some((u) => u.route === "preserve")) {
-      return distillRouted(text, title, sections, lang, frontDescription, opts, selfSlug);
+      return distillRouted(
+        text,
+        title,
+        sections,
+        lang,
+        frontDescription,
+        opts,
+        selfSlug,
+      );
     }
   }
   const blocks = owned?.blocks ?? segment(text);
@@ -876,11 +1017,22 @@ async function distill(
   // 2. grade blocks, then order entries/steps (pure)
   opts.progress?.("grade…");
   const grades = await gradeBlocks(combo, blocks);
-  const { payloadBlocks, orderedEntries, orderedSteps } = orderContent(combo, blocks, grades);
+  const { payloadBlocks, orderedEntries, orderedSteps } = orderContent(
+    combo,
+    blocks,
+    grades,
+  );
 
   // 3. synthesize defs + tie + workflow + connective prose body
   opts.progress?.("synthesize…");
-  const synth = await synthesize(combo, orderedEntries, orderedSteps, opts, blockById, lang);
+  const synth = await synthesize(
+    combo,
+    orderedEntries,
+    orderedSteps,
+    opts,
+    blockById,
+    lang,
+  );
   const defByTerm = synth.defByTerm;
   let tie = synth.tie;
   let workflowSteps = synth.workflowSteps;
@@ -1028,7 +1180,13 @@ async function distill(
       opts.isReference,
     );
   }
-  return { out: exposedOut, footer, residue, status: "compressed", workflowByOwner };
+  return {
+    out: exposedOut,
+    footer,
+    residue,
+    status: "compressed",
+    workflowByOwner,
+  };
 }
 
 // The heterogeneous (per-section-routed) build (D12/D16, Backlog 10). Re-author the idea
@@ -1055,13 +1213,32 @@ async function distillRouted(
     .trim();
   const owned = tagOwnedBlocks(reauthorSections);
   const head = reauthorText
-    ? await distill(reauthorText, lang, frontDescription, opts, selfSlug, true, owned)
-    : { out: "", footer: "", residue: [] as Residue[], status: "passthrough" as const };
+    ? await distill(
+        reauthorText,
+        lang,
+        frontDescription,
+        opts,
+        selfSlug,
+        true,
+        owned,
+      )
+    : {
+        out: "",
+        footer: "",
+        residue: [] as Residue[],
+        status: "passthrough" as const,
+      };
   // The routed note is itself a compression (prose re-authored, payload compacted); its own
   // status is "compressed". Unconsumed today (the routed=true guard blocks nesting), but the
   // contract is honest and a constant, so it cannot drift.
   return {
-    ...assembleRoutedNote({ source: text, title, reauthorText, head, sections }),
+    ...assembleRoutedNote({
+      source: text,
+      title,
+      reauthorText,
+      head,
+      sections,
+    }),
     status: "compressed",
   };
 }
@@ -1090,7 +1267,12 @@ export function assembleRoutedNote(a: {
   source: string;
   title: string;
   reauthorText: string;
-  head: { out: string; residue: Residue[]; status: DistillStatus; workflowByOwner?: string[][] };
+  head: {
+    out: string;
+    residue: Residue[];
+    status: DistillStatus;
+    workflowByOwner?: string[][];
+  };
   sections: { route: Route; text: string }[];
 }): { out: string; footer: string; residue: Residue[] } {
   const beforeWords = wordCount(a.source);
@@ -1153,22 +1335,33 @@ Options:
   --no-expand-guard      disable the whole-note expand-guard (alias: --max-words 0)
   --max-words <n>        expand-guard cap: 0 disables it, a positive n is an absolute ceiling
   --dry-run              deterministic front half only (segment→route report); no API call
+  --out <dest.md>        compress-mode destination override (default: the input path);
+                         required when reading from stdin once a run reaches the emit
   -h, --help             show this help and exit
 
 Output:
-  The input file is never modified. The result is written to a fresh temp .md:
-  <result>…</result> holds exactly the text to write back to source, <residue>
-  (omitted when empty) holds each item that failed a gate, with verbatim
-  <source>. stdout is two lines — the temp-file path, then the one-line footer.
-  A \`| head -1\` capture eats the exit code ($? after a pipeline is the last
-  command's — head's, always 0); capture both instead:
+  The input file is never modified. A distilled run writes an interactive review
+  intermediary sibling to the destination, \`<dest>.tmp.md\` (destination defaults to
+  the input path, overridable with --out): a decision block per residue item (verbs
+  recover/keep) plus a mandatory trailing confirm-all gate stamped with dest=/src=.
+  A passthrough run (failsafe, expand-guard, nothing to distill) instead writes a
+  fresh temp .md holding the legacy envelope: <result>…</result> is exactly the text
+  to write back to source, <residue> (omitted when empty) holds each item that
+  failed a gate, with verbatim <source>. Either way, stdout is two lines — the
+  written path, then the one-line footer. A \`| head -1\` capture eats the exit code
+  ($? after a pipeline is the last command's — head's, always 0); capture both
+  instead:
     out=$(distill-text input.md); status=$?; path=\${out%%$'\\n'*}
-  Exit: 0 distilled (residue and gate-inconclusive items still exit 0 — they are
-  surfaced in the envelope and footer; render-mode skips also exit 0, flagged in
-  the footer) · 1 FIREWORKS_API_KEY missing · 2 usage error · 3 passthrough
-  (compress mode: the output is the unmodified original — failsafe,
-  expand-guard, nothing to distill; the two stdout lines still print; empty
-  input exits 3 with nothing on stdout).
+  Exit: 0 distilled (a pending review intermediary, residue, and gate-inconclusive
+  items still exit 0 — they are surfaced in the footer and the intermediary itself;
+  render-mode skips also exit 0, flagged in the footer) · 1 FIREWORKS_API_KEY
+  missing · 2 usage error (compress mode: stdin without --out once the run reaches
+  the emit; --out naming a missing directory) · 3 passthrough (compress mode: the
+  output is the unmodified original —
+  failsafe, expand-guard, nothing to distill; the two stdout lines still print;
+  empty input exits 3 with nothing on stdout) · 4 pending intermediary already
+  exists at the sibling .tmp.md path (refused before the key gate and before any
+  LLM call — apply or delete it first).
 
 Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
 `;
@@ -1183,6 +1376,12 @@ export type CliOpts = {
   tau: number;
   maxWords?: number;
   path?: string;
+  /// Compress-only destination override (plan Q6): the intermediary is written
+  /// sibling to THIS path (`<out minus .md>.tmp.md`) and apply derives its
+  /// write-back target from it. Required when input is stdin AND the run reaches
+  /// the emit (passthrough/no-body/empty paths never need a destination, which is
+  /// what keeps the c4e0339 stdin recipe exit-3 behavior byte-identical).
+  out?: string;
 };
 
 // parseArgs is the whole CLI surface as one pure argv→result function so main() can act
@@ -1214,6 +1413,7 @@ export function parseArgs(argv: string[]): ParseResult {
   let noGate = false;
   let coreOnly = false;
   let dryRun = false;
+  let out: string | undefined;
   const positionals: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -1248,16 +1448,25 @@ export function parseArgs(argv: string[]): ParseResult {
     if (a === "--lang") {
       const v = argv[++i];
       if (v === undefined)
-        return { kind: "error", message: "--lang expects a value (en, ru, or auto)" };
+        return {
+          kind: "error",
+          message: "--lang expects a value (en, ru, or auto)",
+        };
       if (v !== "en" && v !== "ru" && v !== "auto")
-        return { kind: "error", message: `--lang expects one of: en, ru, auto (got '${v}')` };
+        return {
+          kind: "error",
+          message: `--lang expects one of: en, ru, auto (got '${v}')`,
+        };
       lang = v;
       continue;
     }
     if (a === "--max-retries") {
       const v = argv[++i];
       if (v === undefined || v.trim() === "")
-        return { kind: "error", message: "--max-retries expects a non-negative integer" };
+        return {
+          kind: "error",
+          message: "--max-retries expects a non-negative integer",
+        };
       const n = Number(v);
       if (!Number.isInteger(n) || n < 0)
         return {
@@ -1273,7 +1482,10 @@ export function parseArgs(argv: string[]): ParseResult {
         return { kind: "error", message: "--tau expects a number in [0, 1]" };
       const n = Number(v);
       if (!Number.isFinite(n) || n < 0 || n > 1)
-        return { kind: "error", message: `--tau expects a number in [0, 1] (got '${v}')` };
+        return {
+          kind: "error",
+          message: `--tau expects a number in [0, 1] (got '${v}')`,
+        };
       tau = n;
       continue;
     }
@@ -1284,7 +1496,10 @@ export function parseArgs(argv: string[]): ParseResult {
     if (a === "--max-words") {
       const v = argv[++i];
       if (v === undefined || v.trim() === "")
-        return { kind: "error", message: "--max-words expects a non-negative integer" };
+        return {
+          kind: "error",
+          message: "--max-words expects a non-negative integer",
+        };
       const n = Number(v);
       if (!Number.isInteger(n) || n < 0)
         return {
@@ -1294,10 +1509,35 @@ export function parseArgs(argv: string[]): ParseResult {
       maxWords = n;
       continue;
     }
+    // --out: the compress-mode destination override (plan Q6). Value-checked here at
+    // parse time — it must name a real .md destination, never the .tmp.md intermediary
+    // itself; the stdin-requires---out refusal is a separate RUNTIME check (main()) so
+    // the empty/no-body stdin exit-3 paths stay byte-identical.
+    if (a === "--out") {
+      const v = argv[++i];
+      if (v === undefined || v.trim() === "")
+        return {
+          kind: "error",
+          message: "--out expects a destination .md path",
+        };
+      if (v.endsWith(".tmp.md"))
+        return {
+          kind: "error",
+          message: `--out must not name a .tmp.md intermediary (got '${v}')`,
+        };
+      if (!v.endsWith(".md"))
+        return {
+          kind: "error",
+          message: `--out expects a .md destination (got '${v}')`,
+        };
+      out = v;
+      continue;
+    }
     // Any other dash-prefixed token is a flag typo (single- or double-dash), not a path —
     // name it, rather than misattributing an "extra argument" error to the following values
     // or ENOENT-crashing on it as a bogus filename. A bare `-` stays a positional.
-    if (a.startsWith("-") && a !== "-") return { kind: "error", message: `unknown flag '${a}'` };
+    if (a.startsWith("-") && a !== "-")
+      return { kind: "error", message: `unknown flag '${a}'` };
     positionals.push(a);
   }
 
@@ -1310,7 +1550,17 @@ export function parseArgs(argv: string[]): ParseResult {
   }
   const path = rest[0];
   if (rest.length > 1)
-    return { kind: "error", message: `unexpected extra argument(s): ${rest.slice(1).join(", ")}` };
+    return {
+      kind: "error",
+      message: `unexpected extra argument(s): ${rest.slice(1).join(", ")}`,
+    };
+
+  // --out is compress-only: render never derives a write-back destination.
+  if (mode === "render" && out !== undefined)
+    return {
+      kind: "error",
+      message: "--out is compress-only (render never derives a destination)",
+    };
 
   // --no-expand-guard is sugar for --max-words 0; a conflicting positive --max-words is a
   // contradiction, so reject it rather than silently letting one win.
@@ -1326,7 +1576,18 @@ export function parseArgs(argv: string[]): ParseResult {
   return {
     kind: "ok",
     mode,
-    opts: { lang, maxRetries, noRevise, noGate, coreOnly, dryRun, tau, maxWords, path },
+    opts: {
+      lang,
+      maxRetries,
+      noRevise,
+      noGate,
+      coreOnly,
+      dryRun,
+      tau,
+      maxWords,
+      path,
+      out,
+    },
   };
 }
 
@@ -1335,6 +1596,37 @@ export function parseArgs(argv: string[]): ParseResult {
 // (openable, diffable) and stdout carries only the path + footer.
 function tempMdPath(): string {
   return execFileSync("mktemp", ["--suffix=.md"], { encoding: "utf8" }).trim();
+}
+
+// The pending-review intermediary sibling for a destination. `note.md` →
+// `note.tmp.md`; a destination without the .md suffix APPENDS `.tmp.md` instead
+// of replacing — a bare replace() no-ops on `note.txt`, making tmpPath === dest,
+// so the exit-4 preflight would refuse on the input file's own existence and the
+// success write would clobber the input (both observed pre-fix).
+function tmpPathFor(dest: string): string {
+  return dest.endsWith(".md") ? dest.replace(/\.md$/, ".tmp.md") : `${dest}.tmp.md`;
+}
+
+// The exit-4 pending-intermediary refusal (plan §4), shared by the pre-key preflight
+// and the no-clobber final write (a racing emit's loser). The mtime staleness hint
+// (tmpfile F5) tells the reviewer whether the pending file is this morning's review
+// or a weeks-old orphan; refusal is loud either way.
+function refusePendingIntermediary(tmpPath: string): never {
+  let age = "";
+  try {
+    const mins = Math.round((Date.now() - statSync(tmpPath).mtimeMs) / 60000);
+    const label =
+      mins < 60
+        ? `${mins}m`
+        : mins < 1440
+          ? `${Math.round(mins / 60)}h`
+          : `${Math.round(mins / 1440)}d`;
+    age = ` (${label} old)`;
+  } catch {} // a hint only: a vanished/unstattable file changes nothing about the refusal
+  console.error(
+    `distill: pending intermediary exists: ${tmpPath}${age} — apply it or delete it before re-running`,
+  );
+  process.exit(4);
 }
 
 export async function main() {
@@ -1347,7 +1639,9 @@ export async function main() {
     return;
   }
   if (parsed.kind === "error") {
-    console.error(`distill: ${parsed.message}\nTry 'distill-text --help' for usage.`);
+    console.error(
+      `distill: ${parsed.message}\nTry 'distill-text --help' for usage.`,
+    );
     process.exit(2);
     return; // process.exit ends the run; the explicit return also narrows `parsed` to "ok" below
   }
@@ -1362,13 +1656,40 @@ export async function main() {
     tau,
     maxWords,
     path: inputPath,
+    out: outOpt,
   } = parsed.opts;
   const fromStdin = inputPath === undefined || inputPath === "-";
+  // The compress-mode write-back destination: --out when given, else the input path
+  // (stdin with no --out has none yet — that is a runtime refusal below, once the
+  // run actually reaches the emit, so the no-body/empty-input exit-3 paths stay
+  // byte-identical). Both the exit-4 preflight and the success emit key off this.
+  // Resolved to absolute so stdout line 1 stays openable from any later cwd (the
+  // mktemp contract was always absolute; the plan-§4 transcript shows an absolute
+  // line 1 for a relative invocation) — agent callers re-open $path after a cwd reset.
+  const destRel = outOpt ?? (fromStdin ? undefined : inputPath);
+  const dest = destRel === undefined ? undefined : resolve(destRel);
   // A bare `distill-text` at a terminal would hang silently on fd 0; say so.
   const stdinHint = (): void => {
     if (fromStdin && process.stdin.isTTY)
-      console.error("distill: reading stdin — pass a file or pipe input (ctrl-d ends input)");
+      console.error(
+        "distill: reading stdin — pass a file or pipe input (ctrl-d ends input)",
+      );
   };
+  // Phase 3 preflight: refuse BEFORE the API-key gate and before any LLM call when a
+  // prior review intermediary is still pending at the sibling .tmp.md path — nothing
+  // written, no stdout, so a stuck run never masquerades as fresh progress. An --out
+  // whose directory is absent is a usage error caught here too: the destination file
+  // may be new (creation case) but its directory must exist, or the run would burn
+  // the whole LLM budget and die on the final write.
+  if (mode === "compress" && !dryRun && dest !== undefined) {
+    if (outOpt !== undefined && !existsSync(dirname(dest))) {
+      console.error(`distill: --out directory does not exist: ${dirname(dest)}`);
+      process.exit(2);
+      return;
+    }
+    const tmpPath = tmpPathFor(dest);
+    if (existsSync(tmpPath)) refusePendingIntermediary(tmpPath);
+  }
   // --dry-run (Backlog 9): the deterministic front half only — segment → per-section
   // payload density → route. Prints the report and returns, writing nothing, making no
   // LLM call, needing no API key. Runs on the note body (frontmatter stripped).
@@ -1392,8 +1713,12 @@ export async function main() {
     console.error("distill skipped: empty input");
     process.exit(3);
   }
-  const path = tempMdPath();
+  // Lazy: mktemp CREATES the file, and the Phase-3 success path never uses it —
+  // an eager call would orphan one empty temp file per successful distill. Only
+  // the passthrough/error/no-body/render paths (the `emit` callers) pay for it.
+  let mktempPath: string | undefined;
   const emit = (body: string, footer: string): void => {
+    const path = (mktempPath ??= tempMdPath());
     writeFileSync(path, body);
     process.stdout.write(`${path}\n${footer}\n`);
   };
@@ -1415,6 +1740,16 @@ export async function main() {
     emit(input, "— no body to distill");
     process.exit(3);
   }
+  // stdin without --out: a real body means this run WILL reach the emit, and stdin
+  // has no destination to name the sibling .tmp.md after. Fires here (after the
+  // no-body check, not in parseArgs) so the empty/no-body stdin exit-3 paths above
+  // stay byte-identical (stages.test.ts:656's recipe test pins that).
+  if (dest === undefined) {
+    console.error(
+      "distill: stdin input requires --out to name the destination",
+    );
+    process.exit(2);
+  }
   const resolved = lang === "auto" ? detectLang(body) : lang;
   const frontDescription = parseDescription(front);
   // D30: a type:reference body must stay link-free (no ## Relations). distill emits
@@ -1423,12 +1758,15 @@ export async function main() {
   // D46 genre gate: a superseded note or a "Context document" is licensed to drop wholesale,
   // so the prose-list-item gate would only flood the footer — skip it there (the deterministic
   // spine still runs). Computed here, where the raw frontmatter is in scope.
-  const factsDump = parseSuperseded(front) || /context document/i.test(frontDescription);
+  const factsDump =
+    parseSuperseded(front) || /context document/i.test(frontDescription);
   // the note's canonical self-slug is its filename slug (what other vault notes
   // wikilink to); empty when reading from stdin (including the '-' convention), where
   // distill() falls back to the H1.
   const selfSlug =
-    !fromStdin && inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
+    !fromStdin && inputPath
+      ? slugSegment(basename(inputPath).replace(/\.md$/, ""))
+      : "";
   try {
     const { out, footer, residue, status } = await distill(
       body,
@@ -1447,30 +1785,68 @@ export async function main() {
       },
       selfSlug,
     );
-    // <result> wraps exactly the text to write back to source: frontmatter
-    // (verbatim except the injected epistemic_status default) + distilled body.
-    // <residue> carries one <entry> per definition that failed the gate, with
-    // verbatim <source>; omitted when empty.
-    const front2 = ensureEpistemicStatus(front);
-    const result = front2 ? front2 + "\n" + out : out;
-    let fileBody = `<result>\n${result}\n</result>\n`;
-    if (residue.length) {
-      const entries = residue
-        .map(
-          (r) =>
-            `<entry term="${escAttr(r.label)}" reason="${escAttr(r.reason)}">\n<source>\n${r.source}\n</source>\n</entry>`,
-        )
-        .join("\n");
-      fileBody += `\n<residue>\n${entries}\n</residue>\n`;
-    }
     const footer2 = fmError
       ? `${footer} · frontmatter not parsed (kept verbatim): ${fmError.slice(0, 80)}`
       : footer;
-    emit(fileBody, footer2);
     // exit 3: covers nothing-to-distill and the expand-guard revert — the output is the
     // unmodified original. A routed note is always "compressed" (its preserves were
-    // compacted), so head-kept-verbatim exits 0 with the footer tag as the signal.
-    if (status === "passthrough") process.exit(3);
+    // compacted), so head-kept-verbatim exits 0 with the footer tag as the signal. This
+    // legacy passthrough envelope (mktemp <result>/<residue>) is untouched — Phase 3
+    // only swaps the SUCCESS path below to the review intermediary.
+    if (status === "passthrough") {
+      const front2 = ensureEpistemicStatus(front);
+      const result = front2 ? front2 + "\n" + out : out;
+      let fileBody = `<result>\n${result}\n</result>\n`;
+      if (residue.length) {
+        const entries = residue
+          .map(
+            (r) =>
+              `<entry term="${escAttr(r.label)}" reason="${escAttr(r.reason)}">\n<source>\n${r.source}\n</source>\n</entry>`,
+          )
+          .join("\n");
+        fileBody += `\n<residue>\n${entries}\n</residue>\n`;
+      }
+      emit(fileBody, footer2);
+      process.exit(3);
+    }
+    // Phase 3 success: write the interactive review intermediary sibling to `dest`
+    // (never the source itself — the input file is never modified), stamped with
+    // dest= (the destination basename) and src= (a hash of dest's current bytes, or
+    // "new" when it does not yet exist — the creation case).
+    const destPath = dest as string; // narrowed above: stdin without --out already exited
+    const tmpPath = tmpPathFor(destPath);
+    const noteForIntermediary = front ? `${front}\n${out}` : out;
+    const src = existsSync(destPath)
+      ? `sha256:${createHash("sha256").update(readFileSync(destPath)).digest("hex").slice(0, 12)}`
+      : "new";
+    const intermediary = buildIntermediary(noteForIntermediary, residue, {
+      dest: basename(destPath),
+      src,
+    });
+    // Atomic no-clobber (plan §4, atomicity F2/F7): write a sibling .partial, then
+    // linkSync to the final name — link fails EEXIST instead of overwriting, so a
+    // racing emit that passed the preflight minutes ago (LLM run) loses LOUD with
+    // the same exit-4 refusal, and a crash mid-write never leaves a truncated
+    // intermediary visible at the .tmp.md path.
+    const partial = `${tmpPath}.partial`;
+    writeFileSync(partial, intermediary);
+    try {
+      linkSync(partial, tmpPath);
+    } catch (e) {
+      try {
+        unlinkSync(partial);
+      } catch {}
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") {
+        refusePendingIntermediary(tmpPath);
+      }
+      throw e;
+    }
+    unlinkSync(partial);
+    const reviewSuffix =
+      residue.length > 0
+        ? ` · review: ${residue.length} items + gate`
+        : " · review: gate";
+    process.stdout.write(`${tmpPath}\n${footer2}${reviewSuffix}\n`);
   } catch (e) {
     // A non-transient throw is a real bug — surface it (a stage catch has already
     // logged it on its way up; anything thrown outside a stage prints its own stack

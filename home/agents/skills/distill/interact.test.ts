@@ -602,6 +602,26 @@ test("renderBlock: target containing ' — ' is backticked so the note split sta
   expect(b!.items[0]!.note).toBe("real note");
 });
 
+// targetCode is presentational only (the plan-§5 fixture backticks def terms):
+// render wraps the target, parse strips it back to the same semantic target, and
+// a plain-target item in the same block stays unbackticked.
+test("renderBlock: targetCode wraps the target in backticks; parse strips them back", () => {
+  const spec: BlockSpec = {
+    kind: "pick-any",
+    id: "p",
+    items: [
+      { state: "unchecked", verb: "recover", target: "Impression distance", targetCode: true },
+      { state: "unchecked", verb: "recover", target: "workflow:2" },
+    ],
+  };
+  const out = renderBlock(spec);
+  expect(out).toContain("- [ ] recover: `Impression distance`");
+  expect(out).toContain("- [ ] recover: workflow:2");
+  const [b] = parseOk(out);
+  expect(b!.items[0]!.target).toBe("Impression distance");
+  expect(b!.items[0]!.targetRaw).toBe("`Impression distance`");
+});
+
 test("renderBlock: dest with spaces is emitted quoted and round-trips", () => {
   const spec: BlockSpec = {
     kind: "confirm-all",
@@ -944,7 +964,14 @@ test("parse: a CRLF copy of a document yields the same decision set as its LF fo
 test("parse error: empty id= value is missing-id, not a block with id ''", () => {
   expect(
     errorCodes(
-      lines("<!-- interact: pick-any id= -->", "", "- [ ] recover: X", "", "<!-- /interact -->", ""),
+      lines(
+        "<!-- interact: pick-any id= -->",
+        "",
+        "- [ ] recover: X",
+        "",
+        "<!-- /interact -->",
+        "",
+      ),
     ),
   ).toEqual(["missing-id"]);
 });
@@ -1025,7 +1052,9 @@ test("strip: a multi-blank run and a trailing space in content far from the bloc
     "",
     "tail",
   );
-  expect(stripInteract(text)).toBe(lines("para1", "", "", "para2 with trailing space ", "", "tail"));
+  expect(stripInteract(text)).toBe(
+    lines("para1", "", "", "para2 with trailing space ", "", "tail"),
+  );
 });
 
 test("strip: trailing space on the last content line survives when the block ends the document", () => {
