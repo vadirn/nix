@@ -21,6 +21,7 @@ import {
   payloadResidue,
   proseResidue,
   tagOwnedBlocks,
+  USAGE,
   wikilinkResidue,
 } from "./pipeline.ts";
 
@@ -591,4 +592,93 @@ test("parseArgs: a single-dash unknown token errors and names the offending toke
   expect(m).toContain("-tau");
   // the values must not be misattributed as the problem
   expect(m).not.toContain("0.6");
+});
+
+// ---- USAGE: pins the output contract (temp-file envelope, two-line stdout, exit codes) ----
+test("USAGE: states the output contract — temp-file envelope, two-line stdout, exit codes", () => {
+  expect(USAGE).toContain("Output:");
+  expect(USAGE).toContain("never modified");
+  expect(USAGE).toContain("<result>");
+  // the capture recipe must preserve the exit code: a bare `| head -1` makes $?
+  // report head's status (always 0), so exit 3/1 would be unobservable
+  expect(USAGE).toContain("head -1");
+  expect(USAGE).toContain("status=$?");
+  expect(USAGE).toContain("0 distilled");
+  expect(USAGE).toContain("2 usage");
+  expect(USAGE).toContain("3 passthrough");
+  // exit 3 is compress-scoped: render-mode skips exit 0
+  expect(USAGE).toContain("compress mode");
+  expect(USAGE).toContain("stdin when no path or '-'");
+});
+
+// ---- main() end-to-end over network-free paths (dummy key, no LLM call reached before the
+// guarded exits): the empty-input exit, the '-' stdin convention, --dry-run's stdin support,
+// and the missing-key lane. Mirrors polish.test.ts:227-281. ----
+const { readFileSync: readMainOut } = require("node:fs");
+const { join: joinMainPath } = require("node:path");
+const DISTILL = joinMainPath(import.meta.dir, "distill.ts");
+const DUMMY_KEY = { ...process.env, FIREWORKS_API_KEY: "test-dummy" };
+
+test("main: empty input exits 3 with a stderr note and no stdout", () => {
+  const proc = Bun.spawnSync(["bun", DISTILL], {
+    env: DUMMY_KEY,
+    stdin: Buffer.from("  \n"),
+  });
+  expect(proc.exitCode).toBe(3);
+  expect(proc.stdout.toString()).toBe("");
+  expect(proc.stderr.toString()).toContain("distill skipped: empty input");
+});
+
+test("main: '-' reads stdin instead of a file named '-'; no-body passthrough keeps the two-line stdout and exits 3", () => {
+  const proc = Bun.spawnSync(["bun", DISTILL, "-"], {
+    env: DUMMY_KEY,
+    stdin: Buffer.from("---\ntype: note\n---\n"),
+  });
+  expect(proc.exitCode).toBe(3);
+  const lines = proc.stdout.toString().split("\n");
+  expect(lines[0]).toEndWith(".md");
+  expect(lines[1]).toBe("— no body to distill");
+  expect(readMainOut(lines[0], "utf8")).toBe("---\ntype: note\n---\n");
+});
+
+test("main: --dry-run '-' reads stdin (no ENOENT) and labels the report (stdin)", () => {
+  const proc = Bun.spawnSync(["bun", DISTILL, "--dry-run", "-"], {
+    stdin: Buffer.from("First paragraph of a note.\n\nSecond paragraph here.\n"),
+  });
+  expect(proc.exitCode).toBe(0);
+  const out = proc.stdout.toString();
+  expect(out).toContain("(stdin)");
+  expect(out).not.toMatch(/\(-\)|^-$/m);
+});
+
+test("main: a render-mode skip (no ## Glossary table) is a passthrough that exits 0, not 3", () => {
+  const proc = Bun.spawnSync(["bun", DISTILL, "render", "-"], {
+    env: DUMMY_KEY,
+    stdin: Buffer.from("Just prose, no glossary table.\n"),
+  });
+  expect(proc.exitCode).toBe(0);
+  const lines = proc.stdout.toString().split("\n");
+  expect(lines[0]).toEndWith(".md");
+  expect(lines[1]).toContain("render skipped");
+});
+
+test("main: the documented capture recipe (out/status/path) observes exit 3 and the first line", () => {
+  // the recipe SKILL.md/USAGE ship instead of `| head -1`, which would report head's $?
+  const script = `out=$(bun "$1" -); status=$?; path=\${out%%$'\\n'*}; printf '%s\\n%s\\n' "$status" "$path"`;
+  const proc = Bun.spawnSync(["bash", "-c", script, "bash", DISTILL], {
+    env: DUMMY_KEY,
+    stdin: Buffer.from("---\ntype: note\n---\n"), // frontmatter-only ⇒ no-body passthrough, no network
+  });
+  const [status, path] = proc.stdout.toString().split("\n");
+  expect(status).toBe("3");
+  expect(path).toEndWith(".md");
+});
+
+test("main: missing FIREWORKS_API_KEY exits 1 with the key message", () => {
+  const proc = Bun.spawnSync(["bun", DISTILL], {
+    env: { PATH: process.env.PATH ?? "" },
+    stdin: Buffer.from("Some note body.\n"),
+  });
+  expect(proc.exitCode).toBe(1);
+  expect(proc.stderr.toString()).toContain("FIREWORKS_API_KEY");
 });

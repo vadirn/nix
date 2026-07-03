@@ -40,12 +40,17 @@
 // lines — the file path, then a one-line summary footer. Failsafe: any error before
 // the gate → the temp file holds the original text (passthrough), path still printed.
 //
+// Exit codes: 0 distilled (residue/gate-inconclusive stay 0); 1 missing key; 2 arg
+// misuse; 3 passthrough — compress mode only: the output is the unmodified original
+// (failsafe, expand-guard, no body, empty input; the two stdout lines still print
+// except on empty input). A render-mode skip exits 0 with the reason in the footer.
+//
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
 // `doppler run --project claude-code --config std --`).
 //
 // Usage (full text: distill-text --help):
 //         distill-text input.md                      # prose + ## Glossary (auto-detect language)
-//         distill-text < input.txt                   # read from stdin
+//         distill-text < input.txt                   # read from stdin ('-' as the path also reads stdin)
 //         distill-text --core-only input.md          # glossary only (tie + definitions), no prose
 //         distill-text --lang ru < input.txt         # force Russian rubric
 //         distill-text --synth regenerate input.md   # denser dial (default: render)

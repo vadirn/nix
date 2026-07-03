@@ -89,6 +89,8 @@ type Residue = { label: string; reason: string; source: string };
 // Did distill rewrite the body, or pass it through unchanged? The producer knows this at each
 // return site (nothing-to-distill and expand-guard pass through; the normal path compresses);
 // the routed build reads it to tag the footer rather than re-deriving it by byte-comparison.
+// main() also maps a top-level "passthrough" to exit 3 (exit 3 ⇔ prefer the source); a routed
+// note stays "compressed" even with a verbatim head (see distillRouted, below).
 type DistillStatus = "compressed" | "passthrough";
 // workflowByOwner is set only on a routed head's compressed return (owned is passed): the
 // orderedSteps' rendered strings, bucketed by originating re-author section (groupStepsByOwner),
@@ -263,6 +265,7 @@ async function reviseDistilled(
   defByTerm: Map<string, string>,
   workflowSteps: string[],
   lang: "en" | "ru",
+  onPass?: (index: number, total: number) => void,
 ): Promise<{ tie: string; prose: string; workflowSteps: string[] }> {
   const passes = lang === "ru" ? PASS_RU : PASS_EN;
   const dblocks: Block[] = [
@@ -275,7 +278,7 @@ async function reviseDistilled(
     ...workflowSteps.map((s, i) => ({ id: `__W${i}__`, text: s })),
   ];
   const termLiterals = orderedEntries.map((e) => `**${e.term}**`);
-  const rev = await revise(dblocks, passes, termLiterals);
+  const rev = await revise(dblocks, passes, termLiterals, onPass);
   const byId = new Map(rev.map((b) => [b.id, b.text]));
   const revisedTie = byId.get("__TIE__") ?? tie;
   const revisedProse = prose ? (byId.get("__PROSE__") ?? prose) : prose;
@@ -820,6 +823,7 @@ async function distill(
     factsDump: boolean;
     tau: number;
     maxWords?: number;
+    progress?: (line: string) => void;
   },
   selfSlug = "",
   routed = false,
@@ -855,6 +859,7 @@ async function distill(
     wikilinks: harvestVaultEdges(text),
     external: harvestExternalLinks(text),
   };
+  opts.progress?.("extract…");
   const combo = await extractCombo(
     blocks,
     frontDescription,
@@ -872,10 +877,12 @@ async function distill(
   }
 
   // 2. grade blocks, then order entries/steps (pure)
+  opts.progress?.("grade…");
   const grades = await gradeBlocks(combo, blocks);
   const { payloadBlocks, orderedEntries, orderedSteps } = orderContent(combo, blocks, grades);
 
   // 3. synthesize defs + tie + workflow + connective prose body
+  opts.progress?.("synthesize…");
   const synth = await synthesize(combo, orderedEntries, orderedSteps, opts, blockById, lang);
   const defByTerm = synth.defByTerm;
   let tie = synth.tie;
@@ -891,6 +898,7 @@ async function distill(
       defByTerm,
       workflowSteps,
       lang,
+      (i, n) => opts.progress?.(`revise ${i}/${n}`),
     );
     tie = revised.tie;
     prose = revised.prose;
@@ -903,6 +911,7 @@ async function distill(
   let gateSkipped = 0;
   let keptVerbatim = 0;
   if (!opts.noGate) {
+    opts.progress?.("gate…");
     ({ residue, retries, gateSkipped, keptVerbatim } = await runFidelityGate(
       combo,
       h1,
@@ -922,6 +931,7 @@ async function distill(
   // --no-gate switch; no-op in --core-only (no prose).
   let proseFixes = 0;
   if (prose && !opts.noGate) {
+    opts.progress?.("prose-qa…");
     const qa = await runProseQA(combo.thesis, prose, lang);
     prose = qa.prose;
     proseFixes = qa.proseFixes;
@@ -969,6 +979,7 @@ async function distill(
       ...computeStepGroups(orderedSteps, blockById).map((g) => g.sourceText),
     ];
     const units = harvestProseListItems(text, claimed);
+    opts.progress?.("prose-gate…");
     residue = residue.concat(await runProseGate(units, out, lang));
   }
 
@@ -1132,7 +1143,7 @@ export const USAGE = `distill-text — abstractive idea-compression: rewrite a n
 backed by a certified glossary (and an optional ## Workflow of its directives).
 
 Usage:
-  distill-text [options] [input.md]              compress a note (reads stdin if no path)
+  distill-text [options] [input.md]              compress a note (stdin when no path or '-')
   distill-text render [options] [glossary.md]    render prose FROM an already-distilled glossary
 
 Options:
@@ -1148,6 +1159,21 @@ Options:
   --max-words <n>        expand-guard cap: 0 disables it, a positive n is an absolute ceiling
   --dry-run              deterministic front half only (segment→route report); no API call
   -h, --help             show this help and exit
+
+Output:
+  The input file is never modified. The result is written to a fresh temp .md:
+  <result>…</result> holds exactly the text to write back to source, <residue>
+  (omitted when empty) holds each item that failed a gate, with verbatim
+  <source>. stdout is two lines — the temp-file path, then the one-line footer.
+  A \`| head -1\` capture eats the exit code ($? after a pipeline is the last
+  command's — head's, always 0); capture both instead:
+    out=$(distill-text input.md); status=$?; path=\${out%%$'\\n'*}
+  Exit: 0 distilled (residue and gate-inconclusive items still exit 0 — they are
+  surfaced in the envelope and footer; render-mode skips also exit 0, flagged in
+  the footer) · 1 FIREWORKS_API_KEY missing · 2 usage error · 3 passthrough
+  (compress mode: the output is the unmodified original — failsafe,
+  expand-guard, nothing to distill; the two stdout lines still print; empty
+  input exits 3 with nothing on stdout).
 
 Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
 `;
@@ -1357,13 +1383,21 @@ export async function main() {
     maxWords,
     path: inputPath,
   } = parsed.opts;
+  const fromStdin = inputPath === undefined || inputPath === "-";
+  // A bare `distill-text` at a terminal would hang silently on fd 0; say so.
+  const stdinHint = (): void => {
+    if (fromStdin && process.stdin.isTTY)
+      console.error("distill: reading stdin — pass a file or pipe input (ctrl-d ends input)");
+  };
   // --dry-run (Backlog 9): the deterministic front half only — segment → per-section
   // payload density → route. Prints the report and returns, writing nothing, making no
   // LLM call, needing no API key. Runs on the note body (frontmatter stripped).
   if (dryRun) {
-    const input = readFileSync(inputPath ?? 0, "utf8");
+    stdinHint();
+    const input = readFileSync(fromStdin ? 0 : (inputPath as string), "utf8");
     const { body } = parseFrontmatter(input);
-    process.stdout.write(formatDryRun(inputPath ?? "(stdin)", routeNote(body, tau)) + "\n");
+    const label = fromStdin ? "(stdin)" : (inputPath as string);
+    process.stdout.write(formatDryRun(label, routeNote(body, tau)) + "\n");
     return;
   }
   if (!process.env.FIREWORKS_API_KEY) {
@@ -1372,13 +1406,22 @@ export async function main() {
     );
     process.exit(1);
   }
-  const input = readFileSync(inputPath ?? 0, "utf8");
-  if (!input.trim()) process.exit(0);
+  stdinHint();
+  const input = readFileSync(fromStdin ? 0 : (inputPath as string), "utf8");
+  if (!input.trim()) {
+    console.error("distill skipped: empty input");
+    process.exit(3);
+  }
   const path = tempMdPath();
   const emit = (body: string, footer: string): void => {
     writeFileSync(path, body);
     process.stdout.write(`${path}\n${footer}\n`);
   };
+  // A full run is tens of seconds of LLM calls; tick per stage, TTY-gated so
+  // scripts and parent loops never see it.
+  const progress = process.stderr.isTTY
+    ? (line: string): void => void process.stderr.write(`${line}\n`)
+    : undefined;
   if (mode === "render") {
     await runRender(input, { lang, noRevise }, emit);
     return;
@@ -1390,7 +1433,7 @@ export async function main() {
   const { front, body, error: fmError } = parseFrontmatter(input);
   if (!body.trim()) {
     emit(input, "— no body to distill");
-    process.exit(0);
+    process.exit(3);
   }
   const resolved = lang === "auto" ? detectLang(body) : lang;
   const frontDescription = parseDescription(front);
@@ -1402,14 +1445,27 @@ export async function main() {
   // spine still runs). Computed here, where the raw frontmatter is in scope.
   const factsDump = parseSuperseded(front) || /context document/i.test(frontDescription);
   // the note's canonical self-slug is its filename slug (what other vault notes
-  // wikilink to); empty when reading from stdin, where distill() falls back to the H1.
-  const selfSlug = inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
+  // wikilink to); empty when reading from stdin (including the '-' convention), where
+  // distill() falls back to the H1.
+  const selfSlug =
+    !fromStdin && inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
   try {
-    const { out, footer, residue } = await distill(
+    const { out, footer, residue, status } = await distill(
       body,
       resolved,
       frontDescription,
-      { synth, maxRetries, noRevise, noGate, coreOnly, isReference, factsDump, tau, maxWords },
+      {
+        synth,
+        maxRetries,
+        noRevise,
+        noGate,
+        coreOnly,
+        isReference,
+        factsDump,
+        tau,
+        maxWords,
+        progress,
+      },
       selfSlug,
     );
     // <result> wraps exactly the text to write back to source: frontmatter
@@ -1432,6 +1488,10 @@ export async function main() {
       ? `${footer} · frontmatter not parsed (kept verbatim): ${fmError.slice(0, 80)}`
       : footer;
     emit(fileBody, footer2);
+    // exit 3: covers nothing-to-distill and the expand-guard revert — the output is the
+    // unmodified original. A routed note is always "compressed" (its preserves were
+    // compacted), so head-kept-verbatim exits 0 with the footer tag as the signal.
+    if (status === "passthrough") process.exit(3);
   } catch (e) {
     // A non-transient throw is a real bug — surface it (a stage catch has already
     // logged it on its way up; anything thrown outside a stage prints its own stack
@@ -1439,13 +1499,14 @@ export async function main() {
     // a truncation in a NO-CATCH core stage (extractCombo, gradeBlocks) is not a
     // transient flake and not a code bug: it skips THIS note with a clear actionable
     // footer (raise the stage's cap), never a raw stack crash or a "transient" label.
+    // exit 3: valid but unmodified original.
     if (e instanceof TruncationError) {
       emit(input, `— distill skipped: output TRUNCATED — ${e.message}`);
-      process.exit(0);
+      process.exit(3);
     }
     if (!isTransient(e)) throw e;
     // transient failsafe: temp file holds the original (passthrough); path still printed
     emit(input, `— distill skipped (error): ${String(e).slice(0, 160)}`);
-    process.exit(0);
+    process.exit(3);
   }
 }
