@@ -493,8 +493,7 @@ test("unwrapResult: a distill <result> envelope unwraps to its payload; a bare n
 
 test("stripInteractBelt: an un-applied intermediary loses its gate block; a bare note and a malformed one pass through", () => {
   const note = "---\ndescription: the tie\n---\n\n# T\n\nbody\n";
-  const intermediary =
-    `${note}\n<!-- interact: confirm-all id=triage-final dest=T.md src=new -->\n\n- [ ] reviewed: final\n\n<!-- /interact -->\n`;
+  const intermediary = `${note}\n<!-- interact: confirm-all id=triage-final dest=T.md src=new -->\n\n- [ ] reviewed: final\n\n<!-- /interact -->\n`;
   expect(stripInteractBelt(intermediary)).toBe(note);
   expect(stripInteractBelt(note)).toBe(note);
   // Malformed (unclosed block) is left untouched rather than mangled — it fails loudly downstream.

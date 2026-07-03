@@ -266,7 +266,10 @@ function defRecover(
     if (prompt.includes(RENDER_ENTRY_MARKER)) return { def };
     if (prompt.includes("for a procedure checklist")) return { groups: [] };
     if (prompt.includes("independent fidelity judge"))
-      return { thesisRecoverable: true, concepts: [{ term: "x", grade, direction: "both", missing: "m" }] };
+      return {
+        thesisRecoverable: true,
+        concepts: [{ term: "x", grade, direction: "both", missing: "m" }],
+      };
     if (prompt.includes(RENDER_PROSE_MARKER)) return { prose };
     return {};
   };
@@ -829,4 +832,44 @@ test("fixture sanity: every emitted intermediary parses clean with a triage-fina
     expect(blocks.some((b) => b.kind === "confirm-all" && b.id === "triage-final")).toBe(true);
     expect(stripInteract(tmp)).not.toContain("interact"); // the scaffold strips clean
   }
+});
+
+// ===========================================================================
+// 9. Non-recoverable residue (edge/payload/prose): the advisor's finding 1.
+// These classes emit as `recover` with a safeHandle target that targetKind buckets
+// as "def", but resolveDefTerm finds no glossary row for them. A CHECKED recover
+// must refuse LOUD, never silently no-op + report "recovered" + consume the tmp —
+// a lost reviewer decision is the format's disaster class.
+// ===========================================================================
+
+const R_EDGE: Residue = {
+  kind: "edge",
+  reasonClass: "dropped",
+  label: "Dropped wikilink",
+  reason: "wikilink dropped: collided with an existing term",
+  source: "[[Dropped wikilink]] carried the original aside.",
+};
+
+test("apply: a checked recover on non-recoverable residue refuses (exit 2), preserving the decision and the source", async () => {
+  delete process.env.FIREWORKS_API_KEY; // the refusal must precede the key gate
+  const dir = tmpdirFor("no-action-recover");
+  const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_EDGE]);
+  const before = readFileSync(destPath, "utf8");
+  writeTmp(tmpPath, checkGate(check(tmp, `recover: ${safeHandle("Dropped wikilink")} —`)));
+  const r = await apply(tmpPath);
+  expect(r.code).toBe(2);
+  expect(r.stderr).toContain("no applicable action");
+  expect(r.stdout).toBe(""); // no false "1 recovered" report
+  expect(existsSync(tmpPath)).toBe(true); // decision preserved, tmp not consumed
+  expect(readFileSync(destPath, "utf8")).toBe(before); // source untouched (constraint 7)
+});
+
+test("apply: an unchecked non-recoverable item stays dropped and does not inflate the removed count (effects, not decisions)", async () => {
+  delete process.env.FIREWORKS_API_KEY;
+  const dir = tmpdirFor("count-effects");
+  const { tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_EDGE]);
+  writeTmp(tmpPath, checkGate(tmp)); // gate checked, the edge item left unchecked
+  const r = await apply(tmpPath);
+  expect(r.code).toBe(0);
+  expect(r.stdout).toContain("0 recovered · 0 kept · 0 removed");
 });

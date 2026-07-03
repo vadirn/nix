@@ -70,25 +70,13 @@
 // PURE by contract for the exported helpers below (no fs, no LLM) so they unit-test
 // offline; runApply is the only impure export.
 
-import {
-  existsSync,
-  linkSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, linkSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { parseInteract, resolveInteract, stripInteract } from "./interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "./triage.ts";
 import { askJson, EXTRACT } from "./fw.ts";
-import {
-  fidelityGate,
-  renderEntryPrompt,
-  verbatimDef,
-  verbatimDirectives,
-} from "./prompts.ts";
+import { fidelityGate, renderEntryPrompt, verbatimDef, verbatimDirectives } from "./prompts.ts";
 import { parseDistilled, renderProse } from "./render-mode.ts";
 import { parseDescription, parseFrontmatter } from "./frontmatter.ts";
 import { detectLang } from "./text.ts";
@@ -199,16 +187,11 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   // The residue items (every non-gate block); the gate itself is skipped.
   const items = blocks.filter((b) => b.kind !== "confirm-all").flatMap((b) => b.items);
 
-  // 6. key gate — only a CHECKED recover DEF calls an LLM. A checked recover of a
-  //    workflow group / the thesis is verbatim (no LLM); a checked keep is a no-op.
-  const needsKey = items.some(
-    (it) => it.state === "checked" && it.verb === "recover" && targetKind(it.target) === "def",
-  );
-  if (needsKey && !process.env.FIREWORKS_API_KEY) {
-    return fail("FIREWORKS_API_KEY not set — a checked recover needs it; nothing written", 1);
-  }
-
-  // 7. fire verbs in document order, in memory over the scaffold-free note.
+  // 6. classify every item into deterministic ops (no LLM, no write). This precedes
+  //    the key gate on purpose: a checked recover that resolves to no actionable target
+  //    (an edge/payload/prose residue class, or a def whose glossary row is gone) is a
+  //    LOST reviewer decision if allowed to no-op, so it aborts LOUD below — and only a
+  //    checked recover DEF that actually resolves is what forces the key gate.
   let body = stripInteract(text);
   const { body: bodyNoFront } = parseFrontmatter(body);
   const lang = opts.lang === "auto" ? detectLang(bodyNoFront) : opts.lang;
@@ -224,6 +207,7 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   const defRemovals: string[] = [];
   const workflowOps: WorkflowOp[] = [];
   let thesisPara: string | null = null;
+  const unrecoverable: string[] = [];
 
   for (const it of items) {
     const kind = targetKind(it.target);
@@ -233,33 +217,60 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
         kept++; // held as shipped — no LLM, no removal
         continue;
       }
-      // recover
-      recovered++;
+      // recover — counts reflect EFFECTS: a lane that changes nothing is not counted.
       if (kind === "def") {
         const term = resolveDefTerm(body, it.target);
-        if (term) defRecovers.push({ term, src: payload });
+        if (term === null) {
+          unrecoverable.push(it.target); // no glossary row → apply has no action
+          continue;
+        }
+        defRecovers.push({ term, src: payload });
+        recovered++;
       } else if (kind === "steps") {
         const idxs = workflowIdxs(it.target);
         const clauses = verbatimDirectives(payload);
         idxs.forEach((idx, k) => {
           workflowOps.push({ idx, replace: k === 0 && clauses.length ? clauses : null });
         });
+        recovered++;
         verbatim++;
       } else {
         thesisPara = payload;
+        recovered++;
         verbatim++;
       }
     } else {
-      // unchecked recover|keep → the entry is REMOVED (uniform per-block default)
-      removed++;
+      // unchecked recover|keep → the entry is REMOVED, but only counted when there is a
+      // real removal: a non-recoverable class was never in the output, so it stays
+      // dropped with no effect (not a phantom "removed").
       if (kind === "def") {
         const term = resolveDefTerm(body, it.target);
-        if (term) defRemovals.push(term);
+        if (term !== null) {
+          defRemovals.push(term);
+          removed++;
+        }
       } else if (kind === "steps") {
         for (const idx of workflowIdxs(it.target)) workflowOps.push({ idx, replace: null });
+        removed++;
       }
-      // an unchecked thesis has nothing in the body to remove
+      // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
     }
+  }
+
+  // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
+  // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
+  // item for the same reason). Fires before the key gate and before any write.
+  if (unrecoverable.length > 0) {
+    return fail(
+      `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
+      2,
+    );
+  }
+
+  // 7. key gate — only a checked recover DEF that resolved calls an LLM. A checked
+  //    recover of a workflow group / the thesis is verbatim (no LLM); keep is a no-op.
+  if (defRecovers.length > 0 && !process.env.FIREWORKS_API_KEY) {
+    return fail("FIREWORKS_API_KEY not set — a checked recover needs it; nothing written", 1);
   }
 
   // The LLM window: re-render each checked recover def, re-grade once, and splice
