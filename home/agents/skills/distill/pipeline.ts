@@ -1483,14 +1483,26 @@ export function parseArgs(argv: string[]): ParseResult {
       message: "--out is compress-only (render never derives a destination)",
     };
 
+  // A positional `.tmp.md` compress input is the fat-finger for `apply` (it ends `.md`, so
+  // the non-.md check below waves it through) — distilling scaffold text and stamping
+  // dest=<name>.tmp.md is never intended. Mirror --out's own .tmp.md rejection; point at apply.
+  if (mode === "compress" && path !== undefined && path.endsWith(".tmp.md"))
+    return {
+      kind: "error",
+      message: `'${path}' is an intermediary — did you mean 'distill-text apply ${path}'?`,
+    };
+
   // A compress-mode file input with no --out becomes the write-back destination, and the
   // .tmp.md ↔ .md round-trip (tmpPathFor / destinationFor) only closes on a .md name — a
   // `note.txt` would emit `note.txt.tmp.md`, stamp dest=note.txt, and apply would derive
   // note.txt.md, a stamp that can never match (a full LLM run wasted on an un-appliable
   // intermediary). Reject at parse time, before any work; --out (validated .md) or stdin
   // both escape it, since the destination then comes from --out rather than the input.
+  // --dry-run never writes back (it prints a routing report), so the round-trip rationale
+  // does not apply — it keeps taking any input.
   if (
     mode === "compress" &&
+    !dryRun &&
     out === undefined &&
     path !== undefined &&
     path !== "-" &&

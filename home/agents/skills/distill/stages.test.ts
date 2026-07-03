@@ -658,6 +658,20 @@ test("parseArgs: a compress non-.md file input without --out is rejected", () =>
   expect(ok(["apply", "x.tmp.md"]).opts.path).toBe("x.tmp.md"); // apply path is unconstrained here
 });
 
+// A positional .tmp.md compress input is the fat-finger for `apply` (it ends .md, so the
+// non-.md check waves it through); distilling scaffold text and stamping dest=note.tmp.md
+// is never intended — point at apply. --dry-run writes nothing, so the non-.md round-trip
+// rationale does not apply to it (it kept the routing report before this guard).
+test("parseArgs: a positional .tmp.md compress input is rejected, pointing at apply", () => {
+  expect(err(["note.tmp.md"])).toContain("apply");
+  expect(ok(["apply", "note.tmp.md"]).mode).toBe("apply"); // apply still consumes it
+});
+
+test("parseArgs: --dry-run exempts the non-.md input check (dry-run never writes back)", () => {
+  expect(ok(["--dry-run", "note.txt"]).opts.dryRun).toBe(true);
+  expect(ok(["--dry-run", "note.txt"]).opts.path).toBe("note.txt");
+});
+
 // ---- USAGE: pins the output contract (temp-file envelope, two-line stdout, exit codes) ----
 test("USAGE: states the output contract — intermediary envelope, two-line stdout, exit codes", () => {
   expect(USAGE).toContain("Output:");
