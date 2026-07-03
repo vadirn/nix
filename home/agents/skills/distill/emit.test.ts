@@ -436,33 +436,36 @@ test("Phase 5: a non-TTY success run never enters the session — stdout stays 2
 // ---- adversarial pins (Phase-3 review): non-.md destinations, absolute stdout,
 // --out directory validation, the atomic no-clobber write, and mktemp hygiene ----
 
-test("emit preflight: a non-.md input is NOT its own pending intermediary (bare replace() no-oped, tripping exit 4 on the input's existence)", () => {
+// Supersedes the Phase-3 non-.md handling: emit appended `.tmp.md` to `note.txt` and
+// stamped dest=note.txt, but apply derives note.txt.md, so the intermediary could never
+// be applied (advisor finding 2). The honest contract rejects a non-.md compress input at
+// parse time — before any LLM work — so nothing is written and the input is never touched.
+test("emit: a non-.md compress input without --out is rejected at parse time (exit 2), input untouched", () => {
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.txt");
   writeFileSync(notePath, NOTE);
-  // no pending sibling: the run must sail past the preflight and hit the key gate
-  const clean = Bun.spawnSync(["bun", DISTILL, notePath], { env: NO_KEY });
-  expect(clean.exitCode).toBe(1);
-  expect(clean.stderr.toString()).toContain("FIREWORKS_API_KEY");
-  // the pending path for a non-.md destination APPENDS .tmp.md
-  writeFileSync(`${notePath}.tmp.md`, "pending intermediary bytes\n");
-  const pending = Bun.spawnSync(["bun", DISTILL, notePath], { env: NO_KEY });
-  expect(pending.exitCode).toBe(4);
-  expect(pending.stderr.toString()).toContain(`${notePath}.tmp.md`);
+  const proc = Bun.spawnSync(["bun", DISTILL, notePath], { env: NO_KEY });
+  expect(proc.exitCode).toBe(2);
+  expect(proc.stdout.toString()).toBe("");
+  expect(proc.stderr.toString()).toContain(".md");
+  expect(readFileSync(notePath, "utf8")).toBe(NOTE); // never touched
+  expect(existsSync(`${notePath}.tmp.md`)).toBe(false); // no orphan intermediary
 });
 
-test("emit success: a non-.md input writes <input>.tmp.md and never touches the input", async () => {
+test("emit success: a non-.md input WITH --out emits an appliable intermediary named for the --out .md", async () => {
   mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.txt");
+  const destPath = join(dir, "dest.md");
   writeFileSync(notePath, NOTE);
-  const stdout = await runMain(["--no-revise", "--no-gate", notePath]);
+  const stdout = await runMain(["--no-revise", "--no-gate", notePath, "--out", destPath]);
   const lines = stdout.split("\n");
-  expect(lines[0]).toBe(`${notePath}.tmp.md`);
+  expect(lines[0]).toBe(`${dir}/dest.tmp.md`); // sibling of --out, not the input
   expect(readFileSync(notePath, "utf8")).toBe(NOTE); // input byte-untouched
-  const { blocks, errors } = parseInteract(readFileSync(`${notePath}.tmp.md`, "utf8"));
+  const { blocks, errors } = parseInteract(readFileSync(`${dir}/dest.tmp.md`, "utf8"));
   expect(errors).toEqual([]);
-  expect(blocks[blocks.length - 1]!.dest).toBe("note.txt");
+  // dest= matches what apply's destinationFor derives, so the round-trip closes
+  expect(blocks[blocks.length - 1]!.dest).toBe("dest.md");
 });
 
 test("emit: --out into a missing directory is a usage refusal (exit 2) BEFORE the key gate", () => {

@@ -646,6 +646,18 @@ test("parseArgs: --out is compress-only — render rejects it", () => {
   expect(err(["--out", "x.md", "render", "g.md"])).toContain("--out");
 });
 
+// A compress file input with no --out becomes the write-back destination; a non-.md name
+// breaks the .tmp.md↔.md round-trip and only surfaces after the full LLM run. Reject at
+// parse time. --out (its own .md destination) and stdin both escape it.
+test("parseArgs: a compress non-.md file input without --out is rejected", () => {
+  expect(err(["note.txt"])).toContain(".md");
+  expect(err(["notes"])).toContain(".md");
+  expect(ok(["note.md"]).opts.path).toBe("note.md");
+  expect(ok(["note.txt", "--out", "dest.md"]).opts.path).toBe("note.txt"); // --out names the dest
+  expect(ok(["-"]).opts.path).toBe("-"); // stdin, no destination inferred
+  expect(ok(["apply", "x.tmp.md"]).opts.path).toBe("x.tmp.md"); // apply path is unconstrained here
+});
+
 // ---- USAGE: pins the output contract (temp-file envelope, two-line stdout, exit codes) ----
 test("USAGE: states the output contract — intermediary envelope, two-line stdout, exit codes", () => {
   expect(USAGE).toContain("Output:");

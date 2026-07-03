@@ -1473,8 +1473,7 @@ export function parseArgs(argv: string[]): ParseResult {
   if (mode === "apply") {
     if (path === undefined)
       return { kind: "error", message: "apply requires an intermediary path (<name>.tmp.md)" };
-    if (dryRun)
-      return { kind: "error", message: "apply does not support --dry-run" };
+    if (dryRun) return { kind: "error", message: "apply does not support --dry-run" };
   }
 
   // --out is compress-only: render never derives a write-back destination.
@@ -1482,6 +1481,18 @@ export function parseArgs(argv: string[]): ParseResult {
     return {
       kind: "error",
       message: "--out is compress-only (render never derives a destination)",
+    };
+
+  // A compress-mode file input with no --out becomes the write-back destination, and the
+  // .tmp.md ↔ .md round-trip (tmpPathFor / destinationFor) only closes on a .md name — a
+  // `note.txt` would emit `note.txt.tmp.md`, stamp dest=note.txt, and apply would derive
+  // note.txt.md, a stamp that can never match (a full LLM run wasted on an un-appliable
+  // intermediary). Reject at parse time, before any work; --out (validated .md) or stdin
+  // both escape it, since the destination then comes from --out rather than the input.
+  if (mode === "compress" && out === undefined && path !== undefined && path !== "-" && !path.endsWith(".md"))
+    return {
+      kind: "error",
+      message: `compress input must be a .md file, or pass --out <dest.md> (got '${path}')`,
     };
 
   // --no-expand-guard is sugar for --max-words 0; a conflicting positive --max-words is a
@@ -1576,7 +1587,8 @@ function ask(prompt: string): Promise<string | null> {
   });
 }
 
-const isYes = (answer: string | null): boolean => answer !== null && answer.trim().toLowerCase() === "y";
+const isYes = (answer: string | null): boolean =>
+  answer !== null && answer.trim().toLowerCase() === "y";
 
 /// The gate-aware sugar loop (plan §4 transcript): re-reads `tmpPath` from disk on
 /// every iteration (Sync may have landed a cross-device edit between prompts), so
@@ -1601,7 +1613,9 @@ export async function runTtySession(
     const { blocks } = parseInteract(readFileSync(tmpPath, "utf8"));
     const gate = blocks.find((b) => b.kind === "confirm-all");
     const gateChecked =
-      gate !== undefined && gate.items.length > 0 && gate.items.every((it) => it.state === "checked");
+      gate !== undefined &&
+      gate.items.length > 0 &&
+      gate.items.every((it) => it.state === "checked");
     if (!gateChecked) {
       const gateId = gate?.id ?? "triage-final";
       const answer = await askFn(
