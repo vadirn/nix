@@ -105,7 +105,11 @@ GLOSSARY:
 ${gloss}`;
 }
 
-async function renderProse(
+// Exported for apply-mode.ts (Phase 4): a checked `recover:` that re-renders ≥1
+// glossary def changes the certified artifact, so apply re-projects the head prose
+// from the whole updated entry set — one call, never per-entry (residue-render
+// reader). Removal-only and keep-only applies never reach it (they stay offline).
+export async function renderProse(
   description: string,
   tie: string,
   entries: { term: string; def: string }[],

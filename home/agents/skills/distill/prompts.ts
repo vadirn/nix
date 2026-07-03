@@ -355,6 +355,21 @@ export function verbatimDirectives(sourceText: string): string[] {
   return first ? [first] : [];
 }
 
+// The def analogue of verbatimDirectives: the terminal floor when a checked
+// `recover:` def fails the grade a SECOND time at apply (apply-mode.ts, Phase 4).
+// The source's own defining clause — the first sentence naming the term
+// (case-insensitive), else the first sentence — collapsed to one line for the
+// glossary cell. A literal substring of source, so it cannot invert or invent;
+// verbose where a translation would be tighter, which beats shipping an inverted def.
+export function verbatimDef(term: string, sourceText: string): string {
+  const flat = sourceText.replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  const sentences = flat.split(/(?<=[.!?])\s+/);
+  const needle = term.toLowerCase();
+  const hit = sentences.find((s) => s.toLowerCase().includes(needle));
+  return (hit ?? sentences[0] ?? flat).trim();
+}
+
 // single-entry render from source — used by stage-5 recovery to re-ground a residue def
 export function renderEntryPrompt(
   entry: GlossEntry,

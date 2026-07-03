@@ -1,14 +1,7 @@
 // pipeline — the orchestration layer: the five-stage compress pipeline (distill),
 // arg parsing, the temp-file sink, and main(). Sequences the stages from prompts.ts
 // behind the seams the leaf modules stabilize; main() is invoked by the entrypoint.
-import {
-  existsSync,
-  linkSync,
-  readFileSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, linkSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -52,13 +45,7 @@ import {
   parseSuperseded,
   parseType,
 } from "./frontmatter.ts";
-import {
-  askJson,
-  EXTRACT,
-  isTransient,
-  rethrowIfBug,
-  TruncationError,
-} from "./fw.ts";
+import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
 import {
   type ConceptVerdict,
   type StepVerdict,
@@ -80,14 +67,11 @@ import {
 import { normalizeTypography } from "./writing/typography.ts";
 import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { proseFix, proseJudge } from "./writing/prose-qa.ts";
-import {
-  formatNameLint,
-  nameLintAgainstSource,
-  type NameLintResult,
-} from "./writing/name-lint.ts";
+import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
 import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
 import { runRender } from "./render-mode.ts";
 import { buildIntermediary } from "./triage.ts";
+import { runApply } from "./apply-mode.ts";
 
 // Workflow-gate recovery ladder (stage-5 loop). A flagged step is repaired from
 // the gate's own finding (judge-guided), then — if the repair still fails the
@@ -106,8 +90,7 @@ const WF_RECOVERY: WfRecovery = ((): WfRecovery => {
 // What failed and where, carried structurally (not re-derived from the reason string)
 // so triage.ts can pick the decision verb and target per entry (plan §1: D1's
 // residueToBlocks + kind/stepIdxs threading).
-export type ResidueKind =
-  "def" | "steps" | "thesis" | "edge" | "payload" | "prose";
+export type ResidueKind = "def" | "steps" | "thesis" | "edge" | "payload" | "prose";
 // Why the item is residue: "failed" — a gate judged it unfaithful (def/steps/thesis);
 // "gate-inconclusive" — the fidelity/workflow judge returned no verdict, so the entry
 // SHIPPED in the body surfaced-but-unverified (the one class triage maps to `keep:`);
@@ -115,8 +98,7 @@ export type ResidueKind =
 // slug-collision "verify manually" case, whose recover semantics match a drop's);
 // "prose-inconclusive" — the coverage judge returned no usable verdict for an item
 // that is NOT known to be in the body, so it triages as recover, not keep.
-export type ResidueClass =
-  "failed" | "gate-inconclusive" | "dropped" | "prose-inconclusive";
+export type ResidueClass = "failed" | "gate-inconclusive" | "dropped" | "prose-inconclusive";
 export type Residue = {
   label: string;
   reason: string;
@@ -162,10 +144,7 @@ type StepGroup = { id: string; idxs: number[]; sourceText: string };
 // (today's behavior — any growth at all reverts to the original); a positive value sets an
 // absolute ceiling instead; 0 disables the guard entirely, returning null (a debugging escape
 // hatch to inspect what the model actually produced even when it grew).
-export function expandGuardCap(
-  beforeWords: number,
-  maxWords?: number,
-): number | null {
+export function expandGuardCap(beforeWords: number, maxWords?: number): number | null {
   if (maxWords === 0) return null;
   if (maxWords !== undefined && maxWords > 0) return maxWords;
   return beforeWords;
@@ -192,9 +171,7 @@ export function orderContent(
   const payloadBlockIds = new Set(payloadBlocks.map((b) => b.id));
   const orderKey = (e: { source: string[] }) =>
     Math.min(...e.source.map((id) => blockIndex.get(id) ?? 1e9));
-  const orderedEntries = [...combo.glossary].sort(
-    (a, b) => orderKey(a) - orderKey(b),
-  );
+  const orderedEntries = [...combo.glossary].sort((a, b) => orderKey(a) - orderKey(b));
   const orderedSteps = combo.workflow
     .filter((s) => !s.source.every((id) => payloadBlockIds.has(id)))
     .sort((a, b) => orderKey(a) - orderKey(b));
@@ -216,9 +193,7 @@ export type OwnedBlocks = {
   ownerCount: number;
 };
 
-export function tagOwnedBlocks(
-  reauthorSections: { text: string }[],
-): OwnedBlocks {
+export function tagOwnedBlocks(reauthorSections: { text: string }[]): OwnedBlocks {
   const blocks: Block[] = [];
   const owner = new Map<string, number>();
   let n = 0;
@@ -253,13 +228,8 @@ export function groupStepsByOwner(
   workflowSteps: string[],
   owned: OwnedBlocks,
 ): string[][] {
-  const byOwner: string[][] = Array.from(
-    { length: owned.ownerCount },
-    () => [],
-  );
-  orderedSteps.forEach((s, i) =>
-    byOwner[ownerOfStep(s, owned.owner)].push(workflowSteps[i]),
-  );
+  const byOwner: string[][] = Array.from({ length: owned.ownerCount }, () => []);
+  orderedSteps.forEach((s, i) => byOwner[ownerOfStep(s, owned.owner)].push(workflowSteps[i]));
   return byOwner;
 }
 
@@ -307,9 +277,7 @@ async function synthesize(
     tieTogether(combo, lang),
     synthWorkflow(orderedSteps, blockById, lang),
   ]);
-  const prose = opts.coreOnly
-    ? ""
-    : await connectiveProse(combo, orderedEntries, defByTerm, lang);
+  const prose = opts.coreOnly ? "" : await connectiveProse(combo, orderedEntries, defByTerm, lang);
   return { defByTerm, tie, workflowSteps, prose };
 }
 
@@ -413,10 +381,8 @@ async function runFidelityGate(
   // recovery cannot fix them, so they bypass the retry loop and surface directly.
   const inconclusiveC = new Map<string, ConceptVerdict>();
   const inconclusiveG = new Map<string, StepVerdict>();
-  for (const c of graded.concepts)
-    if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
-  for (const g of gradedG)
-    if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
+  for (const c of graded.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
+  for (const g of gradedG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
   let failC = graded.concepts.filter((c) => c.grade === "residue");
   let failG = gradedG.filter((g) => g.grade === "residue");
   while ((failC.length > 0 || failG.length > 0) && retries < opts.maxRetries) {
@@ -433,8 +399,7 @@ async function runFidelityGate(
             renderEntryPrompt(entry, sourceTextFor(entry, blockById), lang),
             1024,
           );
-          if (r.def)
-            defByTerm.set(entry.term, normalizeTypography(r.def.trim()));
+          if (r.def) defByTerm.set(entry.term, normalizeTypography(r.def.trim()));
         } catch (e) {
           rethrowIfBug(e, "recover-def");
           // a transient re-render flake keeps the prior def; the gate re-grades it next
@@ -453,8 +418,7 @@ async function runFidelityGate(
               lang,
             );
             g.idxs.forEach((i, k) => {
-              if (tightened[k])
-                workflowSteps[i] = normalizeTypography(tightened[k]);
+              if (tightened[k]) workflowSteps[i] = normalizeTypography(tightened[k]);
             });
           } else {
             // judge-guided repair: feed the gate's finding back so the rewrite fixes
@@ -466,8 +430,7 @@ async function runFidelityGate(
               lang,
             );
             g.idxs.forEach((i, k) => {
-              if (repaired[k])
-                workflowSteps[i] = normalizeTypography(repaired[k]);
+              if (repaired[k]) workflowSteps[i] = normalizeTypography(repaired[k]);
             });
           }
         } catch (e) {
@@ -508,10 +471,8 @@ async function runFidelityGate(
     ]);
     // a re-grade can itself come back inconclusive — capture those too, then drop
     // them from the recoverable sets so the loop never retries an unparseable verdict.
-    for (const c of reg.concepts)
-      if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
-    for (const g of regG)
-      if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
+    for (const c of reg.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
+    for (const g of regG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
     failC = reg.concepts.filter((c) => c.grade === "residue");
     failG = regG.filter((g) => g.grade === "residue");
   }
@@ -662,15 +623,11 @@ export function buildFooter(m: {
   const gateTag = m.gateSkipped ? ` · ${m.gateSkipped} gate-skipped` : "";
   // steps the repair ladder could not clear and that shipped the source's verbatim
   // imperative — faithful but uncompressed, distinct from a cleared step
-  const verbatimTag = m.keptVerbatim
-    ? ` · ${m.keptVerbatim} kept-verbatim`
-    : "";
+  const verbatimTag = m.keptVerbatim ? ` · ${m.keptVerbatim} kept-verbatim` : "";
   const shapeTag = m.coreOnly ? "gloss" : "prose+gloss";
   // the prose gate would have run (!noGate && !coreOnly) but the facts-dump genre gate
   // skipped it — surface the skip so disabling a loss detector is never silent.
-  const proseGateTag = m.proseGateOffFactsDump
-    ? ` · prose-gate off (facts-dump)`
-    : "";
+  const proseGateTag = m.proseGateOffFactsDump ? ` · prose-gate off (facts-dump)` : "";
   return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
 }
 
@@ -695,10 +652,7 @@ export function buildFooter(m: {
 // `note`, so dropping one anchor while any link to `note` survives reads as covered,
 // not residue. Section-anchor loss is outside the net by design (the vault is
 // navigational; no note's meaning depends on which anchor survives, audited 2026-06-29).
-export function wikilinkResidue(
-  sourceText: string,
-  outputText: string,
-): Residue[] {
+export function wikilinkResidue(sourceText: string, outputText: string): Residue[] {
   const covered = new Set(harvestVaultEdges(outputText).map((w) => w.slug));
   // Group source edges by slug, tracking the DISTINCT normalized targets and the
   // first-appearance markups under each. The discriminator is the distinct target
@@ -740,8 +694,7 @@ export function wikilinkResidue(
     const markup = g.markups[0];
     residue.push({
       label: markup,
-      reason:
-        "wikilink dropped: source edge absent from output (no relation, no retained block)",
+      reason: "wikilink dropped: source edge absent from output (no relation, no retained block)",
       source: markup,
       kind: "edge",
       reasonClass: "dropped",
@@ -772,18 +725,15 @@ const PAYLOAD_LANES: {
 }[] = [
   {
     harvest: harvestFences,
-    reason:
-      "fenced-block dropped: verbatim code/output block absent from output (not retained)",
+    reason: "fenced-block dropped: verbatim code/output block absent from output (not retained)",
   },
   {
     harvest: harvestBlockquotes,
-    reason:
-      "blockquote dropped: verbatim quotation absent from output (reworded or cut)",
+    reason: "blockquote dropped: verbatim quotation absent from output (reworded or cut)",
   },
   {
     harvest: harvestTableRows,
-    reason:
-      "table-row dropped: data row absent from output (structure dissolved into prose)",
+    reason: "table-row dropped: data row absent from output (structure dissolved into prose)",
   },
   {
     harvest: harvestImages,
@@ -791,8 +741,7 @@ const PAYLOAD_LANES: {
   },
   {
     harvest: harvestMath,
-    reason:
-      "math dropped: formula absent from output (not recoverable from prose)",
+    reason: "math dropped: formula absent from output (not recoverable from prose)",
   },
   {
     harvest: harvestCitations,
@@ -804,10 +753,7 @@ const PAYLOAD_LANES: {
       "numeric-token dropped: source statistic absent from output (figure lost in re-authoring)",
   },
 ];
-export function payloadResidue(
-  sourceText: string,
-  outputText: string,
-): Residue[] {
+export function payloadResidue(sourceText: string, outputText: string): Residue[] {
   const residue: Residue[] = [];
   for (const lane of PAYLOAD_LANES) {
     const covered = new Set(lane.harvest(outputText).map((s) => s.key));
@@ -835,14 +781,8 @@ export function payloadResidue(
 // these gates over its own narrower subset would false-flag a link alive in a preserve section and
 // double-count a real drop. Returning [] for the routed head IS the residue-scope fix, and it is
 // the invariant assembleRoutedNote relies on when it concats head.residue.
-export function edgePayloadResidue(
-  text: string,
-  out: string,
-  routed = false,
-): Residue[] {
-  return routed
-    ? []
-    : [...wikilinkResidue(text, out), ...payloadResidue(text, out)];
+export function edgePayloadResidue(text: string, out: string, routed = false): Residue[] {
+  return routed ? [] : [...wikilinkResidue(text, out), ...payloadResidue(text, out)];
 }
 
 // ---- prose-list-item gate (the prose-judge tier, D46) ----
@@ -873,11 +813,7 @@ const contentWords = (s: string): string[] =>
 // (ii) is the load-bearing fix: existence alone let glm launder a dropped item by quoting
 // unrelated true output text (e.g. the thesis); requiring shared content words binds the
 // anchor to the JUDGED item, so the model cannot point at the thesis to clear a dropped caveat.
-export function anchored(
-  v: ProseVerdict,
-  span: string,
-  normOut: string,
-): boolean {
+export function anchored(v: ProseVerdict, span: string, normOut: string): boolean {
   const a = normalizeForContainment(v.anchor ?? "");
   if (a.length < 16 || !normOut.includes(a)) return false;
   const aw = new Set(contentWords(a));
@@ -967,15 +903,7 @@ async function distill(
   if (!routed && !opts.coreOnly) {
     const { title, sections } = partition(text, opts.tau);
     if (sections.some((u) => u.route === "preserve")) {
-      return distillRouted(
-        text,
-        title,
-        sections,
-        lang,
-        frontDescription,
-        opts,
-        selfSlug,
-      );
+      return distillRouted(text, title, sections, lang, frontDescription, opts, selfSlug);
     }
   }
   const blocks = owned?.blocks ?? segment(text);
@@ -1017,22 +945,11 @@ async function distill(
   // 2. grade blocks, then order entries/steps (pure)
   opts.progress?.("grade…");
   const grades = await gradeBlocks(combo, blocks);
-  const { payloadBlocks, orderedEntries, orderedSteps } = orderContent(
-    combo,
-    blocks,
-    grades,
-  );
+  const { payloadBlocks, orderedEntries, orderedSteps } = orderContent(combo, blocks, grades);
 
   // 3. synthesize defs + tie + workflow + connective prose body
   opts.progress?.("synthesize…");
-  const synth = await synthesize(
-    combo,
-    orderedEntries,
-    orderedSteps,
-    opts,
-    blockById,
-    lang,
-  );
+  const synth = await synthesize(combo, orderedEntries, orderedSteps, opts, blockById, lang);
   const defByTerm = synth.defByTerm;
   let tie = synth.tie;
   let workflowSteps = synth.workflowSteps;
@@ -1213,15 +1130,7 @@ async function distillRouted(
     .trim();
   const owned = tagOwnedBlocks(reauthorSections);
   const head = reauthorText
-    ? await distill(
-        reauthorText,
-        lang,
-        frontDescription,
-        opts,
-        selfSlug,
-        true,
-        owned,
-      )
+    ? await distill(reauthorText, lang, frontDescription, opts, selfSlug, true, owned)
     : {
         out: "",
         footer: "",
@@ -1401,7 +1310,7 @@ export type CliOpts = {
 export type ParseResult =
   | { kind: "help" }
   | { kind: "error"; message: string }
-  | { kind: "ok"; mode: "compress" | "render"; opts: CliOpts };
+  | { kind: "ok"; mode: "compress" | "render" | "apply"; opts: CliOpts };
 
 export function parseArgs(argv: string[]): ParseResult {
   let lang: CliOpts["lang"] = "auto";
@@ -1536,16 +1445,17 @@ export function parseArgs(argv: string[]): ParseResult {
     // Any other dash-prefixed token is a flag typo (single- or double-dash), not a path —
     // name it, rather than misattributing an "extra argument" error to the following values
     // or ENOENT-crashing on it as a bogus filename. A bare `-` stays a positional.
-    if (a.startsWith("-") && a !== "-")
-      return { kind: "error", message: `unknown flag '${a}'` };
+    if (a.startsWith("-") && a !== "-") return { kind: "error", message: `unknown flag '${a}'` };
     positionals.push(a);
   }
 
-  // Interpret positionals: an optional leading `render` subcommand, then the input path.
-  let mode: "compress" | "render" = "compress";
+  // Interpret positionals: an optional leading `render` | `apply` subcommand, then the
+  // input path. A leading flag no longer hides the subcommand (positionals are already
+  // stripped of flags), and a stray subcommand in second position errors as an extra arg.
+  let mode: "compress" | "render" | "apply" = "compress";
   let rest = positionals;
-  if (positionals[0] === "render") {
-    mode = "render";
+  if (positionals[0] === "render" || positionals[0] === "apply") {
+    mode = positionals[0];
     rest = positionals.slice(1);
   }
   const path = rest[0];
@@ -1554,6 +1464,16 @@ export function parseArgs(argv: string[]): ParseResult {
       kind: "error",
       message: `unexpected extra argument(s): ${rest.slice(1).join(", ")}`,
     };
+
+  // apply consumes exactly one intermediary and never reads stdin, so a missing path
+  // is a usage error (not a stdin fallback); --dry-run names an action apply does not
+  // have (there is nothing to preview — the intermediary IS the preview), exit 2.
+  if (mode === "apply") {
+    if (path === undefined)
+      return { kind: "error", message: "apply requires an intermediary path (<name>.tmp.md)" };
+    if (dryRun)
+      return { kind: "error", message: "apply does not support --dry-run" };
+  }
 
   // --out is compress-only: render never derives a write-back destination.
   if (mode === "render" && out !== undefined)
@@ -1639,9 +1559,7 @@ export async function main() {
     return;
   }
   if (parsed.kind === "error") {
-    console.error(
-      `distill: ${parsed.message}\nTry 'distill-text --help' for usage.`,
-    );
+    console.error(`distill: ${parsed.message}\nTry 'distill-text --help' for usage.`);
     process.exit(2);
     return; // process.exit ends the run; the explicit return also narrows `parsed` to "ok" below
   }
@@ -1658,6 +1576,14 @@ export async function main() {
     path: inputPath,
     out: outOpt,
   } = parsed.opts;
+  // apply is a structurally distinct verb: it consumes a previously-emitted
+  // intermediary, checks the key LAZILY (only a checked recover DEF needs an LLM), and
+  // does its own two-line stdout + refusal stderr. Dispatched BEFORE the compress-mode
+  // exit-4 preflight and the API-key gate below, so a keyless reject-all triage applies
+  // offline. parseArgs guarantees inputPath is present in this mode.
+  if (mode === "apply") {
+    process.exit(await runApply(inputPath as string, { lang }));
+  }
   const fromStdin = inputPath === undefined || inputPath === "-";
   // The compress-mode write-back destination: --out when given, else the input path
   // (stdin with no --out has none yet — that is a runtime refusal below, once the
@@ -1671,9 +1597,7 @@ export async function main() {
   // A bare `distill-text` at a terminal would hang silently on fd 0; say so.
   const stdinHint = (): void => {
     if (fromStdin && process.stdin.isTTY)
-      console.error(
-        "distill: reading stdin — pass a file or pipe input (ctrl-d ends input)",
-      );
+      console.error("distill: reading stdin — pass a file or pipe input (ctrl-d ends input)");
   };
   // Phase 3 preflight: refuse BEFORE the API-key gate and before any LLM call when a
   // prior review intermediary is still pending at the sibling .tmp.md path — nothing
@@ -1745,9 +1669,7 @@ export async function main() {
   // no-body check, not in parseArgs) so the empty/no-body stdin exit-3 paths above
   // stay byte-identical (stages.test.ts:656's recipe test pins that).
   if (dest === undefined) {
-    console.error(
-      "distill: stdin input requires --out to name the destination",
-    );
+    console.error("distill: stdin input requires --out to name the destination");
     process.exit(2);
   }
   const resolved = lang === "auto" ? detectLang(body) : lang;
@@ -1758,15 +1680,12 @@ export async function main() {
   // D46 genre gate: a superseded note or a "Context document" is licensed to drop wholesale,
   // so the prose-list-item gate would only flood the footer — skip it there (the deterministic
   // spine still runs). Computed here, where the raw frontmatter is in scope.
-  const factsDump =
-    parseSuperseded(front) || /context document/i.test(frontDescription);
+  const factsDump = parseSuperseded(front) || /context document/i.test(frontDescription);
   // the note's canonical self-slug is its filename slug (what other vault notes
   // wikilink to); empty when reading from stdin (including the '-' convention), where
   // distill() falls back to the H1.
   const selfSlug =
-    !fromStdin && inputPath
-      ? slugSegment(basename(inputPath).replace(/\.md$/, ""))
-      : "";
+    !fromStdin && inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
   try {
     const { out, footer, residue, status } = await distill(
       body,
@@ -1843,9 +1762,7 @@ export async function main() {
     }
     unlinkSync(partial);
     const reviewSuffix =
-      residue.length > 0
-        ? ` · review: ${residue.length} items + gate`
-        : " · review: gate";
+      residue.length > 0 ? ` · review: ${residue.length} items + gate` : " · review: gate";
     process.stdout.write(`${tmpPath}\n${footer2}${reviewSuffix}\n`);
   } catch (e) {
     // A non-transient throw is a real bug — surface it (a stage catch has already
