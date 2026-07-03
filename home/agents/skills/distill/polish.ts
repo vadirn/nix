@@ -3,7 +3,8 @@
 // spell/grammar pass, typography normalization, and a self-consistency name
 // lint. It does not compress the text, add a glossary, or apply a fidelity
 // gate — the original claims remain unchanged.
-// The input file is never modified (unversioned vault, fallible LLM pass).
+// The input file is never modified (fallible LLM pass; the write-back is the
+// reviewer's act, not the tool's).
 // Shares the writing-core (writing/) with distill: revise() and spellPass() mask
 // reference spans before rewriting and normalize typography on the way out.
 //
