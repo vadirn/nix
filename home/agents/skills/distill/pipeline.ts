@@ -1489,7 +1489,13 @@ export function parseArgs(argv: string[]): ParseResult {
   // note.txt.md, a stamp that can never match (a full LLM run wasted on an un-appliable
   // intermediary). Reject at parse time, before any work; --out (validated .md) or stdin
   // both escape it, since the destination then comes from --out rather than the input.
-  if (mode === "compress" && out === undefined && path !== undefined && path !== "-" && !path.endsWith(".md"))
+  if (
+    mode === "compress" &&
+    out === undefined &&
+    path !== undefined &&
+    path !== "-" &&
+    !path.endsWith(".md")
+  )
     return {
       kind: "error",
       message: `compress input must be a .md file, or pass --out <dest.md> (got '${path}')`,
