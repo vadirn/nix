@@ -27,6 +27,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseDescription, parseFrontmatter } from "../frontmatter.ts";
+import { InteractFormatError, stripInteract } from "../interact.ts";
 import {
   askJson,
   EXTRACT,
@@ -122,6 +123,20 @@ export function unwrapResult(text: string): string {
   return m ? m[1] : text;
 }
 
+// Belt for the interactive-text flow: card-stage's input is the APPLIED note
+// (scaffold-free), but a reviewer can point it at an un-applied `<name>.tmp.md`
+// intermediary by mistake. stripInteract removes the decision blocks (an applied
+// note has none and returns byte-identical); a malformed intermediary is left
+// untouched so it is not silently mangled — it fails downstream loudly instead.
+export function stripInteractBelt(text: string): string {
+  try {
+    return stripInteract(text);
+  } catch (e) {
+    if (e instanceof InteractFormatError) return text;
+    throw e;
+  }
+}
+
 // The whole staging flow, deps injected so cards/stage.test.ts drives every
 // degradation lane with fakes and asserts dry-run calls neither ask nor writeFile.
 export async function stageNote(
@@ -130,7 +145,7 @@ export async function stageNote(
   opts: StageOpts,
   deps: StageDeps,
 ): Promise<StageRunResult> {
-  const { front, body } = parseFrontmatter(unwrapResult(noteText));
+  const { front, body } = parseFrontmatter(stripInteractBelt(unwrapResult(noteText)));
   const tie = parseDescription(front);
   const noteName = basename(opts.source ?? notePath).replace(/\.md$/i, "");
   const title = extractTitle(body) || noteName;

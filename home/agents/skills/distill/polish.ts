@@ -251,9 +251,10 @@ export async function main(): Promise<void> {
     });
     emit(result, footer);
   } catch (e) {
-    // Failsafe (mirrors distill's pipeline.ts main): a truncation or a transient
-    // flake escaping the passes ships the ORIGINAL input rather than aborting; a
-    // non-transient throw (a code bug) propagates. Exit 3: valid but unpolished.
+    // Failsafe (mirrors distill's passthrough catch, not its emit/apply flow —
+    // polish has no intermediary): a truncation or a transient flake escaping the
+    // passes ships the ORIGINAL input rather than aborting; a non-transient throw
+    // (a code bug) propagates. Exit 3: valid but unpolished.
     if (e instanceof TruncationError) {
       emit(input, `— polish skipped: output TRUNCATED — ${e.message}`);
       process.exit(3);
