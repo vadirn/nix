@@ -327,7 +327,9 @@ test("emit success (clean run): gate-only intermediary, footer says '· review: 
 // Like runMain, but for paths that end in process.exit: the stub throws a sentinel
 // carrying the code (main's own catch rethrows it — a sentinel is not transient),
 // and the wrapper returns it alongside captured stdout.
-async function runMainExpectExit(args: string[]): Promise<{ stdout: string; exit: number | undefined }> {
+async function runMainExpectExit(
+  args: string[],
+): Promise<{ stdout: string; exit: number | undefined }> {
   const argv = process.argv;
   const hadKey = process.env.FIREWORKS_API_KEY;
   const realWrite = process.stdout.write.bind(process.stdout);
@@ -382,6 +384,55 @@ test("emit success (--out to a new destination): intermediary sibling of --out, 
   expect(existsSync(join(dir, "note.tmp.md"))).toBe(false);
 });
 
+// ---- Phase 5 pin: the TTY session guard is OFF for this whole file ----
+//
+// `bun test` gives main() a non-TTY stdin AND stdout (there is no real terminal
+// behind either descriptor here), which is exactly the guard's off condition —
+// so a real, successful, residue-bearing distill run is the sharpest proof that
+// the session never fires unless BOTH ends are a TTY: colocated with the Phase 3
+// mock (not a new file) so it shares runMain's process.exit-throws-on-success
+// sentinel and mockPipeline's lifecycle, sidestepping the cross-file fw mock race
+// emit.test.ts's own banner names (a second file's mock.module("./fw.ts") could
+// otherwise unmock mid-flight under a slow run here). If the guard's condition
+// were ever inverted, runMain's stubbed process.exit would throw and fail this
+// test loudly; stderr is captured too, so a bug that printed prompt text WITHOUT
+// exiting (guard fires, loop never reaches the exit call) is caught as well.
+test("Phase 5: a non-TTY success run never enters the session — stdout stays 2 lines, stderr carries no prompt text", async () => {
+  mockPipeline();
+  const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
+  const notePath = join(dir, "note.md");
+  const tmpPath = join(dir, "note.tmp.md");
+  writeFileSync(notePath, NOTE);
+  const realErrWrite = process.stderr.write.bind(process.stderr);
+  const errChunks: string[] = [];
+  process.stderr.write = ((c: string | Uint8Array) => {
+    errChunks.push(typeof c === "string" ? c : new TextDecoder().decode(c));
+    return true;
+  }) as typeof process.stderr.write;
+  let stdout: string;
+  try {
+    stdout = await runMain(["--no-revise", "--max-retries", "0", notePath]);
+  } finally {
+    process.stderr.write = realErrWrite;
+  }
+  const lines = stdout.split("\n");
+  expect(lines.length).toBe(3); // path, footer, trailing newline's empty tail
+  expect(lines[0]).toBe(tmpPath);
+  expect(lines[2]).toBe("");
+  const stderrAll = errChunks.join("");
+  for (const forbidden of [
+    "[y/N]",
+    "review:",
+    "apply later with",
+    "gate '",
+    "about to write",
+    "applied:",
+  ]) {
+    expect(stderrAll).not.toContain(forbidden);
+  }
+  expect(existsSync(tmpPath)).toBe(true); // still pending — nothing applied itself
+});
+
 // ---- adversarial pins (Phase-3 review): non-.md destinations, absolute stdout,
 // --out directory validation, the atomic no-clobber write, and mktemp hygiene ----
 
@@ -420,10 +471,9 @@ test("emit: --out into a missing directory is a usage refusal (exit 2) BEFORE th
   writeFileSync(notePath, NOTE);
   // NO_KEY: exit 2 (not 1) proves the check beats the key gate — otherwise the run
   // would burn the whole LLM budget and die on the final write
-  const proc = Bun.spawnSync(
-    ["bun", DISTILL, "--out", join(dir, "missing", "x.md"), notePath],
-    { env: NO_KEY },
-  );
+  const proc = Bun.spawnSync(["bun", DISTILL, "--out", join(dir, "missing", "x.md"), notePath], {
+    env: NO_KEY,
+  });
   expect(proc.exitCode).toBe(2);
   expect(proc.stdout.toString()).toBe("");
   expect(proc.stderr.toString()).toContain("directory does not exist");

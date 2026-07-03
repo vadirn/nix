@@ -732,8 +732,7 @@ export function renderBlock(spec: BlockSpec): string {
   const chunks: string[] = [];
   spec.items.forEach((it, idx) => {
     if (idx > 0) chunks.push("");
-    const targetRaw =
-      it.targetCode || needsBacktick(it.target) ? `\`${it.target}\`` : it.target;
+    const targetRaw = it.targetCode || needsBacktick(it.target) ? `\`${it.target}\`` : it.target;
     let line = `- [${it.state === "checked" ? "x" : " "}] ${it.verb}: ${targetRaw}`;
     if (it.note !== undefined) line += ` — ${it.note}`;
     chunks.push(line);

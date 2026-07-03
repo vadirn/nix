@@ -16,11 +16,7 @@ import type { Residue } from "./pipeline.ts";
 /// `keep` — gate-inconclusive items, which SHIPPED in the body unverified; checked
 /// = keep as shipped, no LLM. `reviewed` — the confirm-all gate item. Unchecked is
 /// uniform across the block: the entry is removed from the final note.
-export const TRIAGE_VERBS = [
-  "recover",
-  "keep",
-  "reviewed",
-] as const satisfies readonly string[];
+export const TRIAGE_VERBS = ["recover", "keep", "reviewed"] as const satisfies readonly string[];
 
 const RESIDUE_INTRO =
   "Residue triage. Checked `recover:` re-renders the entry from its fenced source " +
@@ -31,10 +27,13 @@ const RESIDUE_INTRO =
 /// label: backticks stripped (the payload carries the verbatim truth, the target is
 /// only a grep handle), internal whitespace (including newlines) collapsed to a
 /// single space, truncated so a fenced code block doesn't become a wall of a target.
-function safeHandle(label: string): string {
+/// Exported for apply-mode.ts (Phase 4): a def whose term carries a backtick/newline
+/// ships a DEGRADED target (safeHandle(term) ≠ term), so apply matches a recover/keep/
+/// remove back to its glossary row by re-deriving safeHandle over each row's real
+/// term — the emit transform run in reverse, no handle→term channel in the file.
+export function safeHandle(label: string): string {
   const collapsed = label.replace(/`/g, "").replace(/\s+/g, " ").trim();
-  const truncated =
-    collapsed.length > 80 ? `${collapsed.slice(0, 80).trimEnd()}…` : collapsed;
+  const truncated = collapsed.length > 80 ? `${collapsed.slice(0, 80).trimEnd()}…` : collapsed;
   return truncated || "(unlabeled)";
 }
 
@@ -154,9 +153,7 @@ export function buildIntermediary(
         state: "unchecked",
         verb: "reviewed",
         target:
-          residue.length > 0
-            ? "residue triage above is final"
-            : "distilled result above is final",
+          residue.length > 0 ? "residue triage above is final" : "distilled result above is final",
         note: `apply writes ${opts.dest} and deletes this file`,
       },
     ],

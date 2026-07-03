@@ -72,6 +72,8 @@ import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
 import { runRender } from "./render-mode.ts";
 import { buildIntermediary } from "./triage.ts";
 import { runApply } from "./apply-mode.ts";
+import { parseInteract } from "./interact.ts";
+import { createInterface } from "node:readline";
 
 // Workflow-gate recovery ladder (stage-5 loop). A flagged step is repaired from
 // the gate's own finding (judge-guided), then — if the repair still fails the
@@ -1549,6 +1551,84 @@ function refusePendingIntermediary(tmpPath: string): never {
   process.exit(4);
 }
 
+// ---- TTY session (Phase 5, plan §4): sugar over emit+apply, never a third code path ----
+
+/// One `prompt [y/N]` round-trip against the real terminal: the prompt lands on
+/// stderr (stdout stays the frozen two-line envelope even at a TTY), the answer
+/// comes from stdin. A fresh readline.Interface per call — this is a handful of
+/// round-trips per session, not a hot loop. EOF (Ctrl-D) or a stream error
+/// resolves null, which the caller treats as decline; readline's own Ctrl-C
+/// handling is not engaged (`terminal` defaults off without a matching `output`),
+/// so Ctrl-C falls through to the SIGINT handler main() installs around the session.
+function ask(prompt: string): Promise<string | null> {
+  return new Promise((resolvePrompt) => {
+    process.stderr.write(prompt);
+    const rl = createInterface({ input: process.stdin });
+    let answered = false;
+    rl.once("line", (line) => {
+      answered = true;
+      rl.close();
+      resolvePrompt(line);
+    });
+    rl.once("close", () => {
+      if (!answered) resolvePrompt(null);
+    });
+  });
+}
+
+const isYes = (answer: string | null): boolean => answer !== null && answer.trim().toLowerCase() === "y";
+
+/// The gate-aware sugar loop (plan §4 transcript): re-reads `tmpPath` from disk on
+/// every iteration (Sync may have landed a cross-device edit between prompts), so
+/// it never asks a question the file itself already answers. The confirm-all gate
+/// (triage.ts always names it "triage-final") unchecked → a diagnosis prompt whose
+/// "y" only asks for a re-read, never substitutes for the tick; gate fully checked →
+/// one count-confirm naming what apply is about to do, then `runApply` runs
+/// in-process with its stdout REDIRECTED to stderr for the duration of the call —
+/// the two-line success envelope belongs to emit alone, even in-session. Any
+/// non-"y" answer or EOF returns 0 with the intermediary untouched; the file
+/// predates the prompt, so nothing is lost. `askFn` is the injection seam unit
+/// tests use to script answers without a real terminal; production always uses the
+/// real `ask` above.
+export async function runTtySession(
+  tmpPath: string,
+  dest: string,
+  lang: "en" | "ru",
+  askFn: (prompt: string) => Promise<string | null> = ask,
+): Promise<number> {
+  for (;;) {
+    if (!existsSync(tmpPath)) return 0; // consumed already — a racing apply, or a hand delete
+    const { blocks } = parseInteract(readFileSync(tmpPath, "utf8"));
+    const gate = blocks.find((b) => b.kind === "confirm-all");
+    const gateChecked =
+      gate !== undefined && gate.items.length > 0 && gate.items.every((it) => it.state === "checked");
+    if (!gateChecked) {
+      const gateId = gate?.id ?? "triage-final";
+      const answer = await askFn(
+        `gate '${gateId}' unchecked — check it in Obsidian, then press y to re-check [y/N] `,
+      );
+      if (!isYes(answer)) return 0;
+      continue; // re-read before asking again — the tick is the file's, not the terminal's
+    }
+    const items = blocks.filter((b) => b.kind !== "confirm-all").flatMap((b) => b.items);
+    const recovered = items.filter((it) => it.state === "checked" && it.verb === "recover").length;
+    const kept = items.filter((it) => it.state === "checked" && it.verb === "keep").length;
+    const removed = items.filter((it) => it.state === "unchecked").length;
+    const answer = await askFn(
+      `about to write: ${recovered} recovered · ${kept} kept · ${removed} removed → ${dest} — confirm [y/N] `,
+    );
+    if (!isYes(answer)) return 0;
+    const realStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) =>
+      process.stderr.write(chunk)) as typeof process.stdout.write;
+    try {
+      return await runApply(tmpPath, { lang });
+    } finally {
+      process.stdout.write = realStdoutWrite;
+    }
+  }
+}
+
 export async function main() {
   // The whole CLI surface resolves in parseArgs (help/misuse/ok). Act on help and misuse
   // here, before the API-key gate or any network call: help prints usage to stdout and exits
@@ -1764,6 +1844,20 @@ export async function main() {
     const reviewSuffix =
       residue.length > 0 ? ` · review: ${residue.length} items + gate` : " · review: gate";
     process.stdout.write(`${tmpPath}\n${footer2}${reviewSuffix}\n`);
+    // Phase 5: at a real terminal (both ends — command substitution and pipes must
+    // never see a prompt), emit's success hands off to the gate-aware session in the
+    // SAME process. Everything below this line is stderr; stdout is already frozen
+    // at the two lines above. Not a TTY (the overwhelmingly common agent-caller
+    // case): fall through unchanged, exiting 0 exactly as before Phase 5.
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      const reviewLabel = residue.length > 0 ? `${residue.length} items + gate` : "gate";
+      process.stderr.write(`review: ${tmpPath} — ${reviewLabel}\n`);
+      process.stderr.write(`apply later with: distill-text apply ${tmpPath}\n`);
+      // Ctrl-C loses nothing (the intermediary is already on disk) — exit 0 rather
+      // than the default SIGINT death, matching decline/EOF's exit code.
+      process.once("SIGINT", () => process.exit(0));
+      process.exit(await runTtySession(tmpPath, destPath, resolved));
+    }
   } catch (e) {
     // A non-transient throw is a real bug — surface it (a stage catch has already
     // logged it on its way up; anything thrown outside a stage prints its own stack
