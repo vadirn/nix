@@ -873,3 +873,85 @@ test("apply: an unchecked non-recoverable item stays dropped and does not inflat
   expect(r.code).toBe(0);
   expect(r.stdout).toContain("0 recovered · 0 kept · 0 removed");
 });
+
+// The advisor's re-review: the steps and thesis lanes had the same silent-swallow /
+// content-delete root as finding 1 — a checked recover that cannot execute must refuse,
+// never no-op (an out-of-range idx) or, worse, DELETE the step (an empty payload →
+// verbatimDirectives("") → [] → replace:null → editWorkflow drops the slot).
+
+test("apply: a checked recover on an out-of-range workflow target refuses (exit 2), the list untouched", async () => {
+  delete process.env.FIREWORKS_API_KEY;
+  const dir = tmpdirFor("wf-oor");
+  const R: Residue = {
+    kind: "steps",
+    reasonClass: "failed",
+    label: "workflow:99",
+    stepIdxs: [98],
+    reason: "workflow: a step group beyond the emitted list",
+    source: "Some directive that has nowhere to land.",
+  };
+  const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);
+  const before = readFileSync(destPath, "utf8");
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: workflow:99 —")));
+  const r = await apply(tmpPath);
+  expect(r.code).toBe(2);
+  expect(r.stderr).toContain("no applicable action");
+  expect(existsSync(tmpPath)).toBe(true);
+  expect(readFileSync(destPath, "utf8")).toBe(before);
+});
+
+test("apply: a checked recover on a workflow group with NO source payload refuses — never DELETES the step it was asked to recover", async () => {
+  delete process.env.FIREWORKS_API_KEY;
+  const dir = tmpdirFor("wf-nosrc");
+  const R: Residue = {
+    kind: "steps",
+    reasonClass: "failed",
+    label: "workflow:2",
+    stepIdxs: [1],
+    reason: "workflow: the step-group source lookup returned empty",
+    source: "", // emit omits the payload → the delete-instead-of-recover hazard
+  };
+  const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);
+  const before = readFileSync(destPath, "utf8");
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: workflow:2 —")));
+  const r = await apply(tmpPath);
+  expect(r.code).toBe(2);
+  expect(r.stderr).toContain("no applicable action");
+  expect(readFileSync(destPath, "utf8")).toBe(before); // step 2 survives
+});
+
+test("apply: a checked recover thesis with no payload refuses, never inserts an empty paragraph", async () => {
+  delete process.env.FIREWORKS_API_KEY;
+  const dir = tmpdirFor("thesis-nosrc");
+  const R: Residue = {
+    kind: "thesis",
+    reasonClass: "failed",
+    label: "(thesis)",
+    reason: "thesis not recoverable from output",
+    source: "",
+  };
+  const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);
+  const before = readFileSync(destPath, "utf8");
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: thesis —")));
+  const r = await apply(tmpPath);
+  expect(r.code).toBe(2);
+  expect(readFileSync(destPath, "utf8")).toBe(before);
+});
+
+test("apply: an unchecked out-of-range workflow item does not inflate the removed count", async () => {
+  delete process.env.FIREWORKS_API_KEY;
+  const dir = tmpdirFor("wf-oor-unchecked");
+  const R: Residue = {
+    kind: "steps",
+    reasonClass: "failed",
+    label: "workflow:99",
+    stepIdxs: [98],
+    reason: "workflow: beyond the list",
+    source: "x",
+  };
+  const { tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);
+  writeTmp(tmpPath, checkGate(tmp)); // gate checked, the steps item left unchecked
+  const r = await apply(tmpPath);
+  expect(r.code).toBe(0);
+  expect(r.stdout).toContain("0 recovered · 0 kept · 0 removed");
+});

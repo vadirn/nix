@@ -115,6 +115,28 @@ function workflowIdxs(target: string): number[] {
     .filter((n) => Number.isInteger(n) && n >= 0);
 }
 
+/// The count of numbered steps in the emitted `## Workflow` list (0 if none) — used to
+/// validate a workflow target's indices before acting, so an out-of-range slot is refused
+/// (a checked recover) or ignored (an unchecked remove) rather than silently no-oped, or
+/// worse, deleting the wrong step. Mirrors editWorkflow's list scan.
+function workflowLen(body: string): number {
+  const lines = body.split("\n");
+  const wfIdx = lines.findIndex((l) => /^##\s+Workflow\b/i.test(l.trim()));
+  if (wfIdx < 0) return 0;
+  const itemRe = /^\s*\d+\.\s/;
+  let count = 0;
+  let started = false;
+  for (let i = wfIdx + 1; i < lines.length; i++) {
+    if (itemRe.test(lines[i]!)) {
+      count++;
+      started = true;
+    } else if (started) break;
+    else if (lines[i]!.trim() === "") continue;
+    else break;
+  }
+  return count;
+}
+
 /// Promote the intermediary's forced `epistemic_status: in-review` to `distilled`
 /// (step 10 — write-back is the promotion). The emit always forces the in-review
 /// line into frontmatter, so a bounded first-line replace preserves every other
@@ -208,6 +230,7 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   const workflowOps: WorkflowOp[] = [];
   let thesisPara: string | null = null;
   const unrecoverable: string[] = [];
+  const wfLen = workflowLen(body);
 
   for (const it of items) {
     const kind = targetKind(it.target);
@@ -217,7 +240,7 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
         kept++; // held as shipped — no LLM, no removal
         continue;
       }
-      // recover — counts reflect EFFECTS: a lane that changes nothing is not counted.
+      // recover — every lane must be executable or refuse (below); counts reflect EFFECTS.
       if (kind === "def") {
         const term = resolveDefTerm(body, it.target);
         if (term === null) {
@@ -227,22 +250,34 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
         defRecovers.push({ term, src: payload });
         recovered++;
       } else if (kind === "steps") {
-        const idxs = workflowIdxs(it.target);
+        // A recover with no in-range slot (out-of-range target) or no source directive
+        // (empty payload) cannot execute — and an empty payload would DELETE the slot
+        // (replace:null), the opposite of recover. Refuse both rather than no-op or delete.
+        const idxs = workflowIdxs(it.target).filter((idx) => idx < wfLen);
         const clauses = verbatimDirectives(payload);
+        if (idxs.length === 0 || clauses.length === 0) {
+          unrecoverable.push(it.target);
+          continue;
+        }
         idxs.forEach((idx, k) => {
-          workflowOps.push({ idx, replace: k === 0 && clauses.length ? clauses : null });
+          workflowOps.push({ idx, replace: k === 0 ? clauses : null });
         });
         recovered++;
         verbatim++;
       } else {
+        // thesis — an empty payload is nothing to recover; refuse rather than insert a blank.
+        if (payload.trim() === "") {
+          unrecoverable.push(it.target);
+          continue;
+        }
         thesisPara = payload;
         recovered++;
         verbatim++;
       }
     } else {
       // unchecked recover|keep → the entry is REMOVED, but only counted when there is a
-      // real removal: a non-recoverable class was never in the output, so it stays
-      // dropped with no effect (not a phantom "removed").
+      // real removal: a non-recoverable class (or an out-of-range slot) was never in the
+      // output, so it stays dropped with no effect (not a phantom "removed").
       if (kind === "def") {
         const term = resolveDefTerm(body, it.target);
         if (term !== null) {
@@ -250,8 +285,9 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
           removed++;
         }
       } else if (kind === "steps") {
-        for (const idx of workflowIdxs(it.target)) workflowOps.push({ idx, replace: null });
-        removed++;
+        const idxs = workflowIdxs(it.target).filter((idx) => idx < wfLen);
+        for (const idx of idxs) workflowOps.push({ idx, replace: null });
+        if (idxs.length > 0) removed++;
       }
       // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
     }
