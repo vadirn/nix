@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
-// polish-text — copy-edit a markdown note: four writing passes, a spell/grammar
-// pass, typography normalization, and a self-consistency name lint. No
-// compression, no glossary, no fidelity gate — the text's claims are untouched.
+// polish-text — copy-edit a markdown note: four writing passes, then a
+// spell/grammar pass, typography normalization, and a self-consistency name
+// lint. It does not compress the text, add a glossary, or apply a fidelity
+// gate — the original claims remain unchanged.
 // The input file is never modified (unversioned vault, fallible LLM pass).
 // Shares the writing-core (writing/) with distill: revise() and spellPass() mask
 // reference spans before rewriting and normalize typography on the way out.
@@ -38,9 +39,10 @@ import {
 import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { spellPass } from "./writing/spell.ts";
 
-export const USAGE = `polish-text — copy-edit a markdown note: four writing passes, a spell/grammar
-pass, typography normalization, and a self-consistency name lint.
-No compression, no glossary, no fidelity gate — the text's claims are untouched.
+export const USAGE = `polish-text — copy-edit a markdown note: four writing passes, then a
+spell/grammar pass, typography normalization, and a self-consistency name lint.
+It does not compress the text, add a glossary, or apply a fidelity gate — the
+original claims remain unchanged.
 
 Usage:
   polish-text [options] [input.md]    polish a note (stdin when no path or '-')

@@ -25,7 +25,7 @@ test("USAGE: names the flags and the env requirement", () => {
   expect(USAGE).toContain("-o, --temp-file");
   expect(USAGE).toContain("-h, --help");
   expect(USAGE).toContain("Env: FIREWORKS_API_KEY");
-  expect(USAGE).toContain("No compression, no glossary, no fidelity gate");
+  expect(USAGE).toContain("does not compress the text, add a glossary, or apply a fidelity gate");
 });
 
 test("USAGE: states the output contract — never in place, content→stdout, footer→stderr, exit codes", () => {
