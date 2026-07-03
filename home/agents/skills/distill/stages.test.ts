@@ -466,7 +466,6 @@ test("parseArgs: bare invocation reads stdin with defaults", () => {
   expect(r.opts.path).toBeUndefined();
   expect(r.opts).toMatchObject({
     lang: "auto",
-    synth: "render",
     maxRetries: 2,
     noRevise: false,
     noGate: false,
@@ -488,16 +487,8 @@ test("parseArgs: an unknown flag errors and names the offending token", () => {
   expect(err(["--frobnicate", "input.md"])).toContain("--frobnicate");
 });
 
-test("parseArgs: --synth rejects an out-of-set value and lists the choices", () => {
-  const m = err(["--synth", "foo"]);
-  expect(m).toContain("--synth");
-  expect(m).toContain("render");
-  expect(m).toContain("regenerate");
-  expect(m).toContain("foo");
-});
-
-test("parseArgs: --synth regenerate is accepted", () => {
-  expect(ok(["--synth", "regenerate", "in.md"]).opts.synth).toBe("regenerate");
+test("parseArgs: --synth is gone — the dial was removed after the 2026-06-25 experiment (render dominates)", () => {
+  expect(err(["--synth", "render", "in.md"])).toContain("--synth");
 });
 
 test("parseArgs: --lang rejects a missing value and an out-of-set value", () => {

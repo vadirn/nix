@@ -48,7 +48,6 @@ import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./
 import {
   type ConceptVerdict,
   type StepVerdict,
-  type Synth,
   connectiveProse,
   extractCombo,
   fidelityGate,
@@ -235,7 +234,7 @@ async function synthesize(
   combo: Combo,
   orderedEntries: GlossEntry[],
   orderedSteps: WorkStep[],
-  opts: { synth: Synth; coreOnly: boolean },
+  opts: { coreOnly: boolean },
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): Promise<{
@@ -245,9 +244,9 @@ async function synthesize(
   prose: string;
 }> {
   const [defByTerm, tie, workflowSteps] = await Promise.all([
-    synthEntries(combo, orderedEntries, opts.synth, blockById, lang),
+    synthEntries(orderedEntries, blockById, lang),
     tieTogether(combo, lang),
-    synthWorkflow(orderedSteps, opts.synth, blockById, lang),
+    synthWorkflow(orderedSteps, blockById, lang),
   ]);
   const prose = opts.coreOnly ? "" : await connectiveProse(combo, orderedEntries, defByTerm, lang);
   return { defByTerm, tie, workflowSteps, prose };
@@ -381,7 +380,6 @@ async function runFidelityGate(
             // Same compression pressure that inverted the step — kept for the experiment.
             const tightened = await synthWorkflow(
               g.idxs.map((i) => orderedSteps[i]),
-              "render",
               blockById,
               lang,
             );
@@ -814,7 +812,6 @@ async function distill(
   lang: "en" | "ru",
   frontDescription: string,
   opts: {
-    synth: Synth;
     maxRetries: number;
     noRevise: boolean;
     noGate: boolean;
@@ -1149,8 +1146,6 @@ Usage:
 Options:
   --core-only            emit just the glossary (tie + definitions), no prose
   --lang <en|ru|auto>    language rubric (default: auto-detect)
-  --synth <render|regenerate>
-                         synthesis fidelity dial (default: render; regenerate is denser)
   --max-retries <n>      cap stage-5 gate recovery retries (default: 2)
   --tau <0..1>           payload-density routing threshold (default: ${DEFAULT_TAU})
   --no-gate              skip the stage-5 fidelity gate
@@ -1180,7 +1175,6 @@ Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
 
 export type CliOpts = {
   lang: "en" | "ru" | "auto";
-  synth: Synth;
   maxRetries: number;
   noRevise: boolean;
   noGate: boolean;
@@ -1212,7 +1206,6 @@ export type ParseResult =
 
 export function parseArgs(argv: string[]): ParseResult {
   let lang: CliOpts["lang"] = "auto";
-  let synth: Synth = "render";
   let maxRetries = 2;
   let tau = DEFAULT_TAU;
   let maxWords: number | undefined;
@@ -1259,18 +1252,6 @@ export function parseArgs(argv: string[]): ParseResult {
       if (v !== "en" && v !== "ru" && v !== "auto")
         return { kind: "error", message: `--lang expects one of: en, ru, auto (got '${v}')` };
       lang = v;
-      continue;
-    }
-    if (a === "--synth") {
-      const v = argv[++i];
-      if (v === undefined)
-        return { kind: "error", message: "--synth expects a value (render or regenerate)" };
-      if (v !== "render" && v !== "regenerate")
-        return {
-          kind: "error",
-          message: `--synth expects one of: render, regenerate (got '${v}')`,
-        };
-      synth = v;
       continue;
     }
     if (a === "--max-retries") {
@@ -1345,7 +1326,7 @@ export function parseArgs(argv: string[]): ParseResult {
   return {
     kind: "ok",
     mode,
-    opts: { lang, synth, maxRetries, noRevise, noGate, coreOnly, dryRun, tau, maxWords, path },
+    opts: { lang, maxRetries, noRevise, noGate, coreOnly, dryRun, tau, maxWords, path },
   };
 }
 
@@ -1373,7 +1354,6 @@ export async function main() {
   const { mode } = parsed;
   const {
     lang,
-    synth,
     maxRetries,
     noRevise,
     noGate,
@@ -1455,7 +1435,6 @@ export async function main() {
       resolved,
       frontDescription,
       {
-        synth,
         maxRetries,
         noRevise,
         noGate,

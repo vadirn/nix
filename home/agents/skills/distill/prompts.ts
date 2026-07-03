@@ -179,8 +179,14 @@ export async function gradeBlocks(combo: Combo, blocks: Block[]): Promise<Map<st
   return byId;
 }
 
-// ---- stage 3: synthesize glossary definitions (the fidelity dial) ----
-export type Synth = "render" | "regenerate";
+// ---- stage 3: synthesize glossary definitions (source-grounded) ----
+// Each def is grounded in its cited source text. A `regenerate` arm (defs from the
+// extracted idea-graph alone) existed as a fidelity dial until the 2026-06-25
+// stability experiment refuted the tradeoff it embodied: render matched it on
+// stability and restatement collapse and compressed MORE (60% vs 54%) — the
+// already-lossy IR re-expands with hedging. See
+// `35 experiments/2026-06-25-distill-synth-dial-stability.md` for what would
+// justify re-adding it.
 
 export function sourceTextFor(entry: { source: string[] }, blockById: Map<string, Block>): string {
   return entry.source
@@ -190,54 +196,31 @@ export function sourceTextFor(entry: { source: string[] }, blockById: Map<string
 }
 
 function synthEntriesPrompt(
-  combo: Combo,
   entries: GlossEntry[],
-  mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): string {
-  if (mode === "render") {
-    // DEF_RELATIONS=drop withholds the relations list so the def-writer cannot fold
-    // edges in; the connective prose carries them. DEF_RELATIONS=keep is prior behavior.
-    const concepts = entries
-      .map((e) =>
-        DEF_RELATIONS === "keep"
-          ? `### ${e.term}\nrelations: ${e.relations.map(relText).join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`
-          : `### ${e.term}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
-      )
-      .join("\n\n");
-    const relRule =
-      DEF_RELATIONS === "keep"
-        ? "Keep every named relation; use only claims the source states."
-        : "Define the concept ITSELF — what it is — and state how it relates to other terms (subsumes / contrasts / precondition for) NOWHERE in the def; the connective prose carries relations. Use only claims the source states.";
-    return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause), compressing rather than copying a source sentence verbatim. ${relRule} Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
-
-CONCEPTS:
-${concepts}`;
-  }
+  // DEF_RELATIONS=drop withholds the relations list so the def-writer cannot fold
+  // edges in; the connective prose carries them. DEF_RELATIONS=keep is prior behavior.
   const concepts = entries
     .map((e) =>
       DEF_RELATIONS === "keep"
-        ? `### ${e.term}\ndef(draft): ${e.def}\nrelations: ${e.relations.map(relText).join("; ")}`
-        : `### ${e.term}\ndef(draft): ${e.def}`,
+        ? `### ${e.term}\nrelations: ${e.relations.map(relText).join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`
+        : `### ${e.term}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
     )
     .join("\n\n");
-  const defRule =
+  const relRule =
     DEF_RELATIONS === "keep"
-      ? 'write a maximally dense "def" that preserves its relations'
-      : 'write a maximally dense "def" that defines the concept itself, stating no relations to other terms (the prose carries those)';
-  return `You are writing glossary definitions for a compressed note from its extracted idea-graph alone. For each concept, ${defRule}. Stay on the thesis; introduce NO new concept. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
-
-THESIS: ${combo.thesis}
+      ? "Keep every named relation; use only claims the source states."
+      : "Define the concept ITSELF — what it is — and state how it relates to other terms (subsumes / contrasts / precondition for) NOWHERE in the def; the connective prose carries relations. Use only claims the source states.";
+  return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause), compressing rather than copying a source sentence verbatim. ${relRule} Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
 
 CONCEPTS:
 ${concepts}`;
 }
 
 export async function synthEntries(
-  combo: Combo,
   entries: GlossEntry[],
-  mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): Promise<Map<string, string>> {
@@ -245,7 +228,7 @@ export async function synthEntries(
   if (entries.length === 0) return out;
   const res = await askJson<{ entries: { term: string; def: string }[] }>(
     EXTRACT,
-    synthEntriesPrompt(combo, entries, mode, blockById, lang),
+    synthEntriesPrompt(entries, blockById, lang),
     EXTRACT_TOKENS,
   );
   for (const e of res.entries ?? []) if (e.term && e.def) out.set(e.term.trim(), e.def.trim());
@@ -253,30 +236,21 @@ export async function synthEntries(
 }
 
 // ---- stage 3 (workflow): tighten each directive, preserve order, drop none ----
-// Parallel to synthEntries on the procedural channel. The fidelity dial applies
-// the same way: `render` grounds each tightened step in its source block(s);
-// `regenerate` tightens from the extracted draft alone. Steps are keyed by index
-// (S0, S1, …) since, unlike glossary terms, they have no natural unique name.
+// Parallel to synthEntries on the procedural channel: each tightened step is
+// grounded in its source block(s). Steps are keyed by index (S0, S1, …) since,
+// unlike glossary terms, they have no natural unique name.
 function synthWorkflowPrompt(
   steps: WorkStep[],
-  mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): string {
-  if (mode === "render") {
-    // Show each step's own DRAFT alongside its SOURCE. Steps in a list share one
-    // source block, so the draft is what individuates them — without it the model
-    // sees N identical sources and collapses them to one directive.
-    const items = steps
-      .map((s, i) => `### S${i}\ndraft: ${s.step}\nSOURCE:\n${sourceTextFor(s, blockById)}`)
-      .join("\n\n");
-    return `You are tightening the procedure of a note into a clean ordered checklist. Each step has its own DRAFT directive and the SOURCE it came from. Tighten EACH draft into ONE dense imperative directive, keeping its distinct action and grounding it in the SOURCE — reword rather than copy a source sentence verbatim, keep steps separate, one action per step. If the draft carries a reason the SOURCE states ("because/so that Y"), keep that reason in the tightened step and add only reasons the source gives. Keep EVERY step (drop none) and preserve their order. Keep \`inline code\`, file paths, flags, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
-
-STEPS:
-${items}`;
-  }
-  const items = steps.map((s, i) => `### S${i}\ndraft: ${s.step}`).join("\n\n");
-  return `You are tightening the procedure of a note into a clean ordered checklist from its drafted steps alone. For each step, write ONE dense imperative directive that preserves its action and any reason already in the draft, adding only reasons the draft carries. Keep EVERY step (drop none) and preserve their order. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
+  // Show each step's own DRAFT alongside its SOURCE. Steps in a list share one
+  // source block, so the draft is what individuates them — without it the model
+  // sees N identical sources and collapses them to one directive.
+  const items = steps
+    .map((s, i) => `### S${i}\ndraft: ${s.step}\nSOURCE:\n${sourceTextFor(s, blockById)}`)
+    .join("\n\n");
+  return `You are tightening the procedure of a note into a clean ordered checklist. Each step has its own DRAFT directive and the SOURCE it came from. Tighten EACH draft into ONE dense imperative directive, keeping its distinct action and grounding it in the SOURCE — reword rather than copy a source sentence verbatim, keep steps separate, one action per step. If the draft carries a reason the SOURCE states ("because/so that Y"), keep that reason in the tightened step and add only reasons the source gives. Keep EVERY step (drop none) and preserve their order. Keep \`inline code\`, file paths, flags, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
 
 STEPS:
 ${items}`;
@@ -284,7 +258,6 @@ ${items}`;
 
 export async function synthWorkflow(
   steps: WorkStep[],
-  mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): Promise<string[]> {
@@ -293,7 +266,7 @@ export async function synthWorkflow(
   try {
     const res = await askJson<{ steps: { id: string; step: string }[] }>(
       EXTRACT,
-      synthWorkflowPrompt(steps, mode, blockById, lang),
+      synthWorkflowPrompt(steps, blockById, lang),
       EXTRACT_TOKENS,
     );
     for (const e of res.steps ?? []) {

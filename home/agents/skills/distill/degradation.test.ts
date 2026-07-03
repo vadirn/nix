@@ -138,7 +138,7 @@ test("synthWorkflow: a transient flake keeps the drafted steps", async () => {
   const { synthWorkflow } = await import(PROMPTS);
   const steps = [{ step: "do the thing", source: ["B1"] }];
   const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
-  const out = await synthWorkflow(steps, "regenerate", blockById, "en");
+  const out = await synthWorkflow(steps, blockById, "en");
   expect(out).toEqual(["do the thing"]); // unchanged draft survives the flake
 });
 
@@ -149,9 +149,7 @@ test("synthWorkflow: a non-transient code bug propagates", async () => {
   const { synthWorkflow } = await import(PROMPTS);
   const steps = [{ step: "do the thing", source: ["B1"] }];
   const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
-  await expect(synthWorkflow(steps, "regenerate", blockById, "en")).rejects.toThrow(
-    "undefined helper",
-  );
+  await expect(synthWorkflow(steps, blockById, "en")).rejects.toThrow("undefined helper");
 });
 
 test("revise: an echoed block-id marker is stripped from the returned text (live [__G0__] leak)", async () => {
@@ -182,7 +180,7 @@ test("synthWorkflow: a marker-only model step is rejected, the draft kept (no '3
   const { synthWorkflow } = await import(PROMPTS);
   const steps = [{ step: "do the thing", source: ["B1"] }];
   const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
-  const out = await synthWorkflow(steps, "regenerate", blockById, "en");
+  const out = await synthWorkflow(steps, blockById, "en");
   expect(out).toEqual(["do the thing"]);
 });
 

@@ -19,7 +19,7 @@
 // Pipeline (5 stages): segment → (1) extract combo {description, thesis, glossary
 // with relations + source pointers, workflow steps + source pointers} (gpt-oss-120b)
 // → (2) grade each block drop/distill/retain (gpt-oss-120b) → (3) synthesize
-// glossary defs AND tighten workflow steps via the fidelity dial render|regenerate,
+// glossary defs AND tighten workflow steps, each grounded in its cited source text,
 // then write the connective prose head from the defs+relations → (4) revise the
 // distilled prose + steps (4 writing passes) → (5) fidelity-grade the glossary defs
 // AND the workflow steps ⟷ raw-input by round-trip entailment with a DIFFERENT model
@@ -53,7 +53,6 @@
 //         distill-text < input.txt                   # read from stdin ('-' as the path also reads stdin)
 //         distill-text --core-only input.md          # glossary only (tie + definitions), no prose
 //         distill-text --lang ru < input.txt         # force Russian rubric
-//         distill-text --synth regenerate input.md   # denser dial (default: render)
 //         distill-text --max-retries 1 input.md      # cap stage-5 recovery (default: 2)
 //         distill-text --tau 0.6 input.md            # payload-density routing threshold (default: 0.5)
 //         distill-text --no-gate input.md            # skip stage-5 fidelity gate
