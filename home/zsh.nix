@@ -105,6 +105,25 @@
 
       alias gtimeout='timeout'
 
+      # Render markdown through oxfmt so prose wraps correctly. glamour (glow's
+      # renderer) mis-breaks hyphenated words when it wraps; oxfmt reflows the
+      # source at its print width, and `glow -w 0` prints that verbatim instead
+      # of re-wrapping. The reflow is dry (stdin -> stdout), so source files stay
+      # unwrapped on disk (oxfmtrc.json proseWrap:never). Non-markdown, TUI, and
+      # multi-arg calls fall through to plain `glow -w 0`.
+      glow() {
+        emulate -L zsh
+        local cfg="$HOME/nix/home/oxfmt-prose-wrap.json"
+        if [[ $# -eq 1 && -f $1 && $1 == *.md && -r $cfg ]]; then
+          local out
+          if out=$(command oxfmt --stdin-filepath="$1" -c "$cfg" <"$1" 2>/dev/null) && [[ -n $out ]]; then
+            print -r -- "$out" | command glow -w 0
+            return
+          fi
+        fi
+        command glow -w 0 "$@"
+      }
+
       tt() {
         local depth="''${1:-3}"
         shift 2>/dev/null
