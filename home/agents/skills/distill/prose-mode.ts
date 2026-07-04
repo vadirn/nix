@@ -125,23 +125,25 @@ export async function renderProse(
 
 // Drive render mode: parse → synthesize prose → revise (no gate) → assemble.
 // Failsafe mirrors the compress path: any error → the original is passed through.
+// Returns the process exit code: 0 rendered, 3 skipped (output = unmodified
+// input, same contract as a compress passthrough; the reason goes to stderr).
 export async function runProse(
   input: string,
   opts: { lang: "en" | "ru" | "auto"; noRevise: boolean },
   emit: (body: string, footer: string) => void,
-): Promise<void> {
+): Promise<number> {
   try {
     const { front, body } = parseFrontmatter(unwrapResult(input));
     const { tie, entries, preserved } = parseDistilled(body);
     if (entries.length === 0) {
       emit(input, "— prose skipped: no ## Glossary table found");
-      return;
+      return 3;
     }
     const lang = opts.lang === "auto" ? detectLang(body) : opts.lang;
     let prose = await renderProse(parseDescription(front), tie, entries, lang);
     if (!prose) {
       emit(input, "— prose skipped: empty prose");
-      return;
+      return 3;
     }
     if (!opts.noRevise) {
       const revised = await revise(segment(prose), lang === "ru" ? PASS_RU : PASS_EN);
@@ -153,8 +155,10 @@ export async function runProse(
       `<result>\n${result}\n</result>\n`,
       `— rendered prose · ${wordCount(body)}→${wordCount(outBody)} words · ${entries.length} entries`,
     );
+    return 0;
   } catch (e) {
     rethrowIfBug(e, "runProse");
     emit(input, `— prose skipped (error): ${String(e).slice(0, 160)}`);
+    return 3;
   }
 }

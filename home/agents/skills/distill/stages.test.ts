@@ -695,7 +695,7 @@ test("USAGE: states the output contract — intermediary envelope, path-on-stdou
   expect(USAGE).toContain("2 usage");
   expect(USAGE).toContain("3 passthrough");
   expect(USAGE).toContain("4 pending intermediary");
-  // exit 3 is compress-scoped: prose-mode skips exit 0
+  // exit 2's stdin-without-out case is compress-mode-scoped; prose-mode skips now share exit 3
   expect(USAGE).toContain("compress mode");
   expect(USAGE).toContain("stdin when no path or '-'");
 });
@@ -741,12 +741,12 @@ test("main: --dry-run '-' reads stdin (no ENOENT) and labels the report (stdin)"
   expect(out).not.toMatch(/\(-\)|^-$/m);
 });
 
-test("main: a prose-mode skip (no ## Glossary table) is a passthrough that exits 0, not 3", () => {
+test("main: a prose-mode skip (no ## Glossary table) is a passthrough that exits 3, same as compress passthrough", () => {
   const proc = Bun.spawnSync(["bun", DISTILL, "prose", "-"], {
     env: DUMMY_KEY,
     stdin: Buffer.from("Just prose, no glossary table.\n"),
   });
-  expect(proc.exitCode).toBe(0);
+  expect(proc.exitCode).toBe(3);
   const lines = proc.stdout.toString().split("\n");
   expect(lines[0]).toEndWith(".md");
   expect(lines.length).toBe(2); // path only on stdout

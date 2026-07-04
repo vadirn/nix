@@ -1264,13 +1264,14 @@ Output:
   data: one line, the written path (nothing on empty input). The one-line summary
   footer prints on stderr, with every other diagnostic. Capture is plain:
     path=$(distill-text input.md); status=$?
-  Exit: 0 distilled (a pending review intermediary, residue, and gate-inconclusive
-  items still exit 0 — they are surfaced in the footer and the intermediary itself;
-  prose-mode skips also exit 0, flagged in the footer) · 1 FIREWORKS_API_KEY
+  Exit: 0 distilled or prose rendered (a pending review intermediary, residue, and
+  gate-inconclusive items still exit 0 — they are surfaced in the footer and the
+  intermediary itself) · 1 FIREWORKS_API_KEY
   missing · 2 usage error (compress mode: stdin without --out once the run reaches
-  the emit; --out naming a missing directory) · 3 passthrough (compress mode: the
-  output is the unmodified original —
-  failsafe, expand-guard, nothing to distill; the path line still prints;
+  the emit; --out naming a missing directory) · 3 passthrough (the
+  output is the unmodified original — compress failsafe, expand-guard, nothing to
+  distill, and every prose-mode skip: no glossary table, empty prose, error; the
+  path line still prints, the reason on stderr;
   empty input exits 3 with nothing on stdout) · 4 pending intermediary already
   exists at the sibling .tmp.md path (refused before the key gate and before any
   LLM call — apply or delete it first).
@@ -1772,8 +1773,9 @@ export async function main() {
     ? (line: string): void => void process.stderr.write(`${line}\n`)
     : undefined;
   if (mode === "prose") {
-    await runProse(input, { lang, noRevise }, emit);
-    return;
+    // runProse returns the exit code: 0 rendered, 3 skipped (output = the
+    // unmodified input — the same code compress passthrough uses).
+    process.exit(await runProse(input, { lang, noRevise }, emit));
   }
   // compress mode: strip leading frontmatter (it passes through verbatim; the
   // pipeline + language detection operate on the body only). A block whose YAML

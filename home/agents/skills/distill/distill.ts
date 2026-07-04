@@ -41,10 +41,11 @@
 // other diagnostics go to stderr. Failsafe: any error before
 // the gate → the temp file holds the original text (passthrough), path still printed.
 //
-// Exit codes: 0 distilled (residue/gate-inconclusive stay 0); 1 missing key; 2 arg
-// misuse; 3 passthrough — compress mode only: the output is the unmodified original
-// (failsafe, expand-guard, no body, empty input; the stdout path line still prints
-// except on empty input). A prose-mode skip exits 0 with the reason in the footer.
+// Exit codes: 0 distilled or prose rendered (residue/gate-inconclusive stay 0);
+// 1 missing key; 2 arg misuse; 3 passthrough — the output is the unmodified original
+// (compress: failsafe, expand-guard, no body, empty input; prose: no glossary table,
+// empty prose, error). The stdout path line still prints except on empty input;
+// the skip reason goes to stderr.
 //
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
 // `doppler run --project claude-code --config std --`).
