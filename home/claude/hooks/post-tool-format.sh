@@ -19,7 +19,9 @@
 #   - For deno.json: runs `deno fmt` at the nearest deno root.
 #   - Universal fallback: global oxfmt on the file. Runs when no ancestor
 #     defines `format:file`, including the no-manifest case (scratch files,
-#     vault .md, etc.). Easy to spot when oxfmt's defaults diverge from
+#     vault .md, etc.). oxfmt discovers the nearest .oxfmtrc.json by walking up
+#     from the file (see home/bun/oxfmtrc.json, deployed to ~ — sets
+#     proseWrap: never). Easy to spot when oxfmt's defaults diverge from
 #     project style — that's the cue to add `format:file`.
 #
 # Never blocks: failures go to stderr so Claude can see and decide.
