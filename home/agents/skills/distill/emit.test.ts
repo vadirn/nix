@@ -3,8 +3,8 @@
 // Freezes the pipeline emit swap: every successful distill writes the interactive
 // intermediary to `<dest>.tmp.md` (sibling of the destination — the input path by
 // default, `--out` override) instead of the `<result>`/`<residue>` XML envelope;
-// stdout stays exactly two lines (line 1 now the .tmp.md path; the footer gains the
-// `· review: …` suffix); a pending intermediary refuses with exit 4 BEFORE the
+// stdout carries exactly the data — one line, the .tmp.md path — while the footer
+// (which gains the `· review: …` suffix) goes to stderr; a pending intermediary refuses with exit 4 BEFORE the
 // API-key gate; stdin requires `--out` once the run actually reaches the emit
 // (exit 2) — while the empty/no-body/passthrough exit-3 paths keep today's mktemp
 // behavior byte-identical (the stages.test.ts:656 recipe test is the executable
@@ -102,8 +102,9 @@ test("emit hygiene: the no-body exit-3 path writes NO sibling intermediary (mkte
   const proc = Bun.spawnSync(["bun", DISTILL, notePath], { env: DUMMY_KEY });
   expect(proc.exitCode).toBe(3);
   const lines = proc.stdout.toString().split("\n");
-  expect(lines[1]).toBe("— no body to distill");
-  // the two-line envelope still points at a disposable mktemp artifact…
+  expect(proc.stderr.toString()).toContain("— no body to distill");
+  expect(lines.length).toBe(2); // path + trailing newline's empty tail
+  // the stdout path line still points at a disposable mktemp artifact…
   expect(lines[0]).toEndWith(".md");
   expect(lines[0]).not.toBe(join(dir, "note.tmp.md"));
   expect(readFileSync(lines[0]!, "utf8")).toBe("---\ntype: note\n---\n");
@@ -225,18 +226,24 @@ function mockPipeline() {
 // Run main() in-process with argv patched and stdout captured. The success path
 // never calls process.exit; process.exit is stubbed to THROW so any exit-path
 // regression (or red-phase behavior) fails the test instead of killing the runner.
-async function runMain(args: string[]): Promise<string> {
+async function runMain(args: string[]): Promise<{ stdout: string; stderr: string }> {
   const argv = process.argv;
   const hadKey = process.env.FIREWORKS_API_KEY;
   const realWrite = process.stdout.write.bind(process.stdout);
+  const realErrWrite = process.stderr.write.bind(process.stderr);
   const realExit = process.exit;
   const chunks: string[] = [];
+  const errChunks: string[] = [];
   process.argv = ["bun", "distill.ts", ...args];
   process.env.FIREWORKS_API_KEY = "test-dummy";
   process.stdout.write = ((c: string | Uint8Array) => {
     chunks.push(typeof c === "string" ? c : new TextDecoder().decode(c));
     return true;
   }) as typeof process.stdout.write;
+  process.stderr.write = ((c: string | Uint8Array) => {
+    errChunks.push(typeof c === "string" ? c : new TextDecoder().decode(c));
+    return true;
+  }) as typeof process.stderr.write;
   process.exit = ((code?: number) => {
     throw new Error(`main() called process.exit(${code}) on a success path`);
   }) as typeof process.exit;
@@ -245,29 +252,27 @@ async function runMain(args: string[]): Promise<string> {
     await main();
   } finally {
     process.stdout.write = realWrite;
+    process.stderr.write = realErrWrite;
     process.argv = argv;
     process.exit = realExit;
     if (hadKey === undefined) delete process.env.FIREWORKS_API_KEY;
     else process.env.FIREWORKS_API_KEY = hadKey;
   }
-  return chunks.join("");
+  return { stdout: chunks.join(""), stderr: errChunks.join("") };
 }
 
-test("emit success: sibling .tmp.md intermediary, two-line stdout, no XML, dest=/src= stamp, residue triaged", async () => {
+test("emit success: sibling .tmp.md intermediary, path-only stdout, no XML, dest=/src= stamp, residue triaged", async () => {
   mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.md");
   const tmpPath = join(dir, "note.tmp.md");
   writeFileSync(notePath, NOTE);
-  const stdout = await runMain(["--no-revise", "--max-retries", "0", notePath]);
+  const { stdout, stderr } = await runMain(["--no-revise", "--max-retries", "0", notePath]);
 
-  // stdout: exactly two lines — the intermediary path, then the footer with the review suffix
-  const lines = stdout.split("\n");
-  expect(lines.length).toBe(3);
-  expect(lines[0]).toBe(tmpPath);
-  expect(lines[1]).toContain("— distilled");
-  expect(lines[1]).toContain("· review: 4 items + gate");
-  expect(lines[2]).toBe("");
+  // stdout: exactly the data — the intermediary path; the footer with the review suffix on stderr
+  expect(stdout).toBe(`${tmpPath}\n`);
+  expect(stderr).toContain("— distilled");
+  expect(stderr).toContain("· review: 4 items + gate");
 
   // the intermediary: an Obsidian-first document, not an XML envelope
   expect(existsSync(tmpPath)).toBe(true);
@@ -307,13 +312,11 @@ test("emit success (clean run): gate-only intermediary, footer says '· review: 
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "clean.md");
   writeFileSync(notePath, NOTE);
-  const stdout = await runMain(["--no-revise", "--no-gate", notePath]);
+  const { stdout, stderr } = await runMain(["--no-revise", "--no-gate", notePath]);
 
-  const lines = stdout.split("\n");
-  expect(lines.length).toBe(3);
-  expect(lines[0]).toBe(join(dir, "clean.tmp.md"));
-  expect(lines[1]).toContain("· review: gate");
-  expect(lines[1]).not.toContain("items + gate");
+  expect(stdout).toBe(`${join(dir, "clean.tmp.md")}\n`);
+  expect(stderr).toContain("· review: gate");
+  expect(stderr).not.toContain("items + gate");
 
   const tmp = readFileSync(join(dir, "clean.tmp.md"), "utf8");
   expect(tmp).not.toContain("pick-any");
@@ -370,7 +373,7 @@ test("emit success (--out to a new destination): intermediary sibling of --out, 
   writeFileSync(notePath, NOTE);
   const { mkdirSync } = await import("node:fs");
   mkdirSync(join(dir, "fresh"));
-  const stdout = await runMain(["--no-revise", "--no-gate", "--out", outPath, notePath]);
+  const { stdout } = await runMain(["--no-revise", "--no-gate", "--out", outPath, notePath]);
 
   const lines = stdout.split("\n");
   expect(lines[0]).toBe(join(dir, "fresh", "dest.tmp.md"));
@@ -397,32 +400,18 @@ test("emit success (--out to a new destination): intermediary sibling of --out, 
 // were ever inverted, runMain's stubbed process.exit would throw and fail this
 // test loudly; stderr is captured too, so a bug that printed prompt text WITHOUT
 // exiting (guard fires, loop never reaches the exit call) is caught as well.
-test("Phase 5: a non-TTY success run never enters the session — stdout stays 2 lines, stderr carries no prompt text", async () => {
+test("Phase 5: a non-TTY success run never enters the session — stdout stays the path line, stderr carries no prompt text", async () => {
   mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.md");
   const tmpPath = join(dir, "note.tmp.md");
   writeFileSync(notePath, NOTE);
-  const realErrWrite = process.stderr.write.bind(process.stderr);
-  const errChunks: string[] = [];
-  process.stderr.write = ((c: string | Uint8Array) => {
-    errChunks.push(typeof c === "string" ? c : new TextDecoder().decode(c));
-    return true;
-  }) as typeof process.stderr.write;
-  let stdout: string;
-  try {
-    stdout = await runMain(["--no-revise", "--max-retries", "0", notePath]);
-  } finally {
-    process.stderr.write = realErrWrite;
-  }
-  const lines = stdout.split("\n");
-  expect(lines.length).toBe(3); // path, footer, trailing newline's empty tail
-  expect(lines[0]).toBe(tmpPath);
-  expect(lines[2]).toBe("");
-  const stderrAll = errChunks.join("");
+  const { stdout, stderr } = await runMain(["--no-revise", "--max-retries", "0", notePath]);
+  expect(stdout).toBe(`${tmpPath}\n`); // exactly the path line
+  const stderrAll = stderr;
   for (const forbidden of [
     "[y/N]",
-    "review:",
+    `review: ${tmpPath}`, // the session's stderr hint, not the footer's "· review: …" suffix
     "apply later with",
     "gate '",
     "about to write",
@@ -458,7 +447,7 @@ test("emit success: a non-.md input WITH --out emits an appliable intermediary n
   const notePath = join(dir, "note.txt");
   const destPath = join(dir, "dest.md");
   writeFileSync(notePath, NOTE);
-  const stdout = await runMain(["--no-revise", "--no-gate", notePath, "--out", destPath]);
+  const { stdout } = await runMain(["--no-revise", "--no-gate", notePath, "--out", destPath]);
   const lines = stdout.split("\n");
   expect(lines[0]).toBe(`${dir}/dest.tmp.md`); // sibling of --out, not the input
   expect(readFileSync(notePath, "utf8")).toBe(NOTE); // input byte-untouched
@@ -506,7 +495,7 @@ test("emit success: a cwd-relative input still puts an ABSOLUTE intermediary pat
   let stdout: string;
   try {
     process.chdir(dir);
-    stdout = await runMain(["--no-revise", "--no-gate", "relnote.md"]);
+    ({ stdout } = await runMain(["--no-revise", "--no-gate", "relnote.md"]));
   } finally {
     process.chdir(cwd);
   }

@@ -677,8 +677,8 @@ test("parseArgs: --dry-run exempts the non-.md input check (dry-run never writes
   expect(ok(["--dry-run", "note.txt"]).opts.path).toBe("note.txt");
 });
 
-// ---- USAGE: pins the output contract (temp-file envelope, two-line stdout, exit codes) ----
-test("USAGE: states the output contract — intermediary envelope, two-line stdout, exit codes", () => {
+// ---- USAGE: pins the output contract (temp-file envelope, path-only stdout, exit codes) ----
+test("USAGE: states the output contract — intermediary envelope, path-on-stdout footer-on-stderr, exit codes", () => {
   expect(USAGE).toContain("Output:");
   expect(USAGE).toContain("never modified");
   // success now writes the review intermediary sibling to the destination…
@@ -686,9 +686,10 @@ test("USAGE: states the output contract — intermediary envelope, two-line stdo
   expect(USAGE).toContain("--out");
   // …while the exit-3 passthrough paths keep the mktemp <result> envelope
   expect(USAGE).toContain("<result>");
-  // the capture recipe must preserve the exit code: a bare `| head -1` makes $?
-  // report head's status (always 0), so exit 3/1 would be unobservable
-  expect(USAGE).toContain("head -1");
+  // stdout is exactly the data (the path); the footer is a stderr diagnostic, so
+  // capture is a plain command substitution — the old `| head -1` caveat is gone
+  expect(USAGE).not.toContain("head -1");
+  expect(USAGE).toContain("footer prints on stderr");
   expect(USAGE).toContain("status=$?");
   expect(USAGE).toContain("0 distilled");
   expect(USAGE).toContain("2 usage");
@@ -717,7 +718,7 @@ test("main: empty input exits 3 with a stderr note and no stdout", () => {
   expect(proc.stderr.toString()).toContain("distill skipped: empty input");
 });
 
-test("main: '-' reads stdin instead of a file named '-'; no-body passthrough keeps the two-line stdout and exits 3", () => {
+test("main: '-' reads stdin instead of a file named '-'; no-body passthrough keeps the path-on-stdout and exits 3", () => {
   const proc = Bun.spawnSync(["bun", DISTILL, "-"], {
     env: DUMMY_KEY,
     stdin: Buffer.from("---\ntype: note\n---\n"),
@@ -725,7 +726,8 @@ test("main: '-' reads stdin instead of a file named '-'; no-body passthrough kee
   expect(proc.exitCode).toBe(3);
   const lines = proc.stdout.toString().split("\n");
   expect(lines[0]).toEndWith(".md");
-  expect(lines[1]).toBe("— no body to distill");
+  expect(lines.length).toBe(2); // path + trailing newline's empty tail
+  expect(proc.stderr.toString()).toContain("— no body to distill");
   expect(readMainOut(lines[0], "utf8")).toBe("---\ntype: note\n---\n");
 });
 
@@ -747,12 +749,13 @@ test("main: a prose-mode skip (no ## Glossary table) is a passthrough that exits
   expect(proc.exitCode).toBe(0);
   const lines = proc.stdout.toString().split("\n");
   expect(lines[0]).toEndWith(".md");
-  expect(lines[1]).toContain("prose skipped");
+  expect(lines.length).toBe(2); // path only on stdout
+  expect(proc.stderr.toString()).toContain("prose skipped");
 });
 
-test("main: the documented capture recipe (out/status/path) observes exit 3 and the first line", () => {
-  // the recipe SKILL.md/USAGE ship instead of `| head -1`, which would report head's $?
-  const script = `out=$(bun "$1" -); status=$?; path=\${out%%$'\\n'*}; printf '%s\\n%s\\n' "$status" "$path"`;
+test("main: the documented capture recipe (path/status) observes exit 3 and the path", () => {
+  // the plain capture SKILL.md/USAGE ship now that stdout is the path alone
+  const script = `path=$(bun "$1" -); status=$?; printf '%s\\n%s\\n' "$status" "$path"`;
   const proc = Bun.spawnSync(["bash", "-c", script, "bash", DISTILL], {
     env: DUMMY_KEY,
     stdin: Buffer.from("---\ntype: note\n---\n"), // frontmatter-only ⇒ no-body passthrough, no network

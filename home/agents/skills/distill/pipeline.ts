@@ -279,7 +279,9 @@ async function synthesize(
     tieTogether(combo, lang),
     synthWorkflow(orderedSteps, blockById, lang),
   ]);
-  const prose = opts.glossaryOnly ? "" : await connectiveProse(combo, orderedEntries, defByTerm, lang);
+  const prose = opts.glossaryOnly
+    ? ""
+    : await connectiveProse(combo, orderedEntries, defByTerm, lang);
   return { defByTerm, tie, workflowSteps, prose };
 }
 
@@ -595,8 +597,8 @@ async function runProseQA(
   return { prose, proseFixes: 0 };
 }
 
-// build the success footer line — the one-line summary stdout carries beside the
-// temp-file path. Pure; the nothing-to-distill and expansion guards in distill()
+// build the success footer line — the one-line summary stderr carries beside the
+// temp-file path on stdout. Pure; the nothing-to-distill and expansion guards in distill()
 // emit their own footers, so this only renders a real (compressed-or-equal) run.
 export function buildFooter(m: {
   beforeWords: number;
@@ -1258,18 +1260,17 @@ Output:
   A passthrough run (failsafe, expand-guard, nothing to distill) instead writes a
   fresh temp .md holding the legacy envelope: <result>…</result> is exactly the text
   to write back to source, <residue> (omitted when empty) holds each item that
-  failed a gate, with verbatim <source>. Either way, stdout is two lines — the
-  written path, then the one-line footer. A \`| head -1\` capture eats the exit code
-  ($? after a pipeline is the last command's — head's, always 0); capture both
-  instead:
-    out=$(distill-text input.md); status=$?; path=\${out%%$'\\n'*}
+  failed a gate, with verbatim <source>. Either way, stdout carries exactly the
+  data: one line, the written path (nothing on empty input). The one-line summary
+  footer prints on stderr, with every other diagnostic. Capture is plain:
+    path=$(distill-text input.md); status=$?
   Exit: 0 distilled (a pending review intermediary, residue, and gate-inconclusive
   items still exit 0 — they are surfaced in the footer and the intermediary itself;
   prose-mode skips also exit 0, flagged in the footer) · 1 FIREWORKS_API_KEY
   missing · 2 usage error (compress mode: stdin without --out once the run reaches
   the emit; --out naming a missing directory) · 3 passthrough (compress mode: the
   output is the unmodified original —
-  failsafe, expand-guard, nothing to distill; the two stdout lines still print;
+  failsafe, expand-guard, nothing to distill; the path line still prints;
   empty input exits 3 with nothing on stdout) · 4 pending intermediary already
   exists at the sibling .tmp.md path (refused before the key gate and before any
   LLM call — apply or delete it first).
@@ -1550,7 +1551,7 @@ export function parseArgs(argv: string[]): ParseResult {
 
 // Create an empty temp file with a .md extension and return its path. The result
 // is written here instead of stdout so the caller gets a real .md artifact
-// (openable, diffable) and stdout carries only the path + footer.
+// (openable, diffable) and stdout carries only the path (footer on stderr).
 function tempMdPath(): string {
   return execFileSync("mktemp", ["--suffix=.md"], { encoding: "utf8" }).trim();
 }
@@ -1589,7 +1590,7 @@ function refusePendingIntermediary(tmpPath: string): never {
 // ---- TTY session (Phase 5, plan §4): sugar over emit+apply, never a third code path ----
 
 /// One `prompt [y/N]` round-trip against the real terminal: the prompt lands on
-/// stderr (stdout stays the frozen two-line envelope even at a TTY), the answer
+/// stderr (stdout stays the frozen one-line path even at a TTY), the answer
 /// comes from stdin. A fresh readline.Interface per call — this is a handful of
 /// round-trips per session, not a hot loop. EOF (Ctrl-D) or a stream error
 /// resolves null, which the caller treats as decline; readline's own Ctrl-C
@@ -1621,7 +1622,7 @@ const isYes = (answer: string | null): boolean =>
 /// "y" only asks for a re-read, never substitutes for the tick; gate fully checked →
 /// one count-confirm naming what apply is about to do, then `runApply` runs
 /// in-process with its stdout REDIRECTED to stderr for the duration of the call —
-/// the two-line success envelope belongs to emit alone, even in-session. Any
+/// the stdout path line belongs to emit alone, even in-session. Any
 /// non-"y" answer or EOF returns 0 with the intermediary untouched; the file
 /// predates the prompt, so nothing is lost. `askFn` is the injection seam unit
 /// tests use to script answers without a real terminal; production always uses the
@@ -1696,7 +1697,7 @@ export async function main() {
   } = parsed.opts;
   // apply is a structurally distinct verb: it consumes a previously-emitted
   // intermediary, checks the key LAZILY (only a checked recover DEF needs an LLM), and
-  // does its own two-line stdout + refusal stderr. Dispatched BEFORE the compress-mode
+  // does its own path-on-stdout + footer/refusal-on-stderr. Dispatched BEFORE the compress-mode
   // exit-4 preflight and the API-key gate below, so a keyless reject-all triage applies
   // offline. parseArgs guarantees inputPath is present in this mode.
   if (mode === "apply") {
@@ -1762,7 +1763,8 @@ export async function main() {
   const emit = (body: string, footer: string): void => {
     const path = (mktempPath ??= tempMdPath());
     writeFileSync(path, body);
-    process.stdout.write(`${path}\n${footer}\n`);
+    process.stdout.write(`${path}\n`);
+    process.stderr.write(`${footer}\n`);
   };
   // A full run is tens of seconds of LLM calls; tick per stage, TTY-gated so
   // scripts and parent loops never see it.
@@ -1881,11 +1883,12 @@ export async function main() {
     unlinkSync(partial);
     const reviewSuffix =
       residue.length > 0 ? ` · review: ${residue.length} items + gate` : " · review: gate";
-    process.stdout.write(`${tmpPath}\n${footer2}${reviewSuffix}\n`);
+    process.stdout.write(`${tmpPath}\n`);
+    process.stderr.write(`${footer2}${reviewSuffix}\n`);
     // Phase 5: at a real terminal (both ends — command substitution and pipes must
     // never see a prompt), emit's success hands off to the gate-aware session in the
     // SAME process. Everything below this line is stderr; stdout is already frozen
-    // at the two lines above. Not a TTY (the overwhelmingly common agent-caller
+    // at the path line above. Not a TTY (the overwhelmingly common agent-caller
     // case): fall through unchanged, exiting 0 exactly as before Phase 5.
     if (process.stdin.isTTY && process.stdout.isTTY) {
       const reviewLabel = residue.length > 0 ? `${residue.length} items + gate` : "gate";

@@ -53,9 +53,9 @@
 //                             replace); new case → link no-clobber
 //  12. unlink tmp             ENOENT tolerated (a racing applier may have removed it)
 //
-// ── Success stdout (standalone apply): two lines, exit 0.
-//   line 1  the destination path (absolute)
-//   line 2  `— applied: N recovered · M kept · K removed (V verbatim) · <reproj>`
+// ── Success output (standalone apply): path on stdout, footer on stderr, exit 0.
+//   stdout  the destination path (absolute) — the only stdout line
+//   stderr  `— applied: N recovered · M kept · K removed (V verbatim) · <reproj>`
 //           N = checked recover items · M = checked keep items · K = removed
 //           (unchecked recover|keep) · V = entries written verbatim (recover defs whose
 //           second grade failed + every recover workflow/thesis) · reproj is
@@ -147,7 +147,8 @@ function promoteEpistemic(body: string): string {
 }
 
 /// Apply a single intermediary and return the process exit code (0 | 1 | 2).
-/// Writes its own two-line success stdout and every refusal to stderr; NEVER
+/// Writes the destination path to stdout, the applied-summary footer and every
+/// refusal to stderr; NEVER
 /// prompts, NEVER reads stdin. main() does `process.exit(await runApply(...))`.
 /// Before the write-back the destination and the tmp are BOTH untouched on every
 /// refusal path (constraint 7, pinned by hash in apply.test.ts).
@@ -405,8 +406,9 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   unlinkIfPresent(tmpPath);
 
   const reproj = reprojNeeded ? "re-projected" : "re-projection skipped";
-  process.stdout.write(
-    `${dest}\n— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim) · ${reproj}\n`,
+  process.stdout.write(`${dest}\n`);
+  process.stderr.write(
+    `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim) · ${reproj}\n`,
   );
   return 0;
 }

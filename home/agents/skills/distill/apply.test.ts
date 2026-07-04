@@ -478,10 +478,9 @@ test("apply: remove-all (every item unchecked, gate checked) applies OFFLINE wit
   expect(out).not.toContain("interact");
   // consumed
   expect(existsSync(tmpPath)).toBe(false);
-  // two-line stdout, removal-only ⇒ re-projection skipped, nothing verbatim
-  const lines = r.stdout.split("\n");
-  expect(lines[0]).toBe(destPath);
-  expect(lines[1]).toBe(
+  // path on stdout, footer on stderr; removal-only ⇒ re-projection skipped, nothing verbatim
+  expect(r.stdout).toBe(`${destPath}\n`);
+  expect(r.stderr.trim()).toBe(
     "— applied: 0 recovered · 0 kept · 3 removed (0 verbatim) · re-projection skipped",
   );
 });
@@ -499,7 +498,7 @@ test("apply: a clean (residue-free) intermediary with src=new CREATES the destin
   expect(out).toContain("epistemic_status: distilled");
   expect(out).not.toContain("interact");
   expect(existsSync(tmpPath)).toBe(false);
-  expect(r.stdout.split("\n")[1]).toBe(
+  expect(r.stderr.trim()).toBe(
     "— applied: 0 recovered · 0 kept · 0 removed (0 verbatim) · re-projection skipped",
   );
 });
@@ -576,7 +575,7 @@ test("apply: checked recover DEF → one re-render + one grade, glossary row upd
   expect(out).toContain("REPROJECTED HEAD PROSE.");
   expect(out).not.toContain("Blocking from the impression rather than the scene");
   expect(existsSync(tmpPath)).toBe(false);
-  expect(r.stdout.split("\n")[1]).toBe(
+  expect(r.stderr.trim()).toBe(
     "— applied: 1 recovered · 0 kept · 0 removed (0 verbatim) · re-projected",
   );
 });
@@ -594,7 +593,7 @@ test("apply: checked recover DEF whose second grade fails is spliced VERBATIM (v
   expect(out).not.toContain("AN INVERTED RE-RENDER");
   // a glossary change still triggers exactly one re-projection
   expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(1);
-  expect(r.stdout.split("\n")[1]).toBe(
+  expect(r.stderr.trim()).toBe(
     "— applied: 1 recovered · 0 kept · 0 removed (1 verbatim) · re-projected",
   );
 });
@@ -611,7 +610,7 @@ test("apply: checked recover THESIS splices the payload verbatim after the H1 (n
   expect(out).toContain(THESIS_SRC);
   // inserted as the opening paragraph, before the original head prose
   expect(out.indexOf(THESIS_SRC)).toBeLessThan(out.indexOf("Blocking from the impression"));
-  expect(r.stdout.split("\n")[1]).toBe(
+  expect(r.stderr.trim()).toBe(
     "— applied: 1 recovered · 0 kept · 0 removed (1 verbatim) · re-projection skipped",
   );
 });
@@ -637,7 +636,7 @@ test("apply: a recovered THESIS survives when a def is ALSO recovered (re-projec
   // the def was re-rendered into its row and the head prose re-projected exactly once
   expect(out).toContain("| Impression distance | A re-grounded gap def. |");
   expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(1);
-  expect(r.stdout.split("\n")[1]).toBe(
+  expect(r.stderr.trim()).toBe(
     "— applied: 2 recovered · 0 kept · 0 removed (1 verbatim) · re-projected",
   );
 });
@@ -652,7 +651,7 @@ test("apply: checked keep holds the entry as shipped — no LLM, no removal", as
   expect(r.prompts.length).toBe(0);
   const out = readFileSync(destPath, "utf8");
   expect(out).toContain("| Anchor image | The first felt impression, fixed as the reference. |");
-  expect(r.stdout.split("\n")[1]).toBe(
+  expect(r.stderr.trim()).toBe(
     "— applied: 0 recovered · 1 kept · 0 removed (0 verbatim) · re-projection skipped",
   );
 });
@@ -871,7 +870,7 @@ test("apply: an unchecked non-recoverable item stays dropped and does not inflat
   writeTmp(tmpPath, checkGate(tmp)); // gate checked, the edge item left unchecked
   const r = await apply(tmpPath);
   expect(r.code).toBe(0);
-  expect(r.stdout).toContain("0 recovered · 0 kept · 0 removed");
+  expect(r.stderr).toContain("0 recovered · 0 kept · 0 removed");
 });
 
 // The advisor's re-review: the steps and thesis lanes had the same silent-swallow /
@@ -953,5 +952,5 @@ test("apply: an unchecked out-of-range workflow item does not inflate the remove
   writeTmp(tmpPath, checkGate(tmp)); // gate checked, the steps item left unchecked
   const r = await apply(tmpPath);
   expect(r.code).toBe(0);
-  expect(r.stdout).toContain("0 recovered · 0 kept · 0 removed");
+  expect(r.stderr).toContain("0 recovered · 0 kept · 0 removed");
 });

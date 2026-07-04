@@ -36,13 +36,14 @@
 // or step-group that failed the gate, with verbatim <source>, so a parent can re-read
 // it. A `gate-inconclusive:` reason marks an item the judge could not grade (it
 // returned no parseable verdict): the distillation still ships, that item just rides
-// surfaced-but-unverified — a judge flake never discards the whole run. stdout is two
-// lines — the file path, then a one-line summary footer. Failsafe: any error before
+// surfaced-but-unverified — a judge flake never discards the whole run. stdout is
+// exactly the data: one line, the file path; the one-line summary footer and all
+// other diagnostics go to stderr. Failsafe: any error before
 // the gate → the temp file holds the original text (passthrough), path still printed.
 //
 // Exit codes: 0 distilled (residue/gate-inconclusive stay 0); 1 missing key; 2 arg
 // misuse; 3 passthrough — compress mode only: the output is the unmodified original
-// (failsafe, expand-guard, no body, empty input; the two stdout lines still print
+// (failsafe, expand-guard, no body, empty input; the stdout path line still prints
 // except on empty input). A prose-mode skip exits 0 with the reason in the footer.
 //
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.

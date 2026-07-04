@@ -200,8 +200,8 @@ test("gate checked, confirmed: applies in-process, dest written, tmp consumed, a
   expect(prompts).toEqual([
     `about to write: 0 recovered · 1 kept · 1 removed → ${destPath} — confirm [y/N] `,
   ]);
-  // apply's own two-line success envelope, redirected verbatim onto stderr instead
-  // of the real stdout it would otherwise have gone to
+  // apply's path line, redirected onto stderr instead of the real stdout it would
+  // otherwise have gone to, plus its footer (a direct stderr write)
   const err = errChunks.join("");
   expect(err).toContain(destPath);
   expect(err).toContain("— applied: 0 recovered · 1 kept · 1 removed");
