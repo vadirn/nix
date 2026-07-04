@@ -102,6 +102,10 @@
 
       alias y='yazi'
       alias v='nvim'
+      # -w 0 disables glamour's word-wrap so the terminal soft-wraps instead;
+      # glamour mis-breaks hyphenated words, and the config `width` key is
+      # ignored for one-shot rendering (only the flag is honored). See home/glow.yml.
+      alias glow='glow -w 0'
 
       alias gtimeout='timeout'
 

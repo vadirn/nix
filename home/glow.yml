@@ -4,8 +4,10 @@ style: "auto"
 mouse: false
 # use pager to display markdown
 pager: false
-# word-wrap at width; 0 defers wrapping to the terminal, since glamour's own
-# wrap mis-breaks hyphenated words (charmbracelet/glamour#407, muesli/reflow#66)
-width: 0
+# word-wrap at width. NOTE: glow ignores this key for one-shot `glow <file>`
+# rendering — only the `-w` flag is honored (it defaults to 80 regardless). The
+# actual wrap fix lives in the `glow` alias (home/zsh.nix), which passes `-w 0`
+# to dodge glamour's hyphen mis-wrap (charmbracelet/glamour#407, muesli/reflow#66).
+width: 80
 # show all files, including hidden and ignored.
 all: false
