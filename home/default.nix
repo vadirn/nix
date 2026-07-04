@@ -69,7 +69,6 @@
         ./yazi.nix
         ./nvim/nvim.nix
         ./bat.nix
-        ./glow.nix
         ./claude.nix
         ./ghostty.nix
         ./lazygit.nix
