@@ -17,11 +17,11 @@ Turn this session into an orchestrator. Hold the plan; delegate the work.
 ```
 // Enter or extend orchestration
 if do("orchestration is already in progress from a prior /work in this session"):
-    do("merge <task> into the existing plan as additional steps; tag each new step 'read' or 'write'")
+    do("merge <task> into the existing plan as additional steps; tag each new step 'read' or 'write' and assign each a model + effort tier — see Reference: Model and effort per task; the per-batch reprint shows them before they spawn")
 else:
-    plan = do("draft a numbered step list from <task>; tag each step 'read' (no file edits) or 'write' (creates or edits files); hold in session context only")
+    plan = do("draft a numbered step list from <task>; tag each step 'read' (no file edits) or 'write' (creates or edits files), and assign each a model + effort tier — see Reference: Model and effort per task; hold in session context only")
     auto_commits_enabled = do("establish git posture (including a dedicated branch) via setup subagents; see Reference: Git posture and auto-commits")
-    do("present plan to user")
+    do("present the plan as the model/effort table and get one approval to proceed — see Reference: Plan preview")
 
 // Orchestration loop
 while plan has unresolved steps:
@@ -31,8 +31,9 @@ while plan has unresolved steps:
     do("answer in_context steps directly; mark them done; remove from batch")
     if batch is empty: continue
 
+    do("reprint this batch's rows from the plan table (# / step / tag / model / effort / agent type); spawn unless the user asks to adjust a model or effort — see Reference: Plan preview")
     briefs = do("write one three-section brief per remaining step: ## Task, ## Context (cite any $TMPDIR paths), ## Return (restate the four-section response contract; route any multi-step needs from the subagent into Backlog instead of /work)")
-    responses = spawn_subagents(briefs)  // parallel when batch > 1; subagent_type per step's tag — see Reference: Mapping spawn_subagent to a real tool
+    responses = spawn_subagents(briefs)  // parallel when batch > 1; subagent_type + model per step — see Reference: Mapping spawn_subagent to a real tool
 
     for each (step, response) in zip(batch, responses):
         if response is error or empty:
@@ -107,15 +108,36 @@ Delegate by default. Answer directly only when the answer is already in the orch
 
 ### Mapping spawn_subagent to a real tool
 
-`spawn_subagent(brief)` and `spawn_subagents(briefs)` both map to the Agent tool, passing each brief as the `prompt`. The plural form emits multiple Agent calls in a single message so they execute concurrently.
+`spawn_subagent(brief)` and `spawn_subagents(briefs)` both map to the Agent tool, passing each brief as the `prompt` and the step's assigned model as `model`. The plural form emits multiple Agent calls in a single message so they execute concurrently.
 
-Choose `subagent_type` by the step's tag:
+Choose `subagent_type` by the step's tag and (for write steps) effort tier:
 
-- **`read` step → `Explore` agent type.** Tool-restricted: Edit, Write, NotebookEdit are absent. Enforcement is at the tool layer, not via brief instruction. Explore reads excerpts rather than whole files — fits parallel discovery (find X / where Y / which files reference Z); whole-module review still happens as a single sequential `general-purpose` step.
-- **`write` step → `general-purpose` agent type.** Full read/write/edit/bash access. Always sequential.
-- **Commit subagent → `commit-runner` agent type.** Sequential. Narrow toolset (`Bash`, `Read`, `Skill`) and a static system prompt that forces invocation of the `/commit` skill — keeps message style consistent across orchestrations. The brief can be one line because the agent's prompt carries the rest.
+- **`read` step → `Explore` agent type.** Tool-restricted: Edit, Write, NotebookEdit are absent. Enforcement is at the tool layer, not via brief instruction. Explore reads excerpts rather than whole files — fits parallel discovery (find X / where Y / which files reference Z); whole-module review still happens as a single sequential write step. Effort inherits the session — there is no read effort tier — while the assigned model is still passed per call.
+- **`write` step → the effort tier's agent type.** light → `work-write-light` (effort low), standard → `general-purpose` (effort inherits), deep → `work-write-deep` (effort high). All three have full read/write/edit/bash access and always run sequentially. The per-call `model` overrides whatever the agent type would inherit, so model and effort are chosen independently.
+- **Commit subagent → `commit-runner` agent type.** Sequential. Narrow toolset (`Bash`, `Read`, `Skill`) and a static system prompt that forces invocation of the `/commit` skill — keeps message style consistent across orchestrations. Runs at its default model and effort; commits are mechanical. The brief can be one line because the agent's prompt carries the rest.
 
 `spawn_subagents` is used only for batches of independent `read` steps. Write steps stay sequential. If an `Explore` subagent fails because it tried to use a missing write tool, the failure handler offers "rerun as general-purpose" as the modify option.
+
+### Model and effort per task
+
+Two knobs per step, set independently. **Model** is passed per call on the Agent tool (`model`: `haiku` | `sonnet` | `opus` | `fable`, or a full ID like `claude-opus-4-8`); it overrides whatever the agent type would inherit. **Effort** (`low` | `medium` | `high` | `xhigh` | `max`) is not a per-call parameter — it lives in a subagent definition's frontmatter, so effort varies only by routing a step to an agent type that pins it. Read steps therefore run at the session's inherited effort (discovery rarely needs more); write steps carry a real effort tier.
+
+Effort tiers for write steps:
+
+- **light → `work-write-light`** (effort low). Mechanical edits: rename, move, apply a stated diff, boilerplate.
+- **standard → `general-purpose`** (effort inherits the session). The default write tier.
+- **deep → `work-write-deep`** (effort high). Ambiguous or architectural work: design a module, resolve a cross-cutting bug, choose between approaches.
+
+Assign by the step's demand, not its size. Pick the cheapest model and lowest tier that finishes the step correctly: discovery reads and mechanical writes take a cheap model (`haiku`/`sonnet`) at inherited/light effort; reasoning-heavy writes take a strong model (`opus`) at deep effort. When unsure, default to `sonnet` + standard and note the default in the preview so the user can raise it.
+
+### Plan preview
+
+Present the plan as a table before spawning anything:
+
+| #   | Step | Tag | Model | Effort | Agent type |
+| --- | ---- | --- | ----- | ------ | ---------- |
+
+Show the full table at plan time and get one approval to proceed — that approval covers the run. Before each batch spawns, reprint that batch's rows; spawn immediately unless the user asks to adjust a model or effort. The table is the contract the user approves: every spawned agent's model and agent type trace back to a row, so nothing runs at an unseen tier.
 
 ### Tmp dir
 
@@ -155,6 +177,6 @@ There is no `/stop` slash command.
 
 ### Out of scope for v1
 
-- Pre-approval UX
+- Per-brief content approval (the preview gates each step's model and effort, not the brief text)
 - Tmp dir auto-cleanup
 - Write parallelism (out of design scope, not just v1)
