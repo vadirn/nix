@@ -5,7 +5,7 @@ import { isContentfulStep, slugSegment, type Block, type GlossEntry } from "./te
 
 // ---- assembly: head prose + glossary table + retained-verbatim blocks ----
 // `head` is the prose that sits above the table: the full connective note in the
-// default mode (relations live here), or the short tie-together in --core-only.
+// default mode (relations live here), or the short tie-together in --glossary.
 // The `## Glossary` table carries definitions only — relations are not a column;
 // they are carried by the connective prose (see connectiveProse).
 function escCell(s: string): string {

@@ -1,4 +1,4 @@
-// render-mode — the inverse flow: reconstruct a readable prose note from an
+// prose-mode — the inverse flow: reconstruct a readable prose note from an
 // already-distilled glossary. No fidelity gate (the glossary is the certified
 // artifact); the prose is its regenerable derivative.
 import { detectLang, glossList, langRule, segment, wordCount } from "./text.ts";
@@ -6,7 +6,7 @@ import { parseDescription, parseFrontmatter } from "./frontmatter.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "./fw.ts";
 import { PASS_EN, PASS_RU, revise } from "./prompts.ts";
 
-// ---- render mode: reconstruct a prose note from a distilled glossary ----
+// ---- prose mode: reconstruct a prose note from a distilled glossary ----
 // The inverse of the compress pipeline. Input is a distilled file (this tool's
 // own output, or a saved glossary note): frontmatter + a tie-together line + a
 // `## Glossary` table + optional retained blocks. Output is a flowing prose note
@@ -125,7 +125,7 @@ export async function renderProse(
 
 // Drive render mode: parse → synthesize prose → revise (no gate) → assemble.
 // Failsafe mirrors the compress path: any error → the original is passed through.
-export async function runRender(
+export async function runProse(
   input: string,
   opts: { lang: "en" | "ru" | "auto"; noRevise: boolean },
   emit: (body: string, footer: string) => void,
@@ -134,13 +134,13 @@ export async function runRender(
     const { front, body } = parseFrontmatter(unwrapResult(input));
     const { tie, entries, preserved } = parseDistilled(body);
     if (entries.length === 0) {
-      emit(input, "— render skipped: no ## Glossary table found");
+      emit(input, "— prose skipped: no ## Glossary table found");
       return;
     }
     const lang = opts.lang === "auto" ? detectLang(body) : opts.lang;
     let prose = await renderProse(parseDescription(front), tie, entries, lang);
     if (!prose) {
-      emit(input, "— render skipped: empty prose");
+      emit(input, "— prose skipped: empty prose");
       return;
     }
     if (!opts.noRevise) {
@@ -154,7 +154,7 @@ export async function runRender(
       `— rendered prose · ${wordCount(body)}→${wordCount(outBody)} words · ${entries.length} entries`,
     );
   } catch (e) {
-    rethrowIfBug(e, "runRender");
-    emit(input, `— render skipped (error): ${String(e).slice(0, 160)}`);
+    rethrowIfBug(e, "runProse");
+    emit(input, `— prose skipped (error): ${String(e).slice(0, 160)}`);
   }
 }

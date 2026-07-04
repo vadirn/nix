@@ -77,7 +77,7 @@ import { parseInteract, resolveInteract, stripInteract } from "./interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "./triage.ts";
 import { askJson, EXTRACT } from "./fw.ts";
 import { fidelityGate, renderEntryPrompt, verbatimDef, verbatimDirectives } from "./prompts.ts";
-import { parseDistilled, renderProse } from "./render-mode.ts";
+import { parseDistilled, renderProse } from "./prose-mode.ts";
 import { parseDescription, parseFrontmatter } from "./frontmatter.ts";
 import { detectLang } from "./text.ts";
 

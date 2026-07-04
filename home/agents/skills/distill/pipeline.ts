@@ -69,7 +69,7 @@ import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { proseFix, proseJudge } from "./writing/prose-qa.ts";
 import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
 import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
-import { runRender } from "./render-mode.ts";
+import { runProse } from "./prose-mode.ts";
 import { buildIntermediary } from "./triage.ts";
 import { runApply } from "./apply-mode.ts";
 import { parseInteract } from "./interact.ts";
@@ -258,14 +258,14 @@ export function computeStepGroups(
 }
 
 // stage 3: synthesize the distilled prose — glossary definitions via the dial, the
-// short tie-together (the gate's thesis anchor, and the head in --core-only), and
+// short tie-together (the gate's thesis anchor, and the head in --glossary), and
 // the per-step workflow. These three are independent, so they run concurrently; the
-// connective prose body needs the defs, so it follows (skipped in --core-only).
+// connective prose body needs the defs, so it follows (skipped in --glossary).
 async function synthesize(
   combo: Combo,
   orderedEntries: GlossEntry[],
   orderedSteps: WorkStep[],
-  opts: { coreOnly: boolean },
+  opts: { glossaryOnly: boolean },
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): Promise<{
@@ -279,7 +279,7 @@ async function synthesize(
     tieTogether(combo, lang),
     synthWorkflow(orderedSteps, blockById, lang),
   ]);
-  const prose = opts.coreOnly ? "" : await connectiveProse(combo, orderedEntries, defByTerm, lang);
+  const prose = opts.glossaryOnly ? "" : await connectiveProse(combo, orderedEntries, defByTerm, lang);
   return { defByTerm, tie, workflowSteps, prose };
 }
 
@@ -579,7 +579,7 @@ async function runFidelityGate(
 // prose QA: judge the un-gated readable head against its own contract and repair
 // best-effort. One judge + one fix pass — defects never block, so no re-judge.
 // Sits BELOW the fidelity line; the caller rides it on the --no-gate switch and
-// skips it in --core-only (no prose).
+// skips it in --glossary (no prose).
 async function runProseQA(
   thesis: string,
   prose: string,
@@ -609,7 +609,7 @@ export function buildFooter(m: {
   keptVerbatim: number;
   retries: number;
   proseFixes: number;
-  coreOnly: boolean;
+  glossaryOnly: boolean;
   proseGateOffFactsDump: boolean;
   nameLint?: NameLintResult;
 }): string {
@@ -626,8 +626,8 @@ export function buildFooter(m: {
   // steps the repair ladder could not clear and that shipped the source's verbatim
   // imperative — faithful but uncompressed, distinct from a cleared step
   const verbatimTag = m.keptVerbatim ? ` · ${m.keptVerbatim} kept-verbatim` : "";
-  const shapeTag = m.coreOnly ? "gloss" : "prose+gloss";
-  // the prose gate would have run (!noGate && !coreOnly) but the facts-dump genre gate
+  const shapeTag = m.glossaryOnly ? "gloss" : "prose+gloss";
+  // the prose gate would have run (!noGate && !glossaryOnly) but the facts-dump genre gate
   // skipped it — surface the skip so disabling a loss detector is never silent.
   const proseGateTag = m.proseGateOffFactsDump ? ` · prose-gate off (facts-dump)` : "";
   return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
@@ -886,7 +886,7 @@ async function distill(
     maxRetries: number;
     noRevise: boolean;
     noGate: boolean;
-    coreOnly: boolean;
+    glossaryOnly: boolean;
     isReference: boolean;
     factsDump: boolean;
     tau: number;
@@ -902,7 +902,7 @@ async function distill(
   // itself a homogeneous distill, which gives the expand guard scoped to its own source), hold
   // the payload sections verbatim (compactSection v1), reassemble in source order into one
   // note. `routed` guards the one-level recursion: the head re-enters with routing skipped.
-  if (!routed && !opts.coreOnly) {
+  if (!routed && !opts.glossaryOnly) {
     const { title, sections } = partition(text, opts.tau);
     if (sections.some((u) => u.route === "preserve")) {
       return distillRouted(text, title, sections, lang, frontDescription, opts, selfSlug);
@@ -996,7 +996,7 @@ async function distill(
   }
 
   // prose QA: judge the un-gated readable head and repair best-effort. Rides the
-  // --no-gate switch; no-op in --core-only (no prose).
+  // --no-gate switch; no-op in --glossary (no prose).
   let proseFixes = 0;
   if (prose && !opts.noGate) {
     opts.progress?.("prose-qa…");
@@ -1006,11 +1006,11 @@ async function distill(
   }
 
   // assemble the final output: the connective prose head by default, the tie in
-  // --core-only. Definitions are the gate-settled ones; the prose restates none
+  // --glossary. Definitions are the gate-settled ones; the prose restates none
   // of them, so recovery changing a def never invalidates the prose above it.
   const out = assembleBody(
     h1,
-    opts.coreOnly ? tie : prose,
+    opts.glossaryOnly ? tie : prose,
     workflowSteps,
     orderedEntries,
     defByTerm,
@@ -1037,11 +1037,11 @@ async function distill(
   // prose-list-item gate (D46): a glm matcher over a deterministic inventory of explicit
   // list-items under a heading — the must-cover prose class the spine is blind to and the
   // fidelity/workflow gates never see. An LLM call, so it rides --no-gate like runFidelityGate;
-  // skipped in --core-only (no prose body to cover into) and on facts/context dumps (wholesale
+  // skipped in --glossary (no prose body to cover into) and on facts/context dumps (wholesale
   // drop is licensed there, so the inventory would only flood the footer). EXCLUSION-3 drops
   // items already folded into a graded def or step (sourceTextFor / StepGroup.sourceText), so
   // the matcher only judges list-items the existing gates do not. Appends to residue only.
-  if (!opts.noGate && !opts.coreOnly && !opts.factsDump) {
+  if (!opts.noGate && !opts.glossaryOnly && !opts.factsDump) {
     const claimed = [
       ...orderedEntries.map((e) => sourceTextFor(e, blockById)),
       ...computeStepGroups(orderedSteps, blockById).map((g) => g.sourceText),
@@ -1073,10 +1073,10 @@ async function distill(
     keptVerbatim,
     retries,
     proseFixes,
-    coreOnly: opts.coreOnly,
-    // the prose gate is in scope (!noGate && !coreOnly) but the facts-dump genre gate
+    glossaryOnly: opts.glossaryOnly,
+    // the prose gate is in scope (!noGate && !glossaryOnly) but the facts-dump genre gate
     // skipped it above — flag the disabled loss detector instead of dropping it silently.
-    proseGateOffFactsDump: !opts.noGate && !opts.coreOnly && opts.factsDump,
+    proseGateOffFactsDump: !opts.noGate && !opts.glossaryOnly && opts.factsDump,
     nameLint,
   });
   // Routed head only: derive the split view for assembleRoutedNote WITHOUT touching the
@@ -1091,7 +1091,7 @@ async function distill(
     workflowByOwner = groupStepsByOwner(orderedSteps, workflowSteps, owned);
     exposedOut = assembleBody(
       h1,
-      opts.coreOnly ? tie : prose,
+      opts.glossaryOnly ? tie : prose,
       [],
       orderedEntries,
       defByTerm,
@@ -1234,10 +1234,10 @@ backed by a certified glossary (and an optional ## Workflow of its directives).
 
 Usage:
   distill-text [options] [input.md]              compress a note (stdin when no path or '-')
-  distill-text render [options] [glossary.md]    render prose FROM an already-distilled glossary
+  distill-text prose [options] [glossary.md]     render prose FROM an already-distilled glossary
 
 Options:
-  --core-only            emit just the glossary (tie + definitions), no prose
+  --glossary            emit just the glossary (tie + definitions), no prose
   --lang <en|ru|auto>    language rubric (default: auto-detect)
   --max-retries <n>      cap stage-5 gate recovery retries (default: 2)
   --tau <0..1>           payload-density routing threshold (default: ${DEFAULT_TAU})
@@ -1265,7 +1265,7 @@ Output:
     out=$(distill-text input.md); status=$?; path=\${out%%$'\\n'*}
   Exit: 0 distilled (a pending review intermediary, residue, and gate-inconclusive
   items still exit 0 — they are surfaced in the footer and the intermediary itself;
-  render-mode skips also exit 0, flagged in the footer) · 1 FIREWORKS_API_KEY
+  prose-mode skips also exit 0, flagged in the footer) · 1 FIREWORKS_API_KEY
   missing · 2 usage error (compress mode: stdin without --out once the run reaches
   the emit; --out naming a missing directory) · 3 passthrough (compress mode: the
   output is the unmodified original —
@@ -1282,7 +1282,7 @@ export type CliOpts = {
   maxRetries: number;
   noRevise: boolean;
   noGate: boolean;
-  coreOnly: boolean;
+  glossaryOnly: boolean;
   dryRun: boolean;
   tau: number;
   maxWords?: number;
@@ -1307,12 +1307,12 @@ export type CliOpts = {
 // range numbers, missing values, and extra positionals all fail loudly rather than silently
 // falling back to a default (the pre-hardening behavior). `--` is the end-of-options marker: it
 // stops flag parsing so a dash-prefixed input path can follow; a bare `-` stays a positional.
-// The optional `render` subcommand is recognized as the FIRST positional (so a leading flag no
-// longer hides it, and a stray `render` in second position errors instead of misparsing).
+// The optional `prose` subcommand is recognized as the FIRST positional (so a leading flag no
+// longer hides it, and a stray `prose` in second position errors instead of misparsing).
 export type ParseResult =
   | { kind: "help" }
   | { kind: "error"; message: string }
-  | { kind: "ok"; mode: "compress" | "render" | "apply"; opts: CliOpts };
+  | { kind: "ok"; mode: "compress" | "prose" | "apply"; opts: CliOpts };
 
 export function parseArgs(argv: string[]): ParseResult {
   let lang: CliOpts["lang"] = "auto";
@@ -1322,7 +1322,7 @@ export function parseArgs(argv: string[]): ParseResult {
   let noExpandGuard = false;
   let noRevise = false;
   let noGate = false;
-  let coreOnly = false;
+  let glossaryOnly = false;
   let dryRun = false;
   let out: string | undefined;
   const positionals: string[] = [];
@@ -1344,10 +1344,14 @@ export function parseArgs(argv: string[]): ParseResult {
       noGate = true;
       continue;
     }
-    if (a === "--core-only") {
-      coreOnly = true;
+    if (a === "--glossary") {
+      glossaryOnly = true;
       continue;
     }
+    // Renamed surface (2026-07-04): point the muscle-memory forms at the new names
+    // instead of letting them die as a generic unknown-flag / extra-argument error.
+    if (a === "--core-only")
+      return { kind: "error", message: "--core-only was renamed to --glossary" };
     if (a === "--dry-run") {
       dryRun = true;
       continue;
@@ -1451,12 +1455,14 @@ export function parseArgs(argv: string[]): ParseResult {
     positionals.push(a);
   }
 
-  // Interpret positionals: an optional leading `render` | `apply` subcommand, then the
+  // Interpret positionals: an optional leading `prose` | `apply` subcommand, then the
   // input path. A leading flag no longer hides the subcommand (positionals are already
   // stripped of flags), and a stray subcommand in second position errors as an extra arg.
-  let mode: "compress" | "render" | "apply" = "compress";
+  let mode: "compress" | "prose" | "apply" = "compress";
   let rest = positionals;
-  if (positionals[0] === "render" || positionals[0] === "apply") {
+  if (positionals[0] === "render")
+    return { kind: "error", message: "the 'render' subcommand was renamed to 'prose'" };
+  if (positionals[0] === "prose" || positionals[0] === "apply") {
     mode = positionals[0];
     rest = positionals.slice(1);
   }
@@ -1476,11 +1482,11 @@ export function parseArgs(argv: string[]): ParseResult {
     if (dryRun) return { kind: "error", message: "apply does not support --dry-run" };
   }
 
-  // --out is compress-only: render never derives a write-back destination.
-  if (mode === "render" && out !== undefined)
+  // --out is compress-only: prose mode never derives a write-back destination.
+  if (mode === "prose" && out !== undefined)
     return {
       kind: "error",
-      message: "--out is compress-only (render never derives a destination)",
+      message: "--out is compress-only (prose mode never derives a destination)",
     };
 
   // A positional `.tmp.md` compress input is the fat-finger for `apply` (it ends `.md`, so
@@ -1532,7 +1538,7 @@ export function parseArgs(argv: string[]): ParseResult {
       maxRetries,
       noRevise,
       noGate,
-      coreOnly,
+      glossaryOnly,
       dryRun,
       tau,
       maxWords,
@@ -1681,7 +1687,7 @@ export async function main() {
     maxRetries,
     noRevise,
     noGate,
-    coreOnly,
+    glossaryOnly,
     dryRun,
     tau,
     maxWords,
@@ -1751,7 +1757,7 @@ export async function main() {
   }
   // Lazy: mktemp CREATES the file, and the Phase-3 success path never uses it —
   // an eager call would orphan one empty temp file per successful distill. Only
-  // the passthrough/error/no-body/render paths (the `emit` callers) pay for it.
+  // the passthrough/error/no-body/prose paths (the `emit` callers) pay for it.
   let mktempPath: string | undefined;
   const emit = (body: string, footer: string): void => {
     const path = (mktempPath ??= tempMdPath());
@@ -1763,8 +1769,8 @@ export async function main() {
   const progress = process.stderr.isTTY
     ? (line: string): void => void process.stderr.write(`${line}\n`)
     : undefined;
-  if (mode === "render") {
-    await runRender(input, { lang, noRevise }, emit);
+  if (mode === "prose") {
+    await runProse(input, { lang, noRevise }, emit);
     return;
   }
   // compress mode: strip leading frontmatter (it passes through verbatim; the
@@ -1807,7 +1813,7 @@ export async function main() {
         maxRetries,
         noRevise,
         noGate,
-        coreOnly,
+        glossaryOnly,
         isReference,
         factsDump,
         tau,

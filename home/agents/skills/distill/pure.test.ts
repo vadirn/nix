@@ -3,8 +3,8 @@
 // 17a split distill.ts into leaf modules whose helpers are pure string/data
 // functions with no I/O. This suite pins those helpers directly now that they are
 // importable: the text utilities (text.ts), the balanced-JSON extractor over loose
-// model output (fw.ts::extractJson), and the distilled-body parser that render mode
-// inverts the compress pipeline through (render-mode.ts::parseDistilled). It also
+// model output (fw.ts::extractJson), and the distilled-body parser that prose mode
+// inverts the compress pipeline through (prose-mode.ts::parseDistilled). It also
 // pins the one hardening this step adds — parseDistilled drops a term row with no
 // definition, malformed glossary output the model produced by splitting a row.
 import { expect, test } from "bun:test";
@@ -46,7 +46,7 @@ import {
 } from "./text.ts";
 import { extractJson } from "./fw.ts";
 import { assembleRoutedNote, edgePayloadResidue, wikilinkResidue } from "./pipeline.ts";
-import { parseDistilled } from "./render-mode.ts";
+import { parseDistilled } from "./prose-mode.ts";
 import { assembleBody, renderWorkflowBlock } from "./assemble.ts";
 
 // ---- text.ts: segmentation ----
@@ -734,7 +734,7 @@ test("extractJson: throws on no object and on an unbalanced object", () => {
   expect(() => extractJson('{"a":1')).toThrow(/unbalanced JSON/);
 });
 
-// ---- render-mode.ts: parseDistilled ----
+// ---- prose-mode.ts: parseDistilled ----
 test("parseDistilled: splits tie, glossary entries, and skips header/separator rows", () => {
   const body = [
     "Tie-together prose line.",
@@ -787,7 +787,7 @@ test("parseDistilled: unescapes a \\| inside a definition cell", () => {
   expect(entries).toEqual([{ term: "a", def: "x | y" }]);
 });
 
-// ---- render-mode.ts: parseDistilled hardening (this step) ----
+// ---- prose-mode.ts: parseDistilled hardening (this step) ----
 test("parseDistilled: drops a malformed row whose definition cell is empty", () => {
   const body = ["## Glossary", "", "| alpha | first |", "| beta | |"].join("\n");
   const { entries } = parseDistilled(body);

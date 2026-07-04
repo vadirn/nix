@@ -170,7 +170,7 @@ test("buildFooter: compressed run renders size + steps tags, omits the zero tags
       keptVerbatim: 0,
       retries: 0,
       proseFixes: 0,
-      coreOnly: false,
+      glossaryOnly: false,
       proseGateOffFactsDump: false,
     }),
   ).toBe(
@@ -178,7 +178,7 @@ test("buildFooter: compressed run renders size + steps tags, omits the zero tags
   );
 });
 
-test("buildFooter: ±0% on no shrink, --core-only shape, gate-skipped + retries tags", () => {
+test("buildFooter: ±0% on no shrink, --glossary shape, gate-skipped + retries tags", () => {
   expect(
     buildFooter({
       beforeWords: 50,
@@ -191,7 +191,7 @@ test("buildFooter: ±0% on no shrink, --core-only shape, gate-skipped + retries 
       keptVerbatim: 0,
       retries: 2,
       proseFixes: 0,
-      coreOnly: true,
+      glossaryOnly: true,
       proseGateOffFactsDump: false,
     }),
   ).toBe(
@@ -212,7 +212,7 @@ test("buildFooter: facts-dump skip of the in-scope prose gate surfaces as a tag"
       keptVerbatim: 0,
       retries: 0,
       proseFixes: 0,
-      coreOnly: false,
+      glossaryOnly: false,
       proseGateOffFactsDump: true,
     }),
   ).toBe(
@@ -232,7 +232,7 @@ test("buildFooter: nameLint findings append the fragment; omitted nameLint is un
     keptVerbatim: 0,
     retries: 0,
     proseFixes: 0,
-    coreOnly: false,
+    glossaryOnly: false,
     proseGateOffFactsDump: false,
   };
   expect(buildFooter(base)).toBe(
@@ -474,7 +474,7 @@ test("anchored: rejects a too-short anchor or one absent from output, accepts an
   );
 });
 
-// ---- parseArgs: the CLI surface (help / validation / render subcommand / flag composition) ----
+// ---- parseArgs: the CLI surface (help / validation / prose subcommand / flag composition) ----
 // A pure argv→result function: it returns a discriminated result (help | error | ok) so the
 // help path and every misuse fail loudly BEFORE main() reaches the API-key gate or any network
 // call. `ok` carries the resolved mode + options bag.
@@ -505,16 +505,16 @@ test("parseArgs: bare invocation reads stdin with defaults", () => {
     maxRetries: 2,
     noRevise: false,
     noGate: false,
-    coreOnly: false,
+    glossaryOnly: false,
     dryRun: false,
   });
   expect(r.opts.maxWords).toBeUndefined();
 });
 
 test("parseArgs: a positional is taken as the input path; flags compose", () => {
-  const r = ok(["--core-only", "--no-gate", "--no-revise", "input.md"]);
+  const r = ok(["--glossary", "--no-gate", "--no-revise", "input.md"]);
   expect(r.opts.path).toBe("input.md");
-  expect(r.opts.coreOnly).toBe(true);
+  expect(r.opts.glossaryOnly).toBe(true);
   expect(r.opts.noGate).toBe(true);
   expect(r.opts.noRevise).toBe(true);
 });
@@ -570,21 +570,26 @@ test("parseArgs: --no-expand-guard conflicting with a positive --max-words error
   expect(m).toContain("--max-words");
 });
 
-test("parseArgs: `render` as the first positional selects render mode", () => {
-  const r = ok(["render", "glossary.md"]);
-  expect(r.mode).toBe("render");
+test("parseArgs: `prose` as the first positional selects prose mode", () => {
+  const r = ok(["prose", "glossary.md"]);
+  expect(r.mode).toBe("prose");
   expect(r.opts.path).toBe("glossary.md");
 });
 
-test("parseArgs: a flag may precede the render subcommand without breaking detection", () => {
-  const r = ok(["--lang", "ru", "render", "glossary.md"]);
-  expect(r.mode).toBe("render");
+test("parseArgs: a flag may precede the prose subcommand without breaking detection", () => {
+  const r = ok(["--lang", "ru", "prose", "glossary.md"]);
+  expect(r.mode).toBe("prose");
   expect(r.opts.path).toBe("glossary.md");
   expect(r.opts.lang).toBe("ru");
 });
 
-test("parseArgs: `render` as a second positional errors instead of misparsing to ENOENT", () => {
-  const m = err(["foo.md", "render"]);
+test("parseArgs: the stale names point at their renames instead of dying generically", () => {
+  expect(err(["render", "glossary.md"])).toContain("prose");
+  expect(err(["--core-only", "in.md"])).toContain("--glossary");
+});
+
+test("parseArgs: `prose` as a second positional errors instead of misparsing to ENOENT", () => {
+  const m = err(["foo.md", "prose"]);
   expect(m).toMatch(/extra|unexpected/i);
 });
 
@@ -641,9 +646,9 @@ test("parseArgs: --out must name a .md destination, never an intermediary", () =
   expect(err(["--out", "dest.tmp.md", "in.md"])).toContain(".tmp.md");
 });
 
-test("parseArgs: --out is compress-only — render rejects it", () => {
-  expect(err(["render", "--out", "x.md", "g.md"])).toContain("--out");
-  expect(err(["--out", "x.md", "render", "g.md"])).toContain("--out");
+test("parseArgs: --out is compress-only — prose mode rejects it", () => {
+  expect(err(["prose", "--out", "x.md", "g.md"])).toContain("--out");
+  expect(err(["--out", "x.md", "prose", "g.md"])).toContain("--out");
 });
 
 // A compress file input with no --out becomes the write-back destination; a non-.md name
@@ -689,7 +694,7 @@ test("USAGE: states the output contract — intermediary envelope, two-line stdo
   expect(USAGE).toContain("2 usage");
   expect(USAGE).toContain("3 passthrough");
   expect(USAGE).toContain("4 pending intermediary");
-  // exit 3 is compress-scoped: render-mode skips exit 0
+  // exit 3 is compress-scoped: prose-mode skips exit 0
   expect(USAGE).toContain("compress mode");
   expect(USAGE).toContain("stdin when no path or '-'");
 });
@@ -734,15 +739,15 @@ test("main: --dry-run '-' reads stdin (no ENOENT) and labels the report (stdin)"
   expect(out).not.toMatch(/\(-\)|^-$/m);
 });
 
-test("main: a render-mode skip (no ## Glossary table) is a passthrough that exits 0, not 3", () => {
-  const proc = Bun.spawnSync(["bun", DISTILL, "render", "-"], {
+test("main: a prose-mode skip (no ## Glossary table) is a passthrough that exits 0, not 3", () => {
+  const proc = Bun.spawnSync(["bun", DISTILL, "prose", "-"], {
     env: DUMMY_KEY,
     stdin: Buffer.from("Just prose, no glossary table.\n"),
   });
   expect(proc.exitCode).toBe(0);
   const lines = proc.stdout.toString().split("\n");
   expect(lines[0]).toEndWith(".md");
-  expect(lines[1]).toContain("render skipped");
+  expect(lines[1]).toContain("prose skipped");
 });
 
 test("main: the documented capture recipe (out/status/path) observes exit 3 and the first line", () => {
