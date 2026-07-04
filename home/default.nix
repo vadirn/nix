@@ -54,6 +54,12 @@
         };
       };
       home.file.".bunfig.toml".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/bun/bunfig.toml";
+      # Global oxfmt config. The post-tool-format hook's universal fallback runs
+      # bare `oxfmt <file>`, which walks up from the file's dir (crossing .git
+      # boundaries) to discover the nearest .oxfmtrc.json — so this ~ copy governs
+      # every fallback-formatted file under $HOME that has no closer config.
+      # proseWrap: never collapses each markdown paragraph onto a single line.
+      home.file.".oxfmtrc.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/bun/oxfmtrc.json";
 
       imports = [
         ./zsh.nix
