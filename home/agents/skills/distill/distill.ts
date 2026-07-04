@@ -59,7 +59,6 @@
 //         distill-text --tau 0.6 input.md            # payload-density routing threshold (default: 0.5)
 //         distill-text --no-gate input.md            # skip stage-5 fidelity gate
 //         distill-text --no-revise input.md          # skip stage-4 writing passes
-//         distill-text --no-expand-guard input.md    # disable the expand-guard (alias of --max-words 0)
 //         distill-text --max-words 0 input.md        # disable the expand-guard (debugging: see the model's output even if it grew)
 //         distill-text --dry-run input.md            # deterministic front half only (segment→route report); no API call
 //         distill-text prose glossary.md             # separate, on-demand: prose note FROM a distilled glossary

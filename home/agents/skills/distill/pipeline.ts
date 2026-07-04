@@ -1245,7 +1245,6 @@ Options:
   --tau <0..1>           payload-density routing threshold (default: ${DEFAULT_TAU})
   --no-gate              skip the stage-5 fidelity gate
   --no-revise            skip the stage-4 writing passes
-  --no-expand-guard      disable the whole-note expand-guard (alias: --max-words 0)
   --max-words <n>        expand-guard cap: 0 disables it, a positive n is an absolute ceiling
   --dry-run              deterministic front half only (segment→route report); no API call
   --out <dest.md>        compress-mode destination override (default: the input path);
