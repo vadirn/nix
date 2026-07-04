@@ -1,0 +1,11 @@
+# style name or JSON path (default "auto")
+style: "auto"
+# mouse support (TUI-mode only)
+mouse: false
+# use pager to display markdown
+pager: false
+# word-wrap at width; 0 defers wrapping to the terminal, since glamour's own
+# wrap mis-breaks hyphenated words (charmbracelet/glamour#407, muesli/reflow#66)
+width: 0
+# show all files, including hidden and ignored.
+all: false
