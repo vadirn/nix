@@ -8,6 +8,11 @@ font-family = "MonoLisaCode"
 font-family = "Symbols Nerd Font Mono"
 font-size = 13
 font-variation = "GRAD=50"
+font-feature = cv01
+font-feature = cv08
+font-feature = cv09
+font-feature = ss14
+font-feature = dlig
 keybind = alt+left=text:\x1bb
 keybind = alt+right=text:\x1bf
 keybind = shift+enter=text:\x1b\r
