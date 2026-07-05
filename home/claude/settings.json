@@ -79,6 +79,7 @@
     "deny": [],
     "defaultMode": "auto"
   },
+  "model": "opus",
   "enableAllProjectMcpServers": true,
   "hooks": {
     "Notification": [
@@ -290,10 +291,10 @@
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
+  "effortLevel": "xhigh",
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
-  "skipAutoPermissionPrompt": true,
-  "model": "claude-fable-5[1m]"
+  "skipAutoPermissionPrompt": true
 }
