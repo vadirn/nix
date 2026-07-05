@@ -79,6 +79,9 @@
       cleanup = "zap";
       autoUpdate = true;
       upgrade = true;
+      # Skip the interactive "uninstall these?" confirmation during `brew
+      # bundle --cleanup --zap`; answer is always yes.
+      extraFlags = ["--force"];
     };
   };
 
