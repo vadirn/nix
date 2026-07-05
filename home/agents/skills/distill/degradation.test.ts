@@ -84,6 +84,15 @@ function mockAskJson(throwing: () => never) {
   }));
 }
 
+// per-call variant: the mock inspects each prompt so independent batches can succeed
+// or flake separately (proseGate fires its batches concurrently via Promise.all).
+function mockAskJsonBy(handler: (prompt: string) => unknown) {
+  mock.module(FW, () => ({
+    ...real,
+    askJson: mock(async (_model: unknown, prompt: string) => handler(prompt)),
+  }));
+}
+
 // restore the real transport so the mock cannot leak into other test files
 afterAll(() => mock.module(FW, () => real));
 
@@ -129,7 +138,7 @@ test("synthWorkflow: a transient flake keeps the drafted steps", async () => {
   const { synthWorkflow } = await import(PROMPTS);
   const steps = [{ step: "do the thing", source: ["B1"] }];
   const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
-  const out = await synthWorkflow(steps, "regenerate", blockById, "en");
+  const out = await synthWorkflow(steps, blockById, "en");
   expect(out).toEqual(["do the thing"]); // unchanged draft survives the flake
 });
 
@@ -140,7 +149,67 @@ test("synthWorkflow: a non-transient code bug propagates", async () => {
   const { synthWorkflow } = await import(PROMPTS);
   const steps = [{ step: "do the thing", source: ["B1"] }];
   const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
-  await expect(synthWorkflow(steps, "regenerate", blockById, "en")).rejects.toThrow(
-    "undefined helper",
+  await expect(synthWorkflow(steps, blockById, "en")).rejects.toThrow("undefined helper");
+});
+
+test("revise: an echoed block-id marker is stripped from the returned text (live [__G0__] leak)", async () => {
+  // a real vault run shipped glossary defs carrying literal [__G0__]–[__G4__] tokens:
+  // render() shows blocks as "[id] text" and the model echoed the marker back.
+  mockAskJsonBy(() => ({
+    blocks: [
+      { id: "__G0__", text: "[__G0__] A clean definition." },
+      { id: "__G1__", text: "Mid-sentence [__G1__] echo survives content." },
+    ],
+  }));
+  const { revise } = await import(PROMPTS);
+  const out = await revise(
+    [
+      { id: "__G0__", text: "orig def 0" },
+      { id: "__G1__", text: "orig def 1" },
+    ],
+    [{ name: "words", rules: "- tighten" }],
+  );
+  expect(out[0].text).toBe("A clean definition.");
+  expect(out[1].text).toBe("Mid-sentence echo survives content.");
+});
+
+test("synthWorkflow: a marker-only model step is rejected, the draft kept (no '3. 3.')", async () => {
+  // the model "tightened" S0 into the bare ordinal "3." (a real failure seen in output);
+  // accepting it would overwrite the draft and render "3. 3." — reject it, keep the draft.
+  mockAskJsonBy(() => ({ steps: [{ id: "S0", step: "3." }] }));
+  const { synthWorkflow } = await import(PROMPTS);
+  const steps = [{ step: "do the thing", source: ["B1"] }];
+  const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
+  const out = await synthWorkflow(steps, blockById, "en");
+  expect(out).toEqual(["do the thing"]);
+});
+
+// ---- proseGate: parallel batches keep the per-batch flake isolation (D46 / FIX B) ----
+// The batches now fire concurrently, but a flake must still flag ONLY its own ids while a
+// sibling batch's verdicts survive — never collapsing into one outer catch.
+const proseUnits = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: `u${i}`, heading: "H", depth: 2, span: "s" }));
+
+test("proseGate: a transient flake on one batch flags only that batch's ids", async () => {
+  // 7 units → two batches (u0-u4, u5-u6); the second batch flakes, the first verdicts.
+  mockAskJsonBy((prompt) => {
+    if (prompt.includes("### u5")) throw new TransientError("judge returned no JSON");
+    const ids = [...prompt.matchAll(/### (u\d+)/g)].map((m) => m[1]);
+    return { units: ids.map((id) => ({ id, grade: "covered", anchor: "abcd", missing: "" })) };
+  });
+  const { proseGate } = await import(PROMPTS);
+  const { verdicts, flaked } = await proseGate(proseUnits(7), "body", "en");
+  expect(flaked).toEqual(new Set(["u5", "u6"])); // only the flaked batch, not the whole run
+  for (const id of ["u0", "u1", "u2", "u3", "u4"]) expect(verdicts.has(id)).toBe(true);
+  for (const id of ["u5", "u6"]) expect(verdicts.has(id)).toBe(false);
+});
+
+test("proseGate: a non-transient code bug rejects the parallel batches", async () => {
+  mockAskJson(() => {
+    throw new TypeError("cannot read property of undefined");
+  });
+  const { proseGate } = await import(PROMPTS);
+  await expect(proseGate(proseUnits(7), "body", "en")).rejects.toThrow(
+    "cannot read property of undefined",
   );
 });

@@ -1,4 +1,4 @@
-// render-mode — the inverse flow: reconstruct a readable prose note from an
+// prose-mode — the inverse flow: reconstruct a readable prose note from an
 // already-distilled glossary. No fidelity gate (the glossary is the certified
 // artifact); the prose is its regenerable derivative.
 import { detectLang, glossList, langRule, segment, wordCount } from "./text.ts";
@@ -6,7 +6,7 @@ import { parseDescription, parseFrontmatter } from "./frontmatter.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "./fw.ts";
 import { PASS_EN, PASS_RU, revise } from "./prompts.ts";
 
-// ---- render mode: reconstruct a prose note from a distilled glossary ----
+// ---- prose mode: reconstruct a prose note from a distilled glossary ----
 // The inverse of the compress pipeline. Input is a distilled file (this tool's
 // own output, or a saved glossary note): frontmatter + a tie-together line + a
 // `## Glossary` table + optional retained blocks. Output is a flowing prose note
@@ -105,7 +105,11 @@ GLOSSARY:
 ${gloss}`;
 }
 
-async function renderProse(
+// Exported for apply-mode.ts (Phase 4): a checked `recover:` that re-renders ≥1
+// glossary def changes the certified artifact, so apply re-projects the head prose
+// from the whole updated entry set — one call, never per-entry (residue-render
+// reader). Removal-only and keep-only applies never reach it (they stay offline).
+export async function renderProse(
   description: string,
   tie: string,
   entries: { term: string; def: string }[],
@@ -121,23 +125,25 @@ async function renderProse(
 
 // Drive render mode: parse → synthesize prose → revise (no gate) → assemble.
 // Failsafe mirrors the compress path: any error → the original is passed through.
-export async function runRender(
+// Returns the process exit code: 0 rendered, 3 skipped (output = unmodified
+// input, same contract as a compress passthrough; the reason goes to stderr).
+export async function runProse(
   input: string,
   opts: { lang: "en" | "ru" | "auto"; noRevise: boolean },
   emit: (body: string, footer: string) => void,
-): Promise<void> {
+): Promise<number> {
   try {
     const { front, body } = parseFrontmatter(unwrapResult(input));
     const { tie, entries, preserved } = parseDistilled(body);
     if (entries.length === 0) {
-      emit(input, "— render skipped: no ## Glossary table found");
-      return;
+      emit(input, "— prose skipped: no ## Glossary table found");
+      return 3;
     }
     const lang = opts.lang === "auto" ? detectLang(body) : opts.lang;
     let prose = await renderProse(parseDescription(front), tie, entries, lang);
     if (!prose) {
-      emit(input, "— render skipped: empty prose");
-      return;
+      emit(input, "— prose skipped: empty prose");
+      return 3;
     }
     if (!opts.noRevise) {
       const revised = await revise(segment(prose), lang === "ru" ? PASS_RU : PASS_EN);
@@ -149,8 +155,10 @@ export async function runRender(
       `<result>\n${result}\n</result>\n`,
       `— rendered prose · ${wordCount(body)}→${wordCount(outBody)} words · ${entries.length} entries`,
     );
+    return 0;
   } catch (e) {
-    rethrowIfBug(e, "runRender");
-    emit(input, `— render skipped (error): ${String(e).slice(0, 160)}`);
+    rethrowIfBug(e, "runProse");
+    emit(input, `— prose skipped (error): ${String(e).slice(0, 160)}`);
+    return 3;
   }
 }

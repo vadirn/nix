@@ -1,26 +1,29 @@
 // prompts — the LLM stages: every prompt builder and the async stage function that
 // calls it. Each stage maps a typed input to a typed output through fw's askJson;
-// the pipeline (pipeline.ts) sequences them. Prompt-shaping config knobs and the
-// writing-pass rubric live here too, beside the stages that read them.
+// the pipeline (pipeline.ts) sequences them. The writing-core stages (the four
+// writing passes and the prose judge/fix) moved to writing/ and are re-exported
+// below for callers that still import them from here.
 import {
   type Block,
   type Grade,
   type GlossEntry,
-  type IR,
+  type Combo,
   type LinkInventory,
+  type ProseUnit,
   type Relation,
   type WorkStep,
   glossList,
   hasOperational,
   hasWikilink,
+  isContentfulStep,
   langRule,
-  MASK_RE,
   normalizeRelation,
-  normalizeTypography,
   relText,
   render,
 } from "./text.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
+export { type Pass, PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
+export { proseJudge, proseFix } from "./writing/prose-qa.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
 // carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while
@@ -37,50 +40,6 @@ const DEF_RELATIONS: "keep" | "drop" =
   process.env.DISTILL_DEF_RELATIONS === "keep" ? "keep" : "drop";
 const DEF_GATE: "block" | "definition" =
   process.env.DISTILL_DEF_GATE === "block" ? "block" : "definition";
-
-// ---- writing passes (the revise-stage rubric — inline single source) ----
-// Four focused rule sets applied in sequence (words → sentences → paragraphs →
-// AI patterns); each call refines the prior pass's output. These condensed rules
-// are the whole rubric; there is no separate reference file to keep in sync.
-export type Pass = { name: string; rules: string };
-
-export const PASS_EN: Pass[] = [
-  {
-    name: "words",
-    rules: `WORDS: turn nominalizations (-tion/-ment/-ance) into verbs; prefer the shortest word that means the same; cut filler ("it is important to note", "due to the fact that", "in order to"); use affirmative not negative forms ("is absent" not "is not present"); replace dead metaphors with literal statements; use everyday English over formal/Latin words ("use" not "utilize", "end" not "terminate").`,
-  },
-  {
-    name: "sentences",
-    rules: `SENTENCES: make the actor the subject; use active voice; get to the main verb within ~7 words; open with familiar information, close with the new; chain known→new across sentences; keep one topic per sentence; replace verbless fragments ("Fast, but fragile") with a subject+verb; split sentences carrying more than one idea, reconnect with a transition if the ideas depend on each other.`,
-  },
-  {
-    name: "paragraphs",
-    rules: `PARAGRAPHS: lead with the main point; keep one topic per paragraph; where headings are used, make them informative (not "Introduction"/"Discussion"), but do not add headings to prose that has none; explain prerequisites before the things that depend on them; keep paragraphs short enough to scan.`,
-  },
-  {
-    name: "ai",
-    rules: `AI PATTERNS: cut filler openings ("Here's how", "In this section", "Let's dive in"); replace promotional adjectives (innovative/robust/scalable/seamless) with facts; cut significance inflation ("pivotal moment", "underscores its significance"); restore plain copulas (is/has, not "serves as"/"boasts"/"represents"); cut canned constructions ("not just X but Y", rule-of-three padding); thin out AI vocabulary (delve, underscore, leverage, robust, intricate, tapestry, navigate); vary sentence length.`,
-  },
-];
-
-export const PASS_RU: Pass[] = [
-  {
-    name: "words",
-    rules: `СЛОВА: отглагольные существительные (-ание/-ение/-ция) → глаголы; выбирай короткое слово; убирай мусор («следует отметить», «ввиду того что», «в принципе», «таким образом»); утверждение вместо отрицания; мёртвые метафоры → конкретику; живой язык вместо канцелярита («использовать» вместо «осуществлять», «делать» вместо «производить»).`,
-  },
-  {
-    name: "sentences",
-    rules: `ПРЕДЛОЖЕНИЯ: деятель в подлежащем; активный залог; сказуемое ближе к началу (в предложениях длиннее 20 слов проверь); известное → начало, новое → конец; цепочка known-new между предложениями; единая тема в абзаце; безглагольные обрывки («Быстро, но хрупко») → подлежащее + сказуемое; одно предложение — одна мысль, разбей и склей если нужно.`,
-  },
-  {
-    name: "paragraphs",
-    rules: `АБЗАЦЫ: главное первым; один абзац — одна мысль; где есть заголовки — делай их конкретными (не «Введение»/«Заключение»), не добавляй заголовки в текст без них; объясняй предпосылки раньше того, что от них зависит; структурируй для сканирования (подзаголовки, списки, короткие абзацы).`,
-  },
-  {
-    name: "ai",
-    rules: `AI-ПАТТЕРНЫ: убирай маркеры («важно отметить», «в современном мире», «следует учитывать»); рекламные штампы → факты; раздувание значимости → конкретный факт; «является»/«представляет собой» → тире или прямой глагол; шаблонные конструкции («не просто X, а Y», тройка-перечисление) → скажи прямо; прорежай AI-лексику (подчёркивает, отражает, играет ключевую роль, ландшафт, палитра, многогранный); чередуй длину предложений; упрощай пунктуацию (больше трёх запятых — разбей на два).`,
-  },
-];
 
 // ---- stage 1: extract the combo (description, thesis, glossary) ----
 // Render the deterministic link inventory as a MUST-COVER checklist appended to the
@@ -144,14 +103,14 @@ export async function extractCombo(
   lang: "en" | "ru",
   inventory: LinkInventory = { wikilinks: [], external: [] },
   selfSlug = "",
-): Promise<IR> {
-  const ir = await askJson<IR>(
+): Promise<Combo> {
+  const combo = await askJson<Combo>(
     EXTRACT,
     extractComboPrompt(blocks, frontDescription, lang, inventory, selfSlug),
     EXTRACT_TOKENS,
   );
   const ids = new Set(blocks.map((b) => b.id));
-  const glossary = (ir.glossary ?? [])
+  const glossary = (combo.glossary ?? [])
     .map((e) => ({
       term: (e.term ?? "").trim(),
       def: (e.def ?? "").trim(),
@@ -166,7 +125,7 @@ export async function extractCombo(
     }))
     // an entry with no valid source block cannot be rendered grounded or graded — drop it
     .filter((e) => e.term && e.source.length > 0);
-  const workflow = (ir.workflow ?? [])
+  const workflow = (combo.workflow ?? [])
     .map((s) => ({
       step: (s.step ?? "").trim(),
       source: (s.source ?? []).filter((id) => ids.has(id)),
@@ -174,20 +133,20 @@ export async function extractCombo(
     // a step with no valid source block cannot be grounded or gated — drop it
     .filter((s) => s.step && s.source.length > 0);
   // the authored frontmatter description overrides the model's: the one anchor never paraphrased
-  const description = frontDescription || (ir.description ?? "").trim();
-  return { description, thesis: (ir.thesis ?? "").trim(), glossary, workflow };
+  const description = frontDescription || (combo.description ?? "").trim();
+  return { description, thesis: (combo.thesis ?? "").trim(), glossary, workflow };
 }
 
 // ---- stage 2: grade each block drop / distill / retain ----
-function gradeBlocksPrompt(ir: IR, blocks: Block[]): string {
-  const gloss = glossList(ir.glossary);
+function gradeBlocksPrompt(combo: Combo, blocks: Block[]): string {
+  const gloss = glossList(combo.glossary);
   return `You are grading each block of a note for an abstractive compression. You have the note's thesis and its glossary of concepts. Grade EVERY block:
 - "drop": off-thesis, OR its content is already captured by a glossary entry (a restatement).
 - "distill": on-thesis prose whose ideas should be re-expressed densely — it folds into the glossary and a short prose tie-together. This is the DEFAULT for explanatory text.
 - "retain": ONLY content that is already compact and would be destroyed by rewording — a fenced code block, a command line, a file path, a flag, literal output, or a list made mostly of [[wikilink]] references (a "related"/"see also" list). Narrative or explanatory PROSE is NEVER "retain", even when it is important, names an example, or contains a [[wikilink]] — that prose is "distill". When unsure between distill and retain, choose distill.
 Return ONLY JSON {"grades":[{"id":"Bn","grade":"drop|distill|retain"}]} — one entry per block, ids matching.
 
-THESIS: ${ir.thesis}
+THESIS: ${combo.thesis}
 
 GLOSSARY:
 ${gloss}
@@ -196,10 +155,10 @@ BLOCKS (ids in [Bn] markers):
 ${render(blocks)}`;
 }
 
-export async function gradeBlocks(ir: IR, blocks: Block[]): Promise<Map<string, Grade>> {
+export async function gradeBlocks(combo: Combo, blocks: Block[]): Promise<Map<string, Grade>> {
   const judged = await askJson<{ grades: { id: string; grade: Grade }[] }>(
     EXTRACT,
-    gradeBlocksPrompt(ir, blocks),
+    gradeBlocksPrompt(combo, blocks),
     EXTRACT_TOKENS,
   );
   const byId = new Map<string, Grade>();
@@ -220,8 +179,14 @@ export async function gradeBlocks(ir: IR, blocks: Block[]): Promise<Map<string, 
   return byId;
 }
 
-// ---- stage 3: synthesize glossary definitions (the fidelity dial) ----
-export type Synth = "render" | "regenerate";
+// ---- stage 3: synthesize glossary definitions (source-grounded) ----
+// Each def is grounded in its cited source text. A `regenerate` arm (defs from the
+// extracted idea-graph alone) existed as a fidelity dial until the 2026-06-25
+// stability experiment refuted the tradeoff it embodied: render matched it on
+// stability and restatement collapse and compressed MORE (60% vs 54%) — the
+// already-lossy IR re-expands with hedging. See
+// `35 experiments/2026-06-25-distill-synth-dial-stability.md` for what would
+// justify re-adding it.
 
 export function sourceTextFor(entry: { source: string[] }, blockById: Map<string, Block>): string {
   return entry.source
@@ -231,62 +196,39 @@ export function sourceTextFor(entry: { source: string[] }, blockById: Map<string
 }
 
 function synthEntriesPrompt(
-  ir: IR,
   entries: GlossEntry[],
-  mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): string {
-  if (mode === "render") {
-    // DEF_RELATIONS=drop withholds the relations list so the def-writer cannot fold
-    // edges in; the connective prose carries them. DEF_RELATIONS=keep is prior behavior.
-    const concepts = entries
-      .map((e) =>
-        DEF_RELATIONS === "keep"
-          ? `### ${e.term}\nrelations: ${e.relations.map(relText).join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`
-          : `### ${e.term}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
-      )
-      .join("\n\n");
-    const relRule =
-      DEF_RELATIONS === "keep"
-        ? "Keep every named relation; use only claims the source states."
-        : "Define the concept ITSELF — what it is — and state how it relates to other terms (subsumes / contrasts / precondition for) NOWHERE in the def; the connective prose carries relations. Use only claims the source states.";
-    return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause), compressing rather than copying a source sentence verbatim. ${relRule} Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
-
-CONCEPTS:
-${concepts}`;
-  }
+  // DEF_RELATIONS=drop withholds the relations list so the def-writer cannot fold
+  // edges in; the connective prose carries them. DEF_RELATIONS=keep is prior behavior.
   const concepts = entries
     .map((e) =>
       DEF_RELATIONS === "keep"
-        ? `### ${e.term}\ndef(draft): ${e.def}\nrelations: ${e.relations.map(relText).join("; ")}`
-        : `### ${e.term}\ndef(draft): ${e.def}`,
+        ? `### ${e.term}\nrelations: ${e.relations.map(relText).join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`
+        : `### ${e.term}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
     )
     .join("\n\n");
-  const defRule =
+  const relRule =
     DEF_RELATIONS === "keep"
-      ? 'write a maximally dense "def" that preserves its relations'
-      : 'write a maximally dense "def" that defines the concept itself, stating no relations to other terms (the prose carries those)';
-  return `You are writing glossary definitions for a compressed note from its extracted idea-graph alone. For each concept, ${defRule}. Stay on the thesis; introduce NO new concept. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
-
-THESIS: ${ir.thesis}
+      ? "Keep every named relation; use only claims the source states."
+      : "Define the concept ITSELF — what it is — and state how it relates to other terms (subsumes / contrasts / precondition for) NOWHERE in the def; the connective prose carries relations. Use only claims the source states.";
+  return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause), compressing rather than copying a source sentence verbatim. ${relRule} Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
 
 CONCEPTS:
 ${concepts}`;
 }
 
 export async function synthEntries(
-  ir: IR,
   entries: GlossEntry[],
-  mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): Promise<Map<string, string>> {
-  const out = new Map<string, string>(entries.map((e) => [e.term, e.def])); // fall back to IR def
+  const out = new Map<string, string>(entries.map((e) => [e.term, e.def])); // fall back to Combo def
   if (entries.length === 0) return out;
   const res = await askJson<{ entries: { term: string; def: string }[] }>(
     EXTRACT,
-    synthEntriesPrompt(ir, entries, mode, blockById, lang),
+    synthEntriesPrompt(entries, blockById, lang),
     EXTRACT_TOKENS,
   );
   for (const e of res.entries ?? []) if (e.term && e.def) out.set(e.term.trim(), e.def.trim());
@@ -294,30 +236,21 @@ export async function synthEntries(
 }
 
 // ---- stage 3 (workflow): tighten each directive, preserve order, drop none ----
-// Parallel to synthEntries on the procedural channel. The fidelity dial applies
-// the same way: `render` grounds each tightened step in its source block(s);
-// `regenerate` tightens from the extracted draft alone. Steps are keyed by index
-// (S0, S1, …) since, unlike glossary terms, they have no natural unique name.
+// Parallel to synthEntries on the procedural channel: each tightened step is
+// grounded in its source block(s). Steps are keyed by index (S0, S1, …) since,
+// unlike glossary terms, they have no natural unique name.
 function synthWorkflowPrompt(
   steps: WorkStep[],
-  mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): string {
-  if (mode === "render") {
-    // Show each step's own DRAFT alongside its SOURCE. Steps in a list share one
-    // source block, so the draft is what individuates them — without it the model
-    // sees N identical sources and collapses them to one directive.
-    const items = steps
-      .map((s, i) => `### S${i}\ndraft: ${s.step}\nSOURCE:\n${sourceTextFor(s, blockById)}`)
-      .join("\n\n");
-    return `You are tightening the procedure of a note into a clean ordered checklist. Each step has its own DRAFT directive and the SOURCE it came from. Tighten EACH draft into ONE dense imperative directive, keeping its distinct action and grounding it in the SOURCE — reword rather than copy a source sentence verbatim, keep steps separate, one action per step. If the draft carries a reason the SOURCE states ("because/so that Y"), keep that reason in the tightened step and add only reasons the source gives. Keep EVERY step (drop none) and preserve their order. Keep \`inline code\`, file paths, flags, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
-
-STEPS:
-${items}`;
-  }
-  const items = steps.map((s, i) => `### S${i}\ndraft: ${s.step}`).join("\n\n");
-  return `You are tightening the procedure of a note into a clean ordered checklist from its drafted steps alone. For each step, write ONE dense imperative directive that preserves its action and any reason already in the draft, adding only reasons the draft carries. Keep EVERY step (drop none) and preserve their order. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
+  // Show each step's own DRAFT alongside its SOURCE. Steps in a list share one
+  // source block, so the draft is what individuates them — without it the model
+  // sees N identical sources and collapses them to one directive.
+  const items = steps
+    .map((s, i) => `### S${i}\ndraft: ${s.step}\nSOURCE:\n${sourceTextFor(s, blockById)}`)
+    .join("\n\n");
+  return `You are tightening the procedure of a note into a clean ordered checklist. Each step has its own DRAFT directive and the SOURCE it came from. Tighten EACH draft into ONE dense imperative directive, keeping its distinct action and grounding it in the SOURCE — reword rather than copy a source sentence verbatim, keep steps separate, one action per step. If the draft carries a reason the SOURCE states ("because/so that Y"), keep that reason in the tightened step and add only reasons the source gives. Keep EVERY step (drop none) and preserve their order. Keep \`inline code\`, file paths, flags, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
 
 STEPS:
 ${items}`;
@@ -325,7 +258,6 @@ ${items}`;
 
 export async function synthWorkflow(
   steps: WorkStep[],
-  mode: Synth,
   blockById: Map<string, Block>,
   lang: "en" | "ru",
 ): Promise<string[]> {
@@ -334,12 +266,14 @@ export async function synthWorkflow(
   try {
     const res = await askJson<{ steps: { id: string; step: string }[] }>(
       EXTRACT,
-      synthWorkflowPrompt(steps, mode, blockById, lang),
+      synthWorkflowPrompt(steps, blockById, lang),
       EXTRACT_TOKENS,
     );
     for (const e of res.steps ?? []) {
       const m = /^S(\d+)$/.exec((e.id ?? "").trim());
-      if (m && e.step) {
+      // reject a marker-only "tightened" step (the model echoing an ordinal like "3."):
+      // keep the extracted draft rather than overwrite real content with a list number.
+      if (m && e.step && isContentfulStep(e.step)) {
         const idx = parseInt(m[1], 10);
         if (idx >= 0 && idx < out.length) out[idx] = e.step.trim();
       }
@@ -389,7 +323,9 @@ export async function repairWorkflowGroup(
     );
     for (const e of res.steps ?? []) {
       const m = /^S(\d+)$/.exec((e.id ?? "").trim());
-      if (m && e.step) {
+      // reject a marker-only "tightened" step (the model echoing an ordinal like "3."):
+      // keep the extracted draft rather than overwrite real content with a list number.
+      if (m && e.step && isContentfulStep(e.step)) {
         const idx = parseInt(m[1], 10);
         if (idx >= 0 && idx < out.length) out[idx] = e.step.trim();
       }
@@ -419,6 +355,21 @@ export function verbatimDirectives(sourceText: string): string[] {
   return first ? [first] : [];
 }
 
+// The def analogue of verbatimDirectives: the terminal floor when a checked
+// `recover:` def fails the grade a SECOND time at apply (apply-mode.ts, Phase 4).
+// The source's own defining clause — the first sentence naming the term
+// (case-insensitive), else the first sentence — collapsed to one line for the
+// glossary cell. A literal substring of source, so it cannot invert or invent;
+// verbose where a translation would be tighter, which beats shipping an inverted def.
+export function verbatimDef(term: string, sourceText: string): string {
+  const flat = sourceText.replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  const sentences = flat.split(/(?<=[.!?])\s+/);
+  const needle = term.toLowerCase();
+  const hit = sentences.find((s) => s.toLowerCase().includes(needle));
+  return (hit ?? sentences[0] ?? flat).trim();
+}
+
 // single-entry render from source — used by stage-5 recovery to re-ground a residue def
 export function renderEntryPrompt(
   entry: GlossEntry,
@@ -435,24 +386,24 @@ SOURCE:
 ${sourceText}`;
 }
 
-function tieTogetherPrompt(ir: IR, lang: "en" | "ru"): string {
-  const gloss = glossList(ir.glossary);
+function tieTogetherPrompt(combo: Combo, lang: "en" | "ru"): string {
+  const gloss = glossList(combo.glossary);
   return `In 2-4 sentences, state the note's thesis and how its main glossary terms connect. Use only concepts already in the glossary. Plain declarative prose — no heading, no list. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
 
-THESIS: ${ir.thesis}
+THESIS: ${combo.thesis}
 
 GLOSSARY:
 ${gloss}`;
 }
 
-export async function tieTogether(ir: IR, lang: "en" | "ru"): Promise<string> {
-  if (ir.glossary.length === 0) return "";
+export async function tieTogether(combo: Combo, lang: "en" | "ru"): Promise<string> {
+  if (combo.glossary.length === 0) return "";
   try {
-    const res = await askJson<{ prose: string }>(EXTRACT, tieTogetherPrompt(ir, lang), 1024);
+    const res = await askJson<{ prose: string }>(EXTRACT, tieTogetherPrompt(combo, lang), 1024);
     return (res.prose ?? "").trim();
   } catch (e) {
     rethrowIfBug(e, "tieTogether");
-    return ir.thesis; // a transient tie-together flake degrades to the bare thesis sentence
+    return combo.thesis; // a transient tie-together flake degrades to the bare thesis sentence
   }
 }
 
@@ -464,7 +415,7 @@ export async function tieTogether(ir: IR, lang: "en" | "ru"): Promise<string> {
 // context (so it places terms correctly), with an explicit instruction not to copy
 // them in. Relations are the spine the paragraphs are built on.
 function connectiveProsePrompt(
-  ir: IR,
+  combo: Combo,
   orderedEntries: GlossEntry[],
   defByTerm: Map<string, string>,
   lang: "en" | "ru",
@@ -479,14 +430,14 @@ function connectiveProsePrompt(
 Write about the SUBJECT, not about the document: open the FIRST sentence by asserting the thesis directly as a plain claim about the subject (e.g. "Target distance is the gap between …, closed only by …"). NEVER refer to "the note", "this note", "the thesis", "this concept", "the author", or describe what the text does — state every point as a fact about the subject itself.
 Use only claims, terms, and relations the input states. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings. Keep \`inline code\`, file paths, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
 
-THESIS (assert this in your own words as the opening claim — do not announce it as "the thesis"): ${ir.thesis}
+THESIS (assert this in your own words as the opening claim — do not announce it as "the thesis"): ${combo.thesis}
 
 CONCEPTS (term, its relations, and its definition for context):
 ${concepts}`;
 }
 
 export async function connectiveProse(
-  ir: IR,
+  combo: Combo,
   orderedEntries: GlossEntry[],
   defByTerm: Map<string, string>,
   lang: "en" | "ru",
@@ -495,160 +446,14 @@ export async function connectiveProse(
   try {
     const res = await askJson<{ prose: string }>(
       EXTRACT,
-      connectiveProsePrompt(ir, orderedEntries, defByTerm, lang),
+      connectiveProsePrompt(combo, orderedEntries, defByTerm, lang),
       EXTRACT_TOKENS,
     );
-    return (res.prose ?? "").trim() || ir.thesis;
+    return (res.prose ?? "").trim() || combo.thesis;
   } catch (e) {
     rethrowIfBug(e, "connectiveProse");
-    return ir.thesis; // a transient render flake degrades to the bare thesis sentence
+    return combo.thesis; // a transient render flake degrades to the bare thesis sentence
   }
-}
-
-// ---- prose QA: an independent judge for the connective prose ----
-// The prose is the un-gated readable head; it carries its own contract from
-// connectiveProsePrompt (thesis-first opening, no document self-reference, no
-// closing meta-summary, no AI vocabulary) that the generic revise pass enforces
-// unreliably. A DIFFERENT model than the writer (the FIDELITY model judges the
-// EXTRACT model's prose, mirroring the fidelity gate) flags those defects; one
-// fix pass repairs them. This sits BELOW the fidelity line — prose defects never
-// block output, they are repaired best-effort.
-function proseJudgePrompt(thesis: string, prose: string): string {
-  return `You are an independent prose editor. You did NOT write this text. Judge ONLY these four defects and ignore everything else:
-1. CLOSING META-SUMMARY: a final paragraph that summarizes, ties together, or comments on the preceding text ("Thus, the interplay of these concepts...", "In summary...", "Together, these ideas...") rather than stating a fact about the subject.
-2. DOCUMENT SELF-REFERENCE: any mention of "the note", "this note", "the text", "the thesis", "this concept", "the author", or any description of what the text itself does.
-3. AI VOCABULARY: interplay, tapestry, underscore, delve, leverage, robust, intricate, navigate, realm, landscape, multifaceted, seamless, pivotal, and similar.
-4. OPENING: the FIRST sentence must assert the thesis as a plain claim about the subject; flag it if instead it announces the topic ("This covers...", "Here we explore...").
-Return ONLY JSON {"pass":true|false,"issues":["specific located finding", ...]}. pass=true ONLY when there are zero defects. Each issue names the exact offending span and which defect it is.
-
-THESIS: ${thesis}
-
-PROSE:
-${prose}`;
-}
-
-export async function proseJudge(
-  thesis: string,
-  prose: string,
-): Promise<{ pass: boolean; issues: string[] }> {
-  try {
-    const r = await askJson<{ pass?: boolean; issues?: string[] }>(
-      FIDELITY,
-      proseJudgePrompt(thesis, prose),
-      FIDELITY_TOKENS,
-    );
-    return {
-      pass: r.pass !== false,
-      issues: (r.issues ?? []).filter((s) => typeof s === "string"),
-    };
-  } catch (e) {
-    rethrowIfBug(e, "proseJudge");
-    return { pass: true, issues: [] }; // a transient judge flake never blocks the prose
-  }
-}
-
-// The fix pass is NOT revise(): revise is forbidden from dropping content, but a
-// closing meta-summary must be DELETED, not reworded. This pass permits deletion
-// while freezing every claim, bold term span, and verbatim token.
-function proseFixPrompt(prose: string, issues: string[], lang: "en" | "ru"): string {
-  return `You are a copy editor. Rewrite the PROSE below to fix EXACTLY these issues and change nothing else. You MAY delete whole sentences or paragraphs that are pure meta-summary or AI filler — for a closing summary paragraph, deletion is preferred over rewording. Preserve every factual claim about the subject, keep the thesis-first opening, and reproduce all **bold** term spans, \`inline code\`, file paths, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
-
-ISSUES:
-${issues.map((s) => `- ${s}`).join("\n")}
-
-PROSE:
-${prose}`;
-}
-
-export async function proseFix(
-  prose: string,
-  issues: string[],
-  lang: "en" | "ru",
-): Promise<string> {
-  try {
-    const r = await askJson<{ prose?: string }>(
-      EXTRACT,
-      proseFixPrompt(prose, issues, lang),
-      EXTRACT_TOKENS,
-    );
-    return (r.prose ?? "").trim() || prose; // an empty fix keeps the prior prose
-  } catch (e) {
-    rethrowIfBug(e, "proseFix");
-    return prose; // a transient fix flake keeps the prior prose
-  }
-}
-
-// ---- writing passes (stage 4): reuse cut's four sequential rewrites ----
-function revisePrompt(blocks: Block[], pass: Pass): string {
-  return `You are a copy editor. This is the ${pass.name.toUpperCase()} pass. Revise each block below applying only the rules below. Preserve its claims, keep all its content, and match the original's structure exactly (same headings, bullets, and formatting). Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged. Preserve emphasis (**bold**, _italic_). Write straight quotes; keep em dashes (—) as written. Return ONLY JSON {"blocks":[{"id":"B1","text":"revised text"}, ...]} — one entry per block, ids matching.
-
-${pass.rules}
-
-TEXT:
-${render(blocks)}`;
-}
-
-export async function revise(
-  blocks: Block[],
-  passes: Pass[],
-  literals: string[] = [],
-): Promise<Block[]> {
-  // Mask reference spans ([[wikilinks]], ![[embeds]], inline code) to opaque ⟦N⟧
-  // tokens before the passes so the rewriting model cannot reword or drop them;
-  // restored verbatim at the end. General emphasis is left unmasked (it spans words
-  // that legitimately get reworded) and relies on the prompt instruction instead.
-  // `literals` are exact spans to freeze too — the bolded glossary terms (**Term**),
-  // so the term text stays verbatim and keeps matching its glossary key.
-  const masks = new Map<string, string>();
-  const litToken = new Map<string, string>();
-  let n = 0;
-  // freeze the literal spans first (longest first, so a term that contains another
-  // is masked whole before its substring), then the reference-span regex.
-  const orderedLiterals = [...new Set(literals.filter(Boolean))].sort(
-    (a, b) => b.length - a.length,
-  );
-  const maskLiterals = (text: string): string => {
-    let out = text;
-    for (const lit of orderedLiterals) {
-      if (!out.includes(lit)) continue;
-      let key = litToken.get(lit);
-      if (!key) {
-        key = `⟦${n++}⟧`;
-        litToken.set(lit, key);
-        masks.set(key, lit);
-      }
-      out = out.split(lit).join(key);
-    }
-    return out;
-  };
-  const mask = (text: string): string =>
-    maskLiterals(text).replace(MASK_RE, (m) => {
-      const key = `⟦${n++}⟧`;
-      masks.set(key, m);
-      return key;
-    });
-  const unmask = (text: string): string =>
-    masks.size === 0 ? text : text.replace(/⟦\d+⟧/g, (m) => masks.get(m) ?? m);
-
-  // sequential passes: each refines the prior pass's output (words → sentences →
-  // paragraphs → AI patterns). A failed pass (parse/network) keeps the current
-  // blocks so prior improvements survive; the loop continues.
-  let cur = blocks.map((b) => ({ id: b.id, text: mask(b.text) }));
-  for (const pass of passes) {
-    try {
-      const { blocks: rev } = await askJson<{ blocks: { id: string; text: string }[] }>(
-        EXTRACT,
-        revisePrompt(cur, pass),
-        EXTRACT_TOKENS,
-      );
-      const byId = new Map(rev.map((r) => [r.id, r.text]));
-      cur = cur.map((b) => ({ id: b.id, text: byId.get(b.id) ?? b.text }));
-    } catch (e) {
-      rethrowIfBug(e, "revise");
-      // a transient pass flake keeps the current blocks (see above); continue
-    }
-  }
-  return cur.map((b) => ({ id: b.id, text: unmask(normalizeTypography(b.text)) }));
 }
 
 // ---- stage 5: fidelity gate (round-trip entailment, different model) ----
@@ -656,7 +461,7 @@ export async function revise(
 // the judge returns no parseable verdict (no JSON after askJson's retry). It is kept
 // distinct from "residue": inconclusive items skip recovery (re-rendering cannot fix
 // a judge that will not parse) and surface directly, so a flake never discards the run.
-export type Concept = {
+export type ConceptVerdict = {
   term: string;
   grade: "translated" | "residue" | "inconclusive";
   direction: string;
@@ -698,9 +503,9 @@ export async function fidelityGate(
   thesis: string,
   outputBody: string,
   rendered: { term: string; def: string; sourceText: string }[],
-): Promise<{ thesisRecoverable: boolean; concepts: Concept[] }> {
+): Promise<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }> {
   try {
-    const res = await askJson<{ thesisRecoverable?: boolean; concepts?: Concept[] }>(
+    const res = await askJson<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
       FIDELITY,
       fidelityPrompt(thesis, outputBody, rendered),
       FIDELITY_TOKENS,
@@ -787,4 +592,77 @@ export async function workflowGate(
       missing: "judge returned no verdict",
     }));
   }
+}
+
+// ---- prose gate: list-item coverage (the prose-judge tier, D46) ----
+// A deterministic inventory (text.ts::harvestProseListItems) is the answer key; glm — the
+// DIFFERENT model from the one that wrote the compression — is the MATCHER ONLY, deciding
+// per item whether its information SURVIVED somewhere in the output (covered) or was DROPPED.
+// It never decides the key. A "covered" verdict must quote a verbatim output anchor; the
+// covered→clear decision and the anchor re-check live in pipeline.ts::proseResidue, which
+// DEFAULTS TO SURFACED for an omitted id, an unanchored covered, or a parse flake — the
+// model that caused the loss never clears a span by silence.
+export type ProseVerdict = {
+  id: string;
+  grade: "covered" | "dropped";
+  anchor: string;
+  missing: string;
+};
+
+function proseMatchPrompt(outputBody: string, units: ProseUnit[], lang: "en" | "ru"): string {
+  const items = units
+    .map((u) => `### ${u.id}\nFROM SECTION "${u.heading}":\n${u.span}`)
+    .join("\n\n");
+  return `You are an independent coverage judge. You did NOT write this compression — a different model did, and it was ALLOWED to compress, merge, paraphrase, re-author, and re-order freely. Below is the full compressed OUTPUT, then a list of ITEMS taken verbatim from the original note (each a single list entry). For EACH item decide ONE thing: did the item's INFORMATION survive ANYWHERE in the OUTPUT — in any compressed, paraphrased, merged-into-a-definition, or folded-into-prose form — (grade "covered"), or was it DROPPED entirely (grade "dropped")?
+Rules:
+- "covered" REQUIRES an anchor: quote in "anchor" a verbatim substring of at least 4 words copied from the OUTPUT, AND that quote must be the place where THIS item's information survives — not unrelated true text from elsewhere in the OUTPUT. If no such quotable OUTPUT substring exists, you may NOT grade it covered.
+- An item is "covered" even if ALL its wording, examples, emphasis, and ordering are gone and only its CLAIM remains. Compression and re-authoring are NOT loss.
+- "dropped" only when the item's information appears NOWHERE in the OUTPUT; name what is absent in "missing".
+- Judge each item independently; never grade one covered because a sibling item was covered.
+${langRule(lang)}
+Return ONLY JSON {"units":[{"id":"...","grade":"covered|dropped","anchor":"<verbatim OUTPUT substring>","missing":"..."}]} — echo each id exactly once.
+
+OUTPUT (the compressed note):
+${outputBody}
+
+ITEMS:
+${items}`;
+}
+
+// Match the inventory against the output, in batches of 5 (each payload stays under
+// FIDELITY_TOKENS). Returns the raw verdicts keyed by id plus the set of ids whose batch
+// flaked (transient / no-parse), so proseResidue can surface a flaked id distinctly from one
+// the judge simply omitted. The covered/dropped→residue MAPPING and anchor re-check are pure
+// and live in pipeline.ts::proseResidue. A real bug propagates through rethrowIfBug.
+// The batches are independent full-output matches, so they fire concurrently (mirrors the
+// Promise.all over independent glm calls in runFidelityGate); the try/catch is PER batch so a
+// flake flags only its own ids while a real bug rejects Promise.all and propagates.
+export async function proseGate(
+  units: ProseUnit[],
+  outputBody: string,
+  lang: "en" | "ru",
+): Promise<{ verdicts: Map<string, ProseVerdict>; flaked: Set<string> }> {
+  const verdicts = new Map<string, ProseVerdict>();
+  const flaked = new Set<string>();
+  const BATCH = 5;
+  const batches: ProseUnit[][] = [];
+  for (let i = 0; i < units.length; i += BATCH) batches.push(units.slice(i, i + BATCH));
+  await Promise.all(
+    batches.map(async (batch) => {
+      try {
+        const res = await askJson<{ units?: ProseVerdict[] }>(
+          FIDELITY,
+          proseMatchPrompt(outputBody, batch, lang),
+          FIDELITY_TOKENS,
+        );
+        for (const v of res.units ?? []) if (v.id) verdicts.set(v.id, v);
+      } catch (e) {
+        rethrowIfBug(e, "proseGate");
+        // transient / no-parse flake: leave this batch's ids un-verdicted AND flag them, so
+        // proseResidue surfaces each as inconclusive — never silently cleared.
+        for (const u of batch) flaked.add(u.id);
+      }
+    }),
+  );
+  return { verdicts, flaked };
 }

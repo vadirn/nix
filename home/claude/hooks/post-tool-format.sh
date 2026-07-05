@@ -43,6 +43,13 @@ fi
 [ -n "$FILE" ] || exit 0
 [ -f "$FILE" ] || exit 0
 
+# vault-archive holds write-once, content-hash-addressed source snapshots
+# (frozen provenance): reflowing one silently diverges the stored bytes from
+# the hash recorded on its reference stub.
+case "$FILE" in
+  "${HOME:-/nonexistent}/Documents/vault-archive/"*) exit 0 ;;
+esac
+
 ext="${FILE##*.}"
 
 manifest_has_format_file() {

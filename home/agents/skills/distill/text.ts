@@ -1,6 +1,8 @@
-// text — segmentation, typography, slugging, relation/IR types, and the language
+// text — segmentation, typography, slugging, relation/Combo types, and the language
 // helpers. The leaf module of the distill pipeline: pure string/data utilities
-// with no I/O and no dependency on any other distill module.
+// with no I/O; its only dependency is writing/typography.ts, the writing-core's
+// own leaf (normalizeTypography moved there, re-exported here).
+import { normalizeTypography } from "./writing/typography.ts";
 
 // Relations registry — TS-native copy of the open relation vocabulary (structural
 // channel only, D32). Mirror of vault-query/src/commands/lint/rel-registry.json, the
@@ -33,7 +35,7 @@ export type GlossEntry = { term: string; def: string; relations: Relation[]; sou
 // step carries a source-stated reason ("do X because Y") when the source gives
 // one; the gate tolerates a dropped reason but forbids an invented one.
 export type WorkStep = { step: string; source: string[] };
-export type IR = {
+export type Combo = {
   description: string;
   thesis: string;
   glossary: GlossEntry[];
@@ -104,6 +106,14 @@ export const glossList = (entries: { term: string; def: string }[]): string =>
 // deterministic so the protection cannot miss one.
 const WIKILINK = /\[\[[^\]]+\]\]/;
 export const hasWikilink = (text: string): boolean => WIKILINK.test(text);
+
+// A workflow step carries no content when, stripped to its bare token, nothing but a list
+// marker / ordinal / punctuation remains (e.g. "3." — the synth model echoing a list number
+// instead of tightening the step). Such a token must never render as a step ("3. 3."): synth
+// rejects it (keeping the extracted draft) and assembly filters it (dropping + renumbering).
+const STEP_MARKER_ONLY = /^[\s\d.)\]\-*+#:]*$/;
+export const isContentfulStep = (s: string): boolean =>
+  !STEP_MARKER_ONLY.test(s.replace(/\s+/g, " ").trim());
 
 // Asset extensions an Obsidian embed renders inline (image/av/pdf) — NOT a cross-note
 // relation. Anchored at `$`, case-insensitive, tested against the alias-stripped target
@@ -224,6 +234,556 @@ export function harvestVaultEdges(text: string): VaultEdge[] {
   return [...harvestWikilinks(text), ...harvestInternalLinks(text)];
 }
 
+// ---- payload harvest: the NON-edge, NON-prose loss surface (the payloadResidue spine) ----
+// wikilinkResidue makes a dropped cross-note EDGE loud; these harvesters extend the same
+// deterministic move to the five other span classes whose information is LITERAL or
+// STRUCTURAL — and therefore unrecoverable from re-authored prose, so distillation is not
+// licensed to compress them: verbatim fenced code, verbatim blockquotes, table data rows,
+// image/asset embeds, math/formulas, external citations, and substantive statistics. Each
+// returns {markup, key}: `markup` is a single-line capped label (the <entry term=…>
+// attribute must not carry a newline), `key` a content-signature compared against the SAME
+// harvester run over the final output — a span surviving anywhere in output is covered.
+// Prose-compressible classes (headings, list items, sub-sections, qualifiers) are
+// deliberately OUT: a deterministic test over them would flag every source span the tool
+// is licensed to collapse. That residual prose-payload gap is named, not papered over.
+export type PayloadSpan = { markup: string; key: string };
+
+// Collapse a span to a single short line for the residue <entry term/source> label.
+const oneLine = (s: string, n = 80): string => {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > n ? t.slice(0, n - 1) + "…" : t;
+};
+
+// Blank every fenced region (``` / ~~~, 3+ markers) line-for-line, preserving line count
+// so a caller can align scrubbed lines with raw ones. A `|`, `$`, or digit inside a code
+// block is code, never a table cell / formula / statistic, so the number/table/math/citation
+// lanes scrub fences first; harvestFences itself owns the fenced class.
+function stripFences(text: string): string {
+  const out: string[] = [];
+  let open: string | null = null;
+  for (const line of text.split("\n")) {
+    const m = /^[ \t]*(`{3,}|~{3,})/.exec(line);
+    if (!open && m) {
+      open = m[1][0];
+      out.push("");
+      continue;
+    }
+    if (open && m && line.trimStart().startsWith(open.repeat(3))) {
+      open = null;
+      out.push("");
+      continue;
+    }
+    out.push(open ? "" : line);
+  }
+  return out.join("\n");
+}
+
+// Verbatim fenced code/output blocks. key = the inner body, each line right-trimmed,
+// leading/trailing blank lines dropped — the language tag and fence width are excluded, so
+// a retained block (assembleBody pushes b.text verbatim) covers its source twin regardless
+// of info-string. Internal whitespace is KEPT: code indentation is load-bearing.
+export function harvestFences(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const lines = text.split("\n");
+  let open: string | null = null;
+  let body: string[] = [];
+  let head = "";
+  for (const line of lines) {
+    const m = /^[ \t]*(`{3,}|~{3,})/.exec(line);
+    if (!open && m) {
+      open = m[1][0];
+      body = [];
+      head = line.trim();
+      continue;
+    }
+    if (open && m && line.trimStart().startsWith(open.repeat(3))) {
+      const key = body
+        .map((l) => l.replace(/\s+$/, ""))
+        .join("\n")
+        .replace(/^\n+|\n+$/g, "");
+      if (key) out.push({ markup: oneLine(head + " " + (body[0] ?? "")), key });
+      open = null;
+      continue;
+    }
+    if (open) body.push(line);
+  }
+  return out;
+}
+
+// Verbatim blockquotes (`>`-prefixed runs) — a deliberate literal quotation, especially a
+// non-English source citation, the tool may not reword. key = inner text, whitespace
+// collapsed, lowercased; a quote re-authored into bare prose (no `>`) is not covered → a
+// loud, correct residue. A retained blockquote keeps its `>`, so it covers its source twin.
+// A `>`-prefixed blockquote line, capturing its inner text. Shared by harvestBlockquotes
+// (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
+export const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
+
+export function harvestBlockquotes(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  let inner: string[] = [];
+  const flush = () => {
+    if (inner.length) {
+      const key = inner.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
+      if (key) out.push({ markup: oneLine(inner.join(" ")), key });
+    }
+    inner = [];
+  };
+  for (const line of text.split("\n")) {
+    const m = BLOCKQUOTE_LINE.exec(line);
+    if (m) inner.push(m[1]);
+    else flush();
+  }
+  flush();
+  return out;
+}
+
+// GFM pipe-table DATA rows — structured payload the tool dissolves into prose. Runs on a
+// fence- and inline-span-masked copy (MASK_RE blanks wikilinks/embeds/inline-code) so a
+// prose line bearing a `[[a|b]]` alias pipe or a code-fence pipe is never mis-read as a row,
+// then maps each surviving row back to its raw line for the label. key = trimmed lowercased
+// cells joined on an unlikely separator (the row payload, order-preserving). The delimiter
+// row (every cell `:?-+:?`) and all-empty rows are skipped.
+// Split a fence- and inline-span-masked table line into trimmed cells (outer pipes dropped,
+// `\|` kept literal). The shared cell decomposition behind both the data-row predicate and
+// the harvested key.
+function tableCells(maskedLine: string): string[] {
+  return maskedLine
+    .trim()
+    .replace(/^\||\|$/g, "")
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim());
+}
+
+// A fence- and inline-span-masked line is a GFM table DATA row: it carries a pipe, splits
+// into ≥2 non-empty cells, and is not the `:?-+:?` delimiter row. One detection, two uses
+// (D2): harvestTableRows inventories the payload, payloadMask blanks it for the router signal.
+export function isTableDataRow(maskedLine: string): boolean {
+  if (!maskedLine.includes("|")) return false;
+  const cells = tableCells(maskedLine);
+  if (cells.length < 2 || cells.every((c) => c === "")) return false;
+  if (cells.every((c) => /^:?-+:?$/.test(c))) return false; // delimiter row
+  return true;
+}
+
+export function harvestTableRows(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const rawLines = text.split("\n");
+  const mLines = stripFences(text).replace(MASK_RE, " ").split("\n");
+  for (let i = 0; i < mLines.length; i++) {
+    if (!isTableDataRow(mLines[i])) continue;
+    out.push({
+      markup: oneLine((rawLines[i] ?? mLines[i]).trim()),
+      key: tableCells(mLines[i])
+        .map((c) => c.toLowerCase())
+        .join("␟"),
+    });
+  }
+  return out;
+}
+
+// Images + Obsidian asset embeds — the inline-render lane harvestWikilinks SKIPS, so today
+// a dropped image falls through BOTH gates. Markdown `![alt](url)` keyed by url slug; asset
+// embed `![[x.png]]` (ASSET_RE) keyed by target slug. Both fragment-stripped + decoded, so
+// an embed surviving in a retained block covers its source twin.
+// Markdown image `![alt](url)` (url captured) and Obsidian embed `![[target]]` (target
+// captured). Shared by harvestImages (payload inventory, asset-filtered) and payloadMask
+// (router signal) — one detection, two uses (D2).
+export const MD_IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+export const EMBED_RE = /!\[\[([^\]]+)\]\]/g;
+export function harvestImages(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  for (const m of text.matchAll(MD_IMAGE_RE)) {
+    let u = normalizeEdgeTarget(m[1].trim());
+    try {
+      u = decodeURIComponent(u);
+    } catch {
+      // malformed %-sequence: keep raw (still a comparable key)
+    }
+    const key = slugSegment(u);
+    if (key) out.push({ markup: oneLine(m[0]), key });
+  }
+  for (const m of text.matchAll(EMBED_RE)) {
+    const t = normalizeEdgeTarget(m[1].split("|")[0].trim());
+    if (ASSET_RE.test(t)) {
+      const key = slugSegment(t);
+      if (key) out.push({ markup: oneLine(m[0]), key });
+    }
+  }
+  return out;
+}
+
+// Math / formulas — literal non-prose-compressible payload by the same criterion as fenced
+// code. Display math (`$$…$$`, `\[…\]`, `\(…\)`) is unambiguous. Inline `$…$` is admitted
+// ONLY when the span carries a math operator AND is not a pure number, so a currency span
+// (`$1.52 trillion`, two separate `$5 … $10` mentions) is never mis-read as a formula. key
+// = symbol body, whitespace stripped, lowercased.
+const MATH_OP =
+  /[=<>+\-*/^_{}\\]|\\(?:le|ge|leq|geq|neq|cdot|times|frac|sum|prod|int|sqrt|approx|propto|to)\b/;
+// Display-math spans (`$$…$$`, `\[…\]`, `\(…\)`), inner captured, multiline. Shared by
+// harvestMath (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
+export const DISPLAY_MATH_PATTERNS = [
+  /\$\$([\s\S]+?)\$\$/g,
+  /\\\[([\s\S]+?)\\\]/g,
+  /\\\(([\s\S]+?)\\\)/g,
+];
+export function harvestMath(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const src = stripFences(text);
+  const push = (markup: string, inner: string) => {
+    const key = inner.replace(/\s+/g, "").toLowerCase();
+    if (key) out.push({ markup: oneLine(markup), key });
+  };
+  for (const re of DISPLAY_MATH_PATTERNS) for (const m of src.matchAll(re)) push(m[0], m[1]);
+  const noDisplay = src.replace(DISPLAY_MATH_PATTERNS[0], " ");
+  for (const m of noDisplay.matchAll(/(?<![\d\\$])\$([^$\n]+?)\$(?![\d$])/g)) {
+    const inner = m[1];
+    if (!MATH_OP.test(inner)) continue; // no operator → a currency/number span, not a formula
+    if (/^[\s\d.,]+$/.test(inner)) continue;
+    push(m[0], inner);
+  }
+  return out;
+}
+
+// External citations — the source/grounding links wikilinkResidue never covered (they are
+// not vault edges). Unions the three forms the vault actually uses: markdown `[text](url)`,
+// footnote definitions `[^id]: url` (which harvestExternalLinks never sees), and bare/
+// autolink URLs. Fences scrubbed first (a URL in a code sample is not a citation). key =
+// the URL, lowercased, trailing punctuation trimmed.
+export function harvestCitations(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const src = stripFences(text);
+  const push = (markup: string, url: string) => {
+    const u = url.trim().replace(/[.,;:)\]>]+$/, "");
+    if (u && /^(?:https?|ftp):\/\//i.test(u))
+      out.push({ markup: oneLine(markup), key: u.toLowerCase() });
+  };
+  for (const l of harvestExternalLinks(src)) push(l.markup, l.url);
+  for (const m of src.matchAll(/^[ \t]*\[\^[^\]]+\]:\s*(\S+)/gm)) push(m[0].trim(), m[1]);
+  for (const m of src.matchAll(/<((?:https?|ftp):\/\/[^>\s]+)>/gi)) push(m[0], m[1]);
+  for (const m of src.matchAll(/(?<![("<\]])\b(?:https?|ftp):\/\/[^\s)\]>]+/gi)) push(m[0], m[0]);
+  return out;
+}
+
+// Substantive numeric statistics — a figure prose cannot recover. Scrubbed first (fences,
+// footnote-definition lines, autolinks, URLs, markdown-link/image targets, MASK_RE spans)
+// so a digit inside a URL path, a footnote id, or inline code is never harvested as a
+// phantom statistic. SUBSTANCE GATE: keep a token only when it bears %, $, a decimal,
+// comma-grouping, or a ≥2-digit run; bare single digits (step 1, v2, [1]) are idiom. A bare
+// 4-digit year (1900–2099) is dropped UNLESS a scale word follows it, so `2024` is not a
+// statistic but `2024 deaths`-style stays. Multipliers (`8x`, `2x`, `8-fold`) — the form
+// GitClear/Faros findings use, which the substance gate alone would drop — are a sub-lane.
+const NUM_RE = /(?<![\w.])\$?\d[\d,]*(?:\.\d+)?%?/g;
+const MULT_RE = /\b\d+(?:\.\d+)?\s*(?:x|×|-?fold)\b/gi;
+const SCALE_WORD =
+  /^\W*(trillion|billion|million|thousand|hundred|percent|deaths|cases|people|users)\b/i;
+function scrubForNumbers(text: string): string {
+  return stripFences(text)
+    .replace(/^[ \t]*\[\^[^\]]+\]:.*$/gm, " ") // footnote definitions (incl their URLs)
+    .replace(/<[^>\s]+>/g, " ") // autolinks
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, " ") // scheme://… URLs
+    .replace(/\]\([^)\s]+\)/g, "]()") // markdown link/image targets
+    .replace(MASK_RE, " "); // wikilinks/embeds/inline-code
+}
+export function harvestNumbers(text: string): PayloadSpan[] {
+  const out: PayloadSpan[] = [];
+  const clean = scrubForNumbers(text);
+  for (const m of clean.matchAll(MULT_RE)) {
+    out.push({ markup: m[0].trim(), key: m[0].replace(/\s+/g, "").toLowerCase() });
+  }
+  for (const m of clean.matchAll(NUM_RE)) {
+    const tok = m[0];
+    const intRun = tok.replace(/[$,%]/g, "").split(".")[0];
+    const marked = /[%$.]/.test(tok) || /\d,\d/.test(tok);
+    if (!marked && intRun.length < 2) continue; // bare single digit → idiom
+    if (!marked && /^(?:19|20)\d\d$/.test(intRun)) {
+      const after = clean.slice((m.index ?? 0) + tok.length, (m.index ?? 0) + tok.length + 16);
+      if (!SCALE_WORD.test(after)) continue; // bare year, no scale word → not a statistic
+    }
+    out.push({ markup: tok, key: tok.replace(/[$,]/g, "") });
+  }
+  return out;
+}
+
+// ---- prose-list-item inventory (the prose-judge tier, Backlog 40 / D46) ----
+// The payload spine above catches LITERAL/STRUCTURAL loss but is blind to a dropped pure-
+// prose list-item — a `Признаки нарушения` bullet, a `Шаблоны` pattern, an F1–F7 enumerated
+// claim — and so are the fidelity/workflow gates (they only judge the defs and steps the
+// extractor lifted). This harvester does NOT decide coverage; it only enumerates the must-
+// cover CLASS (explicit list-items under a depth≥2 heading) as an answer key for the glm
+// matcher (pipeline.ts::runProseGate). A list-item is an ATOMIC enumerated claim, not
+// restatement-collapsible prose, which is why per-item judging is false-flag-free where a
+// coarse prose-span judge is not — worked examples, thesis spans, and heading-less essays
+// stay deferred. Four deterministic exclusions narrow the inventory to must-cover items;
+// none is a meaning judgment — the layer enumerates and excludes, it never declares survival.
+export type ProseUnit = { id: string; heading: string; depth: number; span: string };
+
+// Lowercase, strip markdown punctuation, collapse whitespace — a containment-comparable
+// form shared by EXCLUSION-3 (extractor-claimed) here and the anchor relevance re-check in
+// the matcher (pipeline.ts::anchored).
+export const normalizeForContainment = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[`*_>#|[\]()!~-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export function harvestProseListItems(text: string, claimed: string[]): ProseUnit[] {
+  const claimNorm = claimed.map(normalizeForContainment).filter((c) => c.length > 0);
+  const lines = text.split("\n");
+  const units: ProseUnit[] = [];
+  let inFence = false;
+  let tok = "";
+  let curHeading = "";
+  let curDepth = 0;
+  let sawHeading = false;
+  let n = 0;
+  const HEAD = /^(#{2,6})\s+(.*)$/;
+  // markdown bullets (- * +), numbered (1. / 1)), and the A–F / Cyrillic enum markers the
+  // vault's scenario / moat / worked-example lists use (F1. A) Сценарий-Б.). The uppercase
+  // A–F restriction keeps a prose abbreviation ("e.g.") from registering as a list marker.
+  const ITEM = /^\s*(?:[-*+]|\d+[.)]|[A-FА-Я]\d*[.)])\s+(.*\S)\s*$/;
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    const f = /^\s*(`{3,}|~{3,})/.exec(ln);
+    if (f) {
+      if (!inFence) {
+        inFence = true;
+        tok = f[1][0];
+      } else if (ln.includes(tok.repeat(3))) {
+        inFence = false;
+      }
+      continue;
+    }
+    if (inFence) continue;
+    const h = ln.match(HEAD);
+    if (h) {
+      curDepth = h[1].length;
+      curHeading = h[2];
+      sawHeading = true;
+      continue;
+    }
+    if (!sawHeading) continue; // EXCL-1 intro/thesis-owned lead (before the first ## heading)
+    const m = ln.match(ITEM);
+    if (!m) continue;
+    let body = m[1];
+    // gather deeper-indented continuation lines (a wrapped item) into one span
+    while (
+      i + 1 < lines.length &&
+      /^\s+\S/.test(lines[i + 1]) &&
+      !ITEM.test(lines[i + 1]) &&
+      !HEAD.test(lines[i + 1])
+    ) {
+      body += " " + lines[++i].trim();
+    }
+    // EXCL-2 payload/spine-owned: a bullet that is wholly a wikilink / image / table row /
+    // citation / inline-code / number is already covered by the seven payload lanes — strip
+    // those and require residual prose before inventorying.
+    const probe = stripFences(body)
+      .replace(MASK_RE, " ")
+      .replace(/!\[[^\]]*\]\([^)]*\)|!\[\[[^\]]+\]\]/g, " ")
+      .replace(/^\s*\|.*\|?\s*$/g, " ");
+    if (!/\S/.test(probe)) continue;
+    const norm = normalizeForContainment(body);
+    if (norm.length < 12) continue; // EXCL-4 too thin to carry a claim (heading echo, scaffold)
+    // EXCL-3 extractor-claimed: the item was folded into a def or step the extractor lifted,
+    // so fidelityGate/workflowGate already judge it. Information-grounded (the extractor's own
+    // source attribution), a best-effort REDUCER — a non-contiguously cited item may slip to
+    // the matcher, costing a token, never a false residue.
+    if (claimNorm.some((c) => c.includes(norm))) continue;
+    units.push({
+      id: `${slugSegment(curHeading) || "prose"}-${n++}`,
+      heading: oneLine(curHeading, 60),
+      depth: curDepth,
+      span: oneLine(body, 300),
+    });
+  }
+  return units;
+}
+
+// ---- per-section density router (D12/D2; the --dry-run + Backlog 10 spine) ----
+// The up-front classification: split a note into heading-delimited sections and route each
+// on its own payload density (D12 per-section grain). Density is the harvest applied a THIRD
+// way (D2 "one harvest, three uses"): the same structural-payload detection that feeds the
+// residue gate and the protected-span set is reused here to MASK payload and measure the
+// prose word-share that remains. High payload-share → preserve (structural compaction); low
+// → re-author (compact prose). Deterministic and free — no LLM, no model consulted.
+export type Section = { heading: string; depth: number; text: string };
+export type Route = "re-author" | "preserve";
+
+// Starting threshold only — the real value is calibrated against 00 inbox/ via --dry-run
+// (Backlog 7/9). A section whose payload word-share meets τ routes to preserve.
+export const DEFAULT_TAU = 0.5;
+
+// Split on every ATX heading (depth 1–6). The lead before the first heading is the intro
+// section (heading "", depth 0); it is dropped when blank. Each section's text includes its
+// own heading line; `heading` holds the title text (markers stripped), `depth` the level.
+const ATX_HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+export function sections(text: string): Section[] {
+  const out: Section[] = [];
+  let cur: Section = { heading: "", depth: 0, text: "" }; // lead / intro
+  const push = () => {
+    if (cur.depth > 0 || /\S/.test(cur.text)) out.push(cur);
+  };
+  const lines = text.split("\n");
+  const masked = stripFences(text).split("\n"); // a fenced `#`-comment reads as blank, never a heading
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (ATX_HEADING.test(masked[i])) {
+      const m = ATX_HEADING.exec(line)!;
+      push();
+      cur = { heading: m[2].trim(), depth: m[1].length, text: line };
+    } else {
+      cur.text = cur.text === "" ? line : cur.text + "\n" + line;
+    }
+  }
+  push();
+  return out;
+}
+
+// Blank the structural payload spans (fenced code, table rows, blockquotes, display math,
+// image lines), preserving line count so the masked copy aligns with the source. Reuses the
+// harvest detection — the router's signal is the same primitive as the residue gate's.
+export function payloadMask(text: string): string {
+  const fenceMasked = stripFences(text); // fence lane: owns fenced code/output
+  const rowProbe = fenceMasked.replace(MASK_RE, " ").split("\n"); // table-row detection copy
+  let masked = fenceMasked
+    .split("\n")
+    .map((line, i) => {
+      if (isTableDataRow(rowProbe[i])) return ""; // table-row lane
+      if (BLOCKQUOTE_LINE.test(line)) return ""; // blockquote lane
+      return line;
+    })
+    .join("\n");
+  // Display-math + image lanes blank in place, replacing each non-newline char with a space
+  // so multi-line spans keep their line count. Markdown images blank unconditionally; embeds
+  // only when the target is an asset (the same ASSET_RE filter harvestImages applies).
+  const blankKeepingLines = (s: string, re: RegExp) =>
+    s.replace(re, (m) => m.replace(/[^\n]/g, " "));
+  for (const re of DISPLAY_MATH_PATTERNS) masked = blankKeepingLines(masked, re);
+  masked = blankKeepingLines(masked, MD_IMAGE_RE);
+  masked = masked.replace(EMBED_RE, (m, inner) =>
+    ASSET_RE.test(normalizeEdgeTarget(String(inner).split("|")[0].trim()))
+      ? m.replace(/[^\n]/g, " ")
+      : m,
+  );
+  return masked;
+}
+
+// Payload word-share ∈ [0,1]: the fraction of a section's words that live in structural
+// payload, = (words − words(payloadMask)) / words. 0 when the section has no words.
+export function payloadDensity(text: string): number {
+  const total = wordCount(text);
+  if (!total) return 0;
+  const prose = wordCount(payloadMask(text));
+  return (total - prose) / total;
+}
+
+// Route a section on its density: density ≥ τ → preserve, else re-author.
+export function routeSection(text: string, tau: number = DEFAULT_TAU): Route {
+  return payloadDensity(text) >= tau ? "preserve" : "re-author";
+}
+
+// One routed section: its heading/depth plus the computed density and route. The dry-run
+// row — pure data, no I/O.
+export type SectionRoute = { heading: string; depth: number; density: number; route: Route };
+
+// Segment a note and route every section on its own density (D12 per-section grain).
+export function routeNote(text: string, tau: number = DEFAULT_TAU): SectionRoute[] {
+  return sections(text).map((s) => {
+    const density = payloadDensity(s.text);
+    return {
+      heading: s.heading,
+      depth: s.depth,
+      density,
+      route: density >= tau ? "preserve" : "re-author",
+    };
+  });
+}
+
+// Render a note's routed sections as a deterministic dry-run report: a note line
+// (`path · N re-author / M preserve`) then one indented line per section
+// (`heading · density · route`); the unnamed intro section prints as `(intro)`.
+export function formatDryRun(path: string, rows: SectionRoute[]): string {
+  const re = rows.filter((r) => r.route === "re-author").length;
+  const pr = rows.length - re;
+  const head = `${path} · ${re} re-author / ${pr} preserve`;
+  const body = rows.map(
+    (r) => `  ${r.heading || "(intro)"} · ${r.density.toFixed(2)} · ${r.route}`,
+  );
+  return [head, ...body].join("\n");
+}
+
+// ---- per-section build partition (D12/D16; Backlog 10) ----
+// One routed build unit: a top-level section (its heading line + body) with the route
+// the build acts on — re-author (folds into the one compact head) or preserve (held by
+// compactSection). Carries heading/depth so reassembly can demote a structural-name clash.
+export type RoutedSection = { heading: string; depth: number; text: string; route: Route };
+
+// Partition a note for the per-section build: lift the leading H1 as the note title
+// (emitted first, independent of any section's route — fix #1), then route each remaining
+// top-level section. Sections deeper than the top level fold into their parent unit so a
+// payload subsection is never torn from its prose parent (fix #2). Pure; no I/O, no model.
+export function partition(
+  text: string,
+  tau: number = DEFAULT_TAU,
+): { title: string; sections: RoutedSection[] } {
+  let secs = sections(text);
+  let title = "";
+  // A leading `# Title` is the note title, not a routable unit: lift its heading line out
+  // and keep any prose beneath it as a depth-0 intro unit.
+  if (secs[0]?.depth === 1 && /^#\s/.test(secs[0].text)) {
+    const [first, ...rest] = secs[0].text.split("\n");
+    title = first.trim();
+    const body = rest.join("\n");
+    secs = (/\S/.test(body) ? [{ heading: "", depth: 0, text: body }] : []).concat(secs.slice(1));
+  }
+  // Group into top-level units: a depth-0 intro stands alone; a heading deeper than the
+  // current unit's anchor depth folds into it (keeping a subsection with its parent, fix #2);
+  // any other heading opens a new unit. Route is computed over the whole folded unit text.
+  const grouped: { heading: string; depth: number; text: string }[] = [];
+  let cur: { heading: string; depth: number; text: string } | null = null;
+  for (const s of secs) {
+    if (cur && cur.depth > 0 && s.depth > cur.depth) {
+      cur.text += "\n" + s.text;
+    } else {
+      cur = { heading: s.heading, depth: s.depth, text: s.text };
+      grouped.push(cur);
+    }
+  }
+  const routed: RoutedSection[] = grouped.map((u) => ({ ...u, route: routeSection(u.text, tau) }));
+  return { title, sections: routed };
+}
+
+// Structurally compact a preserve (payload-dense) unit. v1 is identity passthrough: the
+// payload — code, tables, exact numbers — is held byte-verbatim (D16 forbids paraphrase).
+// Lossy row/boilerplate dropping is deferred to v2, which must surface each drop out-of-band
+// (payloadResidue marks a key covered if it survives anywhere, so a key-collision delete
+// would be silent — the unsafe path this v1 declines to take).
+export function compactSection(text: string): string {
+  return text;
+}
+
+// Reassemble the per-section build into one note: the lifted title first (fix #1), then the
+// single re-author head (its one prose → ## Workflow → ## Glossary → ## Relations), then the
+// compacted preserve sections in source order (fix #4 — head-first is the accepted v1 shape:
+// the head is an aggregate with no single source position, so order is honored where defined,
+// among the preserves). A preserve heading that collides with a structural H2 name
+// (## Glossary/Workflow/Relations) is demoted one level so the note carries exactly one of each
+// and the render-mode inverse (parseDistilled) still finds the head's. Pure; no I/O, no model.
+const STRUCT_HEAD = /^##\s+(glossary|workflow|relations)\b/i;
+export function reassembleNote(title: string, head: string, preserves: string[]): string {
+  const demote = (t: string) =>
+    t
+      .split("\n")
+      .map((l) => (STRUCT_HEAD.test(l) ? "#" + l : l))
+      .join("\n");
+  const parts: string[] = [];
+  if (title.trim()) parts.push(title.trim());
+  if (head.trim()) parts.push(head.trim());
+  for (const p of preserves) if (p.trim()) parts.push(demote(p.trim()));
+  return parts.join("\n\n");
+}
+
 // a block carries operational tokens that must survive verbatim — code, CLI
 // flags, file paths. Used by the wikilink clamp to choose retain over distill.
 export const hasOperational = (text: string): boolean =>
@@ -234,21 +794,10 @@ export const hasOperational = (text: string): boolean =>
 // opaque ⟦N⟧ tokens for the duration of revise, then restored (see revise()).
 export const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
 
-// Deterministic typographic normalization. The revise model substitutes typeset
-// glyphs (curly quotes, a non-breaking hyphen) regardless of prompt instruction;
-// this maps the finite set back. Em dashes (—) are kept as clause breaks (the
-// source notes use them) but normalized to spaced form ( — ), since the model
-// emits them tight (model—assuming) about half the time. It touches only
-// substitutes — it leaves Cyrillic and source guillemets alone, safe for RU.
-export function normalizeTypography(s: string): string {
-  return s
-    .replace(/[‘’‚‛]/g, "'")
-    .replace(/[“”„‟]/g, '"')
-    .replace(/[‐‑‒–]/g, "-") // hyphen/nbhyphen/figure/en (ranges) → bare - (em dash — is kept)
-    .replace(/[ \t]*[—―][ \t]*/g, " — ") // em dash / bar → spaced em dash; never eats a newline
-    .replace(/…/g, "...")
-    .replace(/ /g, " "); // nbsp → space
-}
+// Deterministic typographic normalization — owned by writing/typography.ts (the
+// core), re-exported here so text.ts's existing importers (pure.test.ts:35 and
+// every internal user below) keep working unchanged.
+export { normalizeTypography } from "./writing/typography.ts";
 
 // Slug a single label — TS-native mirror of vault-query slug.rs::segment /
 // normalize_segment (the unified slugifier). Strip wikilink syntax (keeping an
@@ -291,6 +840,189 @@ export function normalizeRelation(r: unknown): Relation | null {
   if (!rel || !to) return null;
   const pred = o.predicate == null ? "" : normalizeTypography(String(o.predicate)).trim();
   return { rel, to, predicate: pred || null };
+}
+
+// ---- relations/glossary REBUILD (W1; inverts assemble.ts::emitRelationsBlock /
+// assembleBody's Glossary table). Lives here, not cards/, so cards/ modules read an
+// emitted note's structural channels through one leaf-module seam (D13). ----
+
+// One structural edge parsed off a `## Relations` list item. `from` is the entry's
+// own slug (multi-node form) or null (single-atom form omits the from-label, D26).
+// `to` keeps the endpoint's EMITTED form verbatim — `[[file-slug]]` stays bracketed,
+// a bare term-slug stays bare — so a caller that re-emits via emitRelationsBlock
+// (which itself re-derives scope from the brackets) round-trips byte-for-byte.
+export type ParsedRelationEdge = {
+  from: string | null;
+  rel: string;
+  to: string;
+  predicate: string | null;
+};
+
+// Toggle-based section extraction: an H2 heading whose slugged text equals `name`
+// opens the section; ANY other heading (any depth) closes it; `collecting` is
+// recomputed on every heading rather than latched, so a same-named H2 appearing
+// again later reopens the section. Heading detection runs on a fence-masked copy so
+// a fenced `# comment` cannot toggle the section (the sections() fix, d06c6fa) while
+// the returned text keeps the RAW lines (fences intact) for the caller to re-scan.
+//
+// DIVERGENCE from vault-query's canonical rule (relations.rs::parse_relations /
+// markdown::heading_text), which opens on ANY depth 1-6: this is the REBUILD inverse
+// of assembleBody's emit grammar, whose channels are exactly `## Glossary` /
+// `## Relations` — and the routed build DEMOTES a preserved section's colliding
+// `## Glossary` to `### Glossary` (assembleRoutedNote's demote sweep) precisely to
+// mark it as source material, not channel. Any-depth opening reads those demoted
+// source tables back as channel rows (live-run finding: a preserve section's 20-row
+// property table enumerated as 20 card candidates), so depth is load-bearing here.
+function extractSection(md: string, name: string): string {
+  const lines = md.split("\n");
+  const masked = stripFences(md).split("\n");
+  let collecting = false;
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const h = ATX_HEADING.exec(masked[i]);
+    if (h) {
+      collecting = h[1] === "##" && slugSegment(h[2]) === name;
+      continue;
+    }
+    if (collecting) out.push(lines[i]);
+  }
+  return out.join("\n");
+}
+
+// Split a `<endpoint> (<predicate>)` tail into its two parts.
+//
+// DIVERGENCE from vault-query/src/commands/lint/relations.rs::split_predicate: the Rust
+// scanner takes the LAST `(` in the string (`rfind`), which mis-splits whenever the
+// predicate itself carries a parenthetical — the predicate's own inner `(` wins over the
+// wrap's outer one, truncating the endpoint and corrupting the predicate (verified: Rust's
+// algorithm, mirrored naively, turns `endpoint (a (b))` into endpoint `"endpoint (a"` /
+// predicate `"b)"`). This mirror instead finds the `(` whose matching `)` is the string's
+// own LAST character (depth-balanced scan from the end), so a predicate containing "(...)"
+// round-trips correctly. The two algorithms agree on every case without nested parens
+// (the golden fixture, every emitted note today), so this is invisible parity for existing
+// output and only helps a future nested-predicate emission. Rust's lint side is unaffected
+// (out of scope here) — flagged for a follow-up there.
+function splitPredicate(right: string): { endpoint: string; predicate: string | null } {
+  if (!right.endsWith(")")) return { endpoint: right, predicate: null };
+  let depth = 0;
+  let open = -1;
+  for (let i = right.length - 1; i >= 0; i--) {
+    const c = right[i];
+    if (c === ")") depth++;
+    else if (c === "(") {
+      depth--;
+      if (depth === 0) {
+        open = i;
+        break;
+      }
+    }
+  }
+  if (open < 0) return { endpoint: right, predicate: null };
+  const predicate = right.slice(open + 1, -1).trim();
+  const endpoint = right.slice(0, open).trim();
+  return { endpoint, predicate: predicate || null };
+}
+
+// Parse one `## Relations` list-item body (the text after the `- `/`* ` marker):
+// `[<from> ]<rel>:: <to>[ (<predicate>)]`. Lossy (D29): returns null on anything
+// short of well-formed rather than throwing — a missing `::`, an empty rel/endpoint,
+// or an all-parenthetical tail with no endpoint before it.
+function parseEdgeLine(edgeText: string): ParsedRelationEdge | null {
+  const sep = edgeText.indexOf("::");
+  if (sep < 0) return null;
+  const left = edgeText.slice(0, sep).trim();
+  const right = edgeText.slice(sep + 2).trim();
+  if (!left || !right) return null;
+  const tokens = left.split(/\s+/).filter(Boolean);
+  const rel = tokens.pop();
+  if (!rel) return null;
+  const from = tokens.length ? tokens.join(" ") : null;
+  const { endpoint, predicate } = splitPredicate(right);
+  if (!endpoint) return null;
+  return { from, rel, to: endpoint, predicate };
+}
+
+// Parse a full note body's `## Relations` section back into structural edges — the
+// REBUILD inverse of assemble.ts::emitRelationsBlock. Grammar mirrors
+// vault-query/src/commands/lint/relations.rs::parse_relations line-for-line (fence
+// tracking, heading toggle, `- `/`* ` list-item prefix, `::` split); see splitPredicate
+// for the one intentional divergence. Lossy-tolerant like normalizeRelation: a
+// malformed line yields no edge and parsing never throws.
+export function parseRelationsBlock(md: string): ParsedRelationEdge[] {
+  const edges: ParsedRelationEdge[] = [];
+  let fence: string | null = null;
+  for (const raw of extractSection(md, "relations").split("\n")) {
+    const trimmed = raw.trimStart();
+    const fm = /^(`{3,}|~{3,})/.exec(trimmed);
+    if (fm) {
+      const marker = fm[1][0];
+      if (fence === null) fence = marker;
+      else if (fence === marker) fence = null;
+      // else: a mismatched marker inside an open fence is literal content, not a close.
+      continue;
+    }
+    if (fence) continue;
+    const item = /^[-*] (.*)$/.exec(trimmed);
+    if (!item) continue;
+    const edge = parseEdgeLine(item[1]);
+    if (edge) edges.push(edge);
+  }
+  return edges;
+}
+
+// Undo assembleBody's escCell pipe-escaping (`\|` → `|`). escCell also collapses a
+// def's internal newlines to spaces before emit, so that fold is not (and cannot be)
+// reversed here — a documented one-way loss, not a bug.
+const unescCell = (s: string): string => s.replace(/\\\|/g, "|").trim();
+
+// Split a `| a | b |` table row into trimmed, unescaped cells. Outer pipes are
+// dropped; the split runs on unescaped `|` only (negative lookbehind), so a def
+// carrying a real `|` (escCell-escaped) never mis-splits into a phantom column.
+function glossaryRowCells(line: string): string[] | null {
+  const t = line.trim();
+  if (t.length < 2 || !t.startsWith("|") || !t.endsWith("|")) return null;
+  return t
+    .slice(1, -1)
+    .split(/(?<!\\)\|/)
+    .map(unescCell);
+}
+
+// A GFM table delimiter row (`| ---- | ---------- |`): every cell is bare dashes,
+// optionally colon-anchored. Shared by the header/delimiter skip below.
+const isDelimiterRow = (cells: string[]): boolean => cells.every((c) => /^:?-+:?$/.test(c));
+
+// Parse an emitted note's `## Glossary` table AND `## Relations` block into
+// GlossEntry[] — the REBUILD inverse of assembleBody's Glossary+Relations
+// rendering. Each row becomes one entry (term, def unescaped, source: [] — not
+// recoverable from an emitted note, D13); each parsed edge attaches to the entry
+// whose slug matches its `from`. A single-atom edge (`from === null`) attaches to
+// the sole entry when the table has exactly one row; over a multi-row table it has
+// no unambiguous owner and is dropped (lossy, matches parseRelationsBlock's tolerance).
+export function parseConceptGraph(md: string): GlossEntry[] {
+  const entries: GlossEntry[] = [];
+  for (const line of extractSection(md, "glossary").split("\n")) {
+    const cells = glossaryRowCells(line);
+    if (!cells || cells.length < 2) continue;
+    if (cells[0] === "Term" && cells[1] === "Definition") continue; // header row
+    if (isDelimiterRow(cells)) continue;
+    entries.push({ term: cells[0], def: cells[1], relations: [], source: [] });
+  }
+  for (const edge of parseRelationsBlock(md)) {
+    const rel: Relation = { rel: edge.rel, to: edge.to, predicate: edge.predicate };
+    if (edge.from !== null) {
+      // Slug BOTH sides before comparing (Finding 3): emitted notes pre-slug the
+      // from-label so a raw comparison happens to match, but Log 10 makes human
+      // editing of the Relations line the expected path, and a hand-typed unslugged
+      // label ("Target Distance" over a glossary row "Target Distance") must still
+      // resolve to its entry instead of silently detaching the whole relation.
+      const fromSlug = slugSegment(edge.from);
+      entries.find((e) => slugSegment(e.term) === fromSlug)?.relations.push(rel);
+    } else if (entries.length === 1) {
+      entries[0].relations.push(rel);
+    }
+    // else: single-atom edge over a 0- or multi-row table has no unambiguous owner — drop.
+  }
+  return entries;
 }
 
 export function detectLang(text: string): "en" | "ru" {
