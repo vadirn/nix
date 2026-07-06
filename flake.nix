@@ -56,11 +56,17 @@
       src = ./vault-query;
       cargoHash = "sha256-yAjiNHuZm3TDMTzk2TYnBGv5+vsn6gFaNbmg6HcWEmo=";
     };
+    mdstruct = pkgs.rustPlatform.buildRustPackage {
+      pname = "mdstruct";
+      version = "0.1.0";
+      src = ./mdstruct;
+      cargoHash = "sha256-tVsDf7y3MQD8BEiWNg8NQtWnjxVgyiE5wCwYiBAZlYA=";
+    };
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:
       nix-darwin.lib.darwinSystem {
         inherit system;
-        specialArgs = {inherit inputs self vault-query hostname;};
+        specialArgs = {inherit inputs self vault-query mdstruct hostname;};
         modules = [
           ./hosts/darwin.nix
           nix-homebrew.darwinModules.nix-homebrew
