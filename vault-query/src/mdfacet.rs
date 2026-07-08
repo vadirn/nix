@@ -63,6 +63,44 @@ pub fn body_headings(content: &str) -> Vec<BodyHeading> {
     facet(content).headings
 }
 
+/// The trimmed text of the first body heading IFF it is a level-1 heading that
+/// opens the body — no paragraph, list, code block, or other top-level node
+/// begins before it. Returns `None` otherwise (a non-H1 first heading, a block
+/// before the first H1, or no heading at all).
+///
+/// Mechanism: the first [`Heading`] in document order (`headings()[0]`, since a
+/// child never precedes its parent) must be `level == 1`, and its `span.start`
+/// must be `<=` every top-level [`Node`]'s `span.start`. Frontmatter is already
+/// excluded from both `headings()` and `nodes()`, and their spans share one
+/// byte-offset coordinate system, so no frontmatter stripping is needed.
+///
+/// Deliberately MORE permissive than [`BodyHeading`]: it does not apply the
+/// `start_col == 1 && !setext` ATX filter, so a setext H1 or a 1–3-space-indented
+/// H1 still counts as the opening block — matching the CommonMark event walk
+/// this replaces, which accepted both.
+pub fn first_body_block_h1(content: &str) -> Option<String> {
+    let opts = Options {
+        wikilinks: false,
+        regions: Vec::new(),
+    };
+    let doc = parse(content, &opts);
+    let first = doc.headings().first()?;
+    if first.level != 1 {
+        return None;
+    }
+    // First structural block only: reject if any top-level node opens earlier.
+    if doc.nodes().iter().any(|n| n.span().start < first.span.start) {
+        return None;
+    }
+    // `.get(..).unwrap_or("")` not indexing: degrade a malformed span to empty
+    // instead of panicking the whole command (matches `collect_headings`).
+    let text = content
+        .get(first.text_span.start..first.text_span.end)
+        .unwrap_or("")
+        .trim();
+    Some(text.to_string())
+}
+
 /// Pre-order flatten (document order) of the heading tree, keeping only the
 /// column-1, non-setext, non-empty ATX headings the old scanner detected.
 fn collect_headings(hs: &[Heading], content: &str, out: &mut Vec<BodyHeading>) {
