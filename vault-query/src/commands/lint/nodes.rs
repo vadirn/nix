@@ -29,8 +29,6 @@
 //! section headings (`## Glossary`, `## Workflow`) are emitted in English by BUILD
 //! regardless of the note's language, so the slug match is language-stable.
 
-use crate::markdown::{fence_marker, heading_text};
-
 /// The local-node slug set of one file: Glossary term-slugs and Workflow step-slugs,
 /// each normalized by [`crate::slug::segment`]. These are the labels a bare local
 /// relation endpoint or from-label (D29/D26) resolves against.
@@ -59,36 +57,48 @@ enum Section {
 
 /// Parse the `## Glossary` table rows and `## Workflow` list items of `content` into
 /// the file's local-node slug set.
+///
+/// Test-only convenience: builds a throwaway mdstruct facet and delegates to
+/// [`parse_local_nodes_with_facet`]. Production callers already hold a
+/// [`crate::mdfacet::Facet`] (e.g. [`super::rule::LintContext::build`], which shares one
+/// parse across both scanners) and call that variant directly to avoid a second parse.
+#[cfg(test)]
 pub fn parse_local_nodes(content: &str) -> LocalNodes {
+    let facet = crate::mdfacet::facet(content);
+    parse_local_nodes_with_facet(&facet, content)
+}
+
+/// Parse the `## Glossary` / `## Workflow` sections using an already-computed facet.
+///
+/// The facet supplies the fenced-code line set and a heading-line → slug map
+/// (mirroring the old fence toggler + raw-line heading scan). The column-1/
+/// non-setext heading filter is applied by the facet, so an indented heading is
+/// still not a section boundary. Line numbering uses [`crate::mdfacet::lines`] so it
+/// matches comrak/mdstruct on lone-CR input (`str::lines` would desync).
+pub fn parse_local_nodes_with_facet(facet: &crate::mdfacet::Facet, content: &str) -> LocalNodes {
+    let heading_slug: std::collections::HashMap<usize, String> = facet
+        .headings
+        .iter()
+        .map(|h| (h.line, crate::slug::segment(&h.text)))
+        .collect();
+
     let mut nodes = LocalNodes::default();
     let mut section = Section::None;
     // GFM tables put a separator row between the header and the body; collection
     // begins only once that row is seen, latched per Glossary section entry.
     let mut seen_separator = false;
-    let mut fence: Option<char> = None;
 
-    for raw in content.lines() {
-        let trimmed = raw.trim_start();
+    for (idx, raw) in crate::mdfacet::lines(content).into_iter().enumerate() {
+        let line_no = idx + 1;
 
-        // Skip fenced code blocks entirely. A mismatched marker inside a fence
-        // is literal content, not a close (canonical `markdown` semantics).
-        if let Some(marker) = fence_marker(trimmed) {
-            match fence {
-                None => fence = Some(marker),
-                Some(open) if open == marker => fence = None,
-                Some(_) => {}
-            }
-            continue;
-        }
-        if fence.is_some() {
+        // Skip fenced code blocks entirely.
+        if facet.fenced_lines.contains(&line_no) {
             continue;
         }
 
         // A heading switches sections; reset the table latch on each entry.
-        // Detection runs against the raw line, so an indented heading is not a
-        // section boundary.
-        if let Some(text) = heading_text(raw) {
-            section = match crate::slug::segment(text).as_str() {
+        if let Some(slug) = heading_slug.get(&line_no) {
+            section = match slug.as_str() {
                 "glossary" => Section::Glossary,
                 "workflow" => Section::Workflow,
                 _ => Section::None,
@@ -97,6 +107,7 @@ pub fn parse_local_nodes(content: &str) -> LocalNodes {
             continue;
         }
 
+        let trimmed = raw.trim_start();
         match section {
             Section::Glossary => {
                 if is_separator_row(trimmed) {

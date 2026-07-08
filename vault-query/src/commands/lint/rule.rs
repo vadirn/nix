@@ -63,15 +63,21 @@ impl<'a> LintContext<'a> {
             .collect();
         let backlink_index = crate::wikilink::build_backlink_index_with(files, &body_links);
 
-        let relations: Vec<Vec<super::relations::RelationEdge>> = files
-            .iter()
-            .map(|f| super::relations::parse_relations(&f.content))
-            .collect();
-
-        let local_nodes: Vec<super::nodes::LocalNodes> = files
-            .iter()
-            .map(|f| super::nodes::parse_local_nodes(&f.content))
-            .collect();
+        // One mdstruct parse per file, shared by both structural scanners: the
+        // relations edge scan and the local-node scan each need the same fenced-line
+        // set and heading→slug map, so computing the facet once here avoids two
+        // identical whole-document parses per file across the vault.
+        let mut relations: Vec<Vec<super::relations::RelationEdge>> = Vec::with_capacity(files.len());
+        let mut local_nodes: Vec<super::nodes::LocalNodes> = Vec::with_capacity(files.len());
+        for f in files {
+            let facet = crate::mdfacet::facet(&f.content);
+            relations.push(super::relations::parse_relations_with_facet(
+                &facet, &f.content,
+            ));
+            local_nodes.push(super::nodes::parse_local_nodes_with_facet(
+                &facet, &f.content,
+            ));
+        }
 
         LintContext {
             vault_root,

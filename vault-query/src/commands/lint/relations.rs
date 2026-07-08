@@ -76,33 +76,51 @@ pub struct RelationEdge {
 /// Lossy (D29): a line that is not a well-formed edge yields no edge and is
 /// skipped, never aborting. Fenced code is ignored. A `## Relations` heading opens
 /// the section; the next heading of any level closes it.
+///
+/// Test-only convenience: production callers share one facet via
+/// [`parse_relations_with_facet`]; this builds a throwaway facet for a bare `content`.
+#[cfg(test)]
 pub fn parse_relations(content: &str) -> Vec<RelationEdge> {
+    let facet = crate::mdfacet::facet(content);
+    parse_relations_with_facet(&facet, content)
+}
+
+/// Parse every `## Relations` section's edge lines using an already-computed facet.
+///
+/// The facet supplies the two primitives the old per-line scan derived: the lines
+/// inside fenced code, and a heading-line → slug map (a `## Relations` opens the
+/// section, any other heading closes it). The column-1/non-setext heading filter is
+/// applied by the facet, so an indented heading is still not a section boundary. Line
+/// numbering uses [`crate::mdfacet::lines`] so it matches comrak/mdstruct on lone-CR
+/// input (`str::lines` would desync).
+///
+/// [`parse_relations`] is the test-only wrapper that builds a facet and delegates
+/// here; production callers hold a shared facet (e.g. [`super::rule::LintContext::build`])
+/// and call this variant directly to avoid a second whole-document parse.
+pub fn parse_relations_with_facet(
+    facet: &crate::mdfacet::Facet,
+    content: &str,
+) -> Vec<RelationEdge> {
+    let heading_slug: std::collections::HashMap<usize, String> = facet
+        .headings
+        .iter()
+        .map(|h| (h.line, crate::slug::segment(&h.text)))
+        .collect();
+
     let mut edges = Vec::new();
     let mut in_relations = false;
-    let mut fence: Option<char> = None;
 
-    for (idx, raw) in content.lines().enumerate() {
+    for (idx, raw) in crate::mdfacet::lines(content).into_iter().enumerate() {
         let line_no = idx + 1;
-        let trimmed = raw.trim_start();
 
-        // Skip fenced code blocks entirely. A mismatched marker inside a fence
-        // is literal content, not a close (canonical `markdown` semantics).
-        if let Some(marker) = crate::markdown::fence_marker(trimmed) {
-            match fence {
-                None => fence = Some(marker),
-                Some(open) if open == marker => fence = None,
-                Some(_) => {}
-            }
-            continue;
-        }
-        if fence.is_some() {
+        // Skip fenced code blocks entirely.
+        if facet.fenced_lines.contains(&line_no) {
             continue;
         }
 
-        // A heading toggles section membership. Detection runs against the raw
-        // line, so an indented heading is not a section boundary.
-        if let Some(text) = crate::markdown::heading_text(raw) {
-            in_relations = crate::slug::segment(text) == "relations";
+        // A heading toggles section membership.
+        if let Some(slug) = heading_slug.get(&line_no) {
+            in_relations = slug == "relations";
             continue;
         }
 
@@ -111,6 +129,7 @@ pub fn parse_relations(content: &str) -> Vec<RelationEdge> {
         }
 
         // A list item is a candidate edge.
+        let trimmed = raw.trim_start();
         if let Some(edge) = trimmed
             .strip_prefix("- ")
             .or_else(|| trimmed.strip_prefix("* "))
