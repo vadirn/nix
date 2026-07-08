@@ -37,7 +37,6 @@ impl Serialize for Span {
     }
 }
 
-/// The whole envelope for one source file.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Document {
@@ -184,17 +183,17 @@ pub enum Node {
         end_line: u32,
         children: Vec<Node>,
     },
-    /// A CommonMark link reference definition (`[label]: dest`), which comrak
-    /// consumes to metadata with NO AST node. Recovered by the gap-filler so its
-    /// bytes tile and distill's `[^n]: url` citations are not silently lost.
+    /// CommonMark link reference definition (`[label]: dest`); comrak consumes
+    /// it to metadata with NO AST node. Recovered by the gap-filler so its
+    /// bytes tile and distill's `[^n]: url` citations are not lost.
     LinkReferenceDefinition {
         span: Span,
         start_line: u32,
         end_line: u32,
     },
-    /// Freeze-gate diagnostic: a top-level block comrak emitted that the schema
-    /// does not yet type. Emitted (not dropped) so total tiling stays whole and
-    /// coverage enumeration can report it. Should never appear in a clean run.
+    /// Freeze-gate diagnostic: a comrak top-level block the schema does not yet
+    /// type. Emitted (not dropped) so total tiling stays whole and coverage
+    /// enumeration can report it; never appears in a clean run.
     Unknown {
         kind: String,
         span: Span,
@@ -338,9 +337,9 @@ impl Node {
         }
     }
 
-    /// The `children[]` slice for the six container variants, and an empty
-    /// slice for every leaf variant. The one place the container set is named,
-    /// so consumers recurse via `for c in n.children()` rather than re-matching.
+    /// `children[]` for the six container variants, empty for leaves. The one
+    /// place the container set is named; consumers recurse via `n.children()`
+    /// rather than re-matching.
     pub fn children(&self) -> &[Node] {
         match self {
             Node::BlockQuote { children, .. }

@@ -63,9 +63,9 @@ pub fn verify_spans(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
     Ok(())
 }
 
-/// A clean freeze has zero `Node::Unknown`. Any Unknown — a gap-filler
-/// "uncovered" fill or an untyped comrak block — is a coverage hole the schema
-/// does not yet name, so reject it. Recurses into container children.
+/// A clean freeze has zero `Node::Unknown`: any Unknown (gap-filler "uncovered"
+/// fill or untyped comrak block) is a coverage hole the schema does not yet
+/// name. Recurses into container children.
 fn verify_no_unknown(nodes: &[Node]) -> Result<(), SpanMismatch> {
     for n in nodes {
         if let Node::Unknown { kind, span, .. } = n {
@@ -105,8 +105,8 @@ fn verify_tiling(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
         let gap = source.get(cursor..s.start).ok_or_else(|| {
             err(format!("gap [{}, {}) is not a valid slice", cursor, s.start))
         })?;
-        // A leading UTF-8 BOM (U+FEFF) is ignorable in the leading gap, like a
-        // blank line: strip it before the whitespace check so tiling tolerates it.
+        // Tolerate a leading UTF-8 BOM (U+FEFF) like a blank line: strip it
+        // before the whitespace check.
         let gap = if cursor == 0 {
             gap.strip_prefix('\u{feff}').unwrap_or(gap)
         } else {
@@ -120,16 +120,14 @@ fn verify_tiling(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
                 gap.chars().take(40).collect::<String>()
             )));
         }
-        // The span itself must slice (char boundary + in range).
         slice(source, *s)?;
         cursor = s.end;
     }
     let tail = source.get(cursor..len).ok_or_else(|| {
         err(format!("trailing region [{}, {}) is not a valid slice", cursor, len))
     })?;
-    // Same leading-BOM tolerance as the per-span gap: when no tiled span advanced
-    // past the document start (cursor == 0), a leading BOM still leads the
-    // unconsumed region, so a BOM-only file passes like its whitespace-only twin.
+    // Same leading-BOM tolerance: with no tiled span (cursor == 0) the BOM
+    // still leads the tail, so a BOM-only file passes like its whitespace-only twin.
     let tail = if cursor == 0 {
         tail.strip_prefix('\u{feff}').unwrap_or(tail)
     } else {
@@ -238,7 +236,6 @@ fn verify_nodes(nodes: &[Node], source: &str) -> Result<(), SpanMismatch> {
                 )));
             }
         }
-        // Recurse into container children.
         verify_nodes(n.children(), source)?;
     }
     Ok(())

@@ -11,8 +11,8 @@ use comrak::nodes::Sourcepos;
 
 use super::model::Span;
 
-/// Byte offsets of the start of each 1-based line. `starts[L - 1]` is the byte
-/// offset at which line `L` begins; `starts[0] == 0`.
+/// `starts[L - 1]` is the byte offset at which 1-based line `L` begins;
+/// `starts[0] == 0`.
 pub struct LineIndex {
     starts: Vec<usize>,
     len: usize,
@@ -23,10 +23,9 @@ impl LineIndex {
         let mut starts = vec![0usize];
         let bytes = source.as_bytes();
         for (i, &b) in bytes.iter().enumerate() {
-            // Push a line start after each CommonMark line ending, matching
-            // comrak's sourcepos: after every `\n`, and after a lone `\r` (one
-            // not immediately followed by `\n`). A `\r\n` pair is a single line
-            // ending, so the `\r` is skipped and the start lands after the `\n`.
+            // Line start after each CommonMark line ending, matching comrak's
+            // sourcepos: after every `\n`, and after a lone `\r` (not followed
+            // by `\n`). `\r\n` is one ending; the start lands after the `\n`.
             let is_break = b == b'\n' || (b == b'\r' && bytes.get(i + 1) != Some(&b'\n'));
             if is_break {
                 starts.push(i + 1);
@@ -53,16 +52,14 @@ impl LineIndex {
         self.line_start(line + 1)
     }
 
-    /// Total source length in bytes.
     pub fn len(&self) -> usize {
         self.len
     }
 
-    /// Number of lines (a trailing newline does not add an empty final line).
-    /// `LineIndex::new` pushes a start for the byte after every `\n`, so a source
-    /// ending in `\n` records a final start equal to `len` — the phantom start of
-    /// a non-existent line. Drop it so the count matches the doc comment and
-    /// heading `sectionEndLine` is not one too high.
+    /// Number of lines; a trailing newline does not add an empty final line.
+    /// `new` pushes a start after every `\n`, so a source ending in `\n`
+    /// records a phantom final start equal to `len`; drop it so heading
+    /// `sectionEndLine` is not one too high.
     pub fn line_count(&self) -> usize {
         if self.len > 0 && self.starts.last() == Some(&self.len) {
             self.starts.len() - 1
@@ -114,7 +111,7 @@ mod tests {
         // land at 18+ and corrupt write-back.
         let src = "## Заметка\n";
         let idx = LineIndex::new(src);
-        let heading_bytes = "## Заметка".len(); // 3 + 14 = 17
+        let heading_bytes = "## Заметка".len();
         assert_eq!(heading_bytes, 17);
         let sp = Sourcepos::from((1, 1, 1, 17));
         let span = idx.span_of(sp);

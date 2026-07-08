@@ -32,13 +32,12 @@ fn comrak_options(opts: &Options) -> comrak::Options<'static> {
     o.extension.table = true;
     o.extension.strikethrough = true;
     o.extension.tasklist = true;
-    // Footnotes deliberately OFF: comrak silently DROPS unreferenced footnote
-    // definitions from the AST, and the vault's citation style is
-    // footnote-definitions-as-bibliography (no inline `[^x]` reference). Leaving
-    // it on both breaks total tiling (the dropped def's bytes go uncovered) and
-    // would vanish distill's citations. Off, they parse as paragraphs — tiled,
-    // content preserved — and footnote harvesting stays a distill-side regex
-    // lane, on the same footing as pseudo-tables and enum-marker lists.
+    // Footnotes OFF: comrak silently DROPS unreferenced footnote definitions,
+    // and the vault's citation style is footnote-definitions-as-bibliography
+    // (no inline `[^x]`). On, this breaks total tiling (dropped def's bytes go
+    // uncovered) and vanishes distill's citations. Off, they parse as
+    // paragraphs — tiled, content preserved — and footnote harvesting stays a
+    // distill-side regex lane, like pseudo-tables and enum-marker lists.
     o.extension.autolink = true;
     o.extension.front_matter_delimiter = Some("---".to_string());
     if opts.wikilinks {
@@ -57,9 +56,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
     s
 }
 
-/// Combined span of a node's direct children (first child start → last child
-/// end), or `None` if it has none. Used for link text / image alt / wikilink
-/// alias regions.
+/// Combined span of a node's direct children (first start → last end), or
+/// `None` if none. Used for link text / image alt / wikilink alias regions.
 fn children_span<'a>(node: &'a AstNode<'a>, idx: &LineIndex) -> Option<Span> {
     let mut lo = usize::MAX;
     let mut hi = 0usize;
@@ -98,10 +96,9 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     let mut nodes: Vec<Node> = Vec::new();
 
     for top in root.children() {
-        // Borrow the node and match on `&d.value` rather than cloning the whole
-        // NodeValue: only the small Copy fields we keep are read out. The walk
-        // takes no `borrow_mut`, and `children_span`/`convert_node` re-borrow
-        // shared, so holding this `Ref` across the arm is sound.
+        // Match on `&d.value`, not a NodeValue clone: only small Copy fields are
+        // read. No `borrow_mut` in the walk; `children_span`/`convert_node`
+        // re-borrow shared, so holding this `Ref` across the arm is sound.
         let d = top.data.borrow();
         let sp = d.sourcepos;
         match &d.value {
@@ -114,9 +111,9 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
                     span: Some(span),
                     start_line: Some(sp.start.line as u32),
                     end_line: Some(sp.end.line as u32),
-                    // Body starts on the line after the closing delimiter, so
-                    // bodyStartByte == line_start(bodyStartLine) and the slice
-                    // begins on content (reversing Decision 22, which pointed at
+                    // Body starts the line after the closing delimiter:
+                    // bodyStartByte == line_start(bodyStartLine), slice begins
+                    // on content (reverses Decision 22, which pointed at
                     // comrak's block end — the closing delimiter's newline).
                     body_start_byte: idx.line_start(sp.end.line + 1),
                     body_start_line: (sp.end.line + 1) as u32,
@@ -184,13 +181,12 @@ fn build_subtree(flat: &[FlatHeading], from: usize, to: usize, idx: &LineIndex) 
     let mut i = from;
     while i < to {
         let parent_level = flat[i].level;
-        // Subtree extends until the next heading of level <= parent_level.
         let mut j = i + 1;
         while j < to && flat[j].level > parent_level {
             j += 1;
         }
-        // Section extends until the next same-or-higher heading in the WHOLE
-        // document (not just this slice), else EOF.
+        // Section runs to the next same-or-higher heading in the WHOLE document
+        // (not just this slice), else EOF.
         let mut k = i + 1;
         while k < flat.len() && flat[k].level > parent_level {
             k += 1;
@@ -220,10 +216,10 @@ fn build_subtree(flat: &[FlatHeading], from: usize, to: usize, idx: &LineIndex) 
 }
 
 /// Fill non-whitespace tiling gaps with located nodes. comrak consumes some
-/// constructs (link reference definitions) to metadata with no AST node; without
-/// this pass their bytes go uncovered and distill's `[^n]: url` citations vanish.
-/// Each blank-line-separated chunk becomes one node, classified as a link
-/// reference definition or (diagnostic) uncovered content.
+/// constructs (link reference definitions) to metadata with no AST node; unfixed,
+/// their bytes go uncovered and distill's `[^n]: url` citations vanish. Each
+/// blank-line-separated chunk becomes one node: link reference definition or
+/// (diagnostic) uncovered content.
 fn fill_gaps(
     source: &str,
     idx: &LineIndex,
@@ -271,9 +267,8 @@ fn emit_fill(source: &str, idx: &LineIndex, g0: usize, g1: usize, out: &mut Vec<
     let bytes = source.as_bytes();
     let is_ws = |b: u8| b == b' ' || b == b'\t' || b == b'\r' || b == b'\n';
     let mut pos = g0;
-    // A leading UTF-8 BOM (U+FEFF = EF BB BF) at the very start of the document
-    // is ignorable, like a blank line: skip it so it stays unowned-in-gap and is
-    // never emitted as an Unknown uncovered node.
+    // A leading UTF-8 BOM (U+FEFF = EF BB BF) is ignorable like a blank line:
+    // skip it so it stays unowned-in-gap, never an Unknown uncovered node.
     if pos == 0 && bytes.len() >= 3 && &bytes[0..3] == b"\xef\xbb\xbf" {
         pos = 3;
     }
@@ -476,8 +471,8 @@ fn convert_children<'a>(node: &'a AstNode<'a>, source: &str, idx: &LineIndex) ->
 }
 
 /// A container's tiled span must cover its children. comrak occasionally
-/// underreports a container's extent (e.g. a loose nested list after a blank
-/// line), so take the union of comrak's span and every child's span.
+/// underreports the extent (e.g. a loose nested list after a blank line), so
+/// union comrak's span with every child's.
 fn expand(base: Span, children: &[Node]) -> Span {
     let mut s = base;
     for c in children {
@@ -498,17 +493,15 @@ fn code_block_spans(
     idx: &LineIndex,
 ) -> (Option<Span>, Span) {
     if !ncb.fenced {
-        // Indented code block: body is the block itself; no info string.
         return (None, block);
     }
     let open_line = sp.start.line;
     let open_line_start = idx.line_start(open_line);
     let fence_end = open_line_start + (sp.start.column - 1) + ncb.fence_length;
 
-    // Raw info span: slice the opening fence line directly (never comrak's
-    // decoded `ncb.info`, whose `.find` misses when the info has HTML entities or
-    // escapes and mis-locates when the info text repeats). From `fence_end`, skip
-    // leading spaces/tabs, take to the trimmed end of the opening line.
+    // Slice the raw opening fence line, never decoded `ncb.info`: its `.find`
+    // misses on HTML entities/escapes and mis-locates on repeated info text.
+    // From `fence_end`, skip leading spaces/tabs, take to the trimmed line end.
     let info_span = {
         let open_line_end = idx.next_line_start(open_line);
         let line = source.get(fence_end..open_line_end).unwrap_or("");
@@ -525,8 +518,8 @@ fn code_block_spans(
     let body_start = idx.line_start(open_line + 1).min(block.end);
     let body_end = if ncb.closed && sp.end.line > open_line {
         // Closed fence: body ends before the closing-fence line. Step back over
-        // the line terminator CR-aware — a `\n`, then a preceding `\r` on CRLF —
-        // so a carriage return does not leak into the body on CRLF files.
+        // the terminator CR-aware (`\n`, then a preceding `\r`) so a carriage
+        // return does not leak into the body on CRLF files.
         let bytes = source.as_bytes();
         let mut e = idx.line_start(sp.end.line);
         if e > body_start && bytes[e - 1] == b'\n' {
@@ -551,20 +544,20 @@ fn collect_inlines<'a>(
     opts: &Options,
 ) -> Vec<Inline> {
     let mut inlines: Vec<Inline> = Vec::new();
-    // Code-suppression mask (vault-query src/wikilink.rs:83): spans of every node
-    // whose bytes are verbatim, not markup — code, frontmatter, raw-HTML blocks
-    // (including HTML comments), and whole GFM tables. The `![[…]]` embed pre-pass
-    // skips any embed whose `!` falls inside one: comrak emits no wikilink for a
-    // plain `[[…]]` in an HtmlBlock, and collect_inlines already drops every
-    // inside-cell inline (the `in_table` guard below), so masking these keeps the
-    // embed pre-pass symmetric and free of phantom embeds.
+    // Code-suppression mask (vault-query src/wikilink.rs:83): spans whose bytes
+    // are verbatim, not markup — code, frontmatter, raw-HTML blocks (including
+    // HTML comments), whole GFM tables. The `![[…]]` embed pre-pass skips any
+    // embed whose `!` falls inside one: comrak emits no wikilink for a plain
+    // `[[…]]` in an HtmlBlock, and the `in_table` guard below already drops
+    // inside-cell inlines, so masking keeps the pre-pass symmetric and free of
+    // phantom embeds.
     let mut mask: Vec<Span> = Vec::new();
 
     for node in root.descendants() {
-        // Match on `&d.value` instead of cloning the whole NodeValue; clone only
-        // the small owned fields (url/title/name) inside the arms that keep them.
-        // The loop takes no `borrow_mut`, and `in_table`/`children_span` re-borrow
-        // shared, so holding this `Ref` across the arm is sound.
+        // Match on `&d.value`, not a NodeValue clone; clone only the small owned
+        // fields (url/title/name) in arms that keep them. No `borrow_mut` in the
+        // loop; `in_table`/`children_span` re-borrow shared, so holding this
+        // `Ref` across the arm is sound.
         let d = node.data.borrow();
         let sp = d.sourcepos;
         if let NodeValue::Code(_)
@@ -575,10 +568,10 @@ fn collect_inlines<'a>(
         {
             mask.push(idx.span_of(sp));
         }
-        // Skip inlines inside GFM table cells: comrak's inline sourcepos there is
-        // unreliable (escaped-pipe cells shift the offsets — R2), and no consumer
-        // reads mdstruct inline spans inside cells (distill re-slices raw cell
-        // bytes; §2). Cells are handled by the tableCell span alone.
+        // Skip inlines in GFM table cells: comrak's inline sourcepos there is
+        // unreliable (escaped-pipe cells shift offsets — R2), and no consumer
+        // reads inline spans inside cells (distill re-slices raw cell bytes;
+        // §2). The tableCell span alone covers cells.
         if in_table(node) {
             continue;
         }
@@ -653,13 +646,13 @@ fn collect_inlines<'a>(
 }
 
 /// The `![[…]]` embed pre-pass: comrak emits no WikiLink for embeds, so scan the
-/// raw source. `embed = true`; the target is decomposed like a normal wikilink.
+/// raw source. `embed = true`; the target decomposes like a normal wikilink.
 ///
 /// Context discipline: Obsidian embeds are single-line, so the closing `]]` is
-/// sought only within the `!`'s own line; an embed whose `!` sits inside a `mask`
-/// span (code / frontmatter) or is backslash-escaped is skipped; and an inner
-/// range that reopens with `[[` is an unclosed embed whose `]]` belongs to a
-/// nested wikilink, so it is skipped too (the nested `[[Real]]` is comrak's).
+/// sought only within the `!`'s own line; skip an embed whose `!` sits inside a
+/// `mask` span (code / frontmatter) or is backslash-escaped; an inner range that
+/// reopens with `[[` is an unclosed embed whose `]]` belongs to a nested
+/// wikilink — skip it too (the nested `[[Real]]` is comrak's).
 fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Vec<Inline>) {
     let bytes = source.as_bytes();
     let masked = |off: usize| mask.iter().any(|s| off >= s.start && off < s.end);
@@ -667,9 +660,9 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
     // `i + 3 <= len` so a trailing `![[x]]` flush against EOF is not missed.
     while i + 3 <= bytes.len() {
         if &bytes[i..i + 3] == b"![[" {
-            // Escaped embed: an ODD number of backslashes immediately before `!`
-            // escapes it; an even count (e.g. `\\![[…]]` = literal `\` + live `!`)
-            // leaves a genuine embed, so count the run's parity, not just one byte.
+            // An ODD backslash run before `!` escapes it; an even count (e.g.
+            // `\\![[…]]` = literal `\` + live `!`) leaves a genuine embed —
+            // count the run's parity, not one byte.
             let mut bs = 0usize;
             while i >= bs + 1 && bytes[i - 1 - bs] == b'\\' {
                 bs += 1;
@@ -678,12 +671,10 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
                 i += 1;
                 continue;
             }
-            // Suppressed inside a code or frontmatter span.
             if masked(i) {
                 i += 1;
                 continue;
             }
-            // Bound the closing `]]` search to the current line.
             let line = line_of(idx, i);
             let search_end = idx.next_line_start(line).min(bytes.len());
             if let Some(rel_end) = source[i + 3..search_end].find("]]") {
@@ -715,7 +706,6 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
     }
 }
 
-/// Whether `node` sits inside a GFM table (cell/row/table ancestor).
 fn in_table<'a>(node: &'a AstNode<'a>) -> bool {
     let mut cur = node.parent();
     while let Some(p) = cur {
@@ -732,7 +722,6 @@ fn in_table<'a>(node: &'a AstNode<'a>) -> bool {
 
 /// 1-based line containing byte offset `pos`.
 fn line_of(idx: &LineIndex, pos: usize) -> usize {
-    // Linear-free: binary search over line starts.
     let mut lo = 1usize;
     let mut hi = idx.line_count();
     while lo < hi {
@@ -792,11 +781,10 @@ mod tests {
 
     #[test]
     fn unclosed_embed_yields_no_phantom() {
-        // The `]]` on this line closes a NESTED `[[Real]]`, not the `![[`, so the
-        // embed is unclosed and the scanner must fabricate nothing. (comrak also
-        // drops the nested wikilink in this broken context — an unclosed `[[`
-        // earlier on the line defeats its wikilink parser — so no inline at all
-        // survives, and collect_embeds must not add one.)
+        // The `]]` closes a NESTED `[[Real]]`, not the `![[`: the embed is
+        // unclosed and the scanner must fabricate nothing. (comrak also drops
+        // the nested wikilink here — an earlier unclosed `[[` on the line
+        // defeats its parser — so no inline survives at all.)
         let d = build("x ![[unclosed [[Real]] y\n");
         assert!(
             !d.inlines.iter().any(|i| matches!(i, Inline::Wikilink { embed: true, .. })),
@@ -806,8 +794,6 @@ mod tests {
 
     #[test]
     fn embed_prepass_keeps_genuine_adjacent_wikilink() {
-        // A well-formed embed next to a genuine wikilink: the pre-pass adds the
-        // embed without clobbering comrak's `[[Real]]`.
         let d = build("![[Note]] and [[Real]]\n");
         assert!(
             d.inlines.iter().any(|i| matches!(

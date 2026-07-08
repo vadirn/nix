@@ -17,8 +17,8 @@ enum Anchor<'a> {
     Close { label: &'a str },
 }
 
-/// Parse a whole line as an anchor comment, or `None` if it is not one.
-/// The comment must be the entire (trimmed) line content.
+/// Parse a line as an anchor comment (`None` otherwise); the comment must be
+/// the entire trimmed line content.
 fn parse_anchor(line: &str) -> Option<Anchor<'_>> {
     let inner = line.trim().strip_prefix("<!--")?.strip_suffix("-->")?.trim();
     if let Some(rest) = inner.strip_prefix('/') {
@@ -62,7 +62,6 @@ pub fn scan(source: &str, idx: &LineIndex, labels: &[String]) -> Vec<Region> {
                 open_stack.push((label.to_string(), info.map(str::to_string), line_no));
             }
             Anchor::Close { label } if registered(label) => {
-                // Pop the most recent matching open.
                 if let Some(pos) = open_stack.iter().rposition(|(l, _, _)| l == label) {
                     let (lbl, info, open_line) = open_stack.remove(pos);
                     let span = Span::new(idx.line_start(open_line), idx.next_line_start(line_no));

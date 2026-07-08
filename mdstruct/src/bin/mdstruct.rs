@@ -28,7 +28,6 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Parse args for the default (no-subcommand) verb.
     #[command(flatten)]
     parse: ParseArgs,
 
@@ -154,7 +153,7 @@ fn read_stdin() -> io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-/// Resolve the input list: an empty list means "read stdin" (`-`).
+/// An empty input list means "read stdin" (`-`).
 fn resolve(files: &[String]) -> Vec<String> {
     if files.is_empty() {
         vec!["-".to_string()]
@@ -201,7 +200,6 @@ fn main() -> ExitCode {
     ExitCode::from(exit)
 }
 
-/// Default verb: parse → NDJSON on stdout.
 fn run_parse(args: &ParseArgs) -> u8 {
     let files = resolve(&args.files);
     if args.pretty && files.len() != 1 {
@@ -245,7 +243,6 @@ fn run_parse(args: &ParseArgs) -> u8 {
     exit
 }
 
-/// `check` verb: freeze gate → summary on stderr, nothing on stdout, exit 4 on failure.
 fn run_check(args: &CheckArgs) -> u8 {
     let files = resolve(&args.files);
     let opts = Options {
@@ -288,7 +285,6 @@ fn run_check(args: &CheckArgs) -> u8 {
     exit
 }
 
-/// `stats` verb: type-coverage report → stdout.
 fn run_stats(args: &StatsArgs) -> u8 {
     let files = resolve(&args.files);
     let opts = Options {
