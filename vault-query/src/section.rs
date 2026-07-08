@@ -7,10 +7,10 @@
 //! assembly) use it to attribute body positions to sections without rendering
 //! the full heading tree.
 //!
-//! The heading/fence detection is shared with `read` through [`crate::markdown`]
-//! rather than re-implemented here; only the address/range arithmetic lives in
-//! this module. Addresses are kept identical to `read`'s overview tree so an
-//! address produced here resolves against the on-disk file via
+//! Heading detection comes from the shared [`crate::mdfacet`] locator facet (one
+//! mdstruct parse), the same source `read` uses; only the address/range arithmetic
+//! lives in this module. Addresses are kept identical to `read`'s overview tree so
+//! an address produced here resolves against the on-disk file via
 //! `read <path> <address>`.
 
 /// A section's structural address and the inclusive 1-based line range it owns,
@@ -24,8 +24,8 @@ pub struct SectionRange {
 }
 
 /// Concatenate the inclusive 1-based line range back into a string slice so a
-/// region can be tested for non-whitespace. Lines were split on `'\n'`, so
-/// rejoin with `'\n'`.
+/// region can be tested for non-whitespace. Lines were split by
+/// [`crate::mdfacet::lines`] (line endings dropped), so rejoin with `'\n'`.
 fn range_slice(lines: &[&str], start: usize, end: usize) -> String {
     if start == 0 || start > lines.len() {
         return String::new();
@@ -44,44 +44,22 @@ fn range_slice(lines: &[&str], start: usize, end: usize) -> String {
 /// an address computed from a frontmatter-stripped body still resolves against
 /// the on-disk file via `read <path> <address>`.
 pub fn section_ranges(body: &str) -> Vec<SectionRange> {
-    let lines: Vec<&str> = body.lines().collect();
+    let lines: Vec<&str> = crate::mdfacet::lines(body);
     let total = lines.len();
 
     // The 1-based line at which the body begins, i.e. the line after the closing
     // frontmatter `---`. Without frontmatter the body begins at line 1.
     let body_start = crate::frontmatter::body_start_line(body);
 
-    // First pass: collect heading (level, line), skipping fenced code so a `#`
-    // inside a code block is not a heading. Fence and heading detection are the
-    // canonical primitives from `crate::markdown`.
-    struct RawHeading {
-        level: usize,
-        line: usize,
-    }
-    let mut raw: Vec<RawHeading> = Vec::new();
-    let mut fence: Option<char> = None; // Some('`')/Some('~') while inside a fence.
-
-    for (idx, raw_line) in lines.iter().enumerate() {
-        let lineno = idx + 1;
-        if lineno < body_start {
-            continue;
-        }
-        let trimmed = raw_line.trim_start();
-        if let Some(marker) = crate::markdown::fence_marker(trimmed) {
-            match fence {
-                None => fence = Some(marker),
-                Some(open) if open == marker => fence = None,
-                Some(_) => {} // a different marker inside a fence is literal content
-            }
-            continue;
-        }
-        if fence.is_some() {
-            continue;
-        }
-        if let Some((level, _text)) = crate::markdown::atx_heading(raw_line) {
-            raw.push(RawHeading { level, line: lineno });
-        }
-    }
+    // First pass: the body's ATX headings (level, line) from the mdstruct locator
+    // facet. comrak already excludes a `#` inside a code fence or the frontmatter
+    // block, so the old fence-toggling scan is gone; the `body_start` guard still
+    // drops any heading before the body (an unclosed frontmatter mdstruct does not
+    // recognize but `body_start_line` counts as frontmatter).
+    let raw: Vec<crate::mdfacet::BodyHeading> = crate::mdfacet::body_headings(body)
+        .into_iter()
+        .filter(|h| h.line >= body_start)
+        .collect();
 
     let mut ranges: Vec<SectionRange> = Vec::new();
 

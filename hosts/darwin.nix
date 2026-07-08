@@ -4,6 +4,7 @@
   config,
   self,
   vault-query,
+  mdstruct,
   inputs,
   hostname,
   ...
@@ -27,6 +28,7 @@
     ])
     ++ [
       vault-query
+      mdstruct
     ];
 
   environment.systemPath = [

@@ -8,7 +8,7 @@ mod config;
 mod epistemic;
 mod frontmatter;
 mod index;
-mod markdown;
+mod mdfacet;
 mod output;
 mod section;
 mod slug;

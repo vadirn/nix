@@ -43,7 +43,8 @@ pub(super) fn range_lines(start: usize, end: usize) -> usize {
 }
 
 /// Concatenate the inclusive 1-based line range back into a string slice for
-/// token estimation. Lines were split on '\n', so rejoin with '\n'. Returns
+/// token estimation. Lines were split by [`crate::mdfacet::lines`] (line
+/// endings dropped), so rejoin with '\n'. Returns
 /// `None` for a range that does not name real body lines (start before line 1,
 /// start past EOF, or an inverted end < start), so callers turn an out-of-range
 /// request into an explicit empty/zero rather than indexing past the slice.
@@ -67,7 +68,7 @@ pub(super) fn node_tokens(n: &Node, lines: &[&str]) -> usize {
 /// and fenced code blocks (``` and ~~~) so that `#` inside code is not a
 /// heading. Returns the parsed document.
 pub(super) fn parse_document(content: &str) -> Document<'_> {
-    let lines: Vec<&str> = content.lines().collect();
+    let lines: Vec<&str> = crate::mdfacet::lines(content);
     let total = lines.len();
 
     // Determine the 1-based line index at which the body begins, i.e. the line
@@ -75,37 +76,15 @@ pub(super) fn parse_document(content: &str) -> Document<'_> {
     // begins at line 1.
     let body_start = crate::frontmatter::body_start_line(content);
 
-    // First pass: collect heading (level, text, line), skipping fenced code.
-    struct RawHeading {
-        level: usize,
-        text: String,
-        line: usize,
-    }
-    let mut raw: Vec<RawHeading> = Vec::new();
-    let mut fence: Option<char> = None; // Some('`') or Some('~') while inside a fence.
-
-    for (idx, raw_line) in lines.iter().enumerate() {
-        let lineno = idx + 1;
-        if lineno < body_start {
-            continue;
-        }
-        let trimmed = raw_line.trim_start();
-        // Fence toggling: a line starting with ``` or ~~~ opens/closes a fence.
-        if let Some(marker) = crate::markdown::fence_marker(trimmed) {
-            match fence {
-                None => fence = Some(marker),
-                Some(open) if open == marker => fence = None,
-                Some(_) => {} // a different marker inside a fence is literal content
-            }
-            continue;
-        }
-        if fence.is_some() {
-            continue;
-        }
-        if let Some((level, text)) = crate::markdown::atx_heading(raw_line) {
-            raw.push(RawHeading { level, text, line: lineno });
-        }
-    }
+    // First pass: the body's ATX headings (level, text, line) from the mdstruct
+    // locator facet. comrak excludes a `#` inside a code fence or the frontmatter
+    // block, so the fence-toggling scan is gone; the `body_start` guard still drops
+    // any heading before the body. `text` is comrak's canonical post-`#` slice — a
+    // `## x ##` closing-hash run is stripped where the old scanner kept it.
+    let raw: Vec<crate::mdfacet::BodyHeading> = crate::mdfacet::body_headings(content)
+        .into_iter()
+        .filter(|h| h.line >= body_start)
+        .collect();
 
     // Text region: body content before the first heading (or whole body when
     // heading-less). Emit only when it holds non-whitespace.

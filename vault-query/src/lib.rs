@@ -4,7 +4,7 @@ pub mod config;
 pub mod epistemic;
 pub mod frontmatter;
 pub mod index;
-pub mod markdown;
+pub mod mdfacet;
 pub mod output;
 pub mod section;
 pub mod slug;
