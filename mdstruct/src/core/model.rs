@@ -9,7 +9,10 @@
 use serde::{Serialize, Serializer, ser::SerializeTuple};
 
 /// Full `major.minor` schema contract version, carried in every envelope.
-pub const SCHEMA_VERSION: &str = "1.0";
+/// 1.1 (additive-minor over 1.0): `Inline::Wikilink` gained `target` + `alias`
+/// so a consumer reconstructs `{target, alias}` off decoded strings instead of
+/// slicing the (table-cell-unreliable) span.
+pub const SCHEMA_VERSION: &str = "1.1";
 
 /// Half-open UTF-8 byte span `[start, end)` — the sole slicing primitive.
 /// Serializes as a two-element array `[start, end]`.
@@ -222,9 +225,20 @@ pub enum Inline {
         start_line: u32,
     },
     Wikilink {
+        /// Decoded link target: comrak's `WikiLink.url` (or, for an embed, the
+        /// pre-pipe raw inner). The RELIABLE string a consumer reads instead of
+        /// slicing `span`, whose bytes shift inside escaped-pipe table cells
+        /// (Decision 19). (Schema 1.1.)
+        target: String,
         page: String,
         heading: Option<String>,
         block: Option<String>,
+        /// Decoded display alias, present exactly when a `|` separates the link
+        /// (`Some("")` for the empty-pipe `[[X|]]`), absent for a no-pipe
+        /// `[[X]]`. `alias_span` (comrak's display span) is `Some(page)` for a
+        /// no-pipe link and so cannot signal a pipe; this field can. (1.1.)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        alias: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         alias_span: Option<Span>,
         /// `![[…]]` — set by a core pre-pass, never read from the node (comrak

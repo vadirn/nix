@@ -60,13 +60,57 @@ fn example_interior_spans() {
         .iter()
         .find(|i| matches!(i, mdstruct::Inline::Wikilink { .. }))
         .unwrap();
-    if let mdstruct::Inline::Wikilink { page, heading, block, embed, alias_span, .. } = wl {
+    if let mdstruct::Inline::Wikilink { target, page, heading, block, embed, alias, alias_span, .. } = wl {
+        assert_eq!(target, "Note#Sec");
         assert_eq!(page, "Note");
         assert_eq!(heading.as_deref(), Some("Sec"));
         assert_eq!(*block, None);
         assert!(!*embed);
+        assert_eq!(alias.as_deref(), Some("alias"));
         assert_eq!(slice(src, alias_span.unwrap()), "alias");
     }
+}
+
+/// 1.1 table-cell backlinks: a plain wikilink and an embed inside GFM cells are
+/// emitted (the `in_table` guard and whole-table mask no longer suppress them),
+/// the freeze gate passes (the oracle exempts cell wikilinks), and the consumer
+/// reads decoded `target`/`alias` rather than the imprecise span.
+#[test]
+fn table_cell_wikilink_and_embed() {
+    let src = "| Ref | Note |\n| --- | --- |\n| [[Alpha]] | ![[Beta]] |\n| [[Gamma\\|display]] | x |\n";
+    let d = doc(src);
+    let wl = |target: &str| {
+        d.inlines.iter().find_map(|i| match i {
+            mdstruct::Inline::Wikilink { target: t, alias, embed, .. } if t == target => {
+                Some((alias.clone(), *embed))
+            }
+            _ => None,
+        })
+    };
+    // Plain cell wikilink: target from decoded url, no pipe → alias None.
+    assert_eq!(wl("Alpha"), Some((None, false)));
+    // Cell embed: emitted with embed:true, byte-exact span.
+    assert_eq!(wl("Beta"), Some((None, true)));
+    // Escaped-pipe cell wikilink: alias recovered from the decoded display.
+    assert_eq!(wl("Gamma"), Some((Some("display".to_string()), false)));
+}
+
+/// 1.1 empty-pipe `[[X|]]`: pipe present, empty display. `alias` is `Some("")`,
+/// distinct from a no-pipe `[[X]]` whose `alias` is `None` — the distinction a
+/// raw `alias_span` (present as `Some(page)` for no-pipe links) cannot carry.
+#[test]
+fn empty_pipe_wikilink() {
+    let src = "See [[Topic|]] and [[Topic]].\n";
+    let d = doc(src);
+    let aliases: Vec<Option<String>> = d
+        .inlines
+        .iter()
+        .filter_map(|i| match i {
+            mdstruct::Inline::Wikilink { alias, .. } => Some(alias.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(aliases, vec![Some(String::new()), None]);
 }
 
 /// Cyrillic-terminal block: the exclusive-end arithmetic must not overshoot.

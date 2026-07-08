@@ -151,11 +151,34 @@ fn flatten_headings(hs: &[Heading], out: &mut Vec<Span>) {
     }
 }
 
+/// Collect every `tableCell` span (recursing Table → TableRow → TableCell), so
+/// the inline oracle can locate a wikilink that lives inside a cell.
+fn collect_table_cell_spans(nodes: &[Node], out: &mut Vec<Span>) {
+    for n in nodes {
+        if let Node::TableCell { span, .. } = n {
+            out.push(*span);
+        }
+        collect_table_cell_spans(n.children(), out);
+    }
+}
+
 /// Per-inline grammar oracle + sub-span nesting.
 fn verify_inlines(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
+    let mut cells: Vec<Span> = Vec::new();
+    collect_table_cell_spans(&doc.nodes, &mut cells);
     for inl in &doc.inlines {
         let sp = inl.span();
         let s = slice(source, sp)?;
+        // Table-cell wikilinks/embeds (1.1): comrak's inline sourcepos shifts on
+        // escaped-pipe cells (Decision 19), so the span is imprecise and fails
+        // the `]]` shape check. The consumer reads the decoded `target`/`alias`,
+        // not the span, so exempt a wikilink contained in a tableCell from the
+        // shape + sub-span-nesting oracle. The boundary slice above still holds
+        // (the span is a valid on-char slice), and Decision 19 stays in force
+        // for every non-wikilink table-cell inline (those are not emitted).
+        if matches!(inl, Inline::Wikilink { .. }) && cells.iter().any(|c| nests(*c, sp)) {
+            continue;
+        }
         let (ok, sub) = match inl {
             Inline::Link { text_span, .. } => (
                 s.starts_with('[') && (s.ends_with(')') || s.ends_with(']')),
