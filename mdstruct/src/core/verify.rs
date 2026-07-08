@@ -74,15 +74,7 @@ fn verify_no_unknown(nodes: &[Node]) -> Result<(), SpanMismatch> {
                 kind, span.start, span.end
             )));
         }
-        match n {
-            Node::BlockQuote { children, .. }
-            | Node::List { children, .. }
-            | Node::ListItem { children, .. }
-            | Node::Table { children, .. }
-            | Node::TableRow { children, .. }
-            | Node::FootnoteDefinition { children, .. } => verify_no_unknown(children)?,
-            _ => {}
-        }
+        verify_no_unknown(n.children())?;
     }
     Ok(())
 }
@@ -247,15 +239,7 @@ fn verify_nodes(nodes: &[Node], source: &str) -> Result<(), SpanMismatch> {
             }
         }
         // Recurse into container children.
-        match n {
-            Node::BlockQuote { children, .. }
-            | Node::List { children, .. }
-            | Node::ListItem { children, .. }
-            | Node::Table { children, .. }
-            | Node::TableRow { children, .. }
-            | Node::FootnoteDefinition { children, .. } => verify_nodes(children, source)?,
-            _ => {}
-        }
+        verify_nodes(n.children(), source)?;
     }
     Ok(())
 }

@@ -48,10 +48,11 @@ fn comrak_options(opts: &Options) -> comrak::Options<'static> {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
     let digest = Sha256::digest(bytes);
     let mut s = String::with_capacity(64);
     for b in digest {
-        s.push_str(&format!("{b:02x}"));
+        write!(s, "{b:02x}").unwrap();
     }
     s
 }
@@ -97,11 +98,13 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     let mut nodes: Vec<Node> = Vec::new();
 
     for top in root.children() {
-        let (value, sp) = {
-            let d = top.data.borrow();
-            (d.value.clone(), d.sourcepos)
-        };
-        match value {
+        // Borrow the node and match on `&d.value` rather than cloning the whole
+        // NodeValue: only the small Copy fields we keep are read out. The walk
+        // takes no `borrow_mut`, and `children_span`/`convert_node` re-borrow
+        // shared, so holding this `Ref` across the arm is sound.
+        let d = top.data.borrow();
+        let sp = d.sourcepos;
+        match &d.value {
             NodeValue::FrontMatter(_) => {
                 let span = idx.span_of(sp);
                 frontmatter = FrontMatter {
@@ -548,17 +551,28 @@ fn collect_inlines<'a>(
     opts: &Options,
 ) -> Vec<Inline> {
     let mut inlines: Vec<Inline> = Vec::new();
-    // Code-suppression mask (vault-query src/wikilink.rs:83): spans of every code
-    // and frontmatter node. The `![[…]]` embed pre-pass skips any embed whose `!`
-    // falls inside one, since raw source there is verbatim, not markup.
+    // Code-suppression mask (vault-query src/wikilink.rs:83): spans of every node
+    // whose bytes are verbatim, not markup — code, frontmatter, raw-HTML blocks
+    // (including HTML comments), and whole GFM tables. The `![[…]]` embed pre-pass
+    // skips any embed whose `!` falls inside one: comrak emits no wikilink for a
+    // plain `[[…]]` in an HtmlBlock, and collect_inlines already drops every
+    // inside-cell inline (the `in_table` guard below), so masking these keeps the
+    // embed pre-pass symmetric and free of phantom embeds.
     let mut mask: Vec<Span> = Vec::new();
 
     for node in root.descendants() {
-        let (value, sp) = {
-            let d = node.data.borrow();
-            (d.value.clone(), d.sourcepos)
-        };
-        if let NodeValue::Code(_) | NodeValue::CodeBlock(_) | NodeValue::FrontMatter(_) = &value {
+        // Match on `&d.value` instead of cloning the whole NodeValue; clone only
+        // the small owned fields (url/title/name) inside the arms that keep them.
+        // The loop takes no `borrow_mut`, and `in_table`/`children_span` re-borrow
+        // shared, so holding this `Ref` across the arm is sound.
+        let d = node.data.borrow();
+        let sp = d.sourcepos;
+        if let NodeValue::Code(_)
+        | NodeValue::CodeBlock(_)
+        | NodeValue::FrontMatter(_)
+        | NodeValue::HtmlBlock(_)
+        | NodeValue::Table(_) = &d.value
+        {
             mask.push(idx.span_of(sp));
         }
         // Skip inlines inside GFM table cells: comrak's inline sourcepos there is
@@ -571,7 +585,7 @@ fn collect_inlines<'a>(
         let span = idx.span_of(sp);
         let start_line = sp.start.line as u32;
         let slice = source.get(span.start..span.end).unwrap_or("");
-        match value {
+        match &d.value {
             NodeValue::Link(nl) => {
                 if slice.starts_with('[') {
                     let text_span = children_span(node, idx)
@@ -762,6 +776,18 @@ mod tests {
     fn embed_in_frontmatter_emits_no_wikilink() {
         let d = build("---\nx: ![[Note]]\n---\n\nbody\n");
         assert!(!has_wikilink(&d), "embed inside frontmatter is verbatim");
+    }
+
+    #[test]
+    fn embed_in_html_comment_emits_no_wikilink() {
+        let d = build("<!-- ![[Note]] -->\n");
+        assert!(!has_wikilink(&d), "embed inside an HTML comment is verbatim");
+    }
+
+    #[test]
+    fn embed_in_table_cell_emits_no_wikilink() {
+        let d = build("| a | b |\n| --- | --- |\n| ![[Note]] | c |\n");
+        assert!(!has_wikilink(&d), "embed inside a GFM table cell is verbatim");
     }
 
     #[test]

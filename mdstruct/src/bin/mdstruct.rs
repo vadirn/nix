@@ -338,18 +338,9 @@ fn run_stats(args: &StatsArgs) -> u8 {
 }
 
 fn count_nodes(nodes: &[mdstruct::Node], counts: &mut BTreeMap<String, usize>) {
-    use mdstruct::Node;
     for n in nodes {
         *counts.entry(n.kind().to_string()).or_default() += 1;
-        match n {
-            Node::BlockQuote { children, .. }
-            | Node::List { children, .. }
-            | Node::ListItem { children, .. }
-            | Node::Table { children, .. }
-            | Node::TableRow { children, .. }
-            | Node::FootnoteDefinition { children, .. } => count_nodes(children, counts),
-            _ => {}
-        }
+        count_nodes(n.children(), counts);
     }
 }
 

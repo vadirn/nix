@@ -337,6 +337,21 @@ impl Node {
             Node::Unknown { kind, .. } => kind,
         }
     }
+
+    /// The `children[]` slice for the six container variants, and an empty
+    /// slice for every leaf variant. The one place the container set is named,
+    /// so consumers recurse via `for c in n.children()` rather than re-matching.
+    pub fn children(&self) -> &[Node] {
+        match self {
+            Node::BlockQuote { children, .. }
+            | Node::List { children, .. }
+            | Node::ListItem { children, .. }
+            | Node::Table { children, .. }
+            | Node::TableRow { children, .. }
+            | Node::FootnoteDefinition { children, .. } => children,
+            _ => &[],
+        }
+    }
 }
 
 impl Inline {

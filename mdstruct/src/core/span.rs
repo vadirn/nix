@@ -21,8 +21,14 @@ pub struct LineIndex {
 impl LineIndex {
     pub fn new(source: &str) -> Self {
         let mut starts = vec![0usize];
-        for (i, b) in source.bytes().enumerate() {
-            if b == b'\n' {
+        let bytes = source.as_bytes();
+        for (i, &b) in bytes.iter().enumerate() {
+            // Push a line start after each CommonMark line ending, matching
+            // comrak's sourcepos: after every `\n`, and after a lone `\r` (one
+            // not immediately followed by `\n`). A `\r\n` pair is a single line
+            // ending, so the `\r` is skipped and the start lands after the `\n`.
+            let is_break = b == b'\n' || (b == b'\r' && bytes.get(i + 1) != Some(&b'\n'));
+            if is_break {
                 starts.push(i + 1);
             }
         }
@@ -114,5 +120,33 @@ mod tests {
         let span = idx.span_of(sp);
         assert_eq!((span.start, span.end), (0, 17));
         assert_eq!(&src[span.start..span.end], "## Заметка");
+    }
+
+    #[test]
+    fn lone_cr_is_a_line_ending() {
+        // CommonMark (and comrak's sourcepos) treats a lone `\r` — one not
+        // immediately followed by `\n` — as a line ending. In "a\r## H\nbody"
+        // the heading begins on line 2 at byte 2. A LineIndex that counted only
+        // `\n` would place line 2 at byte 7, desyncing every following span.
+        let src = "a\r## H\nbody";
+        let idx = LineIndex::new(src);
+        assert_eq!(idx.line_start(2), 2);
+        assert_eq!(idx.line_start(3), 7);
+        // comrak reports the atx heading at (2, 1, 2, 4); span_of must slice it.
+        let sp = Sourcepos::from((2, 1, 2, 4));
+        let span = idx.span_of(sp);
+        assert_eq!((span.start, span.end), (2, 6));
+        assert_eq!(&src[span.start..span.end], "## H");
+    }
+
+    #[test]
+    fn crlf_pair_is_one_line_ending() {
+        // A `\r\n` pair is a single CommonMark line ending: no start is added
+        // between the `\r` and the `\n`. "a\r\nb" stays two lines — exactly the
+        // count produced when only `\n` was recognized.
+        let idx = LineIndex::new("a\r\nb");
+        assert_eq!(idx.line_count(), 2);
+        assert_eq!(idx.line_start(1), 0);
+        assert_eq!(idx.line_start(2), 3);
     }
 }
