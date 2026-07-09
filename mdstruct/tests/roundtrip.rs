@@ -11,7 +11,7 @@ fn doc(src: &str) -> mdstruct::Document {
     d
 }
 
-fn slice<'s>(src: &'s str, span: mdstruct::Span) -> &'s str {
+fn slice(src: &str, span: mdstruct::Span) -> &str {
     &src[span.start..span.end]
 }
 

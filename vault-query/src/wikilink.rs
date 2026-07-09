@@ -429,11 +429,11 @@ mod tests {
         let file_a = make_file("A", "", fm);
         let index = build_backlink_index(&[file_a]);
         assert!(
-            index.get("b").map_or(false, |v| v.contains(&"A".to_string())),
+            index.get("b").is_some_and(|v| v.contains(&"A".to_string())),
             "expected A in index[\"b\"]"
         );
         assert!(
-            index.get("c").map_or(false, |v| v.contains(&"A".to_string())),
+            index.get("c").is_some_and(|v| v.contains(&"A".to_string())),
             "expected A in index[\"c\"]"
         );
     }
@@ -450,11 +450,11 @@ mod tests {
         let file_a = make_file("A", "See [[B]] for details.", fm);
         let index = build_backlink_index(&[file_a]);
         assert!(
-            index.get("b").map_or(false, |v| v.contains(&"A".to_string())),
+            index.get("b").is_some_and(|v| v.contains(&"A".to_string())),
             "expected A in index[\"b\"]"
         );
         assert!(
-            index.get("c").map_or(false, |v| v.contains(&"A".to_string())),
+            index.get("c").is_some_and(|v| v.contains(&"A".to_string())),
             "expected A in index[\"c\"]"
         );
     }
@@ -490,7 +490,7 @@ mod tests {
         let file_a = make_file("A", "", fm);
         let index = build_backlink_index(&[file_a]);
         assert!(
-            index.get("b").map_or(false, |v| v.contains(&"A".to_string())),
+            index.get("b").is_some_and(|v| v.contains(&"A".to_string())),
             "expected A in index[\"b\"] via nested YAML walk"
         );
     }

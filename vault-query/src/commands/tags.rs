@@ -17,7 +17,7 @@ pub fn run(cfg: &crate::config::ResolvedConfig, sort: &str) -> Result<()> {
 
     let mut entries: Vec<(String, usize)> = tag_counts.into_iter().collect();
     match sort {
-        "count" => entries.sort_by(|a, b| b.1.cmp(&a.1)),
+        "count" => entries.sort_by_key(|b| std::cmp::Reverse(b.1)),
         _ => entries.sort_by(|a, b| a.0.cmp(&b.0)),
     }
 

@@ -242,10 +242,8 @@ fn fill_gaps(
     nodes: &mut Vec<Node>,
 ) {
     let mut partition: Vec<Span> = Vec::new();
-    if fm.present {
-        if let Some(s) = fm.span {
-            partition.push(s);
-        }
+    if fm.present && let Some(s) = fm.span {
+        partition.push(s);
     }
     fn push_heading_spans(hs: &[Heading], out: &mut Vec<Span>) {
         for h in hs {
@@ -693,7 +691,7 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
             // `\\![[…]]` = literal `\` + live `!`) leaves a genuine embed —
             // count the run's parity, not one byte.
             let mut bs = 0usize;
-            while i >= bs + 1 && bytes[i - 1 - bs] == b'\\' {
+            while i > bs && bytes[i - 1 - bs] == b'\\' {
                 bs += 1;
             }
             if bs % 2 == 1 {
@@ -763,7 +761,7 @@ fn line_of(idx: &LineIndex, pos: usize) -> usize {
     let mut lo = 1usize;
     let mut hi = idx.line_count();
     while lo < hi {
-        let mid = (lo + hi + 1) / 2;
+        let mid = (lo + hi).div_ceil(2);
         if idx.line_start(mid) <= pos {
             lo = mid;
         } else {

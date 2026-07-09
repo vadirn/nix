@@ -208,6 +208,7 @@ struct LogRecord<'a> {
 /// Append one JSONL record to `log_path` (relative to `vault_root` or absolute).
 /// The caller discards the error: logging is best-effort and never affects the
 /// exit code.
+#[allow(clippy::too_many_arguments)]
 fn append_log(
     log_path: &str,
     vault_root: &std::path::Path,
@@ -303,6 +304,7 @@ fn append_log(
 
 /// Run the consult command. Returns the typed exit code:
 ///   0 = selected, 4 = abstain, 1 = error (propagated via anyhow).
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     task: &str,
     cfg: &ResolvedConfig,

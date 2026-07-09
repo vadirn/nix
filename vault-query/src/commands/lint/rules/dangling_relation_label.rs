@@ -31,17 +31,17 @@ impl Rule for DanglingRelationLabel {
             for edge in edges {
                 // A from-label, when present (multi-node note, D26), is itself a
                 // local node label.
-                if let Some(from) = &edge.from_label {
-                    if !nodes.contains(&crate::slug::segment(from)) {
-                        findings.push(self.finding(file, from, "from-label", edge.line));
-                    }
+                if let Some(from) = &edge.from_label
+                    && !nodes.contains(&crate::slug::segment(from))
+                {
+                    findings.push(self.finding(file, from, "from-label", edge.line));
                 }
                 // A bare local endpoint must resolve to a local node; a `[[file]]`
                 // endpoint is broken-wikilink's concern, not this rule's.
-                if let Endpoint::Local(label) = &edge.endpoint {
-                    if !nodes.contains(&crate::slug::segment(label)) {
-                        findings.push(self.finding(file, label, "endpoint", edge.line));
-                    }
+                if let Endpoint::Local(label) = &edge.endpoint
+                    && !nodes.contains(&crate::slug::segment(label))
+                {
+                    findings.push(self.finding(file, label, "endpoint", edge.line));
                 }
             }
         }
