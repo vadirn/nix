@@ -3,6 +3,7 @@
 // with no I/O; its only dependency is writing/typography.ts, the writing-core's
 // own leaf (normalizeTypography moved there, re-exported here).
 import { normalizeTypography } from "./writing/typography.ts";
+import { parseDoc, sliceBytes, walkNodes } from "./mdstruct.ts";
 
 // Relations registry — TS-native copy of the open relation vocabulary (structural
 // channel only, D32). Mirror of vault-query/src/commands/lint/rel-registry.json, the
@@ -282,31 +283,22 @@ function stripFences(text: string): string {
 // leading/trailing blank lines dropped — the language tag and fence width are excluded, so
 // a retained block (assembleBody pushes b.text verbatim) covers its source twin regardless
 // of info-string. Internal whitespace is KEPT: code indentation is load-bearing.
+// LOCATOR: mdstruct fenced `codeBlock` nodes (Backlog 5a). Fenced-ONLY — comrak also emits
+// indented code blocks the old regex never saw, so `fenced===true` filters them out (a spike
+// lesson). Fixes the nested-fence mis-split: the old line-scanner closed the block at the
+// FIRST inner ` ``` `; comrak parses the outer block whole.
 export function harvestFences(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  const lines = text.split("\n");
-  let open: string | null = null;
-  let body: string[] = [];
-  let head = "";
-  for (const line of lines) {
-    const m = /^[ \t]*(`{3,}|~{3,})/.exec(line);
-    if (!open && m) {
-      open = m[1][0];
-      body = [];
-      head = line.trim();
-      continue;
-    }
-    if (open && m && line.trimStart().startsWith(open.repeat(3))) {
-      const key = body
-        .map((l) => l.replace(/\s+$/, ""))
-        .join("\n")
-        .replace(/^\n+|\n+$/g, "");
-      if (key) out.push({ markup: oneLine(head + " " + (body[0] ?? "")), key });
-      open = null;
-      continue;
-    }
-    if (open) body.push(line);
-  }
+  const { doc, buf } = parseDoc(text);
+  walkNodes(doc.nodes, (n) => {
+    if (n.type !== "codeBlock" || !n.fenced || !n.bodySpan) return;
+    const key = sliceBytes(buf, n.bodySpan)
+      .split("\n")
+      .map((l) => l.replace(/\s+$/, ""))
+      .join("\n")
+      .replace(/^\n+|\n+$/g, "");
+    if (key) out.push({ markup: oneLine(sliceBytes(buf, n.span ?? n.bodySpan)), key });
+  });
   return out;
 }
 
@@ -318,22 +310,29 @@ export function harvestFences(text: string): PayloadSpan[] {
 // (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
 export const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
 
+// LOCATOR: mdstruct `blockQuote` nodes, no-descend (Backlog 5a) — the regex merged a `>`/`>>`
+// run into ONE key, so nested quotes must not be double-counted. key normalization is
+// unchanged: per-line BLOCKQUOTE_LINE strip, joined " ", whitespace-collapsed, lowercased.
+// Fixes two regex bugs the gate found: a `> quote` documented INSIDE a code fence no longer
+// false-flags (comrak ignores fenced content), and a list-nested `- > quote` is now captured
+// (comrak parses it as a child blockQuote; the old `^\s*>` line-anchor missed it).
 export function harvestBlockquotes(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  let inner: string[] = [];
-  const flush = () => {
-    if (inner.length) {
+  const { doc, buf } = parseDoc(text);
+  walkNodes(
+    doc.nodes,
+    (n) => {
+      if (n.type !== "blockQuote" || !n.span) return;
+      const inner: string[] = [];
+      for (const line of sliceBytes(buf, n.span).split("\n")) {
+        const m = BLOCKQUOTE_LINE.exec(line);
+        if (m) inner.push(m[1]);
+      }
       const key = inner.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
       if (key) out.push({ markup: oneLine(inner.join(" ")), key });
-    }
-    inner = [];
-  };
-  for (const line of text.split("\n")) {
-    const m = BLOCKQUOTE_LINE.exec(line);
-    if (m) inner.push(m[1]);
-    else flush();
-  }
-  flush();
+    },
+    new Set(["blockQuote"]),
+  );
   return out;
 }
 
@@ -365,11 +364,37 @@ export function isTableDataRow(maskedLine: string): boolean {
   return true;
 }
 
+// HYBRID LOCATOR (Backlog 5a) — the one non-clean lane. Real GFM tables come from mdstruct
+// `tableRow`→`tableCell` spans (per cell: MASK_RE-masked, trimmed, lowercased, joined ␟),
+// header row kept (only the delimiter row is dropped, which comrak never emits as a row).
+// UNION the old regex row-scan for rows NOT inside any mdstruct table: a `- a | b` pseudo-
+// table (no `:?-+:?` delimiter row) is not a GFM table, so comrak emits no table node, and
+// the regex carve-out (isTableDataRow, gate class-1) must keep detecting it. A real table's
+// lines are tracked in `covered` so a genuine row is never double-counted across the two paths.
 export function harvestTableRows(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
+  const { doc, buf } = parseDoc(text);
+  const covered = new Set<number>(); // 1-indexed source lines owned by a real mdstruct table
+  walkNodes(doc.nodes, (n) => {
+    if (n.type === "table" && n.startLine != null && n.endLine != null) {
+      for (let ln = n.startLine; ln <= n.endLine; ln++) covered.add(ln);
+    }
+    if (n.type !== "tableRow") return;
+    const cells = (n.children ?? []).map((c) =>
+      c.span ? sliceBytes(buf, c.span).replace(MASK_RE, " ").trim().toLowerCase() : "",
+    );
+    if (cells.length && !cells.every((c) => c === "")) {
+      out.push({
+        markup: oneLine((n.span ? sliceBytes(buf, n.span) : cells.join(" | ")).trim()),
+        key: cells.join("␟"),
+      });
+    }
+  });
+  // Pseudo-table fallback: the old regex row-scan, restricted to lines outside any real table.
   const rawLines = text.split("\n");
   const mLines = stripFences(text).replace(MASK_RE, " ").split("\n");
   for (let i = 0; i < mLines.length; i++) {
+    if (covered.has(i + 1)) continue; // already emitted by the mdstruct table lane
     if (!isTableDataRow(mLines[i])) continue;
     out.push({
       markup: oneLine((rawLines[i] ?? mLines[i]).trim()),
@@ -390,23 +415,32 @@ export function harvestTableRows(text: string): PayloadSpan[] {
 // (router signal) — one detection, two uses (D2).
 export const MD_IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 export const EMBED_RE = /!\[\[([^\]]+)\]\]/g;
+// LOCATOR: mdstruct `inlines[]` — a markdown `image.url` → slug, and a `wikilink{embed:true}`
+// asset target (`page`) → slug (Backlog 5a). key normalization unchanged (normalizeEdgeTarget,
+// decode, slugSegment, ASSET_RE). Fixes the payload-in-code false positive: an `![[x.png]]` or
+// `![alt](y.png)` written inside inline code or a fence is no longer emitted (comrak surfaces
+// no image inline there), so it stops false-flagging as dropped. `page` is the wikilink target
+// with alias and `#fragment` already stripped by mdstruct — see MdInline in mdstruct.ts for why
+// keying on it is gate-equivalent to the spike's raw-`target` path.
 export function harvestImages(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  for (const m of text.matchAll(MD_IMAGE_RE)) {
-    let u = normalizeEdgeTarget(m[1].trim());
-    try {
-      u = decodeURIComponent(u);
-    } catch {
-      // malformed %-sequence: keep raw (still a comparable key)
-    }
-    const key = slugSegment(u);
-    if (key) out.push({ markup: oneLine(m[0]), key });
-  }
-  for (const m of text.matchAll(EMBED_RE)) {
-    const t = normalizeEdgeTarget(m[1].split("|")[0].trim());
-    if (ASSET_RE.test(t)) {
-      const key = slugSegment(t);
-      if (key) out.push({ markup: oneLine(m[0]), key });
+  const { doc, buf } = parseDoc(text);
+  for (const il of doc.inlines ?? []) {
+    if (il.type === "image" && il.url != null) {
+      let u = normalizeEdgeTarget(il.url.trim());
+      try {
+        u = decodeURIComponent(u);
+      } catch {
+        // malformed %-sequence: keep raw (still a comparable key)
+      }
+      const key = slugSegment(u);
+      if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.url), key });
+    } else if (il.type === "wikilink" && il.embed && il.page != null) {
+      const t = normalizeEdgeTarget(il.page.split("|")[0].trim());
+      if (ASSET_RE.test(t)) {
+        const key = slugSegment(t);
+        if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.page), key });
+      }
     }
   }
   return out;
