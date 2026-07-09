@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Tests for no-secrets.sh
 SCRIPT="$(dirname "$0")/no-secrets.sh"
 PASS=0
@@ -56,9 +56,23 @@ assert_allow "file credentials.json"      "file credentials.json"
 assert_allow "echo environment"           "echo environment"
 assert_allow "cat .envrc"                 "cat .envrc"
 
-# Known false positives (intentionally paranoid)
-assert_deny  "jq .key (false positive)"   "jq .key file.json"
-assert_deny  "cat secret-santa (false positive)" "cat secret-santa.txt"
+# Fixed false positives: accessors, search terms, and word-bearing filenames
+assert_allow "jq .key accessor"           "jq .key file.json"
+assert_allow "jq to_entries .key"         "jq 'to_entries[] | .key' package.json"
+assert_allow "jq nested .key"             "jq .data.key config.json"
+assert_allow "jq .pem_config"             "jq .pem_config config.json"
+assert_allow "cat secret-santa"           "cat secret-santa.txt"
+assert_allow "grep credentials in source" "grep credentials src/auth.ts"
+assert_allow "aws secretsmanager pipe jq" "aws secretsmanager get-secret-value | jq ."
+assert_allow "jq .credentials accessor"   "jq .credentials.files settings.json"
+assert_allow "jq .secrets accessor"       "jq .secrets config.json"
+
+# Closed bypasses: unlisted readers and the command-substitution anchor gap
+assert_deny  "base64 of private key"      "base64 id_rsa"
+assert_deny  "source .env"                "source .env"
+assert_deny  "cmd-subst cat .env"         "echo \$(cat .env)"
+assert_deny  "cat .git-credentials"       "cat .git-credentials"
+assert_deny  "cat aws credentials path"   "cat ~/.aws/credentials"
 
 echo "$((PASS + FAIL)) tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -79,7 +79,7 @@
     "deny": [],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "opus[1m]",
   "enableAllProjectMcpServers": true,
   "hooks": {
     "Notification": [
@@ -285,13 +285,22 @@
         "~/Pictures/imagen",
         "~/Pictures/vidgen",
         "$TMPDIR"
+      ],
+      "denyRead": ["~/.ssh"],
+      "allowRead": ["~/.ssh/*.pub"]
+    },
+    "credentials": {
+      "files": [
+        { "path": "~/.aws", "mode": "deny" },
+        { "path": "~/.netrc", "mode": "deny" },
+        { "path": "~/.claude/.credentials.json", "mode": "deny" }
       ]
     },
     "enableWeakerNetworkIsolation": true
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "effortLevel": "xhigh",
+  "effortLevel": "high",
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
