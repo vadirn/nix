@@ -36,7 +36,7 @@ fn is_ws(s: &str) -> bool {
     s.chars().all(|c| c == ' ' || c == '\t' || c == '\r' || c == '\n')
 }
 
-fn slice<'s>(source: &'s str, span: Span) -> Result<&'s str, SpanMismatch> {
+fn slice(source: &str, span: Span) -> Result<&str, SpanMismatch> {
     source.get(span.start..span.end).ok_or_else(|| {
         err(format!(
             "span [{}, {}) does not slice source (len {}) on a char boundary",
@@ -82,10 +82,10 @@ fn verify_no_unknown(nodes: &[Node]) -> Result<(), SpanMismatch> {
 /// Whitespace-gap total tiling (Decision 15).
 fn verify_tiling(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
     let mut spans: Vec<Span> = Vec::new();
-    if let Some(fm) = doc.frontmatter() {
-        if let Some(s) = fm.span {
-            spans.push(s);
-        }
+    if let Some(fm) = doc.frontmatter()
+        && let Some(s) = fm.span
+    {
+        spans.push(s);
     }
     flatten_headings(&doc.headings, &mut spans);
     for n in &doc.nodes {

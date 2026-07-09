@@ -182,18 +182,17 @@ fn resolve_display_name(col: &str, base: &BaseFile) -> String {
         col.to_string(),
     ];
     for key in &candidates {
-        if let Some(prop) = base.properties.get(key) {
-            if !prop.display_name.is_empty() {
-                return prop.display_name.clone();
-            }
+        if let Some(prop) = base.properties.get(key)
+            && !prop.display_name.is_empty()
+        {
+            return prop.display_name.clone();
         }
     }
-    if col.starts_with("formula.") {
-        if let Some(prop) = base.properties.get(col) {
-            if !prop.display_name.is_empty() {
-                return prop.display_name.clone();
-            }
-        }
+    if col.starts_with("formula.")
+        && let Some(prop) = base.properties.get(col)
+        && !prop.display_name.is_empty()
+    {
+        return prop.display_name.clone();
     }
     col.to_string()
 }

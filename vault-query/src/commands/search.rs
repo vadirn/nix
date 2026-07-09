@@ -42,6 +42,7 @@ pub struct SearchOutput {
     pub results: Vec<SearchResult>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     query: &str,
     cfg: &crate::config::ResolvedConfig,

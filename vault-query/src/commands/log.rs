@@ -100,34 +100,33 @@ fn parse_week_spec(input: &str, today: NaiveDate) -> Option<IsoWeek> {
     let input_upper = input.to_uppercase();
 
     // Pure number: "5" or "05"
-    if let Ok(n) = input.parse::<u32>() {
-        if n >= 1 && n <= 53 {
-            return week_from_year_week(today.iso_week().year(), n);
-        }
+    if let Ok(n) = input.parse::<u32>()
+        && (1..=53).contains(&n)
+    {
+        return week_from_year_week(today.iso_week().year(), n);
     }
 
     // "W5" or "W05"
-    if let Some(rest) = input_upper.strip_prefix('W') {
-        if let Ok(n) = rest.parse::<u32>() {
-            if n >= 1 && n <= 53 {
-                return week_from_year_week(today.iso_week().year(), n);
-            }
-        }
+    if let Some(rest) = input_upper.strip_prefix('W')
+        && let Ok(n) = rest.parse::<u32>()
+        && (1..=53).contains(&n)
+    {
+        return week_from_year_week(today.iso_week().year(), n);
     }
 
     // "2025-W03" or "2025-w03"
     if input.len() >= 7 && input.as_bytes()[4] == b'-' {
         let year_str = &input[..4];
         let rest = &input_upper[5..];
-        if let Some(wnum_str) = rest.strip_prefix('W') {
-            if let (Ok(year), Ok(wnum)) = (year_str.parse::<i32>(), wnum_str.parse::<u32>()) {
-                return week_from_year_week(year, wnum);
-            }
+        if let Some(wnum_str) = rest.strip_prefix('W')
+            && let (Ok(year), Ok(wnum)) = (year_str.parse::<i32>(), wnum_str.parse::<u32>())
+        {
+            return week_from_year_week(year, wnum);
         }
     }
 
     // "2025W03" or "2025w03"
-    if input.len() >= 6 && input.as_bytes()[4].to_ascii_uppercase() == b'W' {
+    if input.len() >= 6 && input.as_bytes()[4].eq_ignore_ascii_case(&b'W') {
         let year_str = &input[..4];
         let wnum_str = &input[5..];
         if let (Ok(year), Ok(wnum)) = (year_str.parse::<i32>(), wnum_str.parse::<u32>()) {

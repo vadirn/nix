@@ -67,14 +67,15 @@ pub fn parse_weekly_logs(cfg: &ResolvedConfig) -> Result<LogData> {
             .map(|caps| caps[1].to_string())
             .collect();
 
-        if !projects.is_empty() && !done_links.is_empty() && !week_id.is_empty() {
-            if projects.iter().all(|p| done_links.contains(p)) {
-                if let Some(monday) = week_monday(&week_id) {
-                    let next_monday = monday + chrono::Days::new(7);
-                    let key = next_monday.format("%Y-%m-%d").to_string();
-                    *data.day_bonus.entry(key).or_insert(0) += projects.len() as i32;
-                }
-            }
+        if !projects.is_empty()
+            && !done_links.is_empty()
+            && !week_id.is_empty()
+            && projects.iter().all(|p| done_links.contains(p))
+            && let Some(monday) = week_monday(&week_id)
+        {
+            let next_monday = monday + chrono::Days::new(7);
+            let key = next_monday.format("%Y-%m-%d").to_string();
+            *data.day_bonus.entry(key).or_insert(0) += projects.len() as i32;
         }
 
         data.sleep_dates.extend(sleep_dates);
