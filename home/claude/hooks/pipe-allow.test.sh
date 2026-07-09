@@ -100,6 +100,15 @@ assert_allow    "safe env var"          "FOO=bar cat file.json | jq ."
 assert_passthrough "sensitive PATH"     "PATH=/evil cat file.json | jq ."
 assert_passthrough "sensitive LD_PRELOAD" "LD_PRELOAD=x.so cat file.json | jq ."
 
+# --- Smuggled commands must NOT be auto-approved (fail-safe) ---
+# Lone `&` background operator hides a second command behind an allowlisted stage.
+assert_passthrough "lone & smuggle"     "git status & mv ~/.ssh /tmp/x ; ls"
+# Redirect can create/overwrite a victim file behind an allowlisted stage.
+assert_passthrough "redirect smuggle"   "echo pwned >> /tmp/victim | cat"
+# Command substitution runs an arbitrary command.
+assert_passthrough "cmd subst smuggle"  "git diff \$(git rev-parse HEAD)"
+assert_passthrough "backtick smuggle"   "echo \`whoami\` | cat"
+
 # Cleanup
 rm -rf "$SETTINGS_DIR"
 

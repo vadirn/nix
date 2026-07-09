@@ -70,10 +70,13 @@ def split_command(cmd):
         elif ch == ";":
             stages.append("".join(current))
             current = []
-        elif ch == "&" and i + 1 < length and cmd[i + 1] == "&":
+        elif ch == "&":
+            # Lone `&` is a background operator (also a stage separator);
+            # `&&` is a chain operator. Split on both, consuming the second `&`.
             stages.append("".join(current))
             current = []
-            i += 1
+            if i + 1 < length and cmd[i + 1] == "&":
+                i += 1
         else:
             current.append(ch)
         i += 1
@@ -101,6 +104,23 @@ def strip_env_vars(cmd):
     return cmd
 
 
+def strip_quoted(cmd):
+    """Remove single/double quoted spans so shell metacharacters inside
+    arguments (e.g. a jq expression like '.age > 30') aren't mistaken for
+    shell operators when scanning for unmodelable constructs."""
+    out = []
+    quote = None
+    for ch in cmd:
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in ("'", '"'):
+            quote = ch
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def matches_allowed(cmd, prefixes):
     """Check if a single command stage matches any allowed prefix."""
     cmd = cmd.strip()
@@ -108,6 +128,13 @@ def matches_allowed(cmd, prefixes):
     if cmd is None:
         return False
     cmd = re.sub(r"\d*>&\d*", "", cmd).strip()
+    # Fail-safe: refuse to grant if a stage still holds a construct this hook
+    # cannot model (command substitution, or a redirect that could smuggle a
+    # second command). Scan only OUTSIDE quotes so quoted jq expressions don't
+    # trip it. Refusing only means the command falls through to the normal
+    # prompt/classifier — pipe-allow never denies, so this is always safe.
+    if any(t in strip_quoted(cmd) for t in ("`", "$(", ">", "<")):
+        return False
     return any(cmd.startswith(p) for p in prefixes)
 
 

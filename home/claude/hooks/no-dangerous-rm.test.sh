@@ -63,5 +63,34 @@ assert_allow "rm -r without -f" \
 assert_allow "non-rm command" \
   '{"tool_input":{"command":"ls -la /tmp"},"cwd":"'"$CWD"'"}'
 
+# --- Bypasses closed by the rewrite ---
+assert_deny  "rm -Rf uppercase outside project" \
+  '{"tool_input":{"command":"rm -Rf /Users/vadim/Documents"},"cwd":"'"$CWD"'"}'
+
+assert_deny  "rm -r -f split flags outside project" \
+  '{"tool_input":{"command":"rm -r -f /Users/vadim/Documents"},"cwd":"'"$CWD"'"}'
+
+assert_deny  "rm -rf quoted path outside project" \
+  '{"tool_input":{"command":"rm -rf \"/Users/vadim/Documents\""},"cwd":"'"$CWD"'"}'
+
+assert_deny  "rm --recursive long flag outside project" \
+  '{"tool_input":{"command":"rm --recursive --force /Users/vadim/Documents"},"cwd":"'"$CWD"'"}'
+
+assert_deny  "rm -rf unexpanded var" \
+  '{"tool_input":{"command":"rm -rf $HOME"},"cwd":"'"$CWD"'"}'
+
+assert_deny  "cd then rm -rf trusts wrong cwd" \
+  '{"tool_input":{"command":"cd / && rm -rf etc"},"cwd":"'"$CWD"'"}'
+
+assert_deny  "rm -rf -- outside project" \
+  '{"tool_input":{"command":"rm -rf -- /Users/vadim/Documents"},"cwd":"'"$CWD"'"}'
+
+# --- Ordinary recursive deletes stay allowed ---
+assert_allow "rm -rf inside project (build)" \
+  '{"tool_input":{"command":"rm -rf /Users/vadim/nix/build"},"cwd":"'"$CWD"'"}'
+
+assert_allow "rm -rf node_modules then npm i" \
+  '{"tool_input":{"command":"rm -rf node_modules && npm i"},"cwd":"'"$CWD"'"}'
+
 echo "$((PASS + FAIL)) tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

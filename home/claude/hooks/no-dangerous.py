@@ -80,7 +80,11 @@ def check(command: str):
     try:
         tokens = shlex.split(command)
     except ValueError:
-        tokens = []
+        # Unbalanced quote (adversarial or malformed). Fall back to whitespace
+        # tokenization rather than [] — an empty token list would disable every
+        # token rule (sudo, chmod 777, git push/reset/branch). Approximate tokens
+        # are strictly safer than none here.
+        tokens = command.split()
 
     token_set = frozenset(tokens)
 

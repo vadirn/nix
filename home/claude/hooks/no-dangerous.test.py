@@ -99,6 +99,10 @@ assert_allow("obsidian search", "obsidian search foo")
 assert_allow("obsidian list", "obsidian list")
 assert_allow("obsidian read", "obsidian read note.md")
 
+# unbalanced quote must not disable token rules (fail-safe fallback)
+assert_deny("sudo with trailing unbalanced quote", "sudo reboot #'")
+assert_deny("git push with trailing unbalanced quote", "git push origin main #'")
+
 # heredoc commit message (the original bug)
 assert_allow("git push in heredoc commit",
              "git commit -m \"$(cat <<'EOF'\nchore: block git push in hook\nEOF\n)\"")

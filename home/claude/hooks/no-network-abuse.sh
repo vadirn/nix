@@ -37,8 +37,15 @@ if [[ "$COMMAND" =~ (curl|wget)[[:space:]] ]]; then
 fi
 
 # === Data exfiltration: curl with upload flags ===
+# The upload short flags (-d, -F, -T) may sit anywhere inside a leading short-flag
+# cluster, e.g. `curl -sd@/etc/passwd`, so allow an optional [a-zA-Z]* prefix
+# before them. Lowercase -f (--fail) has no upload effect and stays excluded, so
+# `curl -f https://...` is not a false positive.
+# Residual (not covered): numeric-IP encodings of loopback/metadata hosts
+# (e.g. http://2130706433/, http://0x7f000001/) evade the textual host match in
+# the SSRF blocks above; full coverage needs numeric-IP decoding, out of scope.
 if [[ "$COMMAND" =~ (^|[;&|[:space:]])curl[[:space:]] ]]; then
-  if [[ "$COMMAND" =~ [[:space:]](-d[^[:space:]]*|--data(=|[[:space:]])|--data-binary(=|[[:space:]])|--data-raw(=|[[:space:]])|--data-urlencode(=|[[:space:]])|-F[^[:space:]]*|--form(=|[[:space:]])|--upload-file(=|[[:space:]])|-T[^[:space:]]*) ]]; then
+  if [[ "$COMMAND" =~ [[:space:]](-[a-zA-Z]*d[^[:space:]]*|--data(=|[[:space:]])|--data-binary(=|[[:space:]])|--data-raw(=|[[:space:]])|--data-urlencode(=|[[:space:]])|-[a-zA-Z]*F[^[:space:]]*|--form(=|[[:space:]])|--upload-file(=|[[:space:]])|-[a-zA-Z]*T[^[:space:]]*) ]]; then
     deny "Blocked: curl with data upload flags (-d/--data/-F/--form/-T). Run manually if needed."
   fi
 fi
