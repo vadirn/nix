@@ -38,9 +38,26 @@ export interface MdInline {
   span?: Span;
 }
 
+// A heading node in the `headings[]` tree (mirrors the binary's JSON: the key is `level`,
+// not `depth` — Section.depth is derived from it in text.ts::sections). `span` is the heading
+// line itself (ATX marker + text, or a setext text-line + its underline); `textSpan` is the
+// title text alone (trailing `#` markers and whitespace excluded); `startLine` is 1-indexed
+// (setext headings start on their text line). `sectionSpan` is the heading's whole subtree
+// (start → end of everything under it) — it NESTS, so text.ts::sections takes disjoint bodies
+// (heading start → next heading start) rather than reading it. `children` are the sub-headings.
+export interface Heading {
+  level: number;
+  span: Span;
+  textSpan: Span;
+  startLine?: number;
+  sectionSpan?: Span;
+  children?: Heading[];
+}
+
 export interface MdDoc {
   nodes?: MdNode[];
   inlines?: MdInline[];
+  headings?: Heading[];
 }
 
 export interface ParsedDoc {

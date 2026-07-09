@@ -8,7 +8,19 @@
 // the fix is guarded without a vault dependency. Each class was a regex bug that produced
 // phantom "dropped payload" residue (a false warning) or missed real payload.
 import { expect, test } from "bun:test";
-import { harvestBlockquotes, harvestFences, harvestImages, harvestTableRows } from "./text.ts";
+import {
+  harvestBlockquotes,
+  harvestFences,
+  harvestImages,
+  harvestTableRows,
+  payloadMask,
+  payloadDensity,
+  routeSection,
+  sections,
+  structuralSpans,
+  wordCount,
+} from "./text.ts";
+import { parseDoc } from "./mdstruct.ts";
 
 // Class 3 — nested fence. A 4-backtick outer fence wraps a literal 3-backtick block. The old
 // line-scanner closed the outer block at the FIRST inner ` ``` `, splitting one payload into
@@ -70,4 +82,64 @@ test("harvestImages: a markdown image and an asset embed each key by target slug
     .map((s) => s.key)
     .sort();
   expect(keys).toEqual(["diagram-png", "service-locator-jpeg"]);
+});
+
+// ---- router migration goldens: structuralSpans-fed payloadMask + sections (one per class) ----
+// The four harvesters above feed the residue inventory; these pin the SECOND consumer of the
+// same detection (D2) — the density router's payloadMask/sections — over the divergence classes
+// the parity harness materialized (delimiter-row + frontmatter fix) and the structural classes
+// the mask must keep covering (pseudo-table, nested fence, list-nested quote/table).
+
+// Delimiter-row fix. The old per-line mask blanked table DATA rows (isTableDataRow) but LEFT the
+// `| --- | --- |` delimiter row — phantom prose that dragged density down. structuralSpans blanks
+// the whole mdstruct table span (header + delimiter + data), so the named section routes preserve.
+test("payloadMask/routeSection: a GFM table's delimiter row is now masked, section routes preserve", () => {
+  const section = "## T\n\n| a | b |\n| --- | --- |\n| 1 | 2 |";
+  const masked = payloadMask(section);
+  expect(masked).not.toContain("-"); // delimiter row is inside the masked span, no longer prose
+  expect(masked.split("\n").length).toBe(section.split("\n").length); // line count preserved
+  expect(routeSection(section)).toBe("preserve");
+});
+
+// The bare table (no heading) is all payload: every row, delimiter included, masks to zero prose.
+test("payloadMask: a GFM table incl. its delimiter row blanks to zero prose words (density 1)", () => {
+  const table = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+  expect(wordCount(payloadMask(table))).toBe(0);
+  expect(payloadDensity(table)).toBe(1);
+});
+
+// Frontmatter fix. The old regex scanner matched `# a yaml comment` inside `---` frontmatter as
+// an ATX heading and split a phantom section there; mdstruct parses the frontmatter, so the only
+// heading is `## Real` and the `#` comment stays in the intro body.
+test("sections: a `#` comment inside YAML frontmatter no longer splits a section (frontmatter fix)", () => {
+  const note = "---\ntitle: x\n# a yaml comment\n---\n\n## Real\n\nbody";
+  const heads = sections(note).map((s) => s.heading);
+  expect(heads).toEqual(["", "Real"]);
+  expect(heads).not.toContain("a yaml comment");
+});
+
+// Pseudo-table carve-out (class 1). A delimiter-less `- a | b` is no mdstruct table, but the
+// regex fallback inside collectStructural still spans it, so the mask blanks it to zero prose.
+test("payloadMask: a delimiter-less `- a | b` pseudo-table row is still masked (class-1 fallback)", () => {
+  expect(wordCount(payloadMask("- a | b"))).toBe(0);
+  expect(structuralSpans(parseDoc("- a | b")).length).toBe(1);
+});
+
+// Nested fence (class 3). structuralSpans emits ONE fence span for the 4-backtick outer block —
+// it is not split at the inner ` ``` ` — so the whole block, inner fence included, masks to prose-free.
+test("structuralSpans/payloadMask: a nested fence is one whole masked block (class 3)", () => {
+  const md = "````\n```\ninner\n```\n````";
+  expect(structuralSpans(parseDoc(md)).length).toBe(1);
+  expect(wordCount(payloadMask(md))).toBe(0);
+});
+
+// List-nested structure (class 4). A `- > quote` behind a bullet and an indented GFM table under a
+// list item are both real payload; the full-descent walk reaches them, so the mask blanks the
+// quote text and the table (delimiter included), leaving only the bare list scaffold as prose.
+test("payloadMask: a list-nested blockquote and an indented table are masked (class 4)", () => {
+  expect(payloadMask("- > nested quote line here")).not.toContain("nested quote");
+  expect(payloadDensity("- > nested quote line here")).toBeGreaterThan(0.5);
+  const tbl = "- item\n\n  | a | b |\n  | --- | --- |\n  | 1 | 2 |";
+  expect(payloadMask(tbl)).not.toContain("---");
+  expect(payloadDensity(tbl)).toBeGreaterThan(0.7);
 });
