@@ -283,10 +283,9 @@ function stripFences(text: string): string {
 // leading/trailing blank lines dropped — the language tag and fence width are excluded, so
 // a retained block (assembleBody pushes b.text verbatim) covers its source twin regardless
 // of info-string. Internal whitespace is KEPT: code indentation is load-bearing.
-// LOCATOR: mdstruct fenced `codeBlock` nodes (Backlog 5a). Fenced-ONLY — comrak also emits
-// indented code blocks the old regex never saw, so `fenced===true` filters them out (a spike
-// lesson). Fixes the nested-fence mis-split: the old line-scanner closed the block at the
-// FIRST inner ` ``` `; comrak parses the outer block whole.
+// Fenced-ONLY: comrak also emits indented code blocks the old regex never saw, so
+// `fenced===true` filters them out. Fixes the nested-fence mis-split — the old line-scanner
+// closed the block at the FIRST inner ` ``` `; comrak parses the outer block whole.
 export function harvestFences(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const { doc, buf } = parseDoc(text);
@@ -310,12 +309,10 @@ export function harvestFences(text: string): PayloadSpan[] {
 // (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
 export const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
 
-// LOCATOR: mdstruct `blockQuote` nodes, no-descend (Backlog 5a) — the regex merged a `>`/`>>`
-// run into ONE key, so nested quotes must not be double-counted. key normalization is
-// unchanged: per-line BLOCKQUOTE_LINE strip, joined " ", whitespace-collapsed, lowercased.
-// Fixes two regex bugs the gate found: a `> quote` documented INSIDE a code fence no longer
-// false-flags (comrak ignores fenced content), and a list-nested `- > quote` is now captured
-// (comrak parses it as a child blockQuote; the old `^\s*>` line-anchor missed it).
+// mdstruct `blockQuote` nodes, no-descend (the regex merged a `>`/`>>` run into ONE key, so
+// nested quotes must not be double-counted). Fixes two regex bugs: a `> quote` INSIDE a code
+// fence no longer false-flags (comrak ignores fenced content), and a list-nested `- > quote`
+// is now captured (the old `^\s*>` line-anchor missed it; comrak parses it as a child quote).
 export function harvestBlockquotes(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const { doc, buf } = parseDoc(text);
@@ -364,13 +361,11 @@ export function isTableDataRow(maskedLine: string): boolean {
   return true;
 }
 
-// HYBRID LOCATOR (Backlog 5a) — the one non-clean lane. Real GFM tables come from mdstruct
-// `tableRow`→`tableCell` spans (per cell: MASK_RE-masked, trimmed, lowercased, joined ␟),
-// header row kept (only the delimiter row is dropped, which comrak never emits as a row).
-// UNION the old regex row-scan for rows NOT inside any mdstruct table: a `- a | b` pseudo-
-// table (no `:?-+:?` delimiter row) is not a GFM table, so comrak emits no table node, and
-// the regex carve-out (isTableDataRow, gate class-1) must keep detecting it. A real table's
-// lines are tracked in `covered` so a genuine row is never double-counted across the two paths.
+// HYBRID — the one non-clean lane. Real GFM tables come from mdstruct `tableRow`→`tableCell`
+// spans (header row kept; the delimiter row comrak never emits). A `- a | b` pseudo-table has
+// no delimiter row, so comrak emits no table node — the old regex row-scan must keep catching
+// it, UNIONed in for rows outside any mdstruct table. A real table's lines go in `covered` so
+// a genuine row is never counted by both paths.
 export function harvestTableRows(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const { doc, buf } = parseDoc(text);
@@ -415,13 +410,10 @@ export function harvestTableRows(text: string): PayloadSpan[] {
 // (router signal) — one detection, two uses (D2).
 export const MD_IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 export const EMBED_RE = /!\[\[([^\]]+)\]\]/g;
-// LOCATOR: mdstruct `inlines[]` — a markdown `image.url` → slug, and a `wikilink{embed:true}`
-// asset target (`page`) → slug (Backlog 5a). key normalization unchanged (normalizeEdgeTarget,
-// decode, slugSegment, ASSET_RE). Fixes the payload-in-code false positive: an `![[x.png]]` or
-// `![alt](y.png)` written inside inline code or a fence is no longer emitted (comrak surfaces
-// no image inline there), so it stops false-flagging as dropped. `page` is the wikilink target
-// with alias and `#fragment` already stripped by mdstruct — see MdInline in mdstruct.ts for why
-// keying on it is gate-equivalent to the spike's raw-`target` path.
+// mdstruct `inlines[]` — a markdown `image.url` or a `wikilink{embed}` asset target (`page`),
+// each slugged. Fixes the payload-in-code false positive: an `![[x.png]]` / `![alt](y.png)`
+// inside inline code or a fence is no longer emitted (comrak surfaces no image inline there),
+// so it stops false-flagging as dropped. On `page` vs `target`, see MdInline in mdstruct.ts.
 export function harvestImages(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const { doc, buf } = parseDoc(text);
