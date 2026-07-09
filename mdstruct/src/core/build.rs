@@ -76,6 +76,20 @@ fn opt_string(s: String) -> Option<String> {
     if s.is_empty() { None } else { Some(s) }
 }
 
+/// The DECODED display text of a comrak WikiLink: its child `Text` literals
+/// concatenated (comrak un-escapes them, so this is reliable inside a table
+/// cell where the raw span is not). Empty when the link has no display child
+/// (the empty-pipe `[[X|]]`).
+fn wikilink_display<'a>(node: &'a AstNode<'a>) -> String {
+    let mut s = String::new();
+    for c in node.children() {
+        if let NodeValue::Text(t) = &c.data.borrow().value {
+            s.push_str(t);
+        }
+    }
+    s
+}
+
 pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     let idx = LineIndex::new(source);
     let arena = Arena::new();
@@ -545,12 +559,12 @@ fn collect_inlines<'a>(
 ) -> Vec<Inline> {
     let mut inlines: Vec<Inline> = Vec::new();
     // Code-suppression mask (vault-query src/wikilink.rs:83): spans whose bytes
-    // are verbatim, not markup — code, frontmatter, raw-HTML blocks (including
-    // HTML comments), whole GFM tables. The `![[…]]` embed pre-pass skips any
-    // embed whose `!` falls inside one: comrak emits no wikilink for a plain
-    // `[[…]]` in an HtmlBlock, and the `in_table` guard below already drops
-    // inside-cell inlines, so masking keeps the pre-pass symmetric and free of
-    // phantom embeds.
+    // are verbatim, not markup — code (inline + block), frontmatter, raw-HTML
+    // blocks (including HTML comments). The `![[…]]` embed pre-pass skips any
+    // embed whose `!` falls inside one. GFM tables are NOT masked (1.1): a
+    // `![[…]]` in a table cell is now a live embed, and an inline-code cell is
+    // still masked by the `Code` span itself, so the pre-pass stays free of
+    // phantom embeds without a whole-table mask.
     let mut mask: Vec<Span> = Vec::new();
 
     for node in root.descendants() {
@@ -563,16 +577,18 @@ fn collect_inlines<'a>(
         if let NodeValue::Code(_)
         | NodeValue::CodeBlock(_)
         | NodeValue::FrontMatter(_)
-        | NodeValue::HtmlBlock(_)
-        | NodeValue::Table(_) = &d.value
+        | NodeValue::HtmlBlock(_) = &d.value
         {
             mask.push(idx.span_of(sp));
         }
-        // Skip inlines in GFM table cells: comrak's inline sourcepos there is
-        // unreliable (escaped-pipe cells shift offsets — R2), and no consumer
-        // reads inline spans inside cells (distill re-slices raw cell bytes;
-        // §2). The tableCell span alone covers cells.
-        if in_table(node) {
+        // GFM table cells: comrak's inline sourcepos there is unreliable
+        // (escaped-pipe cells shift offsets — R2). Non-wikilink inlines
+        // (links, code spans, images, footnote refs) stay suppressed inside
+        // cells (Decision 19; distill re-slices raw cell bytes). Wikilinks and
+        // embeds ARE emitted (1.1): the consumer reads their decoded
+        // `target`/`alias`, not the imprecise span, so table-cell backlinks are
+        // not lost. The oracle exempts these cell wikilinks (verify.rs).
+        if in_table(node) && !matches!(&d.value, NodeValue::WikiLink(_)) {
             continue;
         }
         let span = idx.span_of(sp);
@@ -613,10 +629,23 @@ fn collect_inlines<'a>(
             NodeValue::WikiLink(nw) => {
                 let t = wikilink::decompose(&nw.url);
                 let alias_span = children_span(node, idx);
+                // A pipe separates target from alias. comrak drops multi-pipe
+                // links (no node), so an emitted wikilink has 0 or 1 pipe: a
+                // `|` byte anywhere in the (start-anchored) slice IS the
+                // separator. The alias itself is the DECODED display child
+                // (`""` for the empty-pipe `[[X|]]`), reliable where a cell
+                // span slice is not.
+                let alias = if slice.contains('|') {
+                    Some(wikilink_display(node))
+                } else {
+                    None
+                };
                 inlines.push(Inline::Wikilink {
+                    target: nw.url.clone(),
                     page: t.page,
                     heading: t.heading,
                     block: t.block,
+                    alias,
                     alias_span,
                     embed: false,
                     span,
@@ -687,12 +716,21 @@ fn collect_embeds(source: &str, idx: &LineIndex, mask: &[Span], inlines: &mut Ve
                     continue;
                 }
                 let end = inner_end + 2;
-                let target = inner.split('|').next().unwrap_or(inner);
+                // Split on the FIRST pipe: target before, alias after (mirrors
+                // vault-query's regex — the alias keeps any later pipes, and an
+                // empty-pipe `![[X|]]` yields `Some("")`). The embed span is a
+                // byte-exact literal scan, so this raw split is reliable.
+                let (target, alias) = match inner.split_once('|') {
+                    Some((tgt, ali)) => (tgt, Some(ali.to_string())),
+                    None => (inner, None),
+                };
                 let t = wikilink::decompose(target);
                 inlines.push(Inline::Wikilink {
+                    target: target.to_string(),
                     page: t.page,
                     heading: t.heading,
                     block: t.block,
+                    alias,
                     alias_span: None,
                     embed: true,
                     span: Span::new(i, end),
@@ -774,9 +812,65 @@ mod tests {
     }
 
     #[test]
-    fn embed_in_table_cell_emits_no_wikilink() {
+    fn embed_in_table_cell_is_emitted() {
+        // 1.1: a table-cell embed is a live backlink, not verbatim. The pre-pass
+        // scans it (GFM tables are no longer masked) with a byte-exact span.
         let d = build("| a | b |\n| --- | --- |\n| ![[Note]] | c |\n");
-        assert!(!has_wikilink(&d), "embed inside a GFM table cell is verbatim");
+        assert!(
+            d.inlines.iter().any(|i| matches!(
+                i,
+                Inline::Wikilink { page, embed: true, .. } if page == "Note"
+            )),
+            "embed inside a GFM table cell is emitted as a wikilink",
+        );
+    }
+
+    #[test]
+    fn wikilink_in_table_cell_is_emitted() {
+        // 1.1: comrak emits the WikiLink inside the cell; the `in_table` guard
+        // no longer suppresses it. `target` comes from the decoded url.
+        let d = build("| a | b |\n| --- | --- |\n| [[Note]] | c |\n");
+        assert!(
+            d.inlines.iter().any(|i| matches!(
+                i,
+                Inline::Wikilink { target, embed: false, .. } if target == "Note"
+            )),
+            "plain wikilink inside a GFM table cell is emitted",
+        );
+    }
+
+    #[test]
+    fn table_cell_wikilink_alias_from_escaped_pipe() {
+        // `[[a\|b]]` in a cell: comrak sees the escaped pipe as the separator
+        // (url="a", display="b"). The span shifts (drops the final `]`), so the
+        // consumer must read `target`/`alias`, not the span.
+        let d = build("| x |\n| --- |\n| [[a\\|b]] |\n");
+        let wl = d
+            .inlines
+            .iter()
+            .find_map(|i| match i {
+                Inline::Wikilink { target, alias, .. } => Some((target.clone(), alias.clone())),
+                _ => None,
+            })
+            .expect("table-cell wikilink emitted");
+        assert_eq!(wl, ("a".to_string(), Some("b".to_string())));
+    }
+
+    #[test]
+    fn empty_pipe_alias_is_some_empty() {
+        // `[[X|]]`: pipe present, empty display. comrak emits no display child;
+        // the pipe in the slice drives `alias = Some("")`, distinct from a
+        // no-pipe `[[X]]` (`alias = None`).
+        let d = build("[[X|]] and [[X]]\n");
+        let aliases: Vec<Option<String>> = d
+            .inlines
+            .iter()
+            .filter_map(|i| match i {
+                Inline::Wikilink { alias, .. } => Some(alias.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(aliases, vec![Some(String::new()), None]);
     }
 
     #[test]
