@@ -7,6 +7,7 @@ import {
   parseDoc,
   sliceBytes,
   walkNodes,
+  walkHeadings,
   type ParsedDoc,
   type Span,
   type MdNode,
@@ -306,12 +307,11 @@ function lineByteOffsets(text: string): number[] {
   return off;
 }
 
-// Flatten the mdstruct headings tree to a flat list in tree order (parent before children).
-function flattenHeadings(hs: Heading[] | undefined, out: Heading[] = []): Heading[] {
-  for (const h of hs ?? []) {
-    out.push(h);
-    if (h.children) flattenHeadings(h.children, out);
-  }
+// Flatten the mdstruct headings tree to a flat list in tree order (parent before children),
+// reusing mdstruct's walkHeadings so the traversal lives in one place.
+function flattenHeadings(hs: Heading[] | undefined): Heading[] {
+  const out: Heading[] = [];
+  walkHeadings(hs, (h) => out.push(h));
   return out;
 }
 
@@ -326,29 +326,37 @@ interface StructuralParts {
   blockquotes: MdNode[]; // top-level blockQuote nodes
   tables: MdNode[]; // GFM table nodes (span covers header + delimiter + data rows)
   tableRows: MdNode[]; // GFM tableRow nodes (children = tableCell), document order
-  tableLines: Set<number>; // 1-indexed source lines owned by a real mdstruct table
   images: MdInline[]; // markdown image inlines + asset-embed wikilink inlines
-  pseudoRows: { line: number; span: Span }[]; // delimiter-less pseudo-table rows outside any table
+  // delimiter-less pseudo-table rows outside any real table; raw = source line, masked = the
+  // fence/inline-span-masked line (both precomputed here so harvestTableRows never re-splits).
+  pseudoRows: { span: Span; raw: string; masked: string }[];
 }
 
+// collectStructural memoized per ParsedDoc: the four harvesters + structuralSpans all read the
+// same parse (parseDoc caches by text → one ParsedDoc object), so the walk runs once per doc,
+// not once per consumer. Nothing mutates StructuralParts, so sharing the object is safe.
+const structuralCache = new WeakMap<ParsedDoc, StructuralParts>();
+
 function collectStructural(parsed: ParsedDoc): StructuralParts {
+  const cached = structuralCache.get(parsed);
+  if (cached) return cached;
   const { doc, buf } = parsed;
   const parts: StructuralParts = {
     fences: [],
     blockquotes: [],
     tables: [],
     tableRows: [],
-    tableLines: new Set(),
     images: [],
     pseudoRows: [],
   };
   // Full-descent walk: fences, tables (+ their line ownership), and tableRows in document order.
+  const tableLines = new Set<number>(); // 1-indexed lines owned by a real table (local bookkeeping)
   walkNodes(doc.nodes, (n) => {
     if (n.type === "codeBlock" && n.fenced) parts.fences.push(n);
     if (n.type === "table") {
       parts.tables.push(n);
       if (n.startLine != null && n.endLine != null)
-        for (let ln = n.startLine; ln <= n.endLine; ln++) parts.tableLines.add(ln);
+        for (let ln = n.startLine; ln <= n.endLine; ln++) tableLines.add(ln);
     }
     if (n.type === "tableRow") parts.tableRows.push(n);
   });
@@ -378,10 +386,15 @@ function collectStructural(parsed: ParsedDoc): StructuralParts {
   const off = lineByteOffsets(text);
   const probe = stripFences(text).replace(MASK_RE, " ").split("\n");
   for (let i = 0; i < probe.length; i++) {
-    if (parts.tableLines.has(i + 1)) continue;
+    if (tableLines.has(i + 1)) continue;
     if (!isTableDataRow(probe[i])) continue;
-    parts.pseudoRows.push({ line: i, span: [off[i], off[i] + byteLen(rawLines[i])] });
+    parts.pseudoRows.push({
+      span: [off[i], off[i] + byteLen(rawLines[i])],
+      raw: rawLines[i],
+      masked: probe[i],
+    });
   }
+  structuralCache.set(parsed, parts);
   return parts;
 }
 
@@ -502,13 +515,12 @@ export function harvestTableRows(text: string): PayloadSpan[] {
     }
   }
   // Pseudo-table fallback: rows outside any real mdstruct table (parts.pseudoRows), keyed
-  // exactly as the old regex row-scan did (masked cells, lowercased).
-  const rawLines = text.split("\n");
-  const mLines = stripFences(text).replace(MASK_RE, " ").split("\n");
-  for (const { line } of parts.pseudoRows) {
+  // exactly as the old regex row-scan did (masked cells, lowercased). raw/masked are precomputed
+  // in collectStructural — the same detection, not a second fence/mask pass.
+  for (const { raw, masked } of parts.pseudoRows) {
     out.push({
-      markup: oneLine((rawLines[line] ?? mLines[line]).trim()),
-      key: tableCells(mLines[line])
+      markup: oneLine(raw.trim()),
+      key: tableCells(masked)
         .map((c) => c.toLowerCase())
         .join("␟"),
     });
@@ -539,12 +551,11 @@ export function harvestImages(text: string): PayloadSpan[] {
       }
       const key = slugSegment(u);
       if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.url), key });
-    } else if (il.type === "wikilink" && il.embed && il.page != null) {
+    } else if (il.type === "wikilink" && il.page != null) {
+      // collectStructural already filtered these to embed + ASSET_RE; just slug the target.
       const t = normalizeEdgeTarget(il.page.split("|")[0].trim());
-      if (ASSET_RE.test(t)) {
-        const key = slugSegment(t);
-        if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.page), key });
-      }
+      const key = slugSegment(t);
+      if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.page), key });
     }
   }
   return out;
@@ -768,25 +779,21 @@ const ATX_HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 // so only the heading oracle changed.
 export function sections(text: string): Section[] {
   const { doc, buf } = parseDoc(text);
-  const headByLine = new Map<number, Heading>(); // 0-indexed split-line index → heading
-  for (const h of flattenHeadings(doc.headings))
-    if (h.startLine != null) headByLine.set(h.startLine - 1, h);
-  const out: Section[] = [];
-  let cur: Section = { heading: "", depth: 0, text: "" }; // lead / intro
-  const push = () => {
-    if (cur.depth > 0 || /\S/.test(cur.text)) out.push(cur);
-  };
   const lines = text.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const h = headByLine.get(i);
-    if (h) {
-      push();
-      cur = { heading: sliceBytes(buf, h.textSpan).trim(), depth: h.level, text: lines[i] };
-    } else {
-      cur.text = cur.text === "" ? lines[i] : cur.text + "\n" + lines[i];
-    }
+  const heads = flattenHeadings(doc.headings)
+    .filter((h) => h.startLine != null)
+    .sort((a, b) => a.startLine! - b.startLine!);
+  const bound = (idx: number) => (idx < heads.length ? heads[idx].startLine! - 1 : lines.length);
+  const out: Section[] = [];
+  const intro = lines.slice(0, bound(0)).join("\n"); // lead before the first heading
+  if (/\S/.test(intro)) out.push({ heading: "", depth: 0, text: intro });
+  for (let i = 0; i < heads.length; i++) {
+    out.push({
+      heading: sliceBytes(buf, heads[i].textSpan).trim(),
+      depth: heads[i].level,
+      text: lines.slice(bound(i), bound(i + 1)).join("\n"),
+    });
   }
-  push();
   return out;
 }
 

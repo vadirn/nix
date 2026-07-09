@@ -121,3 +121,12 @@ export function walkNodes(
     if (n.children && !noDescend.has(n.type)) walkNodes(n.children, fn, noDescend);
   }
 }
+
+// Pre-order walk of the `headings[]` tree (parent before children) — the `Heading` analogue of
+// walkNodes, kept here so both `children`-bearing trees this parse owns share one traversal.
+export function walkHeadings(headings: Heading[] | undefined, fn: (h: Heading) => void): void {
+  for (const h of headings ?? []) {
+    fn(h);
+    walkHeadings(h.children, fn);
+  }
+}
