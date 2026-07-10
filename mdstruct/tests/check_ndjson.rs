@@ -69,6 +69,22 @@ fn bare_check_is_silent_on_dangling() {
     );
 }
 
+/// (d) Scoped human path: `--region <label>` without `--format ndjson` writes a
+/// `warn:` line to stderr (not stdout) for a matching dangling anchor, and does
+/// not change the exit code. This is the default (human) counterpart to (a).
+#[test]
+fn scoped_human_path_warns_on_stderr() {
+    let src = "<!-- interact -->\nbody with no close\n";
+    let (code, stdout, stderr) = run_check(&["--region", "interact"], src);
+
+    assert_eq!(code, 0, "dangling anchors must not change the exit code");
+    assert_eq!(stdout, "", "human warnings go to stderr, not stdout");
+    assert!(
+        stderr.contains("warn:") && stderr.contains("unpaired-open") && stderr.contains("interact"),
+        "expected a scoped warn line for the unpaired open: {stderr:?}"
+    );
+}
+
 /// (c) An unpaired close under `--region` maps to `type=unpaired-close`.
 #[test]
 fn scoped_ndjson_maps_unpaired_close() {
