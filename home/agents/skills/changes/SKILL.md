@@ -1,14 +1,14 @@
 ---
-name: diff
+name: changes
 description: >
   Summarize the current diff per file as markdown: a `## <filepath>` heading per
-  changed file followed by a prose summary of its changes. Triggers: /diff,
+  changed file followed by a prose summary of its changes. Triggers: /changes,
   "summarize the diff", "what changed per file", "per-file summary of changes",
   "суммаризируй дифф", "что изменилось по файлам". Skip for reviewing quality or
   bugs (use /code-review) and for raw diff output (plain `git diff`).
 ---
 
-# Diff
+# Changes
 
 Summarize changes per file, printed as markdown for the user.
 
