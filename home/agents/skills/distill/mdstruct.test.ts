@@ -20,7 +20,32 @@ import {
   structuralSpans,
   wordCount,
 } from "./text.ts";
-import { parseDoc } from "./mdstruct.ts";
+import { parseDoc, sliceBytes } from "./mdstruct.ts";
+
+// Regions overlay (additive, schema 1.1). `parseDoc(doc, { regions: ["interact"] })` registers the
+// `interact` comment-anchor label, so the `<!-- interact: … --> … <!-- /interact -->` pair surfaces
+// in `doc.regions` with byte-exact `span`/`bodySpan` and the whole post-`interact:` string as `info`.
+// The no-opts `parseDoc(doc)` call must stay untouched: region-free (the binary emits `regions: []`
+// when no label is registered, so no region ever surfaces) and the SAME cache key as before (the
+// parsed object is identical across both no-opts calls — same entry, back-compat).
+test("parseDoc: --region surfaces the interact anchor pair; no-opts stays region-free on the same key", () => {
+  const doc = "# T\n\n<!-- interact: click to expand -->\nhidden body\n<!-- /interact -->\n\nAfter.\n";
+
+  const { doc: withRegions, buf } = parseDoc(doc, { regions: ["interact"] });
+  expect(withRegions.regions?.length).toBe(1);
+  const r = withRegions.regions![0];
+  expect(r.label).toBe("interact");
+  expect(r.info).toBe("click to expand"); // the whole post-`interact:` string
+  // span covers both anchor lines; bodySpan is the raw bytes between them.
+  expect(sliceBytes(buf, r.span)).toBe("<!-- interact: click to expand -->\nhidden body\n<!-- /interact -->\n");
+  expect(sliceBytes(buf, r.bodySpan)).toBe("hidden body\n");
+
+  // No-opts path is unchanged: no region surfaces (binary emits `regions: []`), and it hits the
+  // same cache entry across calls — proving the label-suffix key-fix left the `text`-only key intact.
+  const first = parseDoc(doc);
+  expect(first.doc.regions?.length ?? 0).toBe(0);
+  expect(parseDoc(doc)).toBe(first); // byte-for-byte same key → same cached ParsedDoc
+});
 
 // Class 3 — nested fence. A 4-backtick outer fence wraps a literal 3-backtick block. The old
 // line-scanner closed the outer block at the FIRST inner ` ``` `, splitting one payload into
