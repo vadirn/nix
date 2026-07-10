@@ -47,6 +47,9 @@ struct ParseArgs {
     /// Surface a region label in `regions[]` (repeatable).
     #[arg(long = "region")]
     regions: Vec<String>,
+    /// Ignore region anchors inside fenced code blocks when pairing (opt-in).
+    #[arg(long = "region-skip-fenced")]
+    region_skip_fenced: bool,
 }
 
 #[derive(Subcommand)]
@@ -67,6 +70,9 @@ struct CheckArgs {
     /// Register a region label so the opt-in region-slice check runs (repeatable).
     #[arg(long = "region")]
     regions: Vec<String>,
+    /// Ignore region anchors inside fenced code blocks when pairing (opt-in).
+    #[arg(long = "region-skip-fenced")]
+    region_skip_fenced: bool,
 }
 
 #[derive(Args)]
@@ -76,6 +82,9 @@ struct StatsArgs {
     /// Surface a region label in `regions[]` (repeatable).
     #[arg(long = "region")]
     regions: Vec<String>,
+    /// Ignore region anchors inside fenced code blocks when pairing (opt-in).
+    #[arg(long = "region-skip-fenced")]
+    region_skip_fenced: bool,
 }
 
 const TOP_AFTER_HELP: &str = "\
@@ -210,6 +219,7 @@ fn run_parse(args: &ParseArgs) -> u8 {
     let opts = Options {
         wikilinks: true,
         regions: args.regions.clone(),
+        region_skip_fenced: args.region_skip_fenced,
     };
     let mut exit: u8 = 0;
     let stdout = io::stdout();
@@ -248,6 +258,7 @@ fn run_check(args: &CheckArgs) -> u8 {
     let opts = Options {
         wikilinks: true,
         regions: args.regions.clone(),
+        region_skip_fenced: args.region_skip_fenced,
     };
     let mut exit: u8 = 0;
     let mut files_ok = 0usize;
@@ -290,6 +301,7 @@ fn run_stats(args: &StatsArgs) -> u8 {
     let opts = Options {
         wikilinks: true,
         regions: args.regions.clone(),
+        region_skip_fenced: args.region_skip_fenced,
     };
     let mut exit: u8 = 0;
     let mut node_counts: BTreeMap<String, usize> = BTreeMap::new();

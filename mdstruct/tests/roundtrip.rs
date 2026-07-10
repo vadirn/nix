@@ -190,6 +190,7 @@ fn nested_regions() {
     let opts = Options {
         wikilinks: true,
         regions: vec!["outer".to_string(), "inner".to_string()],
+        region_skip_fenced: false,
     };
     let d = parse(src, &opts);
     verify_spans(&d, src).expect("region-slice check must pass");

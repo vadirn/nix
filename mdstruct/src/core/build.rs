@@ -16,6 +16,10 @@ use super::wikilink;
 pub struct Options {
     pub wikilinks: bool,
     pub regions: Vec<String>,
+    /// Opt-in: anchor lines inside fenced code blocks are ignored during region
+    /// pairing (fixes the S7 in-fence-close mispairing). Off by default, which
+    /// keeps region output byte-for-byte identical to the fence-blind scanner.
+    pub region_skip_fenced: bool,
 }
 
 impl Default for Options {
@@ -23,6 +27,7 @@ impl Default for Options {
         Options {
             wikilinks: true,
             regions: Vec::new(),
+            region_skip_fenced: false,
         }
     }
 }
@@ -157,7 +162,15 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     let headings = build_heading_tree(&flat, &idx);
     fill_gaps(source, &idx, &frontmatter, &headings, &mut nodes);
     let inlines = collect_inlines(root, source, &idx, opts);
-    let regions = region::scan(source, &idx, &opts.regions);
+    // Fence-aware regions (opt-in): hand the scanner the byte spans of fenced
+    // code blocks so it can treat in-fence anchors as inert. Empty in the
+    // default path — the scanner then behaves exactly as before.
+    let fence_spans = if opts.region_skip_fenced {
+        fenced_code_spans(root, &idx)
+    } else {
+        Vec::new()
+    };
+    let regions = region::scan(source, &idx, &opts.regions, &fence_spans);
 
     Document {
         schema_version: SCHEMA_VERSION,
@@ -172,6 +185,24 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
         inlines,
         regions,
     }
+}
+
+/// Byte spans of every fenced code block, harvested from comrak's parse (so we
+/// reuse its fence detection rather than reimplementing the ``` grammar). Only
+/// fenced blocks are collected — not indented code, inline code, or HTML blocks
+/// (the last would swallow the anchor comment lines themselves). Feeds the
+/// opt-in `region_skip_fenced` scan; unused on the default path.
+fn fenced_code_spans<'a>(root: &'a AstNode<'a>, idx: &LineIndex) -> Vec<Span> {
+    let mut spans = Vec::new();
+    for node in root.descendants() {
+        let d = node.data.borrow();
+        if let NodeValue::CodeBlock(ncb) = &d.value {
+            if ncb.fenced {
+                spans.push(idx.span_of(d.sourcepos));
+            }
+        }
+    }
+    spans
 }
 
 struct FlatHeading {
