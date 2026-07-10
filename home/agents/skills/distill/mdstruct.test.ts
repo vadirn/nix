@@ -7,7 +7,6 @@
 // in-repo goldens pin the SPECIFIC correctness classes that motivated it, one per class, so
 // the fix is guarded without a vault dependency. Each class was a regex bug that produced
 // phantom "dropped payload" residue (a false warning) or missed real payload.
-import { execFileSync } from "node:child_process";
 import { expect, test } from "bun:test";
 import {
   harvestBlockquotes,
@@ -23,19 +22,18 @@ import {
 } from "./text.ts";
 import { parseDoc, sliceBytes } from "./mdstruct.ts";
 
-// Regions overlay (additive, schema 1.1). `parseDoc(doc, { regions: ["interact"] })` registers the
-// `interact` comment-anchor label, so the `<!-- interact: … --> … <!-- /interact -->` pair surfaces
-// in `doc.regions` with byte-exact `span`/`bodySpan` and the whole post-`interact:` string as `info`.
-// The no-opts `parseDoc(doc)` call must stay untouched: region-free (the binary emits `regions: []`
-// when no label is registered, so no region ever surfaces) and the SAME cache key as before (the
-// parsed object is identical across both no-opts calls — same entry, back-compat).
-test("parseDoc: --region surfaces the interact anchor pair; no-opts stays region-free on the same key", () => {
+// Region extraction is always-on and complete: every comment-anchor pair surfaces in `doc.regions`
+// with byte-exact `span`/`bodySpan` and the whole post-`interact:` string as `info`. There is no
+// registration flag -- `parseDoc(text)` alone emits the region -- and the cache keys on `text`
+// alone, so repeated calls hit the same entry.
+test("parseDoc: the interact anchor pair surfaces unconditionally; repeat calls hit the same key", () => {
   const doc =
     "# T\n\n<!-- interact: click to expand -->\nhidden body\n<!-- /interact -->\n\nAfter.\n";
 
-  const { doc: withRegions, buf } = parseDoc(doc, { regions: ["interact"] });
-  expect(withRegions.regions?.length).toBe(1);
-  const r = withRegions.regions![0];
+  const first = parseDoc(doc);
+  const { doc: parsed, buf } = first;
+  expect(parsed.regions?.length).toBe(1);
+  const r = parsed.regions![0];
   expect(r.label).toBe("interact");
   expect(r.info).toBe("click to expand"); // the whole post-`interact:` string
   // span covers both anchor lines; bodySpan is the raw bytes between them.
@@ -44,70 +42,32 @@ test("parseDoc: --region surfaces the interact anchor pair; no-opts stays region
   );
   expect(sliceBytes(buf, r.bodySpan)).toBe("hidden body\n");
 
-  // No-opts path is unchanged: no region surfaces (binary emits `regions: []`), and it hits the
-  // same cache entry across calls — proving the label-suffix key-fix left the `text`-only key intact.
-  const first = parseDoc(doc);
-  expect(first.doc.regions?.length ?? 0).toBe(0);
-  expect(parseDoc(doc)).toBe(first); // byte-for-byte same key → same cached ParsedDoc
+  // Cache keys on `text` alone: a repeated call hits the same entry.
+  expect(parseDoc(doc)).toBe(first);
 });
 
-// S7 fence-skip (schema 1.1, opt-in). `--region-skip-fenced` is a fresh flag: the nix PATH binary
-// predates it, so this case is capability-gated on the RESOLVED binary (MDSTRUCT_BIN ?? "mdstruct")
-// advertising it in `--help`. When absent it is test.skip'd (kept green for everyone); when present
-// it runs against a binary that has the flag (e.g. the debug build via MDSTRUCT_BIN).
-const MDSTRUCT_BIN = process.env.MDSTRUCT_BIN ?? "mdstruct";
-const SUPPORTS_SKIP_FENCED = (() => {
-  try {
-    return execFileSync(MDSTRUCT_BIN, ["--help"], { encoding: "utf8" }).includes(
-      "region-skip-fenced",
-    );
-  } catch {
-    return false;
-  }
-})();
-
-// S7 doc: the `interact` OPEN sits outside any fence; a STRAY `<!-- /interact -->` sits inside a real
-// fenced code block; the REAL close follows after the fence. Without the flag, region::scan pairs the
-// open with the stray (fenced) close → a mispaired, too-short region. With `--region-skip-fenced`, the
-// fenced anchor is ignored and the region spans to the real close.
+// S7 fence-skip is now the SOLE path: fence-awareness is unconditional. The `interact` OPEN sits
+// outside any fence; a STRAY `<!-- /interact -->` sits inside a real fenced code block; the REAL
+// close follows after the fence. The scanner masks the fenced anchor, so the open pairs with the
+// real close and the region spans the full payload -- no flag, no fence-blind alternative.
 const S7_DOC =
   "# T\n\n<!-- interact: demo -->\nreal body line\n\n```text\n<!-- /interact -->\n```\n\nmore real body\n<!-- /interact -->\n\nAfter.\n";
 
-(SUPPORTS_SKIP_FENCED ? test : test.skip)(
-  SUPPORTS_SKIP_FENCED
-    ? "parseDoc: --region-skip-fenced spans past a stray fenced close to the REAL close (S7)"
-    : "parseDoc: --region-skip-fenced S7 [SKIPPED: resolved mdstruct predates the flag]",
-  () => {
-    const skipped = parseDoc(S7_DOC, { regions: ["interact"], skipFencedAnchors: true });
-    const mispaired = parseDoc(S7_DOC, { regions: ["interact"] });
-    const rS = skipped.doc.regions![0];
-    const rM = mispaired.doc.regions![0];
+test("parseDoc: fence-aware extraction spans past a stray fenced close to the REAL close (S7)", () => {
+  const { doc: parsed, buf } = parseDoc(S7_DOC);
+  const r = parsed.regions![0];
 
-    // With the flag: the region reaches the real close — its body carries the post-fence payload.
-    expect(sliceBytes(skipped.buf, rS.bodySpan)).toBe(
-      "real body line\n\n```text\n<!-- /interact -->\n```\n\nmore real body\n",
-    );
-    expect(sliceBytes(skipped.buf, rS.span)).toContain("more real body");
-
-    // Without the flag: the region closes early at the fenced stray anchor — a strictly shorter span
-    // whose body stops at the fence, missing the real payload after it.
-    expect(sliceBytes(mispaired.buf, rM.bodySpan)).toBe("real body line\n\n```text\n");
-    expect(sliceBytes(mispaired.buf, rM.bodySpan)).not.toContain("more real body");
-    expect(rS.span[1]).toBeGreaterThan(rM.span[1]); // fence-aware span extends past the mispaired one
-
-    // The flag keys differently: a distinct cache entry from the no-flag call (flag ⇒ suffix).
-    expect(skipped).not.toBe(mispaired);
-  },
-);
-
-// Default-path invariant: with no `skipFencedAnchors`, the key gains no flag suffix, so a repeated
-// call resolves to the SAME cached object on both the plain and region paths (binary-independent —
-// runs on the PATH binary too, since it never passes the flag).
-test("parseDoc: no skipFencedAnchors ⇒ no flag suffix, so the default-path key is unchanged", () => {
-  expect(parseDoc(S7_DOC)).toBe(parseDoc(S7_DOC));
-  expect(parseDoc(S7_DOC, { regions: ["interact"] })).toBe(
-    parseDoc(S7_DOC, { regions: ["interact"] }),
+  // The region reaches the real close -- its body carries the post-fence payload.
+  expect(sliceBytes(buf, r.bodySpan)).toBe(
+    "real body line\n\n```text\n<!-- /interact -->\n```\n\nmore real body\n",
   );
+  expect(sliceBytes(buf, r.span)).toContain("more real body");
+});
+
+// Cache invariant: `parseDoc` keys on `text` alone, so a repeated call resolves to the SAME cached
+// object.
+test("parseDoc: repeated calls on the same text resolve to the same cached object", () => {
+  expect(parseDoc(S7_DOC)).toBe(parseDoc(S7_DOC));
 });
 
 // Class 3 — nested fence. A 4-backtick outer fence wraps a literal 3-backtick block. The old

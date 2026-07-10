@@ -44,12 +44,6 @@ struct ParseArgs {
     /// 2-space indent; single input only (NDJSON needs one line per doc).
     #[arg(long)]
     pretty: bool,
-    /// Surface a region label in `regions[]` (repeatable).
-    #[arg(long = "region")]
-    regions: Vec<String>,
-    /// Ignore region anchors inside fenced code blocks when pairing (opt-in).
-    #[arg(long = "region-skip-fenced")]
-    region_skip_fenced: bool,
 }
 
 #[derive(Subcommand)]
@@ -67,24 +61,19 @@ enum Commands {
 struct CheckArgs {
     /// Input files; `-` reads stdin. With no path given, reads stdin.
     files: Vec<String>,
-    /// Register a region label so the opt-in region-slice check runs (repeatable).
+    /// Scope dangling-anchor reports to these region labels (repeatable). Its
+    /// sense changed from extraction-registration: extraction is now always-on,
+    /// so this only filters which labels' unpaired anchors `check` reports.
+    // Retained for A5 (dangling-report scoping); not yet read.
+    #[allow(dead_code)]
     #[arg(long = "region")]
     regions: Vec<String>,
-    /// Ignore region anchors inside fenced code blocks when pairing (opt-in).
-    #[arg(long = "region-skip-fenced")]
-    region_skip_fenced: bool,
 }
 
 #[derive(Args)]
 struct StatsArgs {
     /// Input files; `-` reads stdin. With no path given, reads stdin.
     files: Vec<String>,
-    /// Surface a region label in `regions[]` (repeatable).
-    #[arg(long = "region")]
-    regions: Vec<String>,
-    /// Ignore region anchors inside fenced code blocks when pairing (opt-in).
-    #[arg(long = "region-skip-fenced")]
-    region_skip_fenced: bool,
 }
 
 const TOP_AFTER_HELP: &str = "\
@@ -127,7 +116,7 @@ Examples:
   echo '# hi' | mdstruct -                   parse stdin ('-' or no path)
   mdstruct check ~/vault/**/*.md             freeze-gate a corpus (exit 4 on fail)
   mdstruct stats note.md                     type-coverage table on stdout
-  mdstruct check --region interact note.md   gate incl. the 'interact' region slice
+  mdstruct check --region interact note.md   scope dangling-anchor reports to 'interact'
   mdstruct --schema-version                  print the schema contract version";
 
 const CHECK_AFTER_HELP: &str = "\
@@ -142,7 +131,7 @@ Exit codes:
 Examples:
   mdstruct check note.md                     gate a single file
   mdstruct check ~/vault/**/*.md             gate a corpus
-  mdstruct check --region interact note.md   also verify the 'interact' region slice";
+  mdstruct check --region interact note.md   scope dangling-anchor reports to 'interact'";
 
 const STATS_AFTER_HELP: &str = "\
 Contract:
@@ -216,11 +205,7 @@ fn run_parse(args: &ParseArgs) -> u8 {
         return 2;
     }
 
-    let opts = Options {
-        wikilinks: true,
-        regions: args.regions.clone(),
-        region_skip_fenced: args.region_skip_fenced,
-    };
+    let opts = Options { wikilinks: true };
     let mut exit: u8 = 0;
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -255,11 +240,7 @@ fn run_parse(args: &ParseArgs) -> u8 {
 
 fn run_check(args: &CheckArgs) -> u8 {
     let files = resolve(&args.files);
-    let opts = Options {
-        wikilinks: true,
-        regions: args.regions.clone(),
-        region_skip_fenced: args.region_skip_fenced,
-    };
+    let opts = Options { wikilinks: true };
     let mut exit: u8 = 0;
     let mut files_ok = 0usize;
     let mut files_checked = 0usize;
@@ -298,11 +279,7 @@ fn run_check(args: &CheckArgs) -> u8 {
 
 fn run_stats(args: &StatsArgs) -> u8 {
     let files = resolve(&args.files);
-    let opts = Options {
-        wikilinks: true,
-        regions: args.regions.clone(),
-        region_skip_fenced: args.region_skip_fenced,
-    };
+    let opts = Options { wikilinks: true };
     let mut exit: u8 = 0;
     let mut node_counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut inline_counts: BTreeMap<String, usize> = BTreeMap::new();

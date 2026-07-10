@@ -42,10 +42,7 @@ pub struct Facet {
 
 /// Parse `content` once and derive the locator facet.
 pub fn facet(content: &str) -> Facet {
-    let opts = Options {
-        wikilinks: false,
-        regions: Vec::new(),
-    };
+    let opts = Options { wikilinks: false };
     let doc = parse(content, &opts);
     let mut headings = Vec::new();
     collect_headings(doc.headings(), content, &mut headings);
@@ -79,10 +76,7 @@ pub fn body_headings(content: &str) -> Vec<BodyHeading> {
 /// H1 still counts as the opening block — matching the CommonMark event walk
 /// this replaces, which accepted both.
 pub fn first_body_block_h1(content: &str) -> Option<String> {
-    let opts = Options {
-        wikilinks: false,
-        regions: Vec::new(),
-    };
+    let opts = Options { wikilinks: false };
     let doc = parse(content, &opts);
     let first = doc.headings().first()?;
     if first.level != 1 {

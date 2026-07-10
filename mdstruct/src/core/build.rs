@@ -15,20 +15,11 @@ use super::wikilink;
 /// Parse options mirrored onto comrak (Decision 13: wikilinks default on).
 pub struct Options {
     pub wikilinks: bool,
-    pub regions: Vec<String>,
-    /// Opt-in: anchor lines inside fenced code blocks are ignored during region
-    /// pairing (fixes the S7 in-fence-close mispairing). Off by default, which
-    /// keeps region output byte-for-byte identical to the fence-blind scanner.
-    pub region_skip_fenced: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
-            wikilinks: true,
-            regions: Vec::new(),
-            region_skip_fenced: false,
-        }
+        Options { wikilinks: true }
     }
 }
 

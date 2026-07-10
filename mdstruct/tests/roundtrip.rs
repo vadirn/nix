@@ -187,11 +187,7 @@ fn setext() {
 #[test]
 fn nested_regions() {
     let src = "<!-- outer -->\n<!-- inner -->\ncontent\n<!-- /inner -->\n<!-- /outer -->\n";
-    let opts = Options {
-        wikilinks: true,
-        regions: vec!["outer".to_string(), "inner".to_string()],
-        region_skip_fenced: false,
-    };
+    let opts = Options { wikilinks: true };
     let d = parse(src, &opts);
     verify_spans(&d, src).expect("region-slice check must pass");
     assert_eq!(d.regions.len(), 2);
