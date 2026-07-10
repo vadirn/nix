@@ -134,6 +134,83 @@ export function sliceBytes(buf: Buffer, span: Span): string {
   return buf.subarray(span[0], span[1]).toString("utf8");
 }
 
+// A scoped dangling-anchor diagnostic from `mdstruct check --region <label> --format ndjson`.
+// `type` is the pairing failure; `span` is the byte range of the offending anchor comment
+// (a `{start,end}` OBJECT in the ndjson, normalized here to the `[start, end)` tuple the rest
+// of this module uses); `line` is its 1-indexed line. Consumers map the two kinds to their own
+// error vocabulary (interact: unpaired-open -> unclosed-block, unpaired-close -> unopened-close).
+export interface RegionDiagnostic {
+  type: "unpaired-open" | "unpaired-close";
+  label: string;
+  span: Span;
+  line: number;
+}
+
+// Run the freeze-gate's dangling-anchor reporter for a single label over `text` on stdin.
+// Shells `mdstruct check --region <label> --format ndjson -` and parses the stdout ndjson
+// records (one per scoped dangling anchor). Keys are read by NAME (serde emits them
+// alphabetically, so positional order is not relied on). This is the ONE Rust engine's view of
+// unpaired anchors; callers never re-scan for fences themselves.
+//
+// Dangling anchors are non-fatal (exit 0), so `check` normally returns cleanly. A byte-integrity
+// failure exits 4 (execFileSync throws), but its dangling records are still on stdout, so the
+// records are recovered from the thrown error rather than lost. A spawn failure (missing binary)
+// throws `mdstruct unavailable`, matching parseDoc's fail-loud contract.
+export function checkRegion(text: string, label: string): RegionDiagnostic[] {
+  const bin = process.env.MDSTRUCT_BIN ?? "mdstruct";
+  const args = ["check", "--region", label, "--format", "ndjson", "-"];
+  let stdout: string;
+  try {
+    stdout = execFileSync(bin, args, {
+      input: text,
+      encoding: "utf8",
+      maxBuffer: 1 << 28,
+      // The `check` verb writes its `N/N files passed` summary (and any warn lines) to stderr;
+      // interact only wants the ndjson diagnostics on stdout, so drop the child's stderr rather
+      // than let it inherit onto the pipeline's stderr.
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+  } catch (e) {
+    const err = e as { status?: number | null; stdout?: string };
+    // A ran-but-nonzero exit (e.g. byte-integrity 4) still wrote the ndjson to stdout; recover it.
+    // A spawn failure has no numeric status -> fail loud like parseDoc.
+    if (typeof err.status === "number") {
+      stdout = typeof err.stdout === "string" ? err.stdout : "";
+    } else {
+      throw new Error(
+        `mdstruct unavailable: could not run '${bin} check' (${(e as Error).message}). ` +
+          "interact's unclosed/unopened validation needs the mdstruct binary on PATH.",
+      );
+    }
+  }
+  const out: RegionDiagnostic[] = [];
+  for (const raw of stdout.split("\n")) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    let rec: { type?: string; label?: string; span?: { start?: number; end?: number }; line?: number };
+    try {
+      rec = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (
+      (rec.type === "unpaired-open" || rec.type === "unpaired-close") &&
+      rec.span &&
+      typeof rec.span.start === "number" &&
+      typeof rec.span.end === "number" &&
+      typeof rec.line === "number"
+    ) {
+      out.push({
+        type: rec.type,
+        label: rec.label ?? label,
+        span: [rec.span.start, rec.span.end],
+        line: rec.line,
+      });
+    }
+  }
+  return out;
+}
+
 // Depth-first walk calling `fn` on every node, recursing into `children` EXCEPT types in
 // `noDescend` — the blockquote lane passes `{blockQuote}` so a nested `> >` quote isn't
 // double-counted (matching the regex `>`-run merge).
