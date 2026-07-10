@@ -191,6 +191,41 @@ test("routeNote: labels the intro and computes per-section density + route", () 
   ]);
 });
 
+// Route-parity pin (mdstruct-fed sections + structuralSpans mask). A mixed note exercises every
+// lane the migration touches — a prose intro under an H1, a GFM table (delimiter now masked),
+// a prose section, and a code fence — and its heading→route map is asserted stable end-to-end.
+test("routeNote: a mixed fixture routes stably per section (migration route-parity pin)", () => {
+  const note = [
+    "# Guide",
+    "",
+    "Intro prose that carries the reasoning in plain sentences for the reader to follow along.",
+    "",
+    "## Limits",
+    "",
+    "| Plan | Requests |",
+    "| --- | --- |",
+    "| Free | 100 |",
+    "| Pro | 9000 |",
+    "",
+    "## Rationale",
+    "",
+    "We keep the surface small so the prose carries the reasoning instead of a wall of settings.",
+    "",
+    "## Snippet",
+    "",
+    "```ts",
+    "const r = createRouter();",
+    "r.add('/a', a);",
+    "```",
+  ].join("\n");
+  expect(routeNote(note).map((r) => [r.heading, r.route])).toEqual([
+    ["Guide", "re-author"],
+    ["Limits", "preserve"],
+    ["Rationale", "re-author"],
+    ["Snippet", "preserve"],
+  ]);
+});
+
 test("formatDryRun: one note line with route-mix, one line per section", () => {
   const rows = [
     { heading: "Idea", depth: 2, density: 0, route: "re-author" as const },

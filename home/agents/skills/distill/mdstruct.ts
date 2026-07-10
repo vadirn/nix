@@ -38,9 +38,26 @@ export interface MdInline {
   span?: Span;
 }
 
+// A heading node in the `headings[]` tree (mirrors the binary's JSON: the key is `level`,
+// not `depth` — Section.depth is derived from it in text.ts::sections). `span` is the heading
+// line itself (ATX marker + text, or a setext text-line + its underline); `textSpan` is the
+// title text alone (trailing `#` markers and whitespace excluded); `startLine` is 1-indexed
+// (setext headings start on their text line). `sectionSpan` is the heading's whole subtree
+// (start → end of everything under it) — it NESTS, so text.ts::sections takes disjoint bodies
+// (heading start → next heading start) rather than reading it. `children` are the sub-headings.
+export interface Heading {
+  level: number;
+  span: Span;
+  textSpan: Span;
+  startLine?: number;
+  sectionSpan?: Span;
+  children?: Heading[];
+}
+
 export interface MdDoc {
   nodes?: MdNode[];
   inlines?: MdInline[];
+  headings?: Heading[];
 }
 
 export interface ParsedDoc {
@@ -102,5 +119,14 @@ export function walkNodes(
   for (const n of nodes ?? []) {
     fn(n);
     if (n.children && !noDescend.has(n.type)) walkNodes(n.children, fn, noDescend);
+  }
+}
+
+// Pre-order walk of the `headings[]` tree (parent before children) — the `Heading` analogue of
+// walkNodes, kept here so both `children`-bearing trees this parse owns share one traversal.
+export function walkHeadings(headings: Heading[] | undefined, fn: (h: Heading) => void): void {
+  for (const h of headings ?? []) {
+    fn(h);
+    walkHeadings(h.children, fn);
   }
 }

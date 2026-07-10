@@ -3,7 +3,17 @@
 // with no I/O; its only dependency is writing/typography.ts, the writing-core's
 // own leaf (normalizeTypography moved there, re-exported here).
 import { normalizeTypography } from "./writing/typography.ts";
-import { parseDoc, sliceBytes, walkNodes } from "./mdstruct.ts";
+import {
+  parseDoc,
+  sliceBytes,
+  walkNodes,
+  walkHeadings,
+  type ParsedDoc,
+  type Span,
+  type MdNode,
+  type MdInline,
+  type Heading,
+} from "./mdstruct.ts";
 
 // Relations registry — TS-native copy of the open relation vocabulary (structural
 // channel only, D32). Mirror of vault-query/src/commands/lint/rel-registry.json, the
@@ -279,25 +289,150 @@ function stripFences(text: string): string {
   return out.join("\n");
 }
 
+// ---- ONE structural detection, N uses (D2) ----
+// Byte length of a string in UTF-8 (spans are byte offsets into the source Buffer, never JS
+// UTF-16 indices — the Cyrillic invariant).
+const byteLen = (s: string): number => Buffer.byteLength(s, "utf8");
+
+// Per-line byte start offsets for a text split on "\n" (each line's start + its own byte
+// length + 1 for the newline). Aligns a raw line index with its byte span.
+function lineByteOffsets(text: string): number[] {
+  const lines = text.split("\n");
+  const off = new Array<number>(lines.length);
+  let acc = 0;
+  for (let i = 0; i < lines.length; i++) {
+    off[i] = acc;
+    acc += byteLen(lines[i]) + 1;
+  }
+  return off;
+}
+
+// Flatten the mdstruct headings tree to a flat list in tree order (parent before children),
+// reusing mdstruct's walkHeadings so the traversal lives in one place.
+function flattenHeadings(hs: Heading[] | undefined): Heading[] {
+  const out: Heading[] = [];
+  walkHeadings(hs, (h) => out.push(h));
+  return out;
+}
+
+// The categorized structural payload of a parsed doc, harvested ONCE. structuralSpans composes
+// the flat byte-span union from it (the router mask); each of the four structural harvesters
+// reads the category it owns and applies its own key-normalization (the residue inventory).
+// One detection, N uses (D2): the router and the inventory can never disagree on what is
+// structural. Blockquotes are top-level only (nested `> >` merged, matching the regex `>`-run);
+// every other lane descends fully (a fence/table inside a quote or list still counts).
+interface StructuralParts {
+  fences: MdNode[]; // fenced codeBlocks (bodySpan = inner body)
+  blockquotes: MdNode[]; // top-level blockQuote nodes
+  tables: MdNode[]; // GFM table nodes (span covers header + delimiter + data rows)
+  tableRows: MdNode[]; // GFM tableRow nodes (children = tableCell), document order
+  images: MdInline[]; // markdown image inlines + asset-embed wikilink inlines
+  // delimiter-less pseudo-table rows outside any real table; raw = source line, masked = the
+  // fence/inline-span-masked line (both precomputed here so harvestTableRows never re-splits).
+  pseudoRows: { span: Span; raw: string; masked: string }[];
+}
+
+// collectStructural memoized per ParsedDoc: the four harvesters + structuralSpans all read the
+// same parse (parseDoc caches by text → one ParsedDoc object), so the walk runs once per doc,
+// not once per consumer. Nothing mutates StructuralParts, so sharing the object is safe.
+const structuralCache = new WeakMap<ParsedDoc, StructuralParts>();
+
+function collectStructural(parsed: ParsedDoc): StructuralParts {
+  const cached = structuralCache.get(parsed);
+  if (cached) return cached;
+  const { doc, buf } = parsed;
+  const parts: StructuralParts = {
+    fences: [],
+    blockquotes: [],
+    tables: [],
+    tableRows: [],
+    images: [],
+    pseudoRows: [],
+  };
+  // Full-descent walk: fences, tables (+ their line ownership), and tableRows in document order.
+  const tableLines = new Set<number>(); // 1-indexed lines owned by a real table (local bookkeeping)
+  walkNodes(doc.nodes, (n) => {
+    if (n.type === "codeBlock" && n.fenced) parts.fences.push(n);
+    if (n.type === "table") {
+      parts.tables.push(n);
+      if (n.startLine != null && n.endLine != null)
+        for (let ln = n.startLine; ln <= n.endLine; ln++) tableLines.add(ln);
+    }
+    if (n.type === "tableRow") parts.tableRows.push(n);
+  });
+  // Top-level blockquotes only: noDescend so a nested `> >` quote is not double-counted.
+  walkNodes(
+    doc.nodes,
+    (n) => {
+      if (n.type === "blockQuote") parts.blockquotes.push(n);
+    },
+    new Set(["blockQuote"]),
+  );
+  // Inline image lane: every markdown image, plus a wikilink embed whose target is an asset
+  // (the same ASSET_RE filter harvestImages / the old embed-mask regex applied). Inlines inside
+  // code spans/fences are not emitted by mdstruct, so a `![[x.png]]` in inline code is skipped.
+  for (const il of doc.inlines ?? []) {
+    if (il.type === "image") parts.images.push(il);
+    else if (il.type === "wikilink" && il.embed && il.page != null) {
+      const t = normalizeEdgeTarget(il.page.split("|")[0].trim());
+      if (ASSET_RE.test(t)) parts.images.push(il);
+    }
+  }
+  // Pseudo-table fallback (class-1 carve-out): a `- a | b` row has no `:?-+:?` delimiter, so
+  // comrak emits no table node — the old regex row-scan must keep catching it, restricted to
+  // lines OUTSIDE any real mdstruct table (tableLines) so a genuine row is never double-owned.
+  const text = buf.toString("utf8");
+  const rawLines = text.split("\n");
+  const off = lineByteOffsets(text);
+  const probe = stripFences(text).replace(MASK_RE, " ").split("\n");
+  for (let i = 0; i < probe.length; i++) {
+    if (tableLines.has(i + 1)) continue;
+    if (!isTableDataRow(probe[i])) continue;
+    parts.pseudoRows.push({
+      span: [off[i], off[i] + byteLen(rawLines[i])],
+      raw: rawLines[i],
+      masked: probe[i],
+    });
+  }
+  structuralCache.set(parsed, parts);
+  return parts;
+}
+
+// The union of source byte-spans for the structural payload lanes — fenced code, tables
+// (mdstruct table spans ∪ the pseudo-table regex fallback), blockquotes, images, asset embeds.
+// The SINGLE detection both consumers read: payloadMask blanks these bytes for the router
+// signal; the four harvesters read collectStructural's categories for the residue inventory.
+export function structuralSpans(parsed: ParsedDoc): Span[] {
+  const parts = collectStructural(parsed);
+  const spans: Span[] = [];
+  for (const n of parts.fences) if (n.span) spans.push(n.span);
+  for (const n of parts.blockquotes) if (n.span) spans.push(n.span);
+  for (const n of parts.tables) if (n.span) spans.push(n.span);
+  for (const il of parts.images) if (il.span) spans.push(il.span);
+  for (const r of parts.pseudoRows) spans.push(r.span);
+  return spans;
+}
+
 // Verbatim fenced code/output blocks. key = the inner body, each line right-trimmed,
 // leading/trailing blank lines dropped — the language tag and fence width are excluded, so
 // a retained block (assembleBody pushes b.text verbatim) covers its source twin regardless
 // of info-string. Internal whitespace is KEPT: code indentation is load-bearing.
 // Fenced-ONLY: comrak also emits indented code blocks the old regex never saw, so
-// `fenced===true` filters them out. Fixes the nested-fence mis-split — the old line-scanner
-// closed the block at the FIRST inner ` ``` `; comrak parses the outer block whole.
+// collectStructural.fences is fenced-only. Fixes the nested-fence mis-split — the old
+// line-scanner closed the block at the FIRST inner ` ``` `; comrak parses the outer block whole.
 export function harvestFences(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  const { doc, buf } = parseDoc(text);
-  walkNodes(doc.nodes, (n) => {
-    if (n.type !== "codeBlock" || !n.fenced || !n.bodySpan) return;
+  const parsed = parseDoc(text);
+  const { buf } = parsed;
+  for (const n of collectStructural(parsed).fences) {
+    if (!n.bodySpan) continue;
     const key = sliceBytes(buf, n.bodySpan)
       .split("\n")
       .map((l) => l.replace(/\s+$/, ""))
       .join("\n")
       .replace(/^\n+|\n+$/g, "");
     if (key) out.push({ markup: oneLine(sliceBytes(buf, n.span ?? n.bodySpan)), key });
-  });
+  }
   return out;
 }
 
@@ -315,21 +450,18 @@ export const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
 // is now captured (the old `^\s*>` line-anchor missed it; comrak parses it as a child quote).
 export function harvestBlockquotes(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  const { doc, buf } = parseDoc(text);
-  walkNodes(
-    doc.nodes,
-    (n) => {
-      if (n.type !== "blockQuote" || !n.span) return;
-      const inner: string[] = [];
-      for (const line of sliceBytes(buf, n.span).split("\n")) {
-        const m = BLOCKQUOTE_LINE.exec(line);
-        if (m) inner.push(m[1]);
-      }
-      const key = inner.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
-      if (key) out.push({ markup: oneLine(inner.join(" ")), key });
-    },
-    new Set(["blockQuote"]),
-  );
+  const parsed = parseDoc(text);
+  const { buf } = parsed;
+  for (const n of collectStructural(parsed).blockquotes) {
+    if (!n.span) continue;
+    const inner: string[] = [];
+    for (const line of sliceBytes(buf, n.span).split("\n")) {
+      const m = BLOCKQUOTE_LINE.exec(line);
+      if (m) inner.push(m[1]);
+    }
+    const key = inner.join(" ").replace(/\s+/g, " ").trim().toLowerCase();
+    if (key) out.push({ markup: oneLine(inner.join(" ")), key });
+  }
   return out;
 }
 
@@ -368,13 +500,10 @@ export function isTableDataRow(maskedLine: string): boolean {
 // a genuine row is never counted by both paths.
 export function harvestTableRows(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  const { doc, buf } = parseDoc(text);
-  const covered = new Set<number>(); // 1-indexed source lines owned by a real mdstruct table
-  walkNodes(doc.nodes, (n) => {
-    if (n.type === "table" && n.startLine != null && n.endLine != null) {
-      for (let ln = n.startLine; ln <= n.endLine; ln++) covered.add(ln);
-    }
-    if (n.type !== "tableRow") return;
+  const parsed = parseDoc(text);
+  const { buf } = parsed;
+  const parts = collectStructural(parsed);
+  for (const n of parts.tableRows) {
     const cells = (n.children ?? []).map((c) =>
       c.span ? sliceBytes(buf, c.span).replace(MASK_RE, " ").trim().toLowerCase() : "",
     );
@@ -384,16 +513,14 @@ export function harvestTableRows(text: string): PayloadSpan[] {
         key: cells.join("␟"),
       });
     }
-  });
-  // Pseudo-table fallback: the old regex row-scan, restricted to lines outside any real table.
-  const rawLines = text.split("\n");
-  const mLines = stripFences(text).replace(MASK_RE, " ").split("\n");
-  for (let i = 0; i < mLines.length; i++) {
-    if (covered.has(i + 1)) continue; // already emitted by the mdstruct table lane
-    if (!isTableDataRow(mLines[i])) continue;
+  }
+  // Pseudo-table fallback: rows outside any real mdstruct table (parts.pseudoRows), keyed
+  // exactly as the old regex row-scan did (masked cells, lowercased). raw/masked are precomputed
+  // in collectStructural — the same detection, not a second fence/mask pass.
+  for (const { raw, masked } of parts.pseudoRows) {
     out.push({
-      markup: oneLine((rawLines[i] ?? mLines[i]).trim()),
-      key: tableCells(mLines[i])
+      markup: oneLine(raw.trim()),
+      key: tableCells(masked)
         .map((c) => c.toLowerCase())
         .join("␟"),
     });
@@ -405,19 +532,16 @@ export function harvestTableRows(text: string): PayloadSpan[] {
 // a dropped image falls through BOTH gates. Markdown `![alt](url)` keyed by url slug; asset
 // embed `![[x.png]]` (ASSET_RE) keyed by target slug. Both fragment-stripped + decoded, so
 // an embed surviving in a retained block covers its source twin.
-// Markdown image `![alt](url)` (url captured) and Obsidian embed `![[target]]` (target
-// captured). Shared by harvestImages (payload inventory, asset-filtered) and payloadMask
-// (router signal) — one detection, two uses (D2).
-export const MD_IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-export const EMBED_RE = /!\[\[([^\]]+)\]\]/g;
-// mdstruct `inlines[]` — a markdown `image.url` or a `wikilink{embed}` asset target (`page`),
-// each slugged. Fixes the payload-in-code false positive: an `![[x.png]]` / `![alt](y.png)`
-// inside inline code or a fence is no longer emitted (comrak surfaces no image inline there),
-// so it stops false-flagging as dropped. On `page` vs `target`, see MdInline in mdstruct.ts.
+// mdstruct `inlines[]` (via collectStructural.images) — a markdown `image.url` or a
+// `wikilink{embed}` asset target (`page`), each slugged. Fixes the payload-in-code false
+// positive: an `![[x.png]]` / `![alt](y.png)` inside inline code or a fence is no longer
+// emitted (comrak surfaces no image inline there), so it stops false-flagging as dropped.
+// On `page` vs `target`, see MdInline in mdstruct.ts.
 export function harvestImages(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
-  const { doc, buf } = parseDoc(text);
-  for (const il of doc.inlines ?? []) {
+  const parsed = parseDoc(text);
+  const { buf } = parsed;
+  for (const il of collectStructural(parsed).images) {
     if (il.type === "image" && il.url != null) {
       let u = normalizeEdgeTarget(il.url.trim());
       try {
@@ -427,12 +551,11 @@ export function harvestImages(text: string): PayloadSpan[] {
       }
       const key = slugSegment(u);
       if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.url), key });
-    } else if (il.type === "wikilink" && il.embed && il.page != null) {
+    } else if (il.type === "wikilink" && il.page != null) {
+      // collectStructural already filtered these to embed + ASSET_RE; just slug the target.
       const t = normalizeEdgeTarget(il.page.split("|")[0].trim());
-      if (ASSET_RE.test(t)) {
-        const key = slugSegment(t);
-        if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.page), key });
-      }
+      const key = slugSegment(t);
+      if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.page), key });
     }
   }
   return out;
@@ -640,58 +763,56 @@ export type Route = "re-author" | "preserve";
 // (Backlog 7/9). A section whose payload word-share meets τ routes to preserve.
 export const DEFAULT_TAU = 0.5;
 
-// Split on every ATX heading (depth 1–6). The lead before the first heading is the intro
-// section (heading "", depth 0); it is dropped when blank. Each section's text includes its
-// own heading line; `heading` holds the title text (markers stripped), `depth` the level.
+// ATX heading grammar (marker + title, trailing `#` markers stripped). sections() no longer
+// uses it — it reads mdstruct headings — but extractSection (the `## Relations`/`## Glossary`
+// REBUILD toggle) still scans for ATX headings on a fence-masked copy, so it stays here.
 const ATX_HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+
+// Split on every mdstruct heading (ATX depth 1–6 or setext), in document order. Heading
+// detection now comes from mdstruct: a fenced OR frontmatter `#`-comment is never a heading
+// (the frontmatter fix), and a setext underline is recognized (the regex scanner saw neither).
+// The lead before the first heading is the intro section (heading "", depth 0), dropped when
+// blank. Each section's text is its own heading line plus every following non-heading line up
+// to the next heading's start — a DISJOINT body (mdstruct's sectionSpan NESTS, so a parent
+// would swallow its children; it is not read). `heading` is the title via textSpan, `depth`
+// the heading level. The line-join reproduces the old scanner's exact trailing-newline bytes,
+// so only the heading oracle changed.
 export function sections(text: string): Section[] {
-  const out: Section[] = [];
-  let cur: Section = { heading: "", depth: 0, text: "" }; // lead / intro
-  const push = () => {
-    if (cur.depth > 0 || /\S/.test(cur.text)) out.push(cur);
-  };
+  const { doc, buf } = parseDoc(text);
   const lines = text.split("\n");
-  const masked = stripFences(text).split("\n"); // a fenced `#`-comment reads as blank, never a heading
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (ATX_HEADING.test(masked[i])) {
-      const m = ATX_HEADING.exec(line)!;
-      push();
-      cur = { heading: m[2].trim(), depth: m[1].length, text: line };
-    } else {
-      cur.text = cur.text === "" ? line : cur.text + "\n" + line;
-    }
+  const heads = flattenHeadings(doc.headings)
+    .filter((h) => h.startLine != null)
+    .sort((a, b) => a.startLine! - b.startLine!);
+  const bound = (idx: number) => (idx < heads.length ? heads[idx].startLine! - 1 : lines.length);
+  const out: Section[] = [];
+  const intro = lines.slice(0, bound(0)).join("\n"); // lead before the first heading
+  if (/\S/.test(intro)) out.push({ heading: "", depth: 0, text: intro });
+  for (let i = 0; i < heads.length; i++) {
+    out.push({
+      heading: sliceBytes(buf, heads[i].textSpan).trim(),
+      depth: heads[i].level,
+      text: lines.slice(bound(i), bound(i + 1)).join("\n"),
+    });
   }
-  push();
   return out;
 }
 
-// Blank the structural payload spans (fenced code, table rows, blockquotes, display math,
-// image lines), preserving line count so the masked copy aligns with the source. Reuses the
-// harvest detection — the router's signal is the same primitive as the residue gate's.
+// Blank the structural payload spans (structuralSpans: fenced code, tables, blockquotes,
+// images, asset embeds) — every non-newline byte of a span → space, so the masked copy keeps
+// its line count and aligns with the source. Then the display-math lane blanks in place. ONE
+// detection with the residue gate (D2): the router reads exactly what the harvesters inventory.
+// STRUCTURAL-ONLY — no inline-code output lane: MASK_RE is applied only inside collectStructural's
+// pseudo-table detection probe, never to the returned mask (as the old per-line version applied
+// MASK_RE only to its rowProbe copy). Display math stays regex; the lane set is unchanged.
 export function payloadMask(text: string): string {
-  const fenceMasked = stripFences(text); // fence lane: owns fenced code/output
-  const rowProbe = fenceMasked.replace(MASK_RE, " ").split("\n"); // table-row detection copy
-  let masked = fenceMasked
-    .split("\n")
-    .map((line, i) => {
-      if (isTableDataRow(rowProbe[i])) return ""; // table-row lane
-      if (BLOCKQUOTE_LINE.test(line)) return ""; // blockquote lane
-      return line;
-    })
-    .join("\n");
-  // Display-math + image lanes blank in place, replacing each non-newline char with a space
-  // so multi-line spans keep their line count. Markdown images blank unconditionally; embeds
-  // only when the target is an asset (the same ASSET_RE filter harvestImages applies).
-  const blankKeepingLines = (s: string, re: RegExp) =>
-    s.replace(re, (m) => m.replace(/[^\n]/g, " "));
+  const parsed = parseDoc(text);
+  const bytes = Buffer.from(parsed.buf); // copy — never mutate the cached parse buffer
+  for (const [s, e] of structuralSpans(parsed))
+    for (let i = s; i < e && i < bytes.length; i++) if (bytes[i] !== 0x0a) bytes[i] = 0x20;
+  let masked = bytes.toString("utf8");
+  const blankKeepingLines = (str: string, re: RegExp) =>
+    str.replace(re, (m) => m.replace(/[^\n]/g, " "));
   for (const re of DISPLAY_MATH_PATTERNS) masked = blankKeepingLines(masked, re);
-  masked = blankKeepingLines(masked, MD_IMAGE_RE);
-  masked = masked.replace(EMBED_RE, (m, inner) =>
-    ASSET_RE.test(normalizeEdgeTarget(String(inner).split("|")[0].trim()))
-      ? m.replace(/[^\n]/g, " ")
-      : m,
-  );
   return masked;
 }
 
