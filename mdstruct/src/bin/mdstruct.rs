@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use mdstruct::{Options, SCHEMA_VERSION, parse_bytes, verify_spans};
 
 /// Markdown structural-parsing core → NDJSON.
@@ -64,10 +64,22 @@ struct CheckArgs {
     /// Scope dangling-anchor reports to these region labels (repeatable). Its
     /// sense changed from extraction-registration: extraction is now always-on,
     /// so this only filters which labels' unpaired anchors `check` reports.
-    // Retained for A5 (dangling-report scoping); not yet read.
-    #[allow(dead_code)]
+    /// Bare `check` (no `--region`) is silent on dangling anchors.
     #[arg(long = "region")]
     regions: Vec<String>,
+    /// Output format for scoped dangling-anchor diagnostics. Default (unset)
+    /// writes human `warn:` lines to stderr; `ndjson` writes one JSON record
+    /// per diagnostic to stdout. Byte-integrity verdict + exit codes are
+    /// unaffected by this flag.
+    #[arg(long = "format", value_enum)]
+    format: Option<CheckFormat>,
+}
+
+/// Diagnostic output format for `check`'s dangling-anchor channel.
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum CheckFormat {
+    /// One JSON record per scoped diagnostic on stdout.
+    Ndjson,
 }
 
 #[derive(Args)]
@@ -116,7 +128,7 @@ Examples:
   echo '# hi' | mdstruct -                   parse stdin ('-' or no path)
   mdstruct check ~/vault/**/*.md             freeze-gate a corpus (exit 4 on fail)
   mdstruct stats note.md                     type-coverage table on stdout
-  mdstruct check --region interact note.md   scope dangling-anchor reports to 'interact'
+  mdstruct check --region interact note.md   warn on 'interact' dangling anchors
   mdstruct --schema-version                  print the schema contract version";
 
 const CHECK_AFTER_HELP: &str = "\
@@ -129,9 +141,10 @@ Exit codes:
   0 ok · 1 io · 2 usage · 3 non-UTF8 · 4 check-failed
 
 Examples:
-  mdstruct check note.md                     gate a single file
-  mdstruct check ~/vault/**/*.md             gate a corpus
-  mdstruct check --region interact note.md   scope dangling-anchor reports to 'interact'";
+  mdstruct check note.md                              gate a single file
+  mdstruct check ~/vault/**/*.md                      gate a corpus
+  mdstruct check --region interact note.md            warn on 'interact' dangling anchors (stderr)
+  mdstruct check --region interact --format ndjson -  same, as JSON records on stdout";
 
 const STATS_AFTER_HELP: &str = "\
 Contract:
@@ -264,13 +277,42 @@ fn run_check(args: &CheckArgs) -> u8 {
         // Safe: parse_bytes already validated UTF-8.
         let source = std::str::from_utf8(&bytes).unwrap();
 
+        // Fatal channel: byte-integrity freeze gate. Only this drives exit 4
+        // and the N/M summary; dangling anchors below never touch either.
         files_checked += 1;
-        if let Err(e) = verify_spans(&doc, source) {
-            eprintln!("mdstruct: {path}: CHECK FAILED: {e}");
-            exit = exit.max(4);
-            continue;
+        match verify_spans(&doc, source) {
+            Err(e) => {
+                eprintln!("mdstruct: {path}: CHECK FAILED: {e}");
+                exit = exit.max(4);
+            }
+            Ok(()) => files_ok += 1,
         }
-        files_ok += 1;
+
+        // Non-fatal channel: report unpaired anchors scoped to --region labels.
+        // Empty --region set → nothing matches → silent (bare `check`).
+        for d in doc
+            .dangling
+            .iter()
+            .filter(|d| args.regions.iter().any(|r| r == &d.label))
+        {
+            match args.format {
+                Some(CheckFormat::Ndjson) => {
+                    let rec = serde_json::json!({
+                        "type": d.kind,
+                        "label": d.label,
+                        "span": { "start": d.span.start, "end": d.span.end },
+                        "line": d.line,
+                    });
+                    println!("{rec}");
+                }
+                None => {
+                    eprintln!(
+                        "mdstruct: {path}: warn: {} {} L{}",
+                        d.kind, d.label, d.line
+                    );
+                }
+            }
+        }
     }
 
     eprintln!("mdstruct check: {files_ok}/{files_checked} files passed the freeze gate");
