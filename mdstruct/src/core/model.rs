@@ -8,6 +8,8 @@
 
 use serde::{Serialize, Serializer, ser::SerializeTuple};
 
+use super::region::Dangling;
+
 /// Full `major.minor` schema contract version, carried in every envelope.
 /// 1.1 (additive-minor over 1.0): `Inline::Wikilink` gained `target` + `alias`
 /// so a consumer reconstructs `{target, alias}` off decoded strings instead of
@@ -50,6 +52,10 @@ pub struct Document {
     pub nodes: Vec<Node>,
     pub inlines: Vec<Inline>,
     pub regions: Vec<Region>,
+    /// Unpaired anchors (leftover opens / unmatched closes). Populated always,
+    /// serialized never — surfaced only by `check`, never in NDJSON.
+    #[serde(skip)]
+    pub dangling: Vec<Dangling>,
 }
 
 #[derive(Debug, Clone, Serialize)]

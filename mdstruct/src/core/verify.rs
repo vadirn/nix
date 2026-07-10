@@ -275,11 +275,12 @@ fn verify_regions(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
                 r.label, r.body_span.start, r.body_span.end, r.span.start, r.span.end
             )));
         }
-        let first_line = whole.lines().next().unwrap_or("").trim();
-        if !first_line.starts_with("<!--") {
+        // Byte-based anchor check holding for both whole-line and inline
+        // classes: the span opens on `<!--` and closes on `-->`.
+        if !(whole.trim_start().starts_with("<!--") && whole.trim_end().ends_with("-->")) {
             return Err(err(format!(
-                "region {} span does not begin on an anchor comment line: {:?}",
-                r.label, first_line
+                "region {} span is not bounded by anchor comments: {:?}",
+                r.label, whole
             )));
         }
     }

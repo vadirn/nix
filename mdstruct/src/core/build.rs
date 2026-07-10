@@ -162,15 +162,18 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     let headings = build_heading_tree(&flat, &idx);
     fill_gaps(source, &idx, &frontmatter, &headings, &mut nodes);
     let inlines = collect_inlines(root, source, &idx, opts);
-    // Fence-aware regions (opt-in): hand the scanner the byte spans of fenced
-    // code blocks so it can treat in-fence anchors as inert. Empty in the
-    // default path — the scanner then behaves exactly as before.
-    let fence_spans = if opts.region_skip_fenced {
-        fenced_code_spans(root, &idx)
-    } else {
-        Vec::new()
-    };
-    let regions = region::scan(source, &idx, &opts.regions, &fence_spans);
+    // Region recognition is a masked raw byte scan: anchors buried in fenced or
+    // inline code are inert. Fence-awareness is unconditional now, so the mask
+    // is always built (fenced-code spans + inline-code `NodeValue::Code` spans).
+    // Indented-code and frontmatter anchors are intentionally left live.
+    let mut region_mask = fenced_code_spans(root, &idx);
+    for node in root.descendants() {
+        let d = node.data.borrow();
+        if let NodeValue::Code(_) = &d.value {
+            region_mask.push(idx.span_of(d.sourcepos));
+        }
+    }
+    let scanned = region::scan(source, &idx, &region_mask);
 
     Document {
         schema_version: SCHEMA_VERSION,
@@ -183,15 +186,16 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
         headings,
         nodes,
         inlines,
-        regions,
+        regions: scanned.regions,
+        dangling: scanned.dangling,
     }
 }
 
 /// Byte spans of every fenced code block, harvested from comrak's parse (so we
 /// reuse its fence detection rather than reimplementing the ``` grammar). Only
-/// fenced blocks are collected — not indented code, inline code, or HTML blocks
-/// (the last would swallow the anchor comment lines themselves). Feeds the
-/// opt-in `region_skip_fenced` scan; unused on the default path.
+/// fenced blocks are collected here — not indented code or HTML blocks (the last
+/// would swallow the anchor comment lines themselves); inline-code spans are
+/// added separately at the call site. Feeds the always-on region mask.
 fn fenced_code_spans<'a>(root: &'a AstNode<'a>, idx: &LineIndex) -> Vec<Span> {
     let mut spans = Vec::new();
     for node in root.descendants() {
