@@ -74,7 +74,7 @@
       # `../mdstruct` path dep resolves to the sibling crate tree in `crateSrc`.
       cargoRoot = "vault-query";
       buildAndTestSubdir = "vault-query";
-      cargoHash = "sha256-nwqZmu1ql9kU3xhOdiZAD8bGfIKzAwzJ0SpEYcAN1jU=";
+      cargoHash = "sha256-psvRl9CSC5muEccQM38D7c/M78/VWmdnGx3NMBqlflQ=";
     };
     mdstruct = pkgs.rustPlatform.buildRustPackage {
       pname = "mdstruct";
