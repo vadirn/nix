@@ -1,10 +1,10 @@
 //! End-to-end coverage for the always-on masked region scanner (plan Phase A).
 //! The `region.rs` unit tests drive `scan()` with a hand-built mask; these drive
-//! the whole `parse()` path so build.rs's mask construction (fenced-code spans +
-//! inline `NodeValue::Code` spans) is exercised for real — the layer the unit
-//! tests bypass. Scope: inline recognition, inline-code/fenced masking,
-//! cross-block pairing, whole-line parity under a real fence mask, and the
-//! no-flag always-on contract.
+//! the whole `parse()` path so build.rs's mask construction (fenced-or-indented
+//! code-block spans + inline `NodeValue::Code` spans) is exercised for real —
+//! the layer the unit tests bypass. Scope: inline recognition,
+//! inline-code/fenced/indented masking, cross-block pairing, whole-line parity
+//! under a real fence mask, and the no-flag always-on contract.
 
 use mdstruct::{Options, Span, parse, verify_spans};
 
@@ -66,13 +66,25 @@ fn inline_code_anchors_are_inert() {
 }
 
 /// (3b) Fenced-block skip: a balanced open/close inside a fenced code block is
-/// inert. Exercises build.rs's `fenced_code_spans` mask.
+/// inert. Exercises build.rs's `code_block_mask_spans` mask.
 #[test]
 fn fenced_block_anchors_are_inert() {
     let src = "before\n\n```\n<!-- x -->\n<!-- /x -->\n```\n\nafter\n";
     let d = parse(src, &Options::default());
     assert!(d.regions.is_empty(), "in-fence anchors must not pair");
     assert!(d.dangling.is_empty(), "in-fence anchors do not dangle");
+}
+
+/// (3c) Indented-block skip: a balanced open/close inside a 4-space-indented
+/// code block is inert, exactly like a fenced block. Exercises build.rs's
+/// `code_block_mask_spans` mask now covering `NodeValue::CodeBlock(_)` regardless
+/// of `ncb.fenced`.
+#[test]
+fn indented_block_anchors_are_inert() {
+    let src = "before\n\n    <!-- x -->\n    <!-- /x -->\n\nafter\n";
+    let d = parse(src, &Options::default());
+    assert!(d.regions.is_empty(), "in-indented-block anchors must not pair");
+    assert!(d.dangling.is_empty(), "in-indented-block anchors do not dangle");
 }
 
 /// (4) Cross-block pairing: an open mid-paragraph in one block and a close

@@ -153,11 +153,16 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     let headings = build_heading_tree(&flat, &idx);
     fill_gaps(source, &idx, &frontmatter, &headings, &mut nodes);
     let inlines = collect_inlines(root, source, &idx, opts);
-    // Region recognition is a masked raw byte scan: anchors buried in fenced or
-    // inline code are inert. Fence-awareness is unconditional now, so the mask
-    // is always built (fenced-code spans + inline-code `NodeValue::Code` spans).
-    // Indented-code and frontmatter anchors are intentionally left live.
-    let mut region_mask = fenced_code_spans(root, &idx);
+    // Region recognition is a masked raw byte scan: anchors buried in code are
+    // inert, whether the code is fenced, indented, or inline. The mask is
+    // always built (fenced-or-indented code-block spans + inline-code
+    // `NodeValue::Code` spans). Frontmatter anchors are intentionally left
+    // live. Comrak's block-level sourcepos is reliable for indented code
+    // blocks (only inline sourcepos is unreliable — see the wikilink/embed
+    // mask below), so masking by the `CodeBlock` span is sound; this also
+    // brings the region mask into parity with that mask, which already masks
+    // all `CodeBlock(_)`.
+    let mut region_mask = code_block_mask_spans(root, &idx);
     for node in root.descendants() {
         let d = node.data.borrow();
         if let NodeValue::Code(_) = &d.value {
@@ -182,19 +187,21 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     }
 }
 
-/// Byte spans of every fenced code block, harvested from comrak's parse (so we
-/// reuse its fence detection rather than reimplementing the ``` grammar). Only
-/// fenced blocks are collected here — not indented code or HTML blocks (the last
+/// Byte spans of every code block — fenced or indented — harvested from
+/// comrak's parse (so we reuse its block detection rather than reimplementing
+/// the ``` / 4-space-indent grammar). Both kinds are collected here, not just
+/// fenced: an anchor sitting inside a 4-space/tab indented block is bytes, not
+/// markup, exactly like a fenced one. HTML blocks are NOT collected here (that
 /// would swallow the anchor comment lines themselves); inline-code spans are
-/// added separately at the call site. Feeds the always-on region mask.
-fn fenced_code_spans<'a>(root: &'a AstNode<'a>, idx: &LineIndex) -> Vec<Span> {
+/// added separately at the call site. Feeds the always-on region mask. (Not to
+/// be confused with the unrelated `code_block_spans` below, which computes a
+/// single code block's `info_span`/`body_span` for AST conversion.)
+fn code_block_mask_spans<'a>(root: &'a AstNode<'a>, idx: &LineIndex) -> Vec<Span> {
     let mut spans = Vec::new();
     for node in root.descendants() {
         let d = node.data.borrow();
-        if let NodeValue::CodeBlock(ncb) = &d.value {
-            if ncb.fenced {
-                spans.push(idx.span_of(d.sourcepos));
-            }
+        if let NodeValue::CodeBlock(_) = &d.value {
+            spans.push(idx.span_of(d.sourcepos));
         }
     }
     spans
