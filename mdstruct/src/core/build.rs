@@ -589,7 +589,7 @@ fn collect_inlines<'a>(
     opts: &Options,
 ) -> Vec<Inline> {
     let mut inlines: Vec<Inline> = Vec::new();
-    // Code-suppression mask (vault-query src/wikilink.rs:83): spans whose bytes
+    // Code-suppression mask: spans whose bytes
     // are verbatim, not markup — code (inline + block), frontmatter, raw-HTML
     // blocks (including HTML comments). The `![[…]]` embed pre-pass skips any
     // embed whose `!` falls inside one. GFM tables are NOT masked (1.1): a
