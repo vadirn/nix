@@ -187,7 +187,12 @@ export function checkRegion(text: string, label: string): RegionDiagnostic[] {
   for (const raw of stdout.split("\n")) {
     const trimmed = raw.trim();
     if (!trimmed) continue;
-    let rec: { type?: string; label?: string; span?: { start?: number; end?: number }; line?: number };
+    let rec: {
+      type?: string;
+      label?: string;
+      span?: { start?: number; end?: number };
+      line?: number;
+    };
     try {
       rec = JSON.parse(trimmed);
     } catch {
