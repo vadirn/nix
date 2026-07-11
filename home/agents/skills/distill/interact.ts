@@ -1,18 +1,25 @@
-// interact — the pure grammar core of the interactive-text format (spec:
+// interact — the grammar core of the interactive-text format (spec:
 // interactive-text-format.md; frozen by interact.test.ts). Markdown intermediaries
 // carry reviewer decisions as native task-list checkboxes inside HTML-comment-
 // anchored blocks; a processor parses the checked states and acts. Both directions
 // live here so the round-trip law parseInteract(renderBlock(spec)) ≡ spec is a
 // testable property.
 //
-// PURE by contract: no fs, no LLM, no imports from pipeline.ts. Deterministic
-// parse — malformed input yields typed errors, never guesses.
+// Region recognition delegates to the single Rust engine (mdstruct): parseDoc emits
+// every comment-anchor pair (fence-aware, inline-code-aware), and checkRegion reports
+// unpaired anchors. interact is a pure FILTER over that — it owns no document scanner,
+// no fence tracking. Its own recognizer (the "thin pass") was retired in Phase B; what
+// stays here is the block-body grammar (kind/attribute/intro/item/payload semantics).
 //
-// Scanner discipline the tests pin (constraints the signatures can't show):
-// - fence-state-first: inside a fenced payload, anchor-looking lines are payload
-//   bytes, never block boundaries; the same holds at document level — an anchor
-//   inside a content code fence (a note quoting the format itself) is passthrough,
-//   matching what Obsidian renders;
+// Deterministic by contract: no fs, no LLM, no imports from pipeline.ts. It does shell
+// mdstruct (via mdstruct.ts, synchronously) to locate regions — determinism is preserved
+// because the same source yields the same regions. Malformed input yields typed errors,
+// never guesses.
+//
+// Body-grammar discipline the tests pin (constraints the signatures can't show):
+// - fence-state-first at document level (anchors inside a content code fence are
+//   passthrough) now lives in mdstruct's masked scan; inside a block, a payload fence's
+//   interior is still parsed HERE (anchor-looking lines in it are payload bytes);
 // - CRLF-tolerant: a trailing '\r' on a line is line-terminator residue, stripped
 //   before scanning, so a CRLF copy of a document yields the same decision set
 //   as its LF form (strip still preserves kept lines byte-identically);
@@ -27,6 +34,8 @@
 // - the verb vocabulary is per-consumer: parse returns verbs as plain strings;
 //   resolveInteract validates them against the invoker's spec. The vocabulary
 //   never comes from the file.
+
+import { checkRegion, parseDoc, sliceBytes } from "./mdstruct.ts";
 
 // ---- kinds and attribute set ----
 
@@ -132,10 +141,10 @@ const ATTR_KEYS = new Set(["id", "src", "dest"]);
 const ITEM_RE = /^-\s\[(.)\]\s(.*)$/;
 const VERB_RE = /^([a-z][a-z0-9-]*):\s(.*)$/;
 const FENCE_OPEN_RE = /^([ \t]*)(`{3,})[ \t]*$/;
-// Document-level content fences (tagged or not, backtick or tilde) whose
-// interiors are passthrough even when they contain anchor-looking lines.
-const DOC_FENCE_OPEN_RE = /^[ \t]*(`{3,})[^`]*$|^[ \t]*(~{3,}).*$/;
-const DOC_FENCE_CLOSE_RE = /^[ \t]*(`{3,}|~{3,})[ \t]*$/;
+// Extracts the post-`interact:` info from an opening anchor comment sliced out of the
+// source (used to re-read a DANGLING open's content — its class, id, attrs — since the
+// check ndjson carries only the span, not the info).
+const OPEN_INFO_RE = /^[ \t]*<!--\s*interact:\s*(.*?)\s*-->[ \t]*$/;
 
 function splitNote(s: string): { targetRaw: string; note?: string } {
   let inBacktick = false;
@@ -172,8 +181,12 @@ type Frame = {
   hasError: boolean;
 };
 
-/// Deterministic scan of a whole document. Text outside blocks is passthrough
-/// (never interpreted). Never throws; malformed input is reported in errors.
+/// Parse a whole document. Region boundaries and fence-awareness come from the single
+/// Rust engine — parseDoc emits every comment-anchor pair (fence/inline-code aware) and
+/// checkRegion reports unpaired anchors — so this function owns no document scanner, only
+/// the block-body grammar. Text outside interact regions is passthrough. Never throws on
+/// malformed markdown (reported in errors); throws only if the mdstruct binary is
+/// unavailable (fail-loud, matching mdstruct.ts).
 export function parseInteract(text: string): {
   blocks: Block[];
   errors: InteractError[];
@@ -184,19 +197,16 @@ export function parseInteract(text: string): {
   const blocks: Block[] = [];
   const errors: InteractError[] = [];
   const seenIds = new Set<string>();
-  let open: Frame | null = null;
-  /// Open document-level content fence (outside any block): its char and length.
-  let docFence: { ch: string; len: number } | null = null;
 
-  // Looks ahead from the item at index i for a payload: zero or more blank pad
-  // lines, then either a fence (consumed and attached), an anchor-like line
-  // (bailed — belongs to the enclosing block/document), indented non-fence
-  // content (unfenced-payload), or anything else (no payload). Returns the
-  // index the main loop should resume from (the last line consumed).
-  function consumePayload(item: Item, i: number, frame: Frame): number {
+  // Looks ahead from the item at index i for a payload: zero or more blank pad lines, then
+  // either a fence (consumed and attached), an anchor-like line (bailed), indented non-fence
+  // content (unfenced-payload), or anything else (no payload). `limit` is the index of the
+  // block's closing anchor, so the lookahead never scans past the region. Returns the index
+  // the caller should resume from (the last line consumed).
+  function consumePayload(item: Item, i: number, frame: Frame, limit: number): number {
     let j = i + 1;
-    while (j < rawLines.length && rawLines[j]!.trim() === "") j++;
-    if (j >= rawLines.length) return i;
+    while (j < limit && rawLines[j]!.trim() === "") j++;
+    if (j >= limit) return i;
     const candidate = rawLines[j]!;
     const fenceOpen = candidate.match(FENCE_OPEN_RE);
     if (fenceOpen) {
@@ -205,7 +215,7 @@ export function parseInteract(text: string): {
       const interior: string[] = [];
       let k = j + 1;
       let closed = false;
-      for (; k < rawLines.length; k++) {
+      for (; k < limit; k++) {
         const line = rawLines[k]!;
         const closeMatch = line.trim().match(/^`{3,}$/);
         if (closeMatch && closeMatch[0].length >= tickLen) {
@@ -223,7 +233,7 @@ export function parseInteract(text: string): {
           message: `fenced payload opened at line ${j + 1} never closes`,
         });
         frame.hasError = true;
-        return rawLines.length - 1;
+        return limit - 1;
       }
       return k;
     }
@@ -241,253 +251,292 @@ export function parseInteract(text: string): {
     return i;
   }
 
-  for (let i = 0; i < rawLines.length; i++) {
-    const raw = rawLines[i]!;
-    const lineNo = i + 1;
-
-    if (open === null) {
-      if (docFence) {
-        const close = raw.match(DOC_FENCE_CLOSE_RE);
-        if (close && close[1]![0] === docFence.ch && close[1]!.length >= docFence.len) {
-          docFence = null;
-        }
-        continue; // fence interior is passthrough, anchors included
-      }
-      const fenceOpen = raw.match(DOC_FENCE_OPEN_RE);
-      if (fenceOpen) {
-        const ticks = fenceOpen[1] ?? fenceOpen[2]!;
-        docFence = { ch: ticks[0]!, len: ticks.length };
-        continue;
-      }
-      const openMatch = raw.match(OPEN_RE);
-      if (openMatch) {
-        const rest = openMatch[1]!;
-        const tokens = rest.match(/[^\s"=]+="[^"]*"|\S+/g) ?? [];
-        const kindToken = tokens[0];
-        if (tokens.length === 0 || !kindToken || !KIND_TOKEN_RE.test(kindToken)) {
-          errors.push({ code: "bad-anchor", line: lineNo, message: "malformed interact anchor" });
-          continue;
-        }
-        const frame: Frame = {
-          kindRaw: kindToken,
-          kindValid: (BLOCK_KINDS as readonly string[]).includes(kindToken)
-            ? (kindToken as BlockKind)
-            : null,
-          introLines: [],
-          sawFirstItem: false,
-          itemLinesSeen: 0,
-          items: [],
-          line: lineNo,
-          hasError: false,
-        };
-        if (frame.kindValid === null) {
-          errors.push({
-            code: "unknown-kind",
-            line: lineNo,
-            message: `unknown block kind '${kindToken}'`,
-          });
-          frame.hasError = true;
-        }
-        const seenKeys = new Set<string>();
-        for (const tok of tokens.slice(1)) {
-          const eq = tok.indexOf("=");
-          if (eq === -1) {
-            errors.push({
-              code: "unknown-attribute",
-              line: lineNo,
-              message: `malformed attribute '${tok}'`,
-            });
-            frame.hasError = true;
-            continue;
-          }
-          const key = tok.slice(0, eq);
-          let val = tok.slice(eq + 1);
-          if (val.length >= 2 && val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-          if (val.includes('"')) {
-            // an unterminated or embedded quote: never guess at the value
-            errors.push({
-              code: "unknown-attribute",
-              line: lineNo,
-              message: `malformed attribute value for '${key}'`,
-            });
-            frame.hasError = true;
-            continue;
-          }
-          if (!ATTR_KEYS.has(key)) {
-            errors.push({
-              code: "unknown-attribute",
-              line: lineNo,
-              message: `unknown attribute '${key}' (allowed: id, src, dest)`,
-            });
-            frame.hasError = true;
-            continue;
-          }
-          if (seenKeys.has(key)) {
-            errors.push({
-              code: "duplicate-attribute",
-              line: lineNo,
-              message: `duplicate attribute '${key}'`,
-            });
-            frame.hasError = true;
-            continue;
-          }
-          seenKeys.add(key);
-          if (key === "id") frame.id = val;
-          else if (key === "src") frame.src = val;
-          else frame.dest = val;
-        }
-        if (frame.id === undefined || frame.id === "") {
-          errors.push({
-            code: "missing-id",
-            line: lineNo,
-            message: frame.id === "" ? "empty id= attribute" : "missing id= attribute",
-          });
-          frame.hasError = true;
-        } else if (seenIds.has(frame.id)) {
-          errors.push({
-            code: "duplicate-id",
-            blockId: frame.id,
-            line: lineNo,
-            message: `duplicate block id '${frame.id}'`,
-          });
-          frame.hasError = true;
-        } else {
-          seenIds.add(frame.id);
-        }
-        open = frame;
-        continue;
-      }
-      if (CLOSE_RE.test(raw)) {
-        errors.push({
-          code: "unopened-close",
-          line: lineNo,
-          message: "close without an open block",
-        });
-        continue;
-      }
-      continue; // passthrough
+  // Read an opening anchor's post-`interact:` info into a Frame. Returns null when the content
+  // is too malformed to open a block (bad-anchor: no kind token, or the kind is not a lowercase
+  // slug). Emits kind/attribute/id errors and registers id uniqueness. `lineNo` is the anchor's
+  // 1-indexed line. This is the attribute/kind/id grammar unchanged from the pre-migration scan.
+  function parseAnchor(info: string | undefined, lineNo: number): Frame | null {
+    const rest = info ?? "";
+    const tokens = rest.match(/[^\s"=]+="[^"]*"|\S+/g) ?? [];
+    const kindToken = tokens[0];
+    if (tokens.length === 0 || !kindToken || !KIND_TOKEN_RE.test(kindToken)) {
+      errors.push({ code: "bad-anchor", line: lineNo, message: "malformed interact anchor" });
+      return null;
     }
-
-    // inside an open block
-    if (CLOSE_RE.test(raw)) {
-      const frame = open;
-      if (frame.itemLinesSeen === 0) {
-        errors.push({
-          code: "empty-block",
-          blockId: frame.id,
-          line: frame.line,
-          message: `block '${frame.id ?? ""}' has no items`,
-        });
-        frame.hasError = true;
-      }
-      while (
-        frame.introLines.length > 0 &&
-        frame.introLines[frame.introLines.length - 1]!.trim() === ""
-      ) {
-        frame.introLines.pop();
-      }
-      const intro = frame.introLines.length ? frame.introLines.join("\n") : undefined;
-      if (!frame.hasError && frame.kindValid && frame.id !== undefined) {
-        blocks.push({
-          kind: frame.kindValid,
-          id: frame.id,
-          src: frame.src,
-          dest: frame.dest,
-          intro,
-          items: frame.items,
-          line: frame.line,
-          span: [frame.line, lineNo],
-        });
-      }
-      open = null;
-      continue;
-    }
-    if (OPEN_RE.test(raw)) {
-      errors.push({
-        code: "nested-block",
-        blockId: open.id,
-        line: lineNo,
-        message: "an interact block cannot open inside another open block",
-      });
-      open.hasError = true;
-      continue;
-    }
-    if (raw.trim() === "") {
-      // interior blank lines of a multi-paragraph intro are part of the intro;
-      // leading blanks are padding, trailing ones are trimmed at close
-      if (!open.sawFirstItem && open.introLines.length > 0) open.introLines.push(raw);
-      continue;
-    }
-    const itemMatch = raw.match(ITEM_RE);
-    if (itemMatch) {
-      const frame = open;
-      frame.sawFirstItem = true;
-      frame.itemLinesSeen++;
-      const stateChar = itemMatch[1]!;
-      const restAfterCheckbox = itemMatch[2]!;
-      let state: ItemState;
-      if (stateChar === " ") state = "unchecked";
-      else if (stateChar.toLowerCase() === "x") state = "checked";
-      else {
-        if (stateChar === "-") {
-          errors.push({
-            code: "bad-state",
-            blockId: frame.id,
-            line: lineNo,
-            message: "unsupported state '-' — leave unchecked and check the gate instead",
-          });
-        } else {
-          errors.push({
-            code: "bad-state",
-            blockId: frame.id,
-            line: lineNo,
-            message: `unsupported checkbox state '${stateChar}'`,
-          });
-        }
-        frame.hasError = true;
-        continue;
-      }
-      const vm = restAfterCheckbox.match(VERB_RE);
-      if (!vm) {
-        errors.push({
-          code: "bad-item",
-          blockId: frame.id,
-          line: lineNo,
-          message: "item line is missing a 'verb: target' marker",
-        });
-        frame.hasError = true;
-        continue;
-      }
-      const verb = vm[1]!;
-      const { targetRaw, note } = splitNote(vm[2]!);
-      const target = stripBackticks(targetRaw);
-      const item: Item = { state, verb, target, targetRaw, note, payload: undefined, line: lineNo };
-      frame.items.push(item);
-      i = consumePayload(item, i, frame);
-      continue;
-    }
-    if (!open.sawFirstItem) {
-      open.introLines.push(raw);
-      continue;
-    }
-    // Stray content after the first item: a mistyped item line silently dropped
-    // would be a reviewer's decision lost, so it fails loud instead.
-    errors.push({
-      code: "bad-item",
-      blockId: open.id,
+    const frame: Frame = {
+      kindRaw: kindToken,
+      kindValid: (BLOCK_KINDS as readonly string[]).includes(kindToken)
+        ? (kindToken as BlockKind)
+        : null,
+      introLines: [],
+      sawFirstItem: false,
+      itemLinesSeen: 0,
+      items: [],
       line: lineNo,
-      message: `unparseable line inside block '${open.id ?? ""}' — items look like '- [ ] verb: target', payloads are fenced and indented under their item`,
-    });
-    open.hasError = true;
+      hasError: false,
+    };
+    if (frame.kindValid === null) {
+      errors.push({
+        code: "unknown-kind",
+        line: lineNo,
+        message: `unknown block kind '${kindToken}'`,
+      });
+      frame.hasError = true;
+    }
+    const seenKeys = new Set<string>();
+    for (const tok of tokens.slice(1)) {
+      const eq = tok.indexOf("=");
+      if (eq === -1) {
+        errors.push({
+          code: "unknown-attribute",
+          line: lineNo,
+          message: `malformed attribute '${tok}'`,
+        });
+        frame.hasError = true;
+        continue;
+      }
+      const key = tok.slice(0, eq);
+      let val = tok.slice(eq + 1);
+      if (val.length >= 2 && val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+      if (val.includes('"')) {
+        // an unterminated or embedded quote: never guess at the value
+        errors.push({
+          code: "unknown-attribute",
+          line: lineNo,
+          message: `malformed attribute value for '${key}'`,
+        });
+        frame.hasError = true;
+        continue;
+      }
+      if (!ATTR_KEYS.has(key)) {
+        errors.push({
+          code: "unknown-attribute",
+          line: lineNo,
+          message: `unknown attribute '${key}' (allowed: id, src, dest)`,
+        });
+        frame.hasError = true;
+        continue;
+      }
+      if (seenKeys.has(key)) {
+        errors.push({
+          code: "duplicate-attribute",
+          line: lineNo,
+          message: `duplicate attribute '${key}'`,
+        });
+        frame.hasError = true;
+        continue;
+      }
+      seenKeys.add(key);
+      if (key === "id") frame.id = val;
+      else if (key === "src") frame.src = val;
+      else frame.dest = val;
+    }
+    if (frame.id === undefined || frame.id === "") {
+      errors.push({
+        code: "missing-id",
+        line: lineNo,
+        message: frame.id === "" ? "empty id= attribute" : "missing id= attribute",
+      });
+      frame.hasError = true;
+    } else if (seenIds.has(frame.id)) {
+      errors.push({
+        code: "duplicate-id",
+        blockId: frame.id,
+        line: lineNo,
+        message: `duplicate block id '${frame.id}'`,
+      });
+      frame.hasError = true;
+    } else {
+      seenIds.add(frame.id);
+    }
+    return frame;
   }
 
-  if (open !== null) {
-    errors.push({
-      code: "unclosed-block",
-      blockId: open.id,
-      line: open.line,
-      message: `block '${open.id ?? ""}' opened at line ${open.line} is never closed`,
-    });
+  // The in-block grammar over the body line range [bodyStart, closeIdx) (0-indexed), where
+  // closeIdx is the index of the closing anchor. Fills frame.items / introLines and pushes
+  // item/intro/payload errors. Unchanged item/checkbox/intro/payload semantics.
+  function parseBody(frame: Frame, bodyStart: number, closeIdx: number): void {
+    for (let i = bodyStart; i < closeIdx; i++) {
+      const raw = rawLines[i]!;
+      const lineNo = i + 1;
+      if (raw.trim() === "") {
+        // interior blank lines of a multi-paragraph intro are part of the intro; leading
+        // blanks are padding, trailing ones are trimmed at finalize.
+        if (!frame.sawFirstItem && frame.introLines.length > 0) frame.introLines.push(raw);
+        continue;
+      }
+      const itemMatch = raw.match(ITEM_RE);
+      if (itemMatch) {
+        frame.sawFirstItem = true;
+        frame.itemLinesSeen++;
+        const stateChar = itemMatch[1]!;
+        const restAfterCheckbox = itemMatch[2]!;
+        let state: ItemState;
+        if (stateChar === " ") state = "unchecked";
+        else if (stateChar.toLowerCase() === "x") state = "checked";
+        else {
+          if (stateChar === "-") {
+            errors.push({
+              code: "bad-state",
+              blockId: frame.id,
+              line: lineNo,
+              message: "unsupported state '-' — leave unchecked and check the gate instead",
+            });
+          } else {
+            errors.push({
+              code: "bad-state",
+              blockId: frame.id,
+              line: lineNo,
+              message: `unsupported checkbox state '${stateChar}'`,
+            });
+          }
+          frame.hasError = true;
+          continue;
+        }
+        const vm = restAfterCheckbox.match(VERB_RE);
+        if (!vm) {
+          errors.push({
+            code: "bad-item",
+            blockId: frame.id,
+            line: lineNo,
+            message: "item line is missing a 'verb: target' marker",
+          });
+          frame.hasError = true;
+          continue;
+        }
+        const verb = vm[1]!;
+        const { targetRaw, note } = splitNote(vm[2]!);
+        const target = stripBackticks(targetRaw);
+        const item: Item = {
+          state,
+          verb,
+          target,
+          targetRaw,
+          note,
+          payload: undefined,
+          line: lineNo,
+        };
+        frame.items.push(item);
+        i = consumePayload(item, i, frame, closeIdx);
+        continue;
+      }
+      if (!frame.sawFirstItem) {
+        frame.introLines.push(raw);
+        continue;
+      }
+      // Stray content after the first item: a mistyped item line silently dropped would be a
+      // reviewer's decision lost, so it fails loud instead.
+      errors.push({
+        code: "bad-item",
+        blockId: frame.id,
+        line: lineNo,
+        message: `unparseable line inside block '${frame.id ?? ""}' — items look like '- [ ] verb: target', payloads are fenced and indented under their item`,
+      });
+      frame.hasError = true;
+    }
+  }
+
+  // Close-anchor handling: the empty-block gate, trailing-intro trim, and block push.
+  // `closeLineNo` is the closing anchor's 1-indexed line (the span upper bound).
+  function finalizeBlock(frame: Frame, closeLineNo: number): void {
+    if (frame.itemLinesSeen === 0) {
+      errors.push({
+        code: "empty-block",
+        blockId: frame.id,
+        line: frame.line,
+        message: `block '${frame.id ?? ""}' has no items`,
+      });
+      frame.hasError = true;
+    }
+    while (
+      frame.introLines.length > 0 &&
+      frame.introLines[frame.introLines.length - 1]!.trim() === ""
+    ) {
+      frame.introLines.pop();
+    }
+    const intro = frame.introLines.length ? frame.introLines.join("\n") : undefined;
+    if (!frame.hasError && frame.kindValid && frame.id !== undefined) {
+      blocks.push({
+        kind: frame.kindValid,
+        id: frame.id,
+        src: frame.src,
+        dest: frame.dest,
+        intro,
+        items: frame.items,
+        line: frame.line,
+        span: [frame.line, closeLineNo],
+      });
+    }
+  }
+
+  // ---- region-driven dispatch (the single Rust engine locates the anchors) ----
+  const { doc, buf } = parseDoc(text);
+  const regions = (doc.regions ?? [])
+    .filter((r) => r.label === "interact")
+    .slice()
+    .sort((a, b) => a.span[0] - b.span[0]);
+
+  // Nesting from geometry: an interact region whose span is properly contained in another's.
+  // Current-parity: neither the outer nor the inner emits a block; one nested-block error per
+  // contained region names the containing block's id at the inner anchor's opening line.
+  const nested = new Set<number>();
+  for (let n = 0; n < regions.length; n++) {
+    for (let o = 0; o < regions.length; o++) {
+      if (o === n) continue;
+      const outer = regions[o]!;
+      const inner = regions[n]!;
+      const contains =
+        outer.span[0] <= inner.span[0] &&
+        inner.span[1] <= outer.span[1] &&
+        !(outer.span[0] === inner.span[0] && outer.span[1] === inner.span[1]);
+      if (contains) {
+        nested.add(n);
+        nested.add(o);
+        const m = /(?:^|\s)id=("([^"]*)"|\S+)/.exec(outer.info ?? "");
+        const outerId = m ? (m[2] ?? m[1]) : undefined;
+        errors.push({
+          code: "nested-block",
+          blockId: outerId,
+          line: inner.startLine,
+          message: "an interact block cannot open inside another open block",
+        });
+      }
+    }
+  }
+
+  for (let idx = 0; idx < regions.length; idx++) {
+    if (nested.has(idx)) continue;
+    const r = regions[idx]!;
+    const frame = parseAnchor(r.info, r.startLine);
+    if (frame === null) continue; // bad-anchor: this anchor does not open a block
+    // Body lines are (startLine+1 .. endLine-1), i.e. 0-indexed [startLine, endLine-1);
+    // the closing anchor sits at index endLine-1.
+    parseBody(frame, r.startLine, r.endLine - 1);
+    finalizeBlock(frame, r.endLine);
+  }
+
+  // Dangling (unpaired) anchors come from the single engine's check pass. unpaired-close maps
+  // to unopened-close directly. For unpaired-open, re-read the anchor's own bytes to classify
+  // it: a malformed open is bad-anchor (and does NOT also count as unclosed, matching the
+  // pre-migration scan where such an anchor never opened a block); a well-formed open that
+  // simply never closed is unclosed-block, after its content errors.
+  const dangling = checkRegion(text, "interact");
+  for (const d of dangling) {
+    if (d.type === "unpaired-close") {
+      errors.push({ code: "unopened-close", line: d.line, message: "close without an open block" });
+      continue;
+    }
+    const anchorText = sliceBytes(buf, d.span);
+    const m = anchorText.match(OPEN_INFO_RE);
+    const frame = parseAnchor(m ? m[1]! : undefined, d.line);
+    if (frame !== null) {
+      errors.push({
+        code: "unclosed-block",
+        blockId: frame.id,
+        line: frame.line,
+        message: `block '${frame.id ?? ""}' opened at line ${frame.line} is never closed`,
+      });
+    }
   }
 
   return { blocks, errors };

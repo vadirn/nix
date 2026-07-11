@@ -39,10 +39,7 @@ pub struct Wikilink {
 pub fn extract(content: &str) -> Vec<Wikilink> {
     let doc = mdstruct::parse(
         content,
-        &mdstruct::Options {
-            wikilinks: true,
-            regions: Vec::new(),
-        },
+        &mdstruct::Options { wikilinks: true },
     );
 
     doc.inlines()

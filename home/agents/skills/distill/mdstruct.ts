@@ -54,38 +54,75 @@ export interface Heading {
   children?: Heading[];
 }
 
+// A comment-anchor region in the `regions[]` array (mirrors the binary's `Region` JSON).
+// Extraction is always-on and complete: one entry is emitted for every
+// `<!-- <label>[: <info>] -->` … `<!-- /<label> -->` anchor pair (anchors inside fenced or inline
+// code are inert). Consumers filter by `label`. `span` covers both anchor lines; `bodySpan` is the
+// raw bytes between them; `info` is the whole post-`<label>:` string. Regions reference a span
+// WITHOUT disturbing structure — the interior is still parsed into nodes/headings.
+export interface MdRegion {
+  type: string;
+  label: string;
+  info?: string;
+  span: Span;
+  bodySpan: Span;
+  startLine: number;
+  endLine: number;
+}
+
 export interface MdDoc {
+  schemaVersion?: string;
   nodes?: MdNode[];
   inlines?: MdInline[];
   headings?: Heading[];
+  regions?: MdRegion[];
 }
+
+// The `mdstruct` JSON schema this module is written against (the binary's
+// `SCHEMA_VERSION`, camelCased on the wire as `schemaVersion`). parseDoc asserts
+// an exact match: a stale binary on PATH emits an older version and silently
+// returns pre-mask `regions[]` (phantom regions from anchors buried in indented
+// code or multi-line HTML comments), which every present and future parse-only
+// consumer (interact, highlight) would trust blind. The handshake turns that
+// silent deploy-skew into a loud "rebuild mdstruct" failure. Bump in lockstep
+// with the Rust `SCHEMA_VERSION` whenever this module depends on the new shape.
+const EXPECTED_SCHEMA_VERSION = "1.2";
 
 export interface ParsedDoc {
   doc: MdDoc;
   buf: Buffer;
 }
 
-// Parse cache keyed by source text. distill is a one-shot CLI per note, so unbounded is fine.
-// payloadResidue runs the four lanes over two texts → 2 parses, not 8.
+// Parse cache keyed by source text alone. distill is a one-shot CLI per note, so unbounded is fine.
+// payloadResidue runs the four lanes over two texts -> 2 parses, not 8.
 const cache = new Map<string, ParsedDoc>();
 
 // Parse `text` to { doc, buf }. Spawns the bare name `mdstruct` (PATH-resolved, the
 // polish.ts:167 mktemp pattern). Throws `mdstruct unavailable` on a missing binary or
 // unparseable output (see the fail-loud note up top).
+//
+// Region extraction is always-on and fence-aware in the binary: every comment-anchor pair
+// surfaces in `doc.regions` (anchors inside fenced or inline code are inert), with no flags to
+// pass. Consumers filter `doc.regions` by label.
 export function parseDoc(text: string): ParsedDoc {
-  const hit = cache.get(text);
+  const key = text;
+  const hit = cache.get(key);
   if (hit) return hit;
   const buf = Buffer.from(text, "utf8");
+  const args = ["-"];
+  // MDSTRUCT_BIN overrides the bare-name PATH resolution so tests can point at a freshly-built
+  // binary (with newer flags); production leaves it unset and resolves `mdstruct` on PATH.
+  const bin = process.env.MDSTRUCT_BIN ?? "mdstruct";
   let stdout: string;
   try {
-    stdout = execFileSync("mdstruct", ["-"], {
+    stdout = execFileSync(bin, args, {
       input: text,
       encoding: "utf8",
       maxBuffer: 1 << 28,
     });
   } catch (e) {
     throw new Error(
-      `mdstruct unavailable: could not run 'mdstruct' (${(e as Error).message}). ` +
+      `mdstruct unavailable: could not run '${bin}' (${(e as Error).message}). ` +
         "The payload-residue gate needs the mdstruct binary on PATH; it must not degrade to regex.",
     );
   }
@@ -99,13 +136,105 @@ export function parseDoc(text: string): ParsedDoc {
       `mdstruct unavailable: unparseable NDJSON from 'mdstruct' (${(e as Error).message})`,
     );
   }
+  // Schema-version handshake: fail loud on deploy skew rather than trust a stale
+  // binary's pre-mask regions. Exact-match against the version this module was
+  // written for (see EXPECTED_SCHEMA_VERSION).
+  if (doc.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
+    throw new Error(
+      `mdstruct schema mismatch: binary '${bin}' emitted schemaVersion ` +
+        `${JSON.stringify(doc.schemaVersion)}, this build expects ` +
+        `"${EXPECTED_SCHEMA_VERSION}". Rebuild mdstruct (the installed binary is stale).`,
+    );
+  }
   const parsed: ParsedDoc = { doc, buf };
-  cache.set(text, parsed);
+  cache.set(key, parsed);
   return parsed;
 }
 
 export function sliceBytes(buf: Buffer, span: Span): string {
   return buf.subarray(span[0], span[1]).toString("utf8");
+}
+
+// A scoped dangling-anchor diagnostic from `mdstruct check --region <label> --format ndjson`.
+// `type` is the pairing failure; `span` is the byte range of the offending anchor comment
+// (a `{start,end}` OBJECT in the ndjson, normalized here to the `[start, end)` tuple the rest
+// of this module uses); `line` is its 1-indexed line. Consumers map the two kinds to their own
+// error vocabulary (interact: unpaired-open -> unclosed-block, unpaired-close -> unopened-close).
+export interface RegionDiagnostic {
+  type: "unpaired-open" | "unpaired-close";
+  label: string;
+  span: Span;
+  line: number;
+}
+
+// Run the freeze-gate's dangling-anchor reporter for a single label over `text` on stdin.
+// Shells `mdstruct check --region <label> --format ndjson -` and parses the stdout ndjson
+// records (one per scoped dangling anchor). Keys are read by NAME (serde emits them
+// alphabetically, so positional order is not relied on). This is the ONE Rust engine's view of
+// unpaired anchors; callers never re-scan for fences themselves.
+//
+// Dangling anchors are non-fatal (exit 0), so `check` normally returns cleanly. A byte-integrity
+// failure exits 4 (execFileSync throws), but its dangling records are still on stdout, so the
+// records are recovered from the thrown error rather than lost. A spawn failure (missing binary)
+// throws `mdstruct unavailable`, matching parseDoc's fail-loud contract.
+export function checkRegion(text: string, label: string): RegionDiagnostic[] {
+  const bin = process.env.MDSTRUCT_BIN ?? "mdstruct";
+  const args = ["check", "--region", label, "--format", "ndjson", "-"];
+  let stdout: string;
+  try {
+    stdout = execFileSync(bin, args, {
+      input: text,
+      encoding: "utf8",
+      maxBuffer: 1 << 28,
+      // The `check` verb writes its `N/N files passed` summary (and any warn lines) to stderr;
+      // interact only wants the ndjson diagnostics on stdout, so drop the child's stderr rather
+      // than let it inherit onto the pipeline's stderr.
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+  } catch (e) {
+    const err = e as { status?: number | null; stdout?: string };
+    // A ran-but-nonzero exit (e.g. byte-integrity 4) still wrote the ndjson to stdout; recover it.
+    // A spawn failure has no numeric status -> fail loud like parseDoc.
+    if (typeof err.status === "number") {
+      stdout = typeof err.stdout === "string" ? err.stdout : "";
+    } else {
+      throw new Error(
+        `mdstruct unavailable: could not run '${bin} check' (${(e as Error).message}). ` +
+          "interact's unclosed/unopened validation needs the mdstruct binary on PATH.",
+      );
+    }
+  }
+  const out: RegionDiagnostic[] = [];
+  for (const raw of stdout.split("\n")) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    let rec: {
+      type?: string;
+      label?: string;
+      span?: { start?: number; end?: number };
+      line?: number;
+    };
+    try {
+      rec = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (
+      (rec.type === "unpaired-open" || rec.type === "unpaired-close") &&
+      rec.span &&
+      typeof rec.span.start === "number" &&
+      typeof rec.span.end === "number" &&
+      typeof rec.line === "number"
+    ) {
+      out.push({
+        type: rec.type,
+        label: rec.label ?? label,
+        span: [rec.span.start, rec.span.end],
+        line: rec.line,
+      });
+    }
+  }
+  return out;
 }
 
 // Depth-first walk calling `fn` on every node, recursing into `children` EXCEPT types in

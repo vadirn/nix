@@ -20,7 +20,55 @@ import {
   structuralSpans,
   wordCount,
 } from "./text.ts";
-import { parseDoc } from "./mdstruct.ts";
+import { parseDoc, sliceBytes } from "./mdstruct.ts";
+
+// Region extraction is always-on and complete: every comment-anchor pair surfaces in `doc.regions`
+// with byte-exact `span`/`bodySpan` and the whole post-`interact:` string as `info`. There is no
+// registration flag -- `parseDoc(text)` alone emits the region -- and the cache keys on `text`
+// alone, so repeated calls hit the same entry.
+test("parseDoc: the interact anchor pair surfaces unconditionally; repeat calls hit the same key", () => {
+  const doc =
+    "# T\n\n<!-- interact: click to expand -->\nhidden body\n<!-- /interact -->\n\nAfter.\n";
+
+  const first = parseDoc(doc);
+  const { doc: parsed, buf } = first;
+  expect(parsed.regions?.length).toBe(1);
+  const r = parsed.regions![0];
+  expect(r.label).toBe("interact");
+  expect(r.info).toBe("click to expand"); // the whole post-`interact:` string
+  // span covers both anchor lines; bodySpan is the raw bytes between them.
+  expect(sliceBytes(buf, r.span)).toBe(
+    "<!-- interact: click to expand -->\nhidden body\n<!-- /interact -->\n",
+  );
+  expect(sliceBytes(buf, r.bodySpan)).toBe("hidden body\n");
+
+  // Cache keys on `text` alone: a repeated call hits the same entry.
+  expect(parseDoc(doc)).toBe(first);
+});
+
+// S7 fence-skip is now the SOLE path: fence-awareness is unconditional. The `interact` OPEN sits
+// outside any fence; a STRAY `<!-- /interact -->` sits inside a real fenced code block; the REAL
+// close follows after the fence. The scanner masks the fenced anchor, so the open pairs with the
+// real close and the region spans the full payload -- no flag, no fence-blind alternative.
+const S7_DOC =
+  "# T\n\n<!-- interact: demo -->\nreal body line\n\n```text\n<!-- /interact -->\n```\n\nmore real body\n<!-- /interact -->\n\nAfter.\n";
+
+test("parseDoc: fence-aware extraction spans past a stray fenced close to the REAL close (S7)", () => {
+  const { doc: parsed, buf } = parseDoc(S7_DOC);
+  const r = parsed.regions![0];
+
+  // The region reaches the real close -- its body carries the post-fence payload.
+  expect(sliceBytes(buf, r.bodySpan)).toBe(
+    "real body line\n\n```text\n<!-- /interact -->\n```\n\nmore real body\n",
+  );
+  expect(sliceBytes(buf, r.span)).toContain("more real body");
+});
+
+// Cache invariant: `parseDoc` keys on `text` alone, so a repeated call resolves to the SAME cached
+// object.
+test("parseDoc: repeated calls on the same text resolve to the same cached object", () => {
+  expect(parseDoc(S7_DOC)).toBe(parseDoc(S7_DOC));
+});
 
 // Class 3 — nested fence. A 4-backtick outer fence wraps a literal 3-backtick block. The old
 // line-scanner closed the outer block at the FIRST inner ` ``` `, splitting one payload into

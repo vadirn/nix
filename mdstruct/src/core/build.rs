@@ -15,15 +15,11 @@ use super::wikilink;
 /// Parse options mirrored onto comrak (Decision 13: wikilinks default on).
 pub struct Options {
     pub wikilinks: bool,
-    pub regions: Vec<String>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
-            wikilinks: true,
-            regions: Vec::new(),
-        }
+        Options { wikilinks: true }
     }
 }
 
@@ -157,7 +153,40 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     let headings = build_heading_tree(&flat, &idx);
     fill_gaps(source, &idx, &frontmatter, &headings, &mut nodes);
     let inlines = collect_inlines(root, source, &idx, opts);
-    let regions = region::scan(source, &idx, &opts.regions);
+    // Region recognition is a masked raw byte scan: anchors buried in code are
+    // inert, whether the code is fenced, indented, or inline. The mask is
+    // always built (fenced-or-indented code-block spans + inline-code
+    // `NodeValue::Code` spans + multi-line HTML-comment blocks). Frontmatter
+    // anchors are intentionally left live. Comrak's block-level sourcepos is
+    // reliable for indented code blocks (only inline sourcepos is unreliable —
+    // see the wikilink/embed mask below), so masking by the `CodeBlock` span is
+    // sound; this also brings the region mask into parity with that mask, which
+    // already masks all `CodeBlock(_)`.
+    let mut region_mask = code_block_mask_spans(root, &idx);
+    for node in root.descendants() {
+        let d = node.data.borrow();
+        match &d.value {
+            NodeValue::Code(_) => region_mask.push(idx.span_of(d.sourcepos)),
+            // A MULTI-LINE `<!-- … -->` HTML-comment block: its continuation
+            // lines can carry anchor-looking `<!-- label -->` text that would
+            // otherwise pair into a phantom region. Mask it whole — block-level
+            // sourcepos is reliable, so this is sound. SINGLE-line HTML blocks
+            // stay live: those are the whole-line anchors themselves, and
+            // masking them would break parity. Guard on `<!--` so real
+            // multi-line HTML markup (e.g. a `<div>…</div>` block) stays live.
+            NodeValue::HtmlBlock(_) => {
+                let sp = d.sourcepos;
+                if sp.end.line > sp.start.line {
+                    let span = idx.span_of(sp);
+                    if source[span.start..span.end].trim_start().starts_with("<!--") {
+                        region_mask.push(span);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let scanned = region::scan(source, &idx, &region_mask);
 
     Document {
         schema_version: SCHEMA_VERSION,
@@ -170,8 +199,29 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
         headings,
         nodes,
         inlines,
-        regions,
+        regions: scanned.regions,
+        dangling: scanned.dangling,
     }
+}
+
+/// Byte spans of every code block — fenced or indented — harvested from
+/// comrak's parse (so we reuse its block detection rather than reimplementing
+/// the ``` / 4-space-indent grammar). Both kinds are collected here, not just
+/// fenced: an anchor sitting inside a 4-space/tab indented block is bytes, not
+/// markup, exactly like a fenced one. HTML blocks are NOT collected here (that
+/// would swallow the anchor comment lines themselves); inline-code spans are
+/// added separately at the call site. Feeds the always-on region mask. (Not to
+/// be confused with the unrelated `code_block_spans` below, which computes a
+/// single code block's `info_span`/`body_span` for AST conversion.)
+fn code_block_mask_spans<'a>(root: &'a AstNode<'a>, idx: &LineIndex) -> Vec<Span> {
+    let mut spans = Vec::new();
+    for node in root.descendants() {
+        let d = node.data.borrow();
+        if let NodeValue::CodeBlock(_) = &d.value {
+            spans.push(idx.span_of(d.sourcepos));
+        }
+    }
+    spans
 }
 
 struct FlatHeading {
@@ -556,7 +606,7 @@ fn collect_inlines<'a>(
     opts: &Options,
 ) -> Vec<Inline> {
     let mut inlines: Vec<Inline> = Vec::new();
-    // Code-suppression mask (vault-query src/wikilink.rs:83): spans whose bytes
+    // Code-suppression mask: spans whose bytes
     // are verbatim, not markup — code (inline + block), frontmatter, raw-HTML
     // blocks (including HTML comments). The `![[…]]` embed pre-pass skips any
     // embed whose `!` falls inside one. GFM tables are NOT masked (1.1): a

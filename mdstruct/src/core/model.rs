@@ -8,11 +8,18 @@
 
 use serde::{Serialize, Serializer, ser::SerializeTuple};
 
+use super::region::Dangling;
+
 /// Full `major.minor` schema contract version, carried in every envelope.
 /// 1.1 (additive-minor over 1.0): `Inline::Wikilink` gained `target` + `alias`
 /// so a consumer reconstructs `{target, alias}` off decoded strings instead of
 /// slicing the (table-cell-unreliable) span.
-pub const SCHEMA_VERSION: &str = "1.1";
+/// 1.2 (recognition-only over 1.1, no wire-shape change): the region scanner
+/// gained an indented-code + multi-line-HTML-comment mask. The bump is the
+/// deploy-skew handshake — a consumer that pins `"1.2"` (distill's `parseDoc`)
+/// fails loud against a stale binary emitting `"1.1"` instead of silently
+/// reading its pre-mask (phantom-region-prone) `regions[]`.
+pub const SCHEMA_VERSION: &str = "1.2";
 
 /// Half-open UTF-8 byte span `[start, end)` — the sole slicing primitive.
 /// Serializes as a two-element array `[start, end]`.
@@ -50,6 +57,16 @@ pub struct Document {
     pub nodes: Vec<Node>,
     pub inlines: Vec<Inline>,
     pub regions: Vec<Region>,
+    /// Unpaired anchors (leftover opens / unmatched closes). Populated always,
+    /// serialized never — surfaced only by `check`, never in NDJSON.
+    ///
+    /// `#[serde(skip)]` is deliberate, not an oversight: the parse `Document` is
+    /// a structural INDEX (what tiles the bytes) whose every field a downstream
+    /// consumer slices; `dangling` is a DIAGNOSTIC (which anchors failed to
+    /// pair), whose sole home is the `check` verb. Keeping it off the wire keeps
+    /// the parse envelope a pure index and check-only reporting check-only.
+    #[serde(skip)]
+    pub dangling: Vec<Dangling>,
 }
 
 #[derive(Debug, Clone, Serialize)]
