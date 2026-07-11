@@ -5,9 +5,23 @@
 //! `nodes[]`/`headings[]`), may overlap freely, and is excluded from tiling.
 //!
 //! Recognition is a single raw byte scan for single-line `<!-- … -->` comments
-//! over the whole source, masked by fenced-code + inline-code spans (comrak is
-//! consulted only to build that mask, never to enumerate anchors). Multi-line
-//! HTML comments are not anchors (single-line only — pinned convention).
+//! over the whole source, masked by fenced-code + indented-code + inline-code
+//! spans plus multi-line HTML-comment blocks (comrak is consulted only to build
+//! that mask, never to enumerate anchors). Multi-line HTML comments are not
+//! anchors (single-line only — pinned convention).
+//!
+//! Mask reliability. The block-level masks (fenced/indented code, multi-line
+//! HTML comment) rest on comrak's block sourcepos, which is exact — an anchor
+//! buried in any of them is reliably inert. The inline-code (`NodeValue::Code`)
+//! mask instead tracks comrak's INLINE sourcepos, which is not always exact.
+//! Its failure mode is one-sided: an imprecise inline-code span can only over-
+//! or under-cover an anchor that is ALREADY inside inline code, so it may
+//! mis-suppress a real anchor but can never fabricate one from live prose. That
+//! blast radius is narrow and the failure is safe (a dropped region, not a
+//! phantom), so this is accepted, not hardened. The one multi-line blind spot
+//! that WAS a genuine phantom-region source — anchor-looking text on a
+//! continuation line of a multi-line HTML comment — is now handled by the
+//! multi-line HTML-comment mask (build.rs).
 //!
 //! Span convention — pinned per endpoint, not per pair (Decision 17):
 //!   `span.start`/`body_span.start` follow the OPEN's class;

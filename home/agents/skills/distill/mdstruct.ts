@@ -71,11 +71,22 @@ export interface MdRegion {
 }
 
 export interface MdDoc {
+  schemaVersion?: string;
   nodes?: MdNode[];
   inlines?: MdInline[];
   headings?: Heading[];
   regions?: MdRegion[];
 }
+
+// The `mdstruct` JSON schema this module is written against (the binary's
+// `SCHEMA_VERSION`, camelCased on the wire as `schemaVersion`). parseDoc asserts
+// an exact match: a stale binary on PATH emits an older version and silently
+// returns pre-mask `regions[]` (phantom regions from anchors buried in indented
+// code or multi-line HTML comments), which every present and future parse-only
+// consumer (interact, highlight) would trust blind. The handshake turns that
+// silent deploy-skew into a loud "rebuild mdstruct" failure. Bump in lockstep
+// with the Rust `SCHEMA_VERSION` whenever this module depends on the new shape.
+const EXPECTED_SCHEMA_VERSION = "1.2";
 
 export interface ParsedDoc {
   doc: MdDoc;
@@ -123,6 +134,16 @@ export function parseDoc(text: string): ParsedDoc {
   } catch (e) {
     throw new Error(
       `mdstruct unavailable: unparseable NDJSON from 'mdstruct' (${(e as Error).message})`,
+    );
+  }
+  // Schema-version handshake: fail loud on deploy skew rather than trust a stale
+  // binary's pre-mask regions. Exact-match against the version this module was
+  // written for (see EXPECTED_SCHEMA_VERSION).
+  if (doc.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
+    throw new Error(
+      `mdstruct schema mismatch: binary '${bin}' emitted schemaVersion ` +
+        `${JSON.stringify(doc.schemaVersion)}, this build expects ` +
+        `"${EXPECTED_SCHEMA_VERSION}". Rebuild mdstruct (the installed binary is stale).`,
     );
   }
   const parsed: ParsedDoc = { doc, buf };

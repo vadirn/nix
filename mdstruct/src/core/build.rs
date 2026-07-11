@@ -156,17 +156,34 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
     // Region recognition is a masked raw byte scan: anchors buried in code are
     // inert, whether the code is fenced, indented, or inline. The mask is
     // always built (fenced-or-indented code-block spans + inline-code
-    // `NodeValue::Code` spans). Frontmatter anchors are intentionally left
-    // live. Comrak's block-level sourcepos is reliable for indented code
-    // blocks (only inline sourcepos is unreliable — see the wikilink/embed
-    // mask below), so masking by the `CodeBlock` span is sound; this also
-    // brings the region mask into parity with that mask, which already masks
-    // all `CodeBlock(_)`.
+    // `NodeValue::Code` spans + multi-line HTML-comment blocks). Frontmatter
+    // anchors are intentionally left live. Comrak's block-level sourcepos is
+    // reliable for indented code blocks (only inline sourcepos is unreliable —
+    // see the wikilink/embed mask below), so masking by the `CodeBlock` span is
+    // sound; this also brings the region mask into parity with that mask, which
+    // already masks all `CodeBlock(_)`.
     let mut region_mask = code_block_mask_spans(root, &idx);
     for node in root.descendants() {
         let d = node.data.borrow();
-        if let NodeValue::Code(_) = &d.value {
-            region_mask.push(idx.span_of(d.sourcepos));
+        match &d.value {
+            NodeValue::Code(_) => region_mask.push(idx.span_of(d.sourcepos)),
+            // A MULTI-LINE `<!-- … -->` HTML-comment block: its continuation
+            // lines can carry anchor-looking `<!-- label -->` text that would
+            // otherwise pair into a phantom region. Mask it whole — block-level
+            // sourcepos is reliable, so this is sound. SINGLE-line HTML blocks
+            // stay live: those are the whole-line anchors themselves, and
+            // masking them would break parity. Guard on `<!--` so real
+            // multi-line HTML markup (e.g. a `<div>…</div>` block) stays live.
+            NodeValue::HtmlBlock(_) => {
+                let sp = d.sourcepos;
+                if sp.end.line > sp.start.line {
+                    let span = idx.span_of(sp);
+                    if source[span.start..span.end].trim_start().starts_with("<!--") {
+                        region_mask.push(span);
+                    }
+                }
+            }
+            _ => {}
         }
     }
     let scanned = region::scan(source, &idx, &region_mask);

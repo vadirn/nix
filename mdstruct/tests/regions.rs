@@ -87,6 +87,23 @@ fn indented_block_anchors_are_inert() {
     assert!(d.dangling.is_empty(), "in-indented-block anchors do not dangle");
 }
 
+/// (3d) Multi-line-HTML-comment skip: a `<!-- … -->` comment that spans more
+/// than one line carries anchor-looking `<!-- x -->` / `<!-- /x -->` text on its
+/// continuation lines. Each such block is masked whole (build.rs's multi-line
+/// HTML-comment mask pass), so the buried open/close neither pair into a phantom
+/// region nor dangle. Block-level sourcepos is reliable, so masking by the
+/// `HtmlBlock` span is sound.
+#[test]
+fn multiline_html_comment_anchors_are_inert() {
+    // Two multi-line comment blocks: the first ends on a line carrying a
+    // `<!-- x -->` open, the second on a `<!-- /x -->` close. Unmasked they would
+    // pair into a phantom region spanning both blocks; masked, both are inert.
+    let src = "<!--\n<!-- x -->\n\n<!--\n<!-- /x -->\n";
+    let d = parse(src, &Options::default());
+    assert!(d.regions.is_empty(), "anchors on comment continuation lines must not pair");
+    assert!(d.dangling.is_empty(), "masked multi-line-comment anchors do not dangle");
+}
+
 /// (4) Cross-block pairing: an open mid-paragraph in one block and a close
 /// embedded in a later heading pair across the intervening blocks, with
 /// byte-offset endpoints and the correct open/close line numbers.
