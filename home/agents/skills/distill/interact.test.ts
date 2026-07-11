@@ -313,6 +313,59 @@ test("parse error: opening anchor inside an open block (blocks do not nest)", ()
   ).toContain("nested-block");
 });
 
+// ---- region-consumer divergences (Phase B) ----
+// After region recognition moved into the single mdstruct engine, interact is a pure
+// filter over anchor pairs mdstruct locates by geometry over a masked raw-byte scan.
+// Three inputs resolve differently than the retired thin-pass scanner did; these are the
+// accepted new behavior (build plan open question #1), pinned so they can't silently regress.
+
+test("region divergence: a paired region whose OPEN anchor is malformed is bad-anchor alone — its matched close is not orphaned", () => {
+  // mdstruct pairs `<!-- interact: -->` with its `<!-- /interact -->` into one region, so the
+  // empty-info open yields only bad-anchor. The close is never an unopened-close — the retired
+  // scan emitted [bad-anchor, unopened-close] because a bad open opened nothing, orphaning it.
+  const codes = errorCodes(
+    lines("<!-- interact: -->", "", "- [ ] recover: X", "", "<!-- /interact -->", ""),
+  );
+  expect(codes).toEqual(["bad-anchor"]);
+  expect(codes).not.toContain("unopened-close");
+});
+
+test("region divergence: a no-colon `<!-- interact -->` is bad-anchor, but its quoted and inline-code forms stay inert", () => {
+  // mdstruct recognizes the colon-less comment as a (dangling) interact open, so interact
+  // re-reads its bytes and reports bad-anchor — the retired scan's OPEN_RE required the colon and
+  // let it pass through. Wrapped as code, the same text is masked out of region recognition.
+  expect(errorCodes(lines("some prose", "", "<!-- interact -->", ""))).toEqual(["bad-anchor"]);
+  expect(errorCodes(lines(F, "<!-- interact -->", F, ""))).toEqual([]); // quoted (fenced) form
+  expect(errorCodes(lines("prose `<!-- interact -->` inline", ""))).toEqual([]); // inline-code form
+});
+
+test("region divergence: a nested block reports nested-block alone and skips BOTH bodies", () => {
+  // The outer body carries a bad-state item ([-]); because both nested regions' bodies are
+  // skipped, that error is suppressed — only the single nested-block surfaces, naming the outer
+  // id at the inner anchor's line, with no block emitted. The retired scan also parsed the outer
+  // body, which would have added bad-state alongside nested-block.
+  const { blocks, errors } = parseInteract(
+    lines(
+      "<!-- interact: pick-any id=a -->",
+      "",
+      "- [-] recover: X",
+      "",
+      "<!-- interact: pick-one id=b -->",
+      "",
+      "- [ ] keep: Y",
+      "",
+      "<!-- /interact -->",
+      "",
+      "<!-- /interact -->",
+      "",
+    ),
+  );
+  expect(errors.map((e) => e.code)).toEqual(["nested-block"]);
+  expect(errors[0]!.blockId).toBe("a");
+  expect(errors[0]!.line).toBe(5);
+  expect(blocks).toEqual([]);
+});
+
 // ---- item-level errors ----
 
 test("parse error: item line without a verb marker", () => {
