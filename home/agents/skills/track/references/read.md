@@ -11,13 +11,17 @@ else:
     if results has one row:
         cfg = Bash(vault-query config)
         track_path = <cfg.project_path>/<row.Track>.md
-        do("Read(track_path), present the full body")
     else:
         options = [for r in results: { label: r.Track, description: r.Status + " · updated " + r.Updated + " · " + r.Description }]
         selected = AskUserQuestion(options, singleSelect=true)
         cfg = Bash(vault-query config)
         track_path = <cfg.project_path>/<selected.Track>.md
-        do("Read(track_path), present the full body")
+
+    // Shape first, then unfold — tracks grow large; do NOT Read the whole body (see Reference: Presenting a track)
+    shape = Bash(vault-query read <track_path>)                    // folded overview: sections + line/token counts; each Log entry addressed 6.N
+    snapshot = Bash(vault-query read <track_path> 1)               // Direction — the stable framing
+    latest = Bash(vault-query read <track_path> <highest 6.N>)     // the newest Log entry — the current snapshot
+    do("present Direction + latest Log entry as the resume snapshot; offer to unfold Decisions / Backlog / older Log entries by address on demand")
 
     query = do("derive a short phrase from the track's Direction and description — the topic the user is working on")
     grounding = Bash(vault-query consult "<query>" --format markdown)
@@ -59,5 +63,17 @@ Surface that error verbatim — report it as-is without synthesizing a project n
 
 ### Presenting a track
 
-Read the whole body. The latest Log entry (highest `### N.` heading) is the current snapshot. Direction, Glossary,
-and Files of interest are stable across sessions. Decisions and Backlog are append-only — read all entries; treat every item as current.
+Get the shape first, unfold on demand — a mature track runs hundreds of lines / tens of thousands of tokens, so
+reading the whole body every resume is wasteful. `vault-query read <track_path>` (no address) prints a folded
+overview: the frontmatter fields, every top-level section with its line and estimated-token counts, and each Log
+entry addressed individually as `6.N`. From that map:
+
+- **Snapshot** = Direction (address `1`) + the highest-numbered Log entry (`vault-query read <track_path> <6.N>`).
+  The latest Log entry is the current state; Direction is the stable framing. Present these two.
+- **On demand** — unfold Decisions (`4`), Backlog (`5`), an older Log entry, or any section by its address
+  (`vault-query read <track_path> <addr>`), or Read an exact line range from the overview's line numbers. Decisions
+  and Backlog are append-only: when the user goes deeper into either, unfold the whole section and treat every item
+  as current. Glossary and Files of interest are stable — reach for them only when a term or path needs resolving.
+
+`vault-query read` is mdstruct-backed (the same progressive-unfolding reader the `read` command exposes), so the
+address scheme (`0`/`text`, `1`, `6.N`, heading slugs) and the `--depth`/`--threshold`/`--full` controls all apply here.

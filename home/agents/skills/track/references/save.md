@@ -30,8 +30,9 @@ if selected == "new":
 
 else:
     track_path = <cfg.project_path>/<selected.Track>.md
-    track = Read(track_path)
-    last_n = do("scan ## Log section for '### N. YYYY-MM-DD — title' headings; take max N; default 0 if none")
+    // Shape first — a mature track is large; do NOT Read the whole body (see Reference: Editing a large track)
+    shape = Bash(vault-query read <track_path>)   // overview: section line-map + each Log entry addressed 6.N
+    last_n = do("read the highest Log address 6.N from the shape; default 0 if no Log entries")
     new_entry_number = last_n + 1
     title = do("draft a short title for this session's work")
     narrative = do("draft narrative paragraph: outcomes a fresh agent would need; exclude process, exploration noise, content with a permanent home elsewhere")
@@ -46,8 +47,7 @@ else:
 
     AskUserQuestion("apply these edits to <track_path>?", show=proposed_edits)
     if approved:
-        do("compose updated body: append decisions to ## Decisions, apply backlog edits to ## Backlog, append glossary rows to ## Glossary table, append log_entry to ## Log, set frontmatter updated:")
-        Bash("write atomically: write new body to <track_path>.tmp, then mv <track_path>.tmp <track_path>")
+        do("apply as localized Edits, not a full-body rewrite (see Reference: Editing a large track): for each target section, Read only its line range from the shape to get exact anchors, then Edit in place — append decisions to ## Decisions, apply backlog [x]/append edits to ## Backlog, append rows to ## Glossary, append log_entry to ## Log, set frontmatter updated:")
 
 graduation:
     do("review session for CLAUDE.md / skills / vault candidates; present as suggestions, let user decide")
@@ -57,11 +57,29 @@ graduation:
 
 ## Reference
 
-### Atomic write
+### Editing a large track
 
-Obsidian Sync recovery from a partial write is a manual UI flow. To make a save crash-safe, write to a sibling temp
-file and rename it over the target: `printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"`. The Write tool
-does not do this; use Bash with `mv`.
+A mature track runs hundreds of lines / tens of thousands of tokens. Never read or rewrite the whole body on save —
+that is the cost this procedure exists to avoid.
+
+- **Shape, not body.** `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields,
+  every top-level section with its start line and estimated tokens, and each Log entry addressed as `6.N`. The last
+  Log number is the highest `6.N` — read it off the overview instead of grepping the body. The overview's line
+  numbers are the map for the next step.
+- **Targeted reads.** For each section an edit touches (Decisions, Backlog, Glossary, Log, the frontmatter block),
+  Read only that section's line range (or unfold it with `vault-query read <track_path> <addr>`) to get the exact
+  anchor text an Edit needs. A save touches four or five sections, so a handful of small reads replaces one 30k-token
+  Read.
+- **Localized Edits.** Apply the entry as in-place Edits at those anchors — append the log entry under `## Log`,
+  append/append-`[x]` under `## Backlog`, append decisions under `## Decisions`, append Glossary rows, bump
+  `updated:`. Each Edit's write window is a single hunk, smaller than the old full-body rewrite, so the partial-write
+  exposure is lower, not higher.
+
+**Full-file writes stay atomic.** Creating a new track writes a whole file from the template — there is no large body
+to avoid, and a partial write would leave a corrupt half-track that Obsidian Sync recovers only through a manual UI
+flow. For that one full-file write, stay crash-safe with a sibling temp file renamed over the target:
+`printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"` (the Write tool does not do this; use Bash with `mv`).
+Localized Edits into an existing track do not need the temp-file dance.
 
 ### Empty-result handling
 
@@ -86,8 +104,9 @@ chosen single value. Quote any value containing double quotes with single quotes
 ### Log entry format
 
 Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically across the track's lifetime. Numbers
-are never reused — even if an entry is later edited or removed, its number stays consumed. To find the next number,
-grep for `^### ([0-9]+)\.` in the `## Log` section, take the max, add one.
+are never reused — even if an entry is later edited or removed, its number stays consumed. The next number is the
+highest Log address `6.N` in the `vault-query read` overview plus one (that overview enumerates every Log entry
+without reading the body); default to 1 when the Log is empty.
 
 `<title>` is a short noun phrase summarizing the session's outcome (e.g. `entry-binding decision`, `format refinement`).
 
