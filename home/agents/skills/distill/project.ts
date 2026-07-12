@@ -20,7 +20,8 @@ const PROJECTION_SCHEMA = "1.0";
 // authored orientation. They ride alongside the graph here so the projector can render them
 // without widening the canonical `DistillationResult` in graph.ts (the extract prompt will
 // populate them; design Backlog). A `Projection` is structurally a `DistillationResult`, so
-// callers may pass either and the signature stays `projectMarkdown(result: DistillationResult)`.
+// callers may pass either: a plain `DistillationResult` structurally satisfies `Projection` (the
+// extra fields are optional), so the param types as `Projection` with no downcast at the call.
 export interface Projection extends DistillationResult {
   title?: string;
   abstract?: string;
@@ -118,9 +119,8 @@ function typeSection(heading: string, units: Unit[], render: (u: Unit) => string
 
 // Project the canonical graph to its seven-section markdown form (spec §3). Sections emit in
 // fixed order and only when populated; the `## Abstract` is the sole unanchored block.
-export function projectMarkdown(result: DistillationResult): string {
-  const { source, units, edges } = result;
-  const { title, abstract } = result as Projection;
+export function projectMarkdown(result: Projection): string {
+  const { source, units, edges, title, abstract } = result;
 
   const unitById = new Map(units.map((u) => [u.id, u]));
   const byType = (t: Unit["type"]) => units.filter((u) => u.type === t);

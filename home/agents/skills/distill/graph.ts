@@ -84,7 +84,7 @@ export function computeSource(path: string, text: string): Source {
   const utf8 = Buffer.from(text, "utf8");
   return {
     path,
-    bytes: Buffer.byteLength(text, "utf8"),
+    bytes: utf8.length,
     sha256: createHash("sha256").update(utf8).digest("hex"),
   };
 }

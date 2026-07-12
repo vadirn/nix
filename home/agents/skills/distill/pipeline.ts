@@ -1155,7 +1155,7 @@ async function distill(
     // Signal the emit path (main()) that `out` is the seven-section projection carrying its own
     // frontmatter, so it does not prepend the source note's front (one YAML block, not two). A
     // routed head sets exposedOut to the legacy assembleBody render, so canonical is false there.
-    canonical: canonicalPath && !routed,
+    canonical: canonicalPath,
   };
 }
 
