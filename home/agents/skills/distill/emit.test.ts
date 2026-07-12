@@ -132,6 +132,12 @@ function mockPipeline() {
     askJson: mock(async (_model: unknown, prompt: string) => {
       if (prompt.includes("concept cartographer")) {
         return {
+          // title/abstract: the real EXTRACT prompt requests both (prompts.ts) and the canonical
+          // projection (the default path) renders them as the `# title` and the one unanchored
+          // `## Abstract`. The mock carries them so the default seven-section body is exercised.
+          title: "Anchor image discipline",
+          abstract:
+            "Blocking from the first felt impression, not the moving scene, keeps values from drifting.",
           thesis: "Blocking from the impression rather than the scene keeps the painting honest.",
           glossary: [
             {
@@ -139,15 +145,28 @@ function mockPipeline() {
               def: "The first felt impression, fixed as the reference.",
               relations: [],
               source: ["B3"],
+              // canonical projection (the default path) locates every unit's verbatim quote in the
+              // source body via locate() — a HARD ABORT on a miss — so the extract mock must carry a
+              // real slice of NOTE, not just a source block id.
+              quote:
+                "The anchor image is the first felt impression of the scene, fixed as the reference",
             },
             {
               term: "Impression distance",
               def: "The nearness of a value to its anchor.",
               relations: [],
               source: ["B3"],
+              quote:
+                "The impression distance is the nearness of a value to its anchor on re-inspection",
             },
           ],
-          workflow: [{ step: "Fix the anchor image before opening paints", source: ["B4"] }],
+          workflow: [
+            {
+              step: "Fix the anchor image before opening paints",
+              source: ["B4"],
+              quote: "Fix the anchor image before opening paints",
+            },
+          ],
         };
       }
       if (prompt.includes("grading each block")) {
@@ -281,6 +300,17 @@ test("emit success: sibling .tmp.md intermediary, path-only stdout, no XML, dest
   expect(tmp).not.toContain("<residue>");
   expect(tmp).toContain("epistemic_status: in-review");
 
+  // C1 regression: EXACTLY ONE frontmatter block. The canonical projection (now the default
+  // compress body) carries its own `type: distillation` / `source:` / `schema:` YAML, so main()
+  // must NOT also prepend the source note's front — doing so emitted two YAML blocks (the collision
+  // that was latent while canonical was opt-in). The single block holds the spec fields plus the
+  // forced review status; the source note's own `type: note` front is dropped, not prepended.
+  expect(tmp.match(/^type: distillation$/gm)).toHaveLength(1);
+  expect(tmp).not.toContain("type: note");
+  expect(tmp).toContain("schema: 1.0");
+  expect(tmp).toContain("source: { path:");
+  expect(tmp.split("\n").filter((l) => l.trim() === "---")).toHaveLength(2); // one open + one close
+
   // the four residue entries, verbs picked by reason class, targets by kind
   expect(tmp).toContain("- [ ] recover: thesis — thesis not recoverable from output");
   expect(tmp).toContain(
@@ -301,10 +331,20 @@ test("emit success: sibling .tmp.md intermediary, path-only stdout, no XML, dest
   expect(gate.dest).toBe("note.md");
   expect(gate.src).toMatch(/^sha256:[0-9a-f]{12}$/);
 
-  // strip is the write-back projection: no scaffold survives it
+  // strip is the write-back projection: no scaffold survives it, and the body is the seven-section
+  // canonical projection (the default compress output): a `# title`, the unanchored `## Abstract`,
+  // then the populated type-as-section blocks (Concepts + Procedures here; empty sections omitted).
   const stripped = stripInteract(tmp);
   expect(stripped).not.toContain("interact");
   expect(stripped).toContain("# Anchor image discipline");
+  expect(stripped).toContain("## Abstract");
+  expect(stripped).toContain("## Concepts");
+  expect(stripped).toContain("### Anchor image");
+  expect(stripped).toContain("### Impression distance");
+  expect(stripped).toContain("## Procedures");
+  // legacy assembleBody section headers never appear on the canonical default path
+  expect(stripped).not.toContain("## Glossary");
+  expect(stripped).not.toContain("## Workflow");
 });
 
 test("emit success (clean run): gate-only intermediary, footer says '· review: gate'", async () => {

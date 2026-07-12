@@ -12,8 +12,8 @@
 // orchestrator (and no import cycle).
 //
 // LOCKED: a failed `locate` HARD-ABORTS. `locate` throws a typed `LocateError` on a not-found or
-// ambiguous quote; the adapter lets it propagate out of `comboToResult` unchanged (the flip is
-// opt-in behind `--canonical`, so a bad quote must surface loudly — it is the spec §2 fidelity
+// ambiguous quote; the adapter lets it propagate out of `comboToResult` unchanged (the projection
+// is now the DEFAULT compress body, so a bad quote must surface loudly — it is the spec §2 fidelity
 // gate). There is NO whole-block coarse-span fallback.
 import {
   computeSource,

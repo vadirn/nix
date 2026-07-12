@@ -130,6 +130,12 @@ type DistillResult = {
   residue: Residue[];
   status: DistillStatus;
   workflowByOwner?: string[][];
+  // True only when `out` is the seven-section canonical projection (the homogeneous, non-routed,
+  // non-glossary, non-reference compress path). `main()` reads this to emit a SINGLE frontmatter
+  // block: the projection already carries its own `type/source/schema` YAML, so main() must NOT
+  // prepend the source note's front on this path (that would yield two YAML blocks). Undefined on
+  // the routed head, --glossary, isReference, passthrough — all still on the legacy assembler.
+  canonical?: boolean;
 };
 // one workflow group: steps sharing a source block-set, judged together by the
 // workflow gate. `idxs` index into the ordered workflowSteps array.
@@ -787,8 +793,22 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
 // these gates over its own narrower subset would false-flag a link alive in a preserve section and
 // double-count a real drop. Returning [] for the routed head IS the residue-scope fix, and it is
 // the invariant assembleRoutedNote relies on when it concats head.residue.
-export function edgePayloadResidue(text: string, out: string, routed = false): Residue[] {
-  return routed ? [] : [...wikilinkResidue(text, out), ...payloadResidue(text, out)];
+//
+// `skipWikilinks` drops the wikilink lane for the canonical projection path: canonical renders
+// relations as plain headwords and comboToResult/resolveEndpoint (adapt.ts) intentionally DROPS
+// every cross-note `[[wikilink]]` endpoint (only local units become edges), so the wikilink lane
+// would mass-flag every source wikilink as dropped. The payload lane stays — it is shape-agnostic.
+// (Whether the canonical graph should carry cross-note edges via external endpoints is Backlog.)
+export function edgePayloadResidue(
+  text: string,
+  out: string,
+  routed = false,
+  skipWikilinks = false,
+): Residue[] {
+  if (routed) return [];
+  return skipWikilinks
+    ? payloadResidue(text, out)
+    : [...wikilinkResidue(text, out), ...payloadResidue(text, out)];
 }
 
 // ---- prose-list-item gate (the prose-judge tier, D46) ----
@@ -895,11 +915,8 @@ async function distill(
     factsDump: boolean;
     tau: number;
     maxWords?: number;
-    // Opt-in canonical projection (wiring plan STEP 8): when set, the default-compress final
-    // body is `projectMarkdown(comboToResult(...))` instead of `assembleBody(...)`. Default off.
-    canonical: boolean;
-    // The source file path recorded in the canonical projection's `source:` frontmatter (only
-    // read on the --canonical default-compress path). Undefined for stdin.
+    // The source file path recorded in the canonical projection's `source:` frontmatter (read on
+    // the default-compress path — the seven-section projection). Undefined for stdin.
     path?: string;
     progress?: (line: string) => void;
   },
@@ -1015,16 +1032,13 @@ async function distill(
     proseFixes = qa.proseFixes;
   }
 
-  // assemble the final output: the connective prose head by default, the tie in
-  // --glossary. Definitions are the gate-settled ones; the prose restates none
-  // of them, so recovery changing a def never invalidates the prose above it.
-  // Behind --canonical, the DEFAULT-compress path (not routed, not --glossary, not a reference)
-  // instead emits the seven-section canonical projection built from the settled artifacts
-  // (wiring plan STEP 8). The routed head (:1094 branch), --glossary, isReference, and --dry-run
-  // stay on the legacy formatter (out of scope for the flip) — so gate the flip off for them, and
-  // because `out` here also feeds the routed head's expand-guard / prose-list / edge gates, which
-  // expect the legacy body shape.
-  const canonicalPath = opts.canonical && !routed && !opts.glossaryOnly && !opts.isReference;
+  // assemble the final output: the DEFAULT-compress path (not routed, not --glossary, not a
+  // reference) emits the seven-section canonical projection built from the settled artifacts
+  // (wiring plan STEP 8). The routed head (the distillRouted branch), --glossary, and isReference
+  // stay on the legacy `assembleBody` formatter — so gate the projection off for them, and because
+  // `out` here also feeds the routed head's expand-guard / prose-list / edge gates, which expect
+  // the legacy body shape. Definitions are the gate-settled ones.
+  const canonicalPath = !routed && !opts.glossaryOnly && !opts.isReference;
   const out = canonicalPath
     ? projectMarkdown(
         comboToResult({
@@ -1087,8 +1101,10 @@ async function distill(
   // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the final body
   // (prose + ## Relations + retained), so a link surviving in any of them counts as covered. The
   // routed head passes routed=true and contributes nothing here (assembleRoutedNote owns the one
-  // whole-note run); the routed-skip and its rationale live in edgePayloadResidue.
-  residue = residue.concat(edgePayloadResidue(text, out, routed));
+  // whole-note run); the routed-skip and its rationale live in edgePayloadResidue. The canonical
+  // path passes skipWikilinks=true — its projection intentionally drops cross-note edges, so the
+  // wikilink lane would false-flag every source wikilink (see edgePayloadResidue; Backlog).
+  residue = residue.concat(edgePayloadResidue(text, out, routed, canonicalPath));
   // deterministic, zero-LLM, never blocks — findings go to the footer only, never
   // into residue. Skipped on the routed head (its subset lint would false-flag names
   // living only in preserve sections; assembleRoutedNote owns the whole-note run).
@@ -1136,6 +1152,10 @@ async function distill(
     residue,
     status: "compressed",
     workflowByOwner,
+    // Signal the emit path (main()) that `out` is the seven-section projection carrying its own
+    // frontmatter, so it does not prepend the source note's front (one YAML block, not two). A
+    // routed head sets exposedOut to the legacy assembleBody render, so canonical is false there.
+    canonical: canonicalPath && !routed,
   };
 }
 
@@ -1276,7 +1296,6 @@ Options:
   --no-revise            skip the stage-4 writing passes
   --max-words <n>        expand-guard cap: 0 disables it, a positive n is an absolute ceiling
   --dry-run              deterministic front half only (segment→route report); no API call
-  --canonical            emit the seven-section canonical projection (default-compress path only)
   --out <dest.md>        compress-mode destination override (default: the input path);
                          required when reading from stdin once a run reaches the emit
   -h, --help             show this help and exit
@@ -1315,9 +1334,6 @@ export type CliOpts = {
   noGate: boolean;
   glossaryOnly: boolean;
   dryRun: boolean;
-  // Opt-in seven-section canonical projection on the default-compress path (wiring plan STEP 8);
-  // default off, so no-flag behavior is unchanged.
-  canonical: boolean;
   tau: number;
   maxWords?: number;
   path?: string;
@@ -1358,7 +1374,6 @@ export function parseArgs(argv: string[]): ParseResult {
   let noGate = false;
   let glossaryOnly = false;
   let dryRun = false;
-  let canonical = false;
   let out: string | undefined;
   const positionals: string[] = [];
 
@@ -1389,10 +1404,6 @@ export function parseArgs(argv: string[]): ParseResult {
       return { kind: "error", message: "--core-only was renamed to --glossary" };
     if (a === "--dry-run") {
       dryRun = true;
-      continue;
-    }
-    if (a === "--canonical") {
-      canonical = true;
       continue;
     }
     if (a === "--no-expand-guard") {
@@ -1579,7 +1590,6 @@ export function parseArgs(argv: string[]): ParseResult {
       noGate,
       glossaryOnly,
       dryRun,
-      canonical,
       tau,
       maxWords,
       path,
@@ -1729,7 +1739,6 @@ export async function main() {
     noGate,
     glossaryOnly,
     dryRun,
-    canonical,
     tau,
     maxWords,
     path: inputPath,
@@ -1848,7 +1857,7 @@ export async function main() {
   const selfSlug =
     !fromStdin && inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
   try {
-    const { out, footer, residue, status } = await distill(
+    const { out, footer, residue, status, canonical } = await distill(
       body,
       resolved,
       frontDescription,
@@ -1861,7 +1870,6 @@ export async function main() {
         factsDump,
         tau,
         maxWords,
-        canonical,
         path: inputPath,
         progress,
       },
@@ -1897,7 +1905,14 @@ export async function main() {
     // "new" when it does not yet exist — the creation case).
     const destPath = dest as string; // narrowed above: stdin without --out already exited
     const tmpPath = tmpPathFor(destPath);
-    const noteForIntermediary = front ? `${front}\n${out}` : out;
+    // ONE frontmatter block. The canonical projection (`canonical` from distill) already carries its
+    // own `type: distillation` / `source:` / `schema:` YAML, so prepending the source note's `front`
+    // would emit two blocks (the collision that was latent while canonical was opt-in). On the
+    // canonical path take `out` verbatim; buildIntermediary then stamps `epistemic_status: in-review`
+    // into that single block. Source-note-only fields (aliases/tags/description) drop with the
+    // source front — a distillation is a derived artifact stamped with its own provenance (Backlog).
+    // Every legacy path (routed head, --glossary, isReference) still prepends the source front.
+    const noteForIntermediary = canonical ? out : front ? `${front}\n${out}` : out;
     const src = existsSync(destPath)
       ? `sha256:${createHash("sha256").update(readFileSync(destPath)).digest("hex").slice(0, 12)}`
       : "new";
