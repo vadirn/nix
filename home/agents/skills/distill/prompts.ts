@@ -8,6 +8,8 @@ import {
   type Grade,
   type GlossEntry,
   type Combo,
+  type Inference,
+  type Judgement,
   type LinkInventory,
   type ProseUnit,
   type Relation,
@@ -85,16 +87,99 @@ export function extractComboPrompt(
     ? `Use this authored description VERBATIM: "${frontDescription}"`
     : `Write ONE sentence naming what the note is about.`;
   return `You are a concept cartographer. Read the note below (block IDs in [Bn] markers) and produce its compressed idea-graph as JSON. ${langRule(lang)}
+- "title": the note's own H1 title, or — if it has none — a short noun phrase naming its subject.
+- "abstract": 1-2 sentences orienting a reader to what the note covers. This is a SYNTHESIZED overview — the ONE block that carries no source quote.
 - "description": ${descRule}
 - "thesis": the single spine claim the whole note argues, one sentence.
-- "glossary": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out of the glossary. For each: "term" (the concept's name), "def" (dense, in YOUR OWN words, <=20 words), "relations" (array of OBJECTS naming how it ties to OTHER terms; each {"rel","to","predicate"}: "rel" is a single hyphenated token (e.g. subsumes, precondition-for, contrast-to), "to" is EITHER a bare term-slug naming ANOTHER glossary term in this note OR a [[file-slug]] wikilink, "predicate" is an optional one-clause gloss or null — use null when there is no gloss; NOT a bare restatement of def), "source" (array of [Bn] id strings where it is defined or used, at least one).
-- "workflow": the note's ACTIONABLE directives — the practices, steps, or procedure the note tells the reader to DO, in the order the note gives them. A directive earns an entry only when the note PRESCRIBES an action (an imperative, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives — leave them to the thesis and glossary. For each: "step" (one imperative clause in YOUR OWN words, dense; if the SOURCE gives a reason for the action — "do X because Y", "do X so that Y" — append that source-stated reason to the step; if the source states no reason, keep the step terse), "source" (array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
+- "glossary": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out of the glossary. For each: "term" (the concept's name), "def" (dense, in YOUR OWN words, <=20 words), "quote" (a VERBATIM source slice — see QUOTES), "relations" (array of OBJECTS naming how it ties to OTHER terms; each {"rel","to","predicate","quote"}: "rel" is a single hyphenated token (e.g. subsumes, precondition-for, contrast-to), "to" is EITHER a bare term-slug naming ANOTHER glossary term in this note OR a [[file-slug]] wikilink, "predicate" is an optional one-clause gloss or null — use null when there is no gloss; NOT a bare restatement of def; "quote" is a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings where it is defined or used, at least one).
+- "judgements": the note's stated JUDGEMENTS — claims it ASSERTS as true (an S-is-P assertion, an evaluation, a stance), distinct from the concepts they are about. For each: "statement" (the claim in one sentence, YOUR OWN words), "modality" (tag "hypothesis" ONLY when the note frames the claim as tentative/conjectural, "necessarily" ONLY when it frames it as a necessity/must/law; otherwise null — do NOT tag a plainly-asserted claim), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings, at least one). Use [] when the note asserts no standalone judgements.
+- "inferences": the note's stated INFERENCES — claims the note DERIVES from others (signalled by "therefore", "so", "which means", "it follows that"). For each: "statement" (the derived claim, one sentence, YOUR OWN words), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings, at least one). Use [] when the note draws no explicit inferences.
+- "workflow": the note's ACTIONABLE directives — the practices, steps, or procedure the note tells the reader to DO, in the order the note gives them. A directive earns an entry only when the note PRESCRIBES an action (an imperative, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives — leave them to the thesis and glossary. For each: "step" (one imperative clause in YOUR OWN words, dense; if the SOURCE gives a reason for the action — "do X because Y", "do X so that Y" — append that source-stated reason to the step; if the source states no reason, keep the step terse), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
+QUOTES: every "quote" is a slice copied EXACTLY, character-for-character, from the block text it was distilled from — do NOT reword, translate, or normalize punctuation; keep the source's own glyphs. EXCLUDE the leading [Bn] marker. Make each quote long enough to occur EXACTLY ONCE in the note (add surrounding words if a short phrase would be ambiguous). The type of a unit is carried by WHICH array it lands in — never emit a "type" field.
 Collapse restatements of the SAME concept into ONE entry whose "source" lists all the blocks that state it — do not emit a separate entry per surface form.
-Return ONLY JSON {"description":"...","thesis":"...","glossary":[{"term":"...","def":"...","relations":[{"rel":"...","to":"...","predicate":null}],"source":["Bn"]}],"workflow":[{"step":"...","source":["Bn"]}]}.
+Return ONLY JSON {"title":"...","abstract":"...","description":"...","thesis":"...","glossary":[{"term":"...","def":"...","quote":"...","relations":[{"rel":"...","to":"...","predicate":null,"quote":"..."}],"source":["Bn"]}],"judgements":[{"statement":"...","modality":null,"quote":"...","source":["Bn"]}],"inferences":[{"statement":"...","quote":"...","source":["Bn"]}],"workflow":[{"step":"...","quote":"...","source":["Bn"]}]}.
 ${linkInventorySection(inventory, selfSlug)}
 
 TEXT (block IDs in [Bn] markers):
 ${render(blocks)}`;
+}
+
+// Normalize the raw extract JSON into a typed Combo — the PURE core of extractCombo,
+// exported so it is testable without a network round-trip. Threads the verbatim `quote`
+// onto every glossary entry, relation, and workflow step (trim only — NEVER
+// normalizeTypography on a quote, it must stay byte-verbatim to round-trip against source
+// in locate()); parses the judgement/inference channels; carries title/abstract; and
+// applies the existing source-id validation + drop-if-no-source rule, extended to
+// judgements and inferences. `frontDescription`, when set, overrides the model's
+// description (the one anchor never paraphrased). All the new fields are additive: the
+// shipped stages read only {glossary, workflow, thesis, description}.
+export function parseExtractResult(raw: Combo, blocks: Block[], frontDescription = ""): Combo {
+  const ids = new Set(blocks.map((b) => b.id));
+  // Trim-only, byte-verbatim: a quote is the span-locate anchor, so it is never
+  // typography-normalized. Returns `{ quote }` when present, `{}` when empty — spread
+  // into the unit so an entry with no quote keeps the two-channel shape (no `quote` key).
+  const quoteField = (q: unknown): { quote?: string } => {
+    const s = typeof q === "string" ? q.trim() : "";
+    return s ? { quote: s } : {};
+  };
+  const withSource = (s: unknown): string[] =>
+    (Array.isArray(s) ? s : []).filter((id) => ids.has(id));
+  const glossary = (raw.glossary ?? [])
+    .map((e) => ({
+      term: (e.term ?? "").trim(),
+      def: (e.def ?? "").trim(),
+      // relations skip revise(), so coerce + normalize here (the extractor emits
+      // non-breaking hyphens / typeset glyphs the same way the revise model does).
+      // LOSSY (D29): drop only edges missing rel or to; keep unknown rels / unresolved
+      // endpoints (those are REBUILD lint findings, not BUILD drops). normalizeRelation
+      // threads each relation's own verbatim quote (trim only).
+      relations: (Array.isArray(e.relations) ? e.relations : [])
+        .map((r) => normalizeRelation(r))
+        .filter((r): r is Relation => r !== null),
+      source: withSource(e.source),
+      ...quoteField((e as { quote?: unknown }).quote),
+    }))
+    // an entry with no valid source block cannot be rendered grounded or graded — drop it
+    .filter((e) => e.term && e.source.length > 0);
+  const workflow = (raw.workflow ?? [])
+    .map((s) => ({
+      step: (s.step ?? "").trim(),
+      source: withSource(s.source),
+      ...quoteField((s as { quote?: unknown }).quote),
+    }))
+    // a step with no valid source block cannot be grounded or gated — drop it
+    .filter((s) => s.step && s.source.length > 0);
+  // judgement modality: accept only the two marked forms; anything else is assertoric (null)
+  const modalityOf = (m: unknown): "hypothesis" | "necessarily" | null =>
+    m === "hypothesis" || m === "necessarily" ? m : null;
+  const judgements: Judgement[] = (raw.judgements ?? [])
+    .map((j) => ({
+      statement: (j.statement ?? "").trim(),
+      modality: modalityOf(j.modality),
+      source: withSource(j.source),
+      ...quoteField((j as { quote?: unknown }).quote),
+    }))
+    // same drop-if-no-source rule as glossary/workflow: an unanchored judgement cannot be located
+    .filter((j) => j.statement && j.source.length > 0);
+  const inferences: Inference[] = (raw.inferences ?? [])
+    .map((i) => ({
+      statement: (i.statement ?? "").trim(),
+      source: withSource(i.source),
+      ...quoteField((i as { quote?: unknown }).quote),
+    }))
+    .filter((i) => i.statement && i.source.length > 0);
+  // the authored frontmatter description overrides the model's: the one anchor never paraphrased
+  const description = frontDescription || (raw.description ?? "").trim();
+  return {
+    description,
+    thesis: (raw.thesis ?? "").trim(),
+    glossary,
+    workflow,
+    title: (raw.title ?? "").trim(),
+    abstract: (raw.abstract ?? "").trim(),
+    judgements,
+    inferences,
+  };
 }
 
 export async function extractCombo(
@@ -109,32 +194,7 @@ export async function extractCombo(
     extractComboPrompt(blocks, frontDescription, lang, inventory, selfSlug),
     EXTRACT_TOKENS,
   );
-  const ids = new Set(blocks.map((b) => b.id));
-  const glossary = (combo.glossary ?? [])
-    .map((e) => ({
-      term: (e.term ?? "").trim(),
-      def: (e.def ?? "").trim(),
-      // relations skip revise(), so coerce + normalize here (the extractor emits
-      // non-breaking hyphens / typeset glyphs the same way the revise model does).
-      // LOSSY (D29): drop only edges missing rel or to; keep unknown rels / unresolved
-      // endpoints (those are REBUILD lint findings, not BUILD drops).
-      relations: (Array.isArray(e.relations) ? e.relations : [])
-        .map((r) => normalizeRelation(r))
-        .filter((r): r is Relation => r !== null),
-      source: (e.source ?? []).filter((id) => ids.has(id)),
-    }))
-    // an entry with no valid source block cannot be rendered grounded or graded — drop it
-    .filter((e) => e.term && e.source.length > 0);
-  const workflow = (combo.workflow ?? [])
-    .map((s) => ({
-      step: (s.step ?? "").trim(),
-      source: (s.source ?? []).filter((id) => ids.has(id)),
-    }))
-    // a step with no valid source block cannot be grounded or gated — drop it
-    .filter((s) => s.step && s.source.length > 0);
-  // the authored frontmatter description overrides the model's: the one anchor never paraphrased
-  const description = frontDescription || (combo.description ?? "").trim();
-  return { description, thesis: (combo.thesis ?? "").trim(), glossary, workflow };
+  return parseExtractResult(combo, blocks, frontDescription);
 }
 
 // ---- stage 2: grade each block drop / distill / retain ----

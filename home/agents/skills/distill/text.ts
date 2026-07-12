@@ -38,19 +38,57 @@ export type Grade = "drop" | "distill" | "retain";
 // A relation is one STRUCTURAL edge (D29): `rel` an open hyphenated token, `to` an
 // endpoint (a bare local term-slug or a [[file-slug]] wikilink), `predicate` an
 // optional one-clause gloss (null when none). The from-label is NOT a field — it is
-// the entry's own `term`, supplied by the assembler (emitRelationsBlock).
-export type Relation = { rel: string; to: string; predicate: string | null };
-export type GlossEntry = { term: string; def: string; relations: Relation[]; source: string[] };
+// the entry's own `term`, supplied by the assembler (emitRelationsBlock). `quote` is
+// the VERBATIM source slice the edge was distilled from (byte-exact, never typography-
+// normalized) — the span-locate anchor the canonical projection resolves; optional so
+// the shipped two-channel path and REBUILD parsing keep working without it.
+export type Relation = { rel: string; to: string; predicate: string | null; quote?: string };
+// `quote` is the verbatim source slice this concept was distilled from (span-locate
+// anchor, byte-exact); optional and inert to the shipped grade/order/synth/gate path.
+export type GlossEntry = {
+  term: string;
+  def: string;
+  relations: Relation[];
+  source: string[];
+  quote?: string;
+};
 // a workflow step is an ACTIONABLE directive the note prescribes (a practice, a
 // procedure step) — the procedural sink the glossary (concepts) cannot hold. The
 // step carries a source-stated reason ("do X because Y") when the source gives
-// one; the gate tolerates a dropped reason but forbids an invented one.
-export type WorkStep = { step: string; source: string[] };
+// one; the gate tolerates a dropped reason but forbids an invented one. `quote` is
+// the verbatim source slice the step was distilled from (span-locate anchor), optional.
+export type WorkStep = { step: string; source: string[]; quote?: string };
+// A JUDGEMENT is a stated claim the note asserts as true (an S-is-P assertion, an
+// evaluation, a stance) — distinct from the concepts it is about. `modality` tags the
+// note's own framing: "hypothesis" (problematic/tentative), "necessarily" (apodictic),
+// or null (assertoric, the unmarked default). `quote` is the verbatim source slice,
+// `source` the block IDs. The judgment channel of the typed extract (spec §1), read by
+// the canonical adapter, inert to the shipped stages.
+export type Judgement = {
+  statement: string;
+  modality: "hypothesis" | "necessarily" | null;
+  source: string[];
+  quote?: string;
+};
+// An INFERENCE is a claim the note DERIVES from others ("therefore", "so", "it follows
+// that") — the derivation channel of the typed extract (spec §1). `quote` is the
+// verbatim source slice, `source` the block IDs.
+export type Inference = { statement: string; source: string[]; quote?: string };
+// `title`/`abstract` are the document-level orientation of the typed extract (spec §3:
+// the H1 and the one unanchored ## Abstract block); `judgements`/`inferences` are the
+// judgment and inference channels. All four are OPTIONAL and additive — the shipped
+// stages (grade/order/synthesize/revise/gate) destructure only
+// {glossary, workflow, thesis, description}, so they are inert to those and read only
+// by the canonical adapter.
 export type Combo = {
   description: string;
   thesis: string;
   glossary: GlossEntry[];
   workflow: WorkStep[];
+  title?: string;
+  abstract?: string;
+  judgements?: Judgement[];
+  inferences?: Inference[];
 };
 // A vault edge: a [[wikilink]] OR a scheme-less [text](path) markdown link, both
 // intra-vault cross-note relations. `markup` is the verbatim span, `slug` its target
@@ -978,7 +1016,7 @@ export const relText = (r: Relation): string =>
 // token matches the registry's shape; predicate is null when empty.
 export function normalizeRelation(r: unknown): Relation | null {
   if (!r || typeof r !== "object") return null;
-  const o = r as { rel?: unknown; to?: unknown; predicate?: unknown };
+  const o = r as { rel?: unknown; to?: unknown; predicate?: unknown; quote?: unknown };
   const rel = normalizeTypography(String(o.rel ?? ""))
     .trim()
     .toLowerCase()
@@ -986,7 +1024,11 @@ export function normalizeRelation(r: unknown): Relation | null {
   const to = normalizeTypography(String(o.to ?? "")).trim();
   if (!rel || !to) return null;
   const pred = o.predicate == null ? "" : normalizeTypography(String(o.predicate)).trim();
-  return { rel, to, predicate: pred || null };
+  // `quote` is the span-locate anchor: trim only, NEVER normalizeTypography — it must
+  // stay byte-verbatim so it round-trips against the source in locate(). Omitted when
+  // empty so the returned edge matches the two-channel shape when no quote is emitted.
+  const quote = typeof o.quote === "string" ? o.quote.trim() : "";
+  return { rel, to, predicate: pred || null, ...(quote ? { quote } : {}) };
 }
 
 // ---- relations/glossary REBUILD (W1; inverts assemble.ts::emitRelationsBlock /
