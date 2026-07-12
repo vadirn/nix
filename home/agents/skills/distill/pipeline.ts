@@ -69,6 +69,8 @@ import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { proseFix, proseJudge } from "./writing/prose-qa.ts";
 import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
 import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
+import { comboToResult } from "./adapt.ts";
+import { projectMarkdown } from "./project.ts";
 import { runProse } from "./prose-mode.ts";
 import { buildIntermediary } from "./triage.ts";
 import { runApply } from "./apply-mode.ts";
@@ -893,6 +895,12 @@ async function distill(
     factsDump: boolean;
     tau: number;
     maxWords?: number;
+    // Opt-in canonical projection (wiring plan STEP 8): when set, the default-compress final
+    // body is `projectMarkdown(comboToResult(...))` instead of `assembleBody(...)`. Default off.
+    canonical: boolean;
+    // The source file path recorded in the canonical projection's `source:` frontmatter (only
+    // read on the --canonical default-compress path). Undefined for stdin.
+    path?: string;
     progress?: (line: string) => void;
   },
   selfSlug = "",
@@ -1010,15 +1018,36 @@ async function distill(
   // assemble the final output: the connective prose head by default, the tie in
   // --glossary. Definitions are the gate-settled ones; the prose restates none
   // of them, so recovery changing a def never invalidates the prose above it.
-  const out = assembleBody(
-    h1,
-    opts.glossaryOnly ? tie : prose,
-    workflowSteps,
-    orderedEntries,
-    defByTerm,
-    payloadBlocks,
-    opts.isReference,
-  );
+  // Behind --canonical, the DEFAULT-compress path (not routed, not --glossary, not a reference)
+  // instead emits the seven-section canonical projection built from the settled artifacts
+  // (wiring plan STEP 8). The routed head (:1094 branch), --glossary, isReference, and --dry-run
+  // stay on the legacy formatter (out of scope for the flip) — so gate the flip off for them, and
+  // because `out` here also feeds the routed head's expand-guard / prose-list / edge gates, which
+  // expect the legacy body shape.
+  const canonicalPath = opts.canonical && !routed && !opts.glossaryOnly && !opts.isReference;
+  const out = canonicalPath
+    ? projectMarkdown(
+        comboToResult({
+          path: opts.path ?? "",
+          body: text,
+          combo,
+          orderedEntries,
+          orderedSteps,
+          workflowSteps,
+          defByTerm,
+          payloadBlocks,
+          stepGroups: computeStepGroups(orderedSteps, blockById),
+        }),
+      )
+    : assembleBody(
+        h1,
+        opts.glossaryOnly ? tie : prose,
+        workflowSteps,
+        orderedEntries,
+        defByTerm,
+        payloadBlocks,
+        opts.isReference,
+      );
 
   const afterWords = wordCount(out);
   // passthrough guard: a distillation that expands the note has failed its one job.
@@ -1247,6 +1276,7 @@ Options:
   --no-revise            skip the stage-4 writing passes
   --max-words <n>        expand-guard cap: 0 disables it, a positive n is an absolute ceiling
   --dry-run              deterministic front half only (segment→route report); no API call
+  --canonical            emit the seven-section canonical projection (default-compress path only)
   --out <dest.md>        compress-mode destination override (default: the input path);
                          required when reading from stdin once a run reaches the emit
   -h, --help             show this help and exit
@@ -1285,6 +1315,9 @@ export type CliOpts = {
   noGate: boolean;
   glossaryOnly: boolean;
   dryRun: boolean;
+  // Opt-in seven-section canonical projection on the default-compress path (wiring plan STEP 8);
+  // default off, so no-flag behavior is unchanged.
+  canonical: boolean;
   tau: number;
   maxWords?: number;
   path?: string;
@@ -1325,6 +1358,7 @@ export function parseArgs(argv: string[]): ParseResult {
   let noGate = false;
   let glossaryOnly = false;
   let dryRun = false;
+  let canonical = false;
   let out: string | undefined;
   const positionals: string[] = [];
 
@@ -1355,6 +1389,10 @@ export function parseArgs(argv: string[]): ParseResult {
       return { kind: "error", message: "--core-only was renamed to --glossary" };
     if (a === "--dry-run") {
       dryRun = true;
+      continue;
+    }
+    if (a === "--canonical") {
+      canonical = true;
       continue;
     }
     if (a === "--no-expand-guard") {
@@ -1541,6 +1579,7 @@ export function parseArgs(argv: string[]): ParseResult {
       noGate,
       glossaryOnly,
       dryRun,
+      canonical,
       tau,
       maxWords,
       path,
@@ -1690,6 +1729,7 @@ export async function main() {
     noGate,
     glossaryOnly,
     dryRun,
+    canonical,
     tau,
     maxWords,
     path: inputPath,
@@ -1821,6 +1861,8 @@ export async function main() {
         factsDump,
         tau,
         maxWords,
+        canonical,
+        path: inputPath,
         progress,
       },
       selfSlug,
