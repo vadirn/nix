@@ -1,0 +1,239 @@
+// project.test.ts — tests for the seven-section markdown projector (project.ts) against the
+// spec's two worked examples (distill-spec §3, "Reference render 1/2"). Pure formatting; no
+// mdstruct binary needed. Run with `bun test project.test.ts` from this directory.
+import { expect, test } from "bun:test";
+import { projectMarkdown, type Projection } from "./project.ts";
+
+// Reference render 1 — "Record dates, not booleans": Abstract, two concept subsections, one
+// (assertoric) judgement, one inference using ⇐, a procedure subsection with numbered steps,
+// and one relation. No Payload section (the source carries no code/table/quote).
+const RENDER_1: Projection = {
+  source: { path: "record-dates-not-booleans.txt", bytes: 547, sha256: "965c0afefb91" },
+  title: "Record dates, not booleans",
+  abstract:
+    "A nullable timestamp carries strictly more than a boolean and costs no more,\nso state fields should record when a transition happened, not merely whether.",
+  units: [
+    {
+      id: "Boolean flag",
+      type: "concept",
+      statement:
+        'A field recording only whether a state holds — true or false.\nanswers only "is it?"',
+      span: [33, 47],
+    },
+    {
+      id: "Nullable timestamp",
+      type: "concept",
+      statement:
+        'A field recording when a state transition occurred; null means not-yet.\nanswers "is it, and when?", and null still means no',
+      span: [7, 27],
+    },
+    {
+      id: "no extra column",
+      type: "judgment",
+      statement: "the timestamp approach needs no extra column over the boolean",
+      span: [443, 547],
+      // no modality -> assertoric -> no tag
+    },
+    {
+      id: "dominates",
+      type: "inference",
+      statement: "recording the date dominates the flag ⇐ the timestamp subsumes the boolean",
+      span: [443, 547],
+    },
+    {
+      id: "Model a state flag",
+      type: "procedure",
+      statement:
+        'store the moment it happened, not a true/false\ntreat null as "not yet", non-null as "reached, at T"',
+      span: [143, 189],
+    },
+  ],
+  edges: [{ from: "Nullable timestamp", to: "Boolean flag", rel: "subsumes", span: [289, 442] }],
+};
+
+test("render 1: frontmatter mirrors mdstruct Source and declares the projection schema", () => {
+  const md = projectMarkdown(RENDER_1);
+  expect(md.startsWith("---\ntype: distillation\n")).toBe(true);
+  expect(md).toContain(
+    "source: { path: record-dates-not-booleans.txt, bytes: 547, sha256: 965c0afefb91 }",
+  );
+  expect(md).toContain("schema: 1.0");
+});
+
+test("render 1: title then Abstract (the only unanchored block)", () => {
+  const md = projectMarkdown(RENDER_1);
+  expect(md).toContain("# Record dates, not booleans");
+  expect(md).toContain("## Abstract\n\nA nullable timestamp carries strictly more than a boolean");
+  // the abstract line carries no trailing byte-span anchor
+  expect(md).not.toMatch(/not merely whether\.\s+\d+\.\.\d+/);
+});
+
+test("render 1: sections appear in the fixed seven-section order, Payload omitted", () => {
+  const md = projectMarkdown(RENDER_1);
+  const order = [
+    "## Abstract",
+    "## Concepts",
+    "## Judgements",
+    "## Inferences",
+    "## Procedures",
+    "## Relations",
+  ];
+  const positions = order.map((h) => md.indexOf(h));
+  expect(positions.every((p) => p >= 0)).toBe(true);
+  const sorted = [...positions].sort((a, b) => a - b);
+  expect(positions).toEqual(sorted);
+  // no Payload unit -> no Payload section (absence is diagnostic, never an empty section)
+  expect(md).not.toContain("## Payload");
+});
+
+test("render 1: concept subsections carry a heading, a definition line, and an anchored bullet", () => {
+  const md = projectMarkdown(RENDER_1);
+  expect(md).toContain("### Boolean flag");
+  expect(md).toContain("A field recording only whether a state holds — true or false. 33..47");
+  expect(md).toContain('- answers only "is it?" 33..47');
+  expect(md).toContain("### Nullable timestamp");
+  expect(md).toContain(
+    "A field recording when a state transition occurred; null means not-yet. 7..27",
+  );
+});
+
+test("render 1: an assertoric judgement emits no modality tag", () => {
+  const md = projectMarkdown(RENDER_1);
+  expect(md).toContain("- the timestamp approach needs no extra column over the boolean 443..547");
+  const judgeLine = md.split("\n").find((l) => l.includes("no extra column over the boolean"))!;
+  expect(judgeLine).not.toContain("(hypothesis)");
+  expect(judgeLine).not.toContain("(necessarily)");
+  expect(judgeLine.startsWith("- (")).toBe(false);
+});
+
+test("render 1: inference bullet may carry the ⇐ operator, anchored", () => {
+  const md = projectMarkdown(RENDER_1);
+  expect(md).toContain(
+    "- recording the date dominates the flag ⇐ the timestamp subsumes the boolean 443..547",
+  );
+});
+
+test("render 1: procedure subsection numbers steps, lead step anchored", () => {
+  const md = projectMarkdown(RENDER_1);
+  expect(md).toContain("### Model a state flag");
+  expect(md).toContain("1. store the moment it happened, not a true/false 143..189");
+  expect(md).toContain('2. treat null as "not yet", non-null as "reached, at T"');
+});
+
+test("render 1: the relation line is exact (em-dash, arrow, two spaces before the anchor)", () => {
+  const md = projectMarkdown(RENDER_1);
+  expect(md).toContain("## Relations");
+  expect(md).toContain("- nullable timestamp — subsumes → boolean flag  289..442");
+});
+
+test("render 1: no empty sections are emitted", () => {
+  const md = projectMarkdown(RENDER_1);
+  // an emitted heading is always followed by content, never by a blank line then another heading
+  expect(md).not.toMatch(/## [A-Za-z]+\n\n(?:## |#(?!#)|---|$)/);
+});
+
+// Reference render 2 — "Chesterton's Fence": exercises a (necessarily) apodictic judgement and
+// a Payload blockquote with its anchor.
+const RENDER_2: Projection = {
+  source: { path: "chestertons-fence.txt", bytes: 493, sha256: "75ab3e59771c" },
+  title: "Chesterton's Fence",
+  units: [
+    {
+      id: "must not remove an unexplained constraint",
+      type: "judgment",
+      statement: "if you cannot state a constraint's use, you must not remove it",
+      span: [184, 261],
+      modality: "necessarily",
+    },
+    {
+      id: "Reformer's line",
+      type: "payload",
+      statement: '"I don\'t see the use of this; let us clear it away."',
+      span: [110, 162],
+    },
+  ],
+  edges: [],
+};
+
+test("render 2: a (necessarily) judgement carries the apodictic modality tag", () => {
+  const md = projectMarkdown(RENDER_2);
+  expect(md).toContain("## Judgements");
+  expect(md).toContain(
+    "- (necessarily) if you cannot state a constraint's use, you must not remove it 184..261",
+  );
+});
+
+test("render 2: Payload renders a `### key` + anchored blockquote of the verbatim slice", () => {
+  const md = projectMarkdown(RENDER_2);
+  expect(md).toContain("## Payload");
+  expect(md).toContain("### Reformer's line");
+  expect(md).toContain('> "I don\'t see the use of this; let us clear it away." 110..162');
+});
+
+test("render 2: no Concepts / Inferences / Procedures / Relations sections (no such units/edges)", () => {
+  const md = projectMarkdown(RENDER_2);
+  expect(md).not.toContain("## Concepts");
+  expect(md).not.toContain("## Inferences");
+  expect(md).not.toContain("## Procedures");
+  expect(md).not.toContain("## Relations");
+  // Judgements before Payload
+  expect(md.indexOf("## Judgements")).toBeLessThan(md.indexOf("## Payload"));
+});
+
+// Focused unit tests for the omission and modality invariants.
+test("a section with no units of that type is omitted entirely", () => {
+  const onlyJudgement: Projection = {
+    source: { path: "x.txt", bytes: 10, sha256: "deadbeef" },
+    title: "X",
+    units: [{ id: "j", type: "judgment", statement: "a claim", span: [0, 5] }],
+    edges: [],
+  };
+  const md = projectMarkdown(onlyJudgement);
+  expect(md).toContain("## Judgements");
+  for (const h of [
+    "## Concepts",
+    "## Inferences",
+    "## Procedures",
+    "## Payload",
+    "## Relations",
+    "## Abstract",
+  ]) {
+    expect(md).not.toContain(h);
+  }
+});
+
+test("a hypothesis judgement carries the problematic modality tag", () => {
+  const hypo: Projection = {
+    source: { path: "x.txt", bytes: 10, sha256: "deadbeef" },
+    title: "X",
+    units: [
+      { id: "h", type: "judgment", statement: "maybe true", span: [0, 5], modality: "hypothesis" },
+    ],
+    edges: [],
+  };
+  expect(projectMarkdown(hypo)).toContain("- (hypothesis) maybe true 0..5");
+});
+
+test("an off-registry edge rel is a hard failure", () => {
+  const bad: Projection = {
+    source: { path: "x.txt", bytes: 10, sha256: "deadbeef" },
+    title: "X",
+    units: [
+      { id: "A", type: "concept", statement: "a", span: [0, 1] },
+      { id: "B", type: "concept", statement: "b", span: [1, 2] },
+    ],
+    edges: [{ from: "A", to: "B", rel: "causes", span: [0, 2] }],
+  };
+  expect(() => projectMarkdown(bad)).toThrow(/REL_REGISTRY/);
+});
+
+test("title falls back to the source path basename when none is given", () => {
+  const noTitle: DistillationResultLike = {
+    source: { path: "notes/some-idea.md", bytes: 10, sha256: "deadbeef" },
+    units: [{ id: "j", type: "judgment", statement: "a claim", span: [0, 5] }],
+    edges: [],
+  };
+  expect(projectMarkdown(noTitle)).toContain("# Some idea");
+});
+
+type DistillationResultLike = Parameters<typeof projectMarkdown>[0];
