@@ -112,11 +112,27 @@ export function stripAnchor(line: string): { text: string; span: Span | null } {
 
 // Group a section's body lines into `### headword` subsections: the lines under each `### ` up to
 // the next `### ` (or the section end). Lines before the first `### ` are ignored (a well-formed
-// projection has none).
+// projection has none). Fence-aware, mirroring splitSections: a `### `-look-alike line inside a
+// ``` code block (e.g. a comment in a fenced Payload snippet) is literal content, not a subsection
+// boundary — without this, a fenced Payload containing a "### " comment line split into garbage
+// entries (the fence content lost its close, the fake header's line became a bogus second entry).
 function subsections(bodyLines: string[]): { headword: string; lines: string[] }[] {
   const out: { headword: string; lines: string[] }[] = [];
   let cur: { headword: string; lines: string[] } | null = null;
+  let fence: string | null = null;
   for (const line of bodyLines) {
+    const fm = FENCE_RE.exec(line.trimStart());
+    if (fm) {
+      const marker = fm[1]![0]!;
+      if (fence === null) fence = marker;
+      else if (fence === marker) fence = null;
+      if (cur) cur.lines.push(line);
+      continue;
+    }
+    if (fence) {
+      if (cur) cur.lines.push(line);
+      continue;
+    }
     const h = SUB_RE.exec(line);
     if (h) {
       cur = { headword: h[1]!, lines: [] };
@@ -132,43 +148,57 @@ function subsections(bodyLines: string[]): { headword: string; lines: string[] }
 const MODALITY_TAG_RE = /^\((?:hypothesis|necessarily)\)\s+/;
 
 // Parse a canonical note body into its structured sections. Absent sections yield empty arrays /
-// an empty abstract (the projector omits an empty section, so absence is the normal signal).
+// an empty abstract (the projector omits an empty section, so absence is the normal signal). A
+// hand-dropped anchor degrades to `span: null` (text still parses); an empty-def concept or
+// step-less procedure is dropped entirely rather than surfaced as a degenerate entry (see the
+// concepts/procedures filters below). A malformed `### ` header (no space, wrong hash count,
+// leading whitespace) never opens a subsection, so its content is silently lost.
 export function parseCanonicalNote(body: string): CanonNote {
   const sections = splitSections(body);
   const by = (name: string) => sections.find((s) => s.name === name);
 
   const abstract = (by("abstract")?.bodyLines ?? []).join("\n").trim();
 
-  const concepts: CanonConcept[] = subsections(by("concepts")?.bodyLines ?? []).map((sub) => {
-    const content = sub.lines.filter((l) => l.trim().length > 0);
-    let def = "";
-    let span: Span | null = null;
-    const bullets: string[] = [];
-    for (const line of content) {
-      const t = line.trim();
-      if (t.startsWith("- ")) {
-        bullets.push(stripAnchor(t.slice(2)).text);
-      } else if (!def) {
-        const a = stripAnchor(t);
-        def = a.text;
-        span = a.span;
+  // Hardening: a `### headword` with no definition line (back-to-back headers, or a
+  // bullets-only subsection) is malformed — a hand edit dropped or split the entry. Skip it
+  // rather than surface an empty-def concept, symmetric with prose-mode.ts::parseDistilled's
+  // `.filter((c) => c.headword && c.def)` (pure.test.ts:653-664).
+  const concepts: CanonConcept[] = subsections(by("concepts")?.bodyLines ?? [])
+    .map((sub) => {
+      const content = sub.lines.filter((l) => l.trim().length > 0);
+      let def = "";
+      let span: Span | null = null;
+      const bullets: string[] = [];
+      for (const line of content) {
+        const t = line.trim();
+        if (t.startsWith("- ")) {
+          bullets.push(stripAnchor(t.slice(2)).text);
+        } else if (!def) {
+          const a = stripAnchor(t);
+          def = a.text;
+          span = a.span;
+        }
       }
-    }
-    return { headword: sub.headword, def, bullets, span };
-  });
+      return { headword: sub.headword, def, bullets, span };
+    })
+    .filter((c) => c.headword && c.def);
 
-  const procedures: CanonProcedure[] = subsections(by("procedures")?.bodyLines ?? []).map((sub) => {
-    const steps: string[] = [];
-    let span: Span | null = null;
-    for (const line of sub.lines) {
-      const m = line.match(/^\s*\d+\.\s(.*)$/);
-      if (!m) continue;
-      const a = stripAnchor(m[1]!);
-      if (steps.length === 0) span = a.span;
-      steps.push(a.text);
-    }
-    return { headword: sub.headword, steps, span };
-  });
+  // Same hardening for Procedures: a `### headword` with no numbered-step lines is the
+  // procedure analogue of an empty def — skip rather than surface a step-less entry.
+  const procedures: CanonProcedure[] = subsections(by("procedures")?.bodyLines ?? [])
+    .map((sub) => {
+      const steps: string[] = [];
+      let span: Span | null = null;
+      for (const line of sub.lines) {
+        const m = line.match(/^\s*\d+\.\s(.*)$/);
+        if (!m) continue;
+        const a = stripAnchor(m[1]!);
+        if (steps.length === 0) span = a.span;
+        steps.push(a.text);
+      }
+      return { headword: sub.headword, steps, span };
+    })
+    .filter((p) => p.headword && p.steps.length > 0);
 
   const flat = (name: string): CanonFlat[] =>
     (by(name)?.bodyLines ?? [])

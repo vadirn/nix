@@ -6,6 +6,11 @@ import { expect, test } from "bun:test";
 import { projectMarkdown, type Projection } from "./project.ts";
 import { parseCanonicalNote } from "./parse-projection.ts";
 
+// ---- hardening: hand-built (not round-tripped) malformed/hand-edited bodies ----
+// The projector never emits any of the shapes below; these pin the reader's degrade-gracefully
+// contract for hand-edited notes (dropped anchors, malformed headers, fence-unaware subsections,
+// empty defs). See /tmp/claude-501/parse-projection-recon.md for the gap analysis.
+
 // strip the frontmatter block the projector prepends, leaving the body the reader consumes.
 function bodyOf(md: string): string {
   const m = md.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
@@ -61,4 +66,85 @@ test("reader strips the (modality) tag and recovers concept/judgement spans", ()
     span: [41, 70],
   });
   expect(note.relations[0]).toContain("timeout — precondition-for → must-hold");
+});
+
+// ---- fence-aware subsections() regression ----
+test("parseCanonicalNote: a ###-look-alike line inside a fenced Payload block stays inside one entry (fence-unaware bug, fixed)", () => {
+  const body = [
+    "## Payload",
+    "",
+    "### snippet",
+    "",
+    "```js",
+    "### not a real header, just a JS comment style line",
+    "code();",
+    "```",
+    "71..120",
+  ].join("\n");
+  const note = parseCanonicalNote(body);
+  expect(note.payload).toHaveLength(1);
+  expect(note.payload[0]!.headword).toBe("snippet");
+  expect(note.payload[0]!.body).toBe(
+    "### not a real header, just a JS comment style line\ncode();",
+  );
+  expect(note.payload[0]!.span).toEqual([71, 120]);
+});
+
+// ---- hand-dropped anchors (span: null) at each site ----
+test("parseCanonicalNote: a concept def line missing its anchor still parses def, span is null", () => {
+  const body = "## Concepts\n\n### alpha\n\nfirst letter, no anchor here";
+  const note = parseCanonicalNote(body);
+  expect(note.concepts).toEqual([
+    { headword: "alpha", def: "first letter, no anchor here", bullets: [], span: null },
+  ]);
+});
+
+test("parseCanonicalNote: a procedure lead step missing its anchor still parses steps, span is null", () => {
+  const body = "## Procedures\n\n### proc\n\n1. step one no anchor\n2. step two 6..10";
+  const note = parseCanonicalNote(body);
+  expect(note.procedures).toEqual([
+    { headword: "proc", steps: ["step one no anchor", "step two"], span: null },
+  ]);
+});
+
+test("parseCanonicalNote: a judgement/inference statement missing its anchor still parses, span is null", () => {
+  const body = "## Judgements\n\n- a bare statement no anchor";
+  const note = parseCanonicalNote(body);
+  expect(note.judgements).toEqual([{ statement: "a bare statement no anchor", span: null }]);
+});
+
+// ---- malformed ### headers: silently dropped, not recovered, never throws ----
+test("parseCanonicalNote: a malformed ### header (no space after hashes) is silently dropped, not recovered", () => {
+  const body = "## Concepts\n\n###nospace\n\nsome def 1..5";
+  expect(() => parseCanonicalNote(body)).not.toThrow();
+  expect(parseCanonicalNote(body).concepts).toEqual([]);
+});
+
+test("parseCanonicalNote: a malformed ### header (four hashes) is silently dropped", () => {
+  const body = "## Concepts\n\n#### toodeep\n\nsome def 1..5";
+  expect(parseCanonicalNote(body).concepts).toEqual([]);
+});
+
+test("parseCanonicalNote: an indented ### header is silently dropped (not subsection-anchored)", () => {
+  const body = "## Concepts\n\n  ### indented\n\nsome def 1..5";
+  expect(parseCanonicalNote(body).concepts).toEqual([]);
+});
+
+// ---- empty-def hardening (mirrors prose-mode.ts::parseDistilled, pure.test.ts:653-664) ----
+test("parseCanonicalNote: back-to-back ### headers drop the empty-def concept, keep the one with a def", () => {
+  const body = "## Concepts\n\n### alpha\n### beta\n\nbeta def 6..10";
+  const note = parseCanonicalNote(body);
+  expect(note.concepts).toEqual([
+    { headword: "beta", def: "beta def", bullets: [], span: [6, 10] },
+  ]);
+});
+
+test("parseCanonicalNote: a concept with only bullets and no def line is dropped, not surfaced with def ''", () => {
+  const body = "## Concepts\n\n### gamma\n\n- only a bullet, no anchor";
+  expect(parseCanonicalNote(body).concepts).toEqual([]);
+});
+
+test("parseCanonicalNote: a procedure with a headword but no numbered steps is dropped, not surfaced with steps: []", () => {
+  const body = "## Procedures\n\n### proc\n\nno numbered lines here";
+  expect(parseCanonicalNote(body).procedures).toEqual([]);
 });
