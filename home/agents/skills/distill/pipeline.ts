@@ -8,7 +8,6 @@ import { existsSync, linkSync, readFileSync, statSync, unlinkSync, writeFileSync
 import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   type Block,
   type LinkInventory,
@@ -73,7 +72,7 @@ const escAttr = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 import { runProse } from "./prose-mode.ts";
 import { buildIntermediary } from "./triage.ts";
-import { runApply } from "./apply-mode.ts";
+import { runApply, stampHash } from "./apply-mode.ts";
 import { parseInteract, renderBlock } from "./interact.ts";
 import { applyTyping, buildTypingReview } from "./retype.ts";
 import { createInterface } from "node:readline";
@@ -1215,9 +1214,7 @@ export async function main() {
     // (aliases/tags/description) drop with the source front — a distillation is a derived artifact
     // stamped with its own provenance (Backlog).
     const noteForIntermediary = out;
-    const src = existsSync(destPath)
-      ? `sha256:${createHash("sha256").update(readFileSync(destPath)).digest("hex").slice(0, 12)}`
-      : "new";
+    const src = existsSync(destPath) ? stampHash(readFileSync(destPath)) : "new";
     const intermediary = buildIntermediary(noteForIntermediary, residue, {
       dest: basename(destPath),
       src,

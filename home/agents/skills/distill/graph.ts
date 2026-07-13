@@ -141,17 +141,24 @@ export function parseSpan(str: string): Span {
   return [start, end];
 }
 
+// The one canonical content stamp: the first 12 hex digits (48 bits) of the sha256 over
+// `bytes`. Every provenance/verify site routes through here — computeSource's frontmatter
+// `source.sha256` (bare) and apply-mode's `sha256:`-prefixed emit/preflight stamp (stampHash) —
+// so the truncation width is defined ONCE. Widening it for collision-safety at one site while
+// missing another would make apply's `src=` verification silently mis-verify.
+export function stampSha(bytes: string | Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+}
+
 // Compute a `Source` in TS over the UTF-8 bytes of `text`: `bytes` is the UTF-8 byte length and
-// `sha256` is the hex sha256 of those same bytes, TRUNCATED to the first 12 hex digits (48 bits)
-// to match the codebase's frontmatter convention — apply-mode.ts:96 and pipeline.ts:1917 both
-// stamp/compare `createHash(...).digest("hex").slice(0, 12)`, so the projection's `source.sha256`
-// (project.ts renders it verbatim) must be the same 12-hex prefix for a re-stamp to verify. Kept
+// `sha256` is the 12-hex stamp (stampSha) of those same bytes, so the projection's `source.sha256`
+// (project.ts renders it verbatim) is the same prefix apply-mode re-stamps and compares. Kept
 // here so graph.ts stays a leaf — it does NOT extend MdDoc or shell the binary (LOCKED DECISION 5).
 export function computeSource(path: string, text: string): Source {
   const utf8 = Buffer.from(text, "utf8");
   return {
     path,
     bytes: utf8.length,
-    sha256: createHash("sha256").update(utf8).digest("hex").slice(0, 12),
+    sha256: stampSha(utf8),
   };
 }

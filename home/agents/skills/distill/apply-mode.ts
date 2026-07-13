@@ -70,7 +70,6 @@
 
 import { existsSync, linkSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { createHash } from "node:crypto";
 import { parseInteract, resolveInteract, stripInteract } from "./interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "./triage.ts";
 import { askJson, EXTRACT } from "./fw.ts";
@@ -78,6 +77,7 @@ import { fidelityGate, renderEntryPrompt, verbatimDef, verbatimDirectives } from
 import { parseCanonicalNote, splitSections } from "./parse-projection.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 import { detectLang } from "./text.ts";
+import { stampSha } from "./graph.ts";
 
 // ---- runApply: the orchestrator ----
 
@@ -87,11 +87,12 @@ export type ApplyOpts = {
   lang: "en" | "ru" | "auto";
 };
 
-/// The stamp hash form the emit and the compress preflight both use: a 12-hex
-/// sha256 prefix of the destination's current bytes. Compared against the gate's
-/// src= value (step 5) and used to re-hash the tmp across the LLM window (step 9).
-function stampHash(bytes: string): string {
-  return `sha256:${createHash("sha256").update(bytes).digest("hex").slice(0, 12)}`;
+/// The stamp hash form the emit and the compress preflight both use: the shared 12-hex
+/// stampSha (graph.ts) under a `sha256:` label. Compared against the gate's src= value
+/// (step 5) and used to re-hash the tmp across the LLM window (step 9). Exported so the
+/// emit preflight (pipeline.ts) stamps through this ONE prefixed form, not a copy.
+export function stampHash(bytes: string | Buffer): string {
+  return `sha256:${stampSha(bytes)}`;
 }
 
 /// Classify a residue item's target the way triage's targetFor stamped it:
