@@ -380,7 +380,6 @@ test("parseArgs: bare invocation reads stdin with defaults", () => {
   expect(r.opts.path).toBeUndefined();
   expect(r.opts).toMatchObject({
     lang: "auto",
-    maxRetries: 2,
     noRevise: false,
     noGate: false,
     glossaryOnly: false,
@@ -405,6 +404,10 @@ test("parseArgs: --synth is gone — the dial was removed after the 2026-06-25 e
   expect(err(["--synth", "render", "in.md"])).toContain("--synth");
 });
 
+test("parseArgs: --max-retries is gone — the settle-chain gate-recovery loop it capped was deleted", () => {
+  expect(err(["--max-retries", "1", "in.md"])).toContain("--max-retries");
+});
+
 test("parseArgs: --lang rejects a missing value and an out-of-set value", () => {
   expect(err(["--lang"])).toContain("--lang");
   const m = err(["--lang", "fr"]);
@@ -417,18 +420,15 @@ test("parseArgs: --lang ru is accepted", () => {
 });
 
 test("parseArgs: numeric flags reject non-numbers and out-of-range values", () => {
-  expect(err(["--max-retries", "abc"])).toContain("--max-retries");
-  expect(err(["--max-retries", "-1"])).toContain("--max-retries");
   expect(err(["--max-words", "-5"])).toContain("--max-words");
   expect(err(["--tau", "2"])).toContain("--tau");
   expect(err(["--tau", "nope"])).toContain("--tau");
   // valid values pass
-  expect(ok(["--max-retries", "1", "in.md"]).opts.maxRetries).toBe(1);
   expect(ok(["--tau", "0.7", "in.md"]).opts.tau).toBe(0.7);
 });
 
 test("parseArgs: a value flag with no following token errors instead of silently defaulting", () => {
-  expect(err(["--max-retries"])).toContain("--max-retries");
+  expect(err(["--tau"])).toContain("--tau");
 });
 
 test("parseArgs: --max-words 0 disables the guard; a positive value is an absolute ceiling", () => {
@@ -484,7 +484,7 @@ test("parseArgs: a blank numeric value errors instead of silently coercing to 0"
   expect(err(["--max-words", "", "in.md"])).toContain("--max-words");
   expect(err(["--max-words", "   ", "in.md"])).toContain("--max-words");
   expect(err(["--tau", " ", "in.md"])).toContain("--tau");
-  expect(err(["--max-retries", "", "in.md"])).toContain("--max-retries");
+  expect(err(["--tau", "", "in.md"])).toContain("--tau");
 });
 
 // `--` is the conventional end-of-options separator: everything after it is a positional,

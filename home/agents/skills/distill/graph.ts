@@ -1,9 +1,11 @@
 // graph.ts — the canonical distillation graph, distill's source of truth. A `DistillationResult`
 // is a typed, span-anchored knowledge graph `{ source, units[], edges[] }` over the five
-// knowledge-element types; markdown is one projection of it (spec §1). This is a LEAF module:
-// it imports only the `Span` byte-offset type from mdstruct.ts so the type contract stays free
-// of the CLI-wrapper's runtime dependencies. The shipped two-channel `Combo`/`GlossEntry`/
-// `Relation` shape in text.ts is untouched and coexists during migration (LOCKED DECISION 4).
+// knowledge-element types; markdown is one projection of it (spec §1), rendered by project.ts
+// and read back by parse-projection.ts. This is a LEAF module: it imports only the `Span`
+// byte-offset type from mdstruct.ts so the type contract stays free of the CLI-wrapper's
+// runtime dependencies. text.ts's `GlossEntry`/`Relation` shape (the pre-canonical two-channel
+// `## Glossary`/`## Relations` grammar) is retained alongside this graph, not superseded by
+// it — cards/card-stage.ts still reads emitted notes through that shape (D6).
 import { createHash } from "node:crypto";
 import type { Span } from "./mdstruct.ts";
 

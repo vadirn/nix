@@ -1,6 +1,9 @@
-// pipeline — the orchestration layer: the five-stage compress pipeline (distill),
-// arg parsing, the temp-file sink, and main(). Sequences the stages from prompts.ts
-// behind the seams the leaf modules stabilize; main() is invoked by the entrypoint.
+// pipeline — the orchestration layer: the canonical compress pipeline (distill) —
+// extractGraph → locateGraph (hard span gate) → [TTY-gated typing review] →
+// projectMarkdown, with the demoted fidelity/prose gates riding as a residue-only
+// backstop over the projection — plus arg parsing, the temp-file sink, and main().
+// Sequences the stages from prompts.ts behind the seams the leaf modules stabilize;
+// main() is invoked by the entrypoint.
 import { existsSync, linkSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -89,9 +92,10 @@ export type Residue = {
   source: string;
   kind: ResidueKind;
   reasonClass: ResidueClass;
-  /// 0-based indices into the emitted `## Workflow` list; set iff kind === "steps".
-  /// The group id ("workflow:N") is group-numbered and pipeline-internal — these
-  /// indices are the only mapping to the flat list a reviewer sees at apply time.
+  /// 0-based indices into the flat step list under the emitted `## Procedures`
+  /// entry; set iff kind === "steps". Per-step spans are deferred (blueprint §8),
+  /// so the canonical backstop (runFidelityBackstop) always emits an empty array
+  /// here today; the field stays typed for a future per-step-span backstop.
   stepIdxs?: number[];
 };
 // Did distill rewrite the body, or pass it through unchanged? The producer knows this at each
@@ -534,8 +538,6 @@ async function distill(
   lang: "en" | "ru",
   frontDescription: string,
   opts: {
-    maxRetries: number;
-    noRevise: boolean;
     noGate: boolean;
     glossaryOnly: boolean;
     isReference: boolean;
@@ -807,20 +809,22 @@ export function assembleRoutedNote(a: {
 }
 
 // ---- arg parsing + io ----
-export const USAGE = `distill-text — abstractive idea-compression: rewrite a note as connective prose
-backed by a certified glossary (and an optional ## Workflow of its directives).
+export const USAGE = `distill-text — abstractive idea-compression: extract a note's typed knowledge
+graph (concepts / judgements / inferences / procedures / payload) and project it as a
+span-anchored seven-section canonical note (## Abstract/Concepts/Judgements/Inferences/
+Procedures/Payload/Relations).
 
 Usage:
   distill-text [options] [input.md]              compress a note (stdin when no path or '-')
-  distill-text prose [options] [glossary.md]     render prose FROM an already-distilled glossary
+  distill-text prose [options] [glossary.md]     render prose FROM an already-distilled note
 
 Options:
-  --glossary            emit the structured extract with the ## Abstract head omitted
+  --glossary            emit the graph sections with the ## Abstract head omitted
   --lang <en|ru|auto>    language rubric (default: auto-detect)
-  --max-retries <n>      cap stage-5 gate recovery retries (default: 2)
   --tau <0..1>           payload-density routing threshold (default: ${DEFAULT_TAU})
-  --no-gate              skip the stage-5 fidelity gate
-  --no-revise            skip the stage-4 writing passes
+  --no-gate              skip the residue backstop gates (fidelity + prose coverage)
+  --no-revise            skip the revise pass in \`prose\` mode (no-op in compress mode —
+                         its settle-chain revise pass was retired with the canonical rebuild)
   --max-words <n>        expand-guard cap: 0 disables it, a positive n is an absolute ceiling
   --dry-run              deterministic front half only (segment→route report); no API call
   --out <dest.md>        compress-mode destination override (default: the input path);
@@ -856,7 +860,6 @@ Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
 
 export type CliOpts = {
   lang: "en" | "ru" | "auto";
-  maxRetries: number;
   noRevise: boolean;
   noGate: boolean;
   glossaryOnly: boolean;
@@ -893,7 +896,6 @@ export type ParseResult =
 
 export function parseArgs(argv: string[]): ParseResult {
   let lang: CliOpts["lang"] = "auto";
-  let maxRetries = 2;
   let tau = DEFAULT_TAU;
   let maxWords: number | undefined;
   let noExpandGuard = false;
@@ -950,22 +952,6 @@ export function parseArgs(argv: string[]): ParseResult {
           message: `--lang expects one of: en, ru, auto (got '${v}')`,
         };
       lang = v;
-      continue;
-    }
-    if (a === "--max-retries") {
-      const v = argv[++i];
-      if (v === undefined || v.trim() === "")
-        return {
-          kind: "error",
-          message: "--max-retries expects a non-negative integer",
-        };
-      const n = Number(v);
-      if (!Number.isInteger(n) || n < 0)
-        return {
-          kind: "error",
-          message: `--max-retries expects a non-negative integer (got '${v}')`,
-        };
-      maxRetries = n;
       continue;
     }
     if (a === "--tau") {
@@ -1112,7 +1098,6 @@ export function parseArgs(argv: string[]): ParseResult {
     mode,
     opts: {
       lang,
-      maxRetries,
       noRevise,
       noGate,
       glossaryOnly,
@@ -1306,7 +1291,6 @@ export async function main() {
   const { mode } = parsed;
   const {
     lang,
-    maxRetries,
     noRevise,
     noGate,
     glossaryOnly,
@@ -1434,8 +1418,6 @@ export async function main() {
       resolved,
       frontDescription,
       {
-        maxRetries,
-        noRevise,
         noGate,
         glossaryOnly,
         isReference,
@@ -1532,7 +1514,7 @@ export async function main() {
     // A non-transient throw is a real bug — surface it (a stage catch has already
     // logged it on its way up; anything thrown outside a stage prints its own stack
     // on propagation) instead of shipping the original as a silent passthrough.
-    // a truncation in a NO-CATCH core stage (extractCombo, gradeBlocks) is not a
+    // a truncation in a NO-CATCH core stage (extractGraph, gradeBlocks) is not a
     // transient flake and not a code bug: it skips THIS note with a clear actionable
     // footer (raise the stage's cap), never a raw stack crash or a "transient" label.
     // exit 3: valid but unmodified original.

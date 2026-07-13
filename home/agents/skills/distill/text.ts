@@ -1,7 +1,9 @@
-// text — segmentation, typography, slugging, relation/Combo types, and the language
-// helpers. The leaf module of the distill pipeline: pure string/data utilities
-// with no I/O; its only dependency is writing/typography.ts, the writing-core's
-// own leaf (normalizeTypography moved there, re-exported here).
+// text — segmentation, typography, slugging, the legacy `GlossEntry`/`Relation`
+// two-channel types (retained for the cards-harvest path, D6 — see graph.ts for the
+// canonical typed graph these predate), and the language helpers. The leaf module of
+// the distill pipeline: pure string/data utilities with no I/O; its only dependency
+// is writing/typography.ts, the writing-core's own leaf (normalizeTypography moved
+// there, re-exported here).
 import { normalizeTypography } from "./writing/typography.ts";
 import {
   parseDoc,
@@ -407,8 +409,9 @@ export function structuralSpans(parsed: ParsedDoc): Span[] {
 
 // Verbatim fenced code/output blocks. key = the inner body, each line right-trimmed,
 // leading/trailing blank lines dropped — the language tag and fence width are excluded, so
-// a retained block (assembleBody pushes b.text verbatim) covers its source twin regardless
-// of info-string. Internal whitespace is KEPT: code indentation is load-bearing.
+// a retained block (held verbatim as a `## Payload` unit, statement = b.text) covers its
+// source twin regardless of info-string. Internal whitespace is KEPT: code indentation is
+// load-bearing.
 // Fenced-ONLY: comrak also emits indented code blocks the old regex never saw, so
 // collectStructural.fences is fenced-only. Fixes the nested-fence mis-split — the old
 // line-scanner closed the block at the FIRST inner ` ``` `; comrak parses the outer block whole.
@@ -1002,9 +1005,9 @@ export function normalizeRelation(r: unknown): Relation | null {
   return { rel, to, predicate: pred || null, ...(quote ? { quote } : {}) };
 }
 
-// ---- relations/glossary REBUILD (W1; inverts assemble.ts::emitRelationsBlock /
-// assembleBody's Glossary table). Lives here, not cards/, so cards/ modules read an
-// emitted note's structural channels through one leaf-module seam (D13). ----
+// ---- relations/glossary REBUILD (W1; inverts this file's own emitRelationsBlock /
+// the legacy two-channel `## Glossary` table). Lives here, not cards/, so cards/ modules
+// read an emitted note's structural channels through one leaf-module seam (D13). ----
 
 // One structural edge parsed off a `## Relations` list item. `from` is the entry's
 // own slug (multi-node form) or null (single-atom form omits the from-label, D26).
@@ -1027,7 +1030,7 @@ export type ParsedRelationEdge = {
 //
 // DIVERGENCE from vault-query's canonical rule (relations.rs::parse_relations /
 // markdown::heading_text), which opens on ANY depth 1-6: this is the REBUILD inverse
-// of assembleBody's emit grammar, whose channels are exactly `## Glossary` /
+// of the legacy two-channel emit grammar, whose channels are exactly `## Glossary` /
 // `## Relations` — and the routed build DEMOTES a preserved section's colliding
 // `## Glossary` to `### Glossary` (assembleRoutedNote's demote sweep) precisely to
 // mark it as source material, not channel. Any-depth opening reads those demoted
@@ -1103,7 +1106,7 @@ function parseEdgeLine(edgeText: string): ParsedRelationEdge | null {
 }
 
 // Parse a full note body's `## Relations` section back into structural edges — the
-// REBUILD inverse of assemble.ts::emitRelationsBlock. Grammar mirrors
+// REBUILD inverse of this file's own emitRelationsBlock. Grammar mirrors
 // vault-query/src/commands/lint/relations.rs::parse_relations line-for-line (fence
 // tracking, heading toggle, `- `/`* ` list-item prefix, `::` split); see splitPredicate
 // for the one intentional divergence. Lossy-tolerant like normalizeRelation: a
@@ -1130,7 +1133,7 @@ export function parseRelationsBlock(md: string): ParsedRelationEdge[] {
   return edges;
 }
 
-// Undo assembleBody's escCell pipe-escaping (`\|` → `|`). escCell also collapses a
+// Undo the legacy emit's escCell pipe-escaping (`\|` → `|`). escCell also collapses a
 // def's internal newlines to spaces before emit, so that fold is not (and cannot be)
 // reversed here — a documented one-way loss, not a bug.
 const unescCell = (s: string): string => s.replace(/\\\|/g, "|").trim();
@@ -1152,8 +1155,10 @@ function glossaryRowCells(line: string): string[] | null {
 const isDelimiterRow = (cells: string[]): boolean => cells.every((c) => /^:?-+:?$/.test(c));
 
 // Parse an emitted note's `## Glossary` table AND `## Relations` block into
-// GlossEntry[] — the REBUILD inverse of assembleBody's Glossary+Relations
-// rendering. Each row becomes one entry (term, def unescaped, source: [] — not
+// GlossEntry[] — the REBUILD inverse of the legacy two-channel Glossary+Relations
+// rendering, retained for the cards-harvest path (D6; see parse-projection.ts's
+// header for how this differs from the canonical `## Concepts` reader). Each row
+// becomes one entry (term, def unescaped, source: [] — not
 // recoverable from an emitted note, D13); each parsed edge attaches to the entry
 // whose slug matches its `from`. A single-atom edge (`from === null`) attaches to
 // the sole entry when the table has exactly one row; over a multi-row table it has

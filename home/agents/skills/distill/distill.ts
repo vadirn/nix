@@ -1,73 +1,78 @@
 #!/usr/bin/env bun
-// distill — abstractive idea-compression: re-express a note as readable prose
-// backed by a certified glossary.
+// distill — abstractive idea-compression: extract a note's typed knowledge graph and
+// project it as a certified, span-anchored canonical note.
 //
-// Not extractive (cut's verbatim-survivor trim, retired). distill rebuilds the
-// note around a canonical form. By default the output is a readable note: flowing
-// connective prose (which carries the THESIS and the RELATIONS among terms) above
-// a `## Glossary` table of DEFINITIONS ONLY — division of labor, no duplication.
-// Only operational tokens (commands, paths, flags, code) are kept verbatim.
-// Restatement collapses structurally (N surface forms of one idea → one entry).
-// `--glossary` drops the prose and emits just the glossary (tie + definitions).
+// Not extractive (cut's verbatim-survivor trim, retired). distill rebuilds the note
+// around a canonical form: a typed, span-anchored graph over five knowledge-element
+// types — concept / judgment / inference / procedure / payload (distill-spec §1) — of
+// which markdown is one projection. By default the output is the seven-section
+// canonical note: an unanchored `## Abstract` orientation, then `## Concepts` /
+// `## Judgements` / `## Inferences` / `## Procedures` / `## Payload` (a section
+// appears only when the source has that element), then `## Relations`. Every unit
+// and edge carries a trailing byte-span anchor (`start..end`) into the source; a
+// payload unit's statement is a verbatim slice, every other type's is the normalized
+// re-expression. `--glossary` drops the `## Abstract` head; a source note whose own
+// frontmatter is `type: reference` keeps the head but suppresses `## Relations`
+// (D30 — a reference body stays link-free; automatic, not a flag). Restatement
+// collapses structurally (N surface forms of one idea → one unit).
 //
-// Two certified channels share the pipeline: the GLOSSARY (declarative — concepts
-// to know) and the WORKFLOW (procedural — directives to do). The glossary cannot
-// hold a practice or a procedure step, so a note's actionable payload used to
-// dissolve; the workflow channel is its sink. It is optional — empty when the note
-// prescribes nothing, in which case no `## Workflow` section is emitted.
+// Pipeline (spec §4; blueprint §0): extract(native typed units + per-unit source
+// quotes, gpt-oss-120b) → locate(resolve each quote to a byte span against the
+// source; a bad quote HARD-ABORTS here, before any projection) → [TTY-gated typing
+// review: at an interactive terminal, the reviewer confirms each unit's type against
+// its resolved source slice and re-types where wrong — skipped for any non-TTY
+// caller, so the default pipeline stays extract→locate→project] → project(render the
+// seven-section markdown). What survives of the old settle chain (synth/revise/
+// fidelity-gate) is only the gates' VERDICT half, demoted to a residue-only backstop
+// that runs AFTER projection: a fidelity backstop (glm-5p2, the different model, by
+// round-trip entailment against the projection body), a prose-list-item coverage
+// gate, and a deterministic payload-coverage check. None of them repair or rewrite —
+// extract's statement is final — they only surface what didn't make it into the
+// projection as `<residue>`, never silently drop it.
 //
-// Pipeline (5 stages): segment → (1) extract combo {description, thesis, glossary
-// with relations + source pointers, workflow steps + source pointers} (gpt-oss-120b)
-// → (2) grade each block drop/distill/retain (gpt-oss-120b) → (3) synthesize
-// glossary defs AND tighten workflow steps, each grounded in its cited source text,
-// then write the connective prose head from the defs+relations → (4) revise the
-// distilled prose + steps (4 writing passes) → (5) fidelity-grade the glossary defs
-// AND the workflow steps ⟷ raw-input by round-trip entailment with a DIFFERENT model
-// (glm-5p2); residue is re-rendered from source, capped, then surfaced. Independence
-// of writer (EXTRACT) and grader (FIDELITY) is the safety property — the verbatim
-// certificate is gone, so the gate is equivalence. The gate certifies the glossary
-// definitions and the workflow steps; the prose, which restates none of them, rides
-// on those certified items and is not separately gated. Output order is prose →
-// `## Workflow` → `## Glossary` → retained-verbatim.
-//
-// Output: written to a fresh temp .md file (mktemp), XML-wrapped. <result>…</result>
-// holds exactly the text to write back to source (frontmatter verbatim + distilled
-// body); <residue>…</residue> (omitted when empty) holds one <entry> per definition
-// or step-group that failed the gate, with verbatim <source>, so a parent can re-read
-// it. A `gate-inconclusive:` reason marks an item the judge could not grade (it
+// Output: a distilled run writes an interactive review intermediary sibling to the
+// destination, `<dest>.tmp.md` — a decision block per residue item (recover/keep)
+// plus a mandatory confirm-all gate; `distill-text apply <path>` resolves it and
+// writes the finished note back to source. A passthrough run (failsafe, expand-guard,
+// nothing to distill) instead writes a fresh temp .md holding the legacy envelope:
+// <result>…</result> is exactly the text to write back to source; <residue>…</residue>
+// (omitted when empty) holds one <entry> per item a backstop flagged, with verbatim
+// <source>. A `gate-inconclusive:` reason marks an item the judge could not grade (it
 // returned no parseable verdict): the distillation still ships, that item just rides
 // surfaced-but-unverified — a judge flake never discards the whole run. stdout is
 // exactly the data: one line, the file path; the one-line summary footer and all
-// other diagnostics go to stderr. Failsafe: any error before
-// the gate → the temp file holds the original text (passthrough), path still printed.
+// other diagnostics go to stderr. Failsafe: any error before the backstop gates →
+// the temp file holds the original text (passthrough), path still printed.
 //
-// Exit codes: 0 distilled or prose rendered (residue/gate-inconclusive stay 0);
-// 1 missing key; 2 arg misuse; 3 passthrough — the output is the unmodified original
-// (compress: failsafe, expand-guard, no body, empty input; prose: no glossary table,
-// empty prose, error). The stdout path line still prints except on empty input;
-// the skip reason goes to stderr.
+// Exit codes: 0 an intermediary was written, or (passthrough/prose) distilled/rendered
+// (residue/gate-inconclusive stay 0); 1 missing key; 2 arg misuse; 3 passthrough — the
+// output is the unmodified original (compress: failsafe, expand-guard, no body, empty
+// input; prose: no `## Concepts` section, empty prose, error); 4 a prior `<dest>.tmp.md`
+// is still pending. The stdout path line still prints except on empty input; the skip
+// reason goes to stderr.
 //
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
 // `doppler run --project claude-code --config std --`).
 //
 // Usage (full text: distill-text --help):
-//         distill-text input.md                      # prose + ## Glossary (auto-detect language)
-//         distill-text < input.txt                   # read from stdin ('-' as the path also reads stdin)
-//         distill-text --glossary input.md          # glossary only (tie + definitions), no prose
-//         distill-text --lang ru < input.txt         # force Russian rubric
-//         distill-text --max-retries 1 input.md      # cap stage-5 recovery (default: 2)
+//         distill-text input.md                      # seven-section canonical note (auto-detect language)
+//         distill-text < input.txt --out out.md       # stdin: --out names the destination
+//         distill-text --glossary input.md           # graph sections only, no ## Abstract head
+//         distill-text --lang ru input.md             # force Russian rubric
 //         distill-text --tau 0.6 input.md            # payload-density routing threshold (default: 0.5)
-//         distill-text --no-gate input.md            # skip stage-5 fidelity gate
-//         distill-text --no-revise input.md          # skip stage-4 writing passes
+//         distill-text --no-gate input.md            # skip the residue backstop gates
 //         distill-text --max-words 0 input.md        # disable the expand-guard (debugging: see the model's output even if it grew)
 //         distill-text --dry-run input.md            # deterministic front half only (segment→route report); no API call
-//         distill-text prose glossary.md             # separate, on-demand: prose note FROM a distilled glossary
+//         distill-text prose glossary.md             # separate, on-demand: prose note FROM an already-distilled note
+//         distill-text apply input.tmp.md            # resolve a review intermediary, write the note back to source
 //
 // Module layout (split along the pipeline's phase seams; this file is the entrypoint
-// and the stable public surface): text · frontmatter · fw · prompts · writing/
-// (writing-core: typography, mask, passes, prose-qa) · assemble · prose-mode ·
-// pipeline. The four exports below are the public API the test suite (and any
-// importer) depends on; everything else is an internal module detail.
+// and the stable public surface): text · frontmatter · fw · graph · prompts ·
+// locate(-graph) · retype (the typing review) · project · parse-projection ·
+// interact/triage (the review grammar) · apply-mode · prose-mode · writing/
+// (writing-core: typography, mask, passes, prose-qa) · pipeline. The four exports
+// below are the public API the test suite (and any importer) depends on; everything
+// else is an internal module detail.
 export { REL_REGISTRY, slugSegment } from "./text.ts";
 export { ensureEpistemicStatus } from "./frontmatter.ts";
 export { emitRelationsBlock } from "./text.ts";

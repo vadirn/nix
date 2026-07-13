@@ -5,9 +5,9 @@
 // `## Procedures` / `## Payload`) and finally `## Relations`. A section appears only when a
 // unit/edge of that type exists — an empty section is never emitted (absence is diagnostic).
 //
-// This is ADDITIVE and standalone (LOCKED DECISION 6): `assemble.ts` and the pipeline's final
-// assemble caller are untouched. The pipeline flips to this projector in a later backlog item,
-// once the extract prompt emits typed units. Pure formatting; no I/O, no model calls.
+// This is the pipeline's only projector: main()'s default/--glossary/--reference compress
+// paths and the routed build (distillRouted) all render through projectMarkdown; the legacy
+// two-channel assemble step it replaced is gone. Pure formatting; no I/O, no model calls.
 import { formatSpan, type DistillationResult, type Edge, type Unit } from "./graph.ts";
 import { REL_REGISTRY } from "./text.ts";
 

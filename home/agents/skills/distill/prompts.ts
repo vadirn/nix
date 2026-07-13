@@ -73,18 +73,17 @@ ${ex}`;
 }
 
 // ---- canonical extract: native typed pre-graph (spec §4 step 1; blueprint §1.2/§1.4) ----
-// The ADDITIVE replacement for extractComboPrompt/parseExtractResult. It emits the SAME five
-// knowledge channels but shaped as the pre-graph (graph.ts PreGraph): `concepts`/`headword`/
-// `statement` (was glossary/term/def), grouped `procedures` (was the flat workflow), and
-// relations without `predicate` (the projection never renders it). The two SEMANTIC changes vs
-// the Combo prompt: (1) `statement` is the FINAL normalized re-expression, not a draft the settle
-// chain later rewrites; (2) procedures carry a `headword` + per-step quotes so the projector can
-// render `### headword` + numbered steps. Payload is NOT a channel here — it is the deterministic
-// retain lane (blueprint §1.1). Kept alongside the Combo prompt during migration; unwired until a
-// later step flips distill()'s default path onto it.
+// The extractor's only prompt+parse path: it emits the five knowledge channels shaped as the
+// pre-graph (graph.ts PreGraph): `concepts`/`headword`/`statement`, grouped `procedures` (steps
+// grouped under a headword), and relations without `predicate` (the projection never renders
+// it). `statement` is the FINAL normalized re-expression — extractGraph is the one place a
+// unit's wording is authored; nothing downstream (locate, the typing review, the projector, the
+// residue backstop) rewrites it. `procedures` carry a `headword` + per-step quotes so the
+// projector can render `### headword` + numbered steps. Payload is NOT a channel here — it is
+// the deterministic retain lane (blueprint §1.1), computed separately by gradeBlocks.
 
-// The raw JSON shape the model returns for the pre-graph prompt (parsed defensively — every field
-// is optional, mirroring parseExtractResult's `(raw.x ?? [])` discipline).
+// The raw JSON shape the model returns for the pre-graph prompt (parsed defensively — every
+// field is optional; a missing array defaults to `[]` rather than throwing).
 export interface RawGraph {
   title?: string;
   abstract?: string;
@@ -134,8 +133,8 @@ ${render(blocks)}`;
 }
 
 // Normalize the raw pre-graph JSON into a typed PreGraph — the PURE core of extractGraph, exported
-// so it is testable without a network round-trip. It keeps parseExtractResult's validation
-// discipline: `quote` is trimmed byte-verbatim (NEVER typography-normalized — it is the span-locate
+// so it is testable without a network round-trip. Its validation discipline: `quote` is trimmed
+// byte-verbatim (NEVER typography-normalized — it is the span-locate
 // anchor and must round-trip against source bytes), `source` ids are validated against the block
 // set, the drop-if-no-valid-source rule holds per unit, relations pass through `normalizeRelation`
 // (lowercase+hyphenate rel, trim to, trim-only quote; predicate DROPPED here), and judgement
@@ -239,11 +238,10 @@ export async function extractGraph(
   return parseExtractGraph(raw, blocks, frontDescription);
 }
 
-// ---- stage 2: grade each block drop / distill / retain ----
+// ---- grade each block drop / distill / retain ----
 // The payload retain lane (blueprint §1.1): the ONE deterministic selection that survives the
-// settle-chain collapse. Reads a thesis + a concept list ({term,def}), NOT a `Combo` — the
-// canonical default path feeds the pre-graph's concepts (id→term, statement→def) and the legacy
-// paths feed `combo.thesis`/`combo.glossary` (a `GlossEntry` structurally satisfies {term,def}).
+// settle-chain collapse. Reads a thesis + a concept list ({term,def}), fed from the pre-graph's
+// concepts (id→term, statement→def) — its one live caller, compressToGraph in pipeline.ts.
 function gradeBlocksPrompt(
   thesis: string,
   concepts: { term: string; def: string }[],

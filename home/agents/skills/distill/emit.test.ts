@@ -298,7 +298,7 @@ test("emit success: sibling .tmp.md intermediary, path-only stdout, no XML, dest
   const notePath = join(dir, "note.md");
   const tmpPath = join(dir, "note.tmp.md");
   writeFileSync(notePath, NOTE);
-  const { stdout, stderr } = await runMain(["--no-revise", "--max-retries", "0", notePath]);
+  const { stdout, stderr } = await runMain(["--no-revise", notePath]);
 
   // stdout: exactly the data — the intermediary path; the footer with the review suffix on stderr
   expect(stdout).toBe(`${tmpPath}\n`);
@@ -460,7 +460,7 @@ test("Phase 5: a non-TTY success run never enters the session — stdout stays t
   const notePath = join(dir, "note.md");
   const tmpPath = join(dir, "note.tmp.md");
   writeFileSync(notePath, NOTE);
-  const { stdout, stderr } = await runMain(["--no-revise", "--max-retries", "0", notePath]);
+  const { stdout, stderr } = await runMain(["--no-revise", notePath]);
   expect(stdout).toBe(`${tmpPath}\n`); // exactly the path line
   const stderrAll = stderr;
   for (const forbidden of [

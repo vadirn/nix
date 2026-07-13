@@ -5,11 +5,10 @@
 // triage instance (verb vocabulary, the emit that produced this file) lives in
 // triage.ts; this module owns the verb ACTIONS and the write-back discipline.
 //
-// PHASE 4 STATUS: the surface below is FROZEN and the bodies are UNIMPLEMENTED
-// (each throws). apply.test.ts is the red corpus that pins the contract ahead of
-// the implementation; the green pass turns the bodies on without touching a
-// signature. Nothing here reaches production until the user rebuilds the nix-store
-// binary (the SKILL.md flip is Phase 6).
+// SHIPPED: the surface below is implemented and live — `distill-text apply <path>`
+// (pipeline.ts's runApply) is the production caller; apply.test.ts is its green
+// contract suite. The "Check order" below is still the FROZEN sequence every
+// refusal is measured against; it just no longer describes a future state.
 //
 // ── Check order (plan §4, FROZEN — the sequence every refusal is measured against)
 //   1. path exists            ENOENT → exit 2 "no intermediary at <path> — already
