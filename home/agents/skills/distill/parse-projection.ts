@@ -62,6 +62,14 @@ export interface CanonPayload {
   span: Span | null;
 }
 
+// The structured READ view of a canonical note — the sections the interactive consumers
+// (apply-mode body edits, prose-mode re-prose, cards harvest) locate and edit. It is LOSSY and
+// is NOT the inverse of a `DistillationResult` (graph.ts): `relations` stay raw list-item
+// strings, not typed `Edge`s (run text.ts::parseRelationsBlock over them when you need
+// from/rel/to structure); the `source:` provenance, every unit's source `quote`, and each
+// unit's `type` beyond the section it landed in are all absent; and malformed content is dropped
+// silently (see parseCanonicalNote's header note). So a CanonNote can never re-project or
+// re-distill — do not build a round-trip path on it; reparse the source note instead.
 export interface CanonNote {
   abstract: string;
   concepts: CanonConcept[];
@@ -69,7 +77,7 @@ export interface CanonNote {
   inferences: CanonFlat[];
   procedures: CanonProcedure[];
   payload: CanonPayload[];
-  relations: string[]; // raw list-item bodies (after the `- ` marker), verbatim
+  relations: string[]; // raw list-item bodies (after the `- ` marker), verbatim — not typed edges
 }
 
 const FENCE_RE = /^(```|~~~)/;
@@ -153,7 +161,9 @@ function subsections(bodyLines: string[]): { headword: string; lines: string[] }
 // The leading `(modality) ` tag the projector prepends to a hypothesis/necessarily judgement.
 const MODALITY_TAG_RE = /^\((?:hypothesis|necessarily)\)\s+/;
 
-// Parse a canonical note body into its structured sections. Absent sections yield empty arrays /
+// Parse a canonical note body into its structured sections — the lossy READ view documented on
+// CanonNote (edge typing, unit quotes, and source provenance are NOT recovered; this never
+// round-trips to a DistillationResult). Absent sections yield empty arrays /
 // an empty abstract (the projector omits an empty section, so absence is the normal signal). A
 // hand-dropped anchor degrades to `span: null` (text still parses); an empty-def concept or
 // step-less procedure is dropped entirely rather than surfaced as a degenerate entry (see the
