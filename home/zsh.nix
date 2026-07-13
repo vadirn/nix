@@ -103,6 +103,10 @@
       alias y='yazi'
       alias v='nvim'
 
+      # Terseness for the distill-text CLI lives here, not in the binary name:
+      # distill-text stays greppable and self-describing on PATH.
+      alias dn='distill-text'
+
       alias gtimeout='timeout'
 
       # Render markdown through oxfmt so prose wraps correctly. glamour (glow's
