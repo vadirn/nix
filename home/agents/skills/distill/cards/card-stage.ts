@@ -36,9 +36,15 @@ import {
   FIDELITY_TOKENS,
   rethrowIfBug,
 } from "../fw.ts";
-import { detectLang, parseConceptGraph, sections } from "../text.ts";
+import { detectLang, sections } from "../text.ts";
 import { nameLintAgainstSource } from "../writing/name-lint.ts";
-import { annotateEdges, buildStagingRecord, decideCard, enumerateCandidates } from "./cards.ts";
+import {
+  annotateEdges,
+  buildStagingRecord,
+  decideCard,
+  enumerateCandidates,
+  harvestConcepts,
+} from "./cards.ts";
 import { fetchNeighbours } from "./neighbours.ts";
 import { cardDraftPrompt, noveltyBandPrompt } from "./prompts.ts";
 import { renderStagingFile } from "./stage.ts";
@@ -150,8 +156,8 @@ export async function stageNote(
   const noteName = basename(opts.source ?? notePath).replace(/\.md$/i, "");
   const title = extractTitle(body) || noteName;
   const sourceNote = resolve(opts.source ?? notePath);
-  const glossary = parseConceptGraph(body);
-  const candidates = enumerateCandidates(glossary, { tie, title, sourceNote });
+  const concepts = harvestConcepts(body);
+  const candidates = enumerateCandidates(concepts, { tie, title, sourceNote });
   const lang = detectLang(body);
 
   if (opts.dryRun) {

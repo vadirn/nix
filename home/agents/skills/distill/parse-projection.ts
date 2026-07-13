@@ -6,10 +6,10 @@
 // concept blocks, numbered `## Procedures` steps, and the abstract WITHOUT re-parsing the grammar
 // four times. It reuses parseSpan (graph.ts) for the trailing `start..end` anchors.
 //
-// This is DISTINCT from text.ts::parseConceptGraph, which reads the LEGACY `## Glossary` TABLE +
-// `## Relations` into GlossEntry[] for the cards-harvest path (that reader, and GlossEntry/Relation,
-// stay untouched — they serve cards/, out of scope here). The grammar here is the canonical
-// `### headword` subsection shape, not table rows.
+// The cards-harvest path (cards/cards.ts::harvestConcepts) reads its concepts THROUGH this
+// reader now (D6): `parseCanonicalNote(body).concepts` for term/def, paired with text.ts's
+// surviving `## Relations` parser for edges. The legacy `## Glossary` table reader
+// (parseConceptGraph) and its GlossEntry/Relation types are gone.
 //
 // PURE: no fs, no LLM, no model of the source bytes — it reads only the projected markdown.
 import { parseSpan } from "./graph.ts";

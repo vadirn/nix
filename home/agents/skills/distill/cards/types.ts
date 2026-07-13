@@ -9,8 +9,20 @@
 //   Log 10 — the only path from staging to `20 cards/` is a human commit; drafts
 //          exist to be rewritten, not accepted.
 
-import type { GlossEntry, Relation } from "../text.ts";
 import type { NameLintResult } from "../writing/name-lint.ts";
+
+// One structural edge harvested from an emitted note's `## Relations` block and attached
+// to its owning concept (the from-label's slug), stripped of the from-field. `rel` an open
+// hyphenated token, `to` an endpoint (bare local term-slug or a [[file-slug]] wikilink),
+// `predicate` an optional one-clause gloss. UNCERTIFIED — parsed off the source, never
+// re-verified.
+export type CardEdge = { rel: string; to: string; predicate: string | null };
+
+// One concept harvested from an emitted note for card enumeration: the `### headword`
+// term, its first-line def (both from the canonical `## Concepts` reader), and the
+// `## Relations` edges attached to it. The input shape enumerateCandidates maps to a
+// concept-arm Candidate.
+export type HarvestedConcept = { term: string; def: string; relations: CardEdge[] };
 
 // Which lexicographer form the draft takes. v1 ships two arms; inference is
 // excluded by the vault typology (its surface is prose, governed by validity —
@@ -24,7 +36,7 @@ export type Candidate = {
   arm: Arm;
   term: string; // headword: the glossary term (concept) / the note's H1 or title (thesis)
   def: string; // certified content: the glossary def (concept) / the tie text (thesis)
-  relations: Relation[]; // edges parsed from `## Relations` for this term — UNCERTIFIED channel
+  relations: CardEdge[]; // edges parsed from `## Relations` for this term — UNCERTIFIED channel
   sourceNote: string; // absolute path of the emitted note the candidate came from
 };
 
@@ -65,7 +77,7 @@ export type CandidateFlag = "recall-unavailable" | "judge-inconclusive" | "draft
 
 // A relation annotated against REL_REGISTRY. Off-registry is a review flag,
 // never an error (open vocabulary, D32).
-export type StagedEdge = Relation & { offRegistry: boolean };
+export type StagedEdge = CardEdge & { offRegistry: boolean };
 
 // Everything the staging writer renders for one candidate — one file per record.
 export type StagingRecord = {
@@ -83,6 +95,3 @@ export type StagingRecord = {
 export type BandJudgeReply = { band: string; rationale: string };
 export type DraftReply = { draft: string };
 export type AtomicityReply = { atomic: boolean; reason: string };
-
-// Re-exported so cards/ modules import graph types from one place.
-export type { GlossEntry, Relation };

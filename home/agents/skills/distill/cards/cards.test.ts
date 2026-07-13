@@ -3,16 +3,14 @@
 // test` — sibling build agents' files are still in flight and would fail it).
 import { expect, test } from "bun:test";
 import { annotateEdges, buildStagingRecord, decideCard, enumerateCandidates } from "./cards.ts";
-import type { BandVerdict, Candidate, NeighbourHit } from "./types.ts";
-import type { GlossEntry, Relation } from "../text.ts";
+import type { BandVerdict, Candidate, CardEdge, HarvestedConcept, NeighbourHit } from "./types.ts";
 
 // ---- enumerateCandidates ----
 
-const entry = (term: string, def: string, relations: Relation[] = []): GlossEntry => ({
+const entry = (term: string, def: string, relations: CardEdge[] = []): HarvestedConcept => ({
   term,
   def,
   relations,
-  source: [],
 });
 
 test("enumerateCandidates: one concept-arm candidate per glossary entry, no tie", () => {
@@ -69,7 +67,7 @@ test("enumerateCandidates: empty glossary with a tie yields just the thesis cand
 });
 
 test("enumerateCandidates: never filters — relations pass through verbatim", () => {
-  const rels: Relation[] = [{ rel: "depends-on", to: "beta", predicate: null }];
+  const rels: CardEdge[] = [{ rel: "depends-on", to: "beta", predicate: null }];
   const out = enumerateCandidates([entry("alpha", "def a", rels)], {
     tie: null,
     title: "Note",
@@ -144,21 +142,21 @@ test("decideCard: non-string band or rationale returns null", () => {
 // ---- annotateEdges ----
 
 test("annotateEdges: on-registry relation is flagged offRegistry: false", () => {
-  const rels: Relation[] = [{ rel: "subsumes", to: "beta", predicate: null }];
+  const rels: CardEdge[] = [{ rel: "subsumes", to: "beta", predicate: null }];
   expect(annotateEdges(rels)).toEqual([
     { rel: "subsumes", to: "beta", predicate: null, offRegistry: false },
   ]);
 });
 
 test("annotateEdges: off-registry relation is flagged offRegistry: true, kept not dropped", () => {
-  const rels: Relation[] = [{ rel: "loosely-related-to", to: "beta", predicate: "hmm" }];
+  const rels: CardEdge[] = [{ rel: "loosely-related-to", to: "beta", predicate: "hmm" }];
   expect(annotateEdges(rels)).toEqual([
     { rel: "loosely-related-to", to: "beta", predicate: "hmm", offRegistry: true },
   ]);
 });
 
 test("annotateEdges: mixed registry membership annotates each independently, order preserved", () => {
-  const rels: Relation[] = [
+  const rels: CardEdge[] = [
     { rel: "part-of", to: "x", predicate: null },
     { rel: "vibes-with", to: "y", predicate: null },
     { rel: "refines", to: "z", predicate: null },

@@ -314,12 +314,11 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   // clause (a second grade failure) into its `### headword` concept subsection.
   const defSplices: { term: string; def: string }[] = [];
   for (const d of defRecovers) {
-    const entry = { term: d.term, def: "", relations: [], source: [] };
     let finalDef: string;
     try {
       const rr = await askJson<{ def: string }>(
         EXTRACT,
-        renderEntryPrompt(entry, d.src, lang),
+        renderEntryPrompt({ term: d.term, def: "" }, d.src, lang),
         1024,
       );
       const reRendered = (rr.def ?? "").trim();

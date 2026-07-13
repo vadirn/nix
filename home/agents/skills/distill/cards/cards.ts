@@ -1,13 +1,16 @@
-// cards — pure card-extraction layer: enumerate candidates from a distilled note's
-// glossary/tie, validate untrusted band-judge replies, annotate relations against
+// cards — pure card-extraction layer: harvest a distilled note's concepts from the
+// canonical `## Concepts`/`## Relations` channels, enumerate candidates from them and
+// the tie, validate untrusted band-judge replies, annotate relations against
 // REL_REGISTRY, and assemble the staging record. Zero I/O, zero LLM calls (W2 brief).
 //
 // Boundary rules this module upholds:
-//   D13  — never imports pipeline.ts. Callers hand in already-parsed GlossEntry[]
-//          and frontmatter fields; this layer never reads a file or spawns a process.
+//   D13  — never imports pipeline.ts. Callers hand in an emitted note's body string
+//          (harvestConcepts reads its channels); this layer never reads a file or spawns
+//          a process.
 //   D22  — decideCard/buildStagingRecord treat the band verdict as an ANNOTATION.
 //          enumerateCandidates never filters on it — every candidate is staged.
-import { REL_REGISTRY, type GlossEntry, type Relation } from "../text.ts";
+import { REL_REGISTRY, parseRelationsBlock, slugSegment } from "../text.ts";
+import { parseCanonicalNote } from "../parse-projection.ts";
 import type { NameLintResult } from "../writing/name-lint.ts";
 import type {
   Band,
@@ -15,6 +18,8 @@ import type {
   BandVerdict,
   Candidate,
   CandidateFlag,
+  CardEdge,
+  HarvestedConcept,
   NeighbourHit,
   StagedEdge,
   StagingRecord,
@@ -22,16 +27,43 @@ import type {
 
 const BANDS: readonly Band[] = ["defer-link", "mint", "work-through"];
 
-// One concept-arm candidate per glossary entry, term/def/relations carried
+// Harvest an emitted note's concepts for card enumeration (D6): term/def from the
+// canonical `## Concepts` reader (`### headword` + first-line def), edges from the
+// `## Relations` block attached to the concept whose slug matches each edge's `from`
+// label. A single-atom edge (`from === null`) attaches to the sole concept when there is
+// exactly one; over zero or many concepts it has no unambiguous owner and is dropped
+// (lossy, matches parseRelationsBlock's tolerance). Both sides of the slug comparison are
+// slugged so a hand-typed, unslugged from-label (Log 10's expected human-edit path) still
+// resolves to its concept instead of silently detaching.
+export function harvestConcepts(body: string): HarvestedConcept[] {
+  const concepts: HarvestedConcept[] = parseCanonicalNote(body).concepts.map((c) => ({
+    term: c.headword,
+    def: c.def,
+    relations: [],
+  }));
+  for (const edge of parseRelationsBlock(body)) {
+    const rel: CardEdge = { rel: edge.rel, to: edge.to, predicate: edge.predicate };
+    if (edge.from !== null) {
+      const fromSlug = slugSegment(edge.from);
+      concepts.find((c) => slugSegment(c.term) === fromSlug)?.relations.push(rel);
+    } else if (concepts.length === 1) {
+      concepts[0].relations.push(rel);
+    }
+    // else: single-atom edge over zero or many concepts has no unambiguous owner — drop.
+  }
+  return concepts;
+}
+
+// One concept-arm candidate per harvested concept, term/def/relations carried
 // verbatim, plus one thesis-arm candidate when `tie` is non-empty (term = title,
 // def = tie, relations = [] — the tie is prose, not a Relations-block source).
-// Never filters: every entry becomes a candidate regardless of content (D22 applies
+// Never filters: every concept becomes a candidate regardless of content (D22 applies
 // downstream at staging, but enumeration itself has no admission logic at all).
 export function enumerateCandidates(
-  entries: GlossEntry[],
+  concepts: HarvestedConcept[],
   meta: { tie: string | null; title: string; sourceNote: string },
 ): Candidate[] {
-  const out: Candidate[] = entries.map((e) => ({
+  const out: Candidate[] = concepts.map((e) => ({
     arm: "concept",
     term: e.term,
     def: e.def,
@@ -71,7 +103,7 @@ export function decideCard(reply: unknown, nearest: NeighbourHit[]): BandVerdict
 
 // Annotate each relation with whether its `rel` token is in REL_REGISTRY. Off-registry
 // is a review flag, not an error (D32, open vocabulary) — every relation is kept.
-export function annotateEdges(relations: Relation[]): StagedEdge[] {
+export function annotateEdges(relations: CardEdge[]): StagedEdge[] {
   return relations.map((r) => ({ ...r, offRegistry: !REL_REGISTRY.includes(r.rel) }));
 }
 

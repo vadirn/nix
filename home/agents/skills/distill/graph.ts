@@ -3,9 +3,9 @@
 // knowledge-element types; markdown is one projection of it (spec §1), rendered by project.ts
 // and read back by parse-projection.ts. This is a LEAF module: it imports only the `Span`
 // byte-offset type from mdstruct.ts so the type contract stays free of the CLI-wrapper's
-// runtime dependencies. text.ts's `GlossEntry`/`Relation` shape (the pre-canonical two-channel
-// `## Glossary`/`## Relations` grammar) is retained alongside this graph, not superseded by
-// it — cards/card-stage.ts still reads emitted notes through that shape (D6).
+// runtime dependencies. The cards-harvest path reads emitted notes through this graph's own
+// projection now (parse-projection.ts's `## Concepts` reader + text.ts's `## Relations`
+// parser); the pre-canonical `GlossEntry`/`Relation` two-channel shape is gone (D6).
 import { createHash } from "node:crypto";
 import type { Span } from "./mdstruct.ts";
 

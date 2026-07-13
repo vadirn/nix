@@ -75,7 +75,6 @@
 // else is an internal module detail.
 export { REL_REGISTRY, slugSegment } from "./text.ts";
 export { ensureEpistemicStatus } from "./frontmatter.ts";
-export { emitRelationsBlock } from "./text.ts";
 
 import { main } from "./pipeline.ts";
 

@@ -6,16 +6,13 @@
 import {
   type Block,
   type Grade,
-  type GlossEntry,
   type LinkInventory,
   type ProseUnit,
-  type Relation,
   glossList,
   hasOperational,
   hasWikilink,
   langRule,
   normalizeRelation,
-  relText,
   render,
 } from "./text.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
@@ -325,13 +322,13 @@ export function verbatimDef(term: string, sourceText: string): string {
 
 // single-entry render from source — used by stage-5 recovery to re-ground a residue def
 export function renderEntryPrompt(
-  entry: GlossEntry,
+  entry: { term: string; def: string },
   sourceText: string,
   lang: "en" | "ru",
 ): string {
   const relRule =
     DEF_RELATIONS === "keep"
-      ? `keep every relation (${entry.relations.map(relText).join("; ")}); use only claims the source states.`
+      ? `keep every relation the source states; use only claims the source states.`
       : `define the concept itself; state no relations to other terms (the connective prose carries those); use only claims the source states.`;
   return `Write the glossary definition for "${entry.term}" using ONLY the source text below. One dense sentence; ${relRule} ${langRule(lang)} Return ONLY JSON {"def":"..."}.
 

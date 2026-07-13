@@ -762,7 +762,7 @@ test("harvestExternalLinks: plain prose and bare wikilinks yield nothing", () =>
 });
 
 test("harvestWikilinks: a pre-slugged ## Relations endpoint is idempotent", () => {
-  // emitRelationsBlock emits [[30-notes-elegant-solution]]; harvesting it must yield
+  // the projection emits [[30-notes-elegant-solution]]; harvesting it must yield
   // the SAME slug as the source [[30 notes/Elegant solution]], so coverage matches.
   expect(harvestWikilinks("[[30-notes-elegant-solution]]")[0].slug).toBe(
     "30-notes-elegant-solution",

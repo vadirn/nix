@@ -174,19 +174,23 @@ test("renderStagingFile: case-variant terms that slug identically also dedupe", 
 // ---- stageNote flow ----
 
 // alpha (concept, relates to beta by subsumes) + beta (concept, no relations) +
-// "My Note" (thesis, from the frontmatter description) — 3 candidates total.
+// "My Note" (thesis, from the frontmatter description) — 3 candidates total. Canonical
+// projection shape: `## Concepts` / `### headword` + first-line def, `## Relations` edges.
 const NOTE_MD = [
   "---",
   "description: The unifying thesis of the note.",
   "---",
   "# My Note",
   "",
-  "## Glossary",
+  "## Concepts",
   "",
-  "| Term | Definition |",
-  "| ---- | ---------- |",
-  "| alpha | def a |",
-  "| beta | def b |",
+  "### alpha",
+  "",
+  "def a",
+  "",
+  "### beta",
+  "",
+  "def b",
   "",
   "## Relations",
   "",
@@ -382,22 +386,22 @@ test("stageNote: every enumerated candidate produces exactly one staged file eve
 });
 
 // Pins Finding 1 end-to-end through stageNote (not just renderStagingFile in isolation):
-// the note's H1 title is "Legacy code" and its glossary also carries a term "Legacy code"
-// — the exact collision named in the finding, since the thesis candidate's term IS the
-// title. Before the fix, both candidates' filenames were identical and the second
-// `writeFile` call clobbered the first while `staged` still counted both.
-test("stageNote: a thesis term colliding with a glossary term still produces one staged file per candidate", async () => {
+// the note's H1 title is "Legacy code" and its Concepts section also carries a term
+// "Legacy code" — the exact collision named in the finding, since the thesis candidate's
+// term IS the title. Before the fix, both candidates' filenames were identical and the
+// second `writeFile` call clobbered the first while `staged` still counted both.
+test("stageNote: a thesis term colliding with a concept term still produces one staged file per candidate", async () => {
   const collidingNote = [
     "---",
     "description: The unifying thesis of the note.",
     "---",
     "# Legacy code",
     "",
-    "## Glossary",
+    "## Concepts",
     "",
-    "| Term | Definition |",
-    "| ---- | ---------- |",
-    "| Legacy code | code without tests |",
+    "### Legacy code",
+    "",
+    "code without tests",
     "",
   ].join("\n");
   const { writeFile, calls } = recordingWriteFile();
@@ -502,8 +506,7 @@ test("stripInteractBelt: an un-applied intermediary loses its gate block; a bare
 });
 
 test("stageNote: a wrapped note still yields the thesis candidate from the enveloped frontmatter", async () => {
-  const note =
-    "---\ndescription: the tie\n---\n\n# T\n\n## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| alpha | first |";
+  const note = "---\ndescription: the tie\n---\n\n# T\n\n## Concepts\n\n### alpha\n\nfirst";
   const res = await stageNote(
     `<result>\n${note}</result>`,
     "/x/T.md",

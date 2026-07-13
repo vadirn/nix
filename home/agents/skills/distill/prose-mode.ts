@@ -31,7 +31,7 @@ function unwrapResult(text: string): string {
 // `## Relations`, a wikilink reference list, …). The `## Concepts` section is the only
 // region reconstructed into prose; every other section is passed through verbatim, so a
 // `## Procedures` list is never folded into the prose. Reads the canonical shape via the
-// shared parse-projection reader (its own local `{term,def}[]` type — no GlossEntry import).
+// shared parse-projection reader, projecting into its own local `{term,def}[]` type.
 export function parseDistilled(body: string): {
   tie: string;
   entries: { term: string; def: string }[];

@@ -1,9 +1,8 @@
-// text — segmentation, typography, slugging, the legacy `GlossEntry`/`Relation`
-// two-channel types (retained for the cards-harvest path, D6 — see graph.ts for the
-// canonical typed graph these predate), and the language helpers. The leaf module of
-// the distill pipeline: pure string/data utilities with no I/O; its only dependency
-// is writing/typography.ts, the writing-core's own leaf (normalizeTypography moved
-// there, re-exported here).
+// text — segmentation, typography, slugging, the extractor's `NormalizedEdge` relation
+// shape (see graph.ts for the canonical typed graph), and the language helpers. The leaf
+// module of the distill pipeline: pure string/data utilities with no I/O; its only
+// dependency is writing/typography.ts, the writing-core's own leaf (normalizeTypography
+// moved there, re-exported here).
 import { normalizeTypography } from "./writing/typography.ts";
 import {
   parseDoc,
@@ -37,23 +36,15 @@ export const REL_REGISTRY: readonly string[] = [
 
 export type Block = { id: string; text: string };
 export type Grade = "drop" | "distill" | "retain";
-// A relation is one STRUCTURAL edge (D29): `rel` an open hyphenated token, `to` an
-// endpoint (a bare local term-slug or a [[file-slug]] wikilink), `predicate` an
-// optional one-clause gloss (null when none). The from-label is NOT a field — it is
-// the entry's own `term`, supplied by the assembler (emitRelationsBlock). `quote` is
-// the VERBATIM source slice the edge was distilled from (byte-exact, never typography-
-// normalized) — the span-locate anchor the canonical projection resolves; optional so
-// the shipped two-channel path and REBUILD parsing keep working without it.
-export type Relation = { rel: string; to: string; predicate: string | null; quote?: string };
-// `quote` is the verbatim source slice this concept was distilled from (span-locate
-// anchor, byte-exact); optional and inert to the shipped grade/order/synth/gate path.
-export type GlossEntry = {
-  term: string;
-  def: string;
-  relations: Relation[];
-  source: string[];
-  quote?: string;
-};
+// One normalized STRUCTURAL edge (D29) from the live extractor's relation channel:
+// `rel` an open hyphenated token, `to` an endpoint (a bare local term-slug or a
+// [[file-slug]] wikilink), `predicate` an optional one-clause gloss (null when none).
+// The from-label is NOT a field — the caller supplies it (parseExtractGraph owns the
+// concept's headword). `quote` is the VERBATIM source slice the edge was distilled from
+// (byte-exact, never typography-normalized) — the span-locate anchor the canonical
+// projection resolves; optional. Produced by normalizeRelation, folded into a PreEdge
+// by parseExtractGraph (prompts.ts).
+export type NormalizedEdge = { rel: string; to: string; predicate: string | null; quote?: string };
 // A vault edge: a [[wikilink]] OR a scheme-less [text](path) markdown link, both
 // intra-vault cross-note relations. `markup` is the verbatim span, `slug` its target
 // slugged for byte-stable comparison, `target` the raw alias/path-cleaned endpoint
@@ -156,7 +147,7 @@ export function normalizeEdgeTarget(raw: string): string {
 // Harvest every [[wikilink]] (and ![[embed]]) in `text` as {markup, slug, target}:
 // `markup` is the verbatim span, `slug` its target slugged for byte-stable comparison,
 // `target` the raw alias-stripped endpoint (the collision discriminator wikilinkResidue
-// keys on). An alias `[[t|a]]` harvests target `t`; the slug matches emitRelationsBlock's
+// keys on). An alias `[[t|a]]` harvests target `t`; the slug matches the projection's
 // pre-slugged file endpoints and a retained block's verbatim link alike, since
 // slugSegment is idempotent. ITEM B: an asset embed (`![[diagram.png]]`, `![[doc.pdf#page=2]]`)
 // is NOT an edge — it renders inline, so it is skipped here lest it surface as a phantom
@@ -941,46 +932,8 @@ export function slugSegment(s: string): string {
 // Render a structural relation as readable `rel :: to (predicate)` for the
 // prose-synth prompts — they only need a human-readable form of the edge, not the
 // emit grammar. Used wherever relations were previously joined as bare strings.
-export const relText = (r: Relation): string =>
+export const relText = (r: { rel: string; to: string; predicate: string | null }): string =>
   `${r.rel} :: ${r.to}${r.predicate ? ` (${r.predicate})` : ""}`;
-
-// One `## Relations` endpoint: a `[[file-slug]]` wikilink (inner alias stripped, target re-slugged)
-// or a bare local term-slug. Reparented here from the retired assemble.ts as the emit-twin of the
-// surviving parseRelationsBlock/parseConceptGraph readers (the legacy `rel::` grammar; D6 keeps the
-// parse pair alive for the cards-harvest path).
-function endpointOf(to: string): string {
-  const wl = /^\[\[(.+)\]\]$/.exec(to.trim());
-  if (!wl) return slugSegment(to);
-  // Strip the alias BEFORE slugging so `[[note-aliased|Display Text]]` endpoints on `note-aliased`.
-  const target = wl[1].split("|")[0].trim();
-  return `[[${slugSegment(target)}]]`;
-}
-
-// Build the `## Relations` block body (D29 structural channel): one markdown list item per edge, in
-// entry order then each entry's relation order. A single-atom card (one entry) OMITS the from-label
-// (`- <rel>:: <endpoint>`); a multi-node note prefixes each edge with the source entry's slug.
-// Self-loops (from==to) and empty endpoints drop. Labels are pre-slugified so the block is
-// byte-stable for the REBUILD parser. Returns "" when no entry carries an edge. The inverse of
-// parseRelationsBlock — kept as the tested emit-twin of the surviving legacy parse pair.
-export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
-  const singleAtom = orderedEntries.length === 1;
-  const lines: string[] = [];
-  for (const entry of orderedEntries) {
-    const fromSlug = slugSegment(entry.term);
-    for (const r of entry.relations) {
-      const endpoint = endpointOf(r.to);
-      if (!endpoint) continue; // an endpoint that slugs to empty is unrenderable
-      if (endpoint === fromSlug) continue; // self-loop (from==to) is vacuous extraction junk
-      const pred = r.predicate ? ` (${r.predicate})` : "";
-      lines.push(
-        singleAtom
-          ? `- ${r.rel}:: ${endpoint}${pred}`
-          : `- ${fromSlug} ${r.rel}:: ${endpoint}${pred}`,
-      );
-    }
-  }
-  return lines.length ? `## Relations\n\n${lines.join("\n")}` : "";
-}
 
 // Coerce one extracted relation into a typed edge. LOSSY (D29): keep every
 // well-formed edge — drop ONLY when `rel` or `to` is missing. An unknown rel or an
@@ -988,7 +941,7 @@ export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
 // revise(), so typography is normalized here. The rel is lowercased and hyphenated
 // (residual space-forms like "precondition for" → "precondition-for") so the open
 // token matches the registry's shape; predicate is null when empty.
-export function normalizeRelation(r: unknown): Relation | null {
+export function normalizeRelation(r: unknown): NormalizedEdge | null {
   if (!r || typeof r !== "object") return null;
   const o = r as { rel?: unknown; to?: unknown; predicate?: unknown; quote?: unknown };
   const rel = normalizeTypography(String(o.rel ?? ""))
@@ -1005,15 +958,14 @@ export function normalizeRelation(r: unknown): Relation | null {
   return { rel, to, predicate: pred || null, ...(quote ? { quote } : {}) };
 }
 
-// ---- relations/glossary REBUILD (W1; inverts this file's own emitRelationsBlock /
-// the legacy two-channel `## Glossary` table). Lives here, not cards/, so cards/ modules
-// read an emitted note's structural channels through one leaf-module seam (D13). ----
+// ---- relations REBUILD (W1): parse an emitted note's `## Relations` block back into
+// structural edges. Lives here, not cards/, so cards/ modules read an emitted note's
+// structural channels through one leaf-module seam (D13). ----
 
 // One structural edge parsed off a `## Relations` list item. `from` is the entry's
 // own slug (multi-node form) or null (single-atom form omits the from-label, D26).
 // `to` keeps the endpoint's EMITTED form verbatim — `[[file-slug]]` stays bracketed,
-// a bare term-slug stays bare — so a caller that re-emits via emitRelationsBlock
-// (which itself re-derives scope from the brackets) round-trips byte-for-byte.
+// a bare term-slug stays bare — so a caller can re-slug or re-attach it without ambiguity.
 export type ParsedRelationEdge = {
   from: string | null;
   rel: string;
@@ -1106,7 +1058,7 @@ function parseEdgeLine(edgeText: string): ParsedRelationEdge | null {
 }
 
 // Parse a full note body's `## Relations` section back into structural edges — the
-// REBUILD inverse of this file's own emitRelationsBlock. Grammar mirrors
+// REBUILD inverse of the projection's `## Relations` emit. Grammar mirrors
 // vault-query/src/commands/lint/relations.rs::parse_relations line-for-line (fence
 // tracking, heading toggle, `- `/`* ` list-item prefix, `::` split); see splitPredicate
 // for the one intentional divergence. Lossy-tolerant like normalizeRelation: a
@@ -1131,63 +1083,6 @@ export function parseRelationsBlock(md: string): ParsedRelationEdge[] {
     if (edge) edges.push(edge);
   }
   return edges;
-}
-
-// Undo the legacy emit's escCell pipe-escaping (`\|` → `|`). escCell also collapses a
-// def's internal newlines to spaces before emit, so that fold is not (and cannot be)
-// reversed here — a documented one-way loss, not a bug.
-const unescCell = (s: string): string => s.replace(/\\\|/g, "|").trim();
-
-// Split a `| a | b |` table row into trimmed, unescaped cells. Outer pipes are
-// dropped; the split runs on unescaped `|` only (negative lookbehind), so a def
-// carrying a real `|` (escCell-escaped) never mis-splits into a phantom column.
-function glossaryRowCells(line: string): string[] | null {
-  const t = line.trim();
-  if (t.length < 2 || !t.startsWith("|") || !t.endsWith("|")) return null;
-  return t
-    .slice(1, -1)
-    .split(/(?<!\\)\|/)
-    .map(unescCell);
-}
-
-// A GFM table delimiter row (`| ---- | ---------- |`): every cell is bare dashes,
-// optionally colon-anchored. Shared by the header/delimiter skip below.
-const isDelimiterRow = (cells: string[]): boolean => cells.every((c) => /^:?-+:?$/.test(c));
-
-// Parse an emitted note's `## Glossary` table AND `## Relations` block into
-// GlossEntry[] — the REBUILD inverse of the legacy two-channel Glossary+Relations
-// rendering, retained for the cards-harvest path (D6; see parse-projection.ts's
-// header for how this differs from the canonical `## Concepts` reader). Each row
-// becomes one entry (term, def unescaped, source: [] — not
-// recoverable from an emitted note, D13); each parsed edge attaches to the entry
-// whose slug matches its `from`. A single-atom edge (`from === null`) attaches to
-// the sole entry when the table has exactly one row; over a multi-row table it has
-// no unambiguous owner and is dropped (lossy, matches parseRelationsBlock's tolerance).
-export function parseConceptGraph(md: string): GlossEntry[] {
-  const entries: GlossEntry[] = [];
-  for (const line of extractSection(md, "glossary").split("\n")) {
-    const cells = glossaryRowCells(line);
-    if (!cells || cells.length < 2) continue;
-    if (cells[0] === "Term" && cells[1] === "Definition") continue; // header row
-    if (isDelimiterRow(cells)) continue;
-    entries.push({ term: cells[0], def: cells[1], relations: [], source: [] });
-  }
-  for (const edge of parseRelationsBlock(md)) {
-    const rel: Relation = { rel: edge.rel, to: edge.to, predicate: edge.predicate };
-    if (edge.from !== null) {
-      // Slug BOTH sides before comparing (Finding 3): emitted notes pre-slug the
-      // from-label so a raw comparison happens to match, but Log 10 makes human
-      // editing of the Relations line the expected path, and a hand-typed unslugged
-      // label ("Target Distance" over a glossary row "Target Distance") must still
-      // resolve to its entry instead of silently detaching the whole relation.
-      const fromSlug = slugSegment(edge.from);
-      entries.find((e) => slugSegment(e.term) === fromSlug)?.relations.push(rel);
-    } else if (entries.length === 1) {
-      entries[0].relations.push(rel);
-    }
-    // else: single-atom edge over a 0- or multi-row table has no unambiguous owner — drop.
-  }
-  return entries;
 }
 
 export function detectLang(text: string): "en" | "ru" {

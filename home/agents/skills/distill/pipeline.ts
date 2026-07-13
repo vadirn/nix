@@ -247,7 +247,7 @@ export function buildFooter(m: {
 // Both harvest lanes route through normalizeEdgeTarget, which strips a trailing
 // `#fragment` before slugging, so a fragment-bearing source edge (`[[note#heading]]`)
 // slugs to `note` and is covered by an output `[[note]]` — no anchor-downgrade false
-// positive. emitRelationsBlock's `[[file-slug]]` endpoints carry no fragment, so the
+// positive. The projection's `[[file-slug]]` relation endpoints carry no fragment, so the
 // REBUILD round-trip is byte-stable through the change.
 // This narrows the guarantee to note→note edges, NOT anchor precision: several
 // distinct-anchor links to ONE note (`[[note#a]]` + `[[note#b]]`) collapse to slug
