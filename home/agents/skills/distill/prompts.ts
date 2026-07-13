@@ -5,7 +5,6 @@
 // from here.
 import {
   type Block,
-  type Grade,
   type LinkInventory,
   type ProseUnit,
   glossList,
@@ -15,6 +14,11 @@ import {
   normalizeRelation,
   render,
 } from "./text.ts";
+
+// The block-grading verdict from the fidelity gate: "drop" the block, "distill"
+// it (compress into the projection), or "retain" it verbatim. Lives here, not in
+// text.ts, because prompts.ts is its sole producer/consumer (gradeBlocks below).
+export type Grade = "drop" | "distill" | "retain";
 import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
 import {
   MARKED_MODALITIES,

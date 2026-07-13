@@ -42,7 +42,6 @@ export const REL_REGISTRY: readonly string[] = [
 ];
 
 export type Block = { id: string; text: string };
-export type Grade = "drop" | "distill" | "retain";
 // One normalized STRUCTURAL edge (D29) from the live extractor's relation channel:
 // `rel` an open hyphenated token, `to` an endpoint (a bare local term-slug or a
 // [[file-slug]] wikilink), `predicate` an optional one-clause gloss (null when none).
