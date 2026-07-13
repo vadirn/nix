@@ -14,6 +14,7 @@
 // PURE: no fs, no LLM, no model of the source bytes — it reads only the projected markdown.
 import {
   ABSTRACT_HEADING,
+  MARKED_MODALITIES,
   parseSpan,
   RELATIONS_HEADING,
   SECTION_HEADING,
@@ -168,8 +169,9 @@ function subsections(bodyLines: string[]): { headword: string; lines: string[] }
   return out;
 }
 
-// The leading `(modality) ` tag the projector prepends to a hypothesis/necessarily judgement.
-const MODALITY_TAG_RE = /^\((?:hypothesis|necessarily)\)\s+/;
+// The leading `(modality) ` tag the projector prepends to a marked judgement (W5:
+// MARKED_MODALITIES, graph.ts).
+const MODALITY_TAG_RE = new RegExp(`^\\((?:${MARKED_MODALITIES.join("|")})\\)\\s+`);
 
 // Parse a canonical note body into its structured sections — the lossy READ view documented on
 // CanonNote (edge typing, unit quotes, and source provenance are NOT recovered; this never

@@ -15,12 +15,17 @@ import type { Span } from "./mdstruct.ts";
 // is the normalized standard-form re-expression.
 export type UnitType = "concept" | "judgment" | "inference" | "procedure" | "payload";
 
+// The marked-modality vocabulary (W5): the two tags a judgment can carry beyond the unmarked
+// default. Canonicalized here so the emit tag (project.ts), the strip-regex (parse-projection.ts),
+// and the extract-parse clamp (prompts.ts) can't drift on the token spelling or drop one silently.
+export const MARKED_MODALITIES = ["hypothesis", "necessarily"] as const;
+
 // Judgment modality, an admission gate on card extraction (spec §3/§6). Applies to judgments
 // only; an unmarked judgment is `assertoric`. `hypothesis` = problematic (not minted as an
 // asserted card), `necessarily` = apodictic. `extractGraphPrompt` populates this from the note's
 // own framing (tentative → hypothesis, necessity/must/law → necessarily); `parseExtractGraph`
 // clamps anything the model returns outside those two marked forms to `assertoric`.
-export type Modality = "hypothesis" | "necessarily" | "assertoric";
+export type Modality = (typeof MARKED_MODALITIES)[number] | "assertoric";
 
 // Mirrors mdstruct's Rust `Source` (model.rs:74) — the version-binding record. `bytes` and
 // `sha256` are computed over the UTF-8 bytes of the source (see computeSource); `source.sha256`

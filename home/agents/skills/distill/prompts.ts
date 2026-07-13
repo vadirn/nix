@@ -16,7 +16,13 @@ import {
   render,
 } from "./text.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
-import type { Modality, PreEdge, PreGraph, PreUnit } from "./graph.ts";
+import {
+  MARKED_MODALITIES,
+  type Modality,
+  type PreEdge,
+  type PreGraph,
+  type PreUnit,
+} from "./graph.ts";
 export { type Pass, PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
@@ -145,9 +151,10 @@ export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescripti
   const quoteField = (q: unknown): string => (typeof q === "string" ? q.trim() : "");
   const withSource = (s: unknown): string[] =>
     (Array.isArray(s) ? s : []).filter((id) => ids.has(id));
-  // judgement modality: accept only the two marked forms; anything else is assertoric.
+  // judgement modality: accept only the two marked forms (W5: MARKED_MODALITIES, graph.ts);
+  // anything else is assertoric.
   const modalityOf = (m: unknown): Modality =>
-    m === "hypothesis" || m === "necessarily" ? m : "assertoric";
+    (MARKED_MODALITIES as readonly unknown[]).includes(m) ? (m as Modality) : "assertoric";
 
   // concepts → concept PreUnits (id = headword) + the flat edge list (each relation becomes a
   // PreEdge owned by the concept's headword). Drop a concept with no headword or no valid source

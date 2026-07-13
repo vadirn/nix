@@ -11,6 +11,7 @@
 import {
   ABSTRACT_HEADING,
   formatSpan,
+  MARKED_MODALITIES,
   REL_ARROW,
   REL_DASH,
   RELATIONS_HEADING,
@@ -61,11 +62,10 @@ function lines(statement: string): string[] {
 }
 
 // The leading `(modality)` tag on a judgment bullet — ONLY for the two admission-gating
-// modalities. `assertoric` (or unmarked) emits no tag (spec §3).
+// modalities (W5: MARKED_MODALITIES, graph.ts). `assertoric` (or unmarked) emits no tag (spec §3).
 function modalityTag(unit: Unit): string {
-  if (unit.modality === "hypothesis") return "(hypothesis) ";
-  if (unit.modality === "necessarily") return "(necessarily) ";
-  return "";
+  const m = unit.modality;
+  return m && (MARKED_MODALITIES as readonly string[]).includes(m) ? `(${m}) ` : "";
 }
 
 // The trailing anchor for a TAIL line (concept bullet / procedure step past the lead), read from
