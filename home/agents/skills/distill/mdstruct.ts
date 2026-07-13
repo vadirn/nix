@@ -224,6 +224,10 @@ export function checkRegion(text: string, label: string): RegionDiagnostic[] {
     try {
       rec = JSON.parse(trimmed);
     } catch {
+      // Intentional lossy-tolerant parse: a malformed line (partial write, stray
+      // non-ndjson output) is dropped rather than thrown. checkRegion is a
+      // best-effort diagnostic scan, not a source of truth — losing one record
+      // beats aborting the whole dangling-anchor report over a single bad line.
       continue;
     }
     if (
