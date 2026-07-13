@@ -21,8 +21,9 @@
 // aborting; a non-transient throw (a code bug) propagates.
 //
 // CLI usage, flags, exit codes, and env: see the USAGE block below.
-import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
 import { isTransient, TruncationError } from "./fw.ts";
 import { detectLang, segment, wordCount } from "./text.ts";
@@ -155,10 +156,12 @@ export function buildPolishFooter(m: {
   );
 }
 
-// Create an empty temp file with a .md extension and return its path (same helper
-// shape as cli.ts's tempMdPath).
+// Create a fresh temp directory and return the path to a .md file inside it (not
+// yet created — the caller writeFileSync's the content). Same helper shape as
+// cli.ts's tempMdPath: fs.mkdtempSync instead of shelling out to a platform
+// mktemp binary, whose --suffix flag is GNU-coreutils-specific (not portable).
 function tempMdPath(): string {
-  return execFileSync("mktemp", ["--suffix=.md"], { encoding: "utf8" }).trim();
+  return join(mkdtempSync(join(tmpdir(), "polish-")), "out.md");
 }
 
 export async function main(): Promise<void> {
