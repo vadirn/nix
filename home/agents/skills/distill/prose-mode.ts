@@ -6,6 +6,7 @@ import { parseDescription, parseFrontmatter } from "./frontmatter.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "./fw.ts";
 import { PASS_EN, PASS_RU, revise } from "./prompts.ts";
 import { parseCanonicalNote, splitSections } from "./parse-projection.ts";
+import { unwrapResult } from "./envelope.ts";
 
 // ---- prose mode: reconstruct a prose note from a distilled note's concepts ----
 // The inverse of the compress pipeline. Input is a distilled file (this tool's own
@@ -16,13 +17,6 @@ import { parseCanonicalNote, splitSections } from "./parse-projection.ts";
 // the canonical note is the certified artifact, the prose its readable derivative (always
 // regenerable and checkable against it). The `## Concepts` section is folded into the prose
 // and dropped from output; the abstract seeds the thesis/tie.
-
-// If the input is wrapped in <result>…</result> (the raw temp file this tool
-// emits), use the inner content and ignore any <residue>; otherwise use as-is.
-function unwrapResult(text: string): string {
-  const m = text.match(/<result>\r?\n?([\s\S]*?)\r?\n?<\/result>/);
-  return m ? m[1] : text;
-}
 
 // Parse a distilled body into its parts: the tie-together prose (the `## Abstract`
 // orientation), the concept entries (each `### headword` under `## Concepts`, its

@@ -32,13 +32,7 @@ import {
   slugSegment,
   wordCount,
 } from "./text.ts";
-import {
-  ensureEpistemicStatus,
-  parseDescription,
-  parseFrontmatter,
-  parseSuperseded,
-  parseType,
-} from "./frontmatter.ts";
+import { parseDescription, parseFrontmatter, parseSuperseded, parseType } from "./frontmatter.ts";
 import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
 import { extractGraph, gradeBlocks } from "./prompts.ts";
 import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
@@ -53,11 +47,7 @@ import { runApply, stampHash } from "./apply-mode.ts";
 import { runFidelityBackstop, runProseGate } from "./gates.ts";
 import { runTypingReview, runTtySession } from "./tty.ts";
 import { USAGE, parseArgs, refusePendingIntermediary, tempMdPath, tmpPathFor } from "./cli.ts";
-
-// Escape the three characters an XML attribute value cannot carry raw. The passthrough envelope
-// (main(), the exit-3 legacy sink) stamps residue labels/reasons into `<entry term=… reason=…>`.
-const escAttr = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+import { buildPassthroughEnvelope } from "./envelope.ts";
 
 // ---- pipeline ----
 // The Residue type and the deterministic loss-surface primitives (wikilinkResidue,
@@ -454,25 +444,6 @@ export function assembleRoutedNote(a: {
     (residue.length ? ` · ${residue.length} residue` : "") +
     formatNameLint(nameLint);
   return { out, footer, residue };
-}
-
-// The legacy passthrough envelope (the exit-3 sink): the unmodified source, epistemic-status
-// stamped, wrapped in <result>…</result> with an optional <residue> block of escaped entries.
-// Pure — main()'s passthrough branch emits this verbatim beside its footer.
-function buildPassthroughEnvelope(front: string, out: string, residue: Residue[]): string {
-  const front2 = ensureEpistemicStatus(front);
-  const result = front2 ? front2 + "\n" + out : out;
-  let fileBody = `<result>\n${result}\n</result>\n`;
-  if (residue.length) {
-    const entries = residue
-      .map(
-        (r) =>
-          `<entry term="${escAttr(r.label)}" reason="${escAttr(r.reason)}">\n<source>\n${r.source}\n</source>\n</entry>`,
-      )
-      .join("\n");
-    fileBody += `\n<residue>\n${entries}\n</residue>\n`;
-  }
-  return fileBody;
 }
 
 // Atomic no-clobber write (plan §4, atomicity F2/F7): write a sibling .partial, then linkSync to
