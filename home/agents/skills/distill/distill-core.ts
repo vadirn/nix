@@ -88,6 +88,12 @@ export function expandGuardCap(beforeWords: number, maxWords?: number): number |
   return beforeWords;
 }
 
+// Both ends must be a real terminal (command substitution and pipes must never see a
+// prompt) before the typing review or the Phase-5 gate session take over the process.
+function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
 // build the success footer line — the one-line summary stderr carries beside the
 // temp-file path on stdout. Pure; the nothing-to-distill and expansion guards in distill()
 // emit their own footers, so this only renders a real (compressed-or-equal) run.
@@ -248,7 +254,7 @@ async function distill(
   // non-TTY (piped, redirected, the test harness, agent callers) the review is skipped and the graph
   // keeps its extract-assigned types, so the default non-interactive pipeline stays
   // extract→locate→project and is byte-identical.
-  if (process.stdin.isTTY && process.stdout.isTTY) {
+  if (isInteractive()) {
     opts.progress?.("type…");
     await runTypingReview(result, text);
   }
@@ -664,7 +670,7 @@ export async function main() {
     // SAME process. Everything below this line is stderr; stdout is already frozen
     // at the path line above. Not a TTY (the overwhelmingly common agent-caller
     // case): fall through unchanged, exiting 0 exactly as before Phase 5.
-    if (process.stdin.isTTY && process.stdout.isTTY) {
+    if (isInteractive()) {
       const reviewLabel = residue.length > 0 ? `${residue.length} items + gate` : "gate";
       process.stderr.write(`review: ${tmpPath} — ${reviewLabel}\n`);
       process.stderr.write(`apply later with: distill-text apply ${tmpPath}\n`);
