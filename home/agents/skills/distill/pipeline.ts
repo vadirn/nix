@@ -49,30 +49,25 @@ import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./
 import {
   type ConceptVerdict,
   type StepVerdict,
-  connectiveProse,
-  extractCombo,
   extractGraph,
   fidelityGate,
   gradeBlocks,
   type ProseVerdict,
   proseGate,
-  renderEntryPrompt,
-  repairWorkflowGroup,
   sourceTextFor,
-  synthEntries,
-  synthWorkflow,
-  tieTogether,
-  verbatimDirectives,
   workflowGate,
 } from "./prompts.ts";
-import { normalizeTypography } from "./writing/typography.ts";
-import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
-import { proseFix, proseJudge } from "./writing/prose-qa.ts";
 import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
-import { assembleBody, escAttr, renderWorkflowBlock } from "./assemble.ts";
-import { locateGraph } from "./locate-graph.ts";
+import { locateGraph, payloadKey } from "./locate-graph.ts";
 import { projectMarkdown, type Projection } from "./project.ts";
+import { computeSource, type Unit } from "./graph.ts";
+import { locate } from "./locate.ts";
 import { sliceBytes } from "./mdstruct.ts";
+
+// Escape the three characters an XML attribute value cannot carry raw. The passthrough envelope
+// (main(), the exit-3 legacy sink) stamps residue labels/reasons into `<entry term=… reason=…>`.
+const escAttr = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 import { runProse } from "./prose-mode.ts";
 import { buildIntermediary } from "./triage.ts";
 import { runApply } from "./apply-mode.ts";
@@ -122,22 +117,14 @@ export type Residue = {
 // main() also maps a top-level "passthrough" to exit 3 (exit 3 ⇔ prefer the source); a routed
 // note stays "compressed" even with a verbatim head (see distillRouted, below).
 type DistillStatus = "compressed" | "passthrough";
-// workflowByOwner is set only on a routed head's compressed return (owned is passed): the
-// orderedSteps' rendered strings, bucketed by originating re-author section (groupStepsByOwner),
-// so assembleRoutedNote can splice each owner's steps back at its section's position instead of
-// the flat "## Workflow" this same run still carries inline in the gated/shared `out` below.
+// Every compress path now projects the canonical seven-section graph, which carries its own
+// `type/source/schema` frontmatter, so `out` is always self-provenanced; main() takes it verbatim
+// (no source-front prepend). A passthrough return carries the unmodified source body instead.
 type DistillResult = {
   out: string;
   footer: string;
   residue: Residue[];
   status: DistillStatus;
-  workflowByOwner?: string[][];
-  // True only when `out` is the seven-section canonical projection (the homogeneous, non-routed,
-  // non-glossary, non-reference compress path). `main()` reads this to emit a SINGLE frontmatter
-  // block: the projection already carries its own `type/source/schema` YAML, so main() must NOT
-  // prepend the source note's front on this path (that would yield two YAML blocks). Undefined on
-  // the routed head, --glossary, isReference, passthrough — all still on the legacy assembler.
-  canonical?: boolean;
 };
 // one workflow group: steps sharing a source block-set, judged together by the
 // workflow gate. `idxs` index into the ordered workflowSteps array.
@@ -267,336 +254,14 @@ export function computeStepGroups(
   }));
 }
 
-// stage 3: synthesize the distilled prose — glossary definitions via the dial, the
-// short tie-together (the gate's thesis anchor, and the head in --glossary), and
-// the per-step workflow. These three are independent, so they run concurrently; the
-// connective prose body needs the defs, so it follows (skipped in --glossary).
-async function synthesize(
-  combo: Combo,
-  orderedEntries: GlossEntry[],
-  orderedSteps: WorkStep[],
-  opts: { glossaryOnly: boolean },
-  blockById: Map<string, Block>,
-  lang: "en" | "ru",
-): Promise<{
-  defByTerm: Map<string, string>;
-  tie: string;
-  workflowSteps: string[];
-  prose: string;
-}> {
-  const [defByTerm, tie, workflowSteps] = await Promise.all([
-    synthEntries(orderedEntries, blockById, lang),
-    tieTogether(combo, lang),
-    synthWorkflow(orderedSteps, blockById, lang),
-  ]);
-  const prose = opts.glossaryOnly
-    ? ""
-    : await connectiveProse(combo, orderedEntries, defByTerm, lang);
-  return { defByTerm, tie, workflowSteps, prose };
-}
-
-// stage 4: revise the distilled prose (tie + connective prose + each def + each
-// step) through the writing passes, structure untouched. The bolded glossary terms
-// are frozen so revise keeps each term's text (and bold) verbatim — the prose bolds
-// them as glossary cross-references. Definitions are revised in place on defByTerm;
-// the tie, prose, and workflow steps are returned.
-async function reviseDistilled(
-  tie: string,
-  prose: string,
-  orderedEntries: GlossEntry[],
-  defByTerm: Map<string, string>,
-  workflowSteps: string[],
-  lang: "en" | "ru",
-  onPass?: (index: number, total: number) => void,
-): Promise<{ tie: string; prose: string; workflowSteps: string[] }> {
-  const passes = lang === "ru" ? PASS_RU : PASS_EN;
-  const dblocks: Block[] = [
-    { id: "__TIE__", text: tie },
-    ...(prose ? [{ id: "__PROSE__", text: prose }] : []),
-    ...orderedEntries.map((e, i) => ({
-      id: `__G${i}__`,
-      text: defByTerm.get(e.term) ?? e.def,
-    })),
-    ...workflowSteps.map((s, i) => ({ id: `__W${i}__`, text: s })),
-  ];
-  const termLiterals = orderedEntries.map((e) => `**${e.term}**`);
-  const rev = await revise(dblocks, passes, termLiterals, onPass);
-  const byId = new Map(rev.map((b) => [b.id, b.text]));
-  const revisedTie = byId.get("__TIE__") ?? tie;
-  const revisedProse = prose ? (byId.get("__PROSE__") ?? prose) : prose;
-  orderedEntries.forEach((e, i) => {
-    const t = byId.get(`__G${i}__`);
-    if (t) defByTerm.set(e.term, t);
-  });
-  const revisedSteps = workflowSteps.map((s, i) => byId.get(`__W${i}__`) ?? s);
-  return { tie: revisedTie, prose: revisedProse, workflowSteps: revisedSteps };
-}
-
-// stage 5: fidelity gate + recovery. Two criteria, two gates, one shared retry loop:
-// concepts round-trip bidirectionally against source (a def must capture the whole
-// concept); workflow groups are judged for directive coverage only (a checklist may
-// drop rationale). Both re-render failing items from source, capped at maxRetries; a
-// workflow group the ladder cannot clear ships the source's own verbatim imperative.
-// Surviving residue (incl. an unrecoverable thesis) and gate-inconclusive items are
-// surfaced, never silent. The gate certifies the GLOSSARY form (tie + definitions),
-// never the prose. Definitions and steps are repaired in place (defByTerm,
-// workflowSteps); the metrics + residue are returned.
-async function runFidelityGate(
-  combo: Combo,
-  h1: string,
-  tie: string,
-  orderedEntries: GlossEntry[],
-  orderedSteps: WorkStep[],
-  defByTerm: Map<string, string>,
-  workflowSteps: string[],
-  payloadBlocks: Block[],
-  blockById: Map<string, Block>,
-  lang: "en" | "ru",
-  opts: { maxRetries: number; isReference: boolean },
-): Promise<{
-  residue: Residue[];
-  retries: number;
-  gateSkipped: number;
-  keptVerbatim: number;
-}> {
-  const stepGroups = computeStepGroups(orderedSteps, blockById);
-  let gloss = assembleBody(
-    h1,
-    tie,
-    workflowSteps,
-    orderedEntries,
-    defByTerm,
-    payloadBlocks,
-    opts.isReference,
-  );
-
-  const residue: Residue[] = [];
-  let retries = 0;
-  let gateSkipped = 0;
-  let keptVerbatim = 0;
-  const renderedC = () =>
-    orderedEntries.map((e) => ({
-      term: e.term,
-      def: defByTerm.get(e.term) ?? e.def,
-      sourceText: sourceTextFor(e, blockById),
-    }));
-  const renderedG = () =>
-    stepGroups.map((g) => ({
-      id: g.id,
-      steps: g.idxs.map((i) => workflowSteps[i]),
-      sourceText: g.sourceText,
-    }));
-  const [graded, gradedG] = await Promise.all([
-    fidelityGate(combo.thesis, gloss, renderedC()),
-    workflowGate(renderedG(), lang),
-  ]);
-  const thesisRecoverable = graded.thesisRecoverable;
-  // inconclusive verdicts (judge returned no JSON) are set aside from the start:
-  // recovery cannot fix them, so they bypass the retry loop and surface directly.
-  const inconclusiveC = new Map<string, ConceptVerdict>();
-  const inconclusiveG = new Map<string, StepVerdict>();
-  for (const c of graded.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
-  for (const g of gradedG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
-  let failC = graded.concepts.filter((c) => c.grade === "residue");
-  let failG = gradedG.filter((g) => g.grade === "residue");
-  while ((failC.length > 0 || failG.length > 0) && retries < opts.maxRetries) {
-    retries++;
-    // re-render failing concepts/groups from source, regardless of dial; items are
-    // independent, so concurrent. Recovery bypasses revise(), so normalize here.
-    await Promise.all([
-      ...failC.map(async (c) => {
-        const entry = orderedEntries.find((e) => e.term === c.term);
-        if (!entry) return;
-        try {
-          const r = await askJson<{ def: string }>(
-            EXTRACT,
-            renderEntryPrompt(entry, sourceTextFor(entry, blockById), lang),
-            1024,
-          );
-          if (r.def) defByTerm.set(entry.term, normalizeTypography(r.def.trim()));
-        } catch (e) {
-          rethrowIfBug(e, "recover-def");
-          // a transient re-render flake keeps the prior def; the gate re-grades it next
-        }
-      }),
-      ...failG.map(async (v) => {
-        const g = stepGroups.find((x) => x.id === v.id);
-        if (!g) return;
-        try {
-          if (WF_RECOVERY === "retighten") {
-            // re-tighten the whole group from source (drafts individuate the steps).
-            // Same compression pressure that inverted the step — kept for the experiment.
-            const tightened = await synthWorkflow(
-              g.idxs.map((i) => orderedSteps[i]),
-              blockById,
-              lang,
-            );
-            g.idxs.forEach((i, k) => {
-              if (tightened[k]) workflowSteps[i] = normalizeTypography(tightened[k]);
-            });
-          } else {
-            // judge-guided repair: feed the gate's finding back so the rewrite fixes
-            // the named inversion instead of re-running the compression that caused it
-            const repaired = await repairWorkflowGroup(
-              g.idxs.map((i) => workflowSteps[i]),
-              v.missing,
-              g.sourceText,
-              lang,
-            );
-            g.idxs.forEach((i, k) => {
-              if (repaired[k]) workflowSteps[i] = normalizeTypography(repaired[k]);
-            });
-          }
-        } catch (e) {
-          rethrowIfBug(e, "recover-steps");
-          // a transient re-render flake keeps the prior steps; the gate re-grades them next
-        }
-      }),
-    ]);
-    gloss = assembleBody(
-      h1,
-      tie,
-      workflowSteps,
-      orderedEntries,
-      defByTerm,
-      payloadBlocks,
-      opts.isReference,
-    );
-    // re-grade only the patched items, not the full set (budget)
-    const patchC = new Set(failC.map((c) => c.term));
-    const patchG = new Set(failG.map((g) => g.id));
-    const [reg, regG] = await Promise.all([
-      patchC.size
-        ? fidelityGate(
-            combo.thesis,
-            gloss,
-            renderedC().filter((r) => patchC.has(r.term)),
-          )
-        : Promise.resolve({
-            thesisRecoverable,
-            concepts: [] as ConceptVerdict[],
-          }),
-      patchG.size
-        ? workflowGate(
-            renderedG().filter((r) => patchG.has(r.id)),
-            lang,
-          )
-        : Promise.resolve([] as StepVerdict[]),
-    ]);
-    // a re-grade can itself come back inconclusive — capture those too, then drop
-    // them from the recoverable sets so the loop never retries an unparseable verdict.
-    for (const c of reg.concepts) if (c.grade === "inconclusive") inconclusiveC.set(c.term, c);
-    for (const g of regG) if (g.grade === "inconclusive") inconclusiveG.set(g.id, g);
-    failC = reg.concepts.filter((c) => c.grade === "residue");
-    failG = regG.filter((g) => g.grade === "residue");
-  }
-  // verbatim fallback: a workflow group the repair ladder could not clear ships
-  // the source's own imperative verbatim. The clause is a literal substring of
-  // source, so it covers the action and cannot invert — the inversion clears at
-  // the cost of a slightly verbose step, which beats shipping it inverted. Groups
-  // whose source yields no extractable clause stay in failG and surface as residue.
-  if (WF_RECOVERY === "repair-verbatim" && failG.length) {
-    const stillFail: StepVerdict[] = [];
-    for (const v of failG) {
-      const g = stepGroups.find((x) => x.id === v.id);
-      const verb = g ? verbatimDirectives(g.sourceText) : [];
-      if (g && verb.length) {
-        g.idxs.forEach((idx, k) => {
-          // pair clauses to slots in order; the last slot absorbs any overflow,
-          // surplus slots blank out (filtered when the Workflow list renders).
-          workflowSteps[idx] =
-            k < verb.length
-              ? k === g.idxs.length - 1 && verb.length > g.idxs.length
-                ? verb.slice(k).join("; ")
-                : verb[k]
-              : "";
-        });
-        keptVerbatim++;
-      } else {
-        stillFail.push(v);
-      }
-    }
-    failG = stillFail;
-    if (keptVerbatim) {
-      gloss = assembleBody(
-        h1,
-        tie,
-        workflowSteps,
-        orderedEntries,
-        defByTerm,
-        payloadBlocks,
-        opts.isReference,
-      );
-    }
-  }
-  // surviving residue (incl. an unrecoverable thesis) is surfaced, never silent
-  for (const c of failC) {
-    const entry = orderedEntries.find((e) => e.term === c.term);
-    residue.push({
-      label: c.term,
-      reason: `${c.direction || "residue"}: ${c.missing || "failed round-trip entailment"}`,
-      source: entry ? sourceTextFor(entry, blockById) : "",
-      kind: "def",
-      reasonClass: "failed",
-    });
-  }
-  for (const v of failG) {
-    const g = stepGroups.find((x) => x.id === v.id);
-    residue.push({
-      label: v.id,
-      reason: `workflow: ${v.missing || "directive coverage failed"}`,
-      source: g ? g.sourceText : "",
-      kind: "steps",
-      reasonClass: "failed",
-      stepIdxs: g ? g.idxs : [],
-    });
-  }
-  if (!thesisRecoverable) {
-    residue.unshift({
-      label: "(thesis)",
-      reason: "thesis not recoverable from output",
-      source: combo.thesis,
-      kind: "thesis",
-      reasonClass: "failed",
-    });
-  }
-  // gate-inconclusive items: the judge could not render a verdict (no JSON after
-  // retry). Ship them surfaced-but-unverified, distinct from genuine residue, so a
-  // judge flake never discards the run — the floor under the passthrough failsafe.
-  for (const c of inconclusiveC.values()) {
-    const entry = orderedEntries.find((e) => e.term === c.term);
-    residue.push({
-      label: c.term,
-      reason: `gate-inconclusive: ${c.missing || "judge returned no verdict"}`,
-      source: entry ? sourceTextFor(entry, blockById) : "",
-      kind: "def",
-      reasonClass: "gate-inconclusive",
-    });
-  }
-  for (const v of inconclusiveG.values()) {
-    const g = stepGroups.find((x) => x.id === v.id);
-    residue.push({
-      label: v.id,
-      reason: `gate-inconclusive: ${v.missing || "judge returned no verdict"}`,
-      source: g ? g.sourceText : "",
-      kind: "steps",
-      reasonClass: "gate-inconclusive",
-      stepIdxs: g ? g.idxs : [],
-    });
-  }
-  gateSkipped = inconclusiveC.size + inconclusiveG.size;
-  return { residue, retries, gateSkipped, keptVerbatim };
-}
-
-// The DEMOTED fidelity gate for the canonical default path (blueprint §4.2). The settle-chain
-// gate (runFidelityGate, above) authored defs/steps and repaired them in a recovery loop against
-// an `assembleBody` scratch render; once extract emits the FINAL statements there is nothing to
-// repair, so only the gate's VERDICT half survives here. It runs AFTER projectMarkdown, takes the
-// projection body itself as judge input (never `assembleBody`), and surfaces residue only — no
-// recovery, no in-place mutation, no carriers. Each concept/procedure unit's `sourceText` is the
-// verbatim bytes its span locates (the anti-hallucination anchor `locateGraph` already resolved),
-// so the concept/workflow judges compare projection ↔ source with no legacy shape. Rides the
-// `--no-gate` switch exactly as runFidelityGate does.
+// The DEMOTED fidelity gate for the canonical pipeline (blueprint §4.2). The retired settle-chain
+// gate authored defs/steps and repaired them in a recovery loop against a scratch render; once
+// extract emits the FINAL statements there is nothing to repair, so only the gate's VERDICT half
+// survives here. It runs AFTER projectMarkdown, takes the projection body itself as judge input, and
+// surfaces residue only — no recovery, no in-place mutation, no carriers. Each concept/procedure
+// unit's `sourceText` is the verbatim bytes its span locates (the anti-hallucination anchor
+// `locateGraph` already resolved), so the concept/workflow judges compare projection ↔ source with
+// no legacy shape. Rides the `--no-gate` switch.
 async function runFidelityBackstop(
   thesis: string,
   result: Projection,
@@ -666,25 +331,6 @@ async function runFidelityBackstop(
     graded.concepts.filter((c) => c.grade === "inconclusive").length +
     gradedG.filter((v) => v.grade === "inconclusive").length;
   return { residue, gateSkipped };
-}
-
-// prose QA: judge the un-gated readable head against its own contract and repair
-// best-effort. One judge + one fix pass — defects never block, so no re-judge.
-// Sits BELOW the fidelity line; the caller rides it on the --no-gate switch and
-// skips it in --glossary (no prose).
-async function runProseQA(
-  thesis: string,
-  prose: string,
-  lang: "en" | "ru",
-): Promise<{ prose: string; proseFixes: number }> {
-  const pj = await proseJudge(thesis, prose);
-  if (!pj.pass && pj.issues.length) {
-    return {
-      prose: await proseFix(prose, pj.issues, lang),
-      proseFixes: pj.issues.length,
-    };
-  }
-  return { prose, proseFixes: 0 };
 }
 
 // build the success footer line — the one-line summary stderr carries beside the
@@ -867,30 +513,18 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
   return residue;
 }
 
-// The single origin of a build's deterministic edge+payload residue: dropped [[wikilink]] edges
-// (wikilinkResidue) and dropped payload spans (payloadResidue), surfaced for rollback (D16). Both
-// distill (homogeneous build) and assembleRoutedNote (the routed whole-note run) call THIS, so the
-// pair is never duplicated and the routed-skip rule lives in one tested place. A routed head
-// (routed=true) contributes nothing: assembleRoutedNote owns the whole-note run, so a head running
-// these gates over its own narrower subset would false-flag a link alive in a preserve section and
-// double-count a real drop. Returning [] for the routed head IS the residue-scope fix, and it is
-// the invariant assembleRoutedNote relies on when it concats head.residue.
-//
-// `skipWikilinks` drops the wikilink lane for the canonical projection path: canonical renders
-// relations as plain headwords and locateGraph/resolveEndpoint (locate-graph.ts) intentionally DROPS
-// every cross-note `[[wikilink]]` endpoint (only local units become edges), so the wikilink lane
-// would mass-flag every source wikilink as dropped. The payload lane stays — it is shape-agnostic.
-// (Whether the canonical graph should carry cross-note edges via external endpoints is Backlog.)
-export function edgePayloadResidue(
-  text: string,
-  out: string,
-  routed = false,
-  skipWikilinks = false,
-): Residue[] {
-  if (routed) return [];
-  return skipWikilinks
-    ? payloadResidue(text, out)
-    : [...wikilinkResidue(text, out), ...payloadResidue(text, out)];
+// The deterministic payload-residue backstop for a canonical projection: dropped payload spans
+// (payloadResidue), surfaced for rollback (D16). Both distill (homogeneous build) and
+// assembleRoutedNote (the routed whole-note run) call THIS over (source, projected out) so a span
+// surviving anywhere in output reads as covered. The wikilink lane is INTENTIONALLY omitted: every
+// path now projects the canonical graph, whose `## Relations` renders local edges as plain
+// headwords and whose locate stage drops every cross-note `[[wikilink]]` endpoint (only local units
+// become edges), so a wikilink lane would mass-flag every source wikilink as dropped. Cross-note
+// edges stay dropped by locked scope; wikilinkResidue survives as a standalone tested primitive
+// (its own suite), just no longer wired here. (Carrying cross-note edges via external endpoints is
+// Backlog.)
+export function edgePayloadResidue(text: string, out: string): Residue[] {
+  return payloadResidue(text, out);
 }
 
 // ---- prose-list-item gate (the prose-judge tier, D46) ----
@@ -980,10 +614,55 @@ async function runProseGate(
   return proseResidue(units, verdicts, flaked, outputText);
 }
 
-// orchestrator: thread the stages above, holding the shared state (segmented
-// blocks, ordering, and the two mutable carriers defByTerm + workflowSteps). The
-// output is identical to the pre-decomposition single function; the stages only
-// name the seams.
+// The canonical compress core (blueprint §0): extract native typed units → retain-grade the
+// payload lane → locate spans (hard-gate). Returns the span-anchored graph (`result`), the
+// pre-graph (`pre`, for the backstop's thesis + section counts), and the retain-graded
+// `payloadBlocks`, or null when nothing distills (no unit of any type → passthrough). `bodyForSpans`
+// is the text every unit/edge span indexes into: the whole source for both the homogeneous run and
+// the routed head (so a routed head's spans index the reassembled source, blueprint §6.3). Reused by
+// distill() (default/--glossary/--reference) and distillRouted() (the re-authored head).
+async function compressToGraph(
+  blocks: Block[],
+  bodyForSpans: string,
+  path: string,
+  frontDescription: string,
+  lang: "en" | "ru",
+  selfSlug: string,
+  linkInventory: LinkInventory,
+  opts: { progress?: (line: string) => void },
+): Promise<{
+  pre: Awaited<ReturnType<typeof extractGraph>>;
+  result: Projection;
+  payloadBlocks: Block[];
+} | null> {
+  opts.progress?.("extract…");
+  const pre = await extractGraph(blocks, frontDescription, lang, linkInventory, selfSlug);
+  if (
+    pre.concepts.length === 0 &&
+    pre.judgements.length === 0 &&
+    pre.inferences.length === 0 &&
+    pre.procedures.length === 0
+  ) {
+    return null;
+  }
+  // payload retain lane (blueprint §1.1) — the ONE deterministic selection surviving the settle-chain
+  // collapse. statement = block.text (verbatim), so its locate can never fail. Units render in
+  // extract-emission order (the ordering role dies).
+  opts.progress?.("grade…");
+  const grades = await gradeBlocks(
+    pre.thesis,
+    pre.concepts.map((c) => ({ term: c.id ?? "", def: c.statement })),
+    blocks,
+  );
+  const payloadBlocks = blocks.filter((b) => grades.get(b.id) === "retain");
+  // locate: pre-graph → span-anchored graph. A bad quote HARD-ABORTS here (spec §2), before any
+  // projection — the earliest possible surfacing.
+  const result = locateGraph(pre, path, bodyForSpans, payloadBlocks);
+  return { pre, result, payloadBlocks };
+}
+
+// orchestrator: thread the canonical stages (extract → locate → project → backstop). Routes a
+// payload-dense note to distillRouted first; otherwise runs the homogeneous canonical pipeline.
 async function distill(
   text: string,
   lang: "en" | "ru",
@@ -1003,21 +682,18 @@ async function distill(
     progress?: (line: string) => void;
   },
   selfSlug = "",
-  routed = false,
-  owned?: OwnedBlocks,
 ): Promise<DistillResult> {
-  // Per-section render-router (D12/D16, Backlog 10). When a note carries any payload-dense
-  // section, route: re-author the idea sections into ONE compact head (recurse — the head is
-  // itself a homogeneous distill, which gives the expand guard scoped to its own source), hold
-  // the payload sections verbatim (compactSection v1), reassemble in source order into one
-  // note. `routed` guards the one-level recursion: the head re-enters with routing skipped.
-  if (!routed && !opts.glossaryOnly) {
+  // Per-section render-router (D12/D16, Backlog 10). When a note carries any payload-dense section,
+  // route: re-author the idea sections into ONE compact head graph, hold the payload sections
+  // verbatim as `## Payload` units, and project the merged graph as one canonical note
+  // (distillRouted). --glossary bypasses routing (it wants the flat structured extract).
+  if (!opts.glossaryOnly) {
     const { title, sections } = partition(text, opts.tau);
     if (sections.some((u) => u.route === "preserve")) {
       return distillRouted(text, title, sections, lang, frontDescription, opts, selfSlug);
     }
   }
-  const blocks = owned?.blocks ?? segment(text);
+  const blocks = segment(text);
   const blockById = new Map(blocks.map((b) => [b.id, b]));
   const beforeWords = wordCount(text);
 
@@ -1028,203 +704,62 @@ async function distill(
   const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
   const effectiveSelfSlug = selfSlug || slugSegment(h1.replace(/^#+\s*/, ""));
 
-  // The default-compress path, --glossary AND --reference (every non-routed run) are now the
-  // canonical graph-native pipeline: extract native typed units → locate (span hard-gate) → project.
-  // --glossary is the same projection with the synthesized `## Abstract` head omitted (§6.1);
-  // --reference is the same projection with `## Relations` suppressed but `## Abstract` kept (§6.2,
-  // D30 — reference notes stay link-free); everything else renders identically. The one remaining
-  // legacy path is the routed head (a routed reference note still re-enters here with routed=true,
-  // so its recursive head keeps isReference on the legacy branch until routed migrates). The two
-  // branches diverge from extract through assemble, then rejoin at the shared tail below (expand
-  // guard, prose-list + edge/payload backstops, footer). The deterministic link inventory (every
-  // vault edge — [[wikilink]] or scheme-less [text](path) — UNION every external [text](url)) is
-  // fed to the extractor as a MUST-COVER checklist on both branches.
-  const canonicalPath = !routed;
+  // Every compress run — default, --glossary, --reference — is the canonical graph-native pipeline:
+  // extract native typed units → locate (span hard-gate) → project. --glossary omits the synthesized
+  // `## Abstract` head (§6.1); --reference keeps it but suppresses `## Relations` (§6.2, D30 —
+  // reference notes stay link-free); every other section renders identically. The deterministic link
+  // inventory (every vault edge — [[wikilink]] or scheme-less [text](path) — UNION every external
+  // [text](url)) feeds the extractor as a MUST-COVER checklist.
   const linkInventory: LinkInventory = {
     wikilinks: harvestVaultEdges(text),
     external: harvestExternalLinks(text),
   };
 
-  // Path-neutral carriers the shared tail reads. Each branch settles whatever it produces into
-  // these so the tail sees one shape. The legacy-only carriers (orderedEntries/orderedSteps/
-  // workflowSteps/defByTerm/tie/prose) feed the routed head's second (exposed) assembleBody
-  // render; routed forces !canonicalPath, so only the legacy branch ever populates them.
-  let out: string;
-  let residue: Residue[] = [];
-  let payloadBlocks: Block[] = [];
-  let entriesCount = 0;
-  let stepsCount = 0;
-  // prose-list gate exclusion set (source text already folded into a graded def/step). The legacy
-  // branch fills it from orderedEntries/step-groups; the canonical projection leaves it empty, so
-  // the gate judges every source list-item against the projection body (a broader backstop).
-  let claimed: string[] = [];
-  let retries = 0;
-  let gateSkipped = 0;
-  let keptVerbatim = 0;
-  let proseFixes = 0;
-  let orderedEntries: GlossEntry[] = [];
-  let orderedSteps: WorkStep[] = [];
-  let workflowSteps: string[] = [];
-  let defByTerm = new Map<string, string>();
-  let tie = "";
-  let prose = "";
-
-  if (canonicalPath) {
-    // 1. extract the typed idea-graph — native units carrying their FINAL statements + per-unit
-    // verbatim quotes (blueprint §0/§1). Nothing to distill (no unit of any type) → passthrough.
-    opts.progress?.("extract…");
-    const pre = await extractGraph(
-      blocks,
-      frontDescription,
-      lang,
-      linkInventory,
-      effectiveSelfSlug,
-    );
-    if (
-      pre.concepts.length === 0 &&
-      pre.judgements.length === 0 &&
-      pre.inferences.length === 0 &&
-      pre.procedures.length === 0
-    ) {
-      return {
-        out: text,
-        footer: `— nothing to distill · ${beforeWords} words`,
-        residue: [],
-        status: "passthrough",
-      };
-    }
-    // 2. payload retain lane (blueprint §1.1) — the ONE deterministic selection surviving the
-    // settle-chain collapse. statement = block.text (verbatim), so its locate can never fail. The
-    // ordering role dies: units render in extract-emission order.
-    opts.progress?.("grade…");
-    const grades = await gradeBlocks(
-      pre.thesis,
-      pre.concepts.map((c) => ({ term: c.id ?? "", def: c.statement })),
-      blocks,
-    );
-    payloadBlocks = blocks.filter((b) => grades.get(b.id) === "retain");
-    // 3. locate: pre-graph → span-anchored graph. A bad quote HARD-ABORTS here (spec §2), BEFORE
-    // any projection — the earliest possible surfacing, promoted ahead of the wasted settle work.
-    const result = locateGraph(pre, opts.path ?? "", text, payloadBlocks);
-    // 4. project the seven-section canonical markdown (carries its own frontmatter). --glossary
-    // means "the structured extract, no synthesized prose head" — the same projection with the
-    // `## Abstract` block dropped (§6.1). `Projection.abstract` is already optional, so omitting it
-    // suppresses the one unanchored block; every other section renders unchanged. --reference keeps
-    // the `## Abstract` orientation but suppresses `## Relations` via the projector's relations opt
-    // (§6.2, D30 — reference notes are pointer notes and stay link-free).
-    if (opts.isReference) {
-      out = projectMarkdown(result, { relations: false });
-    } else {
-      out = projectMarkdown(opts.glossaryOnly ? { ...result, abstract: undefined } : result);
-    }
-    // 5. demoted fidelity backstop over the projection (residue-only, no recovery; blueprint §4.2).
-    if (!opts.noGate) {
-      opts.progress?.("gate…");
-      const bs = await runFidelityBackstop(pre.thesis, result, out, text, lang);
-      residue = bs.residue;
-      gateSkipped = bs.gateSkipped;
-    }
-    entriesCount = pre.concepts.length;
-    stepsCount = pre.procedures.reduce((n, p) => n + p.steps.length, 0);
-    claimed = [];
-  } else {
-    // LEGACY path (routed head only): the settle chain authors and gates defs/steps in place, then
-    // assembleBody renders the two-channel Glossary/Workflow/Relations form. A routed reference
-    // head still arrives here with isReference=true (assembleBody then skips `## Relations`), so the
-    // isReference param below stays live until routed migrates. Deleted when step 11 migrates routed
-    // onto projectMarkdown.
-    // 1. extract the idea-graph; nothing to distill (no concepts, no directives) → passthrough.
-    opts.progress?.("extract…");
-    const combo = await extractCombo(
-      blocks,
-      frontDescription,
-      lang,
-      linkInventory,
-      effectiveSelfSlug,
-    );
-    if (combo.glossary.length === 0 && combo.workflow.length === 0) {
-      return {
-        out: text,
-        footer: `— nothing to distill · ${beforeWords} words`,
-        residue: [],
-        status: "passthrough",
-      };
-    }
-    // 2. grade blocks, then order entries/steps (pure)
-    opts.progress?.("grade…");
-    const grades = await gradeBlocks(combo.thesis, combo.glossary, blocks);
-    const ordered = orderContent(combo, blocks, grades);
-    payloadBlocks = ordered.payloadBlocks;
-    orderedEntries = ordered.orderedEntries;
-    orderedSteps = ordered.orderedSteps;
-
-    // 3. synthesize defs + tie + workflow + connective prose body
-    opts.progress?.("synthesize…");
-    const synth = await synthesize(combo, orderedEntries, orderedSteps, opts, blockById, lang);
-    defByTerm = synth.defByTerm;
-    tie = synth.tie;
-    workflowSteps = synth.workflowSteps;
-    prose = synth.prose;
-
-    // 4. revise the distilled prose (structure untouched), defs revised in place
-    if (!opts.noRevise) {
-      const revised = await reviseDistilled(
-        tie,
-        prose,
-        orderedEntries,
-        defByTerm,
-        workflowSteps,
-        lang,
-        (i, n) => opts.progress?.(`revise ${i}/${n}`),
-      );
-      tie = revised.tie;
-      prose = revised.prose;
-      workflowSteps = revised.workflowSteps;
-    }
-
-    // 5. fidelity gate + recovery (defs/steps repaired in place; --no-gate skips it)
-    if (!opts.noGate) {
-      opts.progress?.("gate…");
-      ({ residue, retries, gateSkipped, keptVerbatim } = await runFidelityGate(
-        combo,
-        h1,
-        tie,
-        orderedEntries,
-        orderedSteps,
-        defByTerm,
-        workflowSteps,
-        payloadBlocks,
-        blockById,
-        lang,
-        { maxRetries: opts.maxRetries, isReference: opts.isReference },
-      ));
-    }
-
-    // prose QA: judge the un-gated readable head and repair best-effort. Rides the
-    // --no-gate switch; no-op in --glossary (no prose).
-    if (prose && !opts.noGate) {
-      opts.progress?.("prose-qa…");
-      const qa = await runProseQA(combo.thesis, prose, lang);
-      prose = qa.prose;
-      proseFixes = qa.proseFixes;
-    }
-
-    out = assembleBody(
-      h1,
-      prose,
-      workflowSteps,
-      orderedEntries,
-      defByTerm,
-      payloadBlocks,
-      opts.isReference,
-    );
-    entriesCount = orderedEntries.length;
-    stepsCount = orderedSteps.length;
-    claimed = [
-      ...orderedEntries.map((e) => sourceTextFor(e, blockById)),
-      ...computeStepGroups(orderedSteps, blockById).map((g) => g.sourceText),
-    ];
+  // 1. extract the typed idea-graph (native FINAL statements + per-unit quotes) and 2. locate the
+  // spans against the source — a bad quote HARD-ABORTS in locate, BEFORE any projection (spec §2).
+  // Nothing to distill (no unit of any type) → passthrough.
+  const core = await compressToGraph(
+    blocks,
+    text,
+    opts.path ?? "",
+    frontDescription,
+    lang,
+    effectiveSelfSlug,
+    linkInventory,
+    opts,
+  );
+  if (!core) {
+    return {
+      out: text,
+      footer: `— nothing to distill · ${beforeWords} words`,
+      residue: [],
+      status: "passthrough",
+    };
   }
+  const { pre, result, payloadBlocks } = core;
+
+  // 3. project the seven-section canonical markdown (carries its own frontmatter). --glossary drops
+  // the `## Abstract` head (`Projection.abstract` is optional, so omitting it suppresses the one
+  // unanchored block); --reference keeps `## Abstract` but suppresses `## Relations` via the
+  // projector's relations opt.
+  let out: string;
+  if (opts.isReference) {
+    out = projectMarkdown(result, { relations: false });
+  } else {
+    out = projectMarkdown(opts.glossaryOnly ? { ...result, abstract: undefined } : result);
+  }
+
+  // 4. demoted fidelity backstop over the projection (residue-only, no recovery; blueprint §4.2).
+  let residue: Residue[] = [];
+  let gateSkipped = 0;
+  if (!opts.noGate) {
+    opts.progress?.("gate…");
+    const bs = await runFidelityBackstop(pre.thesis, result, out, text, lang);
+    residue = bs.residue;
+    gateSkipped = bs.gateSkipped;
+  }
+  const entriesCount = pre.concepts.length;
+  const stepsCount = pre.procedures.reduce((n, p) => n + p.steps.length, 0);
 
   const afterWords = wordCount(out);
   // passthrough guard: a distillation that expands the note has failed its one job.
@@ -1243,31 +778,24 @@ async function distill(
     };
   }
   // prose-list-item gate (D46): a glm matcher over a deterministic inventory of explicit
-  // list-items under a heading — the must-cover prose class the spine is blind to and the
-  // fidelity/workflow gates never see. An LLM call, so it rides --no-gate like runFidelityGate;
-  // skipped in --glossary (no prose body to cover into) and on facts/context dumps (wholesale
-  // drop is licensed there, so the inventory would only flood the footer). EXCLUSION-3 drops
-  // items already folded into a graded def or step (sourceTextFor / StepGroup.sourceText), so
-  // the matcher only judges list-items the existing gates do not. Appends to residue only.
+  // list-items under a heading — the must-cover prose class the spine is blind to. An LLM call, so
+  // it rides --no-gate; skipped in --glossary (no prose body) and on facts/context dumps (wholesale
+  // drop is licensed there, so the inventory would only flood the footer). The canonical projection
+  // carries no exclusion set, so the matcher judges every source list-item against the projection
+  // body (a broad backstop). Appends to residue only.
   if (!opts.noGate && !opts.glossaryOnly && !opts.factsDump) {
-    const units = harvestProseListItems(text, claimed);
+    const units = harvestProseListItems(text, []);
     opts.progress?.("prose-gate…");
     residue = residue.concat(await runProseGate(units, out, lang));
   }
 
-  // edge-coverage gate: surface any source [[wikilink]] or payload span the distilled output
-  // dropped as residue. Deterministic and free, so it runs even under --no-gate — a dropped
-  // cross-note edge is irreversible loss the fidelity gate never checks. `out` is the final body
-  // (prose + ## Relations + retained), so a link surviving in any of them counts as covered. The
-  // routed head passes routed=true and contributes nothing here (assembleRoutedNote owns the one
-  // whole-note run); the routed-skip and its rationale live in edgePayloadResidue. The canonical
-  // path passes skipWikilinks=true — its projection intentionally drops cross-note edges, so the
-  // wikilink lane would false-flag every source wikilink (see edgePayloadResidue; Backlog).
-  residue = residue.concat(edgePayloadResidue(text, out, routed, canonicalPath));
-  // deterministic, zero-LLM, never blocks — findings go to the footer only, never
-  // into residue. Skipped on the routed head (its subset lint would false-flag names
-  // living only in preserve sections; assembleRoutedNote owns the whole-note run).
-  const nameLint = routed ? undefined : nameLintAgainstSource(out, text);
+  // deterministic payload-coverage backstop: surface any source payload span the projection dropped
+  // (edgePayloadResidue; the wikilink lane is off — the canonical projection drops cross-note edges
+  // by design, so a wikilink lane would false-flag every source wikilink). Free, so it runs even
+  // under --no-gate — dropped payload is irreversible loss the fidelity backstop never checks.
+  residue = residue.concat(edgePayloadResidue(text, out));
+  // deterministic, zero-LLM, never blocks — findings go to the footer only, never into residue.
+  const nameLint = nameLintAgainstSource(out, text);
   const footer = buildFooter({
     beforeWords,
     afterWords,
@@ -1276,56 +804,25 @@ async function distill(
     verbatim: payloadBlocks.length,
     residue: residue.length,
     gateSkipped,
-    keptVerbatim,
-    retries,
-    proseFixes,
+    keptVerbatim: 0,
+    retries: 0,
+    proseFixes: 0,
     glossaryOnly: opts.glossaryOnly,
     // the prose gate is in scope (!noGate && !glossaryOnly) but the facts-dump genre gate
     // skipped it above — flag the disabled loss detector instead of dropping it silently.
     proseGateOffFactsDump: !opts.noGate && !opts.glossaryOnly && opts.factsDump,
     nameLint,
   });
-  // Routed head only: derive the split view for assembleRoutedNote WITHOUT touching the
-  // gated/shared `out` above — everything graded/guarded against it (the expand guard, the
-  // prose-list-item gate, edgePayloadResidue, buildFooter) stays byte-identical to the
-  // homogeneous build. This second, disposable render carries prose + Glossary + Relations
-  // only (workflowSteps: [] skips assembleBody's own "## Workflow" emission); the steps
-  // themselves are exposed separately, bucketed by owning section, for the caller to splice.
-  let workflowByOwner: string[][] | undefined;
-  let exposedOut = out;
-  if (routed && owned) {
-    workflowByOwner = groupStepsByOwner(orderedSteps, workflowSteps, owned);
-    exposedOut = assembleBody(
-      h1,
-      prose,
-      [],
-      orderedEntries,
-      defByTerm,
-      payloadBlocks,
-      opts.isReference,
-    );
-  }
-  return {
-    out: exposedOut,
-    footer,
-    residue,
-    status: "compressed",
-    workflowByOwner,
-    // Signal the emit path (main()) that `out` is the seven-section projection carrying its own
-    // frontmatter, so it does not prepend the source note's front (one YAML block, not two). A
-    // routed head sets exposedOut to the legacy assembleBody render, so canonical is false there.
-    canonical: canonicalPath,
-  };
+  return { out, footer, residue, status: "compressed" };
 }
 
-// The heterogeneous (per-section-routed) build (D12/D16, Backlog 10). Re-author the idea
-// sections as one head — a homogeneous distill() of their concatenation, so the head carries
-// its own thesis/glossary/workflow/relations and its own scoped expand guard — then hold the
-// payload sections verbatim (compactSection v1) and reassemble in source order into one note.
-// The deterministic edge/payload residue gates re-run over (whole source, reassembled out) so
-// any dropped link or payload still surfaces (D16: surface-for-rollback). The whole-note
-// expand guard is intentionally NOT applied here: the preserve sections are held verbatim and
-// cannot shrink, so a whole-note size compare would no-op the route on its target class.
+// The heterogeneous (per-section-routed) build (D12/D16, Backlog 10; blueprint §6.3). Re-author the
+// idea sections as ONE head graph — a canonical extract→locate of their concatenation, whose spans
+// index the WHOLE source — then hold the payload sections verbatim as `## Payload` units and project
+// the merged graph as one canonical note. The whole-note expand guard is intentionally NOT applied:
+// the preserve sections are held verbatim and cannot shrink, so a whole-note size compare would
+// no-op the route on its target class. The head's own LLM fidelity gate is dropped (the deterministic
+// payload-coverage backstop, re-run at whole-note scope in assembleRoutedNote, is its residue floor).
 async function distillRouted(
   text: string,
   title: string,
@@ -1340,99 +837,91 @@ async function distillRouted(
     .map((u) => u.text)
     .join("\n\n")
     .trim();
-  const owned = tagOwnedBlocks(reauthorSections);
-  const head = reauthorText
-    ? await distill(reauthorText, lang, frontDescription, opts, selfSlug, true, owned)
-    : {
-        out: "",
-        footer: "",
-        residue: [] as Residue[],
-        status: "passthrough" as const,
-      };
-  // The routed note is itself a compression (prose re-authored, payload compacted); its own
-  // status is "compressed". Unconsumed today (the routed=true guard blocks nesting), but the
-  // contract is honest and a constant, so it cannot drift.
+  const effectiveSelfSlug = selfSlug || slugSegment(title.replace(/^#+\s*/, ""));
+  const linkInventory: LinkInventory = {
+    wikilinks: harvestVaultEdges(text),
+    external: harvestExternalLinks(text),
+  };
+  // The re-authored head becomes a span-anchored graph via extract→locate of reauthorText, with
+  // spans located against the WHOLE source (blueprint §6.3). null = the head distilled to nothing
+  // (its prose is then held verbatim as payload by assembleRoutedNote).
+  const core = reauthorText
+    ? await compressToGraph(
+        segment(reauthorText),
+        text,
+        opts.path ?? "",
+        frontDescription,
+        lang,
+        effectiveSelfSlug,
+        linkInventory,
+        opts,
+      )
+    : null;
+  // The routed note is itself a compression (prose re-authored, payload held verbatim); its own
+  // status is "compressed".
   return {
     ...assembleRoutedNote({
       source: text,
+      path: opts.path ?? "",
       title,
-      reauthorText,
-      head,
+      head: core?.result ?? null,
+      headVerbatim: reauthorText !== "" && core === null,
       sections,
     }),
     status: "compressed",
   };
 }
 
-// Pure seam of the per-section routed build (the no-LLM tail of distillRouted): reassemble the
-// routed note, splice the head's per-owner workflow steps back at their originating section's
-// position, run the deterministic edge+payload gates ONCE at whole-note scope, and build the
-// footer. No model and no I/O, so distillRouted's wiring is unit-testable in pure.test.ts. This is
-// the whole-note edge/payload run the routed head defers to (the head passed routed=true to
-// edgePayloadResidue and so contributed none), called here over (source, reassembled out): a link
-// surviving in a preserve section reads as covered (no false drop) and a real drop counts once (no
-// double-count). The verbatim-head tag surfaces a head the inner expand or nothing-to-distill guard
-// returned unchanged, read from the head's own `status` (the producer is the authority); reauthorText
-// !== "" excludes the empty-head / all-preserve route (a passthrough head with no prose) from tagging.
+// Pure seam of the per-section routed build (the no-LLM tail of distillRouted; blueprint §6.3):
+// merge the re-authored head graph with the preserve sections (each held verbatim as a `## Payload`
+// unit whose span locates the section text in the WHOLE source), project the merged graph as one
+// canonical note, re-run the deterministic payload-coverage backstop ONCE at whole-note scope, and
+// build the footer. No model and no I/O, so distillRouted's wiring is unit-testable in pure.test.ts.
 //
-// Prose + Glossary + Relations stay ONE synthesized, head-first block exactly as before — only
-// the "## Workflow" steps split out of that block (head.out no longer carries one; see distill's
-// routed-return branch) and get spliced in at their owning section's position. Walking `sections`
-// once accumulates steps across consecutive re-author owners into `pending`, flushing (rendering,
-// numbering continuing from the running total) whenever a preserve section or the note's end is
-// hit — this is what naturally coalesces adjacent re-author owners into a single fragment. Each
-// rendered fragment is still plain "## Workflow" text pushed into reassembleNote's existing
-// `preserves` array, so its own demote() sweep (text.ts) turns it into "### Workflow" exactly as
-// it would a genuine preserve section's own colliding heading — no new heading logic needed.
+// Payload units are appended in source order (walking `sections`); when the head is null (verbatim
+// — extract found nothing to distill), the re-author sections are ALSO held verbatim as payload, so
+// no prose is lost. The head's concept/judgement/inference/procedure units and edges ride straight
+// into the merged graph; projectMarkdown renders them under their canonical sections, so the note is
+// a standard seven-section projection (a deliberate change from the legacy head-first interleave).
 export function assembleRoutedNote(a: {
   source: string;
+  path: string;
   title: string;
-  reauthorText: string;
-  head: {
-    out: string;
-    residue: Residue[];
-    status: DistillStatus;
-    workflowByOwner?: string[][];
-  };
+  head: Projection | null;
+  headVerbatim: boolean;
   sections: { route: Route; text: string }[];
 }): { out: string; footer: string; residue: Residue[] } {
   const beforeWords = wordCount(a.source);
-  const chunks: string[] = [];
-  let reauthorIdx = 0;
-  let running = 0;
-  let pending: string[] = [];
-  const flush = () => {
-    if (!pending.length) return;
-    const { text, count } = renderWorkflowBlock(pending, running + 1);
-    if (text) {
-      chunks.push(text);
-      running += count;
-    }
-    pending = [];
-  };
+  const units: Unit[] = a.head ? [...a.head.units] : [];
+  const edges = a.head?.edges ?? [];
+  // Every preserve section — plus, when the head is verbatim, every re-author section — is held
+  // byte-verbatim as a `## Payload` unit, spanning the whole source (compactSection v1 = identity).
+  let payloadN = units.filter((u) => u.type === "payload").length;
   for (const u of a.sections) {
-    if (u.route === "preserve") {
-      flush();
-      chunks.push(compactSection(u.text));
-    } else {
-      pending = pending.concat(a.head.workflowByOwner?.[reauthorIdx] ?? []);
-      reauthorIdx++;
-    }
+    const holdVerbatim = u.route === "preserve" || (!a.head && u.route === "re-author");
+    if (!holdVerbatim) continue;
+    const slice = compactSection(u.text);
+    payloadN++;
+    units.push({
+      id: payloadKey(slice, payloadN),
+      type: "payload",
+      statement: slice,
+      span: locate(a.source, slice),
+    });
   }
-  flush();
-  const out = reassembleNote(a.title, a.head.out, chunks);
+  const source = a.head?.source ?? computeSource(a.path, a.source);
+  const title = a.title.replace(/^#+\s*/, "").trim() || a.head?.title;
+  const out = projectMarkdown({ source, units, edges, title, abstract: a.head?.abstract });
   const afterWords = wordCount(out);
-  const residue = a.head.residue.concat(edgePayloadResidue(a.source, out));
-  const headVerbatim = a.reauthorText !== "" && a.head.status === "passthrough";
+  const residue = edgePayloadResidue(a.source, out);
   const reCount = a.sections.filter((u) => u.route === "re-author").length;
   const preserveCount = a.sections.length - reCount;
-  // deterministic, zero-LLM, never blocks — the routed head's own run skips this lint
-  // (see pipeline.ts distill()), so assembleRoutedNote owns the one whole-note check.
+  // deterministic, zero-LLM, never blocks — assembleRoutedNote owns the one whole-note check.
   const nameLint = nameLintAgainstSource(out, a.source);
   const footer =
     `— per-section route: ${reCount} re-author / ${preserveCount} preserve` +
     ` · ${beforeWords}→${afterWords} words` +
-    (headVerbatim ? " · head kept verbatim (prose not compressed)" : "") +
+    (a.headVerbatim ? " · head kept verbatim (prose not compressed)" : "") +
     (residue.length ? ` · ${residue.length} residue` : "") +
     formatNameLint(nameLint);
   return { out, footer, residue };
@@ -2016,7 +1505,7 @@ export async function main() {
   const selfSlug =
     !fromStdin && inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
   try {
-    const { out, footer, residue, status, canonical } = await distill(
+    const { out, footer, residue, status } = await distill(
       body,
       resolved,
       frontDescription,
@@ -2064,14 +1553,13 @@ export async function main() {
     // "new" when it does not yet exist — the creation case).
     const destPath = dest as string; // narrowed above: stdin without --out already exited
     const tmpPath = tmpPathFor(destPath);
-    // ONE frontmatter block. The canonical projection (`canonical` from distill) already carries its
-    // own `type: distillation` / `source:` / `schema:` YAML, so prepending the source note's `front`
-    // would emit two blocks (the collision that was latent while canonical was opt-in). On the
-    // canonical path take `out` verbatim; buildIntermediary then stamps `epistemic_status: in-review`
-    // into that single block. Source-note-only fields (aliases/tags/description) drop with the
-    // source front — a distillation is a derived artifact stamped with its own provenance (Backlog).
-    // Every legacy path (routed head, --glossary, isReference) still prepends the source front.
-    const noteForIntermediary = canonical ? out : front ? `${front}\n${out}` : out;
+    // ONE frontmatter block. Every compress path now projects the canonical graph, whose `out`
+    // already carries its own `type: distillation` / `source:` / `schema:` YAML, so main() takes it
+    // verbatim — prepending the source note's `front` would emit two YAML blocks. buildIntermediary
+    // then stamps `epistemic_status: in-review` into that single block. Source-note-only fields
+    // (aliases/tags/description) drop with the source front — a distillation is a derived artifact
+    // stamped with its own provenance (Backlog).
+    const noteForIntermediary = out;
     const src = existsSync(destPath)
       ? `sha256:${createHash("sha256").update(readFileSync(destPath)).digest("hex").slice(0, 12)}`
       : "new";

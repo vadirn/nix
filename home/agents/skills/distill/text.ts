@@ -1008,6 +1008,44 @@ export function slugSegment(s: string): string {
 export const relText = (r: Relation): string =>
   `${r.rel} :: ${r.to}${r.predicate ? ` (${r.predicate})` : ""}`;
 
+// One `## Relations` endpoint: a `[[file-slug]]` wikilink (inner alias stripped, target re-slugged)
+// or a bare local term-slug. Reparented here from the retired assemble.ts as the emit-twin of the
+// surviving parseRelationsBlock/parseConceptGraph readers (the legacy `rel::` grammar; D6 keeps the
+// parse pair alive for the cards-harvest path).
+function endpointOf(to: string): string {
+  const wl = /^\[\[(.+)\]\]$/.exec(to.trim());
+  if (!wl) return slugSegment(to);
+  // Strip the alias BEFORE slugging so `[[note-aliased|Display Text]]` endpoints on `note-aliased`.
+  const target = wl[1].split("|")[0].trim();
+  return `[[${slugSegment(target)}]]`;
+}
+
+// Build the `## Relations` block body (D29 structural channel): one markdown list item per edge, in
+// entry order then each entry's relation order. A single-atom card (one entry) OMITS the from-label
+// (`- <rel>:: <endpoint>`); a multi-node note prefixes each edge with the source entry's slug.
+// Self-loops (from==to) and empty endpoints drop. Labels are pre-slugified so the block is
+// byte-stable for the REBUILD parser. Returns "" when no entry carries an edge. The inverse of
+// parseRelationsBlock — kept as the tested emit-twin of the surviving legacy parse pair.
+export function emitRelationsBlock(orderedEntries: GlossEntry[]): string {
+  const singleAtom = orderedEntries.length === 1;
+  const lines: string[] = [];
+  for (const entry of orderedEntries) {
+    const fromSlug = slugSegment(entry.term);
+    for (const r of entry.relations) {
+      const endpoint = endpointOf(r.to);
+      if (!endpoint) continue; // an endpoint that slugs to empty is unrenderable
+      if (endpoint === fromSlug) continue; // self-loop (from==to) is vacuous extraction junk
+      const pred = r.predicate ? ` (${r.predicate})` : "";
+      lines.push(
+        singleAtom
+          ? `- ${r.rel}:: ${endpoint}${pred}`
+          : `- ${fromSlug} ${r.rel}:: ${endpoint}${pred}`,
+      );
+    }
+  }
+  return lines.length ? `## Relations\n\n${lines.join("\n")}` : "";
+}
+
 // Coerce one extracted relation into a typed edge. LOSSY (D29): keep every
 // well-formed edge — drop ONLY when `rel` or `to` is missing. An unknown rel or an
 // unresolved endpoint is a REBUILD lint finding, never a BUILD drop. Relations skip

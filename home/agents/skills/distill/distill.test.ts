@@ -9,7 +9,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { REL_REGISTRY, emitRelationsBlock, ensureEpistemicStatus, slugSegment } from "./distill.ts";
-import { assembleBody } from "./assemble.ts";
 import { parseConceptGraph, parseRelationsBlock, type GlossEntry, type Relation } from "./text.ts";
 
 // 4 levels up from this dir (skills → agents → home → /Users/vadim/nix), then into
@@ -310,30 +309,27 @@ test("parseRelationsBlock: unknown rel token is parsed and kept (open vocabulary
   ]);
 });
 
-// ---- parseConceptGraph: Glossary table + Relations attachment over an assembleBody output ----
+// ---- parseConceptGraph: Glossary table + Relations attachment over a legacy `## Glossary` note ----
+// parseConceptGraph survives the canonical migration (D6 — still read by the cards-harvest path),
+// so it is exercised against the literal legacy shape it parses (the retired assembleBody no longer
+// emits it). An escaped-pipe def (`\|`) round-trips to a literal `|`.
 test("parseConceptGraph: recovers terms/defs (incl. an escaped-pipe def) and edge attachment", () => {
-  const graphEntries: GlossEntry[] = [
-    {
-      term: "alpha",
-      def: "unused, defByTerm wins",
-      source: ["B1"],
-      relations: [{ rel: "subsumes", to: "beta", predicate: "alpha grounds beta" }],
-    },
-    { term: "beta", def: "a rate | ratio thing", source: ["B2"], relations: [] },
-  ];
-  const defByTerm = new Map([
-    ["alpha", "the first term"],
-    ["beta", "a rate | ratio thing"],
-  ]);
-  const body = assembleBody(
+  const body = [
     "# Title",
+    "",
     "Some connective prose.",
-    [],
-    graphEntries,
-    defByTerm,
-    [],
-    false,
-  );
+    "",
+    "## Glossary",
+    "",
+    "| Term | Definition |",
+    "| ---- | ---------- |",
+    "| alpha | the first term |",
+    "| beta | a rate \\| ratio thing |",
+    "",
+    "## Relations",
+    "",
+    "- alpha subsumes:: beta (alpha grounds beta)",
+  ].join("\n");
   expect(parseConceptGraph(body)).toEqual([
     {
       term: "alpha",

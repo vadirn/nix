@@ -27,7 +27,7 @@ import type { Projection } from "./project.ts";
 // heading / list punctuation stripped; capped), else the ordinal `Payload N`. Used as the `### key`
 // heading (project.ts renderPayload). Reparented from adapt.ts so locate-graph.ts stays a leaf that
 // outlives adapt.ts.
-function payloadKey(text: string, n: number): string {
+export function payloadKey(text: string, n: number): string {
   for (const raw of text.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
