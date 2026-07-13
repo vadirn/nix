@@ -54,6 +54,10 @@
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
 // `doppler run --project claude-code --config std --`).
 //
+// Design anchors: comments across this skill cite `spec §N`, `blueprint §N`, `D<n>`,
+// `W<n>`, and `Log <n>`. Those documents are retired; DESIGN.md is their in-repo
+// replacement — grep it for the token to resolve any anchor.
+//
 // Usage (full text: distill-text --help):
 //         distill-text input.md                      # seven-section canonical note (auto-detect language)
 //         distill-text < input.txt --out out.md       # stdin: --out names the destination
