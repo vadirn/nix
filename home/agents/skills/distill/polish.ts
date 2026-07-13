@@ -20,13 +20,7 @@
 // passes ships the ORIGINAL input with a "polish skipped" footer instead of
 // aborting; a non-transient throw (a code bug) propagates.
 //
-// Exit codes: 0 polished (a requested --no-revise --no-spell run counts);
-// 2 arg misuse; 3 passthrough — the output is valid but unpolished (truncation
-// failsafe, transient-error failsafe, empty input).
-//
-// Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (the deployed
-// wrapper bin/polish-text fills it from the macOS Keychain, service
-// fireworks-api; `doppler run --project claude-code --config std --` also works).
+// CLI usage, flags, exit codes, and env: see the USAGE block below.
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseFrontmatter } from "./frontmatter.ts";
@@ -237,7 +231,7 @@ export async function main(): Promise<void> {
     const nameLint = nameLintSelfConsistency(outBody);
     const afterWords = wordCount(outBody);
     // block-join drops the source's final newline; restore it so a polished
-    // file round-trips POSIX-complete when the input was
+    // file round-trips POSIX-complete when the input was newline-terminated.
     const nl = input.endsWith("\n") ? "\n" : "";
     const result = (front ? front + "\n" + outBody : outBody) + nl;
     const footer = buildPolishFooter({

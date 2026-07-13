@@ -70,11 +70,11 @@ GLOSSARY:
 ${gloss}`;
 }
 
-// Exported for apply-mode.ts (Phase 4): a checked `recover:` that re-renders ≥1
-// glossary def changes the certified artifact, so apply re-projects the head prose
-// from the whole updated entry set — one call, never per-entry (residue-render
-// reader). Removal-only and keep-only applies never reach it (they stay offline).
-export async function renderProse(
+// Renders the prose form of a glossary entry set via a single LLM call (never
+// per-entry). Local to runProse below — apply-mode's def-recover path leaves the
+// `## Abstract` as-authored instead of re-projecting through this chain (see
+// apply-mode.ts's note on the §12.4 simplification).
+async function renderProse(
   description: string,
   tie: string,
   entries: { term: string; def: string }[],
