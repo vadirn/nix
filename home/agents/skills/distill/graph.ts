@@ -160,6 +160,13 @@ export function stripTrailingAnchor(line: string): { text: string; span: Span | 
   return { text: line.slice(0, m.index).trim(), span: parseSpan(m[1]!) };
 }
 
+// The `## Relations` wire separators (W3): space-flanked em-dash before the predicate,
+// space-flanked right-arrow before the target — `<from> — <rel> → <to>`. project.ts's
+// renderRelation emits both; text.ts's parseArrowEdge locates them via indexOf to split the
+// line. Canonicalized here so the two sides cannot drift on the glyph or the flanking spaces.
+export const REL_DASH = " — ";
+export const REL_ARROW = " → ";
+
 // The one canonical content stamp: the first 12 hex digits (48 bits) of the sha256 over
 // `bytes`. Every provenance/verify site routes through here — computeSource's frontmatter
 // `source.sha256` (bare) and apply-mode's `sha256:`-prefixed emit/preflight stamp (stampHash) —

@@ -5,7 +5,7 @@
 // re-exported here) and graph.ts's TRAILING_ANCHOR_RE (W2: the shared trailing byte-anchor
 // grammar, consumed by parseArrowEdge below) — both leaves themselves, so this stays leaf-tier.
 import { normalizeTypography } from "./writing/typography.ts";
-import { TRAILING_ANCHOR_RE } from "./graph.ts";
+import { REL_ARROW, REL_DASH, TRAILING_ANCHOR_RE } from "./graph.ts";
 import {
   parseDoc,
   sliceBytes,
@@ -1058,15 +1058,15 @@ function splitPredicate(right: string): { endpoint: string; predicate: string | 
 // well-formed rather than throwing.
 function parseArrowEdge(edgeText: string): ParsedRelationEdge | null {
   const body = edgeText.replace(TRAILING_ANCHOR_RE, "").trim();
-  const arrow = body.indexOf(" → ");
+  const arrow = body.indexOf(REL_ARROW);
   if (arrow < 0) return null;
   const left = body.slice(0, arrow).trim();
-  const to = body.slice(arrow + 3).trim();
+  const to = body.slice(arrow + REL_ARROW.length).trim();
   if (!to) return null;
-  const dash = left.indexOf(" — ");
+  const dash = left.indexOf(REL_DASH);
   if (dash < 0) return null;
   const from = left.slice(0, dash).trim();
-  const rel = left.slice(dash + 3).trim();
+  const rel = left.slice(dash + REL_DASH.length).trim();
   if (!from || !rel) return null;
   const { endpoint, predicate } = splitPredicate(to);
   if (!endpoint) return null;

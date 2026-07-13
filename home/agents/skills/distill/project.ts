@@ -8,7 +8,14 @@
 // This is the pipeline's only projector: main()'s default/--glossary/--reference compress
 // paths and the routed build (distillRouted) all render through projectMarkdown; the legacy
 // two-channel assemble step it replaced is gone. Pure formatting; no I/O, no model calls.
-import { formatSpan, type DistillationResult, type Edge, type Unit } from "./graph.ts";
+import {
+  formatSpan,
+  REL_ARROW,
+  REL_DASH,
+  type DistillationResult,
+  type Edge,
+  type Unit,
+} from "./graph.ts";
 
 // The projection format version emitted in `schema:`. Distinct from mdstruct's document
 // schemaVersion — this versions the markdown PROJECTION shape, not the parser.
@@ -118,7 +125,7 @@ function renderRelation(edge: Edge, unitById: Map<string, Unit>): string {
     throw new Error(`projectMarkdown: edge.from ${JSON.stringify(edge.from)} references no unit`);
   if (!to)
     throw new Error(`projectMarkdown: edge.to ${JSON.stringify(edge.to)} references no unit`);
-  return `- ${firstLower(from.id)} — ${edge.rel} → ${firstLower(to.id)}  ${formatSpan(edge.span)}`;
+  return `- ${firstLower(from.id)}${REL_DASH}${edge.rel}${REL_ARROW}${firstLower(to.id)}  ${formatSpan(edge.span)}`;
 }
 
 // Render a type section (`## Heading`) from its units via a per-unit renderer, or "" when the
