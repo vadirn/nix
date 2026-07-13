@@ -391,9 +391,13 @@ export async function fidelityGate(
   thesis: string,
   outputBody: string,
   rendered: { term: string; def: string; sourceText: string }[],
+  // The model call, injected so tests drive the degradation catch (a thrown
+  // TransientError / TruncationError / code bug) without a process-global module
+  // mock. Production callers omit it and get the real fw transport.
+  ask: typeof askJson = askJson,
 ): Promise<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }> {
   try {
-    const res = await askJson<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
+    const res = await ask<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
       FIDELITY,
       fidelityPrompt(thesis, outputBody, rendered),
       FIDELITY_TOKENS,
@@ -529,6 +533,9 @@ export async function proseGate(
   units: ProseUnit[],
   outputBody: string,
   lang: "en" | "ru",
+  // Injected so tests drive the per-batch degradation catch without a global module
+  // mock (see fidelityGate); production callers omit it for the real fw transport.
+  ask: typeof askJson = askJson,
 ): Promise<{ verdicts: Map<string, ProseVerdict>; flaked: Set<string> }> {
   const verdicts = new Map<string, ProseVerdict>();
   const flaked = new Set<string>();
@@ -538,7 +545,7 @@ export async function proseGate(
   await Promise.all(
     batches.map(async (batch) => {
       try {
-        const res = await askJson<{ units?: ProseVerdict[] }>(
+        const res = await ask<{ units?: ProseVerdict[] }>(
           FIDELITY,
           proseMatchPrompt(outputBody, batch, lang),
           FIDELITY_TOKENS,

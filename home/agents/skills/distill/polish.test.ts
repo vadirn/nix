@@ -2,9 +2,11 @@
 // flag composition), the footer renderer, and the revise→spell composition order
 // polish's main() encodes, driven offline through a mocked fw.ts (spell.test.ts /
 // degradation.test.ts pattern).
-import { afterAll, expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { USAGE, buildPolishFooter, parseArgs } from "./polish.ts";
-import { PASS_EN } from "./writing/passes.ts";
+import { PASS_EN, revise } from "./writing/passes.ts";
+import { spellPass } from "./writing/spell.ts";
+import { askJson } from "./fw.ts";
 
 function ok(argv: string[]) {
   const r = parseArgs(argv);
@@ -188,34 +190,25 @@ test("buildPolishFooter: a corrupted-name pair appends the name-lint fragment", 
 });
 
 // ---- pipeline order: revise() runs before spellPass(), threading its output as the
-// spell pass's input — the exact composition main() performs (offline, mocked fw,
-// degradation.test.ts / spell.test.ts pattern). ----
-const FW = "./fw.ts";
-const real = await import(FW);
-afterAll(() => mock.module(FW, () => real));
-
+// spell pass's input — the exact composition main() performs (offline via an injected
+// `ask` fake shared by both stages, degradation.test.ts / spell.test.ts pattern). ----
 test("pipeline order: revise's output is what spellPass receives, not the original text", async () => {
   const calls: string[] = [];
-  mock.module(FW, () => ({
-    ...real,
-    askJson: mock(async (_model: unknown, prompt: string) => {
-      calls.push(prompt);
-      if (prompt.includes("You are a copy editor")) {
-        // every revise pass rewrites toward this revised-and-still-misspelled sentence
-        return { blocks: [{ id: "B1", text: "The teh text is revised now." }] };
-      }
-      // the spell prompt: assert it is proofreading the REVISED text, not the original
-      expect(prompt).toContain("revised now");
-      // small, bound-respecting fix (typo only) so verifySpellBlock accepts it
-      return { blocks: [{ id: "B1", text: "The the text is revised now." }] };
-    }),
-  }));
-  const { revise: revise2 } = await import("./writing/passes.ts");
-  const { spellPass: spellPass2 } = await import("./writing/spell.ts");
+  const ask = (async (_model: unknown, prompt: string) => {
+    calls.push(prompt);
+    if (prompt.includes("You are a copy editor")) {
+      // every revise pass rewrites toward this revised-and-still-misspelled sentence
+      return { blocks: [{ id: "B1", text: "The teh text is revised now." }] };
+    }
+    // the spell prompt: assert it is proofreading the REVISED text, not the original
+    expect(prompt).toContain("revised now");
+    // small, bound-respecting fix (typo only) so verifySpellBlock accepts it
+    return { blocks: [{ id: "B1", text: "The the text is revised now." }] };
+  }) as typeof askJson;
   const blocks = [{ id: "B1", text: "Teh original text." }];
-  const revised = await revise2(blocks, PASS_EN);
+  const revised = await revise(blocks, PASS_EN, [], undefined, ask);
   expect(revised[0].text).toContain("revised now");
-  const spelled = await spellPass2(revised, "en");
+  const spelled = await spellPass(revised, "en", [], ask);
   expect(spelled.reverted).toEqual([]); // the fix landed, not reverted
   expect(spelled.blocks[0].text).toBe("The the text is revised now."); // spell operated on revise's OUTPUT
   // 4 revise-pass calls + 1 spell call

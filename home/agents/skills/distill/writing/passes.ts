@@ -88,6 +88,9 @@ export async function revise(
   // progress seam for CLIs: fires as pass `index` of `total` starts (1-based);
   // the passes themselves are unchanged
   onPass?: (index: number, total: number) => void,
+  // The model call, injected so tests drive a pass flake / echoed-marker case without a
+  // process-global module mock; production callers omit it for the real fw transport.
+  ask: typeof askJson = askJson,
 ): Promise<Block[]> {
   // Mask reference spans ([[wikilinks]], ![[embeds]], inline code) to opaque ⟦N⟧
   // tokens before the passes so the rewriting model cannot reword or drop them;
@@ -108,7 +111,7 @@ export async function revise(
   for (const [i, pass] of passes.entries()) {
     onPass?.(i + 1, passes.length);
     try {
-      const { blocks: rev } = await askJson<{ blocks: { id: string; text: string }[] }>(
+      const { blocks: rev } = await ask<{ blocks: { id: string; text: string }[] }>(
         EXTRACT,
         revisePrompt(cur, pass),
         EXTRACT_TOKENS,

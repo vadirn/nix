@@ -8,8 +8,16 @@
 // re-throws everything else after logging it. These tests pin both directions:
 // (i) a non-transient code bug surfaces/propagates, (ii) a transient judge flake
 // still degrades gracefully.
-import { afterAll, expect, mock, test } from "bun:test";
-import { EXTRACT, TransientError, TruncationError, isTransient, rethrowIfBug } from "./fw.ts";
+import { expect, mock, test } from "bun:test";
+import {
+  askJson,
+  EXTRACT,
+  TransientError,
+  TruncationError,
+  isTransient,
+  rethrowIfBug,
+} from "./fw.ts";
+import { fidelityGate, proseGate, revise } from "./prompts.ts";
 
 // ---- the classifier + the gate it backs (pure, no network) ----
 test("isTransient: only TransientError is transient", () => {
@@ -55,7 +63,7 @@ test("askJson: a length finish_reason throws TruncationError, not retried", asyn
   try {
     let err: unknown;
     try {
-      await real.askJson(EXTRACT, "prompt", 16384);
+      await askJson(EXTRACT, "prompt", 16384);
     } catch (e) {
       err = e;
     }
@@ -70,38 +78,27 @@ test("askJson: a length finish_reason throws TruncationError, not retried", asyn
 });
 
 // ---- the wiring: an actual stage degrades on transient, propagates on a bug ----
-// fidelityGate stands in for the gate catches; it shares the rethrowIfBug seam with
-// the other stages. mock.module repoints prompts.ts's live askJson binding so we
-// drive the catch without a network call.
-const FW = "./fw.ts";
-const PROMPTS = "./prompts.ts";
-const real = await import(FW);
-
-function mockAskJson(throwing: () => never) {
-  mock.module(FW, () => ({
-    ...real,
-    askJson: mock(async () => throwing()),
-  }));
-}
-
-// per-call variant: the mock inspects each prompt so independent batches can succeed
+// Each gate takes its model call as a trailing `ask` param that defaults to the real
+// fw askJson; the tests pass a stand-in instead. This is dependency injection, NOT a
+// process-global module mock — `mock.module("./fw.ts")` would repoint fw for EVERY
+// file, and under bun's concurrent file execution it leaks into another suite's live
+// LLM call (e.g. apply.test.ts's recover). An injected `ask` is scoped to the one call.
+const throwsAsk = (err: unknown): typeof askJson =>
+  (async () => {
+    throw err;
+  }) as typeof askJson;
+// per-call variant: the fake inspects each prompt so independent batches can succeed
 // or flake separately (proseGate fires its batches concurrently via Promise.all).
-function mockAskJsonBy(handler: (prompt: string) => unknown) {
-  mock.module(FW, () => ({
-    ...real,
-    askJson: mock(async (_model: unknown, prompt: string) => handler(prompt)),
-  }));
-}
-
-// restore the real transport so the mock cannot leak into other test files
-afterAll(() => mock.module(FW, () => real));
+const askBy = (handler: (prompt: string) => unknown): typeof askJson =>
+  (async (_model: unknown, prompt: string) => handler(prompt)) as typeof askJson;
 
 test("fidelityGate: a transient judge flake degrades every concept to inconclusive", async () => {
-  mockAskJson(() => {
-    throw new TransientError("judge returned no JSON");
-  });
-  const { fidelityGate } = await import(PROMPTS);
-  const r = await fidelityGate("thesis", "body", [{ term: "x", def: "d", sourceText: "s" }]);
+  const r = await fidelityGate(
+    "thesis",
+    "body",
+    [{ term: "x", def: "d", sourceText: "s" }],
+    throwsAsk(new TransientError("judge returned no JSON")),
+  );
   expect(r.thesisRecoverable).toBe(true);
   expect(r.concepts).toHaveLength(1);
   expect(r.concepts[0].grade).toBe("inconclusive");
@@ -109,44 +106,49 @@ test("fidelityGate: a transient judge flake degrades every concept to inconclusi
 
 test("fidelityGate: a TruncationError rides out to inconclusive (run not aborted)", async () => {
   // glm legitimately exhausts FIDELITY_TOKENS; the gate must degrade, not abort
-  mockAskJson(() => {
-    throw new TruncationError(
-      "output truncated at max_tokens=16384 (glm-5p2) — raise this stage's cap",
-    );
-  });
-  const { fidelityGate } = await import(PROMPTS);
-  const r = await fidelityGate("thesis", "body", [{ term: "x", def: "d", sourceText: "s" }]);
+  const r = await fidelityGate(
+    "thesis",
+    "body",
+    [{ term: "x", def: "d", sourceText: "s" }],
+    throwsAsk(
+      new TruncationError(
+        "output truncated at max_tokens=16384 (glm-5p2) — raise this stage's cap",
+      ),
+    ),
+  );
   expect(r.thesisRecoverable).toBe(true);
   expect(r.concepts).toHaveLength(1);
   expect(r.concepts[0].grade).toBe("inconclusive");
 });
 
 test("fidelityGate: a non-transient code bug propagates instead of shipping unverified", async () => {
-  mockAskJson(() => {
-    throw new TypeError("cannot read property of undefined");
-  });
-  const { fidelityGate } = await import(PROMPTS);
   await expect(
-    fidelityGate("thesis", "body", [{ term: "x", def: "d", sourceText: "s" }]),
+    fidelityGate(
+      "thesis",
+      "body",
+      [{ term: "x", def: "d", sourceText: "s" }],
+      throwsAsk(new TypeError("cannot read property of undefined")),
+    ),
   ).rejects.toThrow("cannot read property of undefined");
 });
 
 test("revise: an echoed block-id marker is stripped from the returned text (live [__G0__] leak)", async () => {
   // a real vault run shipped glossary defs carrying literal [__G0__]–[__G4__] tokens:
   // render() shows blocks as "[id] text" and the model echoed the marker back.
-  mockAskJsonBy(() => ({
-    blocks: [
-      { id: "__G0__", text: "[__G0__] A clean definition." },
-      { id: "__G1__", text: "Mid-sentence [__G1__] echo survives content." },
-    ],
-  }));
-  const { revise } = await import(PROMPTS);
   const out = await revise(
     [
       { id: "__G0__", text: "orig def 0" },
       { id: "__G1__", text: "orig def 1" },
     ],
     [{ name: "words", rules: "- tighten" }],
+    [],
+    undefined,
+    askBy(() => ({
+      blocks: [
+        { id: "__G0__", text: "[__G0__] A clean definition." },
+        { id: "__G1__", text: "Mid-sentence [__G1__] echo survives content." },
+      ],
+    })),
   );
   expect(out[0].text).toBe("A clean definition.");
   expect(out[1].text).toBe("Mid-sentence echo survives content.");
@@ -160,24 +162,28 @@ const proseUnits = (n: number) =>
 
 test("proseGate: a transient flake on one batch flags only that batch's ids", async () => {
   // 7 units → two batches (u0-u4, u5-u6); the second batch flakes, the first verdicts.
-  mockAskJsonBy((prompt) => {
-    if (prompt.includes("### u5")) throw new TransientError("judge returned no JSON");
-    const ids = [...prompt.matchAll(/### (u\d+)/g)].map((m) => m[1]);
-    return { units: ids.map((id) => ({ id, grade: "covered", anchor: "abcd", missing: "" })) };
-  });
-  const { proseGate } = await import(PROMPTS);
-  const { verdicts, flaked } = await proseGate(proseUnits(7), "body", "en");
+  const { verdicts, flaked } = await proseGate(
+    proseUnits(7),
+    "body",
+    "en",
+    askBy((prompt) => {
+      if (prompt.includes("### u5")) throw new TransientError("judge returned no JSON");
+      const ids = [...prompt.matchAll(/### (u\d+)/g)].map((m) => m[1]);
+      return { units: ids.map((id) => ({ id, grade: "covered", anchor: "abcd", missing: "" })) };
+    }),
+  );
   expect(flaked).toEqual(new Set(["u5", "u6"])); // only the flaked batch, not the whole run
   for (const id of ["u0", "u1", "u2", "u3", "u4"]) expect(verdicts.has(id)).toBe(true);
   for (const id of ["u5", "u6"]) expect(verdicts.has(id)).toBe(false);
 });
 
 test("proseGate: a non-transient code bug rejects the parallel batches", async () => {
-  mockAskJson(() => {
-    throw new TypeError("cannot read property of undefined");
-  });
-  const { proseGate } = await import(PROMPTS);
-  await expect(proseGate(proseUnits(7), "body", "en")).rejects.toThrow(
-    "cannot read property of undefined",
-  );
+  await expect(
+    proseGate(
+      proseUnits(7),
+      "body",
+      "en",
+      throwsAsk(new TypeError("cannot read property of undefined")),
+    ),
+  ).rejects.toThrow("cannot read property of undefined");
 });

@@ -65,6 +65,9 @@ export async function spellPass(
   blocks: Block[],
   lang: "en" | "ru",
   literals: string[] = [],
+  // The model call, injected so tests drive a flake / revert case without a
+  // process-global module mock; production callers omit it for the real fw transport.
+  ask: typeof askJson = askJson,
 ): Promise<{ blocks: Block[]; reverted: string[]; failed: boolean }> {
   // same masking engine as revise(): reference spans (and caller literals) are
   // frozen to ⟦N⟧ tokens the model cannot reword, restored verbatim at the end.
@@ -74,7 +77,7 @@ export async function spellPass(
   const reverted: string[] = [];
   let cur = masked;
   try {
-    const { blocks: fixed } = await askJson<{ blocks: { id: string; text: string }[] }>(
+    const { blocks: fixed } = await ask<{ blocks: { id: string; text: string }[] }>(
       EXTRACT,
       spellPassPrompt(masked, lang),
       EXTRACT_TOKENS,
