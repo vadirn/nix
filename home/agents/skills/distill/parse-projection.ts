@@ -13,6 +13,7 @@
 //
 // PURE: no fs, no LLM, no model of the source bytes — it reads only the projected markdown.
 import { parseSpan } from "./graph.ts";
+import { fenceScan, type FenceState } from "./text.ts";
 import type { Span } from "./mdstruct.ts";
 
 // One `## ` section: its heading text (verbatim, e.g. "Concepts"), the body lines between the
@@ -91,15 +92,11 @@ const ANCHOR_ONLY_RE = /^(?:\[\d+\.\.\d+\]|\d+\.\.\d+)$/; // a line that is ONLY
 export function splitSections(body: string): CanonSection[] {
   const lines = body.split("\n");
   const heads: { name: string; heading: string; start: number }[] = [];
-  let fence: string | null = null;
+  let fence: FenceState = null;
   for (let i = 0; i < lines.length; i++) {
-    const fm = FENCE_RE.exec(lines[i]!.trimStart());
-    if (fm) {
-      const marker = fm[1]![0]!;
-      if (fence === null) fence = marker;
-      else if (fence === marker) fence = null;
-      continue;
-    }
+    const scan = fenceScan(lines[i]!, fence);
+    fence = scan.fence;
+    if (scan.isMarker) continue;
     if (fence) continue;
     const h = SECTION_RE.exec(lines[i]!);
     if (h) heads.push({ name: h[1]!.toLowerCase(), heading: h[1]!, start: i });
@@ -133,13 +130,11 @@ export function stripAnchor(line: string): { text: string; span: Span | null } {
 function subsections(bodyLines: string[]): { headword: string; lines: string[] }[] {
   const out: { headword: string; lines: string[] }[] = [];
   let cur: { headword: string; lines: string[] } | null = null;
-  let fence: string | null = null;
+  let fence: FenceState = null;
   for (const line of bodyLines) {
-    const fm = FENCE_RE.exec(line.trimStart());
-    if (fm) {
-      const marker = fm[1]![0]!;
-      if (fence === null) fence = marker;
-      else if (fence === marker) fence = null;
+    const scan = fenceScan(line, fence);
+    fence = scan.fence;
+    if (scan.isMarker) {
       if (cur) cur.lines.push(line);
       continue;
     }

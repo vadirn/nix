@@ -64,6 +64,15 @@ test("segment: a fenced code block stays one whole block, blank line included", 
   expect(blocks[0].text).toBe("```\ncode\n\nmore\n```");
 });
 
+test("segment: a nested opposite fence marker does not mis-segment the tail (BUG-1)", () => {
+  // a ~~~ line inside a ```py block must not flip fence parity — otherwise the real
+  // closing ``` reads as an opener and every later block is swallowed into one phantom block.
+  const blocks = segment("```py\nx = 1\n~~~\ny = 2\n```\n\nafter");
+  expect(blocks).toHaveLength(2);
+  expect(blocks[0].text).toBe("```py\nx = 1\n~~~\ny = 2\n```");
+  expect(blocks[1].text).toBe("after");
+});
+
 // ---- text.ts: per-section density router (D12) ----
 test("routeSection: payload-dense routes to preserve, idea-dense to re-author", () => {
   const codeHeavy = [

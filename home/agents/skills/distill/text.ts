@@ -65,12 +65,30 @@ export type LinkInventory = {
   external: { markup: string; text: string; url: string }[];
 };
 
+// ---- ONE latching fence scanner, six call sites (W1/BUG-1) ----
+// Track whether a line-by-line scan sits inside a ``` / ~~~ code fence. `fence` is the OPEN
+// marker char (backtick or tilde) or null outside a fence. A run of 3+ backticks or tildes at
+// line start opens; a run of 3+ of the SAME char closes. An opposite-marker run inside an open
+// fence is literal content, not a close — latching the opener is what stops segment() (and its
+// five siblings) from mis-toggling parity on a nested opposite fence and swallowing the tail.
+// Returns the next state and whether THIS line was a real fence marker (opener or closer);
+// callers that emit or skip marker lines branch on `isMarker`.
+export type FenceState = string | null;
+export function fenceScan(line: string, fence: FenceState): { fence: FenceState; isMarker: boolean } {
+  const m = /^\s*(`{3,}|~{3,})/.exec(line);
+  if (!m) return { fence, isMarker: false };
+  const marker = m[1]![0]!;
+  if (fence === null) return { fence: marker, isMarker: true };
+  if (fence === marker) return { fence: null, isMarker: true };
+  return { fence, isMarker: false }; // opposite marker inside a fence: literal content
+}
+
 // ---- segmentation: fence-aware, split on blank lines; code fences stay whole ----
 export function segment(text: string): Block[] {
   const lines = text.split("\n");
   const out: string[][] = [];
   let cur: string[] = [];
-  let inFence = false;
+  let fence: FenceState = null;
   const flush = () => {
     if (cur.length) {
       out.push(cur);
@@ -78,13 +96,13 @@ export function segment(text: string): Block[] {
     }
   };
   for (const line of lines) {
-    const t = line.trimStart();
-    if (t.startsWith("```") || t.startsWith("~~~")) {
-      inFence = !inFence;
+    const scan = fenceScan(line, fence);
+    fence = scan.fence;
+    if (scan.isMarker) {
       cur.push(line);
       continue;
     }
-    if (inFence) {
+    if (fence) {
       cur.push(line);
       continue;
     }
@@ -261,20 +279,15 @@ const oneLine = (s: string, n = 80): string => {
 // lanes scrub fences first; harvestFences itself owns the fenced class.
 function stripFences(text: string): string {
   const out: string[] = [];
-  let open: string | null = null;
+  let fence: FenceState = null;
   for (const line of text.split("\n")) {
-    const m = /^[ \t]*(`{3,}|~{3,})/.exec(line);
-    if (!open && m) {
-      open = m[1][0];
+    const scan = fenceScan(line, fence);
+    fence = scan.fence;
+    if (scan.isMarker) {
       out.push("");
       continue;
     }
-    if (open && m && line.trimStart().startsWith(open.repeat(3))) {
-      open = null;
-      out.push("");
-      continue;
-    }
-    out.push(open ? "" : line);
+    out.push(fence ? "" : line);
   }
   return out.join("\n");
 }
@@ -671,8 +684,7 @@ export function harvestProseListItems(text: string, claimed: string[]): ProseUni
   const claimNorm = claimed.map(normalizeForContainment).filter((c) => c.length > 0);
   const lines = text.split("\n");
   const units: ProseUnit[] = [];
-  let inFence = false;
-  let tok = "";
+  let fence: FenceState = null;
   let curHeading = "";
   let curDepth = 0;
   let sawHeading = false;
@@ -684,17 +696,10 @@ export function harvestProseListItems(text: string, claimed: string[]): ProseUni
   const ITEM = /^\s*(?:[-*+]|\d+[.)]|[A-FА-Я]\d*[.)])\s+(.*\S)\s*$/;
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i];
-    const f = /^\s*(`{3,}|~{3,})/.exec(ln);
-    if (f) {
-      if (!inFence) {
-        inFence = true;
-        tok = f[1][0];
-      } else if (ln.includes(tok.repeat(3))) {
-        inFence = false;
-      }
-      continue;
-    }
-    if (inFence) continue;
+    const scan = fenceScan(ln, fence);
+    fence = scan.fence;
+    if (scan.isMarker) continue;
+    if (fence) continue;
     const h = ln.match(HEAD);
     if (h) {
       curDepth = h[1].length;
@@ -1101,19 +1106,13 @@ function parseEdgeLine(edgeText: string): ParsedRelationEdge | null {
 // normalizeRelation: a malformed line yields no edge and parsing never throws.
 export function parseRelationsBlock(md: string): ParsedRelationEdge[] {
   const edges: ParsedRelationEdge[] = [];
-  let fence: string | null = null;
+  let fence: FenceState = null;
   for (const raw of extractSection(md, "relations").split("\n")) {
-    const trimmed = raw.trimStart();
-    const fm = /^(`{3,}|~{3,})/.exec(trimmed);
-    if (fm) {
-      const marker = fm[1][0];
-      if (fence === null) fence = marker;
-      else if (fence === marker) fence = null;
-      // else: a mismatched marker inside an open fence is literal content, not a close.
-      continue;
-    }
+    const scan = fenceScan(raw, fence);
+    fence = scan.fence;
+    if (scan.isMarker) continue;
     if (fence) continue;
-    const item = /^[-*] (.*)$/.exec(trimmed);
+    const item = /^[-*] (.*)$/.exec(raw.trimStart());
     if (!item) continue;
     const edge = parseEdgeLine(item[1]);
     if (edge) edges.push(edge);
