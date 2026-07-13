@@ -93,6 +93,21 @@ export type ParseResult =
   | { kind: "error"; message: string }
   | { kind: "ok"; mode: "compress" | "prose" | "apply"; opts: CliOpts };
 
+// Consumes the token AFTER a value-flag (`argv[i + 1]`), the shape every value-flag below
+// repeats: missing or blank (`--flag ""` / `--flag "  "`, the `--flag "$UNSET"` shell footgun)
+// both fail loudly rather than silently defaulting. `hint` completes "<flag> expects <hint>"
+// so each call site keeps its own wording; callers still do their own value-specific validation
+// (enum/range/suffix checks) on the returned value.
+type TakeValueResult =
+  | { ok: true; value: string; next: number }
+  | { ok: false; message: string };
+
+function takeValue(argv: string[], i: number, flag: string, hint: string): TakeValueResult {
+  const v = argv[i + 1];
+  if (v === undefined || v.trim() === "") return { ok: false, message: `${flag} expects ${hint}` };
+  return { ok: true, value: v, next: i + 1 };
+}
+
 export function parseArgs(argv: string[]): ParseResult {
   let lang: CliOpts["lang"] = "auto";
   let tau = DEFAULT_TAU;
@@ -139,24 +154,22 @@ export function parseArgs(argv: string[]): ParseResult {
       continue;
     }
     if (a === "--lang") {
-      const v = argv[++i];
-      if (v === undefined)
-        return {
-          kind: "error",
-          message: "--lang expects a value (en, ru, or auto)",
-        };
+      const t = takeValue(argv, i, "--lang", "a value (en, ru, or auto)");
+      if (!t.ok) return { kind: "error", message: t.message };
+      const v = t.value;
       if (v !== "en" && v !== "ru" && v !== "auto")
         return {
           kind: "error",
           message: `--lang expects one of: en, ru, auto (got '${v}')`,
         };
       lang = v;
+      i = t.next;
       continue;
     }
     if (a === "--tau") {
-      const v = argv[++i];
-      if (v === undefined || v.trim() === "")
-        return { kind: "error", message: "--tau expects a number in [0, 1]" };
+      const t = takeValue(argv, i, "--tau", "a number in [0, 1]");
+      if (!t.ok) return { kind: "error", message: t.message };
+      const v = t.value;
       const n = Number(v);
       if (!Number.isFinite(n) || n < 0 || n > 1)
         return {
@@ -164,6 +177,7 @@ export function parseArgs(argv: string[]): ParseResult {
           message: `--tau expects a number in [0, 1] (got '${v}')`,
         };
       tau = n;
+      i = t.next;
       continue;
     }
     // --max-words <n>: customizes the expand-guard cap (expandGuardCap). 0 disables the
@@ -171,12 +185,9 @@ export function parseArgs(argv: string[]): ParseResult {
     // grew the note; a positive n sets an absolute ceiling; omitted keeps today's default
     // (revert on any growth past the note's own input size). --no-expand-guard is its alias for 0.
     if (a === "--max-words") {
-      const v = argv[++i];
-      if (v === undefined || v.trim() === "")
-        return {
-          kind: "error",
-          message: "--max-words expects a non-negative integer",
-        };
+      const t = takeValue(argv, i, "--max-words", "a non-negative integer");
+      if (!t.ok) return { kind: "error", message: t.message };
+      const v = t.value;
       const n = Number(v);
       if (!Number.isInteger(n) || n < 0)
         return {
@@ -184,6 +195,7 @@ export function parseArgs(argv: string[]): ParseResult {
           message: `--max-words expects a non-negative integer (got '${v}')`,
         };
       maxWords = n;
+      i = t.next;
       continue;
     }
     // --out: the compress-mode destination override (plan Q6). Value-checked here at
@@ -191,12 +203,9 @@ export function parseArgs(argv: string[]): ParseResult {
     // itself; the stdin-requires---out refusal is a separate RUNTIME check (main()) so
     // the empty/no-body stdin exit-3 paths stay byte-identical.
     if (a === "--out") {
-      const v = argv[++i];
-      if (v === undefined || v.trim() === "")
-        return {
-          kind: "error",
-          message: "--out expects a destination .md path",
-        };
+      const t = takeValue(argv, i, "--out", "a destination .md path");
+      if (!t.ok) return { kind: "error", message: t.message };
+      const v = t.value;
       if (v.endsWith(".tmp.md"))
         return {
           kind: "error",
@@ -208,6 +217,7 @@ export function parseArgs(argv: string[]): ParseResult {
           message: `--out expects a .md destination (got '${v}')`,
         };
       out = v;
+      i = t.next;
       continue;
     }
     // Any other dash-prefixed token is a flag typo (single- or double-dash), not a path —

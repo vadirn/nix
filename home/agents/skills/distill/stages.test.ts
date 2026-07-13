@@ -400,6 +400,14 @@ test("parseArgs: --lang ru is accepted", () => {
   expect(ok(["--lang", "ru", "in.md"]).opts.lang).toBe("ru");
 });
 
+// --lang used to skip the blank-value guard its sibling value-flags (--tau, --max-words,
+// --out) all have, letting `--lang "" ` fall through to the enum check and report a
+// confusing "got ''" instead of the same missing-value message as a bare `--lang`.
+test("parseArgs: --lang rejects a blank value like its sibling value-flags", () => {
+  expect(err(["--lang", "", "in.md"])).toContain("--lang");
+  expect(err(["--lang", "   ", "in.md"])).toContain("--lang");
+});
+
 test("parseArgs: numeric flags reject non-numbers and out-of-range values", () => {
   expect(err(["--max-words", "-5"])).toContain("--max-words");
   expect(err(["--tau", "2"])).toContain("--tau");
