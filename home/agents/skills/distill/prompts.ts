@@ -307,16 +307,19 @@ export async function gradeBlocks(
 // else the first sentence of the block. The terminal floor when the repair ladder
 // cannot clear a flagged group — the result is a literal substring of source, so
 // it covers the action and cannot invent or invert.
+// flatten a run of whitespace to a single space, then split into sentences on a
+// terminal-punctuation boundary. Idempotent — safe to call on already-flattened text.
+// Shared by verbatimDirectives' fallback sentence and verbatimDef's needle search.
+function flattenSentences(text: string): string[] {
+  return text.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
+}
+
 export function verbatimDirectives(sourceText: string): string[] {
   const bold = [...sourceText.matchAll(/\*\*([\s\S]+?)\*\*/g)]
     .map((m) => m[1].replace(/\s+/g, " ").trim())
     .filter((s) => s.length > 0);
   if (bold.length) return bold;
-  const first = sourceText
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(/(?<=[.!?])\s+/)[0]
-    ?.trim();
+  const first = flattenSentences(sourceText)[0]?.trim();
   return first ? [first] : [];
 }
 
@@ -329,7 +332,7 @@ export function verbatimDirectives(sourceText: string): string[] {
 export function verbatimDef(term: string, sourceText: string): string {
   const flat = sourceText.replace(/\s+/g, " ").trim();
   if (!flat) return "";
-  const sentences = flat.split(/(?<=[.!?])\s+/);
+  const sentences = flattenSentences(flat);
   const needle = term.toLowerCase();
   const hit = sentences.find((s) => s.toLowerCase().includes(needle));
   return (hit ?? sentences[0] ?? flat).trim();
