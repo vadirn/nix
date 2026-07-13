@@ -57,6 +57,14 @@ export function levenshteinBounded(a: string, b: string, bound: number): number 
   return Math.min(prev[n], bound + 1);
 }
 
+// Corruption tolerance: how many edits still read as "the same name" scales with length,
+// capped at 3 so a long name doesn't drown short ones in false positives. Shared by both
+// lanes — against-source compares a candidate to its nearest source name; self-consistency
+// compares two candidates to each other.
+function corruptionCap(a: string, b: string): number {
+  return Math.min(3, Math.floor(Math.max(a.length, b.length) / 3));
+}
+
 function stripZones(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ") // fenced code
@@ -190,7 +198,7 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
         best = s;
       }
     }
-    const cap = best ? Math.min(3, Math.floor(Math.max(k.length, best.length) / 3)) : 0;
+    const cap = best ? corruptionCap(k, best) : 0;
     if (best && bestD >= 1 && bestD <= cap) {
       if (initialOnly && (outLower.has(k) || !srcNonInitial.has(best))) continue;
       corrupted.push({ found: g.word, wanted: srcCapSurface.get(best) ?? best });
@@ -221,7 +229,7 @@ export function nameLintSelfConsistency(output: string): NameLintResult {
         gb = groups.get(b)!;
       if (foldSet(ga.word).some((x) => foldSet(gb.word).includes(x))) continue; // inflection variants
       const d = levenshtein(a, b);
-      const cap = Math.min(3, Math.floor(Math.max(a.length, b.length) / 3));
+      const cap = corruptionCap(a, b);
       if (d < 1 || d > cap) continue;
       const [minor, major] = ga.count < gb.count ? [ga, gb] : [gb, ga];
       if (minor.count === major.count) continue; // tie: no direction, skip
