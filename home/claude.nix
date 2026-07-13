@@ -17,6 +17,7 @@ in {
   home.file.".local/bin/pr-template".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/pr-template.sh";
   home.file.".local/bin/distill-text".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/distill/bin/distill-text";
   home.file.".local/bin/polish-text".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/distill/bin/polish-text";
+  home.file.".local/bin/card-stage".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/distill/bin/card-stage";
 
   # Claude Code is not packaged in nixpkgs; this activation intentionally
   # performs an impure network fetch to install the official binary.
