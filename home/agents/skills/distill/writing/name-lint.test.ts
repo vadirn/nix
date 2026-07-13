@@ -6,20 +6,11 @@ import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import {
   formatNameLint,
-  levenshtein,
-  levenshteinBounded,
   nameLintAgainstSource,
   nameLintSelfConsistency,
 } from "./name-lint.ts";
 
 const read = (name: string) => readFileSync(resolve(import.meta.dir, "../fixtures", name), "utf8");
-
-test("levenshtein: pinned distances", () => {
-  expect(levenshtein("firecurl", "firecrawl")).toBe(3);
-  expect(levenshtein("firecrawler", "firecrawl")).toBe(2);
-  expect(levenshtein("", "abc")).toBe(3);
-  expect(levenshtein("same", "same")).toBe(0);
-});
 
 test("nameLintAgainstSource: Firecurl vs source — exactly one corrupted pair, no invented", () => {
   const output = read("name-lint-firecurl-draft.md");
@@ -47,21 +38,6 @@ test("nameLintSelfConsistency: catches the Firecurl/Firecrawl split inside one d
 test("nameLintSelfConsistency: DHH staged doc is clean", () => {
   const staged = read("name-lint-dhh-staged.md");
   expect(nameLintSelfConsistency(staged)).toEqual({ corrupted: [], invented: [] });
-});
-
-test("levenshteinBounded: agrees with levenshtein within the bound, saturates beyond", () => {
-  expect(levenshteinBounded("firecurl", "firecrawl", 3)).toBe(3);
-  expect(levenshteinBounded("firecurl", "firecrawl", 2)).toBe(3); // saturated: bound+1
-  expect(levenshteinBounded("same", "same", 0)).toBe(0);
-  expect(levenshteinBounded("", "abc", 5)).toBe(3);
-  expect(levenshteinBounded("abc", "", 2)).toBe(3); // length delta short-circuit
-  // trim + row-min early exit keep a 20k-char near-identical pair instant
-  const big = "lorem ipsum dolor sit amet ".repeat(800);
-  const edited = `${big.slice(0, 10000)}X${big.slice(10001)}`;
-  expect(levenshteinBounded(big, edited, Math.ceil(0.15 * big.length))).toBe(1);
-  const rewritten = "something else entirely here ".repeat(750);
-  const bound = Math.ceil(0.15 * big.length);
-  expect(levenshteinBounded(big, rewritten, bound)).toBe(bound + 1);
 });
 
 test("unicode: NFC/NFD spellings of one name do not false-flag (either mode)", () => {

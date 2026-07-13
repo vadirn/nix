@@ -2,60 +2,12 @@
 // passes may have corrupted (a proper noun mangled toward a near neighbor) or
 // invented (a capitalized token with no source counterpart). Both modes are
 // total (never throw) and never block: callers only render the result into a
-// footer or Flags line. Leaf module: imports nothing, so the core can depend
-// on it without a cycle back to text.ts.
+// footer or Flags line. Leaf module: only imports the leaf-tier levenshtein
+// helpers, so the core can depend on it without a cycle back to text.ts.
+import { levenshtein } from "./levenshtein.ts";
 
 export type NameFinding = { found: string; wanted: string };
 export type NameLintResult = { corrupted: NameFinding[]; invented: string[] };
-
-export function levenshtein(a: string, b: string): number {
-  const m = a.length,
-    n = b.length;
-  let prev = Array.from({ length: n + 1 }, (_, j) => j);
-  for (let i = 1; i <= m; i++) {
-    const cur = [i];
-    for (let j = 1; j <= n; j++)
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    prev = cur;
-  }
-  return prev[n];
-}
-
-// Bounded variant: exact distance when <= bound, else bound+1. Trims the common
-// prefix/suffix, short-circuits on the length delta (a Levenshtein lower bound),
-// and abandons the DP once a whole row exceeds the bound — so spell verify's hot
-// case (a huge block returned nearly unchanged) costs O(len), and a wholesale
-// rewrite exits after ~bound rows instead of filling the full len² table.
-// Residual: a large block with edits scattered at both ends still pays the DP on
-// the untrimmed middle.
-export function levenshteinBounded(a: string, b: string, bound: number): number {
-  if (a === b) return 0;
-  let s = 0,
-    ae = a.length,
-    be = b.length;
-  while (s < ae && s < be && a[s] === b[s]) s++;
-  while (ae > s && be > s && a[ae - 1] === b[be - 1]) {
-    ae--;
-    be--;
-  }
-  const x = a.slice(s, ae),
-    y = b.slice(s, be);
-  if (Math.abs(x.length - y.length) > bound) return bound + 1;
-  const m = x.length,
-    n = y.length;
-  let prev = Array.from({ length: n + 1 }, (_, j) => j);
-  for (let i = 1; i <= m; i++) {
-    const cur = [i];
-    let rowMin = i;
-    for (let j = 1; j <= n; j++) {
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
-      if (cur[j] < rowMin) rowMin = cur[j];
-    }
-    if (rowMin > bound) return bound + 1;
-    prev = cur;
-  }
-  return Math.min(prev[n], bound + 1);
-}
 
 // Corruption tolerance: how many edits still read as "the same name" scales with length,
 // capped at 3 so a long name doesn't drown short ones in false positives. Shared by both

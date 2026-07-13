@@ -6,7 +6,7 @@
 import { type Block, render } from "../text.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "../fw.ts";
 import { MASK_TOKEN_RE, createMasker } from "./mask.ts";
-import { levenshtein, levenshteinBounded } from "./name-lint.ts";
+import { levenshtein, levenshteinBounded } from "./levenshtein.ts";
 import { makeIdMarkerStripper } from "./passes.ts";
 import { normalizeTypography } from "./typography.ts";
 
