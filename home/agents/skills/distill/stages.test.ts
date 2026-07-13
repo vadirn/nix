@@ -45,9 +45,6 @@ test("buildFooter: compressed run renders size + steps tags, omits the zero tags
       verbatim: 1,
       residue: 0,
       gateSkipped: 0,
-      keptVerbatim: 0,
-      retries: 0,
-      proseFixes: 0,
       glossaryOnly: false,
       proseGateOffFactsDump: false,
     }),
@@ -56,7 +53,7 @@ test("buildFooter: compressed run renders size + steps tags, omits the zero tags
   );
 });
 
-test("buildFooter: ±0% on no shrink, --glossary shape, gate-skipped + retries tags", () => {
+test("buildFooter: ±0% on no shrink, --glossary shape, gate-skipped tag", () => {
   expect(
     buildFooter({
       beforeWords: 50,
@@ -66,14 +63,11 @@ test("buildFooter: ±0% on no shrink, --glossary shape, gate-skipped + retries t
       verbatim: 0,
       residue: 1,
       gateSkipped: 1,
-      keptVerbatim: 0,
-      retries: 2,
-      proseFixes: 0,
       glossaryOnly: true,
       proseGateOffFactsDump: false,
     }),
   ).toBe(
-    "— distilled gloss · 50→50 words (±0%) · 2 entries · 0 verbatim · 1 residue · 1 gate-skipped · 2 retries",
+    "— distilled gloss · 50→50 words (±0%) · 2 entries · 0 verbatim · 1 residue · 1 gate-skipped",
   );
 });
 
@@ -87,9 +81,6 @@ test("buildFooter: facts-dump skip of the in-scope prose gate surfaces as a tag"
       verbatim: 0,
       residue: 0,
       gateSkipped: 0,
-      keptVerbatim: 0,
-      retries: 0,
-      proseFixes: 0,
       glossaryOnly: false,
       proseGateOffFactsDump: true,
     }),
@@ -107,9 +98,6 @@ test("buildFooter: nameLint findings append the fragment; omitted nameLint is un
     verbatim: 1,
     residue: 0,
     gateSkipped: 0,
-    keptVerbatim: 0,
-    retries: 0,
-    proseFixes: 0,
     glossaryOnly: false,
     proseGateOffFactsDump: false,
   };

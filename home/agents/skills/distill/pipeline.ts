@@ -214,9 +214,6 @@ export function buildFooter(m: {
   verbatim: number;
   residue: number;
   gateSkipped: number;
-  keptVerbatim: number;
-  retries: number;
-  proseFixes: number;
   glossaryOnly: boolean;
   proseGateOffFactsDump: boolean;
   nameLint?: NameLintResult;
@@ -225,20 +222,15 @@ export function buildFooter(m: {
     ? Math.round((100 * (m.beforeWords - m.afterWords)) / m.beforeWords)
     : 0;
   const sizeTag = `${pct > 0 ? "-" : pct < 0 ? "+" : "±"}${Math.abs(pct)}%`; // expansion is guarded in distill(), so this is -N% or ±0%
-  const retriesTag = m.retries ? ` · ${m.retries} retries` : "";
-  const proseTag = m.proseFixes ? ` · ${m.proseFixes} prose fixes` : "";
   const stepsTag = m.steps ? ` · ${m.steps} steps` : "";
   // gate-skipped items are a subset of residue.length — flag them so a batch log
   // distinguishes "judge couldn't verify" from a genuine fidelity miss.
   const gateTag = m.gateSkipped ? ` · ${m.gateSkipped} gate-skipped` : "";
-  // steps the repair ladder could not clear and that shipped the source's verbatim
-  // imperative — faithful but uncompressed, distinct from a cleared step
-  const verbatimTag = m.keptVerbatim ? ` · ${m.keptVerbatim} kept-verbatim` : "";
   const shapeTag = m.glossaryOnly ? "gloss" : "prose+gloss";
   // the prose gate would have run (!noGate && !glossaryOnly) but the facts-dump genre gate
   // skipped it — surface the skip so disabling a loss detector is never silent.
   const proseGateTag = m.proseGateOffFactsDump ? ` · prose-gate off (facts-dump)` : "";
-  return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${verbatimTag}${retriesTag}${proseTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
+  return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
 }
 
 // edge-coverage gate (deterministic, pure). A vault edge — a [[wikilink]] or a
@@ -685,9 +677,6 @@ async function distill(
     verbatim: payloadBlocks.length,
     residue: residue.length,
     gateSkipped,
-    keptVerbatim: 0,
-    retries: 0,
-    proseFixes: 0,
     glossaryOnly: opts.glossaryOnly,
     // the prose gate is in scope (!noGate && !glossaryOnly) but the facts-dump genre gate
     // skipped it above — flag the disabled loss detector instead of dropping it silently.

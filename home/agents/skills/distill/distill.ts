@@ -70,7 +70,7 @@
 // and the stable public surface): text · frontmatter · fw · graph · prompts ·
 // locate(-graph) · retype (the typing review) · project · parse-projection ·
 // interact/triage (the review grammar) · apply-mode · prose-mode · writing/
-// (writing-core: typography, mask, passes, prose-qa) · pipeline. The four exports
+// (writing-core: typography, mask, passes) · pipeline. The four exports
 // below are the public API the test suite (and any importer) depends on; everything
 // else is an internal module detail.
 export { REL_REGISTRY, slugSegment } from "./text.ts";

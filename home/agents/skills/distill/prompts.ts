@@ -1,8 +1,8 @@
 // prompts — the LLM stages: every prompt builder and the async stage function that
 // calls it. Each stage maps a typed input to a typed output through fw's askJson;
-// the pipeline (pipeline.ts) sequences them. The writing-core stages (the four
-// writing passes and the prose judge/fix) moved to writing/ and are re-exported
-// below for callers that still import them from here.
+// the pipeline (pipeline.ts) sequences them. The writing-core passes moved to
+// writing/passes.ts and are re-exported below for callers that still import them
+// from here.
 import {
   type Block,
   type Grade,
@@ -21,7 +21,6 @@ import {
 import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
 import type { Modality, PreEdge, PreGraph, PreUnit } from "./graph.ts";
 export { type Pass, PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
-export { proseJudge, proseFix } from "./writing/prose-qa.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
 // carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while
