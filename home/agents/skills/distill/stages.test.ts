@@ -6,8 +6,8 @@
 // and buildFooter (the success-footer renderer). The async stages route through
 // the network and are covered by the end-to-end + degradation suites.
 import { expect, test } from "bun:test";
-import type { ProseUnit } from "./text.ts";
-import { normalizeForContainment } from "./text.ts";
+import type { ProseUnit } from "./harvest.ts";
+import { normalizeForContainment } from "./harvest.ts";
 import type { ProseVerdict } from "./prompts.ts";
 import { buildFooter, expandGuardCap } from "./distill-core.ts";
 import { parseArgs, USAGE } from "./cli.ts";

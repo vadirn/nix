@@ -8,18 +8,15 @@
 // the fix is guarded without a vault dependency. Each class was a regex bug that produced
 // phantom "dropped payload" residue (a false warning) or missed real payload.
 import { expect, test } from "bun:test";
+import { wordCount } from "./text.ts";
 import {
   harvestBlockquotes,
   harvestFences,
   harvestImages,
   harvestTableRows,
-  payloadMask,
-  payloadDensity,
-  routeSection,
-  sections,
   structuralSpans,
-  wordCount,
-} from "./text.ts";
+} from "./harvest.ts";
+import { payloadMask, payloadDensity, routeSection, sections } from "./route.ts";
 import { parseDoc, sliceBytes } from "./mdstruct.ts";
 
 // Region extraction is always-on and complete: every comment-anchor pair surfaces in `doc.regions`

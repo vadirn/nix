@@ -9,12 +9,13 @@ import { basename, dirname, join, resolve } from "node:path";
 import {
   type Block,
   type LinkInventory,
-  type PayloadSpan,
-  type Route,
-  type RoutedSection,
-  compactSection,
   detectLang,
-  formatDryRun,
+  segment,
+  slugSegment,
+  wordCount,
+} from "./text.ts";
+import {
+  type PayloadSpan,
   harvestBlockquotes,
   harvestCitations,
   harvestExternalLinks,
@@ -26,12 +27,15 @@ import {
   harvestTableRows,
   harvestVaultEdges,
   normalizeForContainment,
+} from "./harvest.ts";
+import {
+  type Route,
+  type RoutedSection,
+  compactSection,
+  formatDryRun,
   partition,
   routeNote,
-  segment,
-  slugSegment,
-  wordCount,
-} from "./text.ts";
+} from "./route.ts";
 import { parseDescription, parseFrontmatter, parseSuperseded, parseType } from "./frontmatter.ts";
 import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
 import { extractGraph, gradeBlocks } from "./prompts.ts";

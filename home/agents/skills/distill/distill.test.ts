@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { REL_REGISTRY, ensureEpistemicStatus, slugSegment } from "./distill.ts";
-import { parseRelationsBlock } from "./text.ts";
+import { parseRelationsBlock } from "./rel-parse.ts";
 
 // 4 levels up from this dir (skills → agents → home → /Users/vadim/nix), then into
 // the vault-query lint dir that holds the canonical JSON.

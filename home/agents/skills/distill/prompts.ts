@@ -6,7 +6,6 @@
 import {
   type Block,
   type LinkInventory,
-  type ProseUnit,
   glossList,
   hasOperational,
   hasWikilink,
@@ -14,6 +13,7 @@ import {
   normalizeRelation,
   render,
 } from "./text.ts";
+import { type ProseUnit } from "./harvest.ts";
 
 // The block-grading verdict from the fidelity gate: "drop" the block, "distill"
 // it (compress into the projection), or "retain" it verbatim. Lives here, not in

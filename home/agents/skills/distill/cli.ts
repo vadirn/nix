@@ -5,7 +5,7 @@
 import { mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_TAU } from "./text.ts";
+import { DEFAULT_TAU } from "./route.ts";
 
 // ---- arg parsing + io ----
 export const USAGE = `distill-text — abstractive idea-compression: extract a note's typed knowledge

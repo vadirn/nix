@@ -15,7 +15,7 @@ import {
   harvestTableRows,
   harvestVaultEdges,
   normalizeForContainment,
-} from "./text.ts";
+} from "./harvest.ts";
 import { type ProseVerdict } from "./prompts.ts";
 
 // What failed and where, carried structurally (not re-derived from the reason string)

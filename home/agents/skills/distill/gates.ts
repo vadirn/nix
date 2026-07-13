@@ -14,7 +14,7 @@ import {
   proseGate,
   workflowGate,
 } from "./prompts.ts";
-import { type ProseUnit } from "./text.ts";
+import { type ProseUnit } from "./harvest.ts";
 import { type Residue, proseResidue } from "./residue.ts";
 
 // Shared inconclusive→residue mapping: both the concept and workflow verdict loops below grade

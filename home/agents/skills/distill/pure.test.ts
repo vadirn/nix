@@ -11,6 +11,17 @@ import { expect, test } from "bun:test";
 import {
   detectLang,
   glossList,
+  hasOperational,
+  hasWikilink,
+  isExternalUrl,
+  normalizeRelation,
+  normalizeTypography,
+  relText,
+  segment,
+  slugSegment,
+  wordCount,
+} from "./text.ts";
+import {
   harvestBlockquotes,
   harvestCitations,
   harvestExternalLinks,
@@ -23,25 +34,18 @@ import {
   harvestTableRows,
   harvestVaultEdges,
   harvestWikilinks,
-  hasOperational,
   normalizeForContainment,
-  hasWikilink,
-  isExternalUrl,
+} from "./harvest.ts";
+import {
   formatDryRun,
   compactSection,
-  normalizeRelation,
-  normalizeTypography,
   partition,
   payloadDensity,
   payloadMask,
-  relText,
   routeNote,
   routeSection,
   sections,
-  segment,
-  slugSegment,
-  wordCount,
-} from "./text.ts";
+} from "./route.ts";
 import { extractJson } from "./fw.ts";
 import { assembleRoutedNote } from "./distill-core.ts";
 import { edgePayloadResidue, wikilinkResidue } from "./residue.ts";
