@@ -607,6 +607,46 @@ test("apply: checked recover DEF whose second grade fails is spliced VERBATIM (v
   expect(r.stderr.trim()).toBe("— applied: 1 recovered · 0 kept · 0 removed (1 verbatim)");
 });
 
+test("apply: a non-transient error in the recover-def LLM window propagates (BUG-2 regression) — not floored to verbatim", async () => {
+  process.env.FIREWORKS_API_KEY = "test-dummy";
+  const dir = tmpdirFor("recover-def-bug");
+  const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF]);
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: `Impression distance`")));
+  // A 4xx status is fw.ts's own classification of a real code bug (bad request / auth /
+  // content-policy) — NOT TransientError, NOT TruncationError — so fw() throws a plain
+  // Error that askJson never catches. Before the fix, the recover-def loop's bare
+  // `catch {}` floored ANY throw (including this one) to verbatimDef and returned exit 0;
+  // after the fix, rethrowIfBug(e, "apply-recover-def") sees a non-transient error and
+  // rethrows, so runApply itself throws and nothing is written.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    const prompt: string = body?.messages?.[0]?.content ?? "";
+    if (prompt.includes(RENDER_ENTRY_MARKER)) {
+      return new Response(JSON.stringify({ error: "bad request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(
+      JSON.stringify({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }) as typeof globalThis.fetch;
+  let r: Captured;
+  try {
+    r = await apply(tmpPath);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  expect(r.threw).toBeDefined();
+  expect(String((r.threw as Error).message)).toContain("FW 400");
+  // nothing written on the propagation path: the pre-existing destination (from emit's
+  // srcMode:"sha256" write) is untouched, and the tmp is never consumed.
+  expect(readFileSync(destPath, "utf8")).toBe(SOURCE);
+  expect(existsSync(tmpPath)).toBe(true);
+});
+
 test("apply: checked recover THESIS sets the ## Abstract body verbatim (no LLM)", async () => {
   process.env.FIREWORKS_API_KEY = "test-dummy";
   const dir = tmpdirFor("recover-thesis");

@@ -72,7 +72,7 @@ import { existsSync, linkSync, readFileSync, renameSync, unlinkSync, writeFileSy
 import { basename, resolve } from "node:path";
 import { parseInteract, resolveInteract, stripInteract } from "./interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "./triage.ts";
-import { askJson, EXTRACT } from "./fw.ts";
+import { askJson, EXTRACT, rethrowIfBug } from "./fw.ts";
 import { fidelityGate, renderEntryPrompt, verbatimDef, verbatimDirectives } from "./prompts.ts";
 import { parseCanonicalNote, splitSections } from "./parse-projection.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
@@ -333,7 +333,8 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
       } else {
         finalDef = reRendered;
       }
-    } catch {
+    } catch (e) {
+      rethrowIfBug(e, "apply-recover-def");
       // a transient re-render/grade flake floors to the source's own clause rather
       // than dropping the entry — a verbatim splice cannot invert.
       finalDef = verbatimDef(d.term, d.src);
