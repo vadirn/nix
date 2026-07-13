@@ -141,10 +141,6 @@ const ATTR_KEYS = new Set(["id", "src", "dest"]);
 const ITEM_RE = /^-\s\[(.)\]\s(.*)$/;
 const VERB_RE = /^([a-z][a-z0-9-]*):\s(.*)$/;
 const FENCE_OPEN_RE = /^([ \t]*)(`{3,})[ \t]*$/;
-// Extracts the post-`interact:` info from an opening anchor comment sliced out of the
-// source (used to re-read a DANGLING open's content — its class, id, attrs — since the
-// check ndjson carries only the span, not the info).
-const OPEN_INFO_RE = /^[ \t]*<!--\s*interact:\s*(.*?)\s*-->[ \t]*$/;
 
 function splitNote(s: string): { targetRaw: string; note?: string } {
   let inBacktick = false;
@@ -527,7 +523,7 @@ export function parseInteract(text: string): {
       continue;
     }
     const anchorText = sliceBytes(buf, d.span);
-    const m = anchorText.match(OPEN_INFO_RE);
+    const m = anchorText.match(OPEN_RE);
     const frame = parseAnchor(m ? m[1]! : undefined, d.line);
     if (frame !== null) {
       errors.push({
