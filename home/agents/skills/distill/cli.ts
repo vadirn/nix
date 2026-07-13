@@ -2,8 +2,9 @@
 // temp-file / pending-intermediary path helpers. parseArgs resolves the whole surface
 // (help/misuse/ok) before main() touches the API key or the network, so it is unit-testable
 // without spawning the binary. No LLM calls and no pipeline logic — parsing and path arithmetic.
-import { execFileSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { mkdtempSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DEFAULT_TAU } from "./text.ts";
 
 // ---- arg parsing + io ----
@@ -308,11 +309,14 @@ export function parseArgs(argv: string[]): ParseResult {
   };
 }
 
-// Create an empty temp file with a .md extension and return its path. The result
-// is written here instead of stdout so the caller gets a real .md artifact
-// (openable, diffable) and stdout carries only the path (footer on stderr).
+// Create a fresh temp directory and return the path to a .md file inside it (not
+// yet created — the caller writeFileSync's the content). A dedicated dir per call
+// keeps the name collision-free without depending on a platform mktemp binary's
+// flag syntax (GNU coreutils' --suffix is not portable). The result is written
+// here instead of stdout so the caller gets a real .md artifact (openable,
+// diffable) and stdout carries only the path (footer on stderr).
 export function tempMdPath(): string {
-  return execFileSync("mktemp", ["--suffix=.md"], { encoding: "utf8" }).trim();
+  return join(mkdtempSync(join(tmpdir(), "distill-")), "out.md");
 }
 
 // The pending-review intermediary sibling for a destination. `note.md` →
