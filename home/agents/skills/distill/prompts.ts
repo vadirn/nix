@@ -356,9 +356,13 @@ ${sourceText}`;
 // the judge returns no parseable verdict (no JSON after askJson's retry). It is kept
 // distinct from "residue": inconclusive items skip recovery (re-rendering cannot fix
 // a judge that will not parse) and surface directly, so a flake never discards the run.
+// W6: the one spelling of the verdict-grade union; ConceptVerdict and StepVerdict both
+// reference it rather than re-spelling the three literals.
+export type GateGrade = "translated" | "residue" | "inconclusive";
+
 export type ConceptVerdict = {
   term: string;
-  grade: "translated" | "residue" | "inconclusive";
+  grade: GateGrade;
   direction: string;
   missing: string;
 };
@@ -443,7 +447,7 @@ export async function fidelityGate(
 // dropped freely but never fabricated (invention-only on the "why").
 export type StepVerdict = {
   id: string;
-  grade: "translated" | "residue" | "inconclusive";
+  grade: GateGrade;
   missing: string;
 };
 
