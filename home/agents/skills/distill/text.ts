@@ -169,6 +169,13 @@ export function normalizeEdgeTarget(raw: string): string {
   return raw.replace(/#.*$/, "");
 }
 
+// The wikilink-endpoint idiom shared by every `[[target|alias]]` harvest site: strip
+// the `|alias`, trim, then normalizeEdgeTarget. Centralized so the three sites (bare
+// wikilink harvest, inline-link page, embed page) can never drift on ordering.
+export function wikilinkTarget(raw: string): string {
+  return normalizeEdgeTarget(raw.split("|")[0].trim());
+}
+
 // Harvest every [[wikilink]] (and ![[embed]]) in `text` as {markup, slug, target}:
 // `markup` is the verbatim span, `slug` its target slugged for byte-stable comparison,
 // `target` the raw alias-stripped endpoint (the collision discriminator wikilinkResidue
@@ -190,7 +197,7 @@ export function harvestWikilinks(text: string): VaultEdge[] {
     // target (ASSET_RE is `$`-anchored), so a page/section embed `![[doc.pdf#page=2]]`
     // is still caught. slug and target both drop the fragment, so anchored and bare
     // forms unify on the cross-component join key (harvest ↔ emit ↔ coverage).
-    const target = normalizeEdgeTarget(m[1].split("|")[0].trim());
+    const target = wikilinkTarget(m[1]);
     if (m[0].startsWith("!") && ASSET_RE.test(target)) continue;
     const slug = slugSegment(target);
     if (slug) out.push({ markup: m[0], slug, target });
@@ -379,7 +386,7 @@ function collectStructural(parsed: ParsedDoc): StructuralParts {
   for (const il of doc.inlines ?? []) {
     if (il.type === "image") parts.images.push(il);
     else if (il.type === "wikilink" && il.embed && il.page != null) {
-      const t = normalizeEdgeTarget(il.page.split("|")[0].trim());
+      const t = wikilinkTarget(il.page);
       if (ASSET_RE.test(t)) parts.images.push(il);
     }
   }
@@ -559,7 +566,7 @@ export function harvestImages(text: string): PayloadSpan[] {
       if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.url), key });
     } else if (il.type === "wikilink" && il.page != null) {
       // collectStructural already filtered these to embed + ASSET_RE; just slug the target.
-      const t = normalizeEdgeTarget(il.page.split("|")[0].trim());
+      const t = wikilinkTarget(il.page);
       const key = slugSegment(t);
       if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.page), key });
     }
