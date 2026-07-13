@@ -124,6 +124,17 @@ export function buildFooter(m: {
   return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
 }
 
+// The deterministic, zero-LLM whole-note backstop: payload-coverage residue (irreversible
+// loss the LLM fidelity gate never checks) plus name-lint, both keyed on (source, out).
+// Runs even under --no-gate; shared by distill()'s homogeneous build and
+// assembleRoutedNote()'s per-section-routed build (its one whole-note check).
+function deterministicBackstop(
+  source: string,
+  out: string,
+): { residue: Residue[]; nameLint: NameLintResult } {
+  return { residue: edgePayloadResidue(source, out), nameLint: nameLintAgainstSource(out, source) };
+}
+
 // The canonical compress core (blueprint §0): extract native typed units → retain-grade the
 // payload lane → locate spans (hard-gate). Returns the span-anchored graph (`result`), the
 // pre-graph (`pre`, for the backstop's thesis + section counts), and the retain-graded
@@ -314,9 +325,10 @@ async function distill(
   // (edgePayloadResidue; the wikilink lane is off — the canonical projection drops cross-note edges
   // by design, so a wikilink lane would false-flag every source wikilink). Free, so it runs even
   // under --no-gate — dropped payload is irreversible loss the fidelity backstop never checks.
-  residue = residue.concat(edgePayloadResidue(text, out));
   // deterministic, zero-LLM, never blocks — findings go to the footer only, never into residue.
-  const nameLint = nameLintAgainstSource(out, text);
+  const backstop = deterministicBackstop(text, out);
+  residue = residue.concat(backstop.residue);
+  const nameLint = backstop.nameLint;
   const footer = buildFooter({
     beforeWords,
     afterWords,
@@ -431,11 +443,10 @@ export function assembleRoutedNote(a: {
   const title = a.title.replace(/^#+\s*/, "").trim() || a.head?.title;
   const out = projectMarkdown({ source, units, edges, title, abstract: a.head?.abstract });
   const afterWords = wordCount(out);
-  const residue = edgePayloadResidue(a.source, out);
+  // deterministic, zero-LLM, never blocks — assembleRoutedNote owns the one whole-note check.
+  const { residue, nameLint } = deterministicBackstop(a.source, out);
   const reCount = a.sections.filter((u) => u.route === "re-author").length;
   const preserveCount = a.sections.length - reCount;
-  // deterministic, zero-LLM, never blocks — assembleRoutedNote owns the one whole-note check.
-  const nameLint = nameLintAgainstSource(out, a.source);
   const footer =
     `— per-section route: ${reCount} re-author / ${preserveCount} preserve` +
     ` · ${beforeWords}→${afterWords} words` +
