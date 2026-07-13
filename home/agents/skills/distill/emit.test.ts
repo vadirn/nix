@@ -131,40 +131,46 @@ function mockPipeline() {
     ...real,
     askJson: mock(async (_model: unknown, prompt: string) => {
       if (prompt.includes("concept cartographer")) {
+        // The canonical default path parses this via parseExtractGraph (prompts.ts), so the mock
+        // returns the RawGraph shape (concepts/judgements/inferences/procedures), NOT the legacy
+        // Combo (glossary/workflow). title/abstract render as the `# title` and the one unanchored
+        // `## Abstract`; each unit's verbatim `quote` is located in NOTE by locateGraph — a HARD
+        // ABORT on a miss — so every quote is a real slice of NOTE, not just a source block id.
         return {
-          // title/abstract: the real EXTRACT prompt requests both (prompts.ts) and the canonical
-          // projection (the default path) renders them as the `# title` and the one unanchored
-          // `## Abstract`. The mock carries them so the default seven-section body is exercised.
           title: "Anchor image discipline",
           abstract:
             "Blocking from the first felt impression, not the moving scene, keeps values from drifting.",
           thesis: "Blocking from the impression rather than the scene keeps the painting honest.",
-          glossary: [
+          concepts: [
             {
-              term: "Anchor image",
-              def: "The first felt impression, fixed as the reference.",
+              headword: "Anchor image",
+              statement: "The first felt impression, fixed as the reference.",
               relations: [],
               source: ["B3"],
-              // canonical projection (the default path) locates every unit's verbatim quote in the
-              // source body via locate() — a HARD ABORT on a miss — so the extract mock must carry a
-              // real slice of NOTE, not just a source block id.
               quote:
                 "The anchor image is the first felt impression of the scene, fixed as the reference",
             },
             {
-              term: "Impression distance",
-              def: "The nearness of a value to its anchor.",
+              headword: "Impression distance",
+              statement: "The nearness of a value to its anchor.",
               relations: [],
               source: ["B3"],
               quote:
                 "The impression distance is the nearness of a value to its anchor on re-inspection",
             },
           ],
-          workflow: [
+          judgements: [],
+          inferences: [],
+          procedures: [
             {
-              step: "Fix the anchor image before opening paints",
-              source: ["B4"],
-              quote: "Fix the anchor image before opening paints",
+              headword: "Anchor discipline",
+              steps: [
+                {
+                  statement: "Fix the anchor image before opening paints.",
+                  source: ["B4"],
+                  quote: "Fix the anchor image before opening paints",
+                },
+              ],
             },
           ],
         };

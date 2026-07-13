@@ -1,18 +1,18 @@
-// e2e.test.ts — end-to-end of the canonical projection path WITHOUT a live model: a fixture body
-// + a fixture settled combo (real verbatim quotes) → comboToResult → projectMarkdown. Asserts
-// the frontmatter Source, that the expected sections populate, that every emitted start..end
-// anchor round-trips against the body bytes, and that Relations render `from — rel → to`.
-// Negative: an absent quote hard-aborts (LocateError); an off-registry rel and a no-unit
-// endpoint are dropped. Run with `bun test e2e.test.ts`.
+// e2e.test.ts — end-to-end of the canonical PROJECTION without a live model: a fixture body + a
+// hand-built DistillationResult (units/edges with real located spans) → projectMarkdown. This is
+// the template the other rebuilt suites converge on — it builds the graph DIRECTLY (no Combo
+// bridge, no settle chain), so it exercises projectMarkdown over a valid seven-section graph.
+// Asserts the frontmatter Source, that every expected section populates, that every emitted
+// start..end anchor round-trips against the body bytes, a specific concept anchor, and that
+// Relations render `from — rel → to`. Span-locating and edge-filtering are covered by
+// locate-graph.test.ts (the stage that computes them); here the graph is pre-built. Run with
+// `bun test e2e.test.ts`.
 import { expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
-import { comboToResult, type ComboToResultArgs } from "./adapt.ts";
-import { computeSource } from "./graph.ts";
-import { LocateError } from "./locate.ts";
+import { computeSource, type Edge, type Unit } from "./graph.ts";
+import { locate } from "./locate.ts";
 import { sliceBytes } from "./mdstruct.ts";
-import { computeStepGroups } from "./pipeline.ts";
-import { projectMarkdown } from "./project.ts";
-import type { Block, Combo, GlossEntry, WorkStep } from "./text.ts";
+import { projectMarkdown, type Projection } from "./project.ts";
 
 const PATH = "widgets.md";
 const BODY = [
@@ -32,91 +32,73 @@ const BODY = [
   "const answer = 42;",
 ].join("\n");
 
-const orderedEntries: GlossEntry[] = [
-  {
-    term: "Widget",
-    def: "raw",
-    quote: "A widget is a small composable unit of work.",
-    source: ["B1"],
-    relations: [],
-  },
-  {
-    term: "Gadget",
-    def: "raw",
-    quote: "A gadget is a larger assembly built from widgets.",
-    source: ["B2"],
-    relations: [
-      {
-        rel: "depends-on",
-        to: "Widget",
-        predicate: null,
-        quote: "gadget depends on at least one widget",
-      },
-      // off-registry rel → dropped before locate
-      { rel: "causes", to: "Widget", predicate: null, quote: "unused" },
-      // no local unit for endpoint → dropped before locate
-      { rel: "part-of", to: "Missing", predicate: null, quote: "unused" },
-    ],
-  },
-];
-const defByTerm = new Map<string, string>([
-  ["Widget", "A widget is a small composable unit."],
-  ["Gadget", "A gadget is an assembly of widgets."],
-]);
-const orderedSteps: WorkStep[] = [
-  { step: "s0", source: ["B7"], quote: "First, assemble the widgets in order." },
-  { step: "s1", source: ["B7"], quote: "Then bolt them together into a gadget." },
-];
-const workflowSteps = ["Assemble the widgets in order.", "Bolt them together into a gadget."];
-const blockById = new Map<string, Block>([["B7", { id: "B7", text: "steps source" }]]);
-const payloadBlocks: Block[] = [{ id: "B9", text: "const answer = 42;" }];
-const combo: Combo = {
-  description: "",
-  thesis: "",
-  glossary: [],
-  workflow: [],
-  title: "Widgets and gadgets",
-  abstract: "Widgets compose into gadgets.",
-  judgements: [
-    {
-      statement: "Gadgets are reliable.",
-      modality: null,
-      source: ["B3"],
-      quote: "Every gadget depends on at least one widget, which is a strong claim.",
-    },
-  ],
-  inferences: [
-    {
-      statement: "Gadgets require widgets.",
-      source: ["B4"],
-      quote: "It follows that you cannot build a gadget with no widgets.",
-    },
-  ],
-};
+// A unit whose span is located from a verbatim body quote, so every emitted anchor round-trips.
+function unit(id: string, type: Unit["type"], statement: string, quote: string): Unit {
+  return { id, type, statement, span: locate(BODY, quote) };
+}
 
-function args(overrides: Partial<ComboToResultArgs> = {}): ComboToResultArgs {
+function result(): Projection {
+  const units: Unit[] = [
+    unit(
+      "Widget",
+      "concept",
+      "A widget is a small composable unit.",
+      "A widget is a small composable unit of work.",
+    ),
+    unit(
+      "Gadget",
+      "concept",
+      "A gadget is an assembly of widgets.",
+      "A gadget is a larger assembly built from widgets.",
+    ),
+    {
+      ...unit(
+        "J1",
+        "judgment",
+        "Gadgets are reliable.",
+        "Every gadget depends on at least one widget, which is a strong claim.",
+      ),
+      modality: "assertoric",
+    },
+    unit(
+      "I1",
+      "inference",
+      "Gadgets require widgets.",
+      "It follows that you cannot build a gadget with no widgets.",
+    ),
+    unit(
+      "Assemble a gadget",
+      "procedure",
+      "Assemble the widgets in order.\nBolt them together into a gadget.",
+      "First, assemble the widgets in order.",
+    ),
+    unit("const answer = 42;", "payload", "const answer = 42;", "const answer = 42;"),
+  ];
+  const edges: Edge[] = [
+    {
+      from: "Gadget",
+      to: "Widget",
+      rel: "depends-on",
+      span: locate(BODY, "gadget depends on at least one widget"),
+    },
+  ];
   return {
-    path: PATH,
-    body: BODY,
-    combo,
-    orderedEntries,
-    orderedSteps,
-    workflowSteps,
-    defByTerm,
-    payloadBlocks,
-    stepGroups: computeStepGroups(orderedSteps, blockById),
-    ...overrides,
+    source: computeSource(PATH, BODY),
+    units,
+    edges,
+    title: "Widgets and gadgets",
+    abstract: "Widgets compose into gadgets.",
   };
 }
 
 test("e2e: frontmatter bytes/sha256 equal computeSource(path, body)", () => {
-  const md = projectMarkdown(comboToResult(args()));
+  const md = projectMarkdown(result());
   const src = computeSource(PATH, BODY);
   expect(md).toContain(`source: { path: ${src.path}, bytes: ${src.bytes}, sha256: ${src.sha256} }`);
 });
 
 test("e2e: the expected sections populate", () => {
-  const md = projectMarkdown(comboToResult(args()));
+  const md = projectMarkdown(result());
   for (const heading of [
     "# Widgets and gadgets",
     "## Abstract",
@@ -132,7 +114,7 @@ test("e2e: the expected sections populate", () => {
 });
 
 test("e2e: every emitted start..end anchor round-trips against the body bytes", () => {
-  const md = projectMarkdown(comboToResult(args()));
+  const md = projectMarkdown(result());
   const buf = Buffer.from(BODY, "utf8");
   const anchors = [...md.matchAll(/(\d+)\.\.(\d+)/g)];
   expect(anchors.length).toBeGreaterThan(0);
@@ -146,35 +128,26 @@ test("e2e: every emitted start..end anchor round-trips against the body bytes", 
 });
 
 test("e2e: a specific concept anchor round-trips to its verbatim quote", () => {
-  const result = comboToResult(args());
-  const widget = result.units.find((u) => u.id === "Widget")!;
+  const widget = result().units.find((u) => u.id === "Widget")!;
   expect(sliceBytes(Buffer.from(BODY, "utf8"), widget.span)).toBe(
     "A widget is a small composable unit of work.",
   );
 });
 
 test("e2e: Relations render `from — rel → to`", () => {
-  const md = projectMarkdown(comboToResult(args()));
+  const md = projectMarkdown(result());
   expect(md).toContain("gadget — depends-on → widget");
 });
 
-test("e2e: an off-registry rel and a no-unit endpoint are dropped (one edge survives)", () => {
-  const result = comboToResult(args());
-  expect(result.edges).toHaveLength(1);
-  const md = projectMarkdown(result);
-  const relationLines = md.split("\n").filter((l) => l.includes("→"));
-  expect(relationLines).toHaveLength(1);
-});
-
-test("e2e: a quote absent from body hard-aborts with LocateError", () => {
-  const badEntries: GlossEntry[] = [
+test("e2e: an edge whose endpoint references no unit is a hard failure", () => {
+  const r = result();
+  r.edges = [
     {
-      term: "Ghost",
-      def: "raw",
-      quote: "this exact sentence is not present in the body",
-      source: ["B1"],
-      relations: [],
+      from: "Gadget",
+      to: "Missing",
+      rel: "depends-on",
+      span: locate(BODY, "gadget depends on at least one widget"),
     },
   ];
-  expect(() => comboToResult(args({ orderedEntries: badEntries }))).toThrow(LocateError);
+  expect(() => projectMarkdown(r)).toThrow();
 });

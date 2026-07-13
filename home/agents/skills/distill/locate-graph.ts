@@ -4,11 +4,11 @@
 // edge. Per spec §4 this runs IMMEDIATELY after extract, not at end-of-pipeline — so a bad quote
 // surfaces at the earliest possible point.
 //
-// This is the reparented core of adapt.ts::comboToResult, MINUS the settled-artifact plumbing
-// (no defByTerm / workflowSteps / orderedEntries / stepGroups carriers — the pre-graph already
-// carries the final statements). It is ADDITIVE (blueprint §7 step 7): it lands alongside
-// comboToResult and is not yet wired; a later step flips distill()'s default path onto it and
-// deletes adapt.ts.
+// This is the reparented core of the retired adapt.ts::comboToResult, MINUS the settled-artifact
+// plumbing (no defByTerm / workflowSteps / orderedEntries / stepGroups carriers — the pre-graph
+// already carries the final statements). Blueprint §7 step 8 wired distill()'s DEFAULT-compress
+// path onto it (extract → locateGraph → projectMarkdown) and deleted adapt.ts; the three legacy
+// output paths (routed / --glossary / --reference) still run the settle chain until steps 9-11.
 //
 // It is a leaf over the canonical modules: graph.ts (types + computeSource), locate.ts (the
 // span-locate primitive), and REL_REGISTRY / slugSegment / Block from text.ts. It does NOT import

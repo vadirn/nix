@@ -366,15 +366,23 @@ export async function extractGraph(
 }
 
 // ---- stage 2: grade each block drop / distill / retain ----
-function gradeBlocksPrompt(combo: Combo, blocks: Block[]): string {
-  const gloss = glossList(combo.glossary);
+// The payload retain lane (blueprint §1.1): the ONE deterministic selection that survives the
+// settle-chain collapse. Reads a thesis + a concept list ({term,def}), NOT a `Combo` — the
+// canonical default path feeds the pre-graph's concepts (id→term, statement→def) and the legacy
+// paths feed `combo.thesis`/`combo.glossary` (a `GlossEntry` structurally satisfies {term,def}).
+function gradeBlocksPrompt(
+  thesis: string,
+  concepts: { term: string; def: string }[],
+  blocks: Block[],
+): string {
+  const gloss = glossList(concepts);
   return `You are grading each block of a note for an abstractive compression. You have the note's thesis and its glossary of concepts. Grade EVERY block:
 - "drop": off-thesis, OR its content is already captured by a glossary entry (a restatement).
 - "distill": on-thesis prose whose ideas should be re-expressed densely — it folds into the glossary and a short prose tie-together. This is the DEFAULT for explanatory text.
 - "retain": ONLY content that is already compact and would be destroyed by rewording — a fenced code block, a command line, a file path, a flag, literal output, or a list made mostly of [[wikilink]] references (a "related"/"see also" list). Narrative or explanatory PROSE is NEVER "retain", even when it is important, names an example, or contains a [[wikilink]] — that prose is "distill". When unsure between distill and retain, choose distill.
 Return ONLY JSON {"grades":[{"id":"Bn","grade":"drop|distill|retain"}]} — one entry per block, ids matching.
 
-THESIS: ${combo.thesis}
+THESIS: ${thesis}
 
 GLOSSARY:
 ${gloss}
@@ -383,10 +391,14 @@ BLOCKS (ids in [Bn] markers):
 ${render(blocks)}`;
 }
 
-export async function gradeBlocks(combo: Combo, blocks: Block[]): Promise<Map<string, Grade>> {
+export async function gradeBlocks(
+  thesis: string,
+  concepts: { term: string; def: string }[],
+  blocks: Block[],
+): Promise<Map<string, Grade>> {
   const judged = await askJson<{ grades: { id: string; grade: Grade }[] }>(
     EXTRACT,
-    gradeBlocksPrompt(combo, blocks),
+    gradeBlocksPrompt(thesis, concepts, blocks),
     EXTRACT_TOKENS,
   );
   const byId = new Map<string, Grade>();
