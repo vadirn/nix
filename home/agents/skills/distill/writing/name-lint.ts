@@ -65,6 +65,20 @@ function corruptionCap(a: string, b: string): number {
   return Math.min(3, Math.floor(Math.max(a.length, b.length) / 3));
 }
 
+// Sentence-initial-only groups are usually ordinary capitalization ("So", "Note", table
+// headers), but a revise pass can front a corrupted name too. Flag one as corrupted only
+// when it never occurs lowercase AND its counterpart is attested mid-sentence (a real proper
+// noun, not another structurally capitalized ordinary word). Shared relaxation rule between
+// against-source (a candidate vs. its nearest source name) and self-consistency (the minority
+// spelling vs. the majority).
+function initialOnlyRelaxed(
+  initialOnly: boolean,
+  everLowercase: boolean,
+  counterpartAttestedNonInitial: boolean,
+): boolean {
+  return initialOnly && (everLowercase || !counterpartAttestedNonInitial);
+}
+
 function stripZones(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ") // fenced code
@@ -182,12 +196,8 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
   for (const [k, g] of groups) {
     // first-occurrence order
     if (covered(g.word)) continue; // present in source (case-insensitive, folded)
-    // Sentence-initial-only groups are usually ordinary capitalization ("So",
-    // "Note", table headers), but a revise pass can front a corrupted name too.
-    // The corrupted lane flags an initial-only group when the word never occurs
-    // uncapitalized AND its near-neighbor is attested mid-sentence (a real
-    // proper noun, not another structurally capitalized ordinary word); the
-    // advisory invented lane keeps the strict skip — it has no such evidence.
+    // The corrupted lane applies the initialOnlyRelaxed rule below; the advisory
+    // invented lane keeps the strict skip — it has no such evidence.
     const initialOnly = g.nonInitial === 0;
     let best: string | null = null,
       bestD = Infinity;
@@ -200,7 +210,7 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
     }
     const cap = best ? corruptionCap(k, best) : 0;
     if (best && bestD >= 1 && bestD <= cap) {
-      if (initialOnly && (outLower.has(k) || !srcNonInitial.has(best))) continue;
+      if (initialOnlyRelaxed(initialOnly, outLower.has(k), srcNonInitial.has(best))) continue;
       corrupted.push({ found: g.word, wanted: srcCapSurface.get(best) ?? best });
     } else if (!initialOnly && !inKnownRun.get(k)) invented.push(g.word);
   }
@@ -233,11 +243,15 @@ export function nameLintSelfConsistency(output: string): NameLintResult {
       if (d < 1 || d > cap) continue;
       const [minor, major] = ga.count < gb.count ? [ga, gb] : [gb, ga];
       if (minor.count === major.count) continue; // tie: no direction, skip
-      // same relaxation as against-source: an initial-only minority is flagged
-      // only when it never occurs uncapitalized and the majority spelling is
-      // attested mid-sentence (kills Definition/Destination-style table-header
-      // pairs while keeping a fronted corrupted name)
-      if (minor.nonInitial === 0 && (lower.has(foldKey(minor.word)) || major.nonInitial === 0))
+      // same initialOnlyRelaxed rule as against-source (kills Definition/Destination-style
+      // table-header pairs while keeping a fronted corrupted name)
+      if (
+        initialOnlyRelaxed(
+          minor.nonInitial === 0,
+          lower.has(foldKey(minor.word)),
+          major.nonInitial !== 0,
+        )
+      )
         continue;
       corrupted.push({ found: minor.word, wanted: major.word }); // minority spelling is the suspect
     }
