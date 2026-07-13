@@ -476,10 +476,13 @@ ${blocks}`;
 export async function workflowGate(
   groups: { id: string; steps: string[]; sourceText: string }[],
   lang: "en" | "ru",
+  // Injected so tests drive the degradation catch without a process-global module
+  // mock (see fidelityGate); production callers omit it for the real fw transport.
+  ask: typeof askJson = askJson,
 ): Promise<StepVerdict[]> {
   if (groups.length === 0) return [];
   try {
-    const res = await askJson<{ groups?: StepVerdict[] }>(
+    const res = await ask<{ groups?: StepVerdict[] }>(
       FIDELITY,
       workflowGatePrompt(groups, lang),
       FIDELITY_TOKENS,

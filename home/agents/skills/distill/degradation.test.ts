@@ -17,7 +17,7 @@ import {
   isTransient,
   rethrowIfBug,
 } from "./fw.ts";
-import { fidelityGate, proseGate, revise } from "./prompts.ts";
+import { fidelityGate, proseGate, revise, workflowGate } from "./prompts.ts";
 
 // ---- the classifier + the gate it backs (pure, no network) ----
 test("isTransient: only TransientError is transient", () => {
@@ -130,6 +130,17 @@ test("fidelityGate: a non-transient code bug propagates instead of shipping unve
       throwsAsk(new TypeError("cannot read property of undefined")),
     ),
   ).rejects.toThrow("cannot read property of undefined");
+});
+
+test("workflowGate: a transient judge flake degrades every group to inconclusive", async () => {
+  const r = await workflowGate(
+    [{ id: "g0", steps: ["step"], sourceText: "s" }],
+    "en",
+    throwsAsk(new TransientError("judge returned no JSON")),
+  );
+  expect(r).toHaveLength(1);
+  expect(r[0].grade).toBe("inconclusive");
+  expect(r[0].id).toBe("g0");
 });
 
 test("revise: an echoed block-id marker is stripped from the returned text (live [__G0__] leak)", async () => {
