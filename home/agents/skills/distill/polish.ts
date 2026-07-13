@@ -222,7 +222,7 @@ export async function main(): Promise<void> {
       );
     if (!noSpell) {
       progress?.("spell…");
-      const r = await spellPass(blocks, resolvedLang);
+      const r = await spellPass(blocks);
       blocks = r.blocks;
       reverted = r.reverted;
       spellFailed = r.failed;

@@ -10,13 +10,12 @@ import { levenshtein, levenshteinBounded } from "./name-lint.ts";
 import { makeIdMarkerStripper } from "./passes.ts";
 import { normalizeTypography } from "./typography.ts";
 
-// `lang` stays in the signature (frozen API; polish.ts threads it through) but the
-// prompt's language rule is proofreader-specific and language-neutral: langRule()
-// was written for abstractive generation and instructs the model to WRITE in the
-// note's language, which on code-switched (mixed RU/EN) notes reads as an order to
-// translate the other language's clauses — observed live, small translations fit
-// inside the 15% diff bound. A proofreader must never translate.
-export function spellPassPrompt(blocks: Block[], _lang: "en" | "ru"): string {
+// No langRule() here: that rule is written for abstractive generation and instructs
+// the model to WRITE in the note's language, which on code-switched (mixed RU/EN)
+// notes reads as an order to translate the other language's clauses — observed live,
+// small translations fit inside the 15% diff bound. A proofreader must never translate,
+// so the prompt is language-neutral and takes no lang param.
+export function spellPassPrompt(blocks: Block[]): string {
   return `You are a proofreader. Fix ONLY objective spelling, typo, and grammatical-agreement errors in each block below: misspelled words, wrong case/number/gender/tense agreement, misused homophones, and incorrect compound spelling (e.g. "in stead" vs "instead"). Change NOTHING else: no rephrasing, no reordering, no synonym substitutions, no added or removed words beyond the minimal correction, no punctuation-style changes. Keep every word in the language it is written in; never translate. Keep every line break, heading, list marker, and table cell exactly where it is. Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged, exactly as many times as they appear. Preserve emphasis (**bold**, _italic_). If a block has no errors, return its text unchanged. Return ONLY JSON {"blocks":[{"id":"B1","text":"corrected text"}, ...]} — one entry per block, ids matching.
 
 TEXT:
@@ -63,7 +62,6 @@ export function verifySpellBlock(input: string, output: string): { ok: boolean; 
 
 export async function spellPass(
   blocks: Block[],
-  lang: "en" | "ru",
   literals: string[] = [],
   // The model call, injected so tests drive a flake / revert case without a
   // process-global module mock; production callers omit it for the real fw transport.
@@ -79,7 +77,7 @@ export async function spellPass(
   try {
     const { blocks: fixed } = await ask<{ blocks: { id: string; text: string }[] }>(
       EXTRACT,
-      spellPassPrompt(masked, lang),
+      spellPassPrompt(masked),
       EXTRACT_TOKENS,
     );
     const byId = new Map(fixed.map((r) => [r.id, r.text]));

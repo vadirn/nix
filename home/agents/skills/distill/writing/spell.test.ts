@@ -13,7 +13,7 @@ const read = (name: string) => readFileSync(resolve(import.meta.dir, "../fixture
 // ---- the frozen prompt (pure) ----
 test("spellPassPrompt: frozen sentences and JSON shape pinned; proofreader never translates", () => {
   const blocks = [{ id: "B1", text: "Teh text." }];
-  const en = spellPassPrompt(blocks, "en");
+  const en = spellPassPrompt(blocks);
   expect(en).toContain("Change NOTHING else:");
   expect(en).toContain('Return ONLY JSON {"blocks":');
   expect(en).toContain("[B1] Teh text.");
@@ -22,7 +22,7 @@ test("spellPassPrompt: frozen sentences and JSON shape pinned; proofreader never
   // code-switched RU/EN note it reads as an order to translate the other language's
   // clauses (observed live). It must stay out of the proofreader prompt.
   expect(en).not.toContain(langRule("en"));
-  expect(spellPassPrompt(blocks, "ru")).not.toContain(langRule("ru"));
+  expect(en).not.toContain(langRule("ru"));
 });
 
 // ---- the deterministic verifier (pure) ----
@@ -120,7 +120,6 @@ test("spellPass: a rephrased block reverts to its input and is flagged; others k
       { id: "B1", text: b1 },
       { id: "B2", text: "Blocks with seperate concerns are split." },
     ],
-    "en",
     [],
     askBy((prompt) => ({
       blocks: [
@@ -138,7 +137,6 @@ test("spellPass: a rephrased block reverts to its input and is flagged; others k
 test("spellPass: an echoed [B1] marker is stripped before verification", async () => {
   const out = await spellPass(
     [{ id: "B1", text: "Teh text is fixed." }],
-    "en",
     [],
     askBy(() => ({ blocks: [{ id: "B1", text: "[B1] The text is fixed." }] })),
   );
@@ -150,7 +148,6 @@ test("spellPass: a transient flake returns the input blocks with failed: true", 
   const blocks = [{ id: "B1", text: "Teh text." }];
   const out = await spellPass(
     blocks,
-    "en",
     [],
     throwsAsk(new TransientError("model output parse failure")),
   );
@@ -161,7 +158,6 @@ test("spellPass: a non-transient code bug propagates", async () => {
   await expect(
     spellPass(
       [{ id: "B1", text: "Teh text." }],
-      "en",
       [],
       throwsAsk(new TypeError("cannot read property of undefined")),
     ),
@@ -171,7 +167,6 @@ test("spellPass: a non-transient code bug propagates", async () => {
 test("spellPass: EN fixture's masked spans survive a mocked fix byte-identical", async () => {
   const out = await spellPass(
     segment(read("spell-seeded-en.md")),
-    "en",
     [],
     askBy((prompt) => ({
       blocks: promptBlocks(prompt).map((b) => ({
@@ -194,7 +189,6 @@ test("spellPass: EN fixture's masked spans survive a mocked fix byte-identical",
 test("spellPass: a live-observed synonym swap reverts its block; the legit fix beside it ships", async () => {
   const out = await spellPass(
     segment(read("spell-quirks-en.md")),
-    "en",
     [],
     askBy((prompt) => ({
       blocks: promptBlocks(prompt).map((b) => ({
@@ -214,7 +208,6 @@ test("spellPass: an indented block echoed byte-identical keeps its leading white
   // items and 4-space code blocks even when the model changed nothing.
   const out = await spellPass(
     segment("- parent\n\n  - child one\n  - child two"),
-    "en",
     [],
     askBy((prompt) => ({
       blocks: promptBlocks(prompt).map((b) => ({ id: b.id, text: b.text })),
@@ -227,7 +220,6 @@ test("spellPass: an indented block echoed byte-identical keeps its leading white
 test("spellPass: RU fixture's masked spans survive a mocked fix byte-identical", async () => {
   const out = await spellPass(
     segment(read("spell-seeded-ru.md")),
-    "ru",
     [],
     askBy((prompt) => ({
       blocks: promptBlocks(prompt).map((b) => ({

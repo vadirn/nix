@@ -208,7 +208,7 @@ test("pipeline order: revise's output is what spellPass receives, not the origin
   const blocks = [{ id: "B1", text: "Teh original text." }];
   const revised = await revise(blocks, PASS_EN, [], undefined, ask);
   expect(revised[0].text).toContain("revised now");
-  const spelled = await spellPass(revised, "en", [], ask);
+  const spelled = await spellPass(revised, [], ask);
   expect(spelled.reverted).toEqual([]); // the fix landed, not reverted
   expect(spelled.blocks[0].text).toBe("The the text is revised now."); // spell operated on revise's OUTPUT
   // 4 revise-pass calls + 1 spell call
