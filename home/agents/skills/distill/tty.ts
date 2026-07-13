@@ -9,8 +9,20 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { type Projection } from "./project.ts";
 import { applyTyping, buildTypingReview } from "./retype.ts";
-import { parseInteract, renderBlock } from "./interact.ts";
+import { type Block, parseInteract, renderBlock } from "./interact.ts";
 import { runApply } from "./apply-mode.ts";
+
+// The confirm-all gate-satisfied predicate (plan §4 / blueprint §11.4): a document's gate is
+// satisfied only when a confirm-all block exists AND has at least one item AND every item is
+// checked (an empty confirm-all block never auto-satisfies). Both TTY loops below re-read the
+// file on every iteration and re-derive this off the fresh parse, so it stays a pure function
+// of the current blocks rather than cached state.
+function isGateChecked(blocks: Block[]): boolean {
+  const gate = blocks.find((b) => b.kind === "confirm-all");
+  return (
+    gate !== undefined && gate.items.length > 0 && gate.items.every((it) => it.state === "checked")
+  );
+}
 
 // ---- TTY session (Phase 5, plan §4): sugar over emit+apply, never a third code path ----
 
@@ -63,12 +75,7 @@ export async function runTypingReview(
     for (;;) {
       const text = readFileSync(scratch, "utf8");
       const { blocks: parsed } = parseInteract(text);
-      const gate = parsed.find((b) => b.kind === "confirm-all");
-      const gateChecked =
-        gate !== undefined &&
-        gate.items.length > 0 &&
-        gate.items.every((it) => it.state === "checked");
-      if (!gateChecked) {
+      if (!isGateChecked(parsed)) {
         const answer = await askFn(
           `typing review '${scratch}' — set each unit's type, check the gate, then press y [y/N] `,
         );
@@ -106,13 +113,8 @@ export async function runTtySession(
   for (;;) {
     if (!existsSync(tmpPath)) return 0; // consumed already — a racing apply, or a hand delete
     const { blocks } = parseInteract(readFileSync(tmpPath, "utf8"));
-    const gate = blocks.find((b) => b.kind === "confirm-all");
-    const gateChecked =
-      gate !== undefined &&
-      gate.items.length > 0 &&
-      gate.items.every((it) => it.state === "checked");
-    if (!gateChecked) {
-      const gateId = gate?.id ?? "triage-final";
+    if (!isGateChecked(blocks)) {
+      const gateId = blocks.find((b) => b.kind === "confirm-all")?.id ?? "triage-final";
       const answer = await askFn(
         `gate '${gateId}' unchecked — check it in Obsidian, then press y to re-check [y/N] `,
       );
