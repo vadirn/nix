@@ -23,16 +23,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, expect, test } from "bun:test";
-import { parseInteract, stripInteract } from "./interact.ts";
+import { type Item, parseInteract, stripInteract } from "./interact.ts";
 import { buildIntermediary, safeHandle } from "./triage.ts";
 import { verbatimDef, verbatimDirectives } from "./prompts.ts";
 import type { Residue } from "./residue.ts";
 import {
   type WorkflowOp,
+  classifyItems,
   destinationFor,
   editWorkflow,
   insertThesis,
   resolveDefTerm,
+  resolveStepTarget,
   runApply,
   spliceDef,
   unlinkIfPresent,
@@ -805,6 +807,147 @@ test("resolveDefTerm: exact match, degraded safeHandle match, and no-match null"
   expect(safeHandle("`tau` threshold")).toBe("tau threshold");
   expect(resolveDefTerm(NOTE_TAU, "tau threshold")).toBe("`tau` threshold");
   expect(resolveDefTerm(NOTE, "nonexistent")).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// classifyItems (W19) + resolveStepTarget (W12): the PURE core of the apply pass,
+// unit-tested offline directly (no fs, no LLM), the way the module's helpers-test
+// contract asks. Items are built as plain records — the same shape parseInteract
+// yields — so the whole branch matrix (checked/unchecked × def/steps/thesis/keep,
+// with target-resolution hits and misses) is drivable without an intermediary.
+// ---------------------------------------------------------------------------
+
+// The NOTE procedure "Block from the impression" carries 2 steps (idx 0,1). A steps
+// target is `procedure:<headword>:<1-based idxs>`; procedureTarget re-bases to 0.
+function mkItem(over: Partial<Item> & Pick<Item, "state" | "verb" | "target">): Item {
+  return { targetRaw: over.target, line: 1, ...over };
+}
+
+test("resolveStepTarget: resolves headword + in-range idxs, drops out-of-range, nulls a missing headword", () => {
+  // 1-based 1,2 → 0-based 0,1; both in range (2 steps)
+  expect(resolveStepTarget(NOTE, "procedure:Block from the impression:1,2")).toEqual({
+    hw: "Block from the impression",
+    idxs: [0, 1],
+  });
+  // 1-based 2,99 → 0-based 1,98; 98 is beyond the 2-step list and is dropped
+  expect(resolveStepTarget(NOTE, "procedure:Block from the impression:2,99")).toEqual({
+    hw: "Block from the impression",
+    idxs: [1],
+  });
+  // a whole-procedure target (no `:<idxs>`) resolves the headword but yields no slots
+  expect(resolveStepTarget(NOTE, "procedure:Block from the impression")).toEqual({
+    hw: "Block from the impression",
+    idxs: [],
+  });
+  // an absent headword → null headword, empty idxs (never a phantom slot)
+  expect(resolveStepTarget(NOTE, "procedure:No such procedure:1")).toEqual({
+    hw: null,
+    idxs: [],
+  });
+});
+
+test("classifyItems: checked keep is counted, never executed; checked recover def that resolves queues a re-render", () => {
+  const r = classifyItems(
+    [
+      mkItem({ state: "checked", verb: "keep", target: "Anchor image" }),
+      mkItem({ state: "checked", verb: "recover", target: "Impression distance", payload: DEF_SRC }),
+    ],
+    NOTE,
+  );
+  expect(r.kept).toBe(1);
+  expect(r.recovered).toBe(1);
+  expect(r.defRecovers).toEqual([{ term: "Impression distance", src: DEF_SRC }]);
+  expect(r.defRemovals).toEqual([]);
+  expect(r.unrecoverable).toEqual([]);
+  expect(r.verbatim).toBe(0); // def recovers do NOT bump verbatim in the pure pass
+});
+
+test("classifyItems: checked recover steps splices verbatim; the first slot carries the clauses, the rest delete", () => {
+  const r = classifyItems(
+    [
+      mkItem({
+        state: "checked",
+        verb: "recover",
+        target: "procedure:Block from the impression:1,2",
+        payload: WF_SRC,
+      }),
+    ],
+    NOTE,
+  );
+  const clauses = verbatimDirectives(WF_SRC);
+  expect(r.recovered).toBe(1);
+  expect(r.verbatim).toBe(1);
+  expect(r.workflowOps).toEqual([
+    { headword: "Block from the impression", idx: 0, replace: clauses },
+    { headword: "Block from the impression", idx: 1, replace: null },
+  ]);
+});
+
+test("classifyItems: checked recover thesis sets the paragraph verbatim", () => {
+  const r = classifyItems(
+    [mkItem({ state: "checked", verb: "recover", target: "thesis", payload: THESIS_SRC })],
+    NOTE,
+  );
+  expect(r.thesisPara).toBe(THESIS_SRC);
+  expect(r.recovered).toBe(1);
+  expect(r.verbatim).toBe(1);
+});
+
+test("classifyItems: a CHECKED recover that cannot execute lands in unrecoverable, never a silent no-op", () => {
+  const r = classifyItems(
+    [
+      // def with no glossary row (edge/payload class degrades here)
+      mkItem({ state: "checked", verb: "recover", target: "nonexistent", payload: "x" }),
+      // steps target out of range → no in-range slot
+      mkItem({
+        state: "checked",
+        verb: "recover",
+        target: "procedure:Block from the impression:99",
+        payload: WF_SRC,
+      }),
+      // steps recover with an EMPTY payload would DELETE the slot — refuse instead
+      mkItem({
+        state: "checked",
+        verb: "recover",
+        target: "procedure:Block from the impression:1",
+        payload: "",
+      }),
+      // thesis with an empty payload is nothing to recover
+      mkItem({ state: "checked", verb: "recover", target: "thesis", payload: "   " }),
+    ],
+    NOTE,
+  );
+  expect(r.unrecoverable).toEqual([
+    "nonexistent",
+    "procedure:Block from the impression:99",
+    "procedure:Block from the impression:1",
+    "thesis",
+  ]);
+  expect(r.recovered).toBe(0);
+  expect(r.workflowOps).toEqual([]);
+  expect(r.thesisPara).toBeNull();
+});
+
+test("classifyItems: unchecked entries remove by EFFECT — a resolving def/steps counts, a non-recoverable one does not", () => {
+  const r = classifyItems(
+    [
+      mkItem({ state: "unchecked", verb: "recover", target: "Impression distance", payload: DEF_SRC }),
+      mkItem({
+        state: "unchecked",
+        verb: "recover",
+        target: "procedure:Block from the impression:2",
+        payload: WF_SRC,
+      }),
+      // unchecked non-recoverable: never in the output, so no phantom "removed"
+      mkItem({ state: "unchecked", verb: "recover", target: "nonexistent" }),
+      // unchecked steps out-of-range: nothing to remove
+      mkItem({ state: "unchecked", verb: "recover", target: "procedure:Block from the impression:99" }),
+    ],
+    NOTE,
+  );
+  expect(r.removed).toBe(2);
+  expect(r.defRemovals).toEqual(["Impression distance"]);
+  expect(r.workflowOps).toEqual([{ headword: "Block from the impression", idx: 1, replace: null }]);
 });
 
 test("insertThesis: replaces the ## Abstract body with the paragraph", () => {

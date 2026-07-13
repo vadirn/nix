@@ -70,7 +70,7 @@
 
 import { existsSync, linkSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { parseInteract, resolveInteract, stripInteract } from "./interact.ts";
+import { type Item, parseInteract, resolveInteract, stripInteract } from "./interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "./triage.ts";
 import { askJson, EXTRACT, rethrowIfBug } from "./fw.ts";
 import { fidelityGate, renderEntryPrompt, verbatimDef, verbatimDirectives } from "./prompts.ts";
@@ -139,6 +139,141 @@ function procedureLen(body: string, headword: string): number {
 function promoteEpistemic(body: string): string {
   if (!/^epistemic_status:/m.test(body)) return body;
   return body.replace(/^epistemic_status:.*$/m, "epistemic_status: distilled");
+}
+
+/// Resolve a `procedure:<headword>[:<n,…>]` steps target against the note body into its
+/// resolved headword (null when the `### headword` subsection is absent) and the in-range
+/// subset of its 0-based step indices (an out-of-range slot is dropped; the list is empty
+/// when the headword is gone). The ONE seam apply's two step lanes — checked recover and
+/// unchecked remove — both resolve a step target through; extracted so the resolution is
+/// stated once (W12) and both lanes stay in lockstep.
+export function resolveStepTarget(
+  body: string,
+  target: string,
+): { hw: string | null; idxs: number[] } {
+  const { headword, idxs: raw } = procedureTarget(target);
+  const hw = resolveProcedureHeadword(body, headword);
+  const idxs = hw ? raw.filter((idx) => idx < procedureLen(body, hw)) : [];
+  return { hw, idxs };
+}
+
+/// The classification result runApply fires: the deterministic op set (def re-renders,
+/// def removals, workflow edits, a verbatim thesis) plus the effect counters the footer
+/// reports. `verbatim` here counts only the pre-LLM verbatim splices (recover steps +
+/// thesis); the def-recover lane bumps it again per second-grade failure in runApply.
+export type ClassifyResult = {
+  recovered: number;
+  kept: number;
+  removed: number;
+  verbatim: number;
+  /// Checked recover defs → (resolved term, source clause) to re-render under the key gate.
+  defRecovers: { term: string; src: string }[];
+  /// Unchecked def entries whose `### headword` subsection is spliced out.
+  defRemovals: string[];
+  /// Checked recover steps (replace) and unchecked step removals (replace:null), batched.
+  workflowOps: WorkflowOp[];
+  /// The checked recover thesis payload set verbatim as the ## Abstract body, else null.
+  thesisPara: string | null;
+  /// Checked recover targets with no applicable action — runApply refuses these LOUD.
+  unrecoverable: string[];
+};
+
+/// Classify every residue item against the note body into the op set runApply executes —
+/// the PURE core of the apply pass: no LLM, no fs, no stdout, a transform from (items,
+/// body) to a ClassifyResult. Trapped inside the impure runApply until W19; exported so
+/// the branch matrix (checked/unchecked × def/steps/thesis/keep, with target-resolution
+/// misses) is unit-testable offline, per the module's own helpers-test-offline contract.
+///
+/// Counts reflect EFFECTS, not decisions: a checked keep is `kept`; a checked recover that
+/// resolves is `recovered`; an unchecked recover|keep that had a real removal is `removed`;
+/// a non-recoverable class (edge/payload/prose def with no glossary row, an out-of-range or
+/// whole-procedure step target, an empty payload) is collected in `unrecoverable` when
+/// CHECKED (runApply aborts) and silently dropped when unchecked (never in the output).
+export function classifyItems(items: Item[], body: string): ClassifyResult {
+  let recovered = 0;
+  let kept = 0;
+  let removed = 0;
+  let verbatim = 0;
+
+  const defRecovers: { term: string; src: string }[] = [];
+  const defRemovals: string[] = [];
+  const workflowOps: WorkflowOp[] = [];
+  let thesisPara: string | null = null;
+  const unrecoverable: string[] = [];
+
+  for (const it of items) {
+    const kind = targetKind(it.target);
+    const payload = it.payload ?? "";
+    if (it.state === "checked") {
+      if (it.verb === "keep") {
+        kept++; // held as shipped — no LLM, no removal
+        continue;
+      }
+      // recover — every lane must be executable or refuse; counts reflect EFFECTS.
+      if (kind === "def") {
+        const term = resolveDefTerm(body, it.target);
+        if (term === null) {
+          unrecoverable.push(it.target); // no concept subsection → apply has no action
+          continue;
+        }
+        defRecovers.push({ term, src: payload });
+        recovered++;
+      } else if (kind === "steps") {
+        // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
+        // spans deferred) or no source directive (empty payload) cannot execute — and an empty
+        // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
+        // rather than no-op or delete.
+        const { hw, idxs } = resolveStepTarget(body, it.target);
+        const clauses = verbatimDirectives(payload);
+        if (hw === null || idxs.length === 0 || clauses.length === 0) {
+          unrecoverable.push(it.target);
+          continue;
+        }
+        idxs.forEach((idx, k) => {
+          workflowOps.push({ headword: hw, idx, replace: k === 0 ? clauses : null });
+        });
+        recovered++;
+        verbatim++;
+      } else {
+        // thesis — an empty payload is nothing to recover; refuse rather than insert a blank.
+        if (payload.trim() === "") {
+          unrecoverable.push(it.target);
+          continue;
+        }
+        thesisPara = payload;
+        recovered++;
+        verbatim++;
+      }
+    } else {
+      // unchecked recover|keep → the entry is REMOVED, but only counted when there is a
+      // real removal: a non-recoverable class (or an out-of-range slot) was never in the
+      // output, so it stays dropped with no effect (not a phantom "removed").
+      if (kind === "def") {
+        const term = resolveDefTerm(body, it.target);
+        if (term !== null) {
+          defRemovals.push(term);
+          removed++;
+        }
+      } else if (kind === "steps") {
+        const { hw, idxs } = resolveStepTarget(body, it.target);
+        for (const idx of idxs) workflowOps.push({ headword: hw!, idx, replace: null });
+        if (idxs.length > 0) removed++;
+      }
+      // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
+    }
+  }
+
+  return {
+    recovered,
+    kept,
+    removed,
+    verbatim,
+    defRecovers,
+    defRemovals,
+    workflowOps,
+    thesisPara,
+    unrecoverable,
+  };
 }
 
 /// Apply a single intermediary and return the process exit code (0 | 1 | 2).
@@ -217,82 +352,13 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   // analogue of the old tie-together line).
   const tie0 = parseCanonicalNote(bodyNoFront).abstract;
 
-  let recovered = 0;
-  let kept = 0;
-  let removed = 0;
-  let verbatim = 0;
-
-  const defRecovers: { term: string; src: string }[] = [];
-  const defRemovals: string[] = [];
-  const workflowOps: WorkflowOp[] = [];
-  let thesisPara: string | null = null;
-  const unrecoverable: string[] = [];
-
-  for (const it of items) {
-    const kind = targetKind(it.target);
-    const payload = it.payload ?? "";
-    if (it.state === "checked") {
-      if (it.verb === "keep") {
-        kept++; // held as shipped — no LLM, no removal
-        continue;
-      }
-      // recover — every lane must be executable or refuse (below); counts reflect EFFECTS.
-      if (kind === "def") {
-        const term = resolveDefTerm(body, it.target);
-        if (term === null) {
-          unrecoverable.push(it.target); // no concept subsection → apply has no action
-          continue;
-        }
-        defRecovers.push({ term, src: payload });
-        recovered++;
-      } else if (kind === "steps") {
-        // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
-        // spans deferred) or no source directive (empty payload) cannot execute — and an empty
-        // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
-        // rather than no-op or delete.
-        const { headword, idxs: raw } = procedureTarget(it.target);
-        const hw = resolveProcedureHeadword(body, headword);
-        const idxs = hw ? raw.filter((idx) => idx < procedureLen(body, hw)) : [];
-        const clauses = verbatimDirectives(payload);
-        if (hw === null || idxs.length === 0 || clauses.length === 0) {
-          unrecoverable.push(it.target);
-          continue;
-        }
-        idxs.forEach((idx, k) => {
-          workflowOps.push({ headword: hw, idx, replace: k === 0 ? clauses : null });
-        });
-        recovered++;
-        verbatim++;
-      } else {
-        // thesis — an empty payload is nothing to recover; refuse rather than insert a blank.
-        if (payload.trim() === "") {
-          unrecoverable.push(it.target);
-          continue;
-        }
-        thesisPara = payload;
-        recovered++;
-        verbatim++;
-      }
-    } else {
-      // unchecked recover|keep → the entry is REMOVED, but only counted when there is a
-      // real removal: a non-recoverable class (or an out-of-range slot) was never in the
-      // output, so it stays dropped with no effect (not a phantom "removed").
-      if (kind === "def") {
-        const term = resolveDefTerm(body, it.target);
-        if (term !== null) {
-          defRemovals.push(term);
-          removed++;
-        }
-      } else if (kind === "steps") {
-        const { headword, idxs: raw } = procedureTarget(it.target);
-        const hw = resolveProcedureHeadword(body, headword);
-        const idxs = hw ? raw.filter((idx) => idx < procedureLen(body, hw)) : [];
-        for (const idx of idxs) workflowOps.push({ headword: hw!, idx, replace: null });
-        if (idxs.length > 0) removed++;
-      }
-      // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
-    }
-  }
+  // The classification is the pure core (classifyItems, W19): a transform from (items, body)
+  // to the op set + counters, with NO I/O. `verbatim` is `let` because the def-recover lane
+  // below bumps it per second-grade failure; every other field is final here.
+  const cls = classifyItems(items, body);
+  const { recovered, kept, removed, defRecovers, defRemovals, workflowOps, thesisPara, unrecoverable } =
+    cls;
+  let verbatim = cls.verbatim;
 
   // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
   // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
