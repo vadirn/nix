@@ -8,6 +8,7 @@ import { sliceBytes, type Span } from "./mdstruct.ts";
 import { type Projection } from "./project.ts";
 import {
   type ConceptVerdict,
+  type GateGrade,
   type StepVerdict,
   fidelityGate,
   proseGate,
@@ -15,6 +16,26 @@ import {
 } from "./prompts.ts";
 import { type ProseUnit } from "./text.ts";
 import { type Residue, proseResidue } from "./residue.ts";
+
+// Shared inconclusive→residue mapping: both the concept and workflow verdict loops below grade
+// "inconclusive" identically (a `gate-inconclusive:` reason, surfaced-but-unverified) and derive
+// `reasonClass` the same way off that one distinction. The two loops still vary on `kind` and on
+// the non-inconclusive reason text (concepts prefix a per-item `direction`, groups a fixed
+// "workflow", each with its own missing-fallback), so callers build `failReason` themselves and
+// hand it in pre-interpolated rather than have this helper guess at a shared template.
+function verdictResidueFields(
+  v: { grade: GateGrade; missing: string },
+  opts: { kind: Residue["kind"]; failReason: string },
+): Pick<Residue, "kind" | "reason" | "reasonClass"> {
+  const inconclusive = v.grade === "inconclusive";
+  return {
+    kind: opts.kind,
+    reason: inconclusive
+      ? `gate-inconclusive: ${v.missing || "judge returned no verdict"}`
+      : opts.failReason,
+    reasonClass: inconclusive ? "gate-inconclusive" : "failed",
+  };
+}
 
 // The DEMOTED fidelity gate for the canonical pipeline (blueprint §4.2). The retired settle-chain
 // gate authored defs/steps and repaired them in a recovery loop against a scratch render; once
@@ -68,28 +89,24 @@ export async function runFidelityBackstop(
   }
   for (const c of graded.concepts) {
     if (c.grade === "translated") continue;
-    const inconclusive = c.grade === "inconclusive";
     residue.push({
       label: c.term,
-      reason: inconclusive
-        ? `gate-inconclusive: ${c.missing || "judge returned no verdict"}`
-        : `${c.direction || "residue"}: ${c.missing || "failed round-trip entailment"}`,
       source: concepts.find((r) => r.term === c.term)?.sourceText ?? "",
-      kind: "def",
-      reasonClass: inconclusive ? "gate-inconclusive" : "failed",
+      ...verdictResidueFields(c, {
+        kind: "def",
+        failReason: `${c.direction || "residue"}: ${c.missing || "failed round-trip entailment"}`,
+      }),
     });
   }
   for (const v of gradedG) {
     if (v.grade === "translated") continue;
-    const inconclusive = v.grade === "inconclusive";
     residue.push({
       label: v.id,
-      reason: inconclusive
-        ? `gate-inconclusive: ${v.missing || "judge returned no verdict"}`
-        : `workflow: ${v.missing || "directive coverage failed"}`,
       source: groups.find((g) => g.id === v.id)?.sourceText ?? "",
-      kind: "steps",
-      reasonClass: inconclusive ? "gate-inconclusive" : "failed",
+      ...verdictResidueFields(v, {
+        kind: "steps",
+        failReason: `workflow: ${v.missing || "directive coverage failed"}`,
+      }),
       // per-step spans are deferred, so the canonical backstop carries no flat-list indices.
       stepIdxs: [],
     });
