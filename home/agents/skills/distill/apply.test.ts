@@ -26,7 +26,7 @@ import { afterEach, expect, test } from "bun:test";
 import { parseInteract, stripInteract } from "./interact.ts";
 import { buildIntermediary, safeHandle } from "./triage.ts";
 import { verbatimDef, verbatimDirectives } from "./prompts.ts";
-import type { Residue } from "./pipeline.ts";
+import type { Residue } from "./residue.ts";
 import {
   type WorkflowOp,
   destinationFor,

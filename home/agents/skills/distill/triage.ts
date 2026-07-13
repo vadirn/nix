@@ -9,7 +9,7 @@
 // by the caller and passed in, so the fixture's hash is injectable in tests.
 import { type BlockSpec, renderBlock } from "./interact.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
-import type { Residue } from "./pipeline.ts";
+import type { Residue } from "./residue.ts";
 
 /// The triage vocabulary (plan §1): `recover` — failed items; checked = re-render
 /// from the fenced source at apply (verbatim splice on a second grade failure).

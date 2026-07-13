@@ -43,7 +43,8 @@ import {
   wordCount,
 } from "./text.ts";
 import { extractJson } from "./fw.ts";
-import { assembleRoutedNote, edgePayloadResidue, wikilinkResidue } from "./pipeline.ts";
+import { assembleRoutedNote } from "./pipeline.ts";
+import { edgePayloadResidue, wikilinkResidue } from "./residue.ts";
 import { parseDistilled } from "./prose-mode.ts";
 import { computeSource, type Unit } from "./graph.ts";
 import { locate } from "./locate.ts";

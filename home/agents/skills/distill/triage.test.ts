@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { parseInteract, renderBlock, stripInteract } from "./interact.ts";
-import type { Residue } from "./pipeline.ts";
+import type { Residue } from "./residue.ts";
 import { TRIAGE_VERBS, buildIntermediary, residueToBlocks } from "./triage.ts";
 
 const FIXTURE = readFileSync(

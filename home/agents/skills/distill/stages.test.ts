@@ -9,16 +9,8 @@ import { expect, test } from "bun:test";
 import type { ProseUnit } from "./text.ts";
 import { normalizeForContainment } from "./text.ts";
 import type { ProseVerdict } from "./prompts.ts";
-import {
-  anchored,
-  buildFooter,
-  expandGuardCap,
-  parseArgs,
-  payloadResidue,
-  proseResidue,
-  USAGE,
-  wikilinkResidue,
-} from "./pipeline.ts";
+import { buildFooter, expandGuardCap, parseArgs, USAGE } from "./pipeline.ts";
+import { anchored, payloadResidue, proseResidue, wikilinkResidue } from "./residue.ts";
 
 // ---- expandGuardCap: the passthrough guard's threshold, customizable via --max-words ----
 test("expandGuardCap: unset maxWords defaults to the note's own input size (today's behavior)", () => {
