@@ -1043,11 +1043,40 @@ function splitPredicate(right: string): { endpoint: string; predicate: string | 
   return { endpoint, predicate: predicate || null };
 }
 
-// Parse one `## Relations` list-item body (the text after the `- `/`* ` marker):
-// `[<from> ]<rel>:: <to>[ (<predicate>)]`. Lossy (D29): returns null on anything
-// short of well-formed rather than throwing — a missing `::`, an empty rel/endpoint,
-// or an all-parenthetical tail with no endpoint before it.
+// Parse the projector's emit grammar `<from> — <rel> → <to>[  <anchor>]`
+// (project.ts::renderRelation: em-dash U+2014, right-arrow U+2192, both space-flanked,
+// a trailing `  start..end`/`[start..end]` anchor). This is the TRUE inverse of the
+// `## Relations` projection — the form a distilled note carries on disk, which
+// card-stage reads back (D13). Lossy (D29): returns null on anything short of
+// well-formed rather than throwing.
+function parseArrowEdge(edgeText: string): ParsedRelationEdge | null {
+  const body = edgeText.replace(/\s+(?:\[\d+\.\.\d+\]|\d+\.\.\d+)\s*$/, "").trim();
+  const arrow = body.indexOf(" → ");
+  if (arrow < 0) return null;
+  const left = body.slice(0, arrow).trim();
+  const to = body.slice(arrow + 3).trim();
+  if (!to) return null;
+  const dash = left.indexOf(" — ");
+  if (dash < 0) return null;
+  const from = left.slice(0, dash).trim();
+  const rel = left.slice(dash + 3).trim();
+  if (!from || !rel) return null;
+  const { endpoint, predicate } = splitPredicate(to);
+  if (!endpoint) return null;
+  return { from, rel, to: endpoint, predicate };
+}
+
+// Parse one `## Relations` list-item body (the text after the `- `/`* ` marker) into a
+// structural edge, accepting BOTH grammars a note may carry: the projector's emitted
+// `<from> — <rel> → <to>  <anchor>` form (parseArrowEdge, the projection inverse) and
+// the legacy/vault two-channel `[<from> ]<rel>:: <to>[ (<predicate>)]` form (mirrors
+// vault-query relations.rs). The arrow form is tried first — it is what distilled notes
+// on disk actually contain. Lossy (D29): returns null on anything short of well-formed
+// rather than throwing — a line matching neither grammar, an empty rel/endpoint, or an
+// all-parenthetical tail with no endpoint before it.
 function parseEdgeLine(edgeText: string): ParsedRelationEdge | null {
+  const arrow = parseArrowEdge(edgeText);
+  if (arrow) return arrow;
   const sep = edgeText.indexOf("::");
   if (sep < 0) return null;
   const left = edgeText.slice(0, sep).trim();
@@ -1063,11 +1092,13 @@ function parseEdgeLine(edgeText: string): ParsedRelationEdge | null {
 }
 
 // Parse a full note body's `## Relations` section back into structural edges — the
-// REBUILD inverse of the projection's `## Relations` emit. Grammar mirrors
-// vault-query/src/commands/lint/relations.rs::parse_relations line-for-line (fence
-// tracking, heading toggle, `- `/`* ` list-item prefix, `::` split); see splitPredicate
-// for the one intentional divergence. Lossy-tolerant like normalizeRelation: a
-// malformed line yields no edge and parsing never throws.
+// REBUILD inverse of the projection's `## Relations` emit. Section framing (fence
+// tracking, heading toggle, `- `/`* ` list-item prefix) mirrors
+// vault-query/src/commands/lint/relations.rs::parse_relations line-for-line; the
+// per-line grammar (parseEdgeLine) reads BOTH the projector's `— … →` emit form and the
+// legacy `::` form, so a distilled note on disk and a vault note both parse. See
+// splitPredicate for the one intentional divergence. Lossy-tolerant like
+// normalizeRelation: a malformed line yields no edge and parsing never throws.
 export function parseRelationsBlock(md: string): ParsedRelationEdge[] {
   const edges: ParsedRelationEdge[] = [];
   let fence: string | null = null;
