@@ -11,7 +11,7 @@
 // no fence tracking. Its own recognizer (the "thin pass") was retired in Phase B; what
 // stays here is the block-body grammar (kind/attribute/intro/item/payload semantics).
 //
-// Deterministic by contract: no fs, no LLM, no imports from pipeline.ts. It does shell
+// Deterministic by contract: no fs, no LLM, no imports from distill-core.ts. It does shell
 // mdstruct (via mdstruct.ts, synchronously) to locate regions — determinism is preserved
 // because the same source yields the same regions. Malformed input yields typed errors,
 // never guesses.

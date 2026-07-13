@@ -155,9 +155,7 @@ test("read/cards.harvestConcepts: recovers concept term/def and attaches the rel
   expect(harvested.map((c) => c.term)).toEqual(["Wire format", "Golden fixture"]);
   expect(harvested[0]!.def).toBe("A byte layout a writer and every reader agree on.");
   // the `golden fixture — pins → wire format` edge attaches to its from-concept
-  expect(harvested[1]!.relations).toEqual([
-    { rel: "pins", to: "wire format", predicate: null },
-  ]);
+  expect(harvested[1]!.relations).toEqual([{ rel: "pins", to: "wire format", predicate: null }]);
 });
 
 test("read/prose.parseDistilled: recovers the thesis, glossary entries, and preserved sections from disk", () => {

@@ -158,7 +158,7 @@ export function normalizeEdgeTarget(raw: string): string {
 // is NOT an edge — it renders inline, so it is skipped here lest it surface as a phantom
 // dropped-wikilink; a bare `[[x.png]]` (no `!` embed) and a note transclusion `![[some-note]]`
 // or `![[some-note#heading]]` (no asset ext) stay real edges. Part of harvestVaultEdges, the source-of-truth for a note's
-// cross-note edges: pipeline.ts::wikilinkResidue diffs source against output over these
+// cross-note edges: residue.ts::wikilinkResidue diffs source against output over these
 // slugs, so an edge the extractor failed to encode — and the prose-fold dissolved —
 // surfaces as residue instead of vanishing silently.
 export function harvestWikilinks(text: string): VaultEdge[] {
@@ -650,7 +650,7 @@ export function harvestNumbers(text: string): PayloadSpan[] {
 // claim — and so are the fidelity/workflow gates (they only judge the defs and steps the
 // extractor lifted). This harvester does NOT decide coverage; it only enumerates the must-
 // cover CLASS (explicit list-items under a depth≥2 heading) as an answer key for the glm
-// matcher (pipeline.ts::runProseGate). A list-item is an ATOMIC enumerated claim, not
+// matcher (gates.ts::runProseGate). A list-item is an ATOMIC enumerated claim, not
 // restatement-collapsible prose, which is why per-item judging is false-flag-free where a
 // coarse prose-span judge is not — worked examples, thesis spans, and heading-less essays
 // stay deferred. Four deterministic exclusions narrow the inventory to must-cover items;
@@ -659,7 +659,7 @@ export type ProseUnit = { id: string; heading: string; depth: number; span: stri
 
 // Lowercase, strip markdown punctuation, collapse whitespace — a containment-comparable
 // form shared by EXCLUSION-3 (extractor-claimed) here and the anchor relevance re-check in
-// the matcher (pipeline.ts::anchored).
+// the matcher (residue.ts::anchored).
 export const normalizeForContainment = (s: string): string =>
   s
     .toLowerCase()

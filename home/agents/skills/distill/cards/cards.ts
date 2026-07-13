@@ -4,7 +4,7 @@
 // REL_REGISTRY, and assemble the staging record. Zero I/O, zero LLM calls (W2 brief).
 //
 // Boundary rules this module upholds:
-//   D13  — never imports pipeline.ts. Callers hand in an emitted note's body string
+//   D13  — never imports distill-core.ts. Callers hand in an emitted note's body string
 //          (harvestConcepts reads its channels); this layer never reads a file or spawns
 //          a process.
 //   D22  — decideCard/buildStagingRecord treat the band verdict as an ANNOTATION.

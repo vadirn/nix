@@ -1,5 +1,5 @@
 // cards/stage — render one StagingRecord into a review file. Pure formatting,
-// zero I/O (the CLI owns writing the result to disk). No import of pipeline.ts (D13).
+// zero I/O (the CLI owns writing the result to disk). No import of distill-core.ts (D13).
 //
 // A staging file is untyped inbox material, never a vault card: it carries NO
 // frontmatter (the vault frontmatter schema owns typed `20 cards/` files — Log 10

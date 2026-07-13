@@ -279,7 +279,7 @@ async function runMain(args: string[]): Promise<{ stdout: string; stderr: string
     throw new Error(`main() called process.exit(${code}) on a success path`);
   }) as typeof process.exit;
   try {
-    const { main } = await import("./pipeline.ts");
+    const { main } = await import("./distill-core.ts");
     await main();
   } finally {
     process.stdout.write = realWrite;
@@ -403,7 +403,7 @@ async function runMainExpectExit(
     throw Object.assign(new Error(`process.exit(${code})`), { sentinelExit: code ?? 0 });
   }) as typeof process.exit;
   try {
-    const { main } = await import("./pipeline.ts");
+    const { main } = await import("./distill-core.ts");
     await main();
   } catch (e) {
     const s = (e as { sentinelExit?: number }).sentinelExit;

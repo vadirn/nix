@@ -6,7 +6,7 @@
 // triage.ts; this module owns the verb ACTIONS and the write-back discipline.
 //
 // SHIPPED: the surface below is implemented and live — `distill-text apply <path>`
-// (pipeline.ts's runApply) is the production caller; apply.test.ts is its green
+// (distill-core.ts's runApply) is the production caller; apply.test.ts is its green
 // contract suite. The "Check order" below is still the FROZEN sequence every
 // refusal is measured against; it just no longer describes a future state.
 //
@@ -90,7 +90,7 @@ export type ApplyOpts = {
 /// The stamp hash form the emit and the compress preflight both use: the shared 12-hex
 /// stampSha (graph.ts) under a `sha256:` label. Compared against the gate's src= value
 /// (step 5) and used to re-hash the tmp across the LLM window (step 9). Exported so the
-/// emit preflight (pipeline.ts) stamps through this ONE prefixed form, not a copy.
+/// emit preflight (distill-core.ts) stamps through this ONE prefixed form, not a copy.
 export function stampHash(bytes: string | Buffer): string {
   return `sha256:${stampSha(bytes)}`;
 }

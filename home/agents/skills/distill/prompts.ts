@@ -1,6 +1,6 @@
 // prompts — the LLM stages: every prompt builder and the async stage function that
 // calls it. Each stage maps a typed input to a typed output through fw's askJson;
-// the pipeline (pipeline.ts) sequences them. The writing-core passes moved to
+// the pipeline (distill-core.ts) sequences them. The writing-core passes moved to
 // writing/passes.ts and are re-exported below for callers that still import them
 // from here.
 import {
@@ -245,7 +245,7 @@ export async function extractGraph(
 // ---- grade each block drop / distill / retain ----
 // The payload retain lane (blueprint §1.1): the ONE deterministic selection that survives the
 // settle-chain collapse. Reads a thesis + a concept list ({term,def}), fed from the pre-graph's
-// concepts (id→term, statement→def) — its one live caller, compressToGraph in pipeline.ts.
+// concepts (id→term, statement→def) — its one live caller, compressToGraph in distill-core.ts.
 function gradeBlocksPrompt(
   thesis: string,
   concepts: { term: string; def: string }[],
@@ -491,7 +491,7 @@ export async function workflowGate(
 // DIFFERENT model from the one that wrote the compression — is the MATCHER ONLY, deciding
 // per item whether its information SURVIVED somewhere in the output (covered) or was DROPPED.
 // It never decides the key. A "covered" verdict must quote a verbatim output anchor; the
-// covered→clear decision and the anchor re-check live in pipeline.ts::proseResidue, which
+// covered→clear decision and the anchor re-check live in residue.ts::proseResidue, which
 // DEFAULTS TO SURFACED for an omitted id, an unanchored covered, or a parse flake — the
 // model that caused the loss never clears a span by silence.
 export type ProseVerdict = {
@@ -525,7 +525,7 @@ ${items}`;
 // FIDELITY_TOKENS). Returns the raw verdicts keyed by id plus the set of ids whose batch
 // flaked (transient / no-parse), so proseResidue can surface a flaked id distinctly from one
 // the judge simply omitted. The covered/dropped→residue MAPPING and anchor re-check are pure
-// and live in pipeline.ts::proseResidue. A real bug propagates through rethrowIfBug.
+// and live in residue.ts::proseResidue. A real bug propagates through rethrowIfBug.
 // The batches are independent full-output matches, so they fire concurrently (mirrors the
 // Promise.all over independent glm calls in runFidelityGate); the try/catch is PER batch so a
 // flake flags only its own ids while a real bug rejects Promise.all and propagates.

@@ -162,7 +162,7 @@ export function buildPolishFooter(m: {
 }
 
 // Create an empty temp file with a .md extension and return its path (same helper
-// shape as pipeline.ts's tempMdPath).
+// shape as cli.ts's tempMdPath).
 function tempMdPath(): string {
   return execFileSync("mktemp", ["--suffix=.md"], { encoding: "utf8" }).trim();
 }

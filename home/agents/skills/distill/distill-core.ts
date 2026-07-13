@@ -1,4 +1,4 @@
-// pipeline — the orchestration core: sequences the canonical compress pipeline (distill) —
+// distill-core — the orchestration core: sequences the canonical compress pipeline (distill) —
 // extractGraph → locateGraph (hard span gate) → [TTY-gated typing review] → projectMarkdown,
 // with the demoted fidelity/prose gates riding as a residue-only backstop over the projection —
 // then dispatches the modes and writes the temp-file sink in main(). The focused concerns are

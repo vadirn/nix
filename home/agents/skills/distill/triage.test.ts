@@ -23,7 +23,7 @@ const FIXTURE = readFileSync(
 );
 
 // The three residue entries the fixture serializes, exactly as the pipeline's
-// push sites would shape them (pipeline.ts backstop): a failed def, a failed
+// push sites would shape them (gates.ts backstop): a failed def, a failed
 // procedure (label = the `### headword`; stepIdxs 0-based into that headword's
 // numbered steps — the target carries BOTH as `procedure:<headword>:<n>`), and a
 // gate-inconclusive def that shipped in the body above.

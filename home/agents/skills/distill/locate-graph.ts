@@ -11,7 +11,7 @@
 // output paths (routed / --glossary / --reference) still run the settle chain until steps 9-11.
 //
 // It is a leaf over the canonical modules: graph.ts (types + computeSource), locate.ts (the
-// span-locate primitive), and slugSegment / Block from text.ts. It does NOT import pipeline.ts,
+// span-locate primitive), and slugSegment / Block from text.ts. It does NOT import distill-core.ts,
 // so it carries no runtime dependency on the orchestrator.
 //
 // LOCKED: a failed `locate` HARD-ABORTS. `locate` throws a typed `LocateError` on a not-found or

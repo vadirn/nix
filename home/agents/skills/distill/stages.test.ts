@@ -9,7 +9,7 @@ import { expect, test } from "bun:test";
 import type { ProseUnit } from "./text.ts";
 import { normalizeForContainment } from "./text.ts";
 import type { ProseVerdict } from "./prompts.ts";
-import { buildFooter, expandGuardCap } from "./pipeline.ts";
+import { buildFooter, expandGuardCap } from "./distill-core.ts";
 import { parseArgs, USAGE } from "./cli.ts";
 import { anchored, payloadResidue, proseResidue, wikilinkResidue } from "./residue.ts";
 

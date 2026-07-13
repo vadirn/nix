@@ -62,7 +62,7 @@ the bare-section meaning is inferred from those sub-parts, not stated in the cod
 ### blueprint §0 — the canonical compress core
 
 The spine: extract native typed units → retain-grade payload → locate → project.
-Ground: `pipeline.ts:238`, `distill.ts:19`.
+Ground: `distill-core.ts:121`, `distill.ts:19`.
 
 ### blueprint §1 — the extract stage internals
 
@@ -81,14 +81,14 @@ Ground: `locate-graph.ts:1`.
 Cited only as **§4.2**: the retired settle-chain gate reduced to its verdict half — it
 runs after projection, is residue-only, and never recovers or rewrites. See D46 for the
 prose-coverage counterpart.
-Ground: `pipeline.ts:109`.
+Ground: `gates.ts:19`.
 
 ### blueprint §6 — the build/output paths
 
 By sub-part: **§6.1** the synthesized `## Abstract` head, omitted by `--glossary`
-(`pipeline.ts:328`); **§6.2** `--reference` keeps the head but suppresses `## Relations`
+(`distill-core.ts:211`); **§6.2** `--reference` keeps the head but suppresses `## Relations`
 (see D30); **§6.3** the per-section **routed/heterogeneous build** (`distillRouted`, whose
-head spans index the reassembled whole source, `pipeline.ts:448`).
+head spans index the reassembled whole source, `distill-core.ts:331`).
 
 ### blueprint §8 — per-step spans deferred
 
@@ -142,7 +142,7 @@ Ground: `text.ts:743`.
 ### D13 — the cards-layer boundary
 
 `cards/` reads an _emitted_ distilled note — a `.md` file path is the handshake — and
-never calls `distill()` or imports `pipeline.ts`. Structural channels are read through one
+never calls `distill()` or imports `distill-core.ts`. Structural channels are read through one
 leaf-module seam (`text.ts`'s `## Relations` parser).
 Ground: `cards/types.ts:5`, `cards/cards.ts:7`.
 
@@ -187,7 +187,7 @@ Ground: `text.ts:943`.
 
 A source note whose own frontmatter is `type: reference` renders without `## Relations`.
 Automatic from the source frontmatter, not a flag.
-Ground: `pipeline.ts:1151`, `distill.ts:16`.
+Ground: `distill-core.ts:568`, `distill.ts:16`.
 
 ### D32 — open relation vocabulary
 
@@ -213,7 +213,7 @@ Ground: `fw.ts:60`.
 A glm matcher over a deterministic inventory of explicit prose list items, producing
 coverage residue. Superseded / "Context document" genre notes are licensed to drop
 wholesale and skip the gate.
-Ground: `text.ts:647`, `pipeline.ts:412`.
+Ground: `text.ts:647`, `distill-core.ts:295`.
 
 ## Work items
 

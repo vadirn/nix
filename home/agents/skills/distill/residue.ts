@@ -1,4 +1,4 @@
-// residue — the deterministic loss-surface primitives carved out of pipeline.ts
+// residue — the deterministic loss-surface primitives carved out of distill-core.ts
 // (R1 first carve). Pure functions over (source, output) text plus the judge-verdict
 // mapping: they compute what a distillation dropped, never recover it. No I/O, no model
 // call, no CLI state — so they are unit-tested directly (pure.test.ts, stages.test.ts)
@@ -204,7 +204,7 @@ export function edgePayloadResidue(text: string, out: string): Residue[] {
 // a dropped pure-prose list-item, the must-cover class the spine AND the fidelity/workflow
 // gates are all blind to. text.ts::harvestProseListItems is the deterministic answer key;
 // prompts.ts::proseGate (glm, the model that did not write the compression) is the matcher (wired
-// in pipeline.ts::runProseGate); the covered→clear decision is made HERE — surfaced is the DEFAULT
+// in gates.ts::runProseGate); the covered→clear decision is made HERE — surfaced is the DEFAULT
 // for every outcome except an explicit covered verdict whose anchor is verified present and on-topic.
 
 // EN+RU stoplist: function words the anchor-relevance test must not count as a shared content

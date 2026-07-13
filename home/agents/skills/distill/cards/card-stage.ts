@@ -10,7 +10,7 @@
 // degrades to the judge-inconclusive flag, verdict null) → the card draft on
 // EXTRACT (a non-bug failure or an empty reply degrades to the draft-failed flag,
 // draft "") → buildStagingRecord → renderStagingFile → write. Error discipline
-// mirrors the pipeline (pipeline.ts's recover-def/recover-steps sites): every
+// mirrors the pipeline (distill-core.ts's recover-def/recover-steps sites): every
 // per-candidate LLM call is wrapped in try/rethrowIfBug, so a programmer bug
 // (a real Error, not a TransientError/TruncationError) propagates and aborts the
 // run instead of being swallowed as a flake.
@@ -19,7 +19,7 @@
 // write — and prints a per-candidate report instead of staging anything.
 //
 // The whole flow is one pure-ish function (stageNote) over injected deps
-// (ask/fetchNeighbours/writeFile), mirroring pipeline.ts's parseArgs/main split:
+// (ask/fetchNeighbours/writeFile), mirroring the parseArgs (cli.ts) / main (distill-core.ts) split:
 // stageNote is unit-testable with fakes; main() wires the real Fireworks call,
 // the real fetchNeighbours, and a real mkdir-then-write, behind the
 // import.meta.main guard.
@@ -87,7 +87,7 @@ export type StageOpts = {
 
 // The extension a title falls back to when the note carries no H1 — the first `#`
 // heading anywhere in the body (not anchored to line 1: a note may open with prose
-// above its heading), mirroring pipeline.ts's own H1-detection intent. Reuses
+// above its heading), mirroring distill-core.ts's own H1-detection intent. Reuses
 // sections()'s fence-masked scan (the d06c6fa fix) instead of a raw regex, so a
 // fenced code block's own `# comment` line cannot be misread as the note's title
 // (Finding 6) the way sections() itself was fixed to never misread it as a heading.
@@ -266,7 +266,7 @@ export function formatSummary(
   );
 }
 
-// ---- arg parsing (pure, mirrors pipeline.ts's parseArgs discipline: unknown
+// ---- arg parsing (pure, mirrors cli.ts's parseArgs discipline: unknown
 // flags, missing values, and extra positionals fail loudly) ----
 
 export const USAGE = `card-stage — stage extraction candidates from a distilled note as review
@@ -350,7 +350,7 @@ export function parseArgs(argv: string[]): ParseResult {
       continue;
     }
     // Any other dash-prefixed token is a flag typo, not the note path — name it
-    // rather than misattributing it to a positional (mirrors pipeline.ts).
+    // rather than misattributing it to a positional (mirrors cli.ts).
     if (a.startsWith("-") && a !== "-") return { kind: "error", message: `unknown flag '${a}'` };
     positionals.push(a);
   }

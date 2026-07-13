@@ -11,8 +11,8 @@
 // parseInteract(renderBlock(spec)) ≡ spec) lives in interact.ts and is untouched; this module owns
 // only the typing-review policy — the verb vocabulary, the block-builder, and the `type` apply verb.
 //
-// PURE by contract: no fs, no LLM, no imports from pipeline.ts. The TTY orchestration (writing the
-// scratch review, the reviewer sugar-loop) lives in pipeline.ts; these two functions are the pure
+// PURE by contract: no fs, no LLM, no imports from distill-core.ts. The TTY orchestration (writing the
+// scratch review, the reviewer sugar-loop) lives in tty.ts; these two functions are the pure
 // halves it drives and the whole of what the test surface (retype.test.ts) exercises.
 import { Buffer } from "node:buffer";
 import {

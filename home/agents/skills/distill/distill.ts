@@ -74,13 +74,15 @@
 // and the stable public surface): text · frontmatter · fw · graph · prompts ·
 // locate(-graph) · retype (the typing review) · project · parse-projection ·
 // interact/triage (the review grammar) · apply-mode · prose-mode · writing/
-// (writing-core: typography, mask, passes) · pipeline. The four exports
+// (writing-core: typography, mask, passes) · distill-core (the orchestration core:
+// compress/route/main) with its carved-out concerns gates (residue backstops) · cli
+// (arg parsing + path helpers) · tty (interactive terminal halves). The four exports
 // below are the public API the test suite (and any importer) depends on; everything
 // else is an internal module detail.
 export { REL_REGISTRY, slugSegment } from "./text.ts";
 export { ensureEpistemicStatus } from "./frontmatter.ts";
 
-import { main } from "./pipeline.ts";
+import { main } from "./distill-core.ts";
 
 // Guard the CLI entrypoint so test imports (e.g. distill.test.ts importing
 // REL_REGISTRY) can load this module without running the pipeline against stdin.

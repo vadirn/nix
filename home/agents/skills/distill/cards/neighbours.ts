@@ -1,6 +1,6 @@
 // neighbours — recall: surface the existing vault cards nearest a candidate by
 // spawning the vault-query CLI (BM25 today; the seam is recall-agnostic, see
-// NeighbourHit in types.ts). Never imports pipeline.ts (D13) — the candidate
+// NeighbourHit in types.ts). Never imports distill-core.ts (D13) — the candidate
 // arrives already built from an emitted note; this module only talks to
 // vault-query and to the filesystem for each hit's frontmatter description.
 //

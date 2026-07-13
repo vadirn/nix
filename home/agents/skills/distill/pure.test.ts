@@ -43,7 +43,7 @@ import {
   wordCount,
 } from "./text.ts";
 import { extractJson } from "./fw.ts";
-import { assembleRoutedNote } from "./pipeline.ts";
+import { assembleRoutedNote } from "./distill-core.ts";
 import { edgePayloadResidue, wikilinkResidue } from "./residue.ts";
 import { parseDistilled } from "./prose-mode.ts";
 import { computeSource, type Unit } from "./graph.ts";
@@ -321,7 +321,7 @@ test("compactSection: v1 holds a payload section byte-verbatim (fix #3)", () => 
   expect(compactSection(section)).toBe(section);
 });
 
-// ---- pipeline.ts: routed-build seam (assembleRoutedNote's typed-unit splice; blueprint §6.3) ----
+// ---- distill-core.ts: routed-build seam (assembleRoutedNote's typed-unit splice; blueprint §6.3) ----
 // The routed note is now ONE canonical projection: the re-authored head graph merged with the
 // preserve sections as `## Payload` units, projected via projectMarkdown. Spans index the WHOLE
 // source. A pure, no-LLM seam — the head graph is hand-built here (the e2e/project template).
@@ -828,7 +828,7 @@ test("harvestVaultEdges: unions wikilinks and internal markdown links", () => {
   ]);
 });
 
-// ---- pipeline.ts: wikilinkResidue — ITEM A (collision) + ITEM B/C (lanes) ----
+// ---- residue.ts: wikilinkResidue — ITEM A (collision) + ITEM B/C (lanes) ----
 test("wikilinkResidue: alias pair [[foo]] + [[foo|alias]] uncovered → ONE dropped residue", () => {
   const r = wikilinkResidue("see [[foo]] and [[foo|alias]]", "");
   expect(r.length).toBe(1);
@@ -914,7 +914,7 @@ test("wikilinkResidue: an asset-extension markdown link is not an edge", () => {
   expect(wikilinkResidue("[chart](chart.png)", "")).toEqual([]);
 });
 
-// ---- pipeline.ts: CHANGE #1 — fragment strip kills the anchor-downgrade false positive ----
+// ---- residue.ts: CHANGE #1 — fragment strip kills the anchor-downgrade false positive ----
 test("wikilinkResidue: source [[note#heading]] covered by output [[note]] yields no residue", () => {
   // both slug to `note` now (normalizeEdgeTarget strips the anchor before slugging), so
   // the output's bare link covers the source's anchored one — no false-positive residue.

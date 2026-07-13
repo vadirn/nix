@@ -3,7 +3,7 @@
 //
 // Boundary rules the shapes encode:
 //   D13  — this layer reads an EMITTED distilled note (a .md file path), never calls
-//          distill() and never imports pipeline.ts. The file path is the handshake.
+//          distill() and never imports distill-core.ts. The file path is the handshake.
 //   D22  — the band verdict is an ANNOTATION a candidate carries into staging, never
 //          a filter. Every candidate is staged regardless of verdict.
 //   Log 10 — the only path from staging to `20 cards/` is a human commit; drafts
