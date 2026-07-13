@@ -127,8 +127,12 @@ function typeSection(
 
 // Project the canonical graph to its seven-section markdown form (spec §3). Sections emit in
 // fixed order and only when populated; the `## Abstract` is the sole unanchored block.
-export function projectMarkdown(result: Projection): string {
+// `opts.relations` defaults `true`; passing `false` suppresses the `## Relations` section so a
+// `type:reference` note stays link-free (D30) — the one projector-signature knob the `--reference`
+// output path needs (blueprint §6/§6.2).
+export function projectMarkdown(result: Projection, opts?: { relations?: boolean }): string {
   const { source, units, edges, title, abstract } = result;
+  const relations = opts?.relations ?? true;
 
   const unitById = new Map(units.map((u) => [u.id, u]));
   const byType = (t: Unit["type"]) => units.filter((u) => u.type === t);
@@ -165,7 +169,7 @@ export function projectMarkdown(result: Projection): string {
     ),
     typeSection("Procedures", byType("procedure"), renderProcedure),
     typeSection("Payload", byType("payload"), renderPayload),
-    edges.length
+    relations && edges.length
       ? [`## Relations`, edges.map((e) => renderRelation(e, unitById)).join("\n")].join("\n\n")
       : "",
   ];

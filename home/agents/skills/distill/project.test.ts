@@ -132,6 +132,25 @@ test("render 1: no empty sections are emitted", () => {
   expect(md).not.toMatch(/## [A-Za-z]+\n\n(?:## |#(?!#)|---|$)/);
 });
 
+test("relations: false suppresses ## Relations but keeps every other section (--reference, D30)", () => {
+  // The --reference output path: pointer notes stay link-free, but the ## Abstract orientation and
+  // the concept/judgement/inference/procedure sections all survive.
+  const md = projectMarkdown(RENDER_1, { relations: false });
+  expect(md).not.toContain("## Relations");
+  // the relation line itself is gone (the word "subsumes" still occurs in the inference statement)
+  expect(md).not.toContain("- nullable timestamp — subsumes → boolean flag");
+  expect(md).toContain("## Abstract");
+  expect(md).toContain("### Boolean flag");
+  expect(md).toContain("## Judgements");
+  expect(md).toContain("## Inferences");
+  expect(md).toContain("### Model a state flag");
+});
+
+test("relations defaults true — omitting the opt is identical to relations: true", () => {
+  expect(projectMarkdown(RENDER_1)).toBe(projectMarkdown(RENDER_1, { relations: true }));
+  expect(projectMarkdown(RENDER_1)).toContain("## Relations");
+});
+
 // Reference render 2 — "Chesterton's Fence": exercises a (necessarily) apodictic judgement and
 // a Payload blockquote with its anchor.
 const RENDER_2: Projection = {

@@ -1028,17 +1028,18 @@ async function distill(
   const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
   const effectiveSelfSlug = selfSlug || slugSegment(h1.replace(/^#+\s*/, ""));
 
-  // The default-compress path AND --glossary (not routed, not a reference) are now the canonical
-  // graph-native pipeline: extract native typed units → locate (span hard-gate) → project.
+  // The default-compress path, --glossary AND --reference (every non-routed run) are now the
+  // canonical graph-native pipeline: extract native typed units → locate (span hard-gate) → project.
   // --glossary is the same projection with the synthesized `## Abstract` head omitted (§6.1);
-  // everything else — the concept/judgement/inference/procedure/payload sections + `## Relations` —
-  // renders identically. The two remaining legacy paths (routed head, --reference) still run the
-  // settle chain and the legacy `assembleBody` formatter (migrated onto projectMarkdown in later
-  // steps). The two branches diverge from extract through assemble, then rejoin at the shared tail
-  // below (expand guard, prose-list + edge/payload backstops, footer). The deterministic link
-  // inventory (every vault edge — [[wikilink]] or scheme-less [text](path) — UNION every external
-  // [text](url)) is fed to the extractor as a MUST-COVER checklist on both branches.
-  const canonicalPath = !routed && !opts.isReference;
+  // --reference is the same projection with `## Relations` suppressed but `## Abstract` kept (§6.2,
+  // D30 — reference notes stay link-free); everything else renders identically. The one remaining
+  // legacy path is the routed head (a routed reference note still re-enters here with routed=true,
+  // so its recursive head keeps isReference on the legacy branch until routed migrates). The two
+  // branches diverge from extract through assemble, then rejoin at the shared tail below (expand
+  // guard, prose-list + edge/payload backstops, footer). The deterministic link inventory (every
+  // vault edge — [[wikilink]] or scheme-less [text](path) — UNION every external [text](url)) is
+  // fed to the extractor as a MUST-COVER checklist on both branches.
+  const canonicalPath = !routed;
   const linkInventory: LinkInventory = {
     wikilinks: harvestVaultEdges(text),
     external: harvestExternalLinks(text),
@@ -1108,8 +1109,14 @@ async function distill(
     // 4. project the seven-section canonical markdown (carries its own frontmatter). --glossary
     // means "the structured extract, no synthesized prose head" — the same projection with the
     // `## Abstract` block dropped (§6.1). `Projection.abstract` is already optional, so omitting it
-    // suppresses the one unanchored block; every other section renders unchanged.
-    out = projectMarkdown(opts.glossaryOnly ? { ...result, abstract: undefined } : result);
+    // suppresses the one unanchored block; every other section renders unchanged. --reference keeps
+    // the `## Abstract` orientation but suppresses `## Relations` via the projector's relations opt
+    // (§6.2, D30 — reference notes are pointer notes and stay link-free).
+    if (opts.isReference) {
+      out = projectMarkdown(result, { relations: false });
+    } else {
+      out = projectMarkdown(opts.glossaryOnly ? { ...result, abstract: undefined } : result);
+    }
     // 5. demoted fidelity backstop over the projection (residue-only, no recovery; blueprint §4.2).
     if (!opts.noGate) {
       opts.progress?.("gate…");
@@ -1121,9 +1128,11 @@ async function distill(
     stepsCount = pre.procedures.reduce((n, p) => n + p.steps.length, 0);
     claimed = [];
   } else {
-    // LEGACY paths (routed head / --glossary / --reference): the settle chain authors and gates
-    // defs/steps in place, then assembleBody renders the two-channel Glossary/Workflow/Relations
-    // form. Deleted when steps 9-11 migrate these paths onto projectMarkdown.
+    // LEGACY path (routed head only): the settle chain authors and gates defs/steps in place, then
+    // assembleBody renders the two-channel Glossary/Workflow/Relations form. A routed reference
+    // head still arrives here with isReference=true (assembleBody then skips `## Relations`), so the
+    // isReference param below stays live until routed migrates. Deleted when step 11 migrates routed
+    // onto projectMarkdown.
     // 1. extract the idea-graph; nothing to distill (no concepts, no directives) → passthrough.
     opts.progress?.("extract…");
     const combo = await extractCombo(
