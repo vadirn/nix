@@ -1,9 +1,11 @@
 // text — segmentation, typography, slugging, the extractor's `NormalizedEdge` relation
 // shape (see graph.ts for the canonical typed graph), and the language helpers. The leaf
 // module of the distill pipeline: pure string/data utilities with no I/O; its only
-// dependency is writing/typography.ts, the writing-core's own leaf (normalizeTypography
-// moved there, re-exported here).
+// non-type dependencies are writing/typography.ts (normalizeTypography, moved there and
+// re-exported here) and graph.ts's TRAILING_ANCHOR_RE (W2: the shared trailing byte-anchor
+// grammar, consumed by parseArrowEdge below) — both leaves themselves, so this stays leaf-tier.
 import { normalizeTypography } from "./writing/typography.ts";
+import { TRAILING_ANCHOR_RE } from "./graph.ts";
 import {
   parseDoc,
   sliceBytes,
@@ -1055,7 +1057,7 @@ function splitPredicate(right: string): { endpoint: string; predicate: string | 
 // card-stage reads back (D13). Lossy (D29): returns null on anything short of
 // well-formed rather than throwing.
 function parseArrowEdge(edgeText: string): ParsedRelationEdge | null {
-  const body = edgeText.replace(/\s+(?:\[\d+\.\.\d+\]|\d+\.\.\d+)\s*$/, "").trim();
+  const body = edgeText.replace(TRAILING_ANCHOR_RE, "").trim();
   const arrow = body.indexOf(" → ");
   if (arrow < 0) return null;
   const left = body.slice(0, arrow).trim();

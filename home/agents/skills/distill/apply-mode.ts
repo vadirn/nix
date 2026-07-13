@@ -77,7 +77,7 @@ import { fidelityGate, renderEntryPrompt, verbatimDef, verbatimDirectives } from
 import { parseCanonicalNote, splitSections } from "./parse-projection.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 import { detectLang } from "./text.ts";
-import { stampSha } from "./graph.ts";
+import { stampSha, TRAILING_ANCHOR_RE } from "./graph.ts";
 
 // ---- runApply: the orchestrator ----
 
@@ -509,7 +509,11 @@ export function spliceDef(body: string, term: string, def: string | null): strin
   for (let i = subStart + 1; i < subEnd; i++) {
     const t = lines[i]!.trim();
     if (t === "" || t.startsWith("- ")) continue; // the def line precedes any bullet
-    const anchor = lines[i]!.match(/\s(\d+\.\.\d+)\s*$/);
+    // W2: reads the anchor's raw substring off the shared TRAILING_ANCHOR_RE (graph.ts) rather
+    // than parsing it, so a hand-edited bracketed anchor (`[128..192]`) re-appends unchanged
+    // instead of silently vanishing — the old bare-only regex (`/\s(\d+\.\.\d+)\s*$/`) couldn't
+    // match it and dropped it.
+    const anchor = lines[i]!.match(TRAILING_ANCHOR_RE);
     lines[i] = anchor ? `${flat} ${anchor[1]}` : flat;
     return lines.join("\n");
   }

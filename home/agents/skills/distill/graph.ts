@@ -141,6 +141,25 @@ export function parseSpan(str: string): Span {
   return [start, end];
 }
 
+// The trailing byte-anchor grammar, canonicalized (W2): matches a `start..end` or `[start..end]`
+// anchor sitting at the end of a rendered line, preceded by whitespace separating it from the
+// line's text. Group 1 is the anchor's own substring (brackets included when present) — callers
+// that must preserve the ON-DISK form verbatim (apply-mode's def-line splice re-appends the
+// anchor unchanged rather than reformatting it) read the group directly instead of going through
+// stripTrailingAnchor. The projector (formatSpan) only ever emits the bare form; bracketed only
+// appears in hand-edited notes (parseSpan's accepted-input note above).
+export const TRAILING_ANCHOR_RE = /\s+(\[\d+\.\.\d+\]|\d+\.\.\d+)\s*$/;
+
+// Strip a trailing byte-anchor off a rendered line, in EITHER grammar form. Returns the bare text
+// with the anchor (and its separating whitespace) removed, and the parsed Span — null when the
+// line carries no trailing anchor (a hand edit may have dropped it). Routes the actual parse
+// through parseSpan so the two accepted forms stay defined in exactly one place.
+export function stripTrailingAnchor(line: string): { text: string; span: Span | null } {
+  const m = line.match(TRAILING_ANCHOR_RE);
+  if (!m) return { text: line.trim(), span: null };
+  return { text: line.slice(0, m.index).trim(), span: parseSpan(m[1]!) };
+}
+
 // The one canonical content stamp: the first 12 hex digits (48 bits) of the sha256 over
 // `bytes`. Every provenance/verify site routes through here — computeSource's frontmatter
 // `source.sha256` (bare) and apply-mode's `sha256:`-prefixed emit/preflight stamp (stampHash) —

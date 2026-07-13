@@ -131,6 +131,33 @@ test("parseCanonicalNote: a ###-look-alike line inside a fenced Payload block st
   expect(note.payload[0]!.span).toEqual([71, 120]);
 });
 
+// ---- BUG-3: stripAnchor ignored the bracketed anchor form (fixed via graph.ts's
+// stripTrailingAnchor, W2) ----
+// Before the fix: stripAnchor's own regex (`/^(.*?)\s+(\d+\.\.\d+)\s*$/`) matched the BARE form
+// only. A hand-edited line ending `... [128..192]` fell through to the no-match branch, so
+// `text` kept the literal brackets (`"...[128..192]"`) and `span` came back null — the anchor
+// was both unparsed AND left visible in the text. After the fix: stripAnchor delegates to the
+// shared stripTrailingAnchor, whose TRAILING_ANCHOR_RE matches both forms, so the brackets are
+// stripped and the span parses.
+test("parseCanonicalNote: a concept def line and a judgement line ending in a BRACKETED anchor both strip the brackets and parse the span (BUG-3)", () => {
+  const body = [
+    "## Concepts",
+    "",
+    "### alpha",
+    "",
+    "first letter [128..192]",
+    "",
+    "## Judgements",
+    "",
+    "- a hand-edited statement [128..192]",
+  ].join("\n");
+  const note = parseCanonicalNote(body);
+  expect(note.concepts).toEqual([
+    { headword: "alpha", def: "first letter", bullets: [], bulletSpans: [], span: [128, 192] },
+  ]);
+  expect(note.judgements).toEqual([{ statement: "a hand-edited statement", span: [128, 192] }]);
+});
+
 // ---- hand-dropped anchors (span: null) at each site ----
 test("parseCanonicalNote: a concept def line missing its anchor still parses def, span is null", () => {
   const body = "## Concepts\n\n### alpha\n\nfirst letter, no anchor here";
