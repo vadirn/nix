@@ -148,26 +148,29 @@ ${render(blocks)}`;
 // modality is clamped to the two marked forms (null → assertoric). `frontDescription`, when set,
 // overrides the model's description (the one anchor never paraphrased). Spans are NOT computed here
 // — the model emits no offsets; locateGraph turns each quote into a span (spec §4 step 2).
-export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescription = ""): PreGraph {
-  const ids = new Set(blocks.map((b) => b.id));
-  // Trim-only, byte-verbatim: a quote is the span-locate anchor, so it is never typography-
-  // normalized. Empty → "" (a unit with no quote hard-aborts at locate — the fidelity gate).
-  const quoteField = (q: unknown): string => (typeof q === "string" ? q.trim() : "");
-  const withSource = (s: unknown): string[] =>
-    (Array.isArray(s) ? s : []).filter((id) => ids.has(id));
-  // judgement modality: accept only the two marked forms (W5: MARKED_MODALITIES, graph.ts);
-  // anything else is assertoric.
-  const modalityOf = (m: unknown): Modality =>
-    (MARKED_MODALITIES as readonly unknown[]).includes(m) ? (m as Modality) : "assertoric";
+// Trim-only, byte-verbatim: a quote is the span-locate anchor, so it is never typography-
+// normalized. Empty → "" (a unit with no quote hard-aborts at locate — the fidelity gate).
+// Shared by every parseExtractGraph channel below.
+const quoteField = (q: unknown): string => (typeof q === "string" ? q.trim() : "");
+const withSource = (s: unknown, ids: Set<string>): string[] =>
+  (Array.isArray(s) ? s : []).filter((id) => ids.has(id));
+// judgement modality: accept only the two marked forms (W5: MARKED_MODALITIES, graph.ts);
+// anything else is assertoric.
+const modalityOf = (m: unknown): Modality =>
+  (MARKED_MODALITIES as readonly unknown[]).includes(m) ? (m as Modality) : "assertoric";
 
-  // concepts → concept PreUnits (id = headword) + the flat edge list (each relation becomes a
-  // PreEdge owned by the concept's headword). Drop a concept with no headword or no valid source
-  // (it cannot be rendered grounded); its relations are dropped with it.
+// concepts → concept PreUnits (id = headword) + the flat edge list (each relation becomes a
+// PreEdge owned by the concept's headword). Drop a concept with no headword or no valid source
+// (it cannot be rendered grounded); its relations are dropped with it.
+function parseConcepts(
+  raw: RawGraph["concepts"],
+  ids: Set<string>,
+): { concepts: PreUnit[]; edges: PreEdge[] } {
   const concepts: PreUnit[] = [];
   const edges: PreEdge[] = [];
-  for (const c of raw.concepts ?? []) {
+  for (const c of raw ?? []) {
     const headword = (c.headword ?? "").trim();
-    if (!headword || withSource(c.source).length === 0) continue;
+    if (!headword || withSource(c.source, ids).length === 0) continue;
     // extension bullets: keep those with a non-empty statement (the anchor `quote` may be empty —
     // that bullet then renders unanchored, mirroring an unquoted procedure step). Trim-only,
     // byte-verbatim quotes (the span-locate anchor), same discipline as the concept's own quote.
@@ -187,12 +190,15 @@ export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescripti
       edges.push({ fromHeadword: headword, rel: norm.rel, to: norm.to, quote: norm.quote ?? "" });
     }
   }
+  return { concepts, edges };
+}
 
-  // judgement PreUnits (id ordinal, assigned at locate); same drop-if-no-source rule.
+// judgement PreUnits (id ordinal, assigned at locate); same drop-if-no-source rule as concepts.
+function parseJudgements(raw: RawGraph["judgements"], ids: Set<string>): PreUnit[] {
   const judgements: PreUnit[] = [];
-  for (const j of raw.judgements ?? []) {
+  for (const j of raw ?? []) {
     const statement = (j.statement ?? "").trim();
-    if (!statement || withSource(j.source).length === 0) continue;
+    if (!statement || withSource(j.source, ids).length === 0) continue;
     judgements.push({
       type: "judgment",
       statement,
@@ -200,29 +206,43 @@ export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescripti
       modality: modalityOf(j.modality),
     });
   }
+  return judgements;
+}
 
-  // inference PreUnits (id ordinal, assigned at locate).
+// inference PreUnits (id ordinal, assigned at locate).
+function parseInferences(raw: RawGraph["inferences"], ids: Set<string>): PreUnit[] {
   const inferences: PreUnit[] = [];
-  for (const inf of raw.inferences ?? []) {
+  for (const inf of raw ?? []) {
     const statement = (inf.statement ?? "").trim();
-    if (!statement || withSource(inf.source).length === 0) continue;
+    if (!statement || withSource(inf.source, ids).length === 0) continue;
     inferences.push({ type: "inference", statement, quote: quoteField(inf.quote) });
   }
+  return inferences;
+}
 
-  // procedure groups: keep grounded steps in order; drop a group with no surviving step (the
-  // headword may be "" — locate falls back to `Procedure N`).
+// procedure groups: keep grounded steps in order; drop a group with no surviving step (the
+// headword may be "" — locate falls back to `Procedure N`).
+function parseProcedures(
+  raw: RawGraph["procedures"],
+  ids: Set<string>,
+): { headword: string; steps: PreUnit[] }[] {
   const procedures: { headword: string; steps: PreUnit[] }[] = [];
-  for (const p of raw.procedures ?? []) {
+  for (const p of raw ?? []) {
     const steps: PreUnit[] = [];
     for (const s of Array.isArray(p.steps) ? p.steps : []) {
       const statement = (s.statement ?? "").trim();
-      if (!statement || withSource(s.source).length === 0) continue;
+      if (!statement || withSource(s.source, ids).length === 0) continue;
       steps.push({ type: "procedure", statement, quote: quoteField(s.quote) });
     }
     if (steps.length === 0) continue;
     procedures.push({ headword: (p.headword ?? "").trim(), steps });
   }
+  return procedures;
+}
 
+export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescription = ""): PreGraph {
+  const ids = new Set(blocks.map((b) => b.id));
+  const { concepts, edges } = parseConcepts(raw.concepts, ids);
   // the authored frontmatter description overrides the model's: the one anchor never paraphrased
   const description = frontDescription || (raw.description ?? "").trim();
   return {
@@ -231,9 +251,9 @@ export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescripti
     description,
     thesis: (raw.thesis ?? "").trim(),
     concepts,
-    judgements,
-    inferences,
-    procedures,
+    judgements: parseJudgements(raw.judgements, ids),
+    inferences: parseInferences(raw.inferences, ids),
+    procedures: parseProcedures(raw.procedures, ids),
     edges,
   };
 }
