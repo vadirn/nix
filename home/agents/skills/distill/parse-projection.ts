@@ -27,19 +27,25 @@ export interface CanonSection {
 }
 
 // A concept subsection: `### headword`, a first-line definition, `- bullet` extension lines, each
-// stripped of its trailing anchor. `span` is the def line's anchor (null when hand-edited away).
+// stripped of its trailing anchor. `span` is the def line's anchor (null when hand-edited away);
+// `bulletSpans` is parallel to `bullets` — each bullet's OWN anchor (null when it carries none),
+// recovering the per-sub-element spans the projector now emits (design Backlog 12).
 export interface CanonConcept {
   headword: string;
   def: string;
   bullets: string[];
+  bulletSpans: (Span | null)[];
   span: Span | null;
 }
 
 // A procedure subsection: `### headword` + numbered steps, each stripped of a trailing anchor.
-// `span` is the lead step's anchor (only the lead step is anchored by the projector).
+// `span` is the lead step's anchor; `stepSpans` is parallel to `steps` — each step's OWN anchor
+// (null when hand-edited away or a synthesized step), so `stepSpans[0]` equals `span`. Recovers the
+// per-step anchors the projector now emits (design Backlog 12).
 export interface CanonProcedure {
   headword: string;
   steps: string[];
+  stepSpans: (Span | null)[];
   span: Span | null;
 }
 
@@ -169,17 +175,20 @@ export function parseCanonicalNote(body: string): CanonNote {
       let def = "";
       let span: Span | null = null;
       const bullets: string[] = [];
+      const bulletSpans: (Span | null)[] = [];
       for (const line of content) {
         const t = line.trim();
         if (t.startsWith("- ")) {
-          bullets.push(stripAnchor(t.slice(2)).text);
+          const a = stripAnchor(t.slice(2));
+          bullets.push(a.text);
+          bulletSpans.push(a.span);
         } else if (!def) {
           const a = stripAnchor(t);
           def = a.text;
           span = a.span;
         }
       }
-      return { headword: sub.headword, def, bullets, span };
+      return { headword: sub.headword, def, bullets, bulletSpans, span };
     })
     .filter((c) => c.headword && c.def);
 
@@ -188,6 +197,7 @@ export function parseCanonicalNote(body: string): CanonNote {
   const procedures: CanonProcedure[] = subsections(by("procedures")?.bodyLines ?? [])
     .map((sub) => {
       const steps: string[] = [];
+      const stepSpans: (Span | null)[] = [];
       let span: Span | null = null;
       for (const line of sub.lines) {
         const m = line.match(/^\s*\d+\.\s(.*)$/);
@@ -195,8 +205,9 @@ export function parseCanonicalNote(body: string): CanonNote {
         const a = stripAnchor(m[1]!);
         if (steps.length === 0) span = a.span;
         steps.push(a.text);
+        stepSpans.push(a.span);
       }
-      return { headword: sub.headword, steps, span };
+      return { headword: sub.headword, steps, stepSpans, span };
     })
     .filter((p) => p.headword && p.steps.length > 0);
 

@@ -89,6 +89,7 @@ export interface RawGraph {
     headword?: string;
     statement?: string;
     quote?: string;
+    bullets?: { statement?: string; quote?: string }[];
     relations?: unknown[];
     source?: unknown;
   }[];
@@ -115,13 +116,13 @@ export function extractGraphPrompt(
 - "abstract": 1-2 sentences orienting a reader to what the note covers. This is a SYNTHESIZED overview — the ONE block that carries no source quote.
 - "description": ${descRule}
 - "thesis": the single spine claim the whole note argues, one sentence.
-- "concepts": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out. For each: "headword" (the concept's name), "statement" (the FINAL dense definition in YOUR OWN words, one clause — this is the definition the reader sees, not a draft; compress rather than copy a source sentence), "quote" (a VERBATIM source slice — see QUOTES), "relations" (array of OBJECTS naming how it ties to OTHER concepts; each {"rel","to","quote"}: "rel" is a single hyphenated token (e.g. subsumes, precondition-for, contrast-to), "to" is EITHER a bare headword-slug naming ANOTHER concept in this note OR a [[file-slug]] wikilink, "quote" is a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings where it is defined or used, at least one).
+- "concepts": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out. For each: "headword" (the concept's name), "statement" (the FINAL dense definition in YOUR OWN words, one clause — this is the definition the reader sees, not a draft; compress rather than copy a source sentence), "quote" (a VERBATIM source slice — see QUOTES), "bullets" (OPTIONAL array — the concept's EXTENSION: the predicated properties or enumerated species the note states ABOUT this concept beyond its bare definition, each a SHORT clause; each {"statement","quote"}: "statement" is one clause in YOUR OWN words, "quote" is a VERBATIM source slice — see QUOTES; use [] or omit when the note states no such properties — do NOT invent a bullet the note does not state), "relations" (array of OBJECTS naming how it ties to OTHER concepts; each {"rel","to","quote"}: "rel" is a single hyphenated token (e.g. subsumes, precondition-for, contrast-to), "to" is EITHER a bare headword-slug naming ANOTHER concept in this note OR a [[file-slug]] wikilink, "quote" is a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings where it is defined or used, at least one).
 - "judgements": the note's stated JUDGEMENTS — claims it ASSERTS as true (an S-is-P assertion, an evaluation, a stance), distinct from the concepts they are about. For each: "statement" (the claim in one sentence, YOUR OWN words), "modality" — one of null | "hypothesis" | "necessarily" (tag "hypothesis" ONLY when the note frames the claim as tentative/conjectural; tag "necessarily" ONLY when the note frames it as a necessity/obligation/prohibition/law — watch for the modal words "must", "must not", "cannot", "may not", "shall", "always"/"never" used as a rule (e.g. a deontic clause such as "if you cannot state its use, you must not remove it" is tagged "necessarily" because "must not" frames it as a prohibition); otherwise null — do NOT tag a plainly-asserted claim that carries no such modal word, e.g. "the fence blocks the road" stays null), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings, at least one). Use [] when the note asserts no standalone judgements.
 - "inferences": the note's stated INFERENCES — claims the note DERIVES from others (signalled by "therefore", "so", "which means", "it follows that"). For each: "statement" (the derived claim, one sentence, YOUR OWN words), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings, at least one). Use [] when the note draws no explicit inferences.
 - "procedures": the note's ACTIONABLE procedures — grouped by the named procedure they belong to. A procedure earns an entry only when the note PRESCRIBES actions (imperatives, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives. For each: "headword" (a short noun phrase naming the procedure), "steps" (array, IN THE ORDER the note gives them; each {"statement","quote","source"}: "statement" is ONE imperative clause in YOUR OWN words, dense — if the SOURCE gives a reason ("do X because Y") append it, else keep it terse; "quote" is a VERBATIM source slice — see QUOTES; "source" is an array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
 QUOTES: every "quote" is a slice copied EXACTLY, character-for-character, from the block text it was distilled from — do NOT reword, translate, or normalize punctuation; keep the source's own glyphs. EXCLUDE the leading [Bn] marker. Make each quote long enough to occur EXACTLY ONCE in the note (add surrounding words if a short phrase would be ambiguous). The type of a unit is carried by WHICH array it lands in — never emit a "type" field.
 Collapse restatements of the SAME concept into ONE entry whose "source" lists all the blocks that state it — do not emit a separate entry per surface form.
-Return ONLY JSON {"title":"...","abstract":"...","description":"...","thesis":"...","concepts":[{"headword":"...","statement":"...","quote":"...","relations":[{"rel":"...","to":"...","quote":"..."}],"source":["Bn"]}],"judgements":[{"statement":"...","modality":null|"hypothesis"|"necessarily","quote":"...","source":["Bn"]}],"inferences":[{"statement":"...","quote":"...","source":["Bn"]}],"procedures":[{"headword":"...","steps":[{"statement":"...","quote":"...","source":["Bn"]}]}]}.
+Return ONLY JSON {"title":"...","abstract":"...","description":"...","thesis":"...","concepts":[{"headword":"...","statement":"...","quote":"...","bullets":[{"statement":"...","quote":"..."}],"relations":[{"rel":"...","to":"...","quote":"..."}],"source":["Bn"]}],"judgements":[{"statement":"...","modality":null|"hypothesis"|"necessarily","quote":"...","source":["Bn"]}],"inferences":[{"statement":"...","quote":"...","source":["Bn"]}],"procedures":[{"headword":"...","steps":[{"statement":"...","quote":"...","source":["Bn"]}]}]}.
 ${linkInventorySection(inventory, selfSlug)}
 
 TEXT (block IDs in [Bn] markers):
@@ -156,11 +157,18 @@ export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescripti
   for (const c of raw.concepts ?? []) {
     const headword = (c.headword ?? "").trim();
     if (!headword || withSource(c.source).length === 0) continue;
+    // extension bullets: keep those with a non-empty statement (the anchor `quote` may be empty —
+    // that bullet then renders unanchored, mirroring an unquoted procedure step). Trim-only,
+    // byte-verbatim quotes (the span-locate anchor), same discipline as the concept's own quote.
+    const bullets = (Array.isArray(c.bullets) ? c.bullets : [])
+      .map((b) => ({ statement: (b?.statement ?? "").trim(), quote: quoteField(b?.quote) }))
+      .filter((b) => b.statement.length > 0);
     concepts.push({
       type: "concept",
       id: headword,
       statement: (c.statement ?? "").trim(),
       quote: quoteField(c.quote),
+      ...(bullets.length ? { bullets } : {}),
     });
     for (const r of Array.isArray(c.relations) ? c.relations : []) {
       const norm = normalizeRelation(r); // lossy (D29): drops only rel/to-missing; predicate dropped below

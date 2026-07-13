@@ -19,6 +19,7 @@ const RENDER_1: Projection = {
       statement:
         'A field recording only whether a state holds — true or false.\nanswers only "is it?"',
       span: [33, 47],
+      subSpans: [[191, 222]],
     },
     {
       id: "Nullable timestamp",
@@ -26,6 +27,7 @@ const RENDER_1: Projection = {
       statement:
         'A field recording when a state transition occurred; null means not-yet.\nanswers "is it, and when?", and null still means no',
       span: [7, 27],
+      subSpans: [[224, 287]],
     },
     {
       id: "no extra column",
@@ -86,15 +88,17 @@ test("render 1: sections appear in the fixed seven-section order, Payload omitte
   expect(md).not.toContain("## Payload");
 });
 
-test("render 1: concept subsections carry a heading, a definition line, and an anchored bullet", () => {
+test("render 1: concept subsections carry a heading, a definition line, and a PER-BULLET-anchored extension", () => {
   const md = projectMarkdown(RENDER_1);
   expect(md).toContain("### Boolean flag");
   expect(md).toContain("A field recording only whether a state holds — true or false. 33..47");
-  expect(md).toContain('- answers only "is it?" 33..47');
+  // the extension bullet carries its OWN span (191..222), not the definition's (33..47)
+  expect(md).toContain('- answers only "is it?" 191..222');
   expect(md).toContain("### Nullable timestamp");
   expect(md).toContain(
     "A field recording when a state transition occurred; null means not-yet. 7..27",
   );
+  expect(md).toContain('- answers "is it, and when?", and null still means no 224..287');
 });
 
 test("render 1: an assertoric judgement emits no modality tag", () => {
@@ -277,6 +281,97 @@ test("multi-part sections (concepts) keep the blank-line join between subsection
   const md = projectMarkdown(concepts);
   // concept subsections stay stanza-separated (a `### A` block, blank line, then `### B`)
   expect(md).toContain("### A\n\ndef a 0..1\n\n### B\n\ndef b 1..2");
+});
+
+test("per-step spans: every procedure step past the lead is anchored by its own subSpan", () => {
+  const proc: Projection = {
+    source: { path: "x.txt", bytes: 100, sha256: "deadbeef" },
+    title: "X",
+    units: [
+      {
+        id: "Do the thing",
+        type: "procedure",
+        statement: "first step\nsecond step\nthird step",
+        span: [0, 10],
+        subSpans: [
+          [11, 22],
+          [23, 33],
+        ],
+      },
+    ],
+    edges: [],
+  };
+  const md = projectMarkdown(proc);
+  expect(md).toContain("1. first step 0..10");
+  expect(md).toContain("2. second step 11..22");
+  expect(md).toContain("3. third step 23..33");
+});
+
+test("per-step spans: a null subSpan hole renders that step unanchored (synthesized step)", () => {
+  const proc: Projection = {
+    source: { path: "x.txt", bytes: 100, sha256: "deadbeef" },
+    title: "X",
+    units: [
+      {
+        id: "Model a state flag",
+        type: "procedure",
+        statement: "store the moment, not a flag\ntreat null as not-yet",
+        span: [143, 189],
+        subSpans: [null],
+      },
+    ],
+    edges: [],
+  };
+  const md = projectMarkdown(proc);
+  expect(md).toContain("1. store the moment, not a flag 143..189");
+  // the null hole → no trailing anchor on the synthesized step
+  expect(md).toContain("2. treat null as not-yet");
+  expect(md).not.toMatch(/2\. treat null as not-yet\s+\d+\.\.\d+/);
+});
+
+test("per-bullet spans: a concept with multiple extension bullets anchors each independently", () => {
+  const concept: Projection = {
+    source: { path: "x.txt", bytes: 100, sha256: "deadbeef" },
+    title: "X",
+    units: [
+      {
+        id: "Term",
+        type: "concept",
+        statement: "the definition\nfirst property\nsecond property",
+        span: [0, 14],
+        subSpans: [
+          [15, 29],
+          [30, 45],
+        ],
+      },
+    ],
+    edges: [],
+  };
+  const md = projectMarkdown(concept);
+  expect(md).toContain("the definition 0..14");
+  expect(md).toContain("- first property 15..29");
+  expect(md).toContain("- second property 30..45");
+});
+
+test("per-bullet spans: with no subSpans, extension bullets render unanchored (no def-span reuse)", () => {
+  const concept: Projection = {
+    source: { path: "x.txt", bytes: 100, sha256: "deadbeef" },
+    title: "X",
+    units: [
+      {
+        id: "Term",
+        type: "concept",
+        statement: "the definition\na bullet with no located quote",
+        span: [0, 14],
+      },
+    ],
+    edges: [],
+  };
+  const md = projectMarkdown(concept);
+  expect(md).toContain("the definition 0..14");
+  // the bullet is present but bears no anchor — the def's span is NOT reused for it
+  expect(md).toContain("- a bullet with no located quote");
+  expect(md).not.toMatch(/- a bullet with no located quote\s+\d+\.\.\d+/);
 });
 
 test("title falls back to the source path basename when none is given", () => {

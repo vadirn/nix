@@ -104,7 +104,17 @@ test("extractGraphPrompt: the typed pre-graph schema asks for the five channels 
   expect(p).toContain('"modality"');
   // the return schema carries a quote on every unit + relation; relations drop `predicate`
   expect(p).toContain(
-    'Return ONLY JSON {"title":"...","abstract":"...","description":"...","thesis":"...","concepts":[{"headword":"...","statement":"...","quote":"...","relations":[{"rel":"...","to":"...","quote":"..."}],"source":["Bn"]}],"judgements":[{"statement":"...","modality":null|"hypothesis"|"necessarily","quote":"...","source":["Bn"]}],"inferences":[{"statement":"...","quote":"...","source":["Bn"]}],"procedures":[{"headword":"...","steps":[{"statement":"...","quote":"...","source":["Bn"]}]}]}.',
+    'Return ONLY JSON {"title":"...","abstract":"...","description":"...","thesis":"...","concepts":[{"headword":"...","statement":"...","quote":"...","bullets":[{"statement":"...","quote":"..."}],"relations":[{"rel":"...","to":"...","quote":"..."}],"source":["Bn"]}],"judgements":[{"statement":"...","modality":null|"hypothesis"|"necessarily","quote":"...","source":["Bn"]}],"inferences":[{"statement":"...","quote":"...","source":["Bn"]}],"procedures":[{"headword":"...","steps":[{"statement":"...","quote":"...","source":["Bn"]}]}]}.',
   );
   expect(p).not.toContain('"predicate"'); // predicate dropped from relations
+});
+
+test("extractGraphPrompt: the concept schema asks for an optional extension-bullets array (per-bullet spans)", () => {
+  const p = extractGraphPrompt(blocks, "", "en");
+  // the extension surface: a per-concept bullets array carrying its own verbatim quote
+  expect(p).toContain('"bullets"');
+  expect(p).toContain("EXTENSION");
+  expect(p).toContain("predicated properties or enumerated species");
+  // guarded against fabrication, like the relations lane
+  expect(p).toContain("do NOT invent a bullet the note does not state");
 });

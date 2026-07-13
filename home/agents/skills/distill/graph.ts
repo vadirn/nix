@@ -33,11 +33,22 @@ export interface Source {
 
 // One knowledge element. `span` is a half-open UTF-8 byte range into the source bytes (the
 // anchor); `modality` is present on judgments only (optional, unmarked = assertoric).
+//
+// `subSpans` is the ADDITIVE per-sub-element widening (design Backlog 12): the single `span`
+// anchors the HEAD line — a concept's definition, a procedure's lead step, or the whole flat/
+// payload unit — while `subSpans` carries one anchor per TAIL line of a multi-line `statement`,
+// aligned so `subSpans[i]` anchors `lines(statement)[i + 1]` (concept extension-bullet `i`,
+// procedure step `i + 1`). A `null` hole marks a tail line the projector renders WITHOUT an
+// anchor (a synthesized step/bullet the model gave no source quote for — spec §3's step-2
+// example). Absent (`undefined`) means a single-span unit: every tail line falls back to the
+// projector's legacy behavior. Chosen over restructuring `statement` into `{ text, span }[]`
+// because it is backward-compatible — the existing single-span path is untouched.
 export interface Unit {
   id: string;
   type: UnitType;
   statement: string;
   span: Span;
+  subSpans?: (Span | null)[];
   modality?: Modality;
 }
 
@@ -75,8 +86,11 @@ export interface PreUnit {
   statement: string;
   quote: string;
   modality?: Modality;
-  // per-bullet division-list spans are deferred (blueprint §8 gap #1 / §10 item 3); the first
-  // cut emits statement-only concepts, so `bullets` stays unpopulated.
+  // A concept's extension bullets — the division-list / predicated-property lines the note states
+  // ABOUT the concept beyond its definition (spec §3). Each carries its OWN verbatim `quote` so
+  // locate anchors each bullet independently (its own `subSpan` on the located `Unit`), rather
+  // than reusing the definition's span. Populated by `parseExtractGraph` from the extract prompt's
+  // per-concept `bullets` array; absent when the note enumerates none.
   bullets?: { statement: string; quote: string }[];
 }
 

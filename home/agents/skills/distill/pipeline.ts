@@ -60,7 +60,7 @@ import { locateGraph, payloadKey } from "./locate-graph.ts";
 import { projectMarkdown, type Projection } from "./project.ts";
 import { computeSource, type Unit } from "./graph.ts";
 import { locate } from "./locate.ts";
-import { sliceBytes } from "./mdstruct.ts";
+import { sliceBytes, type Span } from "./mdstruct.ts";
 
 // Escape the three characters an XML attribute value cannot carry raw. The passthrough envelope
 // (main(), the exit-3 legacy sink) stamps residue labels/reasons into `<entry term=… reason=…>`.
@@ -144,13 +144,18 @@ async function runFidelityBackstop(
     .filter((u) => u.type === "concept")
     .map((u) => ({ term: u.id, def: u.statement, sourceText: sliceBytes(buf, u.span) }));
   // one workflow group per procedure unit; its steps are the joined statement re-split, its
-  // sourceText the lead-step slice (per-step spans are deferred — blueprint §8 gap #1).
+  // sourceText the concatenation of every step's located slice (head `span` + each `subSpans`
+  // entry) so the coverage judge sees ALL prescribed source, not just the lead step — a null hole
+  // (a synthesized step) contributes nothing.
   const groups = result.units
     .filter((u) => u.type === "procedure")
     .map((u) => ({
       id: u.id,
       steps: u.statement.split("\n").filter((s) => s.trim().length > 0),
-      sourceText: sliceBytes(buf, u.span),
+      sourceText: [u.span, ...(u.subSpans ?? [])]
+        .filter((s): s is Span => s !== null)
+        .map((s) => sliceBytes(buf, s))
+        .join("\n"),
     }));
   const [graded, gradedG] = await Promise.all([
     concepts.length

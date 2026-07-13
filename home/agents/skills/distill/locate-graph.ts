@@ -20,8 +20,17 @@
 // fallback.
 import { computeSource, type Edge, type PreGraph, type Unit } from "./graph.ts";
 import { locate } from "./locate.ts";
+import type { Span } from "./mdstruct.ts";
 import { REL_REGISTRY, slugSegment, type Block } from "./text.ts";
 import type { Projection } from "./project.ts";
+
+// Locate a sub-element's (bullet / tail-step) quote to a span, or `null` when the model gave no
+// quote (an empty quote is a deliberate no-anchor, not a hallucination — it renders unanchored,
+// spec §3's synthesized-step example). A PRESENT quote still hard-aborts on a locate miss, so the
+// anti-hallucination gate holds for every anchored sub-element, not just the head.
+function locateSub(body: string, quote: string): Span | null {
+  return quote.trim().length === 0 ? null : locate(body, quote);
+}
 
 // A payload subsection key: the first meaningful source line (fence markers skipped; blockquote /
 // heading / list punctuation stripped; capped), else the ordinal `Payload N`. Used as the `### key`
@@ -69,13 +78,21 @@ export function locateGraph(
   const source = computeSource(path, body);
   const units: Unit[] = [];
 
-  // concept units ← pre.concepts: statement is the final def; span locates the verbatim quote.
+  // concept units ← pre.concepts: statement is the final def joined with any extension bullets;
+  // `span` locates the def's verbatim quote, `subSpans` locates each bullet's own quote (per-
+  // sub-element anchoring, design Backlog 12). A bullet with no quote yields a null hole.
   for (const c of pre.concepts) {
+    const bullets = (c.bullets ?? []).filter((b) => b.statement.trim().length > 0);
+    const statement = [c.statement, ...bullets.map((b) => b.statement)]
+      .filter((s) => s && s.trim().length > 0)
+      .join("\n");
+    const subSpans = bullets.map((b) => locateSub(body, b.quote));
     units.push({
       id: c.id ?? "",
       type: "concept",
-      statement: c.statement,
+      statement,
       span: locate(body, c.quote),
+      ...(subSpans.length ? { subSpans } : {}),
     });
   }
 
@@ -102,19 +119,22 @@ export function locateGraph(
   });
 
   // procedure units ← pre.procedures: one unit per group. statement = the group's steps joined by
-  // "\n"; span locates the lead step's quote (the representative slice — coarse; per-step spans are
-  // deferred, blueprint §8 gap #1). id = the group's headword, fallback `Procedure N`.
+  // "\n"; `span` locates the LEAD step's quote and `subSpans` locates each remaining step's own
+  // quote (per-step anchoring, design Backlog 12) — a step with no quote yields a null hole
+  // (rendered unanchored, spec §3's step-2 example). id = the group's headword, fallback
+  // `Procedure N`.
   pre.procedures.forEach((p, i) => {
-    if (p.steps.length === 0) return;
-    const statement = p.steps
-      .map((s) => s.statement)
-      .filter((s) => s && s.trim().length > 0)
-      .join("\n");
+    const steps = p.steps.filter((s) => s.statement && s.statement.trim().length > 0);
+    if (steps.length === 0) return;
+    const statement = steps.map((s) => s.statement).join("\n");
+    const [lead, ...rest] = steps;
+    const subSpans = rest.map((s) => locateSub(body, s.quote));
     units.push({
       id: p.headword.trim() || `Procedure ${i + 1}`,
       type: "procedure",
       statement,
-      span: locate(body, p.steps[0].quote),
+      span: locate(body, lead.quote),
+      ...(subSpans.length ? { subSpans } : {}),
     });
   });
 

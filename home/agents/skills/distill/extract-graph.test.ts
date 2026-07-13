@@ -84,6 +84,36 @@ test("concepts: headword → id, statement kept, quote trimmed byte-verbatim (no
   expect(widget.quote).toBe("A widget is a small unit.");
 });
 
+test("concepts: extension bullets populate PreUnit.bullets (statement kept, quote trim-only)", () => {
+  const pre = parseExtractGraph(
+    raw({
+      concepts: [
+        {
+          headword: "Widget",
+          statement: "a small composable unit",
+          quote: "A widget is a small unit.",
+          bullets: [
+            { statement: "composes into gadgets", quote: "  widgets compose into gadgets  " },
+            { statement: "", quote: "dropped — empty statement" },
+          ],
+          source: ["B1"],
+        },
+      ],
+    }),
+    BLOCKS,
+  );
+  const widget = pre.concepts.find((c) => c.id === "Widget")!;
+  // the empty-statement bullet is dropped; the real one is kept with a trim-only quote
+  expect(widget.bullets).toEqual([
+    { statement: "composes into gadgets", quote: "widgets compose into gadgets" },
+  ]);
+});
+
+test("concepts: a concept with no bullets leaves PreUnit.bullets undefined", () => {
+  const pre = parseExtractGraph(raw(), BLOCKS);
+  expect(pre.concepts.find((c) => c.id === "Widget")!.bullets).toBeUndefined();
+});
+
 test("relations become flat PreEdges owned by the headword; rel normalized, predicate dropped", () => {
   const pre = parseExtractGraph(raw(), BLOCKS);
   expect(pre.edges).toHaveLength(1);

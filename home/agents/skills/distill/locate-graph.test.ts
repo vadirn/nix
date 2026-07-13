@@ -152,6 +152,71 @@ test("locateGraph: procedure id is the group headword; statement joins the steps
   expect(proc.statement).toBe("Assemble the widgets in order.\nBolt them together into a gadget.");
 });
 
+test("locateGraph: per-step spans — every non-lead procedure step is anchored by its own subSpan", () => {
+  const result = locateGraph(pre(), PATH, BODY, payloadBlocks);
+  const proc = result.units.find((u) => u.type === "procedure")!;
+  // two steps → one tail subSpan, located from the second step's own quote
+  expect(proc.subSpans).toHaveLength(1);
+  const buf = Buffer.from(BODY, "utf8");
+  expect(sliceBytes(buf, proc.subSpans![0]!)).toBe("Then bolt them together into a gadget.");
+  // it renders as an anchored step 2 in the projection
+  const md = projectMarkdown(result);
+  expect(md).toMatch(/2\. Bolt them together into a gadget\.\s+\d+\.\.\d+/);
+});
+
+test("locateGraph: per-bullet spans — a concept's extension bullets locate to their own quotes", () => {
+  const result = locateGraph(
+    pre({
+      concepts: [
+        {
+          type: "concept",
+          id: "Widget",
+          statement: "A widget is a small composable unit.",
+          quote: "A widget is a small composable unit of work.",
+          bullets: [
+            {
+              statement: "is the base assembly unit",
+              quote: "A gadget is a larger assembly built from widgets.",
+            },
+          ],
+        },
+      ],
+      edges: [],
+    }),
+    PATH,
+    BODY,
+    payloadBlocks,
+  );
+  const widget = result.units.find((u) => u.id === "Widget")!;
+  expect(widget.statement).toBe("A widget is a small composable unit.\nis the base assembly unit");
+  expect(widget.subSpans).toHaveLength(1);
+  const buf = Buffer.from(BODY, "utf8");
+  expect(sliceBytes(buf, widget.subSpans![0]!)).toBe(
+    "A gadget is a larger assembly built from widgets.",
+  );
+});
+
+test("locateGraph: a bullet with an empty quote yields a null hole (unanchored), not a hard abort", () => {
+  const result = locateGraph(
+    pre({
+      concepts: [
+        {
+          type: "concept",
+          id: "Widget",
+          statement: "A widget is a small composable unit.",
+          quote: "A widget is a small composable unit of work.",
+          bullets: [{ statement: "a synthesized property", quote: "" }],
+        },
+      ],
+      edges: [],
+    }),
+    PATH,
+    BODY,
+  );
+  const widget = result.units.find((u) => u.id === "Widget")!;
+  expect(widget.subSpans).toEqual([null]);
+});
+
 test("locateGraph: judgement ids are ordinal (J1..), inference ids ordinal (I1..)", () => {
   const result = locateGraph(pre(), PATH, BODY, payloadBlocks);
   expect(result.units.find((u) => u.type === "judgment")!.id).toBe("J1");

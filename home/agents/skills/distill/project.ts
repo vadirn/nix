@@ -59,24 +59,36 @@ function modalityTag(unit: Unit): string {
   return "";
 }
 
-// A concept subsection: `### headword`, a definition line, and anchored bullet(s). The
-// statement's first line is the definition (= intension); each subsequent line is a
-// predicated-judgment bullet. Every anchored line bears the unit's single span.
+// The trailing anchor for a TAIL line (concept bullet / procedure step past the lead), read from
+// `unit.subSpans` aligned so tail index `i` (0-based over lines after the head) uses
+// `subSpans[i]`. Returns the ` start..end` suffix (leading space) when a span exists, else "" — a
+// null hole or an absent `subSpans` renders the line unanchored (spec §3's synthesized step-2).
+function tailAnchor(unit: Unit, tailIndex: number): string {
+  const s = unit.subSpans?.[tailIndex];
+  return s ? ` ${formatSpan(s)}` : "";
+}
+
+// A concept subsection: `### headword`, a definition line, and per-bullet anchored extension(s).
+// The statement's first line is the definition (= intension), anchored by the unit's head `span`;
+// each subsequent line is an extension bullet anchored by its OWN `subSpans` entry (per-sub-element
+// anchoring, design Backlog 12) — a bullet with no located quote renders unanchored.
 function renderConcept(unit: Unit): string {
-  const anchor = formatSpan(unit.span);
   const [def, ...bullets] = lines(unit.statement);
-  const parts = [`### ${unit.id}`, `${def} ${anchor}`];
-  if (bullets.length) parts.push(bullets.map((b) => `- ${b} ${anchor}`).join("\n"));
+  const parts = [`### ${unit.id}`, `${def} ${formatSpan(unit.span)}`];
+  if (bullets.length) {
+    parts.push(bullets.map((b, i) => `- ${b}${tailAnchor(unit, i)}`).join("\n"));
+  }
   return parts.join("\n\n");
 }
 
-// A procedure subsection: `### headword` + numbered steps. The unit's single span anchors the
-// lead step (the representative source slice); later steps are unanchored — per-step spans
-// would need step-level units (design Backlog).
+// A procedure subsection: `### headword` + numbered steps. The lead step bears the unit's head
+// `span`; each later step bears its OWN `subSpans` entry (per-step anchoring, design Backlog 12) —
+// a step with no located quote renders unanchored (spec §3's step-2 example).
 function renderProcedure(unit: Unit): string {
-  const anchor = formatSpan(unit.span);
-  const steps = lines(unit.statement).map(
-    (step, i) => `${i + 1}. ${step}${i === 0 ? ` ${anchor}` : ""}`,
+  const steps = lines(unit.statement).map((step, i) =>
+    i === 0
+      ? `${i + 1}. ${step} ${formatSpan(unit.span)}`
+      : `${i + 1}. ${step}${tailAnchor(unit, i - 1)}`,
   );
   return [`### ${unit.id}`, steps.join("\n")].join("\n\n");
 }

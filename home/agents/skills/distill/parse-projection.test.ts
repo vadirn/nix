@@ -68,6 +68,47 @@ test("reader strips the (modality) tag and recovers concept/judgement spans", ()
   expect(note.relations[0]).toContain("timeout — precondition-for → must-hold");
 });
 
+test("reader recovers per-bullet and per-step spans the projector emits (round-trip)", () => {
+  const NOTE2: Projection = {
+    source: { path: "sub.md", bytes: 300, sha256: "abc123abc123" },
+    title: "Sub-spans",
+    units: [
+      {
+        id: "Term",
+        type: "concept",
+        statement: "the definition\nfirst property\nsecond property",
+        span: [0, 14],
+        subSpans: [
+          [15, 29],
+          [30, 45],
+        ],
+      },
+      {
+        id: "Do it",
+        type: "procedure",
+        statement: "lead step\ntail step\nsynthesized step",
+        span: [50, 60],
+        // second tail step is a null hole → rendered unanchored
+        subSpans: [[61, 70], null],
+      },
+    ],
+    edges: [],
+  };
+  const note = parseCanonicalNote(bodyOf(projectMarkdown(NOTE2)));
+  const concept = note.concepts.find((c) => c.headword === "Term")!;
+  expect(concept.span).toEqual([0, 14]);
+  expect(concept.bullets).toEqual(["first property", "second property"]);
+  expect(concept.bulletSpans).toEqual([
+    [15, 29],
+    [30, 45],
+  ]);
+  const proc = note.procedures.find((p) => p.headword === "Do it")!;
+  expect(proc.steps).toEqual(["lead step", "tail step", "synthesized step"]);
+  // stepSpans[0] === the lead span; the null hole comes back as null (anchor dropped on render)
+  expect(proc.stepSpans).toEqual([[50, 60], [61, 70], null]);
+  expect(proc.span).toEqual([50, 60]);
+});
+
 // ---- fence-aware subsections() regression ----
 test("parseCanonicalNote: a ###-look-alike line inside a fenced Payload block stays inside one entry (fence-unaware bug, fixed)", () => {
   const body = [
@@ -95,7 +136,13 @@ test("parseCanonicalNote: a concept def line missing its anchor still parses def
   const body = "## Concepts\n\n### alpha\n\nfirst letter, no anchor here";
   const note = parseCanonicalNote(body);
   expect(note.concepts).toEqual([
-    { headword: "alpha", def: "first letter, no anchor here", bullets: [], span: null },
+    {
+      headword: "alpha",
+      def: "first letter, no anchor here",
+      bullets: [],
+      bulletSpans: [],
+      span: null,
+    },
   ]);
 });
 
@@ -103,7 +150,12 @@ test("parseCanonicalNote: a procedure lead step missing its anchor still parses 
   const body = "## Procedures\n\n### proc\n\n1. step one no anchor\n2. step two 6..10";
   const note = parseCanonicalNote(body);
   expect(note.procedures).toEqual([
-    { headword: "proc", steps: ["step one no anchor", "step two"], span: null },
+    {
+      headword: "proc",
+      steps: ["step one no anchor", "step two"],
+      stepSpans: [null, [6, 10]],
+      span: null,
+    },
   ]);
 });
 
@@ -135,7 +187,7 @@ test("parseCanonicalNote: back-to-back ### headers drop the empty-def concept, k
   const body = "## Concepts\n\n### alpha\n### beta\n\nbeta def 6..10";
   const note = parseCanonicalNote(body);
   expect(note.concepts).toEqual([
-    { headword: "beta", def: "beta def", bullets: [], span: [6, 10] },
+    { headword: "beta", def: "beta def", bullets: [], bulletSpans: [], span: [6, 10] },
   ]);
 });
 
