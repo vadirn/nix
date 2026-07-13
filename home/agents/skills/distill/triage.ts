@@ -7,7 +7,13 @@
 //
 // PURE by contract: no fs, no LLM. The stamp (src=) and destination are computed
 // by the caller and passed in, so the fixture's hash is injectable in tests.
-import { type BlockSpec, renderBlock } from "./interact.ts";
+import {
+  type BlockSpec,
+  renderBlock,
+  sanitizeNote,
+  sanitizePayload,
+  targetIsRenderable,
+} from "./interact.ts";
 import { parseFrontmatter } from "./frontmatter.ts";
 import type { Residue } from "./residue.ts";
 
@@ -44,8 +50,9 @@ function targetFor(r: Residue): { target: string; targetCode?: boolean } {
       // term CAN carry one (LLM-extracted, unsanitized) — degrade such a term to the
       // safeHandle grep-handle instead of crashing the emit after the full LLM run.
       // The fenced payload still carries the verbatim source; apply-side row matching
-      // for degraded handles is Phase 4's seam.
-      if (/[`\n\r]/.test(r.label)) {
+      // for degraded handles is Phase 4's seam. targetIsRenderable is interact.ts's own
+      // guard predicate, so this check can't drift from what renderBlock would throw on.
+      if (!targetIsRenderable(r.label)) {
         return { target: safeHandle(r.label), targetCode: true };
       }
       return { target: r.label, targetCode: true };
@@ -94,12 +101,12 @@ export function residueToBlocks(residue: Residue[]): BlockSpec[] {
         state: "unchecked" as const,
         verb: r.reasonClass === "gate-inconclusive" ? "keep" : "recover",
         ...targetFor(r),
-        // \r included: renderBlock rejects any CR in a note or payload, and a CRLF
-        // source note threads CRs into residue verbatim — a crash HERE would land
-        // after the whole LLM run. Notes flatten to one line; payloads keep their
-        // lines, LF-normalized.
-        note: r.reason.replace(/[\r\n]+/g, " "),
-        payload: r.source === "" ? undefined : r.source.replace(/\r\n?/g, "\n"),
+        // renderBlock rejects any CR in a note or payload, and a CRLF source note
+        // threads CRs into residue verbatim — a crash HERE would land after the whole
+        // LLM run. sanitizeNote/sanitizePayload are interact.ts's own guard-paired
+        // sanitizers: notes flatten to one line; payloads keep their lines, LF-normalized.
+        note: sanitizeNote(r.reason),
+        payload: r.source === "" ? undefined : sanitizePayload(r.source),
       })),
     },
   ];

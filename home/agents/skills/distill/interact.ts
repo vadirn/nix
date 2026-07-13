@@ -741,6 +741,33 @@ function longestBacktickRun(s: string): number {
 
 const RENDER_ID_RE = /^[A-Za-z0-9_-]+$/;
 const RENDER_VERB_RE = /^[a-z][a-z0-9-]*$/;
+const NEWLINE_OR_CR_RE = /[\n\r]/;
+const BACKTICK_RE = /`/;
+const CR_RE = /\r/;
+
+// ---- field predicates/sanitizers shared with triage.ts ----
+// triage.ts pre-satisfies these same throw guards before handing fields to renderBlock
+// (e.g. degrading a def's target to safeHandle() when the raw term wouldn't render).
+// Deriving that off the SAME regex constants the guards below use — rather than a
+// hand-copied char class — means a guard change here can't silently desync triage's
+// sanitization from what actually throws.
+
+/// True iff target would NOT trip renderBlock's target guards (no backtick, no
+/// newline/CR). Consult before deciding whether a field needs degrading (e.g. to
+/// safeHandle()) ahead of a renderBlock call.
+export function targetIsRenderable(target: string): boolean {
+  return !NEWLINE_OR_CR_RE.test(target) && !BACKTICK_RE.test(target);
+}
+
+/// Flattens whatever renderBlock's note guard rejects (newline/CR) to a single space.
+export function sanitizeNote(note: string): string {
+  return note.replace(/[\r\n]+/g, " ");
+}
+
+/// Normalizes whatever renderBlock's payload guard rejects (a bare CR) to LF.
+export function sanitizePayload(payload: string): string {
+  return payload.replace(/\r\n?/g, "\n");
+}
 
 export function renderBlock(spec: BlockSpec): string {
   if (!RENDER_ID_RE.test(spec.id)) {
@@ -771,18 +798,18 @@ export function renderBlock(spec: BlockSpec): string {
     if (!RENDER_VERB_RE.test(it.verb)) {
       throw new Error(`renderBlock: verb '${it.verb}' is not a lowercase slug`);
     }
-    if (/[\n\r]/.test(it.target)) {
+    if (NEWLINE_OR_CR_RE.test(it.target)) {
       throw new Error("renderBlock: newline in target is not allowed");
     }
-    if (it.target.includes("`")) {
+    if (BACKTICK_RE.test(it.target)) {
       throw new Error(
         "renderBlock: backtick in target is not allowed — pass the semantic target, formatting belongs to the renderer",
       );
     }
-    if (it.note !== undefined && /[\n\r]/.test(it.note)) {
+    if (it.note !== undefined && NEWLINE_OR_CR_RE.test(it.note)) {
       throw new Error("renderBlock: newline in note is not allowed");
     }
-    if (it.payload?.includes("\r")) {
+    if (it.payload !== undefined && CR_RE.test(it.payload)) {
       throw new Error("renderBlock: carriage return in payload is not allowed");
     }
   }
