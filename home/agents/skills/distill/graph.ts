@@ -167,6 +167,21 @@ export function stripTrailingAnchor(line: string): { text: string; span: Span | 
 export const REL_DASH = " — ";
 export const REL_ARROW = " → ";
 
+// The `## Heading` vocabulary (W4): one heading per UnitType, plus the two non-unit sections
+// (Abstract, Relations) the projection also carries. project.ts's typeSection calls render
+// these headings directly; parse-projection.ts's section lookup derives its lowercase match
+// keys from the same strings (via `.toLowerCase()`) so a renamed heading can't silently orphan
+// the reader's key.
+export const SECTION_HEADING: Record<UnitType, string> = {
+  concept: "Concepts",
+  judgment: "Judgements",
+  inference: "Inferences",
+  procedure: "Procedures",
+  payload: "Payload",
+};
+export const ABSTRACT_HEADING = "Abstract";
+export const RELATIONS_HEADING = "Relations";
+
 // The one canonical content stamp: the first 12 hex digits (48 bits) of the sha256 over
 // `bytes`. Every provenance/verify site routes through here — computeSource's frontmatter
 // `source.sha256` (bare) and apply-mode's `sha256:`-prefixed emit/preflight stamp (stampHash) —

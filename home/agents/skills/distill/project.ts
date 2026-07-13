@@ -9,9 +9,12 @@
 // paths and the routed build (distillRouted) all render through projectMarkdown; the legacy
 // two-channel assemble step it replaced is gone. Pure formatting; no I/O, no model calls.
 import {
+  ABSTRACT_HEADING,
   formatSpan,
   REL_ARROW,
   REL_DASH,
+  RELATIONS_HEADING,
+  SECTION_HEADING,
   type DistillationResult,
   type Edge,
   type Unit,
@@ -169,26 +172,29 @@ export function projectMarkdown(result: Projection, opts?: { relations?: boolean
 
   blocks.push(`# ${title ?? titleFromPath(source.path)}`);
 
-  if (abstract && abstract.trim()) blocks.push(`## Abstract\n\n${abstract.trim()}`);
+  if (abstract && abstract.trim())
+    blocks.push(`## ${ABSTRACT_HEADING}\n\n${abstract.trim()}`);
 
   const sections = [
-    typeSection("Concepts", byType("concept"), renderConcept),
+    typeSection(SECTION_HEADING.concept, byType("concept"), renderConcept),
     typeSection(
-      "Judgements",
+      SECTION_HEADING.judgment,
       byType("judgment"),
       (u) => `- ${modalityTag(u)}${u.statement} ${formatSpan(u.span)}`,
       "\n",
     ),
     typeSection(
-      "Inferences",
+      SECTION_HEADING.inference,
       byType("inference"),
       (u) => `- ${u.statement} ${formatSpan(u.span)}`,
       "\n",
     ),
-    typeSection("Procedures", byType("procedure"), renderProcedure),
-    typeSection("Payload", byType("payload"), renderPayload),
+    typeSection(SECTION_HEADING.procedure, byType("procedure"), renderProcedure),
+    typeSection(SECTION_HEADING.payload, byType("payload"), renderPayload),
     relations && edges.length
-      ? [`## Relations`, edges.map((e) => renderRelation(e, unitById)).join("\n")].join("\n\n")
+      ? [`## ${RELATIONS_HEADING}`, edges.map((e) => renderRelation(e, unitById)).join("\n")].join(
+          "\n\n",
+        )
       : "",
   ];
 

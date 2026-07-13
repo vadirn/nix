@@ -12,7 +12,13 @@
 // (parseConceptGraph) and its GlossEntry/Relation types are gone.
 //
 // PURE: no fs, no LLM, no model of the source bytes — it reads only the projected markdown.
-import { parseSpan, stripTrailingAnchor } from "./graph.ts";
+import {
+  ABSTRACT_HEADING,
+  parseSpan,
+  RELATIONS_HEADING,
+  SECTION_HEADING,
+  stripTrailingAnchor,
+} from "./graph.ts";
 import { fenceScan, type FenceState } from "./text.ts";
 import type { Span } from "./mdstruct.ts";
 
@@ -177,13 +183,15 @@ export function parseCanonicalNote(body: string): CanonNote {
   const sections = splitSections(body);
   const by = (name: string) => sections.find((s) => s.name === name);
 
-  const abstract = (by("abstract")?.bodyLines ?? []).join("\n").trim();
+  const abstract = (by(ABSTRACT_HEADING.toLowerCase())?.bodyLines ?? []).join("\n").trim();
 
   // Hardening: a `### headword` with no definition line (back-to-back headers, or a
   // bullets-only subsection) is malformed — a hand edit dropped or split the entry. Skip it
   // rather than surface an empty-def concept, symmetric with prose-mode.ts::parseDistilled's
   // `.filter((c) => c.headword && c.def)` (pure.test.ts:653-664).
-  const concepts: CanonConcept[] = subsections(by("concepts")?.bodyLines ?? [])
+  const concepts: CanonConcept[] = subsections(
+    by(SECTION_HEADING.concept.toLowerCase())?.bodyLines ?? [],
+  )
     .map((sub) => {
       const content = sub.lines.filter((l) => l.trim().length > 0);
       let def = "";
@@ -208,7 +216,9 @@ export function parseCanonicalNote(body: string): CanonNote {
 
   // Same hardening for Procedures: a `### headword` with no numbered-step lines is the
   // procedure analogue of an empty def — skip rather than surface a step-less entry.
-  const procedures: CanonProcedure[] = subsections(by("procedures")?.bodyLines ?? [])
+  const procedures: CanonProcedure[] = subsections(
+    by(SECTION_HEADING.procedure.toLowerCase())?.bodyLines ?? [],
+  )
     .map((sub) => {
       const steps: string[] = [];
       const stepSpans: (Span | null)[] = [];
@@ -234,7 +244,9 @@ export function parseCanonicalNote(body: string): CanonNote {
         return { statement: a.text, span: a.span };
       });
 
-  const payload: CanonPayload[] = subsections(by("payload")?.bodyLines ?? []).map((sub) => {
+  const payload: CanonPayload[] = subsections(
+    by(SECTION_HEADING.payload.toLowerCase())?.bodyLines ?? [],
+  ).map((sub) => {
     // single-line `> quote anchor`, or a fenced block whose closing fence is followed by the anchor
     const lines = sub.lines;
     const quote = lines.find((l) => l.trim().startsWith(">"));
@@ -266,7 +278,7 @@ export function parseCanonicalNote(body: string): CanonNote {
     return { headword: sub.headword, body: inner.join("\n"), span };
   });
 
-  const relations = (by("relations")?.bodyLines ?? [])
+  const relations = (by(RELATIONS_HEADING.toLowerCase())?.bodyLines ?? [])
     .map((l) => l.trim())
     .filter((l) => l.startsWith("- "))
     .map((l) => l.slice(2).trim());
@@ -274,8 +286,8 @@ export function parseCanonicalNote(body: string): CanonNote {
   return {
     abstract,
     concepts,
-    judgements: flat("judgements"),
-    inferences: flat("inferences"),
+    judgements: flat(SECTION_HEADING.judgment.toLowerCase()),
+    inferences: flat(SECTION_HEADING.inference.toLowerCase()),
     procedures,
     payload,
     relations,
