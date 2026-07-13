@@ -231,7 +231,7 @@ test("skip: a declined typing review leaves the projection byte-identical to no 
   // runTypingReview is TTY-gated in distill(); a non-TTY run never invokes it, so the graph keeps its
   // extract-assigned types. Modeled here at the seam: a reviewer who declines (askFn → null) mutates
   // nothing, so projectMarkdown is byte-for-byte the pre-review projection.
-  const { runTypingReview } = await import("./pipeline.ts");
+  const { runTypingReview } = await import("./tty.ts");
   const r = result();
   const before = projectMarkdown(r);
   const confirmed = await runTypingReview(r, BODY, async () => null);

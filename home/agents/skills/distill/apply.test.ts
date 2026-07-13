@@ -37,7 +37,7 @@ import {
   spliceDef,
   unlinkIfPresent,
 } from "./apply-mode.ts";
-import { parseArgs } from "./pipeline.ts";
+import { parseArgs } from "./cli.ts";
 
 // ---------------------------------------------------------------------------
 // CLI wiring (parseArgs) — GREEN: the `apply` subcommand surface is implemented,

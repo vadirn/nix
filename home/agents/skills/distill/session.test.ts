@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { buildIntermediary } from "./triage.ts";
-import { runTtySession } from "./pipeline.ts";
+import { runTtySession } from "./tty.ts";
 import type { Residue } from "./residue.ts";
 
 const NOTE = `---

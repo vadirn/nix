@@ -9,7 +9,8 @@ import { expect, test } from "bun:test";
 import type { ProseUnit } from "./text.ts";
 import { normalizeForContainment } from "./text.ts";
 import type { ProseVerdict } from "./prompts.ts";
-import { buildFooter, expandGuardCap, parseArgs, USAGE } from "./pipeline.ts";
+import { buildFooter, expandGuardCap } from "./pipeline.ts";
+import { parseArgs, USAGE } from "./cli.ts";
 import { anchored, payloadResidue, proseResidue, wikilinkResidue } from "./residue.ts";
 
 // ---- expandGuardCap: the passthrough guard's threshold, customizable via --max-words ----
