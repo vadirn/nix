@@ -6,21 +6,16 @@
 // and buildFooter (the success-footer renderer). The async stages route through
 // the network and are covered by the end-to-end + degradation suites.
 import { expect, test } from "bun:test";
-import type { Block, Combo, Grade, ProseUnit, WorkStep } from "./text.ts";
+import type { ProseUnit } from "./text.ts";
 import { normalizeForContainment } from "./text.ts";
 import type { ProseVerdict } from "./prompts.ts";
-import { segment } from "./text.ts";
 import {
   anchored,
   buildFooter,
-  computeStepGroups,
   expandGuardCap,
-  groupStepsByOwner,
-  orderContent,
   parseArgs,
   payloadResidue,
   proseResidue,
-  tagOwnedBlocks,
   USAGE,
   wikilinkResidue,
 } from "./pipeline.ts";
@@ -37,123 +32,6 @@ test("expandGuardCap: maxWords 0 disables the guard (debugging escape hatch)", (
 test("expandGuardCap: a positive maxWords sets an absolute ceiling, ignoring input size", () => {
   expect(expandGuardCap(100, 500)).toBe(500);
   expect(expandGuardCap(100, 10)).toBe(10);
-});
-
-// ---- orderContent: retain selection + note-order entries/steps ----
-test("orderContent: orders entries by first source block, drops fully-retained steps", () => {
-  const blocks: Block[] = [
-    { id: "B1", text: "a" },
-    { id: "B2", text: "b" },
-    { id: "B3", text: "c" },
-  ];
-  const grades: Map<string, Grade> = new Map([
-    ["B1", "distill"],
-    ["B2", "retain"],
-    ["B3", "distill"],
-  ]);
-  const combo: Combo = {
-    description: "",
-    thesis: "t",
-    glossary: [
-      { term: "X", def: "dx", relations: [], source: ["B3"] }, // orderKey 2
-      { term: "Y", def: "dy", relations: [], source: ["B1"] }, // orderKey 0
-    ],
-    workflow: [
-      { step: "do z", source: ["B1"] }, // B1 is distill → kept
-      { step: "do w", source: ["B2"] }, // every source block retained → dropped
-    ],
-  };
-  const { payloadBlocks, payloadBlockIds, orderedEntries, orderedSteps } = orderContent(
-    combo,
-    blocks,
-    grades,
-  );
-  expect(payloadBlocks).toEqual([{ id: "B2", text: "b" }]);
-  expect([...payloadBlockIds]).toEqual(["B2"]);
-  expect(orderedEntries.map((e) => e.term)).toEqual(["Y", "X"]);
-  expect(orderedSteps.map((s) => s.step)).toEqual(["do z"]);
-});
-
-// ---- tagOwnedBlocks: owner-section tagging at segmentation time (routed-build splice) ----
-test("tagOwnedBlocks: assigns sequential ids across sections, tagging each block's owner index", () => {
-  const owned = tagOwnedBlocks([{ text: "para one" }, { text: "para two" }]);
-  expect(owned.blocks).toEqual([
-    { id: "B1", text: "para one" },
-    { id: "B2", text: "para two" },
-  ]);
-  expect([...owned.owner]).toEqual([
-    ["B1", 0],
-    ["B2", 1],
-  ]);
-  expect(owned.ownerCount).toBe(2);
-});
-
-test("tagOwnedBlocks: a section with two blank-line-separated paragraphs contributes two blocks, same owner", () => {
-  const owned = tagOwnedBlocks([{ text: "first\n\nsecond" }, { text: "third" }]);
-  expect(owned.blocks.map((b) => b.id)).toEqual(["B1", "B2", "B3"]);
-  expect(owned.owner.get("B1")).toBe(0);
-  expect(owned.owner.get("B2")).toBe(0);
-  expect(owned.owner.get("B3")).toBe(1);
-});
-
-test("tagOwnedBlocks: segmenting per-section then concatenating agrees, block-for-block, with segmenting the join", () => {
-  const sections = [
-    { text: "## Idea\n\nsome prose\n\nmore prose" },
-    { text: "## Mixed\n\n- a list\n\n```js\nconst x = 1;\n```" },
-    { text: "## Tail\n\ntrailing prose" },
-  ];
-  const owned = tagOwnedBlocks(sections);
-  const wholeText = sections.map((s) => s.text).join("\n\n");
-  expect(owned.blocks.map((b) => b.text)).toEqual(segment(wholeText).map((b) => b.text));
-});
-
-// ---- groupStepsByOwner: bucket already-ordered/synthesized steps by their source section ----
-test("groupStepsByOwner: buckets steps by owning section, preserving order within a bucket", () => {
-  const owned = tagOwnedBlocks([{ text: "first" }, { text: "second" }]);
-  const orderedSteps: WorkStep[] = [
-    { step: "s1", source: [owned.blocks[0].id] },
-    { step: "s2", source: [owned.blocks[1].id] },
-    { step: "s3", source: [owned.blocks[0].id] },
-  ];
-  const byOwner = groupStepsByOwner(
-    orderedSteps,
-    ["s1 rendered", "s2 rendered", "s3 rendered"],
-    owned,
-  );
-  expect(byOwner).toEqual([["s1 rendered", "s3 rendered"], ["s2 rendered"]]);
-});
-
-test("groupStepsByOwner: a step sourced from two owners resolves to the earlier one", () => {
-  const owned = tagOwnedBlocks([{ text: "first" }, { text: "second" }]);
-  const orderedSteps: WorkStep[] = [
-    { step: "cross", source: [owned.blocks[1].id, owned.blocks[0].id] },
-  ];
-  const byOwner = groupStepsByOwner(orderedSteps, ["cross rendered"], owned);
-  expect(byOwner).toEqual([["cross rendered"], []]);
-});
-
-test("groupStepsByOwner: an owner with zero steps yields an empty array at that position", () => {
-  const owned = tagOwnedBlocks([{ text: "first" }, { text: "second" }, { text: "third" }]);
-  const byOwner = groupStepsByOwner([], [], owned);
-  expect(byOwner).toEqual([[], [], []]);
-});
-
-// ---- computeStepGroups: steps sharing a source block group together ----
-test("computeStepGroups: groups by shared source, ids in encounter order, joins source text", () => {
-  const blockById = new Map<string, Block>([
-    ["B1", { id: "B1", text: "block one" }],
-    ["B2", { id: "B2", text: "block two" }],
-  ]);
-  const steps: WorkStep[] = [
-    { step: "s1", source: ["B1"] },
-    { step: "s2", source: ["B1"] },
-    { step: "s3", source: ["B2"] },
-  ];
-  const groups = computeStepGroups(steps, blockById);
-  expect(groups).toEqual([
-    { id: "workflow:1", idxs: [0, 1], sourceText: "block one" },
-    { id: "workflow:2", idxs: [2], sourceText: "block two" },
-  ]);
 });
 
 // ---- buildFooter: tag composition + size-tag branches ----

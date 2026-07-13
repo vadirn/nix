@@ -8,12 +8,8 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   type Block,
-  type Grade,
-  type GlossEntry,
-  type Combo,
   type LinkInventory,
   type ProseUnit,
-  type WorkStep,
   type PayloadSpan,
   type Route,
   type RoutedSection,
@@ -33,7 +29,6 @@ import {
   harvestVaultEdges,
   normalizeForContainment,
   partition,
-  reassembleNote,
   routeNote,
   segment,
   slugSegment,
@@ -55,7 +50,6 @@ import {
   gradeBlocks,
   type ProseVerdict,
   proseGate,
-  sourceTextFor,
   workflowGate,
 } from "./prompts.ts";
 import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
@@ -75,19 +69,6 @@ import { runApply } from "./apply-mode.ts";
 import { parseInteract, renderBlock } from "./interact.ts";
 import { applyTyping, buildTypingReview } from "./retype.ts";
 import { createInterface } from "node:readline";
-
-// Workflow-gate recovery ladder (stage-5 loop). A flagged step is repaired from
-// the gate's own finding (judge-guided), then — if the repair still fails the
-// re-grade within --max-retries — falls back to the source's verbatim imperative,
-// a guaranteed-faithful floor (a substring of source cannot invert). Overridable
-// for the recovery experiment: "retighten" re-runs the same blind compression that
-// caused the inversion (the prior behavior); "repair" is judge-guided only, no
-// floor; "repair-verbatim" is the full ladder and the default.
-type WfRecovery = "retighten" | "repair" | "repair-verbatim";
-const WF_RECOVERY: WfRecovery = ((): WfRecovery => {
-  const v = process.env.DISTILL_WF_RECOVERY;
-  return v === "retighten" || v === "repair" ? v : "repair-verbatim";
-})();
 
 // ---- pipeline ----
 // What failed and where, carried structurally (not re-derived from the reason string)
@@ -128,18 +109,6 @@ type DistillResult = {
   residue: Residue[];
   status: DistillStatus;
 };
-// one workflow group: steps sharing a source block-set, judged together by the
-// workflow gate. `idxs` index into the ordered workflowSteps array.
-type StepGroup = { id: string; idxs: number[]; sourceText: string };
-
-// distill runs as a fixed sequence of stages, each a named function below: extract
-// → order → synthesize → revise → gate → prose-QA → assemble. The stages share the
-// segmented blocks and the entry/step ordering; defByTerm and workflowSteps are the
-// two mutable carriers the synth/revise/gate stages refine in place. The orchestrator
-// (distill) holds that state and threads it; each stage is independently importable
-// so its slice can be exercised on its own (the pure ones — orderContent,
-// computeStepGroups, buildFooter — without a model call).
-
 // The whole-note (and, via the routed head's recursive call, per-head-scoped) expand-guard's
 // threshold, customizable via --max-words: unset defaults to the note's own input size
 // (today's behavior — any growth at all reverts to the original); a positive value sets an
@@ -149,111 +118,6 @@ export function expandGuardCap(beforeWords: number, maxWords?: number): number |
   if (maxWords === 0) return null;
   if (maxWords !== undefined && maxWords > 0) return maxWords;
   return beforeWords;
-}
-
-// stage 2: grade + order (pure). Given the extracted Combo, the segmented blocks, and
-// their per-block grades, pick the retained-verbatim blocks and put the glossary
-// entries and workflow steps in the note's own order (first appearance of their
-// lowest source block, Array.sort stable across a shared block). A step whose every
-// source block is retained verbatim is already carried by that block — drop it so
-// the directive is not duplicated as both a fence and a step. Deterministic.
-export function orderContent(
-  combo: Combo,
-  blocks: Block[],
-  grades: Map<string, Grade>,
-): {
-  payloadBlocks: Block[];
-  payloadBlockIds: Set<string>;
-  orderedEntries: GlossEntry[];
-  orderedSteps: WorkStep[];
-} {
-  const blockIndex = new Map(blocks.map((b, i) => [b.id, i]));
-  const payloadBlocks = blocks.filter((b) => grades.get(b.id) === "retain");
-  const payloadBlockIds = new Set(payloadBlocks.map((b) => b.id));
-  const orderKey = (e: { source: string[] }) =>
-    Math.min(...e.source.map((id) => blockIndex.get(id) ?? 1e9));
-  const orderedEntries = [...combo.glossary].sort((a, b) => orderKey(a) - orderKey(b));
-  const orderedSteps = combo.workflow
-    .filter((s) => !s.source.every((id) => payloadBlockIds.has(id)))
-    .sort((a, b) => orderKey(a) - orderKey(b));
-  return { payloadBlocks, payloadBlockIds, orderedEntries, orderedSteps };
-}
-
-// Owner-tagged blocks for the routed head (D12/D16, WorkStep-splice build): segments each
-// re-author RoutedSection's text INDEPENDENTLY, then reassigns sequential B-ids across the
-// whole set — the same id scheme a single segment(reauthorText) call produces today, since
-// segment() (text.ts:58-88) flushes at every fence-aware blank line and always flushes at
-// end-of-input, and distillRouted's own "\n\n" join already forces a blank-line boundary at
-// every section seam. The owner index lives in a side-map, not the id string, so the
-// extraction prompt's literal "[Bn]" markers (prompts.ts) are byte-identical to today — this
-// is what lets a WorkStep's existing `source: string[]` (block ids) be traced back to the
-// section it came from without perturbing extraction.
-export type OwnedBlocks = {
-  blocks: Block[];
-  owner: Map<string, number>;
-  ownerCount: number;
-};
-
-export function tagOwnedBlocks(reauthorSections: { text: string }[]): OwnedBlocks {
-  const blocks: Block[] = [];
-  const owner = new Map<string, number>();
-  let n = 0;
-  reauthorSections.forEach((sec, idx) => {
-    for (const b of segment(sec.text)) {
-      n++;
-      blocks.push({ id: `B${n}`, text: b.text });
-      owner.set(`B${n}`, idx);
-    }
-  });
-  return { blocks, owner, ownerCount: reauthorSections.length };
-}
-
-// Which re-author section a step traces back to: the earliest owner among its source block
-// ids, mirroring orderContent's own Math.min tie-break (:126). A step whose source spans two
-// owners (possible — extraction runs over the whole concatenated reauthorText as one blob)
-// resolves to the earlier section, matching the note's own reading order.
-function ownerOfStep(step: WorkStep, owner: Map<string, number>): number {
-  let best: number | undefined;
-  for (const id of step.source) {
-    const o = owner.get(id);
-    if (o !== undefined && (best === undefined || o < best)) best = o;
-  }
-  return best ?? 0; // unreachable in practice: orderContent already drops all-payload-sourced steps
-}
-
-// Bucket the already-ordered, already-synthesized workflowSteps strings by owning section
-// (parallel array to orderedSteps), so the routed build can splice each owner's steps back at
-// its section's position instead of bundling every step into the one head block.
-export function groupStepsByOwner(
-  orderedSteps: WorkStep[],
-  workflowSteps: string[],
-  owned: OwnedBlocks,
-): string[][] {
-  const byOwner: string[][] = Array.from({ length: owned.ownerCount }, () => []);
-  orderedSteps.forEach((s, i) => byOwner[ownerOfStep(s, owned.owner)].push(workflowSteps[i]));
-  return byOwner;
-}
-
-// group steps by their shared source block-set (pure) so the workflow gate judges
-// them the way they exist: a practices/procedure list (one block) is one group whose
-// steps are judged as a set against that block; steps in distinct blocks each form
-// their own group, giving per-step granularity where the note allows it.
-export function computeStepGroups(
-  orderedSteps: WorkStep[],
-  blockById: Map<string, Block>,
-): StepGroup[] {
-  const by = new Map<string, number[]>();
-  orderedSteps.forEach((s, i) => {
-    const sig = [...new Set(s.source)].sort().join("|");
-    const g = by.get(sig);
-    if (g) g.push(i);
-    else by.set(sig, [i]);
-  });
-  return [...by.entries()].map(([sig, idxs], n) => ({
-    id: `workflow:${n + 1}`,
-    idxs,
-    sourceText: sourceTextFor({ source: sig.split("|") }, blockById),
-  }));
 }
 
 // The DEMOTED fidelity gate for the canonical pipeline (blueprint §4.2). The retired settle-chain

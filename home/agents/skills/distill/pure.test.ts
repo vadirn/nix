@@ -27,10 +27,8 @@ import {
   normalizeForContainment,
   hasWikilink,
   isExternalUrl,
-  isContentfulStep,
   formatDryRun,
   compactSection,
-  reassembleNote,
   normalizeRelation,
   normalizeTypography,
   partition,
@@ -320,34 +318,6 @@ test("compactSection: v1 holds a payload section byte-verbatim (fix #3)", () => 
   // identity passthrough: no row-dedup, code + exact numbers untouched (the duplicate
   // p99 row survives — silent loss is the deferred v2's job, with surfacing)
   expect(compactSection(section)).toBe(section);
-});
-
-test("reassembleNote: title first, head, preserves in source order; demotes a colliding ## Glossary (fix #1/#4)", () => {
-  const title = "# Homelab Guide";
-  const head = [
-    "Intro prose carrying the thesis.",
-    "",
-    "## Glossary",
-    "",
-    "| Term | Definition |",
-    "| ---- | ---------- |",
-    "| Router | routes sections |",
-  ].join("\n");
-  const preserves = [
-    "## Config\n\n```yaml\nport: 8080\n```",
-    "## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| TTL | time to live |",
-  ];
-  const out = reassembleNote(title, head, preserves);
-  // title is emitted first (fix #1)
-  expect(out.startsWith("# Homelab Guide\n")).toBe(true);
-  // exactly one H2 ## Glossary — the head's; the preserve's own glossary is demoted to ###
-  expect(out.match(/^## Glossary$/gm)?.length).toBe(1);
-  expect(out).toContain("### Glossary");
-  // head before preserves; preserves kept in source order (fix #4: head-first, order among preserves)
-  expect(out.indexOf("## Glossary")).toBeLessThan(out.indexOf("## Config"));
-  expect(out.indexOf("## Config")).toBeLessThan(out.indexOf("### Glossary"));
-  // payload held verbatim
-  expect(out).toContain("port: 8080");
 });
 
 // ---- pipeline.ts: routed-build seam (assembleRoutedNote's typed-unit splice; blueprint §6.3) ----
@@ -1121,18 +1091,4 @@ test("harvestProseListItems: enum markers (F1. / A)) are recognized as list item
     "## Moats\n\nF1. the first structural moat that filters competitors out\nA) the first scenario branch worth enumerating";
   const units = harvestProseListItems(src, []);
   expect(units).toHaveLength(2);
-});
-
-// ---- text.ts: workflow-step content guard (a model echoing a list ordinal as the step) ----
-test("isContentfulStep: a marker-only token (an echoed ordinal) carries no content", () => {
-  for (const empty of ["", "  ", "3.", "3", "1)", "-", "*", "#", " 4) "]) {
-    expect(isContentfulStep(empty)).toBe(false);
-  }
-  for (const real of [
-    "Tune the detector for recall",
-    "3x faster on the hot path",
-    "run `bun test`",
-  ]) {
-    expect(isContentfulStep(real)).toBe(true);
-  }
 });

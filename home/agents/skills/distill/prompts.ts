@@ -7,17 +7,12 @@ import {
   type Block,
   type Grade,
   type GlossEntry,
-  type Combo,
-  type Inference,
-  type Judgement,
   type LinkInventory,
   type ProseUnit,
   type Relation,
-  type WorkStep,
   glossList,
   hasOperational,
   hasWikilink,
-  isContentfulStep,
   langRule,
   normalizeRelation,
   relText,
@@ -44,7 +39,7 @@ const DEF_RELATIONS: "keep" | "drop" =
 const DEF_GATE: "block" | "definition" =
   process.env.DISTILL_DEF_GATE === "block" ? "block" : "definition";
 
-// ---- stage 1: extract the combo (description, thesis, glossary) ----
+// ---- extract: the link-inventory checklist shared by the canonical extract prompt ----
 // Render the deterministic link inventory as a MUST-COVER checklist appended to the
 // prompt: every [[wikilink]] the harvest found (the classify-into-three-lanes answer
 // key) plus every external [text](url) (the citation lane, kept OUT of relations). The
@@ -75,127 +70,6 @@ Each entry is a vault link ([[wikilink]] or [text](path.md)) the note states. As
 A link that fails the note-level test stays SEE-ALSO. NEVER fabricate a "rel" to type an associative link: if no directional predicate is quotable from the prose, the link is SEE-ALSO, not an edge. The quoted predicate is the audit trail — without a quotable directional phrase, do not emit a note-level edge.
 EXTERNAL LINKS (citations / sources, NOT vault relations — NEVER encode a URL as a relation; leave them in the prose as the sources they cite):
 ${ex}`;
-}
-
-export function extractComboPrompt(
-  blocks: Block[],
-  frontDescription: string,
-  lang: "en" | "ru",
-  inventory: LinkInventory = { wikilinks: [], external: [] },
-  selfSlug = "",
-): string {
-  const descRule = frontDescription
-    ? `Use this authored description VERBATIM: "${frontDescription}"`
-    : `Write ONE sentence naming what the note is about.`;
-  return `You are a concept cartographer. Read the note below (block IDs in [Bn] markers) and produce its compressed idea-graph as JSON. ${langRule(lang)}
-- "title": the note's own H1 title, or — if it has none — a short noun phrase naming its subject.
-- "abstract": 1-2 sentences orienting a reader to what the note covers. This is a SYNTHESIZED overview — the ONE block that carries no source quote.
-- "description": ${descRule}
-- "thesis": the single spine claim the whole note argues, one sentence.
-- "glossary": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out of the glossary. For each: "term" (the concept's name), "def" (dense, in YOUR OWN words, <=20 words), "quote" (a VERBATIM source slice — see QUOTES), "relations" (array of OBJECTS naming how it ties to OTHER terms; each {"rel","to","predicate","quote"}: "rel" is a single hyphenated token (e.g. subsumes, precondition-for, contrast-to), "to" is EITHER a bare term-slug naming ANOTHER glossary term in this note OR a [[file-slug]] wikilink, "predicate" is an optional one-clause gloss or null — use null when there is no gloss; NOT a bare restatement of def; "quote" is a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings where it is defined or used, at least one).
-- "judgements": the note's stated JUDGEMENTS — claims it ASSERTS as true (an S-is-P assertion, an evaluation, a stance), distinct from the concepts they are about. For each: "statement" (the claim in one sentence, YOUR OWN words), "modality" (tag "hypothesis" ONLY when the note frames the claim as tentative/conjectural, "necessarily" ONLY when it frames it as a necessity/must/law; otherwise null — do NOT tag a plainly-asserted claim), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings, at least one). Use [] when the note asserts no standalone judgements.
-- "inferences": the note's stated INFERENCES — claims the note DERIVES from others (signalled by "therefore", "so", "which means", "it follows that"). For each: "statement" (the derived claim, one sentence, YOUR OWN words), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings, at least one). Use [] when the note draws no explicit inferences.
-- "workflow": the note's ACTIONABLE directives — the practices, steps, or procedure the note tells the reader to DO, in the order the note gives them. A directive earns an entry only when the note PRESCRIBES an action (an imperative, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives — leave them to the thesis and glossary. For each: "step" (one imperative clause in YOUR OWN words, dense; if the SOURCE gives a reason for the action — "do X because Y", "do X so that Y" — append that source-stated reason to the step; if the source states no reason, keep the step terse), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
-QUOTES: every "quote" is a slice copied EXACTLY, character-for-character, from the block text it was distilled from — do NOT reword, translate, or normalize punctuation; keep the source's own glyphs. EXCLUDE the leading [Bn] marker. Make each quote long enough to occur EXACTLY ONCE in the note (add surrounding words if a short phrase would be ambiguous). The type of a unit is carried by WHICH array it lands in — never emit a "type" field.
-Collapse restatements of the SAME concept into ONE entry whose "source" lists all the blocks that state it — do not emit a separate entry per surface form.
-Return ONLY JSON {"title":"...","abstract":"...","description":"...","thesis":"...","glossary":[{"term":"...","def":"...","quote":"...","relations":[{"rel":"...","to":"...","predicate":null,"quote":"..."}],"source":["Bn"]}],"judgements":[{"statement":"...","modality":null,"quote":"...","source":["Bn"]}],"inferences":[{"statement":"...","quote":"...","source":["Bn"]}],"workflow":[{"step":"...","quote":"...","source":["Bn"]}]}.
-${linkInventorySection(inventory, selfSlug)}
-
-TEXT (block IDs in [Bn] markers):
-${render(blocks)}`;
-}
-
-// Normalize the raw extract JSON into a typed Combo — the PURE core of extractCombo,
-// exported so it is testable without a network round-trip. Threads the verbatim `quote`
-// onto every glossary entry, relation, and workflow step (trim only — NEVER
-// normalizeTypography on a quote, it must stay byte-verbatim to round-trip against source
-// in locate()); parses the judgement/inference channels; carries title/abstract; and
-// applies the existing source-id validation + drop-if-no-source rule, extended to
-// judgements and inferences. `frontDescription`, when set, overrides the model's
-// description (the one anchor never paraphrased). All the new fields are additive: the
-// shipped stages read only {glossary, workflow, thesis, description}.
-export function parseExtractResult(raw: Combo, blocks: Block[], frontDescription = ""): Combo {
-  const ids = new Set(blocks.map((b) => b.id));
-  // Trim-only, byte-verbatim: a quote is the span-locate anchor, so it is never
-  // typography-normalized. Returns `{ quote }` when present, `{}` when empty — spread
-  // into the unit so an entry with no quote keeps the two-channel shape (no `quote` key).
-  const quoteField = (q: unknown): { quote?: string } => {
-    const s = typeof q === "string" ? q.trim() : "";
-    return s ? { quote: s } : {};
-  };
-  const withSource = (s: unknown): string[] =>
-    (Array.isArray(s) ? s : []).filter((id) => ids.has(id));
-  const glossary = (raw.glossary ?? [])
-    .map((e) => ({
-      term: (e.term ?? "").trim(),
-      def: (e.def ?? "").trim(),
-      // relations skip revise(), so coerce + normalize here (the extractor emits
-      // non-breaking hyphens / typeset glyphs the same way the revise model does).
-      // LOSSY (D29): drop only edges missing rel or to; keep unknown rels / unresolved
-      // endpoints (those are REBUILD lint findings, not BUILD drops). normalizeRelation
-      // threads each relation's own verbatim quote (trim only).
-      relations: (Array.isArray(e.relations) ? e.relations : [])
-        .map((r) => normalizeRelation(r))
-        .filter((r): r is Relation => r !== null),
-      source: withSource(e.source),
-      ...quoteField((e as { quote?: unknown }).quote),
-    }))
-    // an entry with no valid source block cannot be rendered grounded or graded — drop it
-    .filter((e) => e.term && e.source.length > 0);
-  const workflow = (raw.workflow ?? [])
-    .map((s) => ({
-      step: (s.step ?? "").trim(),
-      source: withSource(s.source),
-      ...quoteField((s as { quote?: unknown }).quote),
-    }))
-    // a step with no valid source block cannot be grounded or gated — drop it
-    .filter((s) => s.step && s.source.length > 0);
-  // judgement modality: accept only the two marked forms; anything else is assertoric (null)
-  const modalityOf = (m: unknown): "hypothesis" | "necessarily" | null =>
-    m === "hypothesis" || m === "necessarily" ? m : null;
-  const judgements: Judgement[] = (raw.judgements ?? [])
-    .map((j) => ({
-      statement: (j.statement ?? "").trim(),
-      modality: modalityOf(j.modality),
-      source: withSource(j.source),
-      ...quoteField((j as { quote?: unknown }).quote),
-    }))
-    // same drop-if-no-source rule as glossary/workflow: an unanchored judgement cannot be located
-    .filter((j) => j.statement && j.source.length > 0);
-  const inferences: Inference[] = (raw.inferences ?? [])
-    .map((i) => ({
-      statement: (i.statement ?? "").trim(),
-      source: withSource(i.source),
-      ...quoteField((i as { quote?: unknown }).quote),
-    }))
-    .filter((i) => i.statement && i.source.length > 0);
-  // the authored frontmatter description overrides the model's: the one anchor never paraphrased
-  const description = frontDescription || (raw.description ?? "").trim();
-  return {
-    description,
-    thesis: (raw.thesis ?? "").trim(),
-    glossary,
-    workflow,
-    title: (raw.title ?? "").trim(),
-    abstract: (raw.abstract ?? "").trim(),
-    judgements,
-    inferences,
-  };
-}
-
-export async function extractCombo(
-  blocks: Block[],
-  frontDescription: string,
-  lang: "en" | "ru",
-  inventory: LinkInventory = { wikilinks: [], external: [] },
-  selfSlug = "",
-): Promise<Combo> {
-  const combo = await askJson<Combo>(
-    EXTRACT,
-    extractComboPrompt(blocks, frontDescription, lang, inventory, selfSlug),
-    EXTRACT_TOKENS,
-  );
-  return parseExtractResult(combo, blocks, frontDescription);
 }
 
 // ---- canonical extract: native typed pre-graph (spec §4 step 1; blueprint §1.2/§1.4) ----
@@ -419,164 +293,6 @@ export async function gradeBlocks(
   return byId;
 }
 
-// ---- stage 3: synthesize glossary definitions (source-grounded) ----
-// Each def is grounded in its cited source text. A `regenerate` arm (defs from the
-// extracted idea-graph alone) existed as a fidelity dial until the 2026-06-25
-// stability experiment refuted the tradeoff it embodied: render matched it on
-// stability and restatement collapse and compressed MORE (60% vs 54%) — the
-// already-lossy IR re-expands with hedging. See
-// `35 experiments/2026-06-25-distill-synth-dial-stability.md` for what would
-// justify re-adding it.
-
-export function sourceTextFor(entry: { source: string[] }, blockById: Map<string, Block>): string {
-  return entry.source
-    .map((id) => blockById.get(id)?.text ?? "")
-    .filter(Boolean)
-    .join("\n---\n");
-}
-
-function synthEntriesPrompt(
-  entries: GlossEntry[],
-  blockById: Map<string, Block>,
-  lang: "en" | "ru",
-): string {
-  // DEF_RELATIONS=drop withholds the relations list so the def-writer cannot fold
-  // edges in; the connective prose carries them. DEF_RELATIONS=keep is prior behavior.
-  const concepts = entries
-    .map((e) =>
-      DEF_RELATIONS === "keep"
-        ? `### ${e.term}\nrelations: ${e.relations.map(relText).join("; ")}\nSOURCE:\n${sourceTextFor(e, blockById)}`
-        : `### ${e.term}\nSOURCE:\n${sourceTextFor(e, blockById)}`,
-    )
-    .join("\n\n");
-  const relRule =
-    DEF_RELATIONS === "keep"
-      ? "Keep every named relation; use only claims the source states."
-      : "Define the concept ITSELF — what it is — and state how it relates to other terms (subsumes / contrasts / precondition for) NOWHERE in the def; the connective prose carries relations. Use only claims the source states.";
-  return `You are writing glossary definitions for a compressed note. For each concept, write its "def" grounded in the SOURCE text provided for it — but RE-EXPRESS it densely in your own words (<=20 words, one clause), compressing rather than copying a source sentence verbatim. ${relRule} Keep \`inline code\`, file paths, and ⟦N⟧ tokens verbatim. ${langRule(lang)} Return ONLY JSON {"entries":[{"term":"...","def":"..."}]} — one per concept, terms matching.
-
-CONCEPTS:
-${concepts}`;
-}
-
-export async function synthEntries(
-  entries: GlossEntry[],
-  blockById: Map<string, Block>,
-  lang: "en" | "ru",
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>(entries.map((e) => [e.term, e.def])); // fall back to Combo def
-  if (entries.length === 0) return out;
-  const res = await askJson<{ entries: { term: string; def: string }[] }>(
-    EXTRACT,
-    synthEntriesPrompt(entries, blockById, lang),
-    EXTRACT_TOKENS,
-  );
-  for (const e of res.entries ?? []) if (e.term && e.def) out.set(e.term.trim(), e.def.trim());
-  return out;
-}
-
-// ---- stage 3 (workflow): tighten each directive, preserve order, drop none ----
-// Parallel to synthEntries on the procedural channel: each tightened step is
-// grounded in its source block(s). Steps are keyed by index (S0, S1, …) since,
-// unlike glossary terms, they have no natural unique name.
-function synthWorkflowPrompt(
-  steps: WorkStep[],
-  blockById: Map<string, Block>,
-  lang: "en" | "ru",
-): string {
-  // Show each step's own DRAFT alongside its SOURCE. Steps in a list share one
-  // source block, so the draft is what individuates them — without it the model
-  // sees N identical sources and collapses them to one directive.
-  const items = steps
-    .map((s, i) => `### S${i}\ndraft: ${s.step}\nSOURCE:\n${sourceTextFor(s, blockById)}`)
-    .join("\n\n");
-  return `You are tightening the procedure of a note into a clean ordered checklist. Each step has its own DRAFT directive and the SOURCE it came from. Tighten EACH draft into ONE dense imperative directive, keeping its distinct action and grounding it in the SOURCE — reword rather than copy a source sentence verbatim, keep steps separate, one action per step. If the draft carries a reason the SOURCE states ("because/so that Y"), keep that reason in the tightened step and add only reasons the source gives. Keep EVERY step (drop none) and preserve their order. Keep \`inline code\`, file paths, flags, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
-
-STEPS:
-${items}`;
-}
-
-export async function synthWorkflow(
-  steps: WorkStep[],
-  blockById: Map<string, Block>,
-  lang: "en" | "ru",
-): Promise<string[]> {
-  const out = steps.map((s) => s.step); // fall back to the extracted draft
-  if (steps.length === 0) return out;
-  try {
-    const res = await askJson<{ steps: { id: string; step: string }[] }>(
-      EXTRACT,
-      synthWorkflowPrompt(steps, blockById, lang),
-      EXTRACT_TOKENS,
-    );
-    for (const e of res.steps ?? []) {
-      const m = /^S(\d+)$/.exec((e.id ?? "").trim());
-      // reject a marker-only "tightened" step (the model echoing an ordinal like "3."):
-      // keep the extracted draft rather than overwrite real content with a list number.
-      if (m && e.step && isContentfulStep(e.step)) {
-        const idx = parseInt(m[1], 10);
-        if (idx >= 0 && idx < out.length) out[idx] = e.step.trim();
-      }
-    }
-  } catch (e) {
-    rethrowIfBug(e, "synthWorkflow");
-    // a transient synth flake keeps the drafted steps (never silent-dropped)
-  }
-  return out;
-}
-
-// ---- stage-5 recovery: judge-guided repair of a flagged workflow group ----
-// Unlike synthWorkflow (which re-applies the same compression that inverted the
-// step), repair feeds the gate's own FINDING back, naming the violated direction
-// so the rewrite fixes exactly that. Keyed by local index within the group.
-function repairWorkflowGroupPrompt(
-  steps: string[],
-  missing: string,
-  sourceText: string,
-  lang: "en" | "ru",
-): string {
-  const items = steps.map((s, i) => `S${i}: ${s}`).join("\n");
-  return `You are repairing a procedure checklist that an independent fidelity judge flagged as unfaithful to its source. You see the SOURCE (verbatim prescriptive text from the note), the current OUTPUT STEPS, and the JUDGE'S FINDING naming the dropped or inverted action. Rewrite the OUTPUT STEPS so the finding is resolved: follow the SOURCE's own direction exactly — when the source prescribes one target and rules out another ("do X, NOT Y"), keep X as the target and never name Y as the thing to do. Keep each step's action and any reason the SOURCE states, keep EVERY step (drop none), preserve order, stay dense and imperative. Keep \`inline code\`, file paths, flags, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"steps":[{"id":"S0","step":"..."}]} — one per step, ids matching.
-
-JUDGE'S FINDING: ${missing || "a prescribed action is dropped or inverted"}
-
-SOURCE:
-${sourceText}
-
-OUTPUT STEPS:
-${items}`;
-}
-
-export async function repairWorkflowGroup(
-  steps: string[],
-  missing: string,
-  sourceText: string,
-  lang: "en" | "ru",
-): Promise<string[]> {
-  const out = [...steps]; // fall back to the flagged steps if repair fails to parse
-  if (steps.length === 0) return out;
-  try {
-    const res = await askJson<{ steps: { id: string; step: string }[] }>(
-      EXTRACT,
-      repairWorkflowGroupPrompt(steps, missing, sourceText, lang),
-      EXTRACT_TOKENS,
-    );
-    for (const e of res.steps ?? []) {
-      const m = /^S(\d+)$/.exec((e.id ?? "").trim());
-      // reject a marker-only "tightened" step (the model echoing an ordinal like "3."):
-      // keep the extracted draft rather than overwrite real content with a list number.
-      if (m && e.step && isContentfulStep(e.step)) {
-        const idx = parseInt(m[1], 10);
-        if (idx >= 0 && idx < out.length) out[idx] = e.step.trim();
-      }
-    }
-  } catch (e) {
-    rethrowIfBug(e, "repairWorkflowGroup");
-    // a transient repair flake keeps the flagged steps; the gate re-grades them next
-  }
-  return out;
-}
-
 // Extract the source's own imperative clause(s) for the verbatim fallback: prefer
 // the bolded directive spans the note emphasizes (notes bold their directives),
 // else the first sentence of the block. The terminal floor when the repair ladder
@@ -624,76 +340,6 @@ export function renderEntryPrompt(
 
 SOURCE:
 ${sourceText}`;
-}
-
-function tieTogetherPrompt(combo: Combo, lang: "en" | "ru"): string {
-  const gloss = glossList(combo.glossary);
-  return `In 2-4 sentences, state the note's thesis and how its main glossary terms connect. Use only concepts already in the glossary. Plain declarative prose — no heading, no list. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
-
-THESIS: ${combo.thesis}
-
-GLOSSARY:
-${gloss}`;
-}
-
-export async function tieTogether(combo: Combo, lang: "en" | "ru"): Promise<string> {
-  if (combo.glossary.length === 0) return "";
-  try {
-    const res = await askJson<{ prose: string }>(EXTRACT, tieTogetherPrompt(combo, lang), 1024);
-    return (res.prose ?? "").trim();
-  } catch (e) {
-    rethrowIfBug(e, "tieTogether");
-    return combo.thesis; // a transient tie-together flake degrades to the bare thesis sentence
-  }
-}
-
-// ---- the connective prose (default mode's readable body) ----
-// Writes the note's readable body as flowing prose. Division of labor: the prose
-// carries the RELATIONS (how terms tie together) and the thesis; the definitions
-// live in the `## Glossary` table below, so the prose names each term but does NOT
-// restate its full definition. The definitions are shown to the model only as
-// context (so it places terms correctly), with an explicit instruction not to copy
-// them in. Relations are the spine the paragraphs are built on.
-function connectiveProsePrompt(
-  combo: Combo,
-  orderedEntries: GlossEntry[],
-  defByTerm: Map<string, string>,
-  lang: "en" | "ru",
-): string {
-  const concepts = orderedEntries
-    .map(
-      (e) =>
-        `### ${e.term}\nrelations: ${e.relations.map(relText).join("; ")}\ndef (context only — do NOT restate in the prose): ${defByTerm.get(e.term) ?? e.def}`,
-    )
-    .join("\n\n");
-  return `You are writing the readable body of a note. Its definitions live in a separate "## Glossary" table directly below your prose, which the reader can consult — so your job is the connective tissue, not the definitions. Write flowing prose (connected markdown paragraphs) that develops how the terms relate to one another, building on the relations listed for each concept. Bold each glossary term on its first mention (e.g. **Target distance**) so the bold marks it as a term defined in the glossary below; leave its full definition to the glossary table; add a brief gloss only where the flow needs it.
-Write about the SUBJECT, not about the document: open the FIRST sentence by asserting the thesis directly as a plain claim about the subject (e.g. "Target distance is the gap between …, closed only by …"). NEVER refer to "the note", "this note", "the thesis", "this concept", "the author", or describe what the text does — state every point as a fact about the subject itself.
-Use only claims, terms, and relations the input states. Do NOT emit a glossary, a table, a bullet list of the terms, or section headings. Keep \`inline code\`, file paths, and [[wikilink]] targets verbatim. ${langRule(lang)} Return ONLY JSON {"prose":"..."}.
-
-THESIS (assert this in your own words as the opening claim — do not announce it as "the thesis"): ${combo.thesis}
-
-CONCEPTS (term, its relations, and its definition for context):
-${concepts}`;
-}
-
-export async function connectiveProse(
-  combo: Combo,
-  orderedEntries: GlossEntry[],
-  defByTerm: Map<string, string>,
-  lang: "en" | "ru",
-): Promise<string> {
-  if (orderedEntries.length === 0) return "";
-  try {
-    const res = await askJson<{ prose: string }>(
-      EXTRACT,
-      connectiveProsePrompt(combo, orderedEntries, defByTerm, lang),
-      EXTRACT_TOKENS,
-    );
-    return (res.prose ?? "").trim() || combo.thesis;
-  } catch (e) {
-    rethrowIfBug(e, "connectiveProse");
-    return combo.thesis; // a transient render flake degrades to the bare thesis sentence
-  }
 }
 
 // ---- stage 5: fidelity gate (round-trip entailment, different model) ----

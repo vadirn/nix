@@ -52,44 +52,6 @@ export type GlossEntry = {
   source: string[];
   quote?: string;
 };
-// a workflow step is an ACTIONABLE directive the note prescribes (a practice, a
-// procedure step) — the procedural sink the glossary (concepts) cannot hold. The
-// step carries a source-stated reason ("do X because Y") when the source gives
-// one; the gate tolerates a dropped reason but forbids an invented one. `quote` is
-// the verbatim source slice the step was distilled from (span-locate anchor), optional.
-export type WorkStep = { step: string; source: string[]; quote?: string };
-// A JUDGEMENT is a stated claim the note asserts as true (an S-is-P assertion, an
-// evaluation, a stance) — distinct from the concepts it is about. `modality` tags the
-// note's own framing: "hypothesis" (problematic/tentative), "necessarily" (apodictic),
-// or null (assertoric, the unmarked default). `quote` is the verbatim source slice,
-// `source` the block IDs. The judgment channel of the typed extract (spec §1), read by
-// the canonical adapter, inert to the shipped stages.
-export type Judgement = {
-  statement: string;
-  modality: "hypothesis" | "necessarily" | null;
-  source: string[];
-  quote?: string;
-};
-// An INFERENCE is a claim the note DERIVES from others ("therefore", "so", "it follows
-// that") — the derivation channel of the typed extract (spec §1). `quote` is the
-// verbatim source slice, `source` the block IDs.
-export type Inference = { statement: string; source: string[]; quote?: string };
-// `title`/`abstract` are the document-level orientation of the typed extract (spec §3:
-// the H1 and the one unanchored ## Abstract block); `judgements`/`inferences` are the
-// judgment and inference channels. All four are OPTIONAL and additive — the shipped
-// stages (grade/order/synthesize/revise/gate) destructure only
-// {glossary, workflow, thesis, description}, so they are inert to those and read only
-// by the canonical adapter.
-export type Combo = {
-  description: string;
-  thesis: string;
-  glossary: GlossEntry[];
-  workflow: WorkStep[];
-  title?: string;
-  abstract?: string;
-  judgements?: Judgement[];
-  inferences?: Inference[];
-};
 // A vault edge: a [[wikilink]] OR a scheme-less [text](path) markdown link, both
 // intra-vault cross-note relations. `markup` is the verbatim span, `slug` its target
 // slugged for byte-stable comparison, `target` the raw alias/path-cleaned endpoint
@@ -155,14 +117,6 @@ export const glossList = (entries: { term: string; def: string }[]): string =>
 // deterministic so the protection cannot miss one.
 const WIKILINK = /\[\[[^\]]+\]\]/;
 export const hasWikilink = (text: string): boolean => WIKILINK.test(text);
-
-// A workflow step carries no content when, stripped to its bare token, nothing but a list
-// marker / ordinal / punctuation remains (e.g. "3." — the synth model echoing a list number
-// instead of tightening the step). Such a token must never render as a step ("3. 3."): synth
-// rejects it (keeping the extracted draft) and assembly filters it (dropping + renumbering).
-const STEP_MARKER_ONLY = /^[\s\d.)\]\-*+#:]*$/;
-export const isContentfulStep = (s: string): boolean =>
-  !STEP_MARKER_ONLY.test(s.replace(/\s+/g, " ").trim());
 
 // Asset extensions an Obsidian embed renders inline (image/av/pdf) — NOT a cross-note
 // relation. Anchored at `$`, case-insensitive, tested against the alias-stripped target
@@ -946,27 +900,6 @@ export function partition(
 // would be silent — the unsafe path this v1 declines to take).
 export function compactSection(text: string): string {
   return text;
-}
-
-// Reassemble the per-section build into one note: the lifted title first (fix #1), then the
-// single re-author head (its one prose → ## Workflow → ## Glossary → ## Relations), then the
-// compacted preserve sections in source order (fix #4 — head-first is the accepted v1 shape:
-// the head is an aggregate with no single source position, so order is honored where defined,
-// among the preserves). A preserve heading that collides with a structural H2 name
-// (## Glossary/Workflow/Relations) is demoted one level so the note carries exactly one of each
-// and the render-mode inverse (parseDistilled) still finds the head's. Pure; no I/O, no model.
-const STRUCT_HEAD = /^##\s+(glossary|workflow|relations)\b/i;
-export function reassembleNote(title: string, head: string, preserves: string[]): string {
-  const demote = (t: string) =>
-    t
-      .split("\n")
-      .map((l) => (STRUCT_HEAD.test(l) ? "#" + l : l))
-      .join("\n");
-  const parts: string[] = [];
-  if (title.trim()) parts.push(title.trim());
-  if (head.trim()) parts.push(head.trim());
-  for (const p of preserves) if (p.trim()) parts.push(demote(p.trim()));
-  return parts.join("\n\n");
 }
 
 // a block carries operational tokens that must survive verbatim — code, CLI

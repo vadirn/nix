@@ -70,9 +70,9 @@ test("askJson: a length finish_reason throws TruncationError, not retried", asyn
 });
 
 // ---- the wiring: an actual stage degrades on transient, propagates on a bug ----
-// fidelityGate and synthWorkflow stand in for the gate and the helper catches;
-// all of them share the same rethrowIfBug seam. mock.module repoints prompts.ts's
-// live askJson binding so we drive the catch without a network call.
+// fidelityGate stands in for the gate catches; it shares the rethrowIfBug seam with
+// the other stages. mock.module repoints prompts.ts's live askJson binding so we
+// drive the catch without a network call.
 const FW = "./fw.ts";
 const PROMPTS = "./prompts.ts";
 const real = await import(FW);
@@ -131,27 +131,6 @@ test("fidelityGate: a non-transient code bug propagates instead of shipping unve
   ).rejects.toThrow("cannot read property of undefined");
 });
 
-test("synthWorkflow: a transient flake keeps the drafted steps", async () => {
-  mockAskJson(() => {
-    throw new TransientError("model output parse failure");
-  });
-  const { synthWorkflow } = await import(PROMPTS);
-  const steps = [{ step: "do the thing", source: ["B1"] }];
-  const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
-  const out = await synthWorkflow(steps, blockById, "en");
-  expect(out).toEqual(["do the thing"]); // unchanged draft survives the flake
-});
-
-test("synthWorkflow: a non-transient code bug propagates", async () => {
-  mockAskJson(() => {
-    throw new ReferenceError("undefined helper");
-  });
-  const { synthWorkflow } = await import(PROMPTS);
-  const steps = [{ step: "do the thing", source: ["B1"] }];
-  const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
-  await expect(synthWorkflow(steps, blockById, "en")).rejects.toThrow("undefined helper");
-});
-
 test("revise: an echoed block-id marker is stripped from the returned text (live [__G0__] leak)", async () => {
   // a real vault run shipped glossary defs carrying literal [__G0__]–[__G4__] tokens:
   // render() shows blocks as "[id] text" and the model echoed the marker back.
@@ -171,17 +150,6 @@ test("revise: an echoed block-id marker is stripped from the returned text (live
   );
   expect(out[0].text).toBe("A clean definition.");
   expect(out[1].text).toBe("Mid-sentence echo survives content.");
-});
-
-test("synthWorkflow: a marker-only model step is rejected, the draft kept (no '3. 3.')", async () => {
-  // the model "tightened" S0 into the bare ordinal "3." (a real failure seen in output);
-  // accepting it would overwrite the draft and render "3. 3." — reject it, keep the draft.
-  mockAskJsonBy(() => ({ steps: [{ id: "S0", step: "3." }] }));
-  const { synthWorkflow } = await import(PROMPTS);
-  const steps = [{ step: "do the thing", source: ["B1"] }];
-  const blockById = new Map([["B1", { id: "B1", text: "do the thing" }]]);
-  const out = await synthWorkflow(steps, blockById, "en");
-  expect(out).toEqual(["do the thing"]);
 });
 
 // ---- proseGate: parallel batches keep the per-batch flake isolation (D46 / FIX B) ----
