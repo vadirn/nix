@@ -785,7 +785,6 @@ const RENDER_ID_RE = /^[A-Za-z0-9_-]+$/;
 const RENDER_VERB_RE = /^[a-z][a-z0-9-]*$/;
 const NEWLINE_OR_CR_RE = /[\n\r]/;
 const BACKTICK_RE = /`/;
-const CR_RE = /\r/;
 
 // ---- field predicates/sanitizers shared with triage.ts ----
 // triage.ts pre-satisfies these same throw guards before handing fields to renderBlock
@@ -811,7 +810,12 @@ export function sanitizePayload(payload: string): string {
   return payload.replace(/\r\n?/g, "\n");
 }
 
-export function renderBlock(spec: BlockSpec): string {
+/// The renderBlock precondition, split out so the throw-guards read as a named
+/// contract ("is this spec renderable") separate from the emission below. Composes
+/// the shared predicates/sanitizers above (targetIsRenderable, sanitizeNote,
+/// sanitizePayload) rather than re-deriving the char classes they already cover —
+/// a guard change there can't silently desync from what actually throws here.
+function assertRenderable(spec: BlockSpec): void {
   if (!RENDER_ID_RE.test(spec.id)) {
     throw new Error(`renderBlock: id '${spec.id}' is not a slug`);
   }
@@ -840,21 +844,25 @@ export function renderBlock(spec: BlockSpec): string {
     if (!RENDER_VERB_RE.test(it.verb)) {
       throw new Error(`renderBlock: verb '${it.verb}' is not a lowercase slug`);
     }
-    if (NEWLINE_OR_CR_RE.test(it.target)) {
-      throw new Error("renderBlock: newline in target is not allowed");
-    }
-    if (BACKTICK_RE.test(it.target)) {
+    if (!targetIsRenderable(it.target)) {
+      if (NEWLINE_OR_CR_RE.test(it.target)) {
+        throw new Error("renderBlock: newline in target is not allowed");
+      }
       throw new Error(
         "renderBlock: backtick in target is not allowed — pass the semantic target, formatting belongs to the renderer",
       );
     }
-    if (it.note !== undefined && NEWLINE_OR_CR_RE.test(it.note)) {
+    if (it.note !== undefined && sanitizeNote(it.note) !== it.note) {
       throw new Error("renderBlock: newline in note is not allowed");
     }
-    if (it.payload !== undefined && CR_RE.test(it.payload)) {
+    if (it.payload !== undefined && sanitizePayload(it.payload) !== it.payload) {
       throw new Error("renderBlock: carriage return in payload is not allowed");
     }
   }
+}
+
+export function renderBlock(spec: BlockSpec): string {
+  assertRenderable(spec);
 
   let attrs = ` id=${spec.id}`;
   if (spec.dest !== undefined) attrs += ` dest=${quoteIfNeeded(spec.dest)}`;
