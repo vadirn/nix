@@ -176,6 +176,19 @@ export function wikilinkTarget(raw: string): string {
   return normalizeEdgeTarget(raw.split("|")[0].trim());
 }
 
+// The fragment-strip + best-effort percent-decode idiom shared by every URL/path harvest
+// site: normalizeEdgeTarget, then decodeURIComponent, tolerating a malformed %-sequence
+// by keeping the fragment-stripped-but-undecoded raw (still a comparable key). Centralized
+// so harvestInternalLinks (path) and harvestImages (image url) can never drift on the catch.
+export function decodeTarget(raw: string): string {
+  const stripped = normalizeEdgeTarget(raw);
+  try {
+    return decodeURIComponent(stripped);
+  } catch {
+    return stripped;
+  }
+}
+
 // Harvest every [[wikilink]] (and ![[embed]]) in `text` as {markup, slug, target}:
 // `markup` is the verbatim span, `slug` its target slugged for byte-stable comparison,
 // `target` the raw alias-stripped endpoint (the collision discriminator wikilinkResidue
@@ -240,13 +253,8 @@ export function harvestInternalLinks(text: string): VaultEdge[] {
   for (const m of text.matchAll(MD_LINK_RE)) {
     const raw = m[2].trim();
     if (!raw || isExternalUrl(raw)) continue;
-    // strip a leading `./` then the `#fragment` (normalizeEdgeTarget) before slugging
-    let path = normalizeEdgeTarget(raw.replace(/^\.\//, ""));
-    try {
-      path = decodeURIComponent(path);
-    } catch {
-      // malformed %-sequence: keep the raw path (still comparable, just not decoded)
-    }
+    // strip a leading `./` then the `#fragment` + decode (decodeTarget) before slugging
+    const path = decodeTarget(raw.replace(/^\.\//, ""));
     if (ASSET_RE.test(path)) continue;
     const target = path.replace(/\.md$/i, "");
     const slug = slugSegment(target);
@@ -556,12 +564,7 @@ export function harvestImages(text: string): PayloadSpan[] {
   const { buf } = parsed;
   for (const il of collectStructural(parsed).images) {
     if (il.type === "image" && il.url != null) {
-      let u = normalizeEdgeTarget(il.url.trim());
-      try {
-        u = decodeURIComponent(u);
-      } catch {
-        // malformed %-sequence: keep raw (still a comparable key)
-      }
+      const u = decodeTarget(il.url.trim());
       const key = slugSegment(u);
       if (key) out.push({ markup: oneLine(il.span ? sliceBytes(buf, il.span) : il.url), key });
     } else if (il.type === "wikilink" && il.page != null) {
