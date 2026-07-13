@@ -111,10 +111,18 @@ function renderRelation(edge: Edge, unitById: Map<string, Unit>): string {
 }
 
 // Render a type section (`## Heading`) from its units via a per-unit renderer, or "" when the
-// type has no units (the section is then omitted — never emit an empty section).
-function typeSection(heading: string, units: Unit[], render: (u: Unit) => string): string {
+// type has no units (the section is then omitted — never emit an empty section). `join` is the
+// separator BETWEEN rendered units: multi-line subsections (concepts/procedures/payload) take a
+// blank-line `"\n\n"` join, while the flat one-bullet-per-unit sections (judgements/inferences)
+// take a tight `"\n"` join matching `## Relations` — the bullets are a list, not stanzas.
+function typeSection(
+  heading: string,
+  units: Unit[],
+  render: (u: Unit) => string,
+  join = "\n\n",
+): string {
   if (!units.length) return "";
-  return [`## ${heading}`, units.map(render).join("\n\n")].join("\n\n");
+  return [`## ${heading}`, units.map(render).join(join)].join("\n\n");
 }
 
 // Project the canonical graph to its seven-section markdown form (spec §3). Sections emit in
@@ -147,8 +155,14 @@ export function projectMarkdown(result: Projection): string {
       "Judgements",
       byType("judgment"),
       (u) => `- ${modalityTag(u)}${u.statement} ${formatSpan(u.span)}`,
+      "\n",
     ),
-    typeSection("Inferences", byType("inference"), (u) => `- ${u.statement} ${formatSpan(u.span)}`),
+    typeSection(
+      "Inferences",
+      byType("inference"),
+      (u) => `- ${u.statement} ${formatSpan(u.span)}`,
+      "\n",
+    ),
     typeSection("Procedures", byType("procedure"), renderProcedure),
     typeSection("Payload", byType("payload"), renderPayload),
     edges.length

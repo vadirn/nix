@@ -24,6 +24,7 @@ import {
   render,
 } from "./text.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "./fw.ts";
+import type { Modality, PreEdge, PreGraph, PreUnit } from "./graph.ts";
 export { type Pass, PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 export { proseJudge, proseFix } from "./writing/prose-qa.ts";
 
@@ -195,6 +196,173 @@ export async function extractCombo(
     EXTRACT_TOKENS,
   );
   return parseExtractResult(combo, blocks, frontDescription);
+}
+
+// ---- canonical extract: native typed pre-graph (spec §4 step 1; blueprint §1.2/§1.4) ----
+// The ADDITIVE replacement for extractComboPrompt/parseExtractResult. It emits the SAME five
+// knowledge channels but shaped as the pre-graph (graph.ts PreGraph): `concepts`/`headword`/
+// `statement` (was glossary/term/def), grouped `procedures` (was the flat workflow), and
+// relations without `predicate` (the projection never renders it). The two SEMANTIC changes vs
+// the Combo prompt: (1) `statement` is the FINAL normalized re-expression, not a draft the settle
+// chain later rewrites; (2) procedures carry a `headword` + per-step quotes so the projector can
+// render `### headword` + numbered steps. Payload is NOT a channel here — it is the deterministic
+// retain lane (blueprint §1.1). Kept alongside the Combo prompt during migration; unwired until a
+// later step flips distill()'s default path onto it.
+
+// The raw JSON shape the model returns for the pre-graph prompt (parsed defensively — every field
+// is optional, mirroring parseExtractResult's `(raw.x ?? [])` discipline).
+export interface RawGraph {
+  title?: string;
+  abstract?: string;
+  description?: string;
+  thesis?: string;
+  concepts?: {
+    headword?: string;
+    statement?: string;
+    quote?: string;
+    relations?: unknown[];
+    source?: unknown;
+  }[];
+  judgements?: { statement?: string; modality?: unknown; quote?: string; source?: unknown }[];
+  inferences?: { statement?: string; quote?: string; source?: unknown }[];
+  procedures?: {
+    headword?: string;
+    steps?: { statement?: string; quote?: string; source?: unknown }[];
+  }[];
+}
+
+export function extractGraphPrompt(
+  blocks: Block[],
+  frontDescription: string,
+  lang: "en" | "ru",
+  inventory: LinkInventory = { wikilinks: [], external: [] },
+  selfSlug = "",
+): string {
+  const descRule = frontDescription
+    ? `Use this authored description VERBATIM: "${frontDescription}"`
+    : `Write ONE sentence naming what the note is about.`;
+  return `You are a concept cartographer. Read the note below (block IDs in [Bn] markers) and produce its compressed idea-graph as JSON. ${langRule(lang)}
+- "title": the note's own H1 title, or — if it has none — a short noun phrase naming its subject.
+- "abstract": 1-2 sentences orienting a reader to what the note covers. This is a SYNTHESIZED overview — the ONE block that carries no source quote.
+- "description": ${descRule}
+- "thesis": the single spine claim the whole note argues, one sentence.
+- "concepts": the note's LOAD-BEARING concepts — the named ideas a reader must hold to follow the thesis. Typically 4-10, NOT every noun phrase. A concept earns an entry only if the note both NAMES and DEFINES it; leave passing sentences, one-off examples, and restating clauses out. For each: "headword" (the concept's name), "statement" (the FINAL dense definition in YOUR OWN words, one clause — this is the definition the reader sees, not a draft; compress rather than copy a source sentence), "quote" (a VERBATIM source slice — see QUOTES), "relations" (array of OBJECTS naming how it ties to OTHER concepts; each {"rel","to","quote"}: "rel" is a single hyphenated token (e.g. subsumes, precondition-for, contrast-to), "to" is EITHER a bare headword-slug naming ANOTHER concept in this note OR a [[file-slug]] wikilink, "quote" is a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings where it is defined or used, at least one).
+- "judgements": the note's stated JUDGEMENTS — claims it ASSERTS as true (an S-is-P assertion, an evaluation, a stance), distinct from the concepts they are about. For each: "statement" (the claim in one sentence, YOUR OWN words), "modality" (tag "hypothesis" ONLY when the note frames the claim as tentative/conjectural, "necessarily" ONLY when it frames it as a necessity/must/law; otherwise null — do NOT tag a plainly-asserted claim), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings, at least one). Use [] when the note asserts no standalone judgements.
+- "inferences": the note's stated INFERENCES — claims the note DERIVES from others (signalled by "therefore", "so", "which means", "it follows that"). For each: "statement" (the derived claim, one sentence, YOUR OWN words), "quote" (a VERBATIM source slice — see QUOTES), "source" (array of [Bn] id strings, at least one). Use [] when the note draws no explicit inferences.
+- "procedures": the note's ACTIONABLE procedures — grouped by the named procedure they belong to. A procedure earns an entry only when the note PRESCRIBES actions (imperatives, a practice, a "do X / avoid Y"); descriptive claims, explanations, and definitions are NOT directives. For each: "headword" (a short noun phrase naming the procedure), "steps" (array, IN THE ORDER the note gives them; each {"statement","quote","source"}: "statement" is ONE imperative clause in YOUR OWN words, dense — if the SOURCE gives a reason ("do X because Y") append it, else keep it terse; "quote" is a VERBATIM source slice — see QUOTES; "source" is an array of [Bn] id strings where it is prescribed, at least one). Use [] when the note is purely expository and prescribes nothing.
+QUOTES: every "quote" is a slice copied EXACTLY, character-for-character, from the block text it was distilled from — do NOT reword, translate, or normalize punctuation; keep the source's own glyphs. EXCLUDE the leading [Bn] marker. Make each quote long enough to occur EXACTLY ONCE in the note (add surrounding words if a short phrase would be ambiguous). The type of a unit is carried by WHICH array it lands in — never emit a "type" field.
+Collapse restatements of the SAME concept into ONE entry whose "source" lists all the blocks that state it — do not emit a separate entry per surface form.
+Return ONLY JSON {"title":"...","abstract":"...","description":"...","thesis":"...","concepts":[{"headword":"...","statement":"...","quote":"...","relations":[{"rel":"...","to":"...","quote":"..."}],"source":["Bn"]}],"judgements":[{"statement":"...","modality":null,"quote":"...","source":["Bn"]}],"inferences":[{"statement":"...","quote":"...","source":["Bn"]}],"procedures":[{"headword":"...","steps":[{"statement":"...","quote":"...","source":["Bn"]}]}]}.
+${linkInventorySection(inventory, selfSlug)}
+
+TEXT (block IDs in [Bn] markers):
+${render(blocks)}`;
+}
+
+// Normalize the raw pre-graph JSON into a typed PreGraph — the PURE core of extractGraph, exported
+// so it is testable without a network round-trip. It keeps parseExtractResult's validation
+// discipline: `quote` is trimmed byte-verbatim (NEVER typography-normalized — it is the span-locate
+// anchor and must round-trip against source bytes), `source` ids are validated against the block
+// set, the drop-if-no-valid-source rule holds per unit, relations pass through `normalizeRelation`
+// (lowercase+hyphenate rel, trim to, trim-only quote; predicate DROPPED here), and judgement
+// modality is clamped to the two marked forms (null → assertoric). `frontDescription`, when set,
+// overrides the model's description (the one anchor never paraphrased). Spans are NOT computed here
+// — the model emits no offsets; locateGraph turns each quote into a span (spec §4 step 2).
+export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescription = ""): PreGraph {
+  const ids = new Set(blocks.map((b) => b.id));
+  // Trim-only, byte-verbatim: a quote is the span-locate anchor, so it is never typography-
+  // normalized. Empty → "" (a unit with no quote hard-aborts at locate — the fidelity gate).
+  const quoteField = (q: unknown): string => (typeof q === "string" ? q.trim() : "");
+  const withSource = (s: unknown): string[] =>
+    (Array.isArray(s) ? s : []).filter((id) => ids.has(id));
+  // judgement modality: accept only the two marked forms; anything else is assertoric.
+  const modalityOf = (m: unknown): Modality =>
+    m === "hypothesis" || m === "necessarily" ? m : "assertoric";
+
+  // concepts → concept PreUnits (id = headword) + the flat edge list (each relation becomes a
+  // PreEdge owned by the concept's headword). Drop a concept with no headword or no valid source
+  // (it cannot be rendered grounded); its relations are dropped with it.
+  const concepts: PreUnit[] = [];
+  const edges: PreEdge[] = [];
+  for (const c of raw.concepts ?? []) {
+    const headword = (c.headword ?? "").trim();
+    if (!headword || withSource(c.source).length === 0) continue;
+    concepts.push({
+      type: "concept",
+      id: headword,
+      statement: (c.statement ?? "").trim(),
+      quote: quoteField(c.quote),
+    });
+    for (const r of Array.isArray(c.relations) ? c.relations : []) {
+      const norm = normalizeRelation(r); // lossy (D29): drops only rel/to-missing; predicate dropped below
+      if (!norm) continue;
+      edges.push({ fromHeadword: headword, rel: norm.rel, to: norm.to, quote: norm.quote ?? "" });
+    }
+  }
+
+  // judgement PreUnits (id ordinal, assigned at locate); same drop-if-no-source rule.
+  const judgements: PreUnit[] = [];
+  for (const j of raw.judgements ?? []) {
+    const statement = (j.statement ?? "").trim();
+    if (!statement || withSource(j.source).length === 0) continue;
+    judgements.push({
+      type: "judgment",
+      statement,
+      quote: quoteField(j.quote),
+      modality: modalityOf(j.modality),
+    });
+  }
+
+  // inference PreUnits (id ordinal, assigned at locate).
+  const inferences: PreUnit[] = [];
+  for (const inf of raw.inferences ?? []) {
+    const statement = (inf.statement ?? "").trim();
+    if (!statement || withSource(inf.source).length === 0) continue;
+    inferences.push({ type: "inference", statement, quote: quoteField(inf.quote) });
+  }
+
+  // procedure groups: keep grounded steps in order; drop a group with no surviving step (the
+  // headword may be "" — locate falls back to `Procedure N`).
+  const procedures: { headword: string; steps: PreUnit[] }[] = [];
+  for (const p of raw.procedures ?? []) {
+    const steps: PreUnit[] = [];
+    for (const s of Array.isArray(p.steps) ? p.steps : []) {
+      const statement = (s.statement ?? "").trim();
+      if (!statement || withSource(s.source).length === 0) continue;
+      steps.push({ type: "procedure", statement, quote: quoteField(s.quote) });
+    }
+    if (steps.length === 0) continue;
+    procedures.push({ headword: (p.headword ?? "").trim(), steps });
+  }
+
+  // the authored frontmatter description overrides the model's: the one anchor never paraphrased
+  const description = frontDescription || (raw.description ?? "").trim();
+  return {
+    title: (raw.title ?? "").trim(),
+    abstract: (raw.abstract ?? "").trim(),
+    description,
+    thesis: (raw.thesis ?? "").trim(),
+    concepts,
+    judgements,
+    inferences,
+    procedures,
+    edges,
+  };
+}
+
+export async function extractGraph(
+  blocks: Block[],
+  frontDescription: string,
+  lang: "en" | "ru",
+  inventory: LinkInventory = { wikilinks: [], external: [] },
+  selfSlug = "",
+): Promise<PreGraph> {
+  const raw = await askJson<RawGraph>(
+    EXTRACT,
+    extractGraphPrompt(blocks, frontDescription, lang, inventory, selfSlug),
+    EXTRACT_TOKENS,
+  );
+  return parseExtractGraph(raw, blocks, frontDescription);
 }
 
 // ---- stage 2: grade each block drop / distill / retain ----

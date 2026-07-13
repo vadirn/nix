@@ -56,6 +56,52 @@ export interface DistillationResult {
   edges: Edge[];
 }
 
+// ---- the pre-graph: extract's output BEFORE locate (spec §4 step 1; blueprint §1.4) ----
+// The model emits typed units carrying their verbatim `quote` but NO `span` — tooling computes
+// spans at the locate stage, never the model (that is the anti-hallucination primitive). A
+// `PreGraph` is what `parseExtractGraph` returns and what `locateGraph` consumes to produce the
+// span-anchored `DistillationResult`. `statement` is already the FINAL normalized re-expression
+// (concept def / judgement / inference / joined procedure steps), not a draft the settle chain
+// rewrites. These types sit here so both the parse (prompts.ts) and locate (locate-graph.ts)
+// stages read one leaf; adding them keeps graph.ts a leaf (they use only local UnitType/Modality).
+export interface PreUnit {
+  type: UnitType;
+  // present for concepts (the headword id); judgement/inference ids are ordinal, assigned at
+  // locate (J1../I1..); a procedure's headword rides on its group, not the step PreUnit.
+  id?: string;
+  statement: string;
+  quote: string;
+  modality?: Modality;
+  // per-bullet division-list spans are deferred (blueprint §8 gap #1 / §10 item 3); the first
+  // cut emits statement-only concepts, so `bullets` stays unpopulated.
+  bullets?: { statement: string; quote: string }[];
+}
+
+// One pre-locate edge. `fromHeadword` is the owning concept's headword (its unit id at locate);
+// `predicate` is dropped (the projection never renders it — blueprint §1.2). `quote` is the
+// verbatim source slice the relation was distilled from (the span-locate anchor).
+export interface PreEdge {
+  fromHeadword: string;
+  rel: string;
+  to: string;
+  quote: string;
+}
+
+// The whole pre-locate extract: document-level orientation (title/abstract/description/thesis)
+// plus the four re-expressed type channels and the flat edge list. Payload is NOT a channel — it
+// is a deterministic post-extract lane from retain-grading (blueprint §1.1), folded in at locate.
+export interface PreGraph {
+  title: string;
+  abstract: string;
+  description: string;
+  thesis: string;
+  concepts: PreUnit[];
+  judgements: PreUnit[];
+  inferences: PreUnit[];
+  procedures: { headword: string; steps: PreUnit[] }[];
+  edges: PreEdge[];
+}
+
 // Render a span as the bare trailing-anchor notation `start..end` (spec §2/§3). The bracketed
 // form is an accepted INPUT (parseSpan reads both); emit is always bare to match the projection.
 export function formatSpan(span: Span): string {
@@ -77,14 +123,17 @@ export function parseSpan(str: string): Span {
   return [start, end];
 }
 
-// Compute a `Source` in TS matching mdstruct's build.rs (build.rs:196): `bytes` is the UTF-8
-// byte length of `text` and `sha256` is the hex sha256 of those same UTF-8 bytes. Kept here so
-// graph.ts stays a leaf — it does NOT extend MdDoc or shell the binary (LOCKED DECISION 5).
+// Compute a `Source` in TS over the UTF-8 bytes of `text`: `bytes` is the UTF-8 byte length and
+// `sha256` is the hex sha256 of those same bytes, TRUNCATED to the first 12 hex digits (48 bits)
+// to match the codebase's frontmatter convention — apply-mode.ts:96 and pipeline.ts:1917 both
+// stamp/compare `createHash(...).digest("hex").slice(0, 12)`, so the projection's `source.sha256`
+// (project.ts renders it verbatim) must be the same 12-hex prefix for a re-stamp to verify. Kept
+// here so graph.ts stays a leaf — it does NOT extend MdDoc or shell the binary (LOCKED DECISION 5).
 export function computeSource(path: string, text: string): Source {
   const utf8 = Buffer.from(text, "utf8");
   return {
     path,
     bytes: utf8.length,
-    sha256: createHash("sha256").update(utf8).digest("hex"),
+    sha256: createHash("sha256").update(utf8).digest("hex").slice(0, 12),
   };
 }

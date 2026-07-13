@@ -227,6 +227,39 @@ test("an off-registry edge rel is a hard failure", () => {
   expect(() => projectMarkdown(bad)).toThrow(/REL_REGISTRY/);
 });
 
+test("flat-bullet sections (judgements/inferences) join bullets tight (\\n), not blank-line separated", () => {
+  const multi: Projection = {
+    source: { path: "x.txt", bytes: 10, sha256: "deadbeef" },
+    title: "X",
+    units: [
+      { id: "J1", type: "judgment", statement: "first claim", span: [0, 1] },
+      { id: "J2", type: "judgment", statement: "second claim", span: [1, 2] },
+      { id: "I1", type: "inference", statement: "first derivation", span: [2, 3] },
+      { id: "I2", type: "inference", statement: "second derivation", span: [3, 4] },
+    ],
+    edges: [],
+  };
+  const md = projectMarkdown(multi);
+  // adjacent judgement bullets are one line apart (tight), matching ## Relations — not stanzas
+  expect(md).toContain("- first claim 0..1\n- second claim 1..2");
+  expect(md).toContain("- first derivation 2..3\n- second derivation 3..4");
+});
+
+test("multi-part sections (concepts) keep the blank-line join between subsections", () => {
+  const concepts: Projection = {
+    source: { path: "x.txt", bytes: 10, sha256: "deadbeef" },
+    title: "X",
+    units: [
+      { id: "A", type: "concept", statement: "def a", span: [0, 1] },
+      { id: "B", type: "concept", statement: "def b", span: [1, 2] },
+    ],
+    edges: [],
+  };
+  const md = projectMarkdown(concepts);
+  // concept subsections stay stanza-separated (a `### A` block, blank line, then `### B`)
+  expect(md).toContain("### A\n\ndef a 0..1\n\n### B\n\ndef b 1..2");
+});
+
 test("title falls back to the source path basename when none is given", () => {
   const noTitle: DistillationResultLike = {
     source: { path: "notes/some-idea.md", bytes: 10, sha256: "deadbeef" },

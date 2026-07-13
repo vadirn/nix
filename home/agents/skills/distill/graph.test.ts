@@ -38,12 +38,13 @@ test("parseSpan rejects malformed anchors (hard failure, no sentinel)", () => {
   expect(() => parseSpan("abc..def")).toThrow(); // non-numeric
 });
 
-test("computeSource matches build.rs: bytes = UTF-8 length, sha256 = hex of sha256 over the UTF-8 bytes", () => {
-  // "abc" is the canonical NIST sha256 test vector.
+test("computeSource: bytes = UTF-8 length, sha256 = 12-hex prefix of sha256 over the UTF-8 bytes", () => {
+  // "abc" is the canonical NIST sha256 test vector; computeSource truncates to 12 hex to match
+  // the frontmatter convention (apply-mode.ts:96 / pipeline.ts:1917 `.slice(0, 12)`).
   const src = computeSource("note.md", "abc");
   expect(src.path).toBe("note.md");
   expect(src.bytes).toBe(3);
-  expect(src.sha256).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  expect(src.sha256).toBe("ba7816bf8f01");
 });
 
 test("computeSource counts UTF-8 bytes, not JS string length, for non-ASCII", () => {
@@ -56,10 +57,13 @@ test("computeSource counts UTF-8 bytes, not JS string length, for non-ASCII", ()
   expect(cyr.bytes).toBe(12);
 });
 
-test("computeSource sha256 agrees with an independent createHash over the same UTF-8 bytes", () => {
+test("computeSource sha256 agrees with the 12-hex prefix of an independent createHash over the same UTF-8 bytes", () => {
   const text = "Записка — короткая. Keep it short.\n";
   const src = computeSource("z.md", text);
-  const expected = createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+  const expected = createHash("sha256")
+    .update(Buffer.from(text, "utf8"))
+    .digest("hex")
+    .slice(0, 12);
   expect(src.sha256).toBe(expected);
   expect(src.bytes).toBe(Buffer.byteLength(text, "utf8"));
 });
