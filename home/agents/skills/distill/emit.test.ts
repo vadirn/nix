@@ -217,7 +217,13 @@ function mockPipeline() {
       if (prompt.includes("for a procedure checklist")) {
         return {
           groups: [
-            { id: "workflow:1", grade: "inconclusive", missing: "judge returned no verdict" },
+            // the verdict is keyed by the procedure's `### headword` (its unit id), so the
+            // residue target is the headword-scoped `procedure:<headword>` form
+            {
+              id: "Anchor discipline",
+              grade: "inconclusive",
+              missing: "judge returned no verdict",
+            },
           ],
         };
       }
@@ -325,7 +331,9 @@ test("emit success: sibling .tmp.md intermediary, path-only stdout, no XML, dest
   expect(tmp).toContain(
     "- [ ] keep: `Anchor image` — gate-inconclusive: judge returned no verdict after retry",
   );
-  expect(tmp).toContain("- [ ] keep: workflow:1 — gate-inconclusive: judge returned no verdict");
+  expect(tmp).toContain(
+    "- [ ] keep: procedure:Anchor discipline — gate-inconclusive: judge returned no verdict",
+  );
 
   // the stamp rides the gate anchor: dest= is the destination basename, src= hashes
   // the existing destination (the input file) — 12 hex digits

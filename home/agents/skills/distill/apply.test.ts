@@ -15,8 +15,9 @@
 //
 // Fixtures are built through the REAL emit serialization (triage.buildIntermediary)
 // so emit↔apply never drift; checkbox state is flipped by string surgery, the way a
-// reviewer's Obsidian edit would land. The `## Workflow` list is the numbered `1.`
-// form assembleBody actually emits (the plan-§5 golden's `- [ ]` is an illustration).
+// reviewer's Obsidian edit would land. The note bodies are the canonical seven-section
+// projection (`## Concepts` `### headword` blocks, numbered `## Procedures` steps) that
+// projectMarkdown emits, with trailing `start..end` byte anchors on the anchored lines.
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -31,7 +32,6 @@ import {
   destinationFor,
   editWorkflow,
   insertThesis,
-  replaceHeadProse,
   resolveDefTerm,
   runApply,
   spliceDef,
@@ -65,51 +65,66 @@ test("parseArgs: apply accepts --lang and rejects a missing path or --dry-run", 
 // fixtures
 // ---------------------------------------------------------------------------
 
-// A distilled note: frontmatter + head prose + numbered `## Workflow` + `## Glossary`
-// (three terms; "Scene" carries no residue, so it survives every triage as the
-// control the removals are measured against).
+// A distilled note: frontmatter + `## Abstract` + three `## Concepts` (`### headword`
+// blocks; "Scene" carries no residue, so it survives every triage as the control the
+// removals are measured against) + a numbered `## Procedures` under one `### headword`.
 const NOTE = `---
-type: note
+type: distillation
 description: "Impression distance in plein-air blocking."
 epistemic_status: distilled
 ---
 
 # Impression distance
 
-Blocking from the impression rather than the scene keeps the painting's distances honest.
+## Abstract
 
-## Workflow
+Blocking from the felt sense rather than the scene keeps the painting's distances honest.
 
-1. Fix the anchor image before opening paints
+## Concepts
+
+### Anchor image
+
+The first felt impression, fixed as the reference. 10..40
+
+### Impression distance
+
+The nearness of a value to its anchor on re-inspection. 41..70
+
+### Scene
+
+The shifting subject in front of the painter. 71..90
+
+## Procedures
+
+### Block from the impression
+
+1. Fix the anchor image before opening paints 100..140
 2. Re-check values against the anchor, not the scene
-
-## Glossary
-
-| Term | Definition |
-| ---- | ---------- |
-| Anchor image | The first felt impression, fixed as the reference. |
-| Impression distance | The nearness of a value to its anchor on re-inspection. |
-| Scene | The shifting subject in front of the painter. |
 `;
 
-// A distilled note whose glossary carries a BACKTICKED term — the Phase-3 emit seam:
-// its residue target degrades to safeHandle("`tau` threshold") = "tau threshold", so
-// apply must match it back to the row via safeHandle, not the degraded target string.
+// A distilled note whose concept headword is BACKTICKED — the Phase-3 emit seam: its
+// residue target degrades to safeHandle("`tau` threshold") = "tau threshold", so apply
+// must match it back to the `### headword` via safeHandle, not the degraded target string.
 const NOTE_TAU = `---
-type: note
+type: distillation
 epistemic_status: distilled
 ---
 
 # Tau
 
-Head prose about the tau split.
+## Abstract
 
-## Glossary
+Orientation about the tau split.
 
-| Term | Definition |
-| ---- | ---------- |
-| \`tau\` threshold | The split ratio bound. |
-| Scene | The subject in front of the painter. |
+## Concepts
+
+### \`tau\` threshold
+
+The split ratio bound. 10..30
+
+### Scene
+
+The subject in front of the painter. 31..50
 `;
 
 const DEF_SRC =
@@ -129,7 +144,7 @@ const R_DEF: Residue = {
 const R_WF: Residue = {
   kind: "steps",
   reasonClass: "failed",
-  label: "workflow:2",
+  label: "Block from the impression",
   stepIdxs: [1],
   reason: "workflow: drying precondition missing from steps",
   source: WF_SRC,
@@ -466,11 +481,11 @@ test("apply: remove-all (every item unchecked, gate checked) applies OFFLINE wit
   const r = await apply(tmpPath);
   expect(r.code).toBe(0);
   const out = readFileSync(destPath, "utf8");
-  // unchecked recover def + unchecked keep def → both glossary rows deleted; "Scene" survives
-  expect(out).not.toContain("| Impression distance |");
-  expect(out).not.toContain("| Anchor image |");
-  expect(out).toContain("| Scene |");
-  // unchecked recover workflow:2 → step 2 deleted, step 1 kept and renumbered
+  // unchecked recover def + unchecked keep def → both concept subsections deleted; "Scene" survives
+  expect(out).not.toContain("### Impression distance");
+  expect(out).not.toContain("### Anchor image");
+  expect(out).toContain("### Scene");
+  // unchecked recover procedure:…:2 → step 2 deleted, step 1 kept and renumbered
   expect(out).not.toContain("Re-check values against the anchor");
   expect(out).toContain("Fix the anchor image before opening paints");
   // promotion + scaffold gone
@@ -478,11 +493,9 @@ test("apply: remove-all (every item unchecked, gate checked) applies OFFLINE wit
   expect(out).not.toContain("interact");
   // consumed
   expect(existsSync(tmpPath)).toBe(false);
-  // path on stdout, footer on stderr; removal-only ⇒ re-projection skipped, nothing verbatim
+  // path on stdout, footer on stderr; removal-only, nothing verbatim
   expect(r.stdout).toBe(`${destPath}\n`);
-  expect(r.stderr.trim()).toBe(
-    "— applied: 0 recovered · 0 kept · 3 removed (0 verbatim) · re-projection skipped",
-  );
+  expect(r.stderr.trim()).toBe("— applied: 0 recovered · 0 kept · 3 removed (0 verbatim)");
 });
 
 test("apply: a clean (residue-free) intermediary with src=new CREATES the destination, exit 0", async () => {
@@ -494,13 +507,11 @@ test("apply: a clean (residue-free) intermediary with src=new CREATES the destin
   const r = await apply(tmpPath);
   expect(r.code).toBe(0);
   const out = readFileSync(destPath, "utf8");
-  expect(out).toContain("| Impression distance |"); // no residue ⇒ glossary intact
+  expect(out).toContain("### Impression distance"); // no residue ⇒ concepts intact
   expect(out).toContain("epistemic_status: distilled");
   expect(out).not.toContain("interact");
   expect(existsSync(tmpPath)).toBe(false);
-  expect(r.stderr.trim()).toBe(
-    "— applied: 0 recovered · 0 kept · 0 removed (0 verbatim) · re-projection skipped",
-  );
+  expect(r.stderr.trim()).toBe("— applied: 0 recovered · 0 kept · 0 removed (0 verbatim)");
 });
 
 // ===========================================================================
@@ -518,9 +529,9 @@ test("apply: a degraded backticked-term def, all-unchecked → its glossary row 
   const r = await apply(tmpPath);
   expect(r.code).toBe(0);
   const out = readFileSync(destPath, "utf8");
-  // matched back to its real row via safeHandle, then removed
-  expect(out).not.toContain("`tau` threshold |");
-  expect(out).toContain("| Scene |");
+  // matched back to its real `### headword` via safeHandle, then removed
+  expect(out).not.toContain("### `tau` threshold");
+  expect(out).toContain("### Scene");
 });
 
 // ===========================================================================
@@ -540,11 +551,11 @@ test("apply: a checked recover DEF with no key exits 1 (nothing written); the so
   expect(existsSync(tmpPath)).toBe(true);
 });
 
-test("apply: a checked recover WORKFLOW needs no key — it applies verbatim, exit 0 (no LLM)", async () => {
+test("apply: a checked recover PROCEDURE step needs no key — it applies verbatim, exit 0 (no LLM)", async () => {
   delete process.env.FIREWORKS_API_KEY;
   const dir = tmpdirFor("wf-keyless");
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_WF]);
-  writeTmp(tmpPath, checkGate(check(tmp, "recover: workflow:2 —")));
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: procedure:Block from the impression:2 —")));
   const r = await applyWith(tmpPath, NO_LLM);
   expect(r.code).toBe(0);
   expect(r.prompts.length).toBe(0);
@@ -559,7 +570,7 @@ test("apply: a checked recover WORKFLOW needs no key — it applies verbatim, ex
 // 7. Verb actions via the fw mock
 // ===========================================================================
 
-test("apply: checked recover DEF → one re-render + one grade, glossary row updated, re-projected once", async () => {
+test("apply: checked recover DEF → one re-render + one grade, concept def line updated (anchor preserved)", async () => {
   process.env.FIREWORKS_API_KEY = "test-dummy";
   const dir = tmpdirFor("recover-def");
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF]);
@@ -569,18 +580,18 @@ test("apply: checked recover DEF → one re-render + one grade, glossary row upd
   // the re-render saw the fenced payload as its source
   expect(r.prompts.some((p) => p.includes(RENDER_ENTRY_MARKER) && p.includes(DEF_SRC))).toBe(true);
   const out = readFileSync(destPath, "utf8");
-  expect(out).toContain("| Impression distance | A re-grounded gap definition. |");
-  // re-projection fires exactly once (whole-glossary), replacing the head prose
-  expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(1);
-  expect(out).toContain("REPROJECTED HEAD PROSE.");
-  expect(out).not.toContain("Blocking from the impression rather than the scene");
+  // the def line of the `### Impression distance` subsection is rewritten, its anchor kept
+  expect(out).toContain("### Impression distance");
+  expect(out).toContain("A re-grounded gap definition. 41..70");
+  // no re-projection on a canonical note: the ## Abstract is left as-authored (§12.4)
+  expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(0);
+  expect(out).toContain("## Abstract");
+  expect(out).toContain("Blocking from the felt sense rather than the scene");
   expect(existsSync(tmpPath)).toBe(false);
-  expect(r.stderr.trim()).toBe(
-    "— applied: 1 recovered · 0 kept · 0 removed (0 verbatim) · re-projected",
-  );
+  expect(r.stderr.trim()).toBe("— applied: 1 recovered · 0 kept · 0 removed (0 verbatim)");
 });
 
-test("apply: checked recover DEF whose second grade fails is spliced VERBATIM (verbatimDef), still re-projected", async () => {
+test("apply: checked recover DEF whose second grade fails is spliced VERBATIM (verbatimDef)", async () => {
   process.env.FIREWORKS_API_KEY = "test-dummy";
   const dir = tmpdirFor("recover-verbatim");
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF]);
@@ -589,16 +600,14 @@ test("apply: checked recover DEF whose second grade fails is spliced VERBATIM (v
   expect(r.code).toBe(0);
   const out = readFileSync(destPath, "utf8");
   // the failed re-render is discarded; the source's own defining clause is spliced
-  expect(out).toContain(`| Impression distance | ${verbatimDef("Impression distance", DEF_SRC)} |`);
+  expect(out).toContain(`${verbatimDef("Impression distance", DEF_SRC)} 41..70`);
   expect(out).not.toContain("AN INVERTED RE-RENDER");
-  // a glossary change still triggers exactly one re-projection
-  expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(1);
-  expect(r.stderr.trim()).toBe(
-    "— applied: 1 recovered · 0 kept · 0 removed (1 verbatim) · re-projected",
-  );
+  // no re-projection on a canonical note (§12.4)
+  expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(0);
+  expect(r.stderr.trim()).toBe("— applied: 1 recovered · 0 kept · 0 removed (1 verbatim)");
 });
 
-test("apply: checked recover THESIS splices the payload verbatim after the H1 (no LLM)", async () => {
+test("apply: checked recover THESIS sets the ## Abstract body verbatim (no LLM)", async () => {
   process.env.FIREWORKS_API_KEY = "test-dummy";
   const dir = tmpdirFor("recover-thesis");
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_THESIS]);
@@ -608,20 +617,18 @@ test("apply: checked recover THESIS splices the payload verbatim after the H1 (n
   expect(r.prompts.length).toBe(0);
   const out = readFileSync(destPath, "utf8");
   expect(out).toContain(THESIS_SRC);
-  // inserted as the opening paragraph, before the original head prose
-  expect(out.indexOf(THESIS_SRC)).toBeLessThan(out.indexOf("Blocking from the impression"));
-  expect(r.stderr.trim()).toBe(
-    "— applied: 1 recovered · 0 kept · 0 removed (1 verbatim) · re-projection skipped",
-  );
+  // the abstract body is replaced by the recovered thesis (the canonical orientation home)
+  expect(out.indexOf("## Abstract")).toBeLessThan(out.indexOf(THESIS_SRC));
+  expect(out).not.toContain("Blocking from the felt sense rather than the scene");
+  expect(r.stderr.trim()).toBe("— applied: 1 recovered · 0 kept · 0 removed (1 verbatim)");
 });
 
-test("apply: a recovered THESIS survives when a def is ALSO recovered (re-projection must not clobber it)", async () => {
+test("apply: a recovered THESIS and a recovered DEF are independent — abstract set, concept def re-rendered", async () => {
   process.env.FIREWORKS_API_KEY = "test-dummy";
   const dir = tmpdirFor("thesis-plus-def");
-  // both the thesis and a def fail — a common co-occurrence for a badly-distilled note.
-  // The thesis is spliced verbatim after the H1; a recovered def forces a re-projection of
-  // the head-prose region, which is exactly where the thesis sits. The verbatim thesis
-  // (contract: "no LLM") must not be swept away by the re-projection.
+  // both the thesis and a def fail — a common co-occurrence for a badly-distilled note. The
+  // thesis sets the ## Abstract body; a recovered def re-renders its concept subsection. On a
+  // canonical note there is no re-projection, so the two edits are wholly independent.
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_THESIS, R_DEF]);
   let t = check(tmp, "recover: thesis —");
   t = check(t, "recover: `Impression distance`");
@@ -629,16 +636,13 @@ test("apply: a recovered THESIS survives when a def is ALSO recovered (re-projec
   const r = await applyWith(tmpPath, defRecover("translated", "A re-grounded gap def."));
   expect(r.code).toBe(0);
   const out = readFileSync(destPath, "utf8");
-  // the verbatim thesis is present, and leads the re-projected connective prose
+  // the verbatim thesis is the abstract body, and the def was re-rendered into its concept
   expect(out).toContain(THESIS_SRC);
-  expect(out).toContain("REPROJECTED HEAD PROSE.");
-  expect(out.indexOf(THESIS_SRC)).toBeLessThan(out.indexOf("REPROJECTED HEAD PROSE."));
-  // the def was re-rendered into its row and the head prose re-projected exactly once
-  expect(out).toContain("| Impression distance | A re-grounded gap def. |");
-  expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(1);
-  expect(r.stderr.trim()).toBe(
-    "— applied: 2 recovered · 0 kept · 0 removed (1 verbatim) · re-projected",
-  );
+  expect(out.indexOf("## Abstract")).toBeLessThan(out.indexOf(THESIS_SRC));
+  expect(out).toContain("A re-grounded gap def. 41..70");
+  // no re-projection on a canonical note (§12.4)
+  expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(0);
+  expect(r.stderr.trim()).toBe("— applied: 2 recovered · 0 kept · 0 removed (1 verbatim)");
 });
 
 test("apply: checked keep holds the entry as shipped — no LLM, no removal", async () => {
@@ -650,36 +654,12 @@ test("apply: checked keep holds the entry as shipped — no LLM, no removal", as
   expect(r.code).toBe(0);
   expect(r.prompts.length).toBe(0);
   const out = readFileSync(destPath, "utf8");
-  expect(out).toContain("| Anchor image | The first felt impression, fixed as the reference. |");
-  expect(r.stderr.trim()).toBe(
-    "— applied: 0 recovered · 1 kept · 0 removed (0 verbatim) · re-projection skipped",
-  );
+  expect(out).toContain("### Anchor image");
+  expect(out).toContain("The first felt impression, fixed as the reference. 10..40");
+  expect(r.stderr.trim()).toBe("— applied: 0 recovered · 1 kept · 0 removed (0 verbatim)");
 });
 
-test("apply: re-projection fires EXACTLY ONCE across two recovered defs (whole-glossary, not per-entry)", async () => {
-  process.env.FIREWORKS_API_KEY = "test-dummy";
-  const dir = tmpdirFor("reproj-once");
-  const R_DEF2: Residue = { ...R_KEEP, reasonClass: "failed" }; // Anchor image, now a recover
-  const { tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF, R_DEF2]);
-  let t = check(tmp, "recover: `Impression distance`");
-  t = check(t, "recover: `Anchor image`");
-  writeTmp(tmpPath, checkGate(t));
-  const r = await applyWith(tmpPath, defRecover("translated", "def-x"));
-  expect(r.code).toBe(0);
-  expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(1);
-});
-
-test("apply: a workflow-only recover NEVER re-projects (no def re-rendered)", async () => {
-  delete process.env.FIREWORKS_API_KEY;
-  const dir = tmpdirFor("no-reproj");
-  const { tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_WF]);
-  writeTmp(tmpPath, checkGate(check(tmp, "recover: workflow:2 —")));
-  const r = await applyWith(tmpPath, NO_LLM);
-  expect(r.code).toBe(0);
-  expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(0);
-});
-
-test("apply: a degraded backticked-term def, checked recover → re-rendered into its real row", async () => {
+test("apply: a degraded backticked-headword def, checked recover → re-rendered into its real subsection", async () => {
   process.env.FIREWORKS_API_KEY = "test-dummy";
   const dir = tmpdirFor("degraded-recover");
   const { destPath, tmpPath, tmp } = emit(dir, "tau.md", NOTE_TAU, [R_TAU]);
@@ -687,8 +667,9 @@ test("apply: a degraded backticked-term def, checked recover → re-rendered int
   const r = await applyWith(tmpPath, defRecover("translated", "TAU-REDEF", "TAU HEAD."));
   expect(r.code).toBe(0);
   const out = readFileSync(destPath, "utf8");
-  // the row is still keyed by the real backticked term, its def re-rendered
-  expect(out).toContain("| `tau` threshold | TAU-REDEF |");
+  // the subsection is still keyed by the real backticked headword, its def re-rendered
+  expect(out).toContain("### `tau` threshold");
+  expect(out).toContain("TAU-REDEF 10..30");
 });
 
 // ===========================================================================
@@ -745,31 +726,34 @@ test("destinationFor: .tmp.md → the absolute sibling .md; any other suffix →
   expect(destinationFor("note.tmp.md")).toBe(resolve("note.md")); // resolved absolute
 });
 
-test("spliceDef: replaces a def cell, escapes pipes, deletes on null, no-ops an absent term", () => {
+test("spliceDef: replaces the def line (anchor preserved), deletes the subsection on null, no-ops an absent headword", () => {
   const body = NOTE;
-  const replaced = spliceDef(body, "Impression distance", "a new | dense def");
-  expect(replaced).toContain("| Impression distance | a new \\| dense def |"); // pipe escaped
-  expect(replaced).toContain("| Anchor image |"); // siblings untouched
+  const replaced = spliceDef(body, "Impression distance", "a newly dense def");
+  expect(replaced).toContain("a newly dense def 41..70"); // def line rewritten, anchor kept
+  expect(replaced).toContain("### Anchor image"); // siblings untouched
   const removed = spliceDef(body, "Impression distance", null);
-  expect(removed).not.toContain("| Impression distance |");
-  expect(removed).toContain("| Anchor image |");
-  expect(removed).toContain("| Scene |");
-  expect(spliceDef(body, "Nonexistent", null)).toBe(body); // absent term ⇒ unchanged
+  expect(removed).not.toContain("### Impression distance");
+  expect(removed).toContain("### Anchor image");
+  expect(removed).toContain("### Scene");
+  expect(spliceDef(body, "Nonexistent", null)).toBe(body); // absent headword ⇒ unchanged
 });
 
-test("editWorkflow: deletes / replaces by 0-based index, batched against original indices, renumbered", () => {
-  const del = editWorkflow(NOTE, [{ idx: 1, replace: null }]);
+test("editWorkflow: deletes / replaces a headword's steps by 0-based index, batched against original indices, renumbered", () => {
+  const HW = "Block from the impression";
+  const del = editWorkflow(NOTE, [{ headword: HW, idx: 1, replace: null }]);
   expect(del).toContain("1. Fix the anchor image before opening paints");
   expect(del).not.toContain("Re-check values against the anchor");
-  const rep: WorkflowOp[] = [{ idx: 1, replace: ["dry the underlayer", "then glaze"] }];
+  const rep: WorkflowOp[] = [
+    { headword: HW, idx: 1, replace: ["dry the underlayer", "then glaze"] },
+  ];
   const out = editWorkflow(NOTE, rep);
   expect(out).toContain("1. Fix the anchor image before opening paints");
   expect(out).toContain("2. dry the underlayer");
   expect(out).toContain("3. then glaze");
   // a delete + a replace resolve against ORIGINAL indices, then renumber
   const combo = editWorkflow(NOTE, [
-    { idx: 0, replace: null },
-    { idx: 1, replace: ["only this"] },
+    { headword: HW, idx: 0, replace: null },
+    { headword: HW, idx: 1, replace: ["only this"] },
   ]);
   expect(combo).toContain("1. only this");
   expect(combo).not.toContain("Fix the anchor image before opening paints");
@@ -777,27 +761,20 @@ test("editWorkflow: deletes / replaces by 0-based index, batched against origina
 
 test("resolveDefTerm: exact match, degraded safeHandle match, and no-match null", () => {
   expect(resolveDefTerm(NOTE, "Impression distance")).toBe("Impression distance");
-  // the degraded target keys off safeHandle(rowTerm), not the raw backticked term
+  // the degraded target keys off safeHandle(headword), not the raw backticked headword
   expect(safeHandle("`tau` threshold")).toBe("tau threshold");
   expect(resolveDefTerm(NOTE_TAU, "tau threshold")).toBe("`tau` threshold");
   expect(resolveDefTerm(NOTE, "nonexistent")).toBeNull();
 });
 
-test("insertThesis: the paragraph lands right after the H1, before the existing head prose", () => {
+test("insertThesis: replaces the ## Abstract body with the paragraph", () => {
   const out = insertThesis(NOTE, "THE THESIS.");
+  expect(out).toContain("## Abstract");
+  expect(out.indexOf("## Abstract")).toBeLessThan(out.indexOf("THE THESIS."));
+  // the old abstract body is replaced; the H1 and the concept sections stay in place
+  expect(out).not.toContain("Blocking from the felt sense rather than the scene");
   expect(out).toContain("# Impression distance");
-  expect(out.indexOf("# Impression distance")).toBeLessThan(out.indexOf("THE THESIS."));
-  expect(out.indexOf("THE THESIS.")).toBeLessThan(out.indexOf("Blocking from the impression"));
-});
-
-test("replaceHeadProse: swaps the head region (H1→first `## `), leaving the sections in place", () => {
-  const out = replaceHeadProse(NOTE, "NEW HEAD PROSE.");
-  expect(out).toContain("# Impression distance");
-  expect(out).toContain("NEW HEAD PROSE.");
-  expect(out).not.toContain("Blocking from the impression");
-  expect(out).toContain("## Workflow");
-  expect(out).toContain("## Glossary");
-  expect(out).toContain("| Impression distance |"); // the glossary is not re-projected
+  expect(out).toContain("### Impression distance");
 });
 
 test("unlinkIfPresent: tolerates a missing path and removes an existing one", () => {
@@ -878,20 +855,20 @@ test("apply: an unchecked non-recoverable item stays dropped and does not inflat
 // never no-op (an out-of-range idx) or, worse, DELETE the step (an empty payload →
 // verbatimDirectives("") → [] → replace:null → editWorkflow drops the slot).
 
-test("apply: a checked recover on an out-of-range workflow target refuses (exit 2), the list untouched", async () => {
+test("apply: a checked recover on an out-of-range procedure step target refuses (exit 2), the list untouched", async () => {
   delete process.env.FIREWORKS_API_KEY;
   const dir = tmpdirFor("wf-oor");
   const R: Residue = {
     kind: "steps",
     reasonClass: "failed",
-    label: "workflow:99",
+    label: "Block from the impression",
     stepIdxs: [98],
     reason: "workflow: a step group beyond the emitted list",
     source: "Some directive that has nowhere to land.",
   };
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);
   const before = readFileSync(destPath, "utf8");
-  writeTmp(tmpPath, checkGate(check(tmp, "recover: workflow:99 —")));
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: procedure:Block from the impression:99 —")));
   const r = await apply(tmpPath);
   expect(r.code).toBe(2);
   expect(r.stderr).toContain("no applicable action");
@@ -899,20 +876,20 @@ test("apply: a checked recover on an out-of-range workflow target refuses (exit 
   expect(readFileSync(destPath, "utf8")).toBe(before);
 });
 
-test("apply: a checked recover on a workflow group with NO source payload refuses — never DELETES the step it was asked to recover", async () => {
+test("apply: a checked recover on a procedure step with NO source payload refuses — never DELETES the step it was asked to recover", async () => {
   delete process.env.FIREWORKS_API_KEY;
   const dir = tmpdirFor("wf-nosrc");
   const R: Residue = {
     kind: "steps",
     reasonClass: "failed",
-    label: "workflow:2",
+    label: "Block from the impression",
     stepIdxs: [1],
     reason: "workflow: the step-group source lookup returned empty",
     source: "", // emit omits the payload → the delete-instead-of-recover hazard
   };
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);
   const before = readFileSync(destPath, "utf8");
-  writeTmp(tmpPath, checkGate(check(tmp, "recover: workflow:2 —")));
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: procedure:Block from the impression:2 —")));
   const r = await apply(tmpPath);
   expect(r.code).toBe(2);
   expect(r.stderr).toContain("no applicable action");
@@ -937,13 +914,13 @@ test("apply: a checked recover thesis with no payload refuses, never inserts an 
   expect(readFileSync(destPath, "utf8")).toBe(before);
 });
 
-test("apply: an unchecked out-of-range workflow item does not inflate the removed count", async () => {
+test("apply: an unchecked out-of-range procedure step item does not inflate the removed count", async () => {
   delete process.env.FIREWORKS_API_KEY;
   const dir = tmpdirFor("wf-oor-unchecked");
   const R: Residue = {
     kind: "steps",
     reasonClass: "failed",
-    label: "workflow:99",
+    label: "Block from the impression",
     stepIdxs: [98],
     reason: "workflow: beyond the list",
     source: "x",

@@ -23,9 +23,9 @@ const FIXTURE = readFileSync(
 );
 
 // The three residue entries the fixture serializes, exactly as the pipeline's
-// push sites would shape them (pipeline.ts runFidelityGate): a failed def, a
-// failed workflow group (stepIdxs 0-based into the emitted ## Workflow list; the
-// group label is pipeline-internal and must NOT become the target), and a
+// push sites would shape them (pipeline.ts backstop): a failed def, a failed
+// procedure (label = the `### headword`; stepIdxs 0-based into that headword's
+// numbered steps — the target carries BOTH as `procedure:<headword>:<n>`), and a
 // gate-inconclusive def that shipped in the body above.
 const FIXTURE_RESIDUE: Residue[] = [
   {
@@ -39,7 +39,7 @@ const FIXTURE_RESIDUE: Residue[] = [
   {
     kind: "steps",
     reasonClass: "failed",
-    label: "workflow:1",
+    label: "Block from the impression",
     stepIdxs: [1],
     reason: "workflow: drying precondition missing from steps",
     source:
@@ -136,27 +136,41 @@ test("residueToBlocks: gate-inconclusive → keep, everything else → recover",
   expect(b!.items.map((i) => i.verb)).toEqual(["recover", "recover", "keep"]);
 });
 
-test("residueToBlocks: def targets are the term with targetCode; steps targets are 1-based stepIdxs", () => {
+test("residueToBlocks: def targets are the term with targetCode; steps targets are headword-scoped 1-based stepIdxs", () => {
   const [b] = residueToBlocks(FIXTURE_RESIDUE);
   expect(b!.items[0]!.target).toBe("Impression distance");
   expect(b!.items[0]!.targetCode).toBe(true);
-  expect(b!.items[1]!.target).toBe("workflow:2");
+  expect(b!.items[1]!.target).toBe("procedure:Block from the impression:2");
   expect(b!.items[1]!.targetCode).toBeFalsy();
 });
 
-test("residueToBlocks: a multi-step group joins its 1-based indices with commas", () => {
+test("residueToBlocks: a multi-step group joins its 1-based indices with commas under the headword", () => {
   const [b] = residueToBlocks([
     {
       kind: "steps",
       reasonClass: "gate-inconclusive",
-      label: "workflow:3",
+      label: "Dry between glazes",
       stepIdxs: [1, 2],
       reason: "gate-inconclusive: judge returned no verdict",
       source: "Do the thing.",
     },
   ]);
   expect(b!.items[0]!.verb).toBe("keep");
-  expect(b!.items[0]!.target).toBe("workflow:2,3");
+  expect(b!.items[0]!.target).toBe("procedure:Dry between glazes:2,3");
+});
+
+test("residueToBlocks: an empty-stepIdxs steps residue targets the whole procedure by headword", () => {
+  const [b] = residueToBlocks([
+    {
+      kind: "steps",
+      reasonClass: "failed",
+      label: "Block from the impression",
+      stepIdxs: [],
+      reason: "workflow: directive coverage failed",
+      source: "Fix the anchor first.",
+    },
+  ]);
+  expect(b!.items[0]!.target).toBe("procedure:Block from the impression");
 });
 
 test("residueToBlocks: thesis targets the literal 'thesis'", () => {

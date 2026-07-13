@@ -613,20 +613,27 @@ test("extractJson: throws on no object and on an unbalanced object", () => {
   expect(() => extractJson('{"a":1')).toThrow(/unbalanced JSON/);
 });
 
-// ---- prose-mode.ts: parseDistilled ----
-test("parseDistilled: splits tie, glossary entries, and skips header/separator rows", () => {
+// ---- prose-mode.ts: parseDistilled (canonical ## Concepts reader) ----
+test("parseDistilled: tie is the ## Abstract, entries are the ## Concepts headwords + def lines", () => {
   const body = [
-    "Tie-together prose line.",
+    "# Title",
     "",
-    "## Glossary",
+    "## Abstract",
     "",
-    "| Term | Definition |",
-    "| --- | --- |",
-    "| alpha | first letter |",
-    "| beta | second letter |",
+    "The tie-together orientation.",
+    "",
+    "## Concepts",
+    "",
+    "### alpha",
+    "",
+    "first letter 1..5",
+    "",
+    "### beta",
+    "",
+    "second letter 6..10",
   ].join("\n");
   const { tie, entries, preserved } = parseDistilled(body);
-  expect(tie).toBe("Tie-together prose line.");
+  expect(tie).toBe("The tie-together orientation.");
   expect(entries).toEqual([
     { term: "alpha", def: "first letter" },
     { term: "beta", def: "second letter" },
@@ -634,49 +641,55 @@ test("parseDistilled: splits tie, glossary entries, and skips header/separator r
   expect(preserved).toBe("");
 });
 
-test("parseDistilled: preserves a ## Workflow section verbatim, never folds it into prose", () => {
+test("parseDistilled: preserves a ## Procedures section verbatim, never folds it into prose", () => {
   const body = [
+    "## Abstract",
+    "",
     "Thesis prose.",
     "",
-    "## Workflow",
+    "## Procedures",
     "",
-    "- step one",
+    "### proc",
     "",
-    "## Glossary",
+    "1. step one 1..5",
     "",
-    "| a | def a |",
+    "## Concepts",
+    "",
+    "### a",
+    "",
+    "def a 6..10",
   ].join("\n");
   const { tie, entries, preserved } = parseDistilled(body);
   expect(tie).toBe("Thesis prose.");
   expect(entries).toEqual([{ term: "a", def: "def a" }]);
-  expect(preserved).toBe("## Workflow\n\n- step one");
+  expect(preserved).toBe("## Procedures\n\n### proc\n\n1. step one 1..5");
 });
 
-test("parseDistilled: no ## Glossary table yields the whole body as tie, no entries", () => {
-  const body = "Just prose.\n\n## Workflow\n\n- step";
+test("parseDistilled: no ## Concepts section yields no entries (the other sections preserved)", () => {
+  const body = "## Abstract\n\nJust orientation.\n\n## Procedures\n\n### p\n\n1. step";
   const { tie, entries, preserved } = parseDistilled(body);
-  expect(tie).toBe("Just prose.\n\n## Workflow\n\n- step");
+  expect(tie).toBe("Just orientation.");
   expect(entries).toEqual([]);
-  expect(preserved).toBe("");
+  expect(preserved).toBe("## Procedures\n\n### p\n\n1. step");
 });
 
-test("parseDistilled: unescapes a \\| inside a definition cell", () => {
-  const body = ["## Glossary", "", "| a | x \\| y |"].join("\n");
+test("parseDistilled: strips the trailing byte-anchor off a def line", () => {
+  const body = "## Concepts\n\n### a\n\nthe def with a trailing anchor 12..48";
   const { entries } = parseDistilled(body);
-  expect(entries).toEqual([{ term: "a", def: "x | y" }]);
+  expect(entries).toEqual([{ term: "a", def: "the def with a trailing anchor" }]);
 });
 
-// ---- prose-mode.ts: parseDistilled hardening (this step) ----
-test("parseDistilled: drops a malformed row whose definition cell is empty", () => {
-  const body = ["## Glossary", "", "| alpha | first |", "| beta | |"].join("\n");
+// ---- prose-mode.ts: parseDistilled hardening ----
+test("parseDistilled: drops a `### headword` with no definition line", () => {
+  const body = "## Concepts\n\n### alpha\n\nfirst 1..5\n\n### beta";
   const { entries } = parseDistilled(body);
-  // beta has no definition (the model split or dropped a row) — skipped, not
+  // beta has no def line (the model split or dropped a subsection) — skipped, not
   // emitted as an empty-def entry into the render prompt.
   expect(entries).toEqual([{ term: "alpha", def: "first" }]);
 });
 
-test("parseDistilled: a single-cell row (no definition column) is skipped, not a crash", () => {
-  const body = ["## Glossary", "", "| gamma |", "| delta | real def |"].join("\n");
+test("parseDistilled: a `### headword` with only bullets (no def line) is skipped, not a crash", () => {
+  const body = "## Concepts\n\n### gamma\n\n- only a bullet 1..5\n\n### delta\n\nreal def 6..10";
   const { entries } = parseDistilled(body);
   expect(entries).toEqual([{ term: "delta", def: "real def" }]);
 });

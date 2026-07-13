@@ -836,9 +836,9 @@ test("strip: removes blocks with their intro prose; everything before survives b
   const stripped = stripInteract(before);
   const prefix = before.slice(0, before.indexOf("<!-- interact:")).trimEnd() + "\n";
   expect(stripped).toBe(prefix);
-  // the named contract, stated explicitly: content checkboxes outside blocks survive
-  expect(stripped).toContain("- [ ] Fix the anchor image before opening paints");
-  expect(stripped).toContain("- [ ] Re-check values against the anchor, not the scene");
+  // the named contract, stated explicitly: the canonical note body before the blocks survives
+  expect(stripped).toContain("1. Fix the anchor image before opening paints");
+  expect(stripped).toContain("2. Re-check values against the anchor, not the scene");
   expect(stripped).not.toContain("interact");
   expect(stripped).not.toContain("Residue triage");
   expect(stripped).not.toContain("Check this last");
@@ -899,7 +899,7 @@ const TRIAGE_DECISIONS = [
       {
         state: "unchecked",
         verb: "recover",
-        target: "workflow:2",
+        target: "procedure:Block from the impression:2",
         note: "workflow: drying precondition missing from steps",
         payload: P2,
       },

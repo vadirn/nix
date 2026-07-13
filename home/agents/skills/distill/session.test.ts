@@ -22,20 +22,25 @@ import { buildIntermediary } from "./triage.ts";
 import { runTtySession, type Residue } from "./pipeline.ts";
 
 const NOTE = `---
-type: note
+type: distillation
 description: "Anchor image discipline in plein-air blocking."
 ---
 
 # Anchor image discipline
 
-Blocking from the impression rather than the scene keeps distances honest.
+## Abstract
 
-## Glossary
+Blocking from the felt sense rather than the scene keeps distances honest.
 
-| Term | Definition |
-| ---- | ---------- |
-| Anchor image | The first felt impression, fixed as the reference. |
-| Impression distance | The nearness of a value to its anchor. |
+## Concepts
+
+### Anchor image
+
+The first felt impression, fixed as the reference. 10..40
+
+### Impression distance
+
+The nearness of a value to its anchor. 41..70
 `;
 
 const R_RECOVER: Residue = {

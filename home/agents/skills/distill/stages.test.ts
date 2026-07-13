@@ -741,10 +741,10 @@ test("main: --dry-run '-' reads stdin (no ENOENT) and labels the report (stdin)"
   expect(out).not.toMatch(/\(-\)|^-$/m);
 });
 
-test("main: a prose-mode skip (no ## Glossary table) is a passthrough that exits 3, same as compress passthrough", () => {
+test("main: a prose-mode skip (no ## Concepts section) is a passthrough that exits 3, same as compress passthrough", () => {
   const proc = Bun.spawnSync(["bun", DISTILL, "prose", "-"], {
     env: DUMMY_KEY,
-    stdin: Buffer.from("Just prose, no glossary table.\n"),
+    stdin: Buffer.from("Just prose, no concepts section.\n"),
   });
   expect(proc.exitCode).toBe(3);
   const lines = proc.stdout.toString().split("\n");

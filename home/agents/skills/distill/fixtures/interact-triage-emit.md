@@ -6,19 +6,26 @@ epistemic_status: in-review
 
 # Impression distance
 
+## Abstract
+
 Blocking from the impression rather than the scene keeps the painting's distances honest: the anchor image is fixed before any mixing starts, and every later judgment measures against it rather than the drifting scene.
 
-## Workflow
+## Concepts
 
-- [ ] Fix the anchor image before opening paints
-- [ ] Re-check values against the anchor, not the scene
+### Anchor image
 
-## Glossary
+The first felt impression of the scene, fixed as the reference all later value judgments measure against.
 
-| Term | Definition |
-| ---- | ---------- |
-| Anchor image | The first felt impression of the scene, fixed as the reference all later value judgments measure against. |
-| Impression distance | The nearness of a value to its anchor on re-inspection. |
+### Impression distance
+
+The nearness of a value to its anchor on re-inspection.
+
+## Procedures
+
+### Block from the impression
+
+1. Fix the anchor image before opening paints
+2. Re-check values against the anchor, not the scene
 
 <!-- interact: pick-any id=residue -->
 
@@ -30,7 +37,7 @@ Residue triage. Checked `recover:` re-renders the entry from its fenced source (
   the eye verifies on re-inspection; the painting should honor the former.
   ```
 
-- [ ] recover: workflow:2 — workflow: drying precondition missing from steps
+- [ ] recover: procedure:Block from the impression:2 — workflow: drying precondition missing from steps
   ```
   Before glazing, let the underlayer dry fully; a damp underlayer lifts and
   muddies the glaze.

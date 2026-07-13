@@ -25,25 +25,25 @@
 //                             (a renamed tmp refuses); src=sha256 must equal the
 //                             destination's current hash (an edited dest refuses);
 //                             src=new requires the destination ABSENT (no-clobber)
-//   6. key gate               iff ≥1 CHECKED `recover` whose target is a DEF (the only
-//                             action that calls an LLM) and FIREWORKS_API_KEY is unset
-//                             → exit 1, nothing written. A checked recover of a
-//                             workflow group or the thesis is verbatim (no LLM, no key);
-//                             a checked `keep` is a no-op (no LLM, no key).
+//   6. key gate               iff ≥1 CHECKED `recover` whose target is a concept DEF (the
+//                             only action that calls an LLM) and FIREWORKS_API_KEY is unset
+//                             → exit 1, nothing written. A checked recover of procedure
+//                             steps or the thesis is verbatim (no LLM, no key); a checked
+//                             `keep` is a no-op (no LLM, no key).
 //   7. fire verbs             in document order, IN MEMORY over stripInteract(text):
 //                             checked recover def → renderEntryPrompt + one fidelityGate;
 //                               grade "residue" (failed again) → verbatimDef splice;
 //                               grade "translated"/"inconclusive" → keep the re-render;
-//                             checked recover workflow:<idxs> → verbatimDirectives splice
-//                               (no LLM); checked recover thesis → payload verbatim after
-//                               the H1 (no LLM); checked keep → the entry stays as shipped;
-//                             UNCHECKED recover|keep → the entry is REMOVED (glossary row
-//                               deleted / workflow steps deleted / thesis absent) — the
-//                               uniform per-block default (plan §1).
-//   8. re-project             iff ≥1 def was RE-RENDERED (a checked recover def): one
-//                             renderProse call over the whole updated entry set replaces
-//                             the head prose. Removal-only and keep-only applies SKIP it
-//                             and stay fully offline (a reject-all triage needs no key).
+//                             checked recover procedure:<headword>:<idxs> → verbatimDirectives
+//                               splice into that headword's numbered steps (no LLM); checked
+//                               recover thesis → payload verbatim as the ## Abstract body (no
+//                               LLM); checked keep → the entry stays as shipped;
+//                             UNCHECKED recover|keep → the entry is REMOVED (`### headword`
+//                               concept subsection deleted / procedure steps deleted / thesis
+//                               absent) — the uniform per-block default (plan §1).
+//                             (No re-projection step: on a canonical note the ## Abstract is
+//                             authored at extract time, not re-derived from concept defs, so a
+//                             def recover leaves it as-authored — the §12.4 simplification.)
 //   9. re-hash tmp            re-read the tmp and compare to the hash taken at step 1;
 //                             a mismatch (Obsidian Sync rewrote it during the LLM window)
 //                             → exit 2 "intermediary changed during apply", nothing written
@@ -55,11 +55,10 @@
 //
 // ── Success output (standalone apply): path on stdout, footer on stderr, exit 0.
 //   stdout  the destination path (absolute) — the only stdout line
-//   stderr  `— applied: N recovered · M kept · K removed (V verbatim) · <reproj>`
+//   stderr  `— applied: N recovered · M kept · K removed (V verbatim)`
 //           N = checked recover items · M = checked keep items · K = removed
 //           (unchecked recover|keep) · V = entries written verbatim (recover defs whose
-//           second grade failed + every recover workflow/thesis) · reproj is
-//           `re-projected` iff ≥1 def re-rendered, else `re-projection skipped`.
+//           second grade failed + every recover procedure/thesis).
 //
 // ── Exit codes: 0 applied · 1 key missing AND a checked recover def needed it
 //   (nothing written) · 2 everything else refused (missing/malformed/gate/stamp/
@@ -77,8 +76,8 @@ import { parseInteract, resolveInteract, stripInteract } from "./interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "./triage.ts";
 import { askJson, EXTRACT } from "./fw.ts";
 import { fidelityGate, renderEntryPrompt, verbatimDef, verbatimDirectives } from "./prompts.ts";
-import { parseDistilled, renderProse } from "./prose-mode.ts";
-import { parseDescription, parseFrontmatter } from "./frontmatter.ts";
+import { parseCanonicalNote, splitSections } from "./parse-projection.ts";
+import { parseFrontmatter } from "./frontmatter.ts";
 import { detectLang } from "./text.ts";
 
 // ---- runApply: the orchestrator ----
@@ -97,44 +96,40 @@ function stampHash(bytes: string): string {
 }
 
 /// Classify a residue item's target the way triage's targetFor stamped it:
-/// `thesis` → the thesis payload; `workflow:<n,…>` → the numbered `## Workflow`
-/// slots; anything else → a glossary def term (the only class that calls an LLM).
+/// `thesis` → the thesis payload; `procedure:<headword>[:<n,…>]` → numbered steps under a
+/// `## Procedures` `### headword` subsection; anything else → a concept def term (the only
+/// class that calls an LLM).
 function targetKind(target: string): "thesis" | "steps" | "def" {
   if (target === "thesis") return "thesis";
-  if (/^workflow:/.test(target)) return "steps";
+  if (/^procedure:/.test(target)) return "steps";
   return "def";
 }
 
-/// `workflow:2,3` → the 0-based list indices [1, 2] (the inverse of triage's
-/// 1-based stamp), dropping any malformed slot.
-function workflowIdxs(target: string): number[] {
-  return target
-    .replace(/^workflow:/, "")
+/// Decode a `procedure:<headword>[:<n,…>]` steps target into its (headword, 0-based step
+/// indices). The trailing `:<n,…>` (1-based, comma-joined) is the step address; when absent
+/// the target names the WHOLE procedure and `idxs` is empty (per-step spans deferred, so a
+/// whole-procedure recover is not actionable — apply refuses it loud). A trailing numeric
+/// segment is parsed as the step list; everything before it is the headword (which may itself
+/// carry `:` — the parse anchors on a numeric tail, matching triage's stamp).
+export function procedureTarget(target: string): { headword: string; idxs: number[] } {
+  const rest = target.replace(/^procedure:/, "");
+  const m = rest.match(/^(.*):(\d+(?:,\d+)*)$/);
+  if (!m) return { headword: rest, idxs: [] };
+  const idxs = m[2]!
     .split(",")
     .map((s) => Number.parseInt(s, 10) - 1)
     .filter((n) => Number.isInteger(n) && n >= 0);
+  return { headword: m[1]!, idxs };
 }
 
-/// The count of numbered steps in the emitted `## Workflow` list (0 if none) — used to
-/// validate a workflow target's indices before acting, so an out-of-range slot is refused
-/// (a checked recover) or ignored (an unchecked remove) rather than silently no-oped, or
-/// worse, deleting the wrong step. Mirrors editWorkflow's list scan.
-function workflowLen(body: string): number {
-  const lines = body.split("\n");
-  const wfIdx = lines.findIndex((l) => /^##\s+Workflow\b/i.test(l.trim()));
-  if (wfIdx < 0) return 0;
-  const itemRe = /^\s*\d+\.\s/;
-  let count = 0;
-  let started = false;
-  for (let i = wfIdx + 1; i < lines.length; i++) {
-    if (itemRe.test(lines[i]!)) {
-      count++;
-      started = true;
-    } else if (started) break;
-    else if (lines[i]!.trim() === "") continue;
-    else break;
-  }
-  return count;
+/// The count of numbered steps under the `### headword` subsection of `## Procedures` (0 when
+/// the headword or the section is absent) — used to validate a step target's indices before
+/// acting, so an out-of-range slot is refused (a checked recover) or ignored (an unchecked
+/// remove) rather than silently no-oped, or worse, deleting the wrong step. Mirrors
+/// editWorkflow's list scan.
+function procedureLen(body: string, headword: string): number {
+  const range = procedureStepRange(body.split("\n"), headword);
+  return range ? range.count : 0;
 }
 
 /// Promote the intermediary's forced `epistemic_status: in-review` to `distilled`
@@ -212,26 +207,26 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
 
   // 6. classify every item into deterministic ops (no LLM, no write). This precedes
   //    the key gate on purpose: a checked recover that resolves to no actionable target
-  //    (an edge/payload/prose residue class, or a def whose glossary row is gone) is a
+  //    (an edge/payload/prose residue class, or a def whose concept subsection is gone) is a
   //    LOST reviewer decision if allowed to no-op, so it aborts LOUD below — and only a
   //    checked recover DEF that actually resolves is what forces the key gate.
   let body = stripInteract(text);
   const { body: bodyNoFront } = parseFrontmatter(body);
   const lang = opts.lang === "auto" ? detectLang(bodyNoFront) : opts.lang;
-  const tie0 = parseDistilled(bodyNoFront).tie;
+  // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
+  // analogue of the old tie-together line).
+  const tie0 = parseCanonicalNote(bodyNoFront).abstract;
 
   let recovered = 0;
   let kept = 0;
   let removed = 0;
   let verbatim = 0;
-  let reprojNeeded = false;
 
   const defRecovers: { term: string; src: string }[] = [];
   const defRemovals: string[] = [];
   const workflowOps: WorkflowOp[] = [];
   let thesisPara: string | null = null;
   const unrecoverable: string[] = [];
-  const wfLen = workflowLen(body);
 
   for (const it of items) {
     const kind = targetKind(it.target);
@@ -245,23 +240,26 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
       if (kind === "def") {
         const term = resolveDefTerm(body, it.target);
         if (term === null) {
-          unrecoverable.push(it.target); // no glossary row → apply has no action
+          unrecoverable.push(it.target); // no concept subsection → apply has no action
           continue;
         }
         defRecovers.push({ term, src: payload });
         recovered++;
       } else if (kind === "steps") {
-        // A recover with no in-range slot (out-of-range target) or no source directive
-        // (empty payload) cannot execute — and an empty payload would DELETE the slot
-        // (replace:null), the opposite of recover. Refuse both rather than no-op or delete.
-        const idxs = workflowIdxs(it.target).filter((idx) => idx < wfLen);
+        // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
+        // spans deferred) or no source directive (empty payload) cannot execute — and an empty
+        // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
+        // rather than no-op or delete.
+        const { headword, idxs: raw } = procedureTarget(it.target);
+        const hw = resolveProcedureHeadword(body, headword);
+        const idxs = hw ? raw.filter((idx) => idx < procedureLen(body, hw)) : [];
         const clauses = verbatimDirectives(payload);
-        if (idxs.length === 0 || clauses.length === 0) {
+        if (hw === null || idxs.length === 0 || clauses.length === 0) {
           unrecoverable.push(it.target);
           continue;
         }
         idxs.forEach((idx, k) => {
-          workflowOps.push({ idx, replace: k === 0 ? clauses : null });
+          workflowOps.push({ headword: hw, idx, replace: k === 0 ? clauses : null });
         });
         recovered++;
         verbatim++;
@@ -286,8 +284,10 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
           removed++;
         }
       } else if (kind === "steps") {
-        const idxs = workflowIdxs(it.target).filter((idx) => idx < wfLen);
-        for (const idx of idxs) workflowOps.push({ idx, replace: null });
+        const { headword, idxs: raw } = procedureTarget(it.target);
+        const hw = resolveProcedureHeadword(body, headword);
+        const idxs = hw ? raw.filter((idx) => idx < procedureLen(body, hw)) : [];
+        for (const idx of idxs) workflowOps.push({ headword: hw!, idx, replace: null });
         if (idxs.length > 0) removed++;
       }
       // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
@@ -305,14 +305,14 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   }
 
   // 7. key gate — only a checked recover DEF that resolved calls an LLM. A checked
-  //    recover of a workflow group / the thesis is verbatim (no LLM); keep is a no-op.
+  //    recover of procedure steps / the thesis is verbatim (no LLM); keep is a no-op.
   if (defRecovers.length > 0 && !process.env.FIREWORKS_API_KEY) {
     return fail("FIREWORKS_API_KEY not set — a checked recover needs it; nothing written", 1);
   }
 
   // The LLM window: re-render each checked recover def, re-grade once, and splice
   // either the re-render (translated/inconclusive) or the source's own verbatim
-  // clause (a second grade failure). A glossary change forces one re-projection.
+  // clause (a second grade failure) into its `### headword` concept subsection.
   const defSplices: { term: string; def: string }[] = [];
   for (const d of defRecovers) {
     const entry = { term: d.term, def: "", relations: [], source: [] };
@@ -341,28 +341,16 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
       verbatim++;
     }
     defSplices.push({ term: d.term, def: finalDef });
-    reprojNeeded = true;
   }
 
   for (const s of defSplices) body = spliceDef(body, s.term, s.def);
   for (const term of defRemovals) body = spliceDef(body, term, null);
   if (workflowOps.length) body = editWorkflow(body, workflowOps);
 
-  // 8. re-project the head prose from the whole updated glossary (one call, never
-  //    per-entry). Removal-only and keep-only applies never reach this (offline).
-  if (reprojNeeded) {
-    const { front } = parseFrontmatter(body);
-    const { body: noFront } = parseFrontmatter(body);
-    const { tie, entries } = parseDistilled(noFront);
-    const prose = await renderProse(parseDescription(front), tie, entries, lang);
-    if (prose) body = replaceHeadProse(body, prose);
-  }
-  // A checked recover thesis is prepended AFTER re-projection, not before: replaceHeadProse
-  // rewrites the entire H1→first-`##` region, which is exactly where insertThesis lands the
-  // paragraph — inserting first would splice the verbatim thesis into the span the
-  // re-projection then overwrites, so it would vanish whenever a def was ALSO recovered
-  // (reprojNeeded). Prepending last keeps the thesis paragraph verbatim above the
-  // re-projected connective prose; a thesis-only recover (reprojNeeded false) is unaffected.
+  // A checked recover thesis sets the ## Abstract body verbatim. There is NO re-projection
+  // step on a canonical note: the abstract is authored at extract time, not re-derived from
+  // concept defs, so a def recover leaves it as-authored (the §12.4 simplification — the old
+  // renderProse/replaceHeadProse head-prose chain has no canonical analogue).
   if (thesisPara !== null) body = insertThesis(body, thesisPara);
 
   // 9. re-hash the tmp — an Obsidian Sync rewrite during the LLM window invalidates
@@ -405,10 +393,9 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   }
   unlinkIfPresent(tmpPath);
 
-  const reproj = reprojNeeded ? "re-projected" : "re-projection skipped";
   process.stdout.write(`${dest}\n`);
   process.stderr.write(
-    `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim) · ${reproj}\n`,
+    `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim)\n`,
   );
   return 0;
 }
@@ -427,157 +414,193 @@ export function destinationFor(tmpPath: string): string | null {
   return resolve(`${tmpPath.slice(0, -".tmp.md".length)}.md`);
 }
 
-// escCell, replicated from assemble.ts (not exported there): a glossary cell holds
-// neither a raw pipe nor a newline, so escape the one and collapse the other.
-function escCell(s: string): string {
-  return s.replace(/\|/g, "\\|").replace(/\n+/g, " ").trim();
-}
+// ---- canonical section/subsection locators (shared by the body-editing primitives) ----
 
-// Parse a `| a | b |` table row into its unescaped, trimmed cells; null when the
-// line is not a table row. The inverse of escCell + assembleBody's row format.
-function tableCells(line: string): string[] | null {
-  const t = line.trim();
-  if (!t.startsWith("|")) return null;
-  return t
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split(/(?<!\\)\|/)
-    .map((c) => c.replace(/\\\|/g, "|").trim());
-}
+const SUB_HEAD_RE = /^###\s+(.+?)\s*$/; // a `### headword` subsection heading
+const STEP_RE = /^\s*\d+\.\s(.*)$/; // a numbered `N. step` line, capturing the step text
 
-// A glossary DATA row (not the header, not the `---` separator).
-function isGlossDataRow(cells: string[]): boolean {
-  if (cells.length < 2) return false;
-  const term = cells[0]!;
-  if (term.toLowerCase() === "term") return false;
-  if (/^:?-{3,}:?$/.test(term.replace(/\s/g, ""))) return false;
-  return true;
-}
-
-/// Edit the `## Glossary` table in a note body: replace the definition cell of the
-/// row whose (unescaped, trimmed) term cell equals `term` when `def` is a string,
-/// or DELETE that row when `def` is null. The new def is escCell-normalized (pipes
-/// escaped, newlines collapsed — a table cell cannot hold either). A term with no
-/// matching row leaves the body unchanged (a removed-then-recovered race is a no-op,
-/// not a crash). Other rows, the header, and the separator are byte-preserved.
-/// The caller resolves a possibly-degraded target to the real row term via
-/// resolveDefTerm BEFORE calling this (spliceDef itself matches by exact term).
-export function spliceDef(body: string, term: string, def: string | null): string {
-  const lines = body.split("\n");
-  const out: string[] = [];
-  let matched = false;
-  for (const line of lines) {
-    if (!matched) {
-      const cells = tableCells(line);
-      if (cells && isGlossDataRow(cells) && cells[0] === term) {
-        matched = true;
-        if (def === null) continue; // delete the row
-        out.push(`| ${escCell(term)} | ${escCell(def)} |`);
-        continue;
-      }
+/// The line range of a `### headword` subsection under `## <section>`: [subStart, subEnd) where
+/// subStart is the `### headword` line and subEnd is the next `### ` (or the section's end).
+/// Fence-aware via splitSections. null when the section or the headword is absent.
+function subsectionRange(
+  lines: string[],
+  section: string,
+  headword: string,
+): { subStart: number; subEnd: number } | null {
+  const sec = splitSections(lines.join("\n")).find((s) => s.name === section);
+  if (!sec) return null;
+  let subStart = -1;
+  for (let i = sec.start + 1; i < sec.end; i++) {
+    const m = SUB_HEAD_RE.exec(lines[i]!);
+    if (m && m[1] === headword) {
+      subStart = i;
+      break;
     }
-    out.push(line);
   }
-  return matched ? out.join("\n") : body; // absent term ⇒ byte-identical no-op
+  if (subStart < 0) return null;
+  let subEnd = sec.end;
+  for (let i = subStart + 1; i < sec.end; i++) {
+    if (/^###\s/.test(lines[i]!)) {
+      subEnd = i;
+      break;
+    }
+  }
+  return { subStart, subEnd };
 }
 
-/// One instruction against the emitted `## Workflow` list, keyed by 0-based index
-/// into that list (the same indices `Residue.stepIdxs` carried, which emit rendered
-/// as the 1-based `workflow:<n,…>` target). `replace` is the new step text(s) for
-/// that slot (a verbatimDirectives splice may yield several); `replace: null`
-/// DELETES the slot. A group target like `workflow:2,3` expands to one op per index.
-export type WorkflowOp = { idx: number; replace: string[] | null };
-
-/// Apply every WorkflowOp against the `## Workflow` list in one rewrite: all ops are
-/// resolved against the ORIGINAL indices, then the list is rebuilt (deletions drop,
-/// replacements substitute, untouched slots survive) and RENUMBERED from 1. Applying
-/// per-op would shift indices under later ops; batching keeps `workflow:2` meaning
-/// the 2nd emitted step regardless of an earlier deletion. A body with no `## Workflow`
-/// section is returned unchanged.
-export function editWorkflow(body: string, ops: WorkflowOp[]): string {
-  const lines = body.split("\n");
-  const wfIdx = lines.findIndex((l) => /^##\s+Workflow\b/i.test(l.trim()));
-  if (wfIdx < 0) return body; // no ## Workflow section ⇒ unchanged
-  const itemRe = /^\s*\d+\.\s(.*)$/;
+/// The inclusive line range and count of the numbered step list under a `## Procedures`
+/// `### headword` subsection (null when absent) — used to validate a step target's indices
+/// and to locate the list for editing.
+function procedureStepRange(
+  lines: string[],
+  headword: string,
+): { start: number; end: number; count: number } | null {
+  const sub = subsectionRange(lines, "procedures", headword);
+  if (!sub) return null;
   let start = -1;
   let end = -1;
-  for (let i = wfIdx + 1; i < lines.length; i++) {
-    if (itemRe.test(lines[i]!)) {
+  for (let i = sub.subStart + 1; i < sub.subEnd; i++) {
+    if (STEP_RE.test(lines[i]!)) {
       if (start < 0) start = i;
       end = i;
     } else if (start >= 0) {
       break; // the numbered list ended
     } else if (lines[i]!.trim() === "") {
-      continue; // blank line between heading and list
+      continue; // blank between heading and list
     } else {
       break; // non-list content before any item
     }
   }
-  if (start < 0) return body; // heading with no numbered list
-  const orig = lines.slice(start, end + 1).map((l) => l.match(itemRe)![1]!);
-  const opByIdx = new Map(ops.map((o) => [o.idx, o]));
-  const next: string[] = [];
-  orig.forEach((textLine, i) => {
-    const op = opByIdx.get(i);
-    if (op) {
-      if (op.replace !== null) for (const s of op.replace) next.push(s);
-    } else {
-      next.push(textLine);
-    }
-  });
-  const rendered = next.map((s, i) => `${i + 1}. ${s}`);
-  return [...lines.slice(0, start), ...rendered, ...lines.slice(end + 1)].join("\n");
+  if (start < 0) return null;
+  return { start, end, count: end - start + 1 };
 }
 
-/// Insert `para` as the note's opening paragraph, immediately after the H1 (or at the
-/// top when there is no H1) and before the existing head prose — the checked
-/// `recover: thesis` action, verbatim, no LLM. Idempotent shape: exactly one blank
-/// line separates the inserted paragraph from what follows.
+/// The `### headword`s under a `## <section>` block, in document order.
+function headwordsUnder(body: string, section: string): string[] {
+  const lines = body.split("\n");
+  const sec = splitSections(body).find((s) => s.name === section);
+  if (!sec) return [];
+  const out: string[] = [];
+  for (let i = sec.start + 1; i < sec.end; i++) {
+    const m = SUB_HEAD_RE.exec(lines[i]!);
+    if (m) out.push(m[1]!);
+  }
+  return out;
+}
+
+/// Edit the `## Concepts` note body: replace the DEFINITION LINE (the first non-blank,
+/// non-bullet line — its trailing byte-anchor preserved) of the `### headword` subsection when
+/// `def` is a string, or DELETE the whole subsection (with its preceding blank separator) when
+/// `def` is null. A headword with no matching subsection leaves the body unchanged (a
+/// removed-then-recovered race is a no-op, not a crash). Every other subsection, its bullets,
+/// and the anchors are byte-preserved. The caller resolves a possibly-degraded target to the
+/// real headword via resolveDefTerm BEFORE calling this (spliceDef matches by exact headword).
+export function spliceDef(body: string, term: string, def: string | null): string {
+  const lines = body.split("\n");
+  const sub = subsectionRange(lines, "concepts", term);
+  if (!sub) return body; // absent headword ⇒ byte-identical no-op
+  const { subStart, subEnd } = sub;
+  if (def === null) {
+    let start = subStart;
+    if (start > 0 && lines[start - 1]!.trim() === "") start -= 1; // absorb the blank separator
+    return [...lines.slice(0, start), ...lines.slice(subEnd)].join("\n");
+  }
+  const flat = def.replace(/\n+/g, " ").trim(); // a definition line is one line
+  for (let i = subStart + 1; i < subEnd; i++) {
+    const t = lines[i]!.trim();
+    if (t === "" || t.startsWith("- ")) continue; // the def line precedes any bullet
+    const anchor = lines[i]!.match(/\s(\d+\.\.\d+)\s*$/);
+    lines[i] = anchor ? `${flat} ${anchor[1]}` : flat;
+    return lines.join("\n");
+  }
+  // a bare `### headword` with no def line — insert the def right after the heading
+  return [...lines.slice(0, subStart + 1), "", flat, ...lines.slice(subStart + 1)].join("\n");
+}
+
+/// One instruction against a `## Procedures` `### headword` numbered list, keyed by the
+/// headword and the 0-based step index within THAT headword's list (the (headword, stepIdx)
+/// addressing the canonical grouping forces). `replace` is the new step text(s) for the slot
+/// (a verbatimDirectives splice may yield several); `replace: null` DELETES the slot. A group
+/// target like `procedure:<hw>:2,3` expands to one op per index (all sharing the headword).
+export type WorkflowOp = { headword: string; idx: number; replace: string[] | null };
+
+/// Apply every WorkflowOp in one rewrite, PER HEADWORD: ops are grouped by headword, and each
+/// headword's numbered list is rebuilt against its ORIGINAL indices (deletions drop,
+/// replacements substitute, untouched slots survive) and RENUMBERED from 1. Batching per list
+/// keeps `procedure:<hw>:2` meaning that headword's 2nd step regardless of an earlier deletion.
+/// A headword with no `### headword` procedure list is skipped (the caller already validated
+/// in-range targets; a stale one is a no-op, not a crash).
+export function editWorkflow(body: string, ops: WorkflowOp[]): string {
+  let lines = body.split("\n");
+  const byHead = new Map<string, WorkflowOp[]>();
+  for (const op of ops) {
+    const g = byHead.get(op.headword);
+    if (g) g.push(op);
+    else byHead.set(op.headword, [op]);
+  }
+  for (const [headword, hops] of byHead) {
+    const range = procedureStepRange(lines, headword);
+    if (!range) continue; // no such procedure list ⇒ skip
+    const { start, end } = range;
+    const orig = lines.slice(start, end + 1).map((l) => l.match(STEP_RE)![1]!);
+    const opByIdx = new Map(hops.map((o) => [o.idx, o]));
+    const next: string[] = [];
+    orig.forEach((textLine, i) => {
+      const op = opByIdx.get(i);
+      if (op) {
+        if (op.replace !== null) for (const s of op.replace) next.push(s);
+      } else {
+        next.push(textLine);
+      }
+    });
+    const rendered = next.map((s, i) => `${i + 1}. ${s}`);
+    lines = [...lines.slice(0, start), ...rendered, ...lines.slice(end + 1)];
+  }
+  return lines.join("\n");
+}
+
+/// Set the `## Abstract` body to `para` — the canonical home for the synthesized orientation
+/// (the checked `recover: thesis` action, verbatim, no LLM). When a `## Abstract` section
+/// exists, its body is replaced (heading kept); otherwise a `## Abstract` block is inserted
+/// right after the H1 (or at the top when there is no H1), before the first `## ` section.
 export function insertThesis(body: string, para: string): string {
   const lines = body.split("\n");
+  const flat = para.trim();
+  const abstract = splitSections(body).find((s) => s.name === "abstract");
+  if (abstract) {
+    return [...lines.slice(0, abstract.start + 1), "", flat, "", ...lines.slice(abstract.end)].join(
+      "\n",
+    );
+  }
   const h1 = lines.findIndex((l) => /^#\s/.test(l));
-  if (h1 < 0) return `${para}\n\n${body}`; // no H1 ⇒ at the very top
-  const before = lines.slice(0, h1 + 1);
-  const after = lines.slice(h1 + 1);
+  const insertAt = h1 >= 0 ? h1 + 1 : 0;
+  const before = lines.slice(0, insertAt);
+  const after = lines.slice(insertAt);
   let k = 0;
   while (k < after.length && after[k]!.trim() === "") k++; // drop leading blanks
-  return [...before, "", para, "", ...after.slice(k)].join("\n");
+  const block = ["## Abstract", "", flat, ""];
+  const head = before.length ? [...before, ""] : [];
+  return [...head, ...block, ...after.slice(k)].join("\n");
 }
 
-/// Replace the head-prose region (everything between the H1 and the first `## `
-/// section heading) with `prose` — the re-projection sink after ≥1 def re-render.
-/// The H1, the `## Workflow`/`## Glossary`/tail sections keep their place; only the
-/// connective prose the glossary feeds is re-derived. A body with no `## ` heading
-/// replaces everything after the H1.
-export function replaceHeadProse(body: string, prose: string): string {
-  const lines = body.split("\n");
-  const h1 = lines.findIndex((l) => /^#\s/.test(l));
-  const firstH2 = lines.findIndex((l) => /^##\s/.test(l.trim()));
-  const head = h1 < 0 ? [] : lines.slice(0, h1 + 1);
-  const tail = firstH2 < 0 ? [] : lines.slice(firstH2);
-  const parts: string[] = [];
-  if (head.length) parts.push(...head, "");
-  parts.push(prose);
-  if (tail.length) parts.push("", ...tail);
-  return parts.join("\n");
-}
-
-/// Resolve a residue item's (possibly degraded) def target back to the actual
-/// glossary-row term. Exact match first (the common case: target === term); then the
-/// degraded case — the emit shipped `safeHandle(term)` because the term carried a
-/// backtick or newline, so match the row whose `safeHandle(rowTerm)` equals the
-/// target. Returns the real row term, or null when no row matches (the caller counts
-/// it removed/skipped rather than crashing). This is the Phase-3 emit seam closed at
-/// apply WITHOUT a handle→term channel in the file — the emit transform run backward.
+/// Resolve a residue item's (possibly degraded) def target back to the actual `### headword`
+/// under `## Concepts`. Exact match first (the common case: target === headword); then the
+/// degraded case — the emit shipped `safeHandle(headword)` because the headword carried a
+/// backtick or newline, so match the headword whose `safeHandle` equals the target. Returns the
+/// real headword, or null when none matches (the caller counts it removed/skipped rather than
+/// crashing) — the emit transform run backward, no handle→headword channel in the file.
 export function resolveDefTerm(body: string, target: string): string | null {
-  const terms: string[] = [];
-  for (const line of body.split("\n")) {
-    const cells = tableCells(line);
-    if (cells && isGlossDataRow(cells)) terms.push(cells[0]!);
-  }
-  if (terms.includes(target)) return target; // exact (the common case)
-  const degraded = terms.find((t) => safeHandle(t) === target); // the emit run backward
-  return degraded ?? null;
+  const heads = headwordsUnder(body, "concepts");
+  if (heads.includes(target)) return target; // exact (the common case)
+  return heads.find((h) => safeHandle(h) === target) ?? null; // the emit run backward
+}
+
+/// Resolve a `procedure:<headword>` target back to the actual `### headword` under
+/// `## Procedures` — exact then safeHandle-degraded, the procedure-side twin of resolveDefTerm.
+export function resolveProcedureHeadword(body: string, target: string): string | null {
+  const heads = headwordsUnder(body, "procedures");
+  if (heads.includes(target)) return target;
+  return heads.find((h) => safeHandle(h) === target) ?? null;
 }
 
 /// Unlink a path, tolerating ENOENT — the final consume step (step 12). A crash

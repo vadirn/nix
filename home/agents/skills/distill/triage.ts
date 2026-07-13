@@ -50,10 +50,19 @@ function targetFor(r: Residue): { target: string; targetCode?: boolean } {
       }
       return { target: r.label, targetCode: true };
     case "steps": {
+      // Canonical `## Procedures` groups numbered steps under per-headword `### headword`
+      // subsections, so a step is addressed by (headword, stepIdx), not a global ordinal.
+      // The label IS the procedure headword (pipeline stamps v.id); safeHandle guards a
+      // headword carrying a backtick/newline (a bare target cannot be backticked). A
+      // populated stepIdxs appends the 1-based indices (`procedure:<headword>:2,3`); an empty
+      // stepIdxs (per-step spans deferred — the canonical backstop) addresses the WHOLE
+      // procedure (`procedure:<headword>`), which apply refuses to recover per-step and
+      // ignores on removal until per-step spans land.
+      const hw = safeHandle(r.label);
       if (r.stepIdxs && r.stepIdxs.length > 0) {
-        return { target: `workflow:${r.stepIdxs.map((i) => i + 1).join(",")}` };
+        return { target: `procedure:${hw}:${r.stepIdxs.map((i) => i + 1).join(",")}` };
       }
-      return { target: r.label };
+      return { target: `procedure:${hw}` };
     }
     case "thesis":
       return { target: "thesis" };
@@ -66,9 +75,10 @@ function targetFor(r: Residue): { target: string; targetCode?: boolean } {
 /// order (plan Q2: nothing pre-checked, the reason string is diagnosis not
 /// recommendation). Verb by reason class: "gate-inconclusive" → `keep`, everything
 /// else → `recover`. Targets: def → the term (backticked via targetCode);
-/// steps → `workflow:<stepIdxs 1-based, comma-joined>` (positional into the
-/// emitted ## Workflow list; falls back to the group label when stepIdxs is
-/// absent/empty); thesis → `thesis`; edge/payload/prose → a single-line handle
+/// steps → `procedure:<headword>:<stepIdxs 1-based, comma-joined>` (the headword-scoped
+/// step address into the canonical `## Procedures` list; drops the `:<idxs>` tail to
+/// address the whole procedure when stepIdxs is absent/empty); thesis → `thesis`;
+/// edge/payload/prose → a single-line handle
 /// derived from the label (backticks stripped, whitespace collapsed, truncated —
 /// the fenced payload carries the verbatim truth). Item note = the reason string,
 /// newlines flattened to spaces. Payload = the verbatim source excerpt; omitted
