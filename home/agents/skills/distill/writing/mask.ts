@@ -56,6 +56,6 @@ export function createMasker(literals: string[] = []): Masker {
       return key;
     });
   const unmask = (text: string): string =>
-    masks.size === 0 ? text : text.replace(/⟦\d+⟧/g, (m) => masks.get(m) ?? m);
+    masks.size === 0 ? text : text.replace(MASK_TOKEN_RE, (m) => masks.get(m) ?? m);
   return { mask, unmask };
 }
