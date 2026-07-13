@@ -24,6 +24,11 @@ import {
 // (subsumes / precondition-for / contrast-to) plus four it is starting to emit
 // (depends-on / part-of / instance-of / refines). supersedes and contradicts are
 // excluded by channel (frontmatter- and merge-gated respectively).
+//
+// OPEN registry (spec §3): a known/suggested vocabulary, NOT an enforced closed set — a
+// closed `type::` enum could not hold the Chesterton's Fence deontic relation. locateGraph
+// and projectMarkdown accept any `rel` token; only cards/cards.ts reads this list, to flag
+// an off-registry rel for human review (`offRegistry`), never to drop or reject it.
 export const REL_REGISTRY: readonly string[] = [
   "subsumes",
   "precondition-for",

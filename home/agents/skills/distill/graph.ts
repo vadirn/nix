@@ -52,9 +52,10 @@ export interface Unit {
   modality?: Modality;
 }
 
-// One structural edge between two units. `rel` is an open-registry hyphenated token (validated
-// against REL_REGISTRY in text.ts, the source of truth — not re-declared here). `span` anchors
-// the edge to the source bytes the relation was distilled from.
+// One structural edge between two units. `rel` is an open hyphenated token — REL_REGISTRY (text.ts,
+// the source of truth, not re-declared here) is a known/suggested vocabulary, not an enforced
+// closed set (spec §3); an off-registry `rel` still renders. `span` anchors the edge to the
+// source bytes the relation was distilled from.
 export interface Edge {
   from: string;
   to: string;

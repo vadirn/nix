@@ -2,8 +2,9 @@
 // a hand-built PreGraph → locateGraph → projectMarkdown. Asserts the frontmatter Source, that the
 // expected sections populate, that every emitted start..end anchor round-trips against the body
 // bytes, that Relations render `from — rel → to`, and that the payload retain lane folds in.
-// Negative: an absent quote hard-aborts (LocateError); an off-registry rel and a no-unit endpoint
-// are dropped. Converges on the e2e.test.ts template (build the graph directly). Run with
+// Negative: an absent quote hard-aborts (LocateError); a no-unit endpoint is dropped, while an
+// off-registry rel (spec §3, open registry) is KEPT and rendered. Converges on the e2e.test.ts
+// template (build the graph directly). Run with
 // `bun test locate-graph.test.ts`.
 import { expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
@@ -91,9 +92,10 @@ function pre(overrides: Partial<PreGraph> = {}): PreGraph {
         to: "Widget",
         quote: "gadget depends on at least one widget",
       },
-      // off-registry rel → dropped before locate
-      { fromHeadword: "Gadget", rel: "causes", to: "Widget", quote: "unused" },
-      // no local unit for endpoint → dropped before locate
+      // off-registry rel (spec §3, open registry) → KEPT, located like any other edge
+      { fromHeadword: "Gadget", rel: "causes", to: "Widget", quote: "which is a strong claim" },
+      // no local unit for endpoint → dropped before locate (quote is never located, so it can
+      // stay a placeholder)
       { fromHeadword: "Gadget", rel: "part-of", to: "Missing", quote: "unused" },
     ],
     ...overrides,
@@ -240,12 +242,24 @@ test("locateGraph: Relations render `from — rel → to`", () => {
   expect(md).toContain("gadget — depends-on → widget");
 });
 
-test("locateGraph: an off-registry rel and a no-unit endpoint are dropped (one edge survives)", () => {
+test("locateGraph: a no-unit endpoint is dropped; an off-registry rel is kept (two edges survive)", () => {
   const result = locateGraph(pre(), PATH, BODY, payloadBlocks);
-  expect(result.edges).toHaveLength(1);
+  // depends-on/Widget and causes/Widget survive; part-of/Missing is dropped (no local unit)
+  expect(result.edges).toHaveLength(2);
   const md = projectMarkdown(result);
   const relationLines = md.split("\n").filter((l) => l.includes("→"));
-  expect(relationLines).toHaveLength(1);
+  expect(relationLines).toHaveLength(2);
+});
+
+test("locateGraph: an off-registry rel (e.g. a causal predicate) survives end-to-end and renders anchored in ## Relations", () => {
+  const result = locateGraph(pre(), PATH, BODY, payloadBlocks);
+  const causal = result.edges.find((e) => e.rel === "causes");
+  expect(causal).toBeDefined();
+  expect(sliceBytes(Buffer.from(BODY, "utf8"), causal!.span)).toBe("which is a strong claim");
+  const md = projectMarkdown(result);
+  expect(md).toContain("gadget — causes → widget");
+  const causalLine = md.split("\n").find((l) => l.includes("causes"))!;
+  expect(causalLine).toMatch(/\d+\.\.\d+$/); // rendered with its own trailing anchor
 });
 
 test("locateGraph: title/abstract ride on the returned projection", () => {

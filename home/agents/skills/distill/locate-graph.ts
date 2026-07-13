@@ -11,8 +11,8 @@
 // output paths (routed / --glossary / --reference) still run the settle chain until steps 9-11.
 //
 // It is a leaf over the canonical modules: graph.ts (types + computeSource), locate.ts (the
-// span-locate primitive), and REL_REGISTRY / slugSegment / Block from text.ts. It does NOT import
-// pipeline.ts, so it carries no runtime dependency on the orchestrator.
+// span-locate primitive), and slugSegment / Block from text.ts. It does NOT import pipeline.ts,
+// so it carries no runtime dependency on the orchestrator.
 //
 // LOCKED: a failed `locate` HARD-ABORTS. `locate` throws a typed `LocateError` on a not-found or
 // ambiguous quote; locateGraph lets it propagate unchanged (the projection is the DEFAULT compress
@@ -21,7 +21,7 @@
 import { computeSource, type Edge, type PreGraph, type Unit } from "./graph.ts";
 import { locate } from "./locate.ts";
 import type { Span } from "./mdstruct.ts";
-import { REL_REGISTRY, slugSegment, type Block } from "./text.ts";
+import { slugSegment, type Block } from "./text.ts";
 import type { Projection } from "./project.ts";
 
 // Locate a sub-element's (bullet / tail-step) quote to a span, or `null` when the model gave no
@@ -157,13 +157,14 @@ export function locateGraph(
     if (s && !slugToId.has(s)) slugToId.set(s, u.id);
   }
 
-  // edges ← pre.edges. FILTER BEFORE PROJECTING: drop an off-registry rel and drop an endpoint that
-  // resolves to no local unit (a cross-note wikilink) — projectMarkdown throws on both. Only a
-  // retained edge's quote is located (so a dropped edge's absent/bad quote never aborts the run); a
-  // retained edge's failed locate propagates (HARD-ABORT).
+  // edges ← pre.edges. FILTER BEFORE PROJECTING: drop an endpoint that resolves to no local unit
+  // (a cross-note wikilink). `rel` is an OPEN token (spec §3) — REL_REGISTRY (text.ts) is a known
+  // vocabulary, not a closed enum, so an off-registry rel (e.g. a deontic or causal predicate) is
+  // KEPT, not dropped (Chesterton's Fence: a closed enum could not hold a deontic relation). Only
+  // a retained edge's quote is located (so a dropped edge's absent/bad quote never aborts the
+  // run); a retained edge's failed locate propagates (HARD-ABORT).
   const edges: Edge[] = [];
   for (const e of pre.edges) {
-    if (!REL_REGISTRY.includes(e.rel)) continue; // off-registry rel → drop
     const to = resolveEndpoint(e.to, slugToId);
     if (to === undefined) continue; // no local unit endpoint → drop
     edges.push({ from: e.fromHeadword, to, rel: e.rel, span: locate(body, e.quote) });

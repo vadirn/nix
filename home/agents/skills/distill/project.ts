@@ -9,7 +9,6 @@
 // paths and the routed build (distillRouted) all render through projectMarkdown; the legacy
 // two-channel assemble step it replaced is gone. Pure formatting; no I/O, no model calls.
 import { formatSpan, type DistillationResult, type Edge, type Unit } from "./graph.ts";
-import { REL_REGISTRY } from "./text.ts";
 
 // The projection format version emitted in `schema:`. Distinct from mdstruct's document
 // schemaVersion — this versions the markdown PROJECTION shape, not the parser.
@@ -105,13 +104,13 @@ function renderPayload(unit: Unit): string {
 
 // A relation line: `from — predicate → to  <anchor>` (em-dash, right-arrow, TWO spaces before
 // the anchor). `from`/`to` reference unit ids; the endpoint label is the referenced unit's
-// headword, lower-initial. `rel` is validated against the open REL_REGISTRY (text.ts) — an
-// unknown token is a hard failure (extend the registry, never emit off-registry).
+// headword, lower-initial. `rel` is an OPEN token (spec §3): REL_REGISTRY (text.ts) is a known
+// vocabulary, not a closed enum — an off-registry rel (e.g. a deontic or causal predicate) still
+// renders. Only a blank rel is rejected; a real one always has a source (normalizeRelation drops
+// an empty rel upstream), so this is a defensive floor, not a registry check.
 function renderRelation(edge: Edge, unitById: Map<string, Unit>): string {
-  if (!REL_REGISTRY.includes(edge.rel)) {
-    throw new Error(
-      `projectMarkdown: edge rel ${JSON.stringify(edge.rel)} is not in REL_REGISTRY [${REL_REGISTRY.join(", ")}]`,
-    );
+  if (!edge.rel.trim()) {
+    throw new Error(`projectMarkdown: edge.rel is empty`);
   }
   const from = unitById.get(edge.from);
   const to = unitById.get(edge.to);

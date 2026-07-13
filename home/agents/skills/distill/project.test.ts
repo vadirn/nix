@@ -237,17 +237,20 @@ test("a hypothesis judgement carries the problematic modality tag", () => {
   expect(projectMarkdown(hypo)).toContain("- (hypothesis) maybe true 0..5");
 });
 
-test("an off-registry edge rel is a hard failure", () => {
-  const bad: Projection = {
+test("an off-registry edge rel renders (open registry, spec §3) instead of throwing", () => {
+  const deontic: Projection = {
     source: { path: "x.txt", bytes: 10, sha256: "deadbeef" },
     title: "X",
     units: [
       { id: "A", type: "concept", statement: "a", span: [0, 1] },
       { id: "B", type: "concept", statement: "b", span: [1, 2] },
     ],
-    edges: [{ from: "A", to: "B", rel: "causes", span: [0, 2] }],
+    // "causes" and "must-precede" are off-registry (not in REL_REGISTRY) — the closed enum this
+    // spec fixes could not hold a deontic relation like this; the open registry renders it.
+    edges: [{ from: "A", to: "B", rel: "must-precede", span: [0, 2] }],
   };
-  expect(() => projectMarkdown(bad)).toThrow(/REL_REGISTRY/);
+  const md = projectMarkdown(deontic);
+  expect(md).toContain("- a — must-precede → b  0..2");
 });
 
 test("flat-bullet sections (judgements/inferences) join bullets tight (\\n), not blank-line separated", () => {
