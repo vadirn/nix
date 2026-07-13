@@ -338,14 +338,18 @@ export function verbatimDef(term: string, sourceText: string): string {
   return (hit ?? sentences[0] ?? flat).trim();
 }
 
-// single-entry render from source — used by stage-5 recovery to re-ground a residue def
+// single-entry render from source — used by stage-5 recovery to re-ground a residue def.
+// defRelations defaults to the module-level env lever (DISTILL_DEF_RELATIONS) so it can be
+// exercised without process-global env mutation; production callers that pass nothing get
+// the same behavior as before this param existed.
 export function renderEntryPrompt(
   entry: { term: string; def: string },
   sourceText: string,
   lang: "en" | "ru",
+  defRelations: "keep" | "drop" = DEF_RELATIONS,
 ): string {
   const relRule =
-    DEF_RELATIONS === "keep"
+    defRelations === "keep"
       ? `keep every relation the source states; use only claims the source states.`
       : `define the concept itself; state no relations to other terms (the connective prose carries those); use only claims the source states.`;
   return `Write the glossary definition for "${entry.term}" using ONLY the source text below. One dense sentence; ${relRule} ${langRule(lang)} Return ONLY JSON {"def":"..."}.
@@ -374,12 +378,13 @@ function fidelityPrompt(
   thesis: string,
   outputBody: string,
   rendered: { term: string; def: string; sourceText: string }[],
+  defGate: "block" | "definition" = DEF_GATE,
 ): string {
   const concepts = rendered
     .map((r) => `### ${r.term}\nSOURCE:\n${r.sourceText}\nOUTPUT: ${r.def}`)
     .join("\n\n");
   const criterion =
-    DEF_GATE === "block"
+    defGate === "block"
       ? `Decide round-trip entailment in BOTH directions:
 - does OUTPUT entail SOURCE (nothing load-bearing dropped)?
 - does SOURCE entail OUTPUT (nothing invented)?
@@ -409,11 +414,15 @@ export async function fidelityGate(
   // TransientError / TruncationError / code bug) without a process-global module
   // mock. Production callers omit it and get the real fw transport.
   ask: typeof askJson = askJson,
+  // The def-scope gate lever, defaulting to the module-level env read (DISTILL_DEF_GATE)
+  // so it can be exercised without process-global env mutation. Trails `ask` so existing
+  // 3- and 4-arg callers are unaffected.
+  defGate: "block" | "definition" = DEF_GATE,
 ): Promise<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }> {
   try {
     const res = await ask<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
       FIDELITY,
-      fidelityPrompt(thesis, outputBody, rendered),
+      fidelityPrompt(thesis, outputBody, rendered, defGate),
       FIDELITY_TOKENS,
     );
     return {

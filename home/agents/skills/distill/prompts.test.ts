@@ -7,8 +7,9 @@
 // no-fabrication guard is present. It also pins the typed pre-graph schema the prompt asks
 // for. parseExtractGraph (the pure normalizer) is covered by extract-graph.test.ts.
 import { expect, test } from "bun:test";
+import type { askJson } from "./fw.ts";
 import type { Block, LinkInventory } from "./text.ts";
-import { extractGraphPrompt } from "./prompts.ts";
+import { extractGraphPrompt, fidelityGate, renderEntryPrompt } from "./prompts.ts";
 
 const blocks: Block[] = [{ id: "B1", text: "Pragmatic first is reconnaissance for elegance." }];
 
@@ -117,4 +118,30 @@ test("extractGraphPrompt: the concept schema asks for an optional extension-bull
   expect(p).toContain("predicated properties or enumerated species");
   // guarded against fabrication, like the relations lane
   expect(p).toContain("do NOT invent a bullet the note does not state");
+});
+
+// ---- def-scope experiment levers: DI seams over the DISTILL_DEF_RELATIONS /
+// DISTILL_DEF_GATE env reads (W17). Each lever now threads as a trailing param
+// defaulting to the module-level env value, so a caller can flip it without
+// process-global env mutation. These pin that the param — not just the env var —
+// actually changes the prompt text.
+test("renderEntryPrompt: the defRelations param overrides the env-derived default", () => {
+  const dropDefault = renderEntryPrompt({ term: "x", def: "" }, "source text", "en");
+  expect(dropDefault).toContain("state no relations to other terms");
+  const kept = renderEntryPrompt({ term: "x", def: "" }, "source text", "en", "keep");
+  expect(kept).toContain("keep every relation the source states");
+  expect(kept).not.toContain("state no relations to other terms");
+});
+
+test("fidelityGate: the defGate param overrides the env-derived default", async () => {
+  let seenPrompt = "";
+  const captureAsk = (async (_model: string, prompt: string) => {
+    seenPrompt = prompt;
+    return { thesisRecoverable: true, concepts: [] };
+  }) as typeof askJson;
+  const rendered = [{ term: "x", def: "d", sourceText: "s" }];
+  await fidelityGate("thesis", "body", rendered, captureAsk); // default lever: "definition"
+  expect(seenPrompt).toContain("The OUTPUT is a DEFINITION of the concept");
+  await fidelityGate("thesis", "body", rendered, captureAsk, "block");
+  expect(seenPrompt).toContain("Decide round-trip entailment in BOTH directions");
 });
