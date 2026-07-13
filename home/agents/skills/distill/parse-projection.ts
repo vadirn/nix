@@ -69,6 +69,7 @@ export interface CanonNote {
 const FENCE_RE = /^(```|~~~)/;
 const SECTION_RE = /^##\s+(\S.*?)\s*$/; // `## Heading` — two hashes exactly (excludes `### `)
 const SUB_RE = /^###\s+(\S.*?)\s*$/; // `### headword` subsection
+const ANCHOR_ONLY_RE = /^(?:\[\d+\.\.\d+\]|\d+\.\.\d+)$/; // a line that is ONLY a byte-span anchor
 
 // Split a note body into its `## ` sections. Content before the first `## ` (the `# title` and any
 // head prose) is not a section and is dropped from the result — callers that need it read the raw
@@ -197,8 +198,13 @@ export function parseCanonicalNote(body: string): CanonNote {
         inner.push(lines[i]!);
       }
       for (let j = i + 1; j < lines.length; j++) {
-        if (lines[j]!.trim().length === 0) continue;
-        span = stripAnchor(lines[j]!.trim()).span;
+        const bare = lines[j]!.trim();
+        if (bare.length === 0) continue;
+        // The projector renders a multi-line payload's anchor as a BARE `start..end` line after
+        // the closing fence (renderPayload, project.ts) — no leading text, so stripAnchor (which
+        // needs `text<space>anchor`) cannot see it. Parse a bare anchor directly; fall back to
+        // stripAnchor for a hand-edited `text anchor` line, and to null when the anchor was dropped.
+        span = ANCHOR_ONLY_RE.test(bare) ? parseSpan(bare) : stripAnchor(bare).span;
         break;
       }
     }
