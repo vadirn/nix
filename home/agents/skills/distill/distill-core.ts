@@ -456,6 +456,106 @@ export function assembleRoutedNote(a: {
   return { out, footer, residue };
 }
 
+// The legacy passthrough envelope (the exit-3 sink): the unmodified source, epistemic-status
+// stamped, wrapped in <result>…</result> with an optional <residue> block of escaped entries.
+// Pure — main()'s passthrough branch emits this verbatim beside its footer.
+function buildPassthroughEnvelope(front: string, out: string, residue: Residue[]): string {
+  const front2 = ensureEpistemicStatus(front);
+  const result = front2 ? front2 + "\n" + out : out;
+  let fileBody = `<result>\n${result}\n</result>\n`;
+  if (residue.length) {
+    const entries = residue
+      .map(
+        (r) =>
+          `<entry term="${escAttr(r.label)}" reason="${escAttr(r.reason)}">\n<source>\n${r.source}\n</source>\n</entry>`,
+      )
+      .join("\n");
+    fileBody += `\n<residue>\n${entries}\n</residue>\n`;
+  }
+  return fileBody;
+}
+
+// Atomic no-clobber write (plan §4, atomicity F2/F7): write a sibling .partial, then linkSync to
+// the final name — link fails EEXIST instead of overwriting, so a racing emit that passed the
+// preflight minutes ago (LLM run) loses LOUD with the same exit-4 refusal, and a crash mid-write
+// never leaves a truncated intermediary visible at the .tmp.md path. An EEXIST link refuses (never
+// returns); any other link error unlinks the .partial and rethrows.
+function writeIntermediaryAtomically(tmpPath: string, intermediary: string): void {
+  const partial = `${tmpPath}.partial`;
+  writeFileSync(partial, intermediary);
+  try {
+    linkSync(partial, tmpPath);
+  } catch (e) {
+    try {
+      unlinkSync(partial);
+    } catch {}
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") {
+      refusePendingIntermediary(tmpPath);
+    }
+    throw e;
+  }
+  unlinkSync(partial);
+}
+
+// Phase 3/5 success: write the interactive review intermediary sibling to `destPath` (never the
+// source — the input file is never modified), stamped with dest= (the destination basename) and
+// src= (a hash of destPath's current bytes, or "new" when it does not yet exist — the creation
+// case). `out` is the canonical projection, taken verbatim: it already carries its own
+// type/source/schema YAML, so prepending the source front would emit two YAML blocks;
+// buildIntermediary stamps epistemic_status: in-review into that single block. At a real terminal
+// (both ends) the gate-aware session takes over the SAME process and exits its code; otherwise
+// (the common agent-caller case) this returns and main() falls through to exit 0.
+async function emitReviewIntermediary(
+  destPath: string,
+  out: string,
+  residue: Residue[],
+  footer2: string,
+  resolved: "en" | "ru",
+): Promise<void> {
+  const tmpPath = tmpPathFor(destPath);
+  const src = existsSync(destPath) ? stampHash(readFileSync(destPath)) : "new";
+  const intermediary = buildIntermediary(out, residue, {
+    dest: basename(destPath),
+    src,
+  });
+  writeIntermediaryAtomically(tmpPath, intermediary);
+  const reviewSuffix =
+    residue.length > 0 ? ` · review: ${residue.length} items + gate` : " · review: gate";
+  process.stdout.write(`${tmpPath}\n`);
+  process.stderr.write(`${footer2}${reviewSuffix}\n`);
+  if (isInteractive()) {
+    const reviewLabel = residue.length > 0 ? `${residue.length} items + gate` : "gate";
+    process.stderr.write(`review: ${tmpPath} — ${reviewLabel}\n`);
+    process.stderr.write(`apply later with: distill-text apply ${tmpPath}\n`);
+    // Ctrl-C loses nothing (the intermediary is already on disk) — exit 0 rather than the
+    // default SIGINT death, matching decline/EOF's exit code.
+    process.once("SIGINT", () => process.exit(0));
+    process.exit(await runTtySession(tmpPath, destPath, resolved));
+  }
+}
+
+// The compress-mode catch: a non-transient throw is a real bug — surface it (a stage catch has
+// already logged it on its way up; anything thrown outside a stage prints its own stack on
+// propagation) instead of shipping the original as a silent passthrough. A truncation in a
+// no-catch core stage (extractGraph, gradeBlocks) is not a transient flake and not a code bug: it
+// skips THIS note with a clear actionable footer (raise the stage's cap), never a raw stack crash
+// or a "transient" label. A transient flake failsafes to the passthrough. Both skip paths exit 3
+// (valid but unmodified original); a real bug rethrows.
+function handleCompressError(
+  e: unknown,
+  input: string,
+  emit: (body: string, footer: string) => void,
+): never {
+  if (e instanceof TruncationError) {
+    emit(input, `— distill skipped: output TRUNCATED — ${e.message}`);
+    process.exit(3);
+  }
+  if (!isTransient(e)) throw e;
+  // transient failsafe: temp file holds the original (passthrough); path still printed
+  emit(input, `— distill skipped (error): ${String(e).slice(0, 160)}`);
+  process.exit(3);
+}
+
 export async function main() {
   // The whole CLI surface resolves in parseArgs (help/misuse/ok). Act on help and misuse
   // here, before the API-key gate or any network call: help prints usage to stdout and exits
@@ -615,96 +715,17 @@ export async function main() {
       ? `${footer} · frontmatter not parsed (kept verbatim): ${fmError.slice(0, 80)}`
       : footer;
     // exit 3: covers nothing-to-distill and the expand-guard revert — the output is the
-    // unmodified original. A routed note is always "compressed" (its preserves were
-    // compacted), so head-kept-verbatim exits 0 with the footer tag as the signal. This
-    // legacy passthrough envelope (mktemp <result>/<residue>) is untouched — Phase 3
-    // only swaps the SUCCESS path below to the review intermediary.
+    // unmodified original. A routed note is always "compressed" (its preserves were compacted),
+    // so head-kept-verbatim exits 0 with the footer tag as the signal.
     if (status === "passthrough") {
-      const front2 = ensureEpistemicStatus(front);
-      const result = front2 ? front2 + "\n" + out : out;
-      let fileBody = `<result>\n${result}\n</result>\n`;
-      if (residue.length) {
-        const entries = residue
-          .map(
-            (r) =>
-              `<entry term="${escAttr(r.label)}" reason="${escAttr(r.reason)}">\n<source>\n${r.source}\n</source>\n</entry>`,
-          )
-          .join("\n");
-        fileBody += `\n<residue>\n${entries}\n</residue>\n`;
-      }
-      emit(fileBody, footer2);
+      emit(buildPassthroughEnvelope(front, out, residue), footer2);
       process.exit(3);
     }
-    // Phase 3 success: write the interactive review intermediary sibling to `dest`
-    // (never the source itself — the input file is never modified), stamped with
-    // dest= (the destination basename) and src= (a hash of dest's current bytes, or
-    // "new" when it does not yet exist — the creation case).
-    const destPath = dest as string; // narrowed above: stdin without --out already exited
-    const tmpPath = tmpPathFor(destPath);
-    // ONE frontmatter block. Every compress path now projects the canonical graph, whose `out`
-    // already carries its own `type: distillation` / `source:` / `schema:` YAML, so main() takes it
-    // verbatim — prepending the source note's `front` would emit two YAML blocks. buildIntermediary
-    // then stamps `epistemic_status: in-review` into that single block. Source-note-only fields
-    // (aliases/tags/description) drop with the source front — a distillation is a derived artifact
-    // stamped with its own provenance (Backlog).
-    const noteForIntermediary = out;
-    const src = existsSync(destPath) ? stampHash(readFileSync(destPath)) : "new";
-    const intermediary = buildIntermediary(noteForIntermediary, residue, {
-      dest: basename(destPath),
-      src,
-    });
-    // Atomic no-clobber (plan §4, atomicity F2/F7): write a sibling .partial, then
-    // linkSync to the final name — link fails EEXIST instead of overwriting, so a
-    // racing emit that passed the preflight minutes ago (LLM run) loses LOUD with
-    // the same exit-4 refusal, and a crash mid-write never leaves a truncated
-    // intermediary visible at the .tmp.md path.
-    const partial = `${tmpPath}.partial`;
-    writeFileSync(partial, intermediary);
-    try {
-      linkSync(partial, tmpPath);
-    } catch (e) {
-      try {
-        unlinkSync(partial);
-      } catch {}
-      if ((e as NodeJS.ErrnoException).code === "EEXIST") {
-        refusePendingIntermediary(tmpPath);
-      }
-      throw e;
-    }
-    unlinkSync(partial);
-    const reviewSuffix =
-      residue.length > 0 ? ` · review: ${residue.length} items + gate` : " · review: gate";
-    process.stdout.write(`${tmpPath}\n`);
-    process.stderr.write(`${footer2}${reviewSuffix}\n`);
-    // Phase 5: at a real terminal (both ends — command substitution and pipes must
-    // never see a prompt), emit's success hands off to the gate-aware session in the
-    // SAME process. Everything below this line is stderr; stdout is already frozen
-    // at the path line above. Not a TTY (the overwhelmingly common agent-caller
-    // case): fall through unchanged, exiting 0 exactly as before Phase 5.
-    if (isInteractive()) {
-      const reviewLabel = residue.length > 0 ? `${residue.length} items + gate` : "gate";
-      process.stderr.write(`review: ${tmpPath} — ${reviewLabel}\n`);
-      process.stderr.write(`apply later with: distill-text apply ${tmpPath}\n`);
-      // Ctrl-C loses nothing (the intermediary is already on disk) — exit 0 rather
-      // than the default SIGINT death, matching decline/EOF's exit code.
-      process.once("SIGINT", () => process.exit(0));
-      process.exit(await runTtySession(tmpPath, destPath, resolved));
-    }
+    // Phase 3/5 success: hand the canonical projection to the interactive review intermediary,
+    // atomically written beside `dest`. narrowed above: stdin without --out already exited.
+    const destPath = dest as string;
+    await emitReviewIntermediary(destPath, out, residue, footer2, resolved);
   } catch (e) {
-    // A non-transient throw is a real bug — surface it (a stage catch has already
-    // logged it on its way up; anything thrown outside a stage prints its own stack
-    // on propagation) instead of shipping the original as a silent passthrough.
-    // a truncation in a NO-CATCH core stage (extractGraph, gradeBlocks) is not a
-    // transient flake and not a code bug: it skips THIS note with a clear actionable
-    // footer (raise the stage's cap), never a raw stack crash or a "transient" label.
-    // exit 3: valid but unmodified original.
-    if (e instanceof TruncationError) {
-      emit(input, `— distill skipped: output TRUNCATED — ${e.message}`);
-      process.exit(3);
-    }
-    if (!isTransient(e)) throw e;
-    // transient failsafe: temp file holds the original (passthrough); path still printed
-    emit(input, `— distill skipped (error): ${String(e).slice(0, 160)}`);
-    process.exit(3);
+    handleCompressError(e, input, emit);
   }
 }
