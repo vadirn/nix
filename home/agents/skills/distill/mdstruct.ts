@@ -7,6 +7,15 @@
 // dropped), so a silent fallback would reintroduce the very bugs this fixes.
 import { execFileSync } from "node:child_process";
 
+// MDSTRUCT_BIN overrides the bare-name PATH resolution so tests can point at a freshly-built
+// binary (with newer flags); production leaves it unset and resolves `mdstruct` on PATH.
+// Read once at module load — env is fixed for the process lifetime, so both call sites
+// (parseDoc, checkRegion) share this instead of re-reading process.env per call.
+const MDSTRUCT_BIN = process.env.MDSTRUCT_BIN ?? "mdstruct";
+// Both spawns can return large NDJSON payloads (a big note's full region/diagnostic set);
+// shared so the two child_process limits never drift apart.
+const MDSTRUCT_MAX_BUFFER = 1 << 28;
+
 // A `[startByte, endByte)` pair into the source buffer. Slices run on Buffer bytes, never JS
 // UTF-16 string indices — Cyrillic round-trips byte-exact only on a Buffer.
 export type Span = [number, number];
@@ -110,15 +119,13 @@ export function parseDoc(text: string): ParsedDoc {
   if (hit) return hit;
   const buf = Buffer.from(text, "utf8");
   const args = ["-"];
-  // MDSTRUCT_BIN overrides the bare-name PATH resolution so tests can point at a freshly-built
-  // binary (with newer flags); production leaves it unset and resolves `mdstruct` on PATH.
-  const bin = process.env.MDSTRUCT_BIN ?? "mdstruct";
+  const bin = MDSTRUCT_BIN;
   let stdout: string;
   try {
     stdout = execFileSync(bin, args, {
       input: text,
       encoding: "utf8",
-      maxBuffer: 1 << 28,
+      maxBuffer: MDSTRUCT_MAX_BUFFER,
     });
   } catch (e) {
     throw new Error(
@@ -178,14 +185,14 @@ export interface RegionDiagnostic {
 // records are recovered from the thrown error rather than lost. A spawn failure (missing binary)
 // throws `mdstruct unavailable`, matching parseDoc's fail-loud contract.
 export function checkRegion(text: string, label: string): RegionDiagnostic[] {
-  const bin = process.env.MDSTRUCT_BIN ?? "mdstruct";
+  const bin = MDSTRUCT_BIN;
   const args = ["check", "--region", label, "--format", "ndjson", "-"];
   let stdout: string;
   try {
     stdout = execFileSync(bin, args, {
       input: text,
       encoding: "utf8",
-      maxBuffer: 1 << 28,
+      maxBuffer: MDSTRUCT_MAX_BUFFER,
       // The `check` verb writes its `N/N files passed` summary (and any warn lines) to stderr;
       // interact only wants the ndjson diagnostics on stdout, so drop the child's stderr rather
       // than let it inherit onto the pipeline's stderr.
