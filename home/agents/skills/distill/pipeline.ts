@@ -1028,15 +1028,17 @@ async function distill(
   const h1 = blocks.find((b) => /^#\s/.test(b.text))?.text.split("\n")[0] ?? "";
   const effectiveSelfSlug = selfSlug || slugSegment(h1.replace(/^#+\s*/, ""));
 
-  // The default-compress path (not routed, not --glossary, not a reference) is now the canonical
-  // graph-native pipeline: extract native typed units → locate (span hard-gate) → project. The
-  // three legacy paths still run the settle chain and the legacy `assembleBody` formatter (migrated
-  // onto projectMarkdown in later steps). The two branches diverge from extract through assemble,
-  // then rejoin at the shared tail below (expand guard, prose-list + edge/payload backstops,
-  // footer). The deterministic link inventory (every vault edge — [[wikilink]] or scheme-less
-  // [text](path) — UNION every external [text](url)) is fed to the extractor as a MUST-COVER
-  // checklist on both branches.
-  const canonicalPath = !routed && !opts.glossaryOnly && !opts.isReference;
+  // The default-compress path AND --glossary (not routed, not a reference) are now the canonical
+  // graph-native pipeline: extract native typed units → locate (span hard-gate) → project.
+  // --glossary is the same projection with the synthesized `## Abstract` head omitted (§6.1);
+  // everything else — the concept/judgement/inference/procedure/payload sections + `## Relations` —
+  // renders identically. The two remaining legacy paths (routed head, --reference) still run the
+  // settle chain and the legacy `assembleBody` formatter (migrated onto projectMarkdown in later
+  // steps). The two branches diverge from extract through assemble, then rejoin at the shared tail
+  // below (expand guard, prose-list + edge/payload backstops, footer). The deterministic link
+  // inventory (every vault edge — [[wikilink]] or scheme-less [text](path) — UNION every external
+  // [text](url)) is fed to the extractor as a MUST-COVER checklist on both branches.
+  const canonicalPath = !routed && !opts.isReference;
   const linkInventory: LinkInventory = {
     wikilinks: harvestVaultEdges(text),
     external: harvestExternalLinks(text),
@@ -1103,8 +1105,11 @@ async function distill(
     // 3. locate: pre-graph → span-anchored graph. A bad quote HARD-ABORTS here (spec §2), BEFORE
     // any projection — the earliest possible surfacing, promoted ahead of the wasted settle work.
     const result = locateGraph(pre, opts.path ?? "", text, payloadBlocks);
-    // 4. project the seven-section canonical markdown (carries its own frontmatter).
-    out = projectMarkdown(result);
+    // 4. project the seven-section canonical markdown (carries its own frontmatter). --glossary
+    // means "the structured extract, no synthesized prose head" — the same projection with the
+    // `## Abstract` block dropped (§6.1). `Projection.abstract` is already optional, so omitting it
+    // suppresses the one unanchored block; every other section renders unchanged.
+    out = projectMarkdown(opts.glossaryOnly ? { ...result, abstract: undefined } : result);
     // 5. demoted fidelity backstop over the projection (residue-only, no recovery; blueprint §4.2).
     if (!opts.noGate) {
       opts.progress?.("gate…");
@@ -1197,7 +1202,7 @@ async function distill(
 
     out = assembleBody(
       h1,
-      opts.glossaryOnly ? tie : prose,
+      prose,
       workflowSteps,
       orderedEntries,
       defByTerm,
@@ -1283,7 +1288,7 @@ async function distill(
     workflowByOwner = groupStepsByOwner(orderedSteps, workflowSteps, owned);
     exposedOut = assembleBody(
       h1,
-      opts.glossaryOnly ? tie : prose,
+      prose,
       [],
       orderedEntries,
       defByTerm,
@@ -1433,7 +1438,7 @@ Usage:
   distill-text prose [options] [glossary.md]     render prose FROM an already-distilled glossary
 
 Options:
-  --glossary            emit just the glossary (tie + definitions), no prose
+  --glossary            emit the structured extract with the ## Abstract head omitted
   --lang <en|ru|auto>    language rubric (default: auto-detect)
   --max-retries <n>      cap stage-5 gate recovery retries (default: 2)
   --tau <0..1>           payload-density routing threshold (default: ${DEFAULT_TAU})
