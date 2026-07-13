@@ -36,6 +36,7 @@
 //   never comes from the file.
 
 import { checkRegion, parseDoc, sliceBytes } from "./mdstruct.ts";
+import type { MdRegion, RegionDiagnostic } from "./mdstruct.ts";
 
 // ---- kinds and attribute set ----
 
@@ -197,6 +198,71 @@ type Frame = {
   line: number;
   hasError: boolean;
 };
+
+/// Nesting from geometry: an interact region whose span is properly contained in another's.
+/// Current-parity — neither the outer nor the inner emits a block; one nested-block error per
+/// contained region names the containing block's id at the inner anchor's opening line. Pure
+/// over the sorted region list: returns the set of every region index touched by a containment
+/// (both members of each pair, so the dispatch loop can skip them) alongside the errors the
+/// caller appends, mutating nothing it was handed. `peekId` reads the outer anchor's id without
+/// a real parseAnchor() call, which would misfile the outer as its own frame.
+export function detectNestedRegions(regions: MdRegion[]): {
+  nested: Set<number>;
+  errors: InteractError[];
+} {
+  const nested = new Set<number>();
+  const errors: InteractError[] = [];
+  for (let n = 0; n < regions.length; n++) {
+    for (let o = 0; o < regions.length; o++) {
+      if (o === n) continue;
+      const outer = regions[o]!;
+      const inner = regions[n]!;
+      const contains =
+        outer.span[0] <= inner.span[0] &&
+        inner.span[1] <= outer.span[1] &&
+        !(outer.span[0] === inner.span[0] && outer.span[1] === inner.span[1]);
+      if (contains) {
+        nested.add(n);
+        nested.add(o);
+        const outerId = peekId(outer.info);
+        errors.push({
+          code: "nested-block",
+          blockId: outerId,
+          line: inner.startLine,
+          message: "an interact block cannot open inside another open block",
+        });
+      }
+    }
+  }
+  return { nested, errors };
+}
+
+/// The classification of one dangling (unpaired) anchor the single engine reports, decoupled
+/// from the impure parseAnchor step that resolves an open. An `unpaired-close` carries its ready
+/// unopened-close error; an `unpaired-open` carries the anchor's post-`interact:` info bytes
+/// (undefined when the comment does not even match OPEN_RE) and line, for the caller to hand to
+/// parseAnchor — a well-formed open re-parses to unclosed-block, a malformed one to bad-anchor
+/// with no unclosed error (parity with the retired scan, where a bad open opened nothing).
+export type DanglingClass =
+  | { kind: "unopened-close"; error: InteractError }
+  | { kind: "unpaired-open"; info: string | undefined; line: number };
+
+/// Pure over (diagnostics, source buffer): slices each open anchor's bytes and reads its info
+/// string, leaving the stateful parseAnchor call (which emits content errors and consults the
+/// id set) to the caller so this stays free of the parser's accumulators.
+export function classifyDangling(dangling: RegionDiagnostic[], buf: Buffer): DanglingClass[] {
+  return dangling.map((d) => {
+    if (d.type === "unpaired-close") {
+      return {
+        kind: "unopened-close",
+        error: { code: "unopened-close", line: d.line, message: "close without an open block" },
+      };
+    }
+    const anchorText = sliceBytes(buf, d.span);
+    const m = anchorText.match(OPEN_RE);
+    return { kind: "unpaired-open", info: m ? m[1]! : undefined, line: d.line };
+  });
+}
 
 /// Parse a whole document. Region boundaries and fence-awareness come from the single
 /// Rust engine — parseDoc emits every comment-anchor pair (fence/inline-code aware) and
@@ -493,32 +559,10 @@ export function parseInteract(text: string): {
     .slice()
     .sort((a, b) => a.span[0] - b.span[0]);
 
-  // Nesting from geometry: an interact region whose span is properly contained in another's.
-  // Current-parity: neither the outer nor the inner emits a block; one nested-block error per
-  // contained region names the containing block's id at the inner anchor's opening line.
-  const nested = new Set<number>();
-  for (let n = 0; n < regions.length; n++) {
-    for (let o = 0; o < regions.length; o++) {
-      if (o === n) continue;
-      const outer = regions[o]!;
-      const inner = regions[n]!;
-      const contains =
-        outer.span[0] <= inner.span[0] &&
-        inner.span[1] <= outer.span[1] &&
-        !(outer.span[0] === inner.span[0] && outer.span[1] === inner.span[1]);
-      if (contains) {
-        nested.add(n);
-        nested.add(o);
-        const outerId = peekId(outer.info);
-        errors.push({
-          code: "nested-block",
-          blockId: outerId,
-          line: inner.startLine,
-          message: "an interact block cannot open inside another open block",
-        });
-      }
-    }
-  }
+  // Nested regions (spans properly contained in another's) are detected as pure geometry; the
+  // helper returns both the skip-set the dispatch loop reads and the nested-block errors to append.
+  const { nested, errors: nestedErrors } = detectNestedRegions(regions);
+  errors.push(...nestedErrors);
 
   for (let idx = 0; idx < regions.length; idx++) {
     if (nested.has(idx)) continue;
@@ -537,14 +581,12 @@ export function parseInteract(text: string): {
   // pre-migration scan where such an anchor never opened a block); a well-formed open that
   // simply never closed is unclosed-block, after its content errors.
   const dangling = checkRegion(text, "interact");
-  for (const d of dangling) {
-    if (d.type === "unpaired-close") {
-      errors.push({ code: "unopened-close", line: d.line, message: "close without an open block" });
+  for (const c of classifyDangling(dangling, buf)) {
+    if (c.kind === "unopened-close") {
+      errors.push(c.error);
       continue;
     }
-    const anchorText = sliceBytes(buf, d.span);
-    const m = anchorText.match(OPEN_RE);
-    const frame = parseAnchor(m ? m[1]! : undefined, d.line);
+    const frame = parseAnchor(c.info, c.line);
     if (frame !== null) {
       errors.push({
         code: "unclosed-block",

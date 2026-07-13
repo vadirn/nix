@@ -17,12 +17,15 @@ import { expect, test } from "bun:test";
 import {
   type Block,
   type BlockSpec,
+  classifyDangling,
+  detectNestedRegions,
   InteractFormatError,
   parseInteract,
   renderBlock,
   resolveInteract,
   stripInteract,
 } from "./interact.ts";
+import type { MdRegion, RegionDiagnostic } from "./mdstruct.ts";
 
 const FIX = (name: string): string =>
   readFileSync(resolve(import.meta.dir, "fixtures", name), "utf8");
@@ -364,6 +367,83 @@ test("region divergence: a nested block reports nested-block alone and skips BOT
   expect(errors[0]!.blockId).toBe("a");
   expect(errors[0]!.line).toBe(5);
   expect(blocks).toEqual([]);
+});
+
+// ---- lifted pure helpers (unit-level, off the full-parse path) ----
+// detectNestedRegions and classifyDangling were carved out of parseInteract so the
+// nested-region geometry and the dangling-anchor classification are testable without
+// spinning the whole document parse; these exercise their branches directly.
+
+const region = (span: [number, number], startLine: number, info?: string): MdRegion => ({
+  type: "region",
+  label: "interact",
+  info,
+  span,
+  bodySpan: span,
+  startLine,
+  endLine: startLine,
+});
+
+test("detectNestedRegions: disjoint regions nest nothing and emit no error", () => {
+  const { nested, errors } = detectNestedRegions([
+    region([0, 10], 1, "pick-one id=a"),
+    region([20, 30], 5, "pick-any id=b"),
+  ]);
+  expect([...nested]).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("detectNestedRegions: a properly-contained region marks BOTH indices and names the outer id at the inner line", () => {
+  // regions[0] wraps regions[1]; both indices land in the skip-set, one nested-block error
+  // naming the outer's id at the inner anchor's opening line.
+  const { nested, errors } = detectNestedRegions([
+    region([0, 100], 1, "pick-any id=outer"),
+    region([20, 60], 7, "pick-one id=inner"),
+  ]);
+  expect([...nested].sort()).toEqual([0, 1]);
+  expect(errors).toEqual([
+    {
+      code: "nested-block",
+      blockId: "outer",
+      line: 7,
+      message: "an interact block cannot open inside another open block",
+    },
+  ]);
+});
+
+test("detectNestedRegions: two regions with identical spans are not nesting (the equality guard)", () => {
+  const { nested, errors } = detectNestedRegions([
+    region([0, 40], 1, "pick-one id=a"),
+    region([0, 40], 1, "pick-one id=b"),
+  ]);
+  expect([...nested]).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+const diag = (
+  type: RegionDiagnostic["type"],
+  span: [number, number],
+  line: number,
+): RegionDiagnostic => ({ type, label: "interact", span, line });
+
+test("classifyDangling: an unpaired close carries a ready unopened-close error", () => {
+  const [c] = classifyDangling([diag("unpaired-close", [0, 20], 5)], Buffer.from(""));
+  expect(c).toEqual({
+    kind: "unopened-close",
+    error: { code: "unopened-close", line: 5, message: "close without an open block" },
+  });
+});
+
+test("classifyDangling: an unpaired open with a well-formed anchor yields its post-interact: info bytes", () => {
+  const buf = Buffer.from("<!-- interact: pick-one id=q -->", "utf8");
+  const [c] = classifyDangling([diag("unpaired-open", [0, buf.length], 3)], buf);
+  expect(c).toEqual({ kind: "unpaired-open", info: "pick-one id=q", line: 3 });
+});
+
+test("classifyDangling: an unpaired open whose bytes do not match OPEN_RE reports undefined info (parseAnchor will bad-anchor it)", () => {
+  const buf = Buffer.from("<!-- interact -->", "utf8"); // no colon
+  const [c] = classifyDangling([diag("unpaired-open", [0, buf.length], 2)], buf);
+  expect(c).toEqual({ kind: "unpaired-open", info: undefined, line: 2 });
 });
 
 // ---- item-level errors ----
