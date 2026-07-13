@@ -17,8 +17,9 @@ export type UnitType = "concept" | "judgment" | "inference" | "procedure" | "pay
 
 // Judgment modality, an admission gate on card extraction (spec §3/§6). Applies to judgments
 // only; an unmarked judgment is `assertoric`. `hypothesis` = problematic (not minted as an
-// asserted card), `necessarily` = apodictic. No extractor emits this yet (design Backlog 5);
-// it is on the type now so the prompt can populate it without a shape change.
+// asserted card), `necessarily` = apodictic. `extractGraphPrompt` populates this from the note's
+// own framing (tentative → hypothesis, necessity/must/law → necessarily); `parseExtractGraph`
+// clamps anything the model returns outside those two marked forms to `assertoric`.
 export type Modality = "hypothesis" | "necessarily" | "assertoric";
 
 // Mirrors mdstruct's Rust `Source` (model.rs:74) — the version-binding record. `bytes` and
