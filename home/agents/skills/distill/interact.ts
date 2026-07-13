@@ -141,6 +141,27 @@ const ATTR_KEYS = new Set(["id", "src", "dest"]);
 const ITEM_RE = /^-\s\[(.)\]\s(.*)$/;
 const VERB_RE = /^([a-z][a-z0-9-]*):\s(.*)$/;
 const FENCE_OPEN_RE = /^([ \t]*)(`{3,})[ \t]*$/;
+// Tokenizes an anchor's post-`interact:` info into [kind, attr, attr, ...]: a quoted
+// attribute value (key="val with spaces") is one token, everything else splits on
+// whitespace. Shared by parseAnchor and peekId so the id= grammar has one definition.
+const ANCHOR_TOKEN_RE = /[^\s"=]+="[^"]*"|\S+/g;
+
+// Reads just the id= attribute out of an anchor's info string, without validating the
+// anchor or recording errors — used where we need a block's id for a message but the
+// anchor is being deliberately skipped (e.g. a nested block's outer anchor never gets a
+// real parseAnchor() call, since that would misfile it as its own frame).
+function peekId(info: string | undefined): string | undefined {
+  const tokens = (info ?? "").match(ANCHOR_TOKEN_RE) ?? [];
+  for (const tok of tokens.slice(1)) {
+    const eq = tok.indexOf("=");
+    if (eq === -1) continue;
+    if (tok.slice(0, eq) !== "id") continue;
+    let val = tok.slice(eq + 1);
+    if (val.length >= 2 && val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+    return val;
+  }
+  return undefined;
+}
 
 function splitNote(s: string): { targetRaw: string; note?: string } {
   let inBacktick = false;
@@ -253,7 +274,7 @@ export function parseInteract(text: string): {
   // 1-indexed line. This is the attribute/kind/id grammar unchanged from the pre-migration scan.
   function parseAnchor(info: string | undefined, lineNo: number): Frame | null {
     const rest = info ?? "";
-    const tokens = rest.match(/[^\s"=]+="[^"]*"|\S+/g) ?? [];
+    const tokens = rest.match(ANCHOR_TOKEN_RE) ?? [];
     const kindToken = tokens[0];
     if (tokens.length === 0 || !kindToken || !KIND_TOKEN_RE.test(kindToken)) {
       errors.push({ code: "bad-anchor", line: lineNo, message: "malformed interact anchor" });
@@ -488,8 +509,7 @@ export function parseInteract(text: string): {
       if (contains) {
         nested.add(n);
         nested.add(o);
-        const m = /(?:^|\s)id=("([^"]*)"|\S+)/.exec(outer.info ?? "");
-        const outerId = m ? (m[2] ?? m[1]) : undefined;
+        const outerId = peekId(outer.info);
         errors.push({
           code: "nested-block",
           blockId: outerId,
