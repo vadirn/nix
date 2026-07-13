@@ -2,7 +2,8 @@
 // arg parsing, the temp-file sink, and main(). Sequences the stages from prompts.ts
 // behind the seams the leaf modules stabilize; main() is invoked by the entrypoint.
 import { existsSync, linkSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -71,7 +72,8 @@ const escAttr = (s: string) =>
 import { runProse } from "./prose-mode.ts";
 import { buildIntermediary } from "./triage.ts";
 import { runApply } from "./apply-mode.ts";
-import { parseInteract } from "./interact.ts";
+import { parseInteract, renderBlock } from "./interact.ts";
+import { applyTyping, buildTypingReview } from "./retype.ts";
 import { createInterface } from "node:readline";
 
 // Workflow-gate recovery ladder (stage-5 loop). A flagged step is repaired from
@@ -738,6 +740,19 @@ async function distill(
   }
   const { pre, result, payloadBlocks } = core;
 
+  // 2b. span-typing review (spec §4 step 3; blueprint §11): the one place semantic taste re-enters
+  // the otherwise-deterministic pipeline — the reviewer confirms each unit's type against its
+  // resolved source slice and re-types where wrong, mutating result.units IN PLACE before projection
+  // (projectMarkdown re-buckets purely on unit.type via byType, so setting the field is the whole
+  // operation). TTY-gated exactly like the residue-triage session below: when EITHER stream is
+  // non-TTY (piped, redirected, the test harness, agent callers) the review is skipped and the graph
+  // keeps its extract-assigned types, so the default non-interactive pipeline stays
+  // extract→locate→project and is byte-identical.
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    opts.progress?.("type…");
+    await runTypingReview(result, text);
+  }
+
   // 3. project the seven-section canonical markdown (carries its own frontmatter). --glossary drops
   // the `## Abstract` head (`Projection.abstract` is optional, so omitting it suppresses the one
   // unanchored block); --reference keeps `## Abstract` but suppresses `## Relations` via the
@@ -1311,6 +1326,51 @@ function ask(prompt: string): Promise<string | null> {
 
 const isYes = (answer: string | null): boolean =>
   answer !== null && answer.trim().toLowerCase() === "y";
+
+/// The span-typing review's TTY orchestration (blueprint §11.4): the interactive half of the pure
+/// retype.ts helpers, driven only at a real terminal (the caller in distill() TTY-gates it, so a
+/// non-TTY run never reaches here — the review is skipped and the graph keeps its extract-assigned
+/// types). Writes the per-unit `pick-one` review (buildTypingReview → renderBlock) to a scratch file,
+/// then runs the SAME gate-aware sugar loop as runTtySession: re-read on each iteration, prompt until
+/// the confirm-all gate is checked (the reviewer toggles types + the gate in their editor), then
+/// applyTyping the result — mutating result.units IN PLACE before the caller projects. A non-"y"
+/// answer or EOF declines: the graph is left with its extract-assigned types. `askFn` is the same
+/// injection seam runTtySession uses; production wires the real `ask`. The scratch file is always
+/// removed. Returns true when the reviewer confirmed (types applied), false when they declined.
+export async function runTypingReview(
+  result: Projection,
+  body: string,
+  askFn: (prompt: string) => Promise<string | null> = ask,
+): Promise<boolean> {
+  const blocks = buildTypingReview(result, body);
+  if (blocks.length === 0) return false; // no units → nothing to type
+  const scratch = join(tmpdir(), `distill-typing-${process.pid}-${Date.now()}.md`);
+  writeFileSync(scratch, blocks.map(renderBlock).join(""));
+  try {
+    for (;;) {
+      const text = readFileSync(scratch, "utf8");
+      const { blocks: parsed } = parseInteract(text);
+      const gate = parsed.find((b) => b.kind === "confirm-all");
+      const gateChecked =
+        gate !== undefined &&
+        gate.items.length > 0 &&
+        gate.items.every((it) => it.state === "checked");
+      if (!gateChecked) {
+        const answer = await askFn(
+          `typing review '${scratch}' — set each unit's type, check the gate, then press y [y/N] `,
+        );
+        if (!isYes(answer)) return false;
+        continue; // re-read before applying — the tick is the file's, not the terminal's
+      }
+      applyTyping(result, text);
+      return true;
+    }
+  } finally {
+    try {
+      unlinkSync(scratch);
+    } catch {}
+  }
+}
 
 /// The gate-aware sugar loop (plan §4 transcript): re-reads `tmpPath` from disk on
 /// every iteration (Sync may have landed a cross-device edit between prompts), so
