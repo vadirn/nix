@@ -62,6 +62,15 @@ export const FIDELITY_TOKENS = 16_384;
 // as sanity bounds.
 export const EXTRACT_TOKENS = 96_000;
 
+// The retry backoff delay, shared by both wait points in fw's attempt loop (network-error
+// retry and 429/5xx retry) so the two can never drift apart.
+const BACKOFF_MS = 2000;
+
+// A transient-HTTP status: rate-limited (429) or a server-side gateway fault (5xx). Shared
+// by the retry-eligibility check and the throw-classification below it, so "should we
+// retry" and "is this a TransientError" can never mean two different things.
+const transientStatus = (status: number): boolean => status === 429 || status >= 500;
+
 // ---- Fireworks call with retry ----
 // Retry once, but only on transient failures: a network/timeout throw, or a
 // 429/5xx status. A 401/400/content-policy error fails the same way on retry, so
@@ -93,21 +102,21 @@ async function fw(
       });
     } catch (e) {
       if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 2000));
+        await new Promise((r) => setTimeout(r, BACKOFF_MS));
         continue; // network error / timeout: transient
       }
       throw new TransientError(`FW network/timeout: ${String(e).slice(0, 200)}`, { cause: e });
     }
     const j = await res.json().catch(() => ({}) as Record<string, unknown>); // 5xx gateways return HTML
     if (!res.ok) {
-      if ((res.status === 429 || res.status >= 500) && attempt === 0) {
-        await new Promise((r) => setTimeout(r, 2000));
+      if (transientStatus(res.status) && attempt === 0) {
+        await new Promise((r) => setTimeout(r, BACKOFF_MS));
         continue;
       }
       // 429/5xx stay transient even after the retry is spent (rate-limit / server);
       // a 4xx (bad request, auth, content-policy) is a real fault — fail it hard.
       const msg = `FW ${res.status}: ${JSON.stringify(j).slice(0, 300)}`;
-      throw res.status === 429 || res.status >= 500 ? new TransientError(msg) : new Error(msg);
+      throw transientStatus(res.status) ? new TransientError(msg) : new Error(msg);
     }
     const choice = (
       j as { choices?: { message?: { content?: unknown }; finish_reason?: unknown }[] }
