@@ -4,6 +4,16 @@
 
 // ---- frontmatter: YAML metadata block fenced by --- at the very start ----
 
+// A frontmatter fence line: `---` or `...`, tolerating a trailing CR and trailing
+// whitespace so a trailing-space `--- ` still opens/closes the block. The single
+// predicate both scanners share, so opening-fence tolerance and closing-fence
+// tolerance can never drift — a source note whose closing fence carries trailing
+// whitespace must not parse in one scanner yet read as unclosed in the other.
+function isFenceLine(line: string): boolean {
+  const t = line.replace(/\r$/, "").trim();
+  return t === "---" || t === "...";
+}
+
 /// One structural scan of a document's leading frontmatter block.
 export interface Frontmatter {
   /// The frontmatter block, fences included, trailing newline kept, BOM stripped.
@@ -34,12 +44,10 @@ export interface Frontmatter {
 export function parseFrontmatter(text: string): Frontmatter {
   const stripped = text.replace(/^\uFEFF/, "");
   const lines = stripped.split("\n");
-  // Opening delimiter: the first line, trimmed, must be exactly "---".
-  if (lines[0].replace(/\r$/, "").trim() !== "---")
-    return { front: "", body: stripped, error: null };
+  // Opening delimiter: the first line, trimmed, must be a fence.
+  if (!isFenceLine(lines[0])) return { front: "", body: stripped, error: null };
   for (let i = 1; i < lines.length; i++) {
-    const t = lines[i].replace(/\r$/, "").trim();
-    if (t === "---" || t === "...") {
+    if (isFenceLine(lines[i])) {
       const front = lines.slice(0, i + 1).join("\n") + "\n";
       const body = lines
         .slice(i + 1)
@@ -79,7 +87,7 @@ export function ensureEpistemicStatus(front: string): string {
   const lines = front.split(nl);
   let close = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i] === "---" || lines[i] === "...") {
+    if (isFenceLine(lines[i])) {
       close = i;
       break;
     }
@@ -89,14 +97,22 @@ export function ensureEpistemicStatus(front: string): string {
   return lines.join(nl);
 }
 
+// Read a single-line scalar `key:` value out of frontmatter: match the first such
+// line, trim it, and strip one surrounding quote pair. Returns "" when the key is
+// absent. The shared scan behind parseDescription/parseType, so the two read a key
+// the same way.
+function readFrontKey(front: string, key: string): string {
+  const m = front.match(new RegExp(`^${key}:[ \\t]*(.+)$`, "m"));
+  if (!m) return "";
+  return m[1].trim().replace(/^["']|["']$/g, "");
+}
+
 // Pull an authored single-line `description:` value out of frontmatter. This is
 // the one independent ground-truth anchor — when present it overrides the
 // model's extracted description so the anchor is never paraphrased. A blank or
 // block-scalar (|/>) description is treated as absent (nothing authored to pin).
 export function parseDescription(front: string): string {
-  const m = front.match(/^description:[ \t]*(.+)$/m);
-  if (!m) return "";
-  const v = m[1].trim().replace(/^["']|["']$/g, "");
+  const v = readFrontKey(front, "description");
   if (!v || v === "|" || v === ">") return "";
   return v;
 }
@@ -106,12 +122,7 @@ export function parseDescription(front: string): string {
 // defensive guard: a future reference-distill path must stay link-free (no `##
 // Relations` block in a type:reference body). Returns "" when absent.
 export function parseType(front: string): string {
-  const m = front.match(/^type:[ \t]*(.+)$/m);
-  if (!m) return "";
-  return m[1]
-    .trim()
-    .replace(/^["']|["']$/g, "")
-    .toLowerCase();
+  return readFrontKey(front, "type").toLowerCase();
 }
 
 // A `superseded: true` note is retired content the curator has moved past — distill is
