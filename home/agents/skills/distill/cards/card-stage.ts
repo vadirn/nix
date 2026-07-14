@@ -300,8 +300,8 @@ export function formatSummary(
 // USAGE is the CLI's help text, printed verbatim on `-h`/`--help` and on an arg-parse error.
 export const USAGE = `card-stage — stage extraction candidates from a distilled note as review
 files under a card-staging inbox. Every candidate is staged regardless of its band
-verdict or any recall/judge/draft flag (D22) — nothing here gates or drops; a
-staging file is a review packet, never a committed card (Log 10).
+verdict or any recall/judge/draft flag — nothing here gates or drops; a
+staging file is a review packet, never a committed card.
 
 Usage:
   card-stage <note.md> [options]

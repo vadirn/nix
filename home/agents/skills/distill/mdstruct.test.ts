@@ -1,9 +1,9 @@
 // mdstruct-harvester golden tests — run with `bun test` from this directory (needs the
 // `mdstruct` binary on PATH; the nix host has it at /run/current-system/sw/bin/mdstruct).
 //
-// Backlog 5a migrated the four structural payload harvesters (fences, blockquotes, table
-// rows, image embeds) from hand-rolled line-scanning regex to mdstruct byte-spans. The
-// Backlog-9 residue-parity gate proved the swap is residue-safe over 998 vault files; these
+// The four structural payload harvesters (fences, blockquotes, table rows, image embeds)
+// migrated from hand-rolled line-scanning regex to mdstruct byte-spans. A residue-parity
+// gate proved the swap is residue-safe over 998 vault files; these
 // in-repo goldens pin the SPECIFIC correctness classes that motivated it, one per class, so
 // the fix is guarded without a vault dependency. Each class was a regex bug that produced
 // phantom "dropped payload" residue (a false warning) or missed real payload.
@@ -114,7 +114,7 @@ test("harvestTableRows: a real GFM table keys every row once (header kept, delim
 
 // Byte-fidelity — a fence body carrying multibyte Cyrillic (and a `.png`-terminal line) must key
 // byte-exact. The span is sliced on Buffer BYTES, never JS UTF-16 string indices, or the offsets
-// drift past every multibyte char (the Backlog-1 spike's sharpest failure mode).
+// drift past every multibyte char (the sharpest failure mode of the byte-offset design).
 test("harvestFences: a Cyrillic fence body keys byte-exact (guards the Buffer slice)", () => {
   const keys = harvestFences("```\nПривет мир\nконец.png\n```").map((s) => s.key);
   expect(keys).toEqual(["Привет мир\nконец.png"]);
