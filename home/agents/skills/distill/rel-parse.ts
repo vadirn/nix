@@ -1,14 +1,14 @@
-// rel-parse — the `## Relations` REBUILD parser (W1): read an emitted note's `## Relations`
-// block back into structural edges. The inverse of the projection's `## Relations` emit,
-// so cards/ reads a distilled note's structural channels through one seam (D13). Lives a
-// tier above text.ts (leaf slug/fence helpers) and graph.ts (the shared emit grammar consts);
-// text.ts re-exports `parseRelationsBlock` only as a compat shim for cards/. Lossy-tolerant
-// throughout (D29): a malformed line yields no edge and parsing never throws.
+// rel-parse — the `## Relations` REBUILD parser: read an emitted note's `## Relations`
+// block back into structural edges, the inverse of project.ts's `## Relations` emit. Lives
+// a tier above text.ts (leaf slug/fence helpers) and graph.ts (the shared emit-grammar
+// consts); text.ts re-exports `parseRelationsBlock` only as a compat shim so cards/ keeps
+// reading a distilled note's structural channels through one seam. Lossy-tolerant
+// throughout: a malformed line yields no edge and parsing never throws.
 import { REL_ARROW, REL_DASH, TRAILING_ANCHOR_RE } from "./graph.ts";
 import { fenceScan, type FenceState, slugSegment, stripFences } from "./text.ts";
 
 // One structural edge parsed off a `## Relations` list item. `from` is the entry's
-// own slug (multi-node form) or null (single-atom form omits the from-label, D26).
+// own slug (multi-node form) or null (the single-atom form omits the from-label).
 // `to` keeps the endpoint's EMITTED form verbatim — `[[file-slug]]` stays bracketed,
 // a bare term-slug stays bare — so a caller can re-slug or re-attach it without ambiguity.
 export type ParsedRelationEdge = {
@@ -91,8 +91,8 @@ function splitPredicate(right: string): { endpoint: string; predicate: string | 
 // (project.ts::renderRelation: em-dash U+2014, right-arrow U+2192, both space-flanked,
 // a trailing `  start..end`/`[start..end]` anchor). This is the TRUE inverse of the
 // `## Relations` projection — the form a distilled note carries on disk, which
-// card-stage reads back (D13). Lossy (D29): returns null on anything short of
-// well-formed rather than throwing.
+// card-stage reads back. Lossy: returns null on anything short of well-formed rather
+// than throwing.
 function parseArrowEdge(edgeText: string): ParsedRelationEdge | null {
   const body = edgeText.replace(TRAILING_ANCHOR_RE, "").trim();
   const arrow = body.indexOf(REL_ARROW);
@@ -115,8 +115,8 @@ function parseArrowEdge(edgeText: string): ParsedRelationEdge | null {
 // `<from> — <rel> → <to>  <anchor>` form (parseArrowEdge, the projection inverse) and
 // the legacy/vault two-channel `[<from> ]<rel>:: <to>[ (<predicate>)]` form (mirrors
 // vault-query relations.rs). The arrow form is tried first — it is what distilled notes
-// on disk actually contain. Lossy (D29): returns null on anything short of well-formed
-// rather than throwing — a line matching neither grammar, an empty rel/endpoint, or an
+// on disk actually contain. Lossy: returns null on anything short of well-formed rather
+// than throwing — a line matching neither grammar, an empty rel/endpoint, or an
 // all-parenthetical tail with no endpoint before it.
 function parseEdgeLine(edgeText: string): ParsedRelationEdge | null {
   const arrow = parseArrowEdge(edgeText);

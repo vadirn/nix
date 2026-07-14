@@ -2,11 +2,11 @@
 // deterministic loss surface that makes a dropped span LOUD. Three cooperating lanes:
 // the vault-edge harvesters ([[wikilink]] / [text](path)), the seven structural-payload
 // harvesters (fenced code, blockquotes, table rows, images, math, citations, statistics)
-// plus the shared structural detection they and the router read (collectStructural /
-// structuralSpans, D2 "one detection, N uses"), and the prose-list-item inventory
-// (harvestProseListItems, the prose-judge answer key). Pure string/data, no I/O, no LLM.
-// Imports only leaf utilities from text.ts (slug/url/fence helpers) and mdstruct.ts, so it
-// stays a tier above text.ts and never cycles back into it.
+// plus the shared structural detection (collectStructural / structuralSpans) that this
+// file's harvesters and route.ts's density router both read, and the prose-list-item
+// inventory (harvestProseListItems, the prose-judge answer key). Pure string/data, no
+// I/O, no LLM. Imports only leaf utilities from text.ts (slug/url/fence helpers) and
+// mdstruct.ts, so it stays a tier above text.ts and never cycles back into it.
 import {
   parseDoc,
   sliceBytes,
@@ -66,8 +66,8 @@ export function harvestWikilinks(text: string): VaultEdge[] {
   return out;
 }
 
-// Harvest every EXTERNAL [text](url) Markdown link — the citation/source lane (D38),
-// distinct from vault edges. Keeps ONLY links whose url is external (isExternalUrl):
+// Harvest every EXTERNAL [text](url) Markdown link — the citation/source lane, distinct
+// from vault edges. Keeps ONLY links whose url is external (isExternalUrl):
 // a scheme-less `[x](foo.md)` is a vault edge and moves to harvestInternalLinks. Excludes
 // images (![alt](url), rejected by the `!` lookbehind) and wikilinks (the `]` lookbehind
 // rejects the `](...)` trailing a `[[..]]` close, and a `[[x]]` has no `(url)` anyway).
@@ -85,7 +85,7 @@ export function harvestExternalLinks(
 }
 
 // Harvest every INTERNAL [text](path) Markdown link — a scheme-less relative path is a
-// cross-note edge (D38), the markdown-syntax sibling of a [[wikilink]]. Mirrors
+// cross-note edge, the markdown-syntax sibling of a [[wikilink]]. Mirrors
 // harvestWikilinks' shape so harvestVaultEdges can concat the two lanes. Shares
 // MD_LINK_RE with harvestExternalLinks (so `[^)\s]+` forbids a literal space — a path with
 // spaces must be %20-encoded, which the decode step below restores) but keeps only the
@@ -138,7 +138,7 @@ const oneLine = (s: string, n = 80): string => {
   return t.length > n ? t.slice(0, n - 1) + "…" : t;
 };
 
-// ---- ONE structural detection, N uses (D2) ----
+// ---- one structural detection, shared by every consumer below ----
 // Byte length of a string in UTF-8 (spans are byte offsets into the source Buffer, never JS
 // UTF-16 indices — the Cyrillic invariant).
 const byteLen = (s: string): number => Buffer.byteLength(s, "utf8");
@@ -156,12 +156,15 @@ function lineByteOffsets(text: string): number[] {
   return off;
 }
 
-// The categorized structural payload of a parsed doc, harvested ONCE. structuralSpans composes
-// the flat byte-span union from it (the router mask); each of the four structural harvesters
-// reads the category it owns and applies its own key-normalization (the residue inventory).
-// One detection, N uses (D2): the router and the inventory can never disagree on what is
-// structural. Blockquotes are top-level only (nested `> >` merged, matching the regex `>`-run);
-// every other lane descends fully (a fence/table inside a quote or list still counts).
+// The categorized structural payload of a parsed doc, harvested ONCE by collectStructural.
+// structuralSpans composes the flat byte-span union from it for route.ts's density router
+// (payloadMask blanks these bytes as the router's structural signal); each of the four
+// structural harvesters below reads the category it owns and applies its own
+// key-normalization for the residue inventory. Detecting structure exactly once and sharing
+// the result this way means the router and the residue inventory can never disagree about
+// what counts as structural. Blockquotes are top-level only (nested `> >` runs merge,
+// matching the regex `>`-run this replaced); every other lane descends fully, so a fence or
+// table nested inside a quote or list still counts.
 interface StructuralParts {
   fences: MdNode[]; // fenced codeBlocks (bodySpan = inner body)
   blockquotes: MdNode[]; // top-level blockQuote nodes
@@ -178,6 +181,10 @@ interface StructuralParts {
 // not once per consumer. Nothing mutates StructuralParts, so sharing the object is safe.
 const structuralCache = new WeakMap<ParsedDoc, StructuralParts>();
 
+// collectStructural walks a parsed document once and buckets its structural nodes (fences,
+// tables, table rows, blockquotes, images, pseudo-table rows) into a StructuralParts record,
+// memoized per ParsedDoc via structuralCache so repeated calls for the same document never
+// re-walk it.
 function collectStructural(parsed: ParsedDoc): StructuralParts {
   const cached = structuralCache.get(parsed);
   if (cached) return cached;
@@ -282,8 +289,10 @@ export function harvestFences(text: string): PayloadSpan[] {
 // non-English source citation, the tool may not reword. key = inner text, whitespace
 // collapsed, lowercased; a quote re-authored into bare prose (no `>`) is not covered → a
 // loud, correct residue. A retained blockquote keeps its `>`, so it covers its source twin.
-// A `>`-prefixed blockquote line, capturing its inner text. Shared by harvestBlockquotes
-// (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
+// A `>`-prefixed blockquote line, capturing its inner text after the marker. Used by
+// harvestBlockquotes to recover a quote's inner prose from the mdstruct blockQuote span
+// collectStructural already found — the span itself, not this regex, is what route.ts's
+// payloadMask blanks for the router signal.
 export const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
 
 // mdstruct `blockQuote` nodes, no-descend (the regex merged a `>`/`>>` run into ONE key, so
@@ -325,8 +334,10 @@ function tableCells(maskedLine: string): string[] {
 }
 
 // A fence- and inline-span-masked line is a GFM table DATA row: it carries a pipe, splits
-// into ≥2 non-empty cells, and is not the `:?-+:?` delimiter row. One detection, two uses
-// (D2): harvestTableRows inventories the payload, payloadMask blanks it for the router signal.
+// into ≥2 non-empty cells, and is not the `:?-+:?` delimiter row. One detection feeding two
+// consumers: collectStructural calls this to find pseudo-table rows for route.ts's density
+// router (via structuralSpans), and harvestTableRows calls it again to inventory the same
+// rows' payload for the residue gate.
 export function isTableDataRow(maskedLine: string): boolean {
   if (!maskedLine.includes("|")) return false;
   const cells = tableCells(maskedLine);
@@ -406,12 +417,15 @@ export function harvestImages(text: string): PayloadSpan[] {
 const MATH_OP =
   /[=<>+\-*/^_{}\\]|\\(?:le|ge|leq|geq|neq|cdot|times|frac|sum|prod|int|sqrt|approx|propto|to)\b/;
 // Display-math spans (`$$…$$`, `\[…\]`, `\(…\)`), inner captured, multiline. Shared by
-// harvestMath (payload inventory) and payloadMask (router signal) — one detection, two uses (D2).
+// harvestMath (payload inventory here) and route.ts's payloadMask (router signal) — the
+// same pattern list drives both, so they can never disagree on what counts as display math.
 export const DISPLAY_MATH_PATTERNS = [
   /\$\$([\s\S]+?)\$\$/g,
   /\\\[([\s\S]+?)\\\]/g,
   /\\\(([\s\S]+?)\\\)/g,
 ];
+// Math/formulas harvester: see the comment above MATH_OP for the inline-vs-display admission
+// rule and the key format.
 export function harvestMath(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const src = stripFences(text);
@@ -470,6 +484,9 @@ function scrubForNumbers(text: string): string {
     .replace(/\]\([^)\s]+\)/g, "]()") // markdown link/image targets
     .replace(MASK_RE, " "); // wikilinks/embeds/inline-code
 }
+// Substantive numeric statistics harvester: see the comment above NUM_RE for the substance
+// gate and bare-year exclusion; scrubForNumbers (above) removes non-statistic digit sources
+// first.
 export function harvestNumbers(text: string): PayloadSpan[] {
   const out: PayloadSpan[] = [];
   const clean = scrubForNumbers(text);
@@ -490,7 +507,7 @@ export function harvestNumbers(text: string): PayloadSpan[] {
   return out;
 }
 
-// ---- prose-list-item inventory (the prose-judge tier, Backlog 40 / D46) ----
+// ---- prose-list-item inventory (the prose-judge tier) ----
 // The payload spine above catches LITERAL/STRUCTURAL loss but is blind to a dropped pure-
 // prose list-item — a `Признаки нарушения` bullet, a `Шаблоны` pattern, an F1–F7 enumerated
 // claim — and so are the fidelity/workflow gates (they only judge the defs and steps the
@@ -543,6 +560,10 @@ const tooThinToClaim = (norm: string): boolean => norm.length < 12;
 const isExtractorClaimed = (norm: string, claimNorm: string[]): boolean =>
   claimNorm.some((c) => c.includes(norm));
 
+// harvestProseListItems enumerates the must-cover prose list-item inventory for `text`
+// (explicit list-items under a depth≥2 heading, minus the four exclusions above), excluding
+// any item already covered by `claimed` — the extractor's own claimed statements, matched by
+// containment after normalizeForContainment.
 export function harvestProseListItems(text: string, claimed: string[]): ProseUnit[] {
   const claimNorm = claimed.map(normalizeForContainment).filter((c) => c.length > 0);
   const lines = text.split("\n");

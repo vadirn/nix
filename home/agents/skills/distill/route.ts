@@ -1,20 +1,26 @@
-// route — the per-section density router (D12/D2; the --dry-run + Backlog 10 spine).
-// Splits a note into heading-delimited sections and routes each on its own payload
-// density: the SAME structural-payload detection that feeds the residue gate and the
-// protected-span set (harvest.ts::structuralSpans) is reused HERE (D2 "one harvest,
-// three uses") to MASK payload and measure the prose word-share that remains. High
-// payload-share → preserve (structural compaction); low → re-author (compact prose).
-// Deterministic and free — no LLM. Sits a tier above harvest.ts + text.ts and never
-// cycles back into them (text.ts re-exports `sections` only as a compat shim for cards/).
+// route — the per-section density router: splits a note into heading-delimited sections
+// and routes EACH ONE independently on its own payload density, never on the note as a
+// whole. Reuses the SAME structural-payload detection that feeds the residue gate and the
+// protected-span set elsewhere (harvest.ts::structuralSpans) to MASK payload here too and
+// measure the prose word-share that remains, so the router and the residue gate can never
+// disagree about what counts as structural. High payload-share → preserve (structural
+// compaction); low → re-author (compact prose). Deterministic and free — no LLM. Sits a
+// tier above harvest.ts + text.ts and never cycles back into them (text.ts re-exports
+// `sections` only as a compat shim for cards/).
 import { parseDoc, sliceBytes, walkHeadings, type Heading } from "./mdstruct.ts";
 import { DISPLAY_MATH_PATTERNS, structuralSpans } from "./harvest.ts";
 import { wordCount } from "./text.ts";
 
+// One heading-delimited section of a note: `heading` its title text (empty for the intro
+// section before any heading), `depth` its ATX/setext level (0 for the intro), `text` its
+// own heading line plus body up to the next heading.
 export type Section = { heading: string; depth: number; text: string };
+// A section's routing verdict: "preserve" holds it structurally verbatim, "re-author"
+// compacts it into prose.
 export type Route = "re-author" | "preserve";
 
-// Starting threshold only — the real value is calibrated against 00 inbox/ via --dry-run
-// (Backlog 7/9). A section whose payload word-share meets τ routes to preserve.
+// Starting threshold only — the real value is calibrated against 00 inbox/ via --dry-run.
+// A section whose payload word-share meets τ routes to preserve.
 export const DEFAULT_TAU = 0.5;
 
 // Flatten the mdstruct headings tree to a flat list in tree order (parent before children),
@@ -56,9 +62,9 @@ export function sections(text: string): Section[] {
 
 // Blank the structural payload spans (structuralSpans: fenced code, tables, blockquotes,
 // images, asset embeds) — every non-newline byte of a span → space, so the masked copy keeps
-// its line count and aligns with the source. Then the display-math lane blanks in place. ONE
-// detection with the residue gate (D2): the router reads exactly what the harvesters inventory.
-// STRUCTURAL-ONLY — no inline-code output lane: MASK_RE is applied only inside collectStructural's
+// its line count and aligns with the source. Then the display-math lane blanks in place. One
+// detection shared with the residue gate: the router reads exactly what the harvesters
+// inventory. STRUCTURAL-ONLY — no inline-code output lane: MASK_RE is applied only inside collectStructural's
 // pseudo-table detection probe, never to the returned mask (as the old per-line version applied
 // MASK_RE only to its rowProbe copy). Display math stays regex; the lane set is unchanged.
 export function payloadMask(text: string): string {
@@ -91,7 +97,7 @@ export function routeSection(text: string, tau: number = DEFAULT_TAU): Route {
 // row — pure data, no I/O.
 export type SectionRoute = { heading: string; depth: number; density: number; route: Route };
 
-// Segment a note and route every section on its own density (D12 per-section grain).
+// Segment a note and route every section on its own density.
 export function routeNote(text: string, tau: number = DEFAULT_TAU): SectionRoute[] {
   return sections(text).map((s) => {
     const density = payloadDensity(s.text);
@@ -117,10 +123,13 @@ export function formatDryRun(path: string, rows: SectionRoute[]): string {
   return [head, ...body].join("\n");
 }
 
-// ---- per-section build partition (D12/D16; Backlog 10) ----
+// ---- per-section build partition ----
 // One routed build unit: a top-level section (its heading line + body) with the route
 // the build acts on — re-author (folds into the one compact head) or preserve (held by
-// compactSection). Carries heading/depth so reassembly can demote a structural-name clash.
+// compactSection). Carries heading/depth so the build's reassembly step (distill-core.ts)
+// can demote a preserved section whose heading collides with a projection channel name
+// (e.g. a source section literally titled `## Glossary`) to a deeper heading, keeping it
+// from being misread as generated output.
 export type RoutedSection = { heading: string; depth: number; text: string; route: Route };
 
 // Partition a note for the per-section build: lift the leading H1 as the note title
@@ -159,7 +168,7 @@ export function partition(
 }
 
 // Structurally compact a preserve (payload-dense) unit. v1 is identity passthrough: the
-// payload — code, tables, exact numbers — is held byte-verbatim (D16 forbids paraphrase).
+// payload — code, tables, exact numbers — is held byte-verbatim, never paraphrased.
 // Lossy row/boilerplate dropping is deferred to v2, which must surface each drop out-of-band
 // (payloadResidue marks a key covered if it survives anywhere, so a key-collision delete
 // would be silent — the unsafe path this v1 declines to take).

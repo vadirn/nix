@@ -8,11 +8,11 @@
 // lived here moved out to cohesive modules a tier above: the payload/link/prose-list harvest
 // spine (harvest.ts), the per-section density router (route.ts), and the `## Relations` REBUILD
 // parser (rel-parse.ts). Two of their symbols are re-exported at the foot of this file as
-// compat shims so cards/ (which reads them via ./text.ts, D13) keeps compiling unchanged.
+// compat shims so cards/ (which reads them via ./text.ts) keeps compiling unchanged.
 import { normalizeTypography } from "./writing/typography.ts";
 
 // Relations registry — TS-native copy of the open relation vocabulary (structural
-// channel only, D32). Mirror of vault-query/src/commands/lint/rel-registry.json, the
+// channel only). Mirror of vault-query/src/commands/lint/rel-registry.json, the
 // test-only canonical ground truth; parity is pinned by distill.test.ts (which reads
 // that JSON and asserts equality with this const). Read at runtime from here, never
 // from the JSON, so emit stays file-I/O-free. Three tokens the extractor already emits
@@ -20,7 +20,7 @@ import { normalizeTypography } from "./writing/typography.ts";
 // (depends-on / part-of / instance-of / refines). supersedes and contradicts are
 // excluded by channel (frontmatter- and merge-gated respectively).
 //
-// OPEN registry (spec §3): a known/suggested vocabulary, NOT an enforced closed set — a
+// OPEN registry: a known/suggested vocabulary, NOT an enforced closed set — a
 // closed `type::` enum could not hold the Chesterton's Fence deontic relation. locateGraph
 // and projectMarkdown accept any `rel` token; only cards/cards.ts reads this list, to flag
 // an off-registry rel for human review (`offRegistry`), never to drop or reject it.
@@ -34,8 +34,10 @@ export const REL_REGISTRY: readonly string[] = [
   "refines",
 ];
 
+// One segmented chunk of a note: `id` is its stable `B<n>` label (assigned by segment() in
+// document order), `text` its raw source lines rejoined with `\n`.
 export type Block = { id: string; text: string };
-// One normalized STRUCTURAL edge (D29) from the live extractor's relation channel:
+// One normalized STRUCTURAL edge from the live extractor's relation channel:
 // `rel` an open hyphenated token, `to` an endpoint (a bare local term-slug or a
 // [[file-slug]] wikilink), `predicate` an optional one-clause gloss (null when none).
 // The from-label is NOT a field — the caller supplies it (parseExtractGraph owns the
@@ -59,7 +61,7 @@ export type LinkInventory = {
   external: { markup: string; text: string; url: string }[];
 };
 
-// ---- ONE latching fence scanner, six call sites (W1/BUG-1) ----
+// ---- ONE latching fence scanner, six call sites ----
 // Track whether a line-by-line scan sits inside a ``` / ~~~ code fence. `fence` is the OPEN
 // marker char (backtick or tilde) or null outside a fence. A run of 3+ backticks or tildes at
 // line start opens; a run of 3+ of the SAME char closes. An opposite-marker run inside an open
@@ -80,7 +82,9 @@ export function fenceScan(
   return { fence, isMarker: false }; // opposite marker inside a fence: literal content
 }
 
-// ---- segmentation: fence-aware, split on blank lines; code fences stay whole ----
+// Segment text into Blocks split on blank lines, keeping a ``` / ~~~ fenced code region whole
+// (via fenceScan) even across an internal blank line. Blocks are numbered `B1`, `B2`, … in
+// document order.
 export function segment(text: string): Block[] {
   const lines = text.split("\n");
   const out: string[][] = [];
@@ -133,21 +137,26 @@ export function stripFences(text: string): string {
   return out.join("\n");
 }
 
+// Render Blocks back to their `[id] text` display form, one blank line between blocks — the
+// inverse of segment()'s grouping, used to show a segmented note to a human or a prompt.
 export function render(blocks: Block[]): string {
   return blocks.map((b) => `[${b.id}] ${b.text}`).join("\n\n");
 }
 
+// Count whitespace-separated words in a string; an empty or whitespace-only string counts as 0.
 export function wordCount(s: string): number {
   const t = s.trim();
   return t ? t.split(/\s+/).length : 0;
 }
 
+// Render glossary entries as a markdown bullet list, one `- term: def` line per entry.
 export const glossList = (entries: { term: string; def: string }[]): string =>
   entries.map((e) => `- ${e.term}: ${e.def}`).join("\n");
 
-// a block carries a deliberate connection if it contains [[...]] — this also
-// matches ![[...]] embeds, since the embed wraps a wikilink. Detection is
-// deterministic so the protection cannot miss one.
+// hasWikilink reports whether text contains a `[[wikilink]]` — the regex also matches a
+// `![[...]]` embed, since the embed syntax wraps a wikilink. Deterministic (a plain regex
+// test), so a caller relying on it to decide whether a block must be retained verbatim
+// (rather than re-authored) can never miss a wikilink it should have protected.
 const WIKILINK = /\[\[[^\]]+\]\]/;
 export const hasWikilink = (text: string): boolean => WIKILINK.test(text);
 
@@ -196,8 +205,9 @@ export function decodeTarget(raw: string): string {
   }
 }
 
-// a block carries operational tokens that must survive verbatim — code, CLI
-// flags, file paths. Used by the wikilink clamp to choose retain over distill.
+// hasOperational reports whether text carries operational tokens that must survive verbatim —
+// code, CLI flags, file paths. Used by the wikilink clamp to choose retain over distill for
+// a block.
 export const hasOperational = (text: string): boolean =>
   /```|`[^`\n]+`|\s--?[a-z]/i.test(text) || /(^|\s)(\/|~\/|\.\/)\S+/.test(text);
 
@@ -235,7 +245,7 @@ export function slugSegment(s: string): string {
 export const relText = (r: { rel: string; to: string; predicate: string | null }): string =>
   `${r.rel} :: ${r.to}${r.predicate ? ` (${r.predicate})` : ""}`;
 
-// Coerce one extracted relation into a typed edge. LOSSY (D29): keep every
+// Coerce one extracted relation into a typed edge. LOSSY: keep every
 // well-formed edge — drop ONLY when `rel` or `to` is missing. An unknown rel or an
 // unresolved endpoint is a REBUILD lint finding, never a BUILD drop. Relations skip
 // revise(), so typography is normalized here. The rel is lowercased and hyphenated
@@ -258,6 +268,9 @@ export function normalizeRelation(r: unknown): NormalizedEdge | null {
   return { rel, to, predicate: pred || null, ...(quote ? { quote } : {}) };
 }
 
+// Detect whether text is predominantly Russian or English by the Cyrillic share of its
+// letters (ASCII + Cyrillic only): over 30% Cyrillic letters classifies as "ru", else "en";
+// a text with no letters at all defaults to "en".
 export function detectLang(text: string): "en" | "ru" {
   const letters = text.match(/[a-zA-Zа-яА-ЯёЁ]/g) ?? [];
   if (letters.length === 0) return "en";
@@ -265,13 +278,14 @@ export function detectLang(text: string): "en" | "ru" {
   return cyr / letters.length > 0.3 ? "ru" : "en";
 }
 
-// distill generates new natural-language text (abstractive), so every prompt must
-// pin the output language to the note's own — else a Russian note distills to English.
 const langName = (lang: "en" | "ru"): string => (lang === "ru" ? "Russian" : "English");
+// langRule renders the prompt instruction pinning distill's generated natural-language text
+// to the note's own language (English or Russian) — necessary because distill generates new
+// text abstractively, so an unconstrained prompt could distill a Russian note into English.
 export const langRule = (lang: "en" | "ru"): string =>
   `Write every natural-language value (description, thesis, term, def, relations, step, prose) in ${langName(lang)} — match the note's own language. Keep code, paths, identifiers, and [[wikilink]] targets verbatim.`;
 
-// ---- compat shims (D13): cards/ reads a distilled note's structural channels through
+// ---- compat shims: cards/ reads a distilled note's structural channels through
 // ./text.ts. These symbols now live in their cohesive modules a tier above; re-exported
 // here so cards/card-stage.ts (sections) and cards/cards.ts (parseRelationsBlock) keep
 // importing from ./text.ts unchanged. In-scope callers import from the real home instead. ----
