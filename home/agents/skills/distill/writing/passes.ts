@@ -12,6 +12,7 @@ import { normalizeTypography } from "./typography.ts";
 // are the whole rubric; there is no separate reference file to keep in sync.
 export type Pass = { name: string; rules: string };
 
+// PASS_EN is the English rule set, run in this order.
 export const PASS_EN: Pass[] = [
   {
     name: "words",
@@ -31,6 +32,7 @@ export const PASS_EN: Pass[] = [
   },
 ];
 
+// PASS_RU is the Russian equivalent of PASS_EN: the same four passes, in the same order.
 export const PASS_RU: Pass[] = [
   {
     name: "words",
@@ -50,12 +52,12 @@ export const PASS_RU: Pass[] = [
   },
 ];
 
-// render() shows each block to the model as "[id] text"; the model occasionally
-// echoes the marker back inside its returned text. The stripper removes only the
-// ids minted for one call's blocks, so legitimate bracketed spans in the content
-// survive. Trimming happens only when a marker was actually removed (to clean the
-// slack it leaves behind): a marker-free candidate returns byte-identical, so
-// indented blocks — nested list items, 4-space code — keep their leading
+// makeIdMarkerStripper returns a stripper for one call's block ids. render() shows each block
+// to the model as "[id] text", and the model occasionally echoes the marker back inside its
+// returned text; the stripper removes only the ids minted for THIS call's blocks, so
+// legitimate bracketed spans in the content survive. Trimming happens only when a marker was
+// actually removed (to clean the slack it leaves behind): a marker-free candidate returns
+// byte-identical, so indented blocks — nested list items, 4-space code — keep their leading
 // whitespace. Shared by revise() and spellPass().
 export function makeIdMarkerStripper(blocks: { id: string }[]): (text: string) => string {
   const idMarkers = blocks.map((b) => `[${b.id}]`);
@@ -71,7 +73,9 @@ export function makeIdMarkerStripper(blocks: { id: string }[]): (text: string) =
   };
 }
 
-// ---- writing passes (stage 4): reuse cut's four sequential rewrites ----
+// ---- writing passes (stage 4): the four sequential rewrites, applied in order ----
+// revisePrompt builds one pass's copy-editor prompt for `blocks`: apply only `pass.rules`,
+// preserve claims/content/structure, and return JSON keyed by block id.
 function revisePrompt(blocks: Block[], pass: Pass): string {
   return `You are a copy editor. This is the ${pass.name.toUpperCase()} pass. Revise each block below applying only the rules below. Preserve its claims, keep all its content, and match the original's structure exactly (same headings, bullets, and formatting). Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged. Preserve emphasis (**bold**, _italic_). Write straight quotes; keep em dashes (—) as written. Return ONLY JSON {"blocks":[{"id":"B1","text":"revised text"}, ...]} — one entry per block, ids matching.
 
@@ -81,6 +85,10 @@ TEXT:
 ${render(blocks)}`;
 }
 
+// revise runs `passes` over `blocks` in sequence, each pass refining the prior pass's output
+// (see PASS_EN/PASS_RU for the words → sentences → paragraphs → AI-patterns rule sets). A
+// pass that fails (parse/network) keeps the current blocks so prior improvements survive, and
+// the loop continues to the next pass. Returns the final blocks with typography normalized.
 export async function revise(
   blocks: Block[],
   passes: Pass[],
@@ -100,13 +108,10 @@ export async function revise(
   // so the term text stays verbatim and keeps matching its glossary key.
   const { mask, unmask } = createMasker(literals);
 
-  // sequential passes would compound an echoed "[id]" marker; strip only the ids
-  // minted for THIS call (see makeIdMarkerStripper above).
+  // Sequential passes would compound an echoed "[id]" marker; strip only the ids minted for
+  // THIS call (see makeIdMarkerStripper).
   const stripIdMarkers = makeIdMarkerStripper(blocks);
 
-  // sequential passes: each refines the prior pass's output (words → sentences →
-  // paragraphs → AI patterns). A failed pass (parse/network) keeps the current
-  // blocks so prior improvements survive; the loop continues.
   let cur = blocks.map((b) => ({ id: b.id, text: mask(b.text) }));
   for (const [i, pass] of passes.entries()) {
     onPass?.(i + 1, passes.length);
@@ -123,7 +128,6 @@ export async function revise(
       });
     } catch (e) {
       rethrowIfBug(e, "revise");
-      // a transient pass flake keeps the current blocks (see above); continue
     }
   }
   return cur.map((b) => ({ id: b.id, text: unmask(normalizeTypography(b.text)) }));

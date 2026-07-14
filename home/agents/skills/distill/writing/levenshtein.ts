@@ -2,6 +2,11 @@
 // (has the LLM's rewrite of a block drifted too far from the source?) and
 // name-lint's nearest-source-name search. Leaf module: imports nothing.
 
+// levenshtein computes the exact Levenshtein edit distance (insertions, deletions,
+// substitutions) between `a` and `b`, via full dynamic programming in O(len(a) * len(b))
+// time and O(len(b)) space (a single rolling row, no early exit). For a bound-checked
+// variant that exits early once the distance is known to exceed a threshold, see
+// levenshteinBounded.
 export function levenshtein(a: string, b: string): number {
   const m = a.length,
     n = b.length;
@@ -15,13 +20,14 @@ export function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
-// Bounded variant: exact distance when <= bound, else bound+1. Trims the common
-// prefix/suffix, short-circuits on the length delta (a Levenshtein lower bound),
-// and abandons the DP once a whole row exceeds the bound — so spell verify's hot
-// case (a huge block returned nearly unchanged) costs O(len), and a wholesale
-// rewrite exits after ~bound rows instead of filling the full len² table.
-// Residual: a large block with edits scattered at both ends still pays the DP on
-// the untrimmed middle.
+// levenshteinBounded returns the exact Levenshtein distance between `a` and `b` when it is
+// <= bound, else `bound + 1` (a sentinel meaning "exceeds bound", not the true distance). It
+// trims the common prefix/suffix, short-circuits on the length delta (a Levenshtein lower
+// bound), and abandons the DP once a whole row's minimum exceeds the bound — so spell.ts's
+// verify step, whose hot case is a large block returned nearly unchanged, costs O(len)
+// instead of the full O(len²) table, and a wholesale rewrite exits after ~bound rows. A block
+// with edits scattered at both ends of a large diff still pays the DP cost on the untrimmed
+// middle.
 export function levenshteinBounded(a: string, b: string, bound: number): number {
   if (a === b) return 0;
   let s = 0,

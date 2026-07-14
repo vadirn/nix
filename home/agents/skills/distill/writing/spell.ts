@@ -1,4 +1,4 @@
-// writing/spell — the spell/grammar pass (B22): one rewrite on EXTRACT under a
+// writing/spell — the spell/grammar pass: one rewrite on EXTRACT under a
 // change-nothing-else contract, verified deterministically per block. A block whose
 // candidate fails verification ships as its input, so the pass can only lose a
 // correction, never meaning. Consumed only by polish.ts — distill's pipeline does
@@ -10,11 +10,13 @@ import { levenshtein, levenshteinBounded } from "./levenshtein.ts";
 import { makeIdMarkerStripper } from "./passes.ts";
 import { normalizeTypography } from "./typography.ts";
 
-// No langRule() here: that rule is written for abstractive generation and instructs
-// the model to WRITE in the note's language, which on code-switched (mixed RU/EN)
-// notes reads as an order to translate the other language's clauses — observed live,
-// small translations fit inside the 15% diff bound. A proofreader must never translate,
-// so the prompt is language-neutral and takes no lang param.
+// spellPassPrompt builds the proofreader prompt for one spellPass call: fix only spelling,
+// typo, and grammatical-agreement errors, changing nothing else. No langRule() here: that
+// rule is written for abstractive generation and instructs the model to WRITE in the note's
+// language, which on code-switched (mixed RU/EN) notes reads as an order to translate the
+// other language's clauses — observed live, small translations fit inside the 15% diff bound.
+// A proofreader must never translate, so the prompt is language-neutral and takes no lang
+// param.
 export function spellPassPrompt(blocks: Block[]): string {
   return `You are a proofreader. Fix ONLY objective spelling, typo, and grammatical-agreement errors in each block below: misspelled words, wrong case/number/gender/tense agreement, misused homophones, and incorrect compound spelling (e.g. "in stead" vs "instead"). Change NOTHING else: no rephrasing, no reordering, no synonym substitutions, no added or removed words beyond the minimal correction, no punctuation-style changes. Keep every word in the language it is written in; never translate. Keep every line break, heading, list marker, and table cell exactly where it is. Keep code blocks verbatim, and reproduce any ⟦N⟧ placeholder tokens unchanged, exactly as many times as they appear. Preserve emphasis (**bold**, _italic_). If a block has no errors, return its text unchanged. Return ONLY JSON {"blocks":[{"id":"B1","text":"corrected text"}, ...]} — one entry per block, ids matching.
 
@@ -60,6 +62,11 @@ export function verifySpellBlock(input: string, output: string): { ok: boolean; 
   return { ok: true };
 }
 
+// spellPass runs spellPassPrompt once over `blocks`, verifies each returned block with
+// verifySpellBlock, and reverts any block that fails verification to its original text (never
+// meaning-losing, only correction-losing). Returns the resulting blocks, the ids of any
+// reverted blocks, and `failed: true` on a transient/parse error (in which case `blocks` is
+// the unchanged input and `reverted` is empty).
 export async function spellPass(
   blocks: Block[],
   literals: string[] = [],
@@ -67,7 +74,7 @@ export async function spellPass(
   // process-global module mock; production callers omit it for the real fw transport.
   ask: typeof askJson = askJson,
 ): Promise<{ blocks: Block[]; reverted: string[]; failed: boolean }> {
-  // same masking engine as revise(): reference spans (and caller literals) are
+  // Same masking engine as revise() in passes.ts: reference spans (and caller literals) are
   // frozen to ⟦N⟧ tokens the model cannot reword, restored verbatim at the end.
   const { mask, unmask } = createMasker(literals);
   const stripIdMarkers = makeIdMarkerStripper(blocks);

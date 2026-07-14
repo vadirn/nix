@@ -6,7 +6,11 @@
 // helpers, so the core can depend on it without a cycle back to text.ts.
 import { levenshtein } from "./levenshtein.ts";
 
+// NameFinding pairs a name found in the output with the source name it likely corrupted from.
 export type NameFinding = { found: string; wanted: string };
+// NameLintResult is the outcome of one name-lint pass: `corrupted` lists names probably
+// mangled from a source name (see NameFinding), `invented` lists names with no source
+// counterpart at all (nameLintSelfConsistency always leaves this empty).
 export type NameLintResult = { corrupted: NameFinding[]; invented: string[] };
 
 // Corruption tolerance: how many edits still read as "the same name" scales with length,
@@ -31,6 +35,9 @@ function initialOnlyRelaxed(
   return initialOnly && (everLowercase || !counterpartAttestedNonInitial);
 }
 
+// stripZones blanks zones where capitalization is not a meaningful proper-noun signal — code
+// spans, mask tokens, wikilink/embed brackets, markdown link targets, and bare URLs — so
+// tokens() below only sees prose capitalization.
 function stripZones(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ") // fenced code
@@ -43,11 +50,15 @@ function stripZones(text: string): string {
 
 type Tok = { word: string; initial: boolean; idx: number; line: number };
 
+// tokens splits text into word tokens with per-token sentence-initial and line-index metadata,
+// after stripZones removes capitalization-irrelevant zones. Unicode-aware (Cyrillic included);
+// \p{M} keeps combining marks (accents, Cyrillic stress) inside a token instead of splitting
+// it, and NFC canonicalizes the surface form first so `found`/`wanted` render composed. A
+// token is sentence-initial when it is the line's first token, follows sentence-ending
+// punctuation or an opening quote/bracket, or everything before it on the line is list/heading
+// markup (`-`, `*`, `>`, `#`, digits, `.`).
 function tokens(text: string): Tok[] {
   const out: Tok[] = [];
-  // Unicode-aware; Cyrillic included. \p{M} keeps combining marks (Cyrillic
-  // stress, decomposed accents) inside the token instead of splitting it; NFC
-  // canonicalizes the surface form so `found`/`wanted` render composed.
   const re = /[\p{L}\p{N}][\p{L}\p{N}\p{M}'’]*/gu;
   const lines = stripZones(text.normalize("NFC")).split("\n");
   for (let li = 0; li < lines.length; li++) {
@@ -58,7 +69,7 @@ function tokens(text: string): Tok[] {
     let idx = 0;
     while ((m = re.exec(line))) {
       const before = line.slice(prevEnd < 0 ? 0 : prevEnd, m.index);
-      const initial = // sentence-initial detection (frozen)
+      const initial =
         first ||
         /[.!?:;|—]\s*$|["«(\[]\s*$/.test(before) ||
         /^\s*[-*>#\d.]+\s*$/.test(line.slice(0, m.index));
@@ -70,17 +81,17 @@ function tokens(text: string): Tok[] {
   return out;
 }
 
-// mark-insensitive lowercase key: NFC/NFD spellings of one name compare equal,
-// and accent/stress variants fold into one group (an accent is never the
-// letter-mangling corruption this lint chases)
+// Mark-insensitive lowercase key: NFC/NFD spellings of one name compare equal, and
+// accent/stress variants fold into one group (an accent is never the letter-mangling
+// corruption this lint chases).
 const foldKey = (w: string): string =>
   w
     .normalize("NFD")
     .replace(/\p{M}+/gu, "")
     .toLowerCase();
 
-// membership folds: mark-insensitive lowercase, strip possessive 's / trailing
-// apostrophe, plural s/es
+// Membership folds: mark-insensitive lowercase, strip a possessive 's or trailing apostrophe,
+// and strip a plural s/es suffix.
 const foldSet = (w: string): string[] => {
   const l = foldKey(w)
     .replace(/[’']s$/, "")
@@ -91,9 +102,9 @@ const foldSet = (w: string): string[] => {
   return alts;
 };
 
-// candidate shape: starts uppercase; not ALL-CAPS/acronym (HEY, SEO, N3's);
-// not acronym-plural/possessive (URLs, APIs, PR's); letters+apostrophes only
-// (digit-bearing tokens excluded); >=4 letters ignoring apostrophes
+// Candidate name shape: starts uppercase; not ALL-CAPS/acronym (HEY, SEO, N3's); not an
+// acronym plural/possessive (URLs, APIs, PR's); letters and apostrophes only (digit-bearing
+// tokens excluded); at least 4 letters, ignoring apostrophes.
 const isCandidateShape = (w: string): boolean =>
   /^\p{Lu}/u.test(w) &&
   !/^[\p{Lu}\p{N}\p{M}'’]+$/u.test(w) &&
@@ -102,6 +113,11 @@ const isCandidateShape = (w: string): boolean =>
   w.replace(/[’']|\p{M}/gu, "").length >= 4;
 const isCapWord = (w: string): boolean => /^\p{Lu}/u.test(w);
 
+// nameLintAgainstSource compares `output` against `source` and flags candidate proper names
+// (see isCandidateShape) that appear in output but not in source: as `corrupted` when a
+// candidate sits within corruptionCap edit distance of a source name, with `wanted` naming
+// that source match, or as `invented` otherwise. Total: never throws, and the result is
+// advisory — callers only render it, never block on it.
 export function nameLintAgainstSource(output: string, source: string): NameLintResult {
   const srcToks = tokens(source);
   const srcSet = new Set(srcToks.flatMap((t) => foldSet(t.word))); // ALL source words, folded
@@ -169,6 +185,11 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
   return { corrupted, invented };
 }
 
+// nameLintSelfConsistency compares `output` against itself: when the same candidate name
+// occurs under two different spellings within corruptionCap edit distance of each other, the
+// minority-count spelling is flagged as `corrupted` against the majority-count spelling; a tie
+// (equal counts) has no clear direction and is skipped. Has no invented lane — there is
+// nothing to compare a single document against. Total: never throws.
 export function nameLintSelfConsistency(output: string): NameLintResult {
   const toks = tokens(output);
   const lower = new Set<string>(); // words seen uncapitalized in the doc
@@ -210,7 +231,9 @@ export function nameLintSelfConsistency(output: string): NameLintResult {
   return { corrupted, invented: [] }; // self mode has no invented lane
 }
 
-// footer fragment; "" when clean
+// formatNameLint renders a NameLintResult as a trailing footer fragment (" · name-lint: ...")
+// for a distill run's summary line, or "" when the result is clean (no corrupted or invented
+// names).
 export function formatNameLint(r: NameLintResult): string {
   if (r.corrupted.length === 0 && r.invented.length === 0) return "";
   const parts: string[] = [];
