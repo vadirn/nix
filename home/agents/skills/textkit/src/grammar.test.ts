@@ -28,7 +28,7 @@ export const GOLDEN: Projection = {
   source: { path: "canonical-grammar.txt", bytes: 812, sha256: "a1b2c3d4e5f6" },
   title: "Canonical projection grammar",
   abstract:
-    "The seven-section projection is a fixed wire format: every reader parses these\nbytes, so their spacing, anchors, and fences must stay frozen as a golden fixture.",
+    "The seven-section projection is a fixed wire format: every reader parses these bytes, so their spacing, anchors, and fences must stay frozen as a golden fixture.",
   units: [
     {
       id: "Wire format",

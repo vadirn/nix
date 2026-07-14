@@ -114,8 +114,10 @@ function renderPayload(unit: Unit): string {
   return [`### ${unit.id}`, `> ${unit.statement} ${anchor}`].join("\n\n");
 }
 
-// A relation line: `from — predicate → to  <anchor>` (em-dash, right-arrow, TWO spaces before
-// the anchor). `from`/`to` reference unit ids; the endpoint label is the referenced unit's
+// A relation line: `from — predicate → to <anchor>` (em-dash, right-arrow, one space before
+// the anchor — matching every other trailing anchor; the parser tolerates `\s+`, but any
+// multi-space form is collapsed the moment a distilled .md passes the oxfmt format hook, so
+// emit the collapsed form). `from`/`to` reference unit ids; the endpoint label is the referenced unit's
 // headword, lower-initial. `rel` is an OPEN token: REL_REGISTRY (text.ts) is a known
 // vocabulary, not a closed enum — an off-registry rel (e.g. a deontic or causal predicate) still
 // renders. Only a blank rel is rejected; a real one always has a source (normalizeRelation drops
@@ -130,7 +132,7 @@ function renderRelation(edge: Edge, unitById: Map<string, Unit>): string {
     throw new Error(`projectMarkdown: edge.from ${JSON.stringify(edge.from)} references no unit`);
   if (!to)
     throw new Error(`projectMarkdown: edge.to ${JSON.stringify(edge.to)} references no unit`);
-  return `- ${firstLower(from.id)}${REL_DASH}${edge.rel}${REL_ARROW}${firstLower(to.id)}  ${formatSpan(edge.span)}`;
+  return `- ${firstLower(from.id)}${REL_DASH}${edge.rel}${REL_ARROW}${firstLower(to.id)} ${formatSpan(edge.span)}`;
 }
 
 // Render a type section (`## Heading`) from its units via a per-unit renderer, or "" when the

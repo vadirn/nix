@@ -8,8 +8,7 @@ schema: 1.0
 
 ## Abstract
 
-The seven-section projection is a fixed wire format: every reader parses these
-bytes, so their spacing, anchors, and fences must stay frozen as a golden fixture.
+The seven-section projection is a fixed wire format: every reader parses these bytes, so their spacing, anchors, and fences must stay frozen as a golden fixture.
 
 ## Concepts
 
@@ -58,4 +57,4 @@ projectMarkdown(graph) === readFileSync(fixture)
 
 ## Relations
 
-- golden fixture — pins → wire format  90..160
+- golden fixture — pins → wire format 90..160

@@ -87,9 +87,10 @@ function splitPredicate(right: string): { endpoint: string; predicate: string | 
   return { endpoint, predicate: predicate || null };
 }
 
-// Parse the projector's emit grammar `<from> — <rel> → <to>[  <anchor>]`
+// Parse the projector's emit grammar `<from> — <rel> → <to> <anchor>`
 // (project.ts::renderRelation: em-dash U+2014, right-arrow U+2192, both space-flanked,
-// a trailing `  start..end`/`[start..end]` anchor). This is the TRUE inverse of the
+// a trailing ` start..end`/`[start..end]` anchor — TRAILING_ANCHOR_RE tolerates any `\s+`, so a
+// hook-collapsed or hand-typed multi-space form still parses). This is the TRUE inverse of the
 // `## Relations` projection — the form a distilled note carries on disk, which
 // card-stage reads back. Lossy: returns null on anything short of well-formed rather
 // than throwing.

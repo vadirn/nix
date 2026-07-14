@@ -124,10 +124,10 @@ test("render 1: procedure subsection numbers steps, lead step anchored", () => {
   expect(md).toContain('2. treat null as "not yet", non-null as "reached, at T"');
 });
 
-test("render 1: the relation line is exact (em-dash, arrow, two spaces before the anchor)", () => {
+test("render 1: the relation line is exact (em-dash, arrow, one space before the anchor)", () => {
   const md = projectMarkdown(RENDER_1);
   expect(md).toContain("## Relations");
-  expect(md).toContain("- nullable timestamp — subsumes → boolean flag  289..442");
+  expect(md).toContain("- nullable timestamp — subsumes → boolean flag 289..442");
 });
 
 test("render 1: no empty sections are emitted", () => {
@@ -250,7 +250,7 @@ test("an off-registry edge rel renders (open registry) instead of throwing", () 
     edges: [{ from: "A", to: "B", rel: "must-precede", span: [0, 2] }],
   };
   const md = projectMarkdown(deontic);
-  expect(md).toContain("- a — must-precede → b  0..2");
+  expect(md).toContain("- a — must-precede → b 0..2");
 });
 
 test("flat-bullet sections (judgements/inferences) join bullets tight (\\n), not blank-line separated", () => {
