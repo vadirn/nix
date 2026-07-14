@@ -62,10 +62,10 @@ export function parseFrontmatter(text: string): Frontmatter {
 }
 
 // Default the trust tier of distilled output. An agent-distilled note is
-// unverified until curated (D27), so its frontmatter must carry
+// unverified until curated, so its frontmatter must carry
 // `epistemic_status: provisional` — otherwise `vault-query` retrieval, whose
-// absent-key default is `certified` (the trusted tier), would serve it as ground
-// (D7/D18). An existing `epistemic_status:` line is the author's explicit choice
+// absent-key default is `certified` (the trusted tier), would serve it as ground.
+// An existing `epistemic_status:` line is the author's explicit choice
 // and is left untouched; every other frontmatter line is preserved byte-for-byte.
 // When the source has no frontmatter at all, a minimal block is created.
 export function ensureEpistemicStatus(front: string): string {
@@ -102,7 +102,7 @@ export function parseDescription(front: string): string {
 }
 
 // Pull the frontmatter `type:` value (note / card / reference / …). distill never
-// authors `type` and today never emits a reference body, so this feeds ONLY the D30
+// authors `type` and today never emits a reference body, so this feeds ONLY a
 // defensive guard: a future reference-distill path must stay link-free (no `##
 // Relations` block in a type:reference body). Returns "" when absent.
 export function parseType(front: string): string {
@@ -115,7 +115,7 @@ export function parseType(front: string): string {
 }
 
 // A `superseded: true` note is retired content the curator has moved past — distill is
-// licensed to drop it wholesale, so the prose-list-item gate (D46) skips it rather than
+// licensed to drop it wholesale, so the prose-list-item gate skips it rather than
 // flooding the footer with advisory residue. Returns false when absent or any non-true value.
 export function parseSuperseded(front: string): boolean {
   return /^superseded:[ \t]*true[ \t]*$/im.test(front);

@@ -1,8 +1,8 @@
-// residue — the deterministic loss-surface primitives carved out of distill-core.ts
-// (R1 first carve). Pure functions over (source, output) text plus the judge-verdict
-// mapping: they compute what a distillation dropped, never recover it. No I/O, no model
-// call, no CLI state — so they are unit-tested directly (pure.test.ts, stages.test.ts)
-// and the pipeline's gate runners (runFidelityBackstop, runProseGate) import them.
+// residue — the deterministic loss-surface primitives carved out of distill-core.ts.
+// Pure functions over (source, output) text plus the judge-verdict mapping: they compute
+// what a distillation dropped, never recover it. No I/O, no model call, no CLI state — so
+// they are unit-tested directly (pure.test.ts, stages.test.ts) and the pipeline's gate
+// runners (runFidelityBackstop, runProseGate) import them.
 import {
   type PayloadSpan,
   type ProseUnit,
@@ -18,9 +18,9 @@ import {
 } from "./harvest.ts";
 import { type ProseVerdict } from "./prompts.ts";
 
-// What failed and where, carried structurally (not re-derived from the reason string)
-// so triage.ts can pick the decision verb and target per entry (plan §1: D1's
-// residueToBlocks + kind/stepIdxs threading).
+// What failed and where, carried structurally (not re-derived from the reason string) so
+// triage.ts's residueToBlocks can pick the decision verb and target per entry straight off
+// `kind` and `stepIdxs`.
 export type ResidueKind = "def" | "steps" | "thesis" | "edge" | "payload" | "prose";
 // Why the item is residue: "failed" — a gate judged it unfaithful (def/steps/thesis);
 // "gate-inconclusive" — the fidelity/workflow judge returned no verdict, so the entry
@@ -30,6 +30,9 @@ export type ResidueKind = "def" | "steps" | "thesis" | "edge" | "payload" | "pro
 // "prose-inconclusive" — the coverage judge returned no usable verdict for an item
 // that is NOT known to be in the body, so it triages as recover, not keep.
 export type ResidueClass = "failed" | "gate-inconclusive" | "dropped" | "prose-inconclusive";
+// One residue entry: what was lost (`source`), why (`reason`/`reasonClass`), and what kind of
+// unit it came from (`kind`). wikilinkResidue, payloadResidue, and proseResidue each produce
+// these for triage.ts to render.
 export type Residue = {
   label: string;
   reason: string;
@@ -37,9 +40,9 @@ export type Residue = {
   kind: ResidueKind;
   reasonClass: ResidueClass;
   /// 0-based indices into the flat step list under the emitted `## Procedures`
-  /// entry; set iff kind === "steps". Per-step spans are deferred (blueprint §8),
-  /// so the canonical backstop (runFidelityBackstop) always emits an empty array
-  /// here today; the field stays typed for a future per-step-span backstop.
+  /// entry; set iff kind === "steps". Per-step spans are deferred — the field stays typed
+  /// for a future per-step-span backstop, but the canonical backstop (runFidelityBackstop)
+  /// always emits an empty array here today.
   stepIdxs?: number[];
 };
 
@@ -186,9 +189,10 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
 }
 
 // The deterministic payload-residue backstop for a canonical projection: dropped payload spans
-// (payloadResidue), surfaced for rollback (D16). Both distill (homogeneous build) and
-// assembleRoutedNote (the routed whole-note run) call THIS over (source, projected out) so a span
-// surviving anywhere in output reads as covered. The wikilink lane is INTENTIONALLY omitted: every
+// (payloadResidue), surfaced for rollback rather than silently dropped. Both distill
+// (homogeneous build) and assembleRoutedNote (the routed whole-note run) call THIS over (source,
+// projected out) so a span surviving anywhere in output reads as covered. The wikilink lane is
+// INTENTIONALLY omitted: every
 // path now projects the canonical graph, whose `## Relations` renders local edges as plain
 // headwords and whose locate stage drops every cross-note `[[wikilink]]` endpoint (only local units
 // become edges), so a wikilink lane would mass-flag every source wikilink as dropped. Cross-note
@@ -199,7 +203,7 @@ export function edgePayloadResidue(text: string, out: string): Residue[] {
   return payloadResidue(text, out);
 }
 
-// ---- prose-list-item gate (the prose-judge tier, D46): the pure verdict→residue mapping ----
+// ---- prose-list-item gate (the prose-judge tier): the pure verdict→residue mapping ----
 // The deterministic spine above catches dropped literal/structural payload; this mapping catches
 // a dropped pure-prose list-item, the must-cover class the spine AND the fidelity/workflow
 // gates are all blind to. text.ts::harvestProseListItems is the deterministic answer key;

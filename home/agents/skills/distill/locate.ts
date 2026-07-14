@@ -1,21 +1,21 @@
-// locate.ts — the span-locate fidelity primitive (spec §2, design Backlog 3). The model NEVER
-// emits byte offsets; it quotes the source slice a unit was distilled from, and this module
-// locates that quote and computes the half-open UTF-8 byte span. That turns the anchor from an
-// LLM promise into a DETERMINISTIC fidelity check: a failed locate is a HARD GATE — it throws a
-// typed LocateError, never returns a sentinel, so a hallucinated or mis-copied quote cannot pass
-// silently as a bogus span.
+// locate.ts — the span-locate fidelity primitive. The model NEVER emits byte offsets; it quotes
+// the source slice a unit was distilled from, and this module locates that quote and computes
+// the half-open UTF-8 byte span. That turns the anchor from an LLM promise into a DETERMINISTIC
+// fidelity check: a failed locate is a HARD GATE — it throws a typed LocateError, never returns a
+// sentinel, so a hallucinated or mis-copied quote cannot pass silently as a bogus span.
 //
 // It is a leaf over mdstruct.ts: reuses `Span` and `sliceBytes` (the byte-exact slice the
 // computed span must round-trip against). It does NOT validate edge `rel` — REL_REGISTRY in
 // text.ts stays the sole source of truth for that.
 import { sliceBytes, type Span } from "./mdstruct.ts";
 
-// The two ways a locate can fail the gate (LOCKED DECISION 2). `not-found` = the quote does not
-// occur in the source (0 matches). `ambiguous` = it occurs at more than one position, so the span
-// is not uniquely determined; the caller should re-emit a longer quote with disambiguating
-// context.
+// The two ways a locate can fail the gate. `not-found` = the quote does not occur in the source
+// (0 matches). `ambiguous` = it occurs at more than one position, so the span is not uniquely
+// determined; the caller should re-emit a longer quote with disambiguating context.
 export type LocateFailure = "not-found" | "ambiguous";
 
+// LocateError is the typed hard-gate failure locate() throws on a not-found or ambiguous quote;
+// `kind` names which of the two, `quote` carries the offending text for the error message.
 export class LocateError extends Error {
   readonly kind: LocateFailure;
   readonly quote: string;
@@ -48,8 +48,8 @@ function exactHits(source: string, quote: string): number[] {
 
 // Whitespace-collapsed matches: build a regex from the quote's tokens joined by `\s+`, so a
 // line-wrapped or multi-space-collapsed quote still matches, but report the RAW match extent from
-// the source (index + matched substring) so the computed span round-trips byte-exact
-// (LOCKED DECISION 3). Matches are non-overlapping (regex /g); good enough for prose anchors.
+// the source (index + matched substring) so the computed span round-trips byte-exact. Matches are
+// non-overlapping (regex /g); good enough for prose anchors.
 function collapsedHits(source: string, quote: string): { index: number; text: string }[] {
   const tokens = quote.trim().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return [];
@@ -63,10 +63,10 @@ function collapsedHits(source: string, quote: string): { index: number; text: st
   return hits;
 }
 
-// Convert a JS-string match (start index + matched text) into a half-open UTF-8 byte span
-// (LOCKED DECISION 1). JS string indices are UTF-16 code units and diverge from bytes on any
-// non-ASCII (Cyrillic, em-dashes), so the only correct conversion is the UTF-8 byte length of the
-// prefix. The round-trip against `sliceBytes` is asserted as a hard invariant.
+// Convert a JS-string match (start index + matched text) into a half-open UTF-8 byte span. JS
+// string indices are UTF-16 code units and diverge from bytes on any non-ASCII (Cyrillic,
+// em-dashes), so the only correct conversion is the UTF-8 byte length of the prefix. The
+// round-trip against `sliceBytes` is asserted as a hard invariant.
 function toSpan(source: string, index: number, matched: string): Span {
   const start = Buffer.byteLength(source.slice(0, index), "utf8");
   const end = start + Buffer.byteLength(matched, "utf8");

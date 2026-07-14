@@ -34,7 +34,7 @@ export interface MdNode {
 }
 
 // An inline in the flat `inlines[]` array. `url` is a markdown image target; `page` is a
-// wikilink target with its alias and `#fragment` already stripped. (The installed schema-1.0
+// wikilink target with its alias and `#fragment` already stripped. (The installed release
 // binary omits the debug build's raw `target`, but `page` equals
 // `normalizeEdgeTarget(target.split("|")[0])` on every embed, so keying on `page` is
 // equivalent.) Inlines inside code spans/fences are NOT emitted — the payload-in-code
@@ -79,6 +79,9 @@ export interface MdRegion {
   endLine: number;
 }
 
+// The whole document mdstruct parses from one note: its schema version, the block-node tree,
+// the flat inline list, the heading tree, and the comment-anchor regions. Any field may be
+// absent when the binary emits nothing for that lane (e.g. a note with no regions).
 export interface MdDoc {
   schemaVersion?: string;
   nodes?: MdNode[];
@@ -97,6 +100,8 @@ export interface MdDoc {
 // with the Rust `SCHEMA_VERSION` whenever this module depends on the new shape.
 const EXPECTED_SCHEMA_VERSION = "1.2";
 
+// The result of parseDoc: the parsed `doc` paired with the raw UTF-8 `buf` its byte spans
+// index into (sliceBytes reads spans off `buf`, never off the original JS string).
 export interface ParsedDoc {
   doc: MdDoc;
   buf: Buffer;
@@ -143,9 +148,8 @@ export function parseDoc(text: string): ParsedDoc {
       `mdstruct unavailable: unparseable NDJSON from 'mdstruct' (${(e as Error).message})`,
     );
   }
-  // Schema-version handshake: fail loud on deploy skew rather than trust a stale
-  // binary's pre-mask regions. Exact-match against the version this module was
-  // written for (see EXPECTED_SCHEMA_VERSION).
+  // Exact-match against EXPECTED_SCHEMA_VERSION — see its own comment for why a mismatch
+  // must fail loud rather than silently trust a stale binary's output.
   if (doc.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
     throw new Error(
       `mdstruct schema mismatch: binary '${bin}' emitted schemaVersion ` +

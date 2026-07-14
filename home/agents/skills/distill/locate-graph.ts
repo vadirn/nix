@@ -1,14 +1,14 @@
-// locate-graph — the locate stage (spec §4 step 2; blueprint §2). It turns a `PreGraph`
-// (parseExtractGraph's output: typed units carrying their verbatim `quote` but no `span`) into
-// the span-anchored canonical `DistillationResult`, running `locate(body, quote)` per unit and
-// edge. Per spec §4 this runs IMMEDIATELY after extract, not at end-of-pipeline — so a bad quote
-// surfaces at the earliest possible point.
+// locate-graph — the locate stage: the second of distill's three pipeline stages (extract →
+// locate → span-typing review). It turns a `PreGraph` (parseExtractGraph's output: typed units
+// carrying their verbatim `quote` but no `span`) into the span-anchored canonical
+// `DistillationResult`, running `locate(body, quote)` per unit and edge. This runs IMMEDIATELY
+// after extract, not at end-of-pipeline — so a bad quote surfaces at the earliest possible point.
 //
 // This is the reparented core of the retired adapt.ts::comboToResult, MINUS the settled-artifact
 // plumbing (no defByTerm / workflowSteps / orderedEntries / stepGroups carriers — the pre-graph
-// already carries the final statements). Blueprint §7 step 8 wired distill()'s DEFAULT-compress
-// path onto it (extract → locateGraph → projectMarkdown) and deleted adapt.ts; the three legacy
-// output paths (routed / --glossary / --reference) still run the settle chain until steps 9-11.
+// already carries the final statements). distill()'s DEFAULT-compress path now runs extract →
+// locateGraph → projectMarkdown, replacing the deleted adapt.ts; the three legacy output paths
+// (routed / --glossary / --reference) still run the settle chain.
 //
 // It is a leaf over the canonical modules: graph.ts (types + computeSource), locate.ts (the
 // span-locate primitive), and slugSegment / Block from text.ts. It does NOT import distill-core.ts,
@@ -16,8 +16,7 @@
 //
 // LOCKED: a failed `locate` HARD-ABORTS. `locate` throws a typed `LocateError` on a not-found or
 // ambiguous quote; locateGraph lets it propagate unchanged (the projection is the DEFAULT compress
-// body, so a bad quote must surface loudly — the spec §2 fidelity gate). There is NO coarse-span
-// fallback.
+// body, so a bad quote must surface loudly). There is NO coarse-span fallback.
 import { computeSource, type Edge, type PreGraph, type Unit } from "./graph.ts";
 import { locate } from "./locate.ts";
 import type { Span } from "./mdstruct.ts";
@@ -26,7 +25,7 @@ import type { Projection } from "./project.ts";
 
 // Locate a sub-element's (bullet / tail-step) quote to a span, or `null` when the model gave no
 // quote (an empty quote is a deliberate no-anchor, not a hallucination — it renders unanchored,
-// spec §3's synthesized-step example). A PRESENT quote still hard-aborts on a locate miss, so the
+// the synthesized-step convention). A PRESENT quote still hard-aborts on a locate miss, so the
 // anti-hallucination gate holds for every anchored sub-element, not just the head.
 function locateSub(body: string, quote: string): Span | null {
   return quote.trim().length === 0 ? null : locate(body, quote);
@@ -62,11 +61,11 @@ function resolveEndpoint(to: string, slugToId: Map<string, string>): string | un
   return slug ? slugToId.get(slug) : undefined;
 }
 
-// Turn a pre-graph into the span-anchored canonical graph (spec §4 step 2; blueprint §2). Every
-// unit/edge span is `locate(body, quote)`; a failed locate propagates (HARD-ABORT). `payloadBlocks`
-// is the deterministic retain lane (blueprint §1.1) — payload is NOT a pre-graph channel, so it
-// rides in here as an optional argument (the primary signature is `(pre, path, body)`; the pipeline
-// passes the retain-graded blocks at step 8). `title`/`abstract` ride on the returned `Projection`
+// Turn a pre-graph into the span-anchored canonical graph. Every unit/edge span is
+// `locate(body, quote)`; a failed locate propagates (HARD-ABORT). `payloadBlocks` is the
+// deterministic retain lane — payload is NOT a pre-graph channel, so it rides in here as an
+// optional argument (the primary signature is `(pre, path, body)`; the pipeline passes the
+// retain-graded blocks in after extract). `title`/`abstract` ride on the returned `Projection`
 // (project.ts models them as optional on `Projection extends DistillationResult`, so the projector
 // renders them without widening the canonical `DistillationResult`).
 export function locateGraph(
@@ -79,8 +78,8 @@ export function locateGraph(
   const units: Unit[] = [];
 
   // concept units ← pre.concepts: statement is the final def joined with any extension bullets;
-  // `span` locates the def's verbatim quote, `subSpans` locates each bullet's own quote (per-
-  // sub-element anchoring, design Backlog 12). A bullet with no quote yields a null hole.
+  // `span` locates the def's verbatim quote, `subSpans` locates each bullet's own quote
+  // (per-sub-element anchoring). A bullet with no quote yields a null hole.
   for (const c of pre.concepts) {
     const bullets = (c.bullets ?? []).filter((b) => b.statement.trim().length > 0);
     const statement = [c.statement, ...bullets.map((b) => b.statement)]
@@ -120,9 +119,8 @@ export function locateGraph(
 
   // procedure units ← pre.procedures: one unit per group. statement = the group's steps joined by
   // "\n"; `span` locates the LEAD step's quote and `subSpans` locates each remaining step's own
-  // quote (per-step anchoring, design Backlog 12) — a step with no quote yields a null hole
-  // (rendered unanchored, spec §3's step-2 example). id = the group's headword, fallback
-  // `Procedure N`.
+  // quote (per-step anchoring) — a step with no quote yields a null hole (rendered unanchored,
+  // the synthesized-step-2 convention). id = the group's headword, fallback `Procedure N`.
   pre.procedures.forEach((p, i) => {
     const steps = p.steps.filter((s) => s.statement && s.statement.trim().length > 0);
     if (steps.length === 0) return;
@@ -158,7 +156,7 @@ export function locateGraph(
   }
 
   // edges ← pre.edges. FILTER BEFORE PROJECTING: drop an endpoint that resolves to no local unit
-  // (a cross-note wikilink). `rel` is an OPEN token (spec §3) — REL_REGISTRY (text.ts) is a known
+  // (a cross-note wikilink). `rel` is an OPEN token — REL_REGISTRY (text.ts) is a known
   // vocabulary, not a closed enum, so an off-registry rel (e.g. a deontic or causal predicate) is
   // KEPT, not dropped (Chesterton's Fence: a closed enum could not hold a deontic relation). Only
   // a retained edge's quote is located (so a dropped edge's absent/bad quote never aborts the

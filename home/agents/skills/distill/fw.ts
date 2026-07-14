@@ -20,6 +20,8 @@ export class TruncationError extends Error {
   override readonly name = "TruncationError";
 }
 
+// isTransient reports whether e is a TransientError — the type guard callers use to decide
+// whether to retry/degrade gracefully versus let a real bug propagate.
 export function isTransient(e: unknown): boolean {
   return e instanceof TransientError;
 }
@@ -41,8 +43,13 @@ export function rethrowIfBug(e: unknown, stage: string): void {
 }
 
 const FW = "https://api.fireworks.ai/inference/v1/chat/completions";
-export const EXTRACT = "accounts/fireworks/models/gpt-oss-120b"; // fast, obedient; ~3 s — stages 1-3 + revise
-export const FIDELITY = "accounts/fireworks/models/glm-5p2"; // thinking; ~15-20 s — stage 5 only (the different model)
+// EXTRACT is the fast, obedient gpt-oss model id: used for the extract, grade, and revise
+// passes (~3s per call).
+export const EXTRACT = "accounts/fireworks/models/gpt-oss-120b";
+// FIDELITY is the slower glm thinking-model id, deliberately a DIFFERENT model than EXTRACT so
+// the fidelity backstop is not grading the same model's own output: used only for that
+// independent fidelity pass (~15-20s per call).
+export const FIDELITY = "accounts/fireworks/models/glm-5p2";
 const TIMEOUT_MS = 180_000;
 // Token budget for the FIDELITY thinking model. Its reasoning is inlined in the
 // content, so the cap must cover BOTH the thinking and the trailing JSON — too low
@@ -57,7 +64,7 @@ export const FIDELITY_TOKENS = 16_384;
 // normal note generates only what its content needs (~3-5k) and costs the same at any
 // ceiling, so this is sized generously to never truncate a real note. The 180s
 // TIMEOUT_MS is the de-facto limit (a runaway times out long before 96k); a genuine
-// length-truncation now surfaces as an actionable TruncationError (D39), not silent loss.
+// length-truncation now surfaces as an actionable TruncationError, not silent loss.
 // The intentionally-tiny stages (tieTogether, recover-def: ~1024) keep their small caps
 // as sanity bounds.
 export const EXTRACT_TOKENS = 96_000;
@@ -168,6 +175,10 @@ export function extractJson(s: string): string {
   throw new Error(`unbalanced JSON: ${s.slice(0, 200)}`);
 }
 
+// askJson calls `model` with `prompt`, requesting JSON-object output, and parses the response as
+// T. Retries once on a JSON-parse failure (the model returned no or unbalanced JSON) before
+// giving up with a TransientError; fw() below handles the separate network/HTTP retry
+// underneath.
 export async function askJson<T>(model: string, prompt: string, maxTokens: number): Promise<T> {
   // Retry once on a PARSE failure (distinct from fw's network/5xx retry): the
   // FIDELITY thinking model sometimes returns only reasoning with no JSON object,
