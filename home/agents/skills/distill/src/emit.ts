@@ -1,0 +1,16 @@
+// emit — distill's output-read CONTRACT: the sole surface cards/ imports from distill.
+//
+// cards/ consumes an already-emitted distilled note (a body string, never a distill() call)
+// and must read it back through exactly ONE seam, not by reaching into four internal readers.
+// This module is that seam: a curated re-export, NO logic. Every symbol below is the public
+// read-surface a card-extraction consumer needs — the canonical-note reader and its view
+// types, the `## Relations` rebuild parser and its edge type, the section splitter and its
+// section type, and the interact strip plus its format-error. Widen this deliberately; a new
+// cross-import from cards/ into graph/ · extract/ · review/ is a contract leak, not a shortcut.
+export { parseCanonicalNote } from "@/graph/parse-projection.ts";
+export type { CanonConcept, CanonNote } from "@/graph/parse-projection.ts";
+export { parseRelationsBlock } from "@/graph/rel-parse.ts";
+export type { ParsedRelationEdge } from "@/graph/rel-parse.ts";
+export { sections } from "@/extract/route.ts";
+export type { Section } from "@/extract/route.ts";
+export { InteractFormatError, stripInteract } from "@/review/interact.ts";

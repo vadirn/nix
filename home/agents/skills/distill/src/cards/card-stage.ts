@@ -27,7 +27,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseDescription, parseFrontmatter } from "@/kernel/frontmatter.ts";
-import { InteractFormatError, stripInteract } from "@/review/interact.ts";
+import { InteractFormatError, sections, stripInteract } from "@/emit.ts";
 import {
   askJson,
   EXTRACT,
@@ -37,7 +37,6 @@ import {
   rethrowIfBug,
 } from "@/kernel/fw.ts";
 import { detectLang } from "@/kernel/text.ts";
-import { sections } from "@/extract/route.ts";
 import { nameLintAgainstSource } from "@/writing/name-lint.ts";
 import {
   annotateEdges,

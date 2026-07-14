@@ -13,8 +13,7 @@
 //     filter: enumerateCandidates never filters on it, so every candidate is staged
 //     regardless of its verdict.
 import { REL_REGISTRY, slugSegment } from "@/kernel/text.ts";
-import { parseRelationsBlock } from "@/graph/rel-parse.ts";
-import { parseCanonicalNote } from "@/graph/parse-projection.ts";
+import { parseCanonicalNote, parseRelationsBlock } from "@/emit.ts";
 import type { NameLintResult } from "@/writing/name-lint.ts";
 import type {
   Band,
