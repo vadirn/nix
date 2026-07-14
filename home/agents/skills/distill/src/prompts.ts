@@ -269,8 +269,12 @@ export async function extractGraph(
   lang: "en" | "ru",
   inventory: LinkInventory = { wikilinks: [], external: [] },
   selfSlug = "",
+  // The model call, injected so the emit pipeline can drive extract from a fake
+  // transport without a process-global module mock (see fidelityGate). Production
+  // callers omit it → real fw transport.
+  ask: typeof askJson = askJson,
 ): Promise<PreGraph> {
-  const raw = await askJson<RawGraph>(
+  const raw = await ask<RawGraph>(
     EXTRACT,
     extractGraphPrompt(blocks, frontDescription, lang, inventory, selfSlug),
     EXTRACT_TOKENS,
@@ -312,8 +316,10 @@ export async function gradeBlocks(
   thesis: string,
   concepts: { term: string; def: string }[],
   blocks: Block[],
+  // Injected transport (see extractGraph); production omits it → real fw.
+  ask: typeof askJson = askJson,
 ): Promise<Map<string, Grade>> {
-  const judged = await askJson<{ grades: { id: string; grade: Grade }[] }>(
+  const judged = await ask<{ grades: { id: string; grade: Grade }[] }>(
     EXTRACT,
     gradeBlocksPrompt(thesis, concepts, blocks),
     EXTRACT_TOKENS,

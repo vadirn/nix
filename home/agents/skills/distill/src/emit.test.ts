@@ -10,14 +10,16 @@
 // behavior byte-identical (the stages.test.ts:656 recipe test is the executable
 // proof and stays UNMODIFIED).
 //
-// LLM-bearing success paths run main() in-process with fw.ts mocked per the
-// degradation.test.ts convention (mock.module repoints the live askJson binding);
-// key-gate/preflight/usage paths spawn the real binary offline.
+// LLM-bearing success paths run main() in-process with a fake transport injected via
+// main(ask) — dependency injection, no process-global module mock (which would race a
+// concurrent file over the shared module registry); key-gate/preflight/usage paths spawn
+// the real binary offline.
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { parseInteract, stripInteract } from "./interact.ts";
+import { askJson } from "./fw.ts";
 
 const DISTILL = join(import.meta.dir, "distill.ts");
 const DUMMY_KEY = { ...process.env, FIREWORKS_API_KEY: "test-dummy" };
@@ -112,152 +114,144 @@ test("emit hygiene: the no-body exit-3 path writes NO sibling intermediary (mkte
   expect(existsSync(join(dir, "note.tmp.md"))).toBe(false);
 });
 
-// ---- mocked-fw success paths: main() in-process (degradation.test.ts convention) ----
+// ---- success paths: main() in-process with an injected fake transport (main(ask)) ----
 
-const FW = "./fw.ts";
-const real = await import(FW);
-// Snapshot the FUNCTION, not the namespace: mock.module rebinds the namespace's
-// live exports, so restoring `() => real` after mocking would restore the mock
-// itself. This file can run before degradation.test.ts (file order is not
-// alphabetical), which needs the genuine transport back.
-const realAskJson = real.askJson;
-afterAll(() => mock.module(FW, () => ({ ...real, askJson: realAskJson })));
-
-// One dispatching transport for the whole five-stage run. Markers are verbatim
-// substrings of the stage prompts in prompts.ts; an unmocked prompt throws so a
-// new stage can never silently ride a wrong answer.
-function mockPipeline() {
-  mock.module(FW, () => ({
-    ...real,
-    askJson: mock(async (_model: unknown, prompt: string) => {
-      if (prompt.includes("concept cartographer")) {
-        // The canonical default path parses this via parseExtractGraph (prompts.ts), so the mock
-        // returns the RawGraph shape (concepts/judgements/inferences/procedures), NOT the legacy
-        // Combo (glossary/workflow). title/abstract render as the `# title` and the one unanchored
-        // `## Abstract`; each unit's verbatim `quote` is located in NOTE by locateGraph — a HARD
-        // ABORT on a miss — so every quote is a real slice of NOTE, not just a source block id.
-        return {
-          title: "Anchor image discipline",
-          abstract:
-            "Blocking from the first felt impression, not the moving scene, keeps values from drifting.",
-          thesis: "Blocking from the impression rather than the scene keeps the painting honest.",
-          concepts: [
-            {
-              headword: "Anchor image",
-              statement: "The first felt impression, fixed as the reference.",
-              relations: [],
-              source: ["B3"],
-              quote:
-                "The anchor image is the first felt impression of the scene, fixed as the reference",
-            },
-            {
-              headword: "Impression distance",
-              statement: "The nearness of a value to its anchor.",
-              relations: [],
-              source: ["B3"],
-              quote:
-                "The impression distance is the nearness of a value to its anchor on re-inspection",
-            },
-          ],
-          judgements: [],
-          inferences: [],
-          procedures: [
-            {
-              headword: "Anchor discipline",
-              steps: [
-                {
-                  statement: "Fix the anchor image before opening paints.",
-                  source: ["B4"],
-                  quote: "Fix the anchor image before opening paints",
-                },
-              ],
-            },
-          ],
-        };
-      }
-      if (prompt.includes("grading each block")) {
-        return {
-          grades: [
-            { id: "B1", grade: "drop" },
-            { id: "B2", grade: "distill" },
-            { id: "B3", grade: "distill" },
-            { id: "B4", grade: "distill" },
-          ],
-        };
-      }
-      if (prompt.includes("writing glossary definitions")) {
-        return {
-          entries: [
-            {
-              term: "Anchor image",
-              def: "The first felt impression of the scene, fixed as the reference.",
-            },
-            {
-              term: "Impression distance",
-              def: "The nearness of a value to its anchor on re-inspection.",
-            },
-          ],
-        };
-      }
-      if (prompt.includes("tightening the procedure")) {
-        return { steps: [{ id: "S0", step: "Fix the anchor image before opening paints" }] };
-      }
-      if (prompt.includes("state the note's thesis")) {
-        return {
-          prose: "The anchor image fixes the reference; impression distance names drift from it.",
-        };
-      }
-      if (prompt.includes("readable body of a note")) {
-        return {
-          prose:
-            "**Anchor image** fixes the reference before mixing starts, and **Impression distance** names the drift from it on re-inspection.",
-        };
-      }
-      // workflow gate first: its prompt also contains "independent fidelity judge"
-      if (prompt.includes("for a procedure checklist")) {
-        return {
-          groups: [
-            // the verdict is keyed by the procedure's `### headword` (its unit id), so the
-            // residue target is the headword-scoped `procedure:<headword>` form
-            {
-              id: "Anchor discipline",
-              grade: "inconclusive",
-              missing: "judge returned no verdict",
-            },
-          ],
-        };
-      }
-      if (prompt.includes("independent fidelity judge")) {
-        return {
-          thesisRecoverable: false,
-          concepts: [
-            {
-              term: "Impression distance",
-              grade: "residue",
-              direction: "inverted",
-              missing: "def asserts nearness where source asserts a gap",
-            },
-            {
-              term: "Anchor image",
-              grade: "inconclusive",
-              direction: "",
-              missing: "judge returned no verdict after retry",
-            },
-          ],
-        };
-      }
-      if (prompt.includes("independent prose editor")) {
-        return { pass: true, issues: [] };
-      }
-      throw new Error(`unmocked prompt: ${prompt.slice(0, 100)}`);
-    }),
-  }));
+// One dispatching fake transport for the whole five-stage run, handed to main() via its
+// `ask` seam — no process-global module mock, so a concurrent file's transport is never
+// touched. Markers are verbatim substrings of the stage prompts in prompts.ts; an
+// unmocked prompt throws so a new stage can never silently ride a wrong answer.
+function pipelineAsk(): typeof askJson {
+  return (async (_model: unknown, prompt: string) => {
+    if (prompt.includes("concept cartographer")) {
+      // The canonical default path parses this via parseExtractGraph (prompts.ts), so the mock
+      // returns the RawGraph shape (concepts/judgements/inferences/procedures), NOT the legacy
+      // Combo (glossary/workflow). title/abstract render as the `# title` and the one unanchored
+      // `## Abstract`; each unit's verbatim `quote` is located in NOTE by locateGraph — a HARD
+      // ABORT on a miss — so every quote is a real slice of NOTE, not just a source block id.
+      return {
+        title: "Anchor image discipline",
+        abstract:
+          "Blocking from the first felt impression, not the moving scene, keeps values from drifting.",
+        thesis: "Blocking from the impression rather than the scene keeps the painting honest.",
+        concepts: [
+          {
+            headword: "Anchor image",
+            statement: "The first felt impression, fixed as the reference.",
+            relations: [],
+            source: ["B3"],
+            quote:
+              "The anchor image is the first felt impression of the scene, fixed as the reference",
+          },
+          {
+            headword: "Impression distance",
+            statement: "The nearness of a value to its anchor.",
+            relations: [],
+            source: ["B3"],
+            quote:
+              "The impression distance is the nearness of a value to its anchor on re-inspection",
+          },
+        ],
+        judgements: [],
+        inferences: [],
+        procedures: [
+          {
+            headword: "Anchor discipline",
+            steps: [
+              {
+                statement: "Fix the anchor image before opening paints.",
+                source: ["B4"],
+                quote: "Fix the anchor image before opening paints",
+              },
+            ],
+          },
+        ],
+      };
+    }
+    if (prompt.includes("grading each block")) {
+      return {
+        grades: [
+          { id: "B1", grade: "drop" },
+          { id: "B2", grade: "distill" },
+          { id: "B3", grade: "distill" },
+          { id: "B4", grade: "distill" },
+        ],
+      };
+    }
+    if (prompt.includes("writing glossary definitions")) {
+      return {
+        entries: [
+          {
+            term: "Anchor image",
+            def: "The first felt impression of the scene, fixed as the reference.",
+          },
+          {
+            term: "Impression distance",
+            def: "The nearness of a value to its anchor on re-inspection.",
+          },
+        ],
+      };
+    }
+    if (prompt.includes("tightening the procedure")) {
+      return { steps: [{ id: "S0", step: "Fix the anchor image before opening paints" }] };
+    }
+    if (prompt.includes("state the note's thesis")) {
+      return {
+        prose: "The anchor image fixes the reference; impression distance names drift from it.",
+      };
+    }
+    if (prompt.includes("readable body of a note")) {
+      return {
+        prose:
+          "**Anchor image** fixes the reference before mixing starts, and **Impression distance** names the drift from it on re-inspection.",
+      };
+    }
+    // workflow gate first: its prompt also contains "independent fidelity judge"
+    if (prompt.includes("for a procedure checklist")) {
+      return {
+        groups: [
+          // the verdict is keyed by the procedure's `### headword` (its unit id), so the
+          // residue target is the headword-scoped `procedure:<headword>` form
+          {
+            id: "Anchor discipline",
+            grade: "inconclusive",
+            missing: "judge returned no verdict",
+          },
+        ],
+      };
+    }
+    if (prompt.includes("independent fidelity judge")) {
+      return {
+        thesisRecoverable: false,
+        concepts: [
+          {
+            term: "Impression distance",
+            grade: "residue",
+            direction: "inverted",
+            missing: "def asserts nearness where source asserts a gap",
+          },
+          {
+            term: "Anchor image",
+            grade: "inconclusive",
+            direction: "",
+            missing: "judge returned no verdict after retry",
+          },
+        ],
+      };
+    }
+    if (prompt.includes("independent prose editor")) {
+      return { pass: true, issues: [] };
+    }
+    throw new Error(`unmocked prompt: ${prompt.slice(0, 100)}`);
+  }) as typeof askJson;
 }
 
 // Run main() in-process with argv patched and stdout captured. The success path
 // never calls process.exit; process.exit is stubbed to THROW so any exit-path
 // regression (or red-phase behavior) fails the test instead of killing the runner.
-async function runMain(args: string[]): Promise<{ stdout: string; stderr: string }> {
+async function runMain(
+  args: string[],
+  ask: typeof askJson = pipelineAsk(),
+): Promise<{ stdout: string; stderr: string }> {
   const argv = process.argv;
   const hadKey = process.env.FIREWORKS_API_KEY;
   const realWrite = process.stdout.write.bind(process.stdout);
@@ -280,7 +274,7 @@ async function runMain(args: string[]): Promise<{ stdout: string; stderr: string
   }) as typeof process.exit;
   try {
     const { main } = await import("./distill-core.ts");
-    await main();
+    await main(ask);
   } finally {
     process.stdout.write = realWrite;
     process.stderr.write = realErrWrite;
@@ -293,7 +287,6 @@ async function runMain(args: string[]): Promise<{ stdout: string; stderr: string
 }
 
 test("emit success: sibling .tmp.md intermediary, path-only stdout, no XML, dest=/src= stamp, residue triaged", async () => {
-  mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.md");
   const tmpPath = join(dir, "note.tmp.md");
@@ -362,7 +355,6 @@ test("emit success: sibling .tmp.md intermediary, path-only stdout, no XML, dest
 });
 
 test("emit success (clean run): gate-only intermediary, footer says '· review: gate'", async () => {
-  mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "clean.md");
   writeFileSync(notePath, NOTE);
@@ -386,6 +378,7 @@ test("emit success (clean run): gate-only intermediary, footer says '· review: 
 // and the wrapper returns it alongside captured stdout.
 async function runMainExpectExit(
   args: string[],
+  ask: typeof askJson = pipelineAsk(),
 ): Promise<{ stdout: string; exit: number | undefined }> {
   const argv = process.argv;
   const hadKey = process.env.FIREWORKS_API_KEY;
@@ -404,7 +397,7 @@ async function runMainExpectExit(
   }) as typeof process.exit;
   try {
     const { main } = await import("./distill-core.ts");
-    await main();
+    await main(ask);
   } catch (e) {
     const s = (e as { sentinelExit?: number }).sentinelExit;
     if (s === undefined) throw e;
@@ -420,7 +413,6 @@ async function runMainExpectExit(
 }
 
 test("emit success (--out to a new destination): intermediary sibling of --out, src=new", async () => {
-  mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.md");
   const outPath = join(dir, "fresh", "dest.md");
@@ -446,16 +438,14 @@ test("emit success (--out to a new destination): intermediary sibling of --out, 
 // `bun test` gives main() a non-TTY stdin AND stdout (there is no real terminal
 // behind either descriptor here), which is exactly the guard's off condition —
 // so a real, successful, residue-bearing distill run is the sharpest proof that
-// the session never fires unless BOTH ends are a TTY: colocated with the Phase 3
-// mock (not a new file) so it shares runMain's process.exit-throws-on-success
-// sentinel and mockPipeline's lifecycle, sidestepping the cross-file fw mock race
-// emit.test.ts's own banner names (a second file's mock.module("./fw.ts") could
-// otherwise unmock mid-flight under a slow run here). If the guard's condition
-// were ever inverted, runMain's stubbed process.exit would throw and fail this
+// the session never fires unless BOTH ends are a TTY: it shares runMain's
+// process.exit-throws-on-success sentinel and its injected `pipelineAsk` transport, so
+// nothing process-global is mutated and no cross-file fw mock race is possible (the
+// reason this file uses dependency injection rather than mock.module). If the guard's
+// condition were ever inverted, runMain's stubbed process.exit would throw and fail this
 // test loudly; stderr is captured too, so a bug that printed prompt text WITHOUT
 // exiting (guard fires, loop never reaches the exit call) is caught as well.
 test("Phase 5: a non-TTY success run never enters the session — stdout stays the path line, stderr carries no prompt text", async () => {
-  mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.md");
   const tmpPath = join(dir, "note.tmp.md");
@@ -496,7 +486,6 @@ test("emit: a non-.md compress input without --out is rejected at parse time (ex
 });
 
 test("emit success: a non-.md input WITH --out emits an appliable intermediary named for the --out .md", async () => {
-  mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.txt");
   const destPath = join(dir, "dest.md");
@@ -542,7 +531,6 @@ test("emit preflight: a cwd-relative input names the pending intermediary by ABS
 });
 
 test("emit success: a cwd-relative input still puts an ABSOLUTE intermediary path on stdout line 1", async () => {
-  mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   writeFileSync(join(dir, "relnote.md"), NOTE);
   const cwd = process.cwd();
@@ -563,22 +551,18 @@ test("emit write is no-clobber: an intermediary that appears mid-run (racing emi
   // both racers pass the preflight before their minutes-long LLM runs; the final
   // write must be linkSync-no-clobber, never a silent
   // last-writer-wins overwrite
-  mockPipeline();
-  const mocked = await import(FW);
-  const inner = mocked.askJson; // snapshot: the dispatcher mock, not the live binding
+  const base = pipelineAsk();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "race.md");
   const tmpPath = join(dir, "race.tmp.md");
   writeFileSync(notePath, NOTE);
-  mock.module(FW, () => ({
-    ...real,
-    askJson: async (...args: unknown[]) => {
-      // the "other emit" lands its intermediary while this run is mid-LLM
-      if (!existsSync(tmpPath)) writeFileSync(tmpPath, "raced bytes\n");
-      return (inner as (...a: unknown[]) => unknown)(...args);
-    },
-  }));
-  const { stdout, exit } = await runMainExpectExit(["--no-revise", "--no-gate", notePath]);
+  // A wrapping transport (injected, no module mock): the "other emit" lands its
+  // intermediary while this run is mid-LLM, then delegate to the base dispatcher.
+  const raceAsk = (async (...args: Parameters<typeof askJson>) => {
+    if (!existsSync(tmpPath)) writeFileSync(tmpPath, "raced bytes\n");
+    return base(...args);
+  }) as typeof askJson;
+  const { stdout, exit } = await runMainExpectExit(["--no-revise", "--no-gate", notePath], raceAsk);
   expect(exit).toBe(4);
   expect(stdout).toBe(""); // refusal keeps stdout empty
   expect(readFileSync(tmpPath, "utf8")).toBe("raced bytes\n"); // winner not clobbered
@@ -586,7 +570,6 @@ test("emit write is no-clobber: an intermediary that appears mid-run (racing emi
 });
 
 test("emit success: no orphan mktemp file is created (the temp sink is lazy)", async () => {
-  mockPipeline();
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const scratch = mkdtempSync(join(tmpdir(), "distill-tmpdir-"));
   const notePath = join(dir, "note.md");

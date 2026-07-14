@@ -125,7 +125,7 @@ function forceEpistemicStatus(front: string): string {
   const nl = crlf ? "\r\n" : "\n";
   const lines = front.split(nl);
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const filtered = lines.filter((l) => !/^epistemic_status:/.test(l));
+  const filtered = lines.filter((l) => !l.startsWith("epistemic_status:"));
   let close = -1;
   for (let i = filtered.length - 1; i >= 0; i--) {
     if (filtered[i] === "---" || filtered[i] === "...") {

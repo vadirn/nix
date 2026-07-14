@@ -962,7 +962,7 @@ const P2 =
   "muddies the glaze.";
 const P3 = "The anchor image is the first felt impression, fixed before mixing begins.";
 
-const TRIAGE_DECISIONS = [
+const TRIAGE_DECISIONS: ReturnType<typeof decisions> = [
   {
     kind: "pick-any",
     id: "residue",

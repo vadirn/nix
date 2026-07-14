@@ -147,7 +147,7 @@ const byteLen = (s: string): number => Buffer.byteLength(s, "utf8");
 // length + 1 for the newline). Aligns a raw line index with its byte span.
 function lineByteOffsets(text: string): number[] {
   const lines = text.split("\n");
-  const off = new Array<number>(lines.length);
+  const off: number[] = Array.from({ length: lines.length });
   let acc = 0;
   for (let i = 0; i < lines.length; i++) {
     off[i] = acc;

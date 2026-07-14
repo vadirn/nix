@@ -725,7 +725,7 @@ export function stripInteract(text: string): string {
   const arr = text.split("\n");
   if (endsNL) arr.pop();
 
-  const del: boolean[] = new Array(arr.length).fill(false);
+  const del: boolean[] = Array.from({ length: arr.length }, () => false);
   for (const b of blocks) {
     for (let ln = b.span[0]; ln <= b.span[1]; ln++) del[ln - 1] = true;
   }

@@ -123,7 +123,7 @@ test("relations become flat PreEdges owned by the headword; rel normalized, pred
   expect(e.to).toBe("Widget");
   expect(e.quote).toBe("gadget depends on a widget");
   // predicate is not part of PreEdge at all
-  expect((e as Record<string, unknown>).predicate).toBeUndefined();
+  expect((e as unknown as Record<string, unknown>).predicate).toBeUndefined();
 });
 
 test("judgements: modality clamps to the two marked forms, else assertoric", () => {

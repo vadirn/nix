@@ -16,6 +16,7 @@ import {
 } from "./prompts.ts";
 import { type ProseUnit } from "./harvest.ts";
 import { type Residue, proseResidue } from "./residue.ts";
+import { askJson } from "./fw.ts";
 
 // Shared inconclusive→residue mapping: both the concept and workflow verdict loops below grade
 // "inconclusive" identically (a `gate-inconclusive:` reason, surfaced-but-unverified) and derive
@@ -51,6 +52,10 @@ export async function runFidelityBackstop(
   out: string,
   body: string,
   lang: "en" | "ru",
+  // Injected transport threaded from the emit pipeline (main → distill → here), so the
+  // backstop's fidelity/workflow judges run off a fake without a process-global module
+  // mock (see fidelityGate). Production omits it → real fw.
+  ask: typeof askJson = askJson,
 ): Promise<{ residue: Residue[]; gateSkipped: number }> {
   const buf = Buffer.from(body, "utf8");
   const concepts = result.units
@@ -72,9 +77,9 @@ export async function runFidelityBackstop(
     }));
   const [graded, gradedG] = await Promise.all([
     concepts.length
-      ? fidelityGate(thesis, out, concepts)
+      ? fidelityGate(thesis, out, concepts, ask)
       : Promise.resolve({ thesisRecoverable: true, concepts: [] as ConceptVerdict[] }),
-    groups.length ? workflowGate(groups, lang) : Promise.resolve([] as StepVerdict[]),
+    groups.length ? workflowGate(groups, lang, ask) : Promise.resolve([] as StepVerdict[]),
   ]);
   const residue: Residue[] = [];
   // an unrecoverable thesis heads the residue, before the per-concept and per-workflow entries.
@@ -124,8 +129,10 @@ export async function runProseGate(
   units: ProseUnit[],
   outputText: string,
   lang: "en" | "ru",
+  // Injected transport (see runFidelityBackstop); production omits it → real fw.
+  ask: typeof askJson = askJson,
 ): Promise<Residue[]> {
   if (units.length === 0) return [];
-  const { verdicts, flaked } = await proseGate(units, outputText, lang);
+  const { verdicts, flaked } = await proseGate(units, outputText, lang, ask);
   return proseResidue(units, verdicts, flaked, outputText);
 }

@@ -41,7 +41,6 @@ import {
   compactSection,
   partition,
   payloadDensity,
-  payloadMask,
   routeNote,
   routeSection,
   sections,

@@ -9,7 +9,6 @@
 // non-TTY skip (distill()'s TTY gate) is additionally pinned by every existing suite staying green.
 // Run with `bun test retype.test.ts` from this directory.
 import { expect, test } from "bun:test";
-import { Buffer } from "node:buffer";
 import { computeSource, type DistillationResult, type Edge, type Unit } from "./graph.ts";
 import { locate } from "./locate.ts";
 import { projectMarkdown, type Projection } from "./project.ts";
@@ -180,7 +179,7 @@ function retypeBlock(specs: BlockSpec[], idx: number, to: string): BlockSpec[] {
           ...s,
           items: s.items.map((it) => ({
             ...it,
-            state: (it.target === to ? "checked" : "unchecked") as const,
+            state: it.target === to ? ("checked" as const) : ("unchecked" as const),
           })),
         }
       : s,

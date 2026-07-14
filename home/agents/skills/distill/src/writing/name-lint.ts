@@ -71,7 +71,7 @@ function tokens(text: string): Tok[] {
       const before = line.slice(prevEnd < 0 ? 0 : prevEnd, m.index);
       const initial =
         first ||
-        /[.!?:;|—]\s*$|["«(\[]\s*$/.test(before) ||
+        /[.!?:;|—]\s*$|["«([]\s*$/.test(before) ||
         /^\s*[-*>#\d.]+\s*$/.test(line.slice(0, m.index));
       out.push({ word: m[0], initial, idx: idx++, line: li });
       prevEnd = m.index + m[0].length;

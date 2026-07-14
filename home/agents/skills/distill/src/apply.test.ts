@@ -26,6 +26,7 @@ import { afterEach, expect, test } from "bun:test";
 import { type Item, parseInteract, stripInteract } from "./interact.ts";
 import { buildIntermediary, safeHandle } from "./triage.ts";
 import { verbatimDef, verbatimDirectives } from "./prompts.ts";
+import { askJson } from "./fw.ts";
 import type { Residue } from "./residue.ts";
 import {
   type WorkflowOp,
@@ -230,7 +231,11 @@ function tmpdirFor(tag: string): string {
 // ---------------------------------------------------------------------------
 type Captured = { code: number | undefined; threw: unknown; stdout: string; stderr: string };
 
-async function apply(tmpPath: string, lang: "en" | "ru" | "auto" = "auto"): Promise<Captured> {
+async function apply(
+  tmpPath: string,
+  lang: "en" | "ru" | "auto" = "auto",
+  ask?: typeof askJson,
+): Promise<Captured> {
   const outChunks: string[] = [];
   const errChunks: string[] = [];
   const realOut = process.stdout.write.bind(process.stdout);
@@ -247,7 +252,7 @@ async function apply(tmpPath: string, lang: "en" | "ru" | "auto" = "auto"): Prom
   let code: number | undefined;
   let threw: unknown;
   try {
-    code = await runApply(tmpPath, { lang });
+    code = await runApply(tmpPath, { lang, ask });
   } catch (e) {
     threw = e;
   } finally {
@@ -258,15 +263,13 @@ async function apply(tmpPath: string, lang: "en" | "ru" | "auto" = "auto"): Prom
 }
 
 // ---------------------------------------------------------------------------
-// LLM stubbing at the FETCH boundary — deliberately NOT mock.module("./fw.ts").
-// bun runs test files concurrently over one shared module registry, and a
-// module-level fw mock (installed/restored per test) races emit.test.ts's slow
-// mocked-pipeline run — un-mocking fw mid-flight there (a real 401). Stubbing
-// globalThis.fetch instead is orthogonal: a file whose askJson is mock.module'd
-// never reaches fetch, so this touches nothing emit relies on. Every apply LLM call
-// (renderEntryPrompt re-render, fidelityGate re-grade, renderProse re-projection)
-// still routes through fw→fetch, so the real askJson parse/retry path is exercised.
-// The fetch stub is installed inside applyWith and torn down in its finally.
+// LLM stubbing by DEPENDENCY INJECTION — runApply takes an `ask` seam (ApplyOpts.ask,
+// defaulting to fw's askJson), so a test hands it a fake transport directly. No
+// globalThis.fetch swap and no mock.module("./fw.ts"): nothing process-global is
+// mutated, so a file running concurrently over the shared module registry can never
+// see this file's stub (the race that a fetch/module mock invites). Every apply LLM
+// call (renderEntryPrompt re-render, fidelityGate re-grade) routes through the injected
+// `ask`, dispatched on prompt markers below.
 // ---------------------------------------------------------------------------
 const RENDER_PROSE_MARKER = "reconstructing a readable prose note";
 const RENDER_ENTRY_MARKER = 'Write the glossary definition for "';
@@ -298,33 +301,22 @@ const NO_LLM = (): never => {
 
 type MockedCapture = Captured & { prompts: string[] };
 
-// Run apply with globalThis.fetch stubbed to answer each fw request from `handler`
+// Run apply with an injected `ask` that answers each fw request from `handler`
 // (dispatched on the user prompt). Records every prompt so "fires once" / "no LLM"
-// assertions read off `prompts`. fetch is restored in finally — the stub never
-// outlives the call, so a concurrent file's real fetch is untouched.
+// assertions read off `prompts`. The seam is local to this call — nothing global is
+// touched, so a concurrent file's transport is untouched.
 async function applyWith(
   tmpPath: string,
   handler: (prompt: string) => unknown,
   lang: "en" | "ru" | "auto" = "auto",
 ): Promise<MockedCapture> {
   const prompts: string[] = [];
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
-    const body = JSON.parse((init?.body as string) ?? "{}");
-    const prompt: string = body?.messages?.[0]?.content ?? "";
+  const ask = (async (_model: unknown, prompt: string) => {
     prompts.push(prompt);
-    const content = JSON.stringify(handler(prompt));
-    return new Response(
-      JSON.stringify({ choices: [{ message: { content }, finish_reason: "stop" }] }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
-  }) as typeof globalThis.fetch;
-  try {
-    const cap = await apply(tmpPath, lang);
-    return { ...cap, prompts };
-  } finally {
-    globalThis.fetch = realFetch;
-  }
+    return handler(prompt);
+  }) as typeof askJson;
+  const cap = await apply(tmpPath, lang, ask);
+  return { ...cap, prompts };
 }
 
 const HAD_KEY = process.env.FIREWORKS_API_KEY;
@@ -620,27 +612,14 @@ test("apply: a non-transient error in the recover-def LLM window propagates (reg
   // `catch {}` floored ANY throw (including this one) to verbatimDef and returned exit 0;
   // after the fix, rethrowIfBug(e, "apply-recover-def") sees a non-transient error and
   // rethrows, so runApply itself throws and nothing is written.
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
-    const body = JSON.parse((init?.body as string) ?? "{}");
-    const prompt: string = body?.messages?.[0]?.content ?? "";
-    if (prompt.includes(RENDER_ENTRY_MARKER)) {
-      return new Response(JSON.stringify({ error: "bad request" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    return new Response(
-      JSON.stringify({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }),
-      { status: 200, headers: { "Content-Type": "application/json" } },
-    );
-  }) as typeof globalThis.fetch;
-  let r: Captured;
-  try {
-    r = await apply(tmpPath);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
+  // The injected transport throws exactly what fw() raises for a 4xx: a plain Error
+  // (`FW 400: …`), NOT TransientError/TruncationError. fw.ts's own status→error
+  // classification is exercised in degradation.test.ts; here the point is that a
+  // non-transient throw survives the recover-def catch (rethrowIfBug rethrows it).
+  const r = await applyWith(tmpPath, (prompt) => {
+    if (prompt.includes(RENDER_ENTRY_MARKER)) throw new Error('FW 400: {"error":"bad request"}');
+    return {};
+  });
   expect(r.threw).toBeDefined();
   expect(String((r.threw as Error).message)).toContain("FW 400");
   // nothing written on the propagation path: the pre-existing destination (from emit's

@@ -5,7 +5,7 @@
 // carved out around it: the backstop gates into gates.ts, the CLI surface + path helpers into
 // cli.ts, the interactive terminal halves into tty.ts. main() is invoked by the entrypoint.
 import { existsSync, linkSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import {
   type Block,
   type LinkInventory,
@@ -14,20 +14,7 @@ import {
   slugSegment,
   wordCount,
 } from "./text.ts";
-import {
-  type PayloadSpan,
-  harvestBlockquotes,
-  harvestCitations,
-  harvestExternalLinks,
-  harvestFences,
-  harvestImages,
-  harvestMath,
-  harvestNumbers,
-  harvestProseListItems,
-  harvestTableRows,
-  harvestVaultEdges,
-  normalizeForContainment,
-} from "./harvest.ts";
+import { harvestExternalLinks, harvestProseListItems, harvestVaultEdges } from "./harvest.ts";
 import {
   type Route,
   type RoutedSection,
@@ -37,7 +24,7 @@ import {
   routeNote,
 } from "./route.ts";
 import { parseDescription, parseFrontmatter, parseSuperseded, parseType } from "./frontmatter.ts";
-import { askJson, EXTRACT, isTransient, rethrowIfBug, TruncationError } from "./fw.ts";
+import { askJson, isTransient, TruncationError } from "./fw.ts";
 import { extractGraph, gradeBlocks } from "./prompts.ts";
 import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "./writing/name-lint.ts";
 import { locateGraph, payloadKey } from "./locate-graph.ts";
@@ -144,14 +131,14 @@ async function compressToGraph(
   lang: "en" | "ru",
   selfSlug: string,
   linkInventory: LinkInventory,
-  opts: { progress?: (line: string) => void },
+  opts: { progress?: (line: string) => void; ask?: typeof askJson },
 ): Promise<{
   pre: Awaited<ReturnType<typeof extractGraph>>;
   result: Projection;
   payloadBlocks: Block[];
 } | null> {
   opts.progress?.("extract…");
-  const pre = await extractGraph(blocks, frontDescription, lang, linkInventory, selfSlug);
+  const pre = await extractGraph(blocks, frontDescription, lang, linkInventory, selfSlug, opts.ask);
   if (
     pre.concepts.length === 0 &&
     pre.judgements.length === 0 &&
@@ -168,6 +155,7 @@ async function compressToGraph(
     pre.thesis,
     pre.concepts.map((c) => ({ term: c.id ?? "", def: c.statement })),
     blocks,
+    opts.ask,
   );
   const payloadBlocks = blocks.filter((b) => grades.get(b.id) === "retain");
   // locate: pre-graph → span-anchored graph. A bad quote HARD-ABORTS here, before any
@@ -193,6 +181,9 @@ async function distill(
     // the default-compress path — the seven-section projection). Undefined for stdin.
     path?: string;
     progress?: (line: string) => void;
+    // Injected model transport, threaded from main() to compressToGraph and the backstop
+    // gates so the pipeline runs off a fake in tests; undefined → real fw everywhere.
+    ask?: typeof askJson;
   },
   selfSlug = "",
 ): Promise<DistillResult> {
@@ -207,7 +198,6 @@ async function distill(
     }
   }
   const blocks = segment(text);
-  const blockById = new Map(blocks.map((b) => [b.id, b]));
   const beforeWords = wordCount(text);
 
   // The note's own slug — the source endpoint of a note-level edge and the SELF
@@ -280,7 +270,7 @@ async function distill(
   let gateSkipped = 0;
   if (!opts.noGate) {
     opts.progress?.("gate…");
-    const bs = await runFidelityBackstop(pre.thesis, result, out, text, lang);
+    const bs = await runFidelityBackstop(pre.thesis, result, out, text, lang, opts.ask);
     residue = bs.residue;
     gateSkipped = bs.gateSkipped;
   }
@@ -312,7 +302,7 @@ async function distill(
   if (!opts.noGate && !opts.glossaryOnly && !opts.factsDump) {
     const units = harvestProseListItems(text, []);
     opts.progress?.("prose-gate…");
-    residue = residue.concat(await runProseGate(units, out, lang));
+    residue = residue.concat(await runProseGate(units, out, lang, opts.ask));
   }
 
   // deterministic payload-coverage backstop: surface any source payload span the projection dropped
@@ -538,7 +528,11 @@ function handleCompressError(
 // interactive review intermediary or a passthrough envelope beside the destination. It returns no
 // value; it sets the process exit code (0 success/passthrough-prose, 1 missing key, 2 misuse,
 // 3 passthrough, 4 pending intermediary).
-export async function main() {
+// `ask` is the model transport, injected so emit.test.ts / session.test.ts drive the
+// whole five-stage pipeline off a fake without a process-global module mock (it threads
+// down through distill → compressToGraph/extractGraph/gradeBlocks and the backstop gates).
+// The CLI entrypoint calls main() with no argument → real fw transport.
+export async function main(ask: typeof askJson = askJson) {
   // The whole CLI surface resolves in parseArgs (help/misuse/ok). Act on help and misuse
   // here, before the API-key gate or any network call: help prints usage to stdout and exits
   // 0; a parse error prints to stderr and exits 2 (distinct from the runtime exit 1/0 paths).
@@ -691,6 +685,7 @@ export async function main() {
         maxWords,
         path: inputPath,
         progress,
+        ask,
       },
       selfSlug,
     );

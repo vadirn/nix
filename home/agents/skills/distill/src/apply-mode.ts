@@ -90,6 +90,10 @@ export type ApplyOpts = {
   // Overrides body-language detection for the re-render/re-projection prompts;
   // "auto" detects from the stripped note body (parity with compress mode).
   lang: "en" | "ru" | "auto";
+  // The model call, injected so tests drive the recover-def LLM window (re-render +
+  // re-grade) without a process-global fetch/module mock (see fidelityGate in
+  // prompts.ts). Production callers (main/tty) omit it → real fw transport.
+  ask?: typeof askJson;
 };
 
 // The stamp hash form the emit and the compress preflight both use: the shared 12-hex
@@ -106,7 +110,7 @@ export function stampHash(bytes: string | Buffer): string {
 // class that calls an LLM).
 function targetKind(target: string): "thesis" | "steps" | "def" {
   if (target === "thesis") return "thesis";
-  if (/^procedure:/.test(target)) return "steps";
+  if (target.startsWith("procedure:")) return "steps";
   return "def";
 }
 
@@ -353,6 +357,7 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   let body = stripInteract(text);
   const { body: bodyNoFront } = parseFrontmatter(body);
   const lang = opts.lang === "auto" ? detectLang(bodyNoFront) : opts.lang;
+  const ask = opts.ask ?? askJson;
   // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
   // analogue of the old tie-together line).
   const tie0 = parseCanonicalNote(bodyNoFront).abstract;
@@ -396,15 +401,18 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   for (const d of defRecovers) {
     let finalDef: string;
     try {
-      const rr = await askJson<{ def: string }>(
+      const rr = await ask<{ def: string }>(
         EXTRACT,
         renderEntryPrompt({ term: d.term, def: "" }, d.src, lang),
         1024,
       );
       const reRendered = (rr.def ?? "").trim();
-      const graded = await fidelityGate(tie0, body, [
-        { term: d.term, def: reRendered, sourceText: d.src },
-      ]);
+      const graded = await fidelityGate(
+        tie0,
+        body,
+        [{ term: d.term, def: reRendered, sourceText: d.src }],
+        ask,
+      );
       const grade = graded.concepts[0]?.grade ?? "translated";
       if (grade === "residue" || !reRendered) {
         finalDef = verbatimDef(d.term, d.src);
