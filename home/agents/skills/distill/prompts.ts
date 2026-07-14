@@ -335,7 +335,10 @@ export async function gradeBlocks(
 // terminal-punctuation boundary. Idempotent — safe to call on already-flattened text.
 // Shared by verbatimDirectives' fallback sentence and verbatimDef's needle search.
 function flattenSentences(text: string): string[] {
-  return text.replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/);
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+/);
 }
 
 export function verbatimDirectives(sourceText: string): string[] {

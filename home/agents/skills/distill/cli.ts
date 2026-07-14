@@ -98,9 +98,7 @@ export type ParseResult =
 // both fail loudly rather than silently defaulting. `hint` completes "<flag> expects <hint>"
 // so each call site keeps its own wording; callers still do their own value-specific validation
 // (enum/range/suffix checks) on the returned value.
-type TakeValueResult =
-  | { ok: true; value: string; next: number }
-  | { ok: false; message: string };
+type TakeValueResult = { ok: true; value: string; next: number } | { ok: false; message: string };
 
 function takeValue(argv: string[], i: number, flag: string, hint: string): TakeValueResult {
   const v = argv[i + 1];

@@ -356,8 +356,16 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   // to the op set + counters, with NO I/O. `verbatim` is `let` because the def-recover lane
   // below bumps it per second-grade failure; every other field is final here.
   const cls = classifyItems(items, body);
-  const { recovered, kept, removed, defRecovers, defRemovals, workflowOps, thesisPara, unrecoverable } =
-    cls;
+  const {
+    recovered,
+    kept,
+    removed,
+    defRecovers,
+    defRemovals,
+    workflowOps,
+    thesisPara,
+    unrecoverable,
+  } = cls;
   let verbatim = cls.verbatim;
 
   // A checked recover apply cannot execute is refused LOUD — never silently swallowed;

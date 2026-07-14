@@ -172,8 +172,7 @@ export function projectMarkdown(result: Projection, opts?: { relations?: boolean
 
   blocks.push(`# ${title ?? titleFromPath(source.path)}`);
 
-  if (abstract && abstract.trim())
-    blocks.push(`## ${ABSTRACT_HEADING}\n\n${abstract.trim()}`);
+  if (abstract && abstract.trim()) blocks.push(`## ${ABSTRACT_HEADING}\n\n${abstract.trim()}`);
 
   const sections = [
     typeSection(SECTION_HEADING.concept, byType("concept"), renderConcept),

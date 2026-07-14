@@ -850,7 +850,12 @@ test("classifyItems: checked keep is counted, never executed; checked recover de
   const r = classifyItems(
     [
       mkItem({ state: "checked", verb: "keep", target: "Anchor image" }),
-      mkItem({ state: "checked", verb: "recover", target: "Impression distance", payload: DEF_SRC }),
+      mkItem({
+        state: "checked",
+        verb: "recover",
+        target: "Impression distance",
+        payload: DEF_SRC,
+      }),
     ],
     NOTE,
   );
@@ -931,7 +936,12 @@ test("classifyItems: a CHECKED recover that cannot execute lands in unrecoverabl
 test("classifyItems: unchecked entries remove by EFFECT — a resolving def/steps counts, a non-recoverable one does not", () => {
   const r = classifyItems(
     [
-      mkItem({ state: "unchecked", verb: "recover", target: "Impression distance", payload: DEF_SRC }),
+      mkItem({
+        state: "unchecked",
+        verb: "recover",
+        target: "Impression distance",
+        payload: DEF_SRC,
+      }),
       mkItem({
         state: "unchecked",
         verb: "recover",
@@ -941,7 +951,11 @@ test("classifyItems: unchecked entries remove by EFFECT — a resolving def/step
       // unchecked non-recoverable: never in the output, so no phantom "removed"
       mkItem({ state: "unchecked", verb: "recover", target: "nonexistent" }),
       // unchecked steps out-of-range: nothing to remove
-      mkItem({ state: "unchecked", verb: "recover", target: "procedure:Block from the impression:99" }),
+      mkItem({
+        state: "unchecked",
+        verb: "recover",
+        target: "procedure:Block from the impression:99",
+      }),
     ],
     NOTE,
   );
