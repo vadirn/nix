@@ -1,8 +1,8 @@
 // locate-graph — the locate stage: the second of distill's three pipeline stages (extract →
 // locate → span-typing review). It turns a `PreGraph` (parseExtractGraph's output: typed units
 // carrying their verbatim `quote` but no `span`) into the span-anchored canonical
-// `DistillationResult`, running `locate(body, quote)` per unit and edge. This runs IMMEDIATELY
-// after extract, not at end-of-pipeline — so a bad quote surfaces at the earliest possible point.
+// `DistillationResult`. This runs IMMEDIATELY after extract, not at end-of-pipeline — so a bad
+// quote surfaces at the earliest possible point.
 //
 // This is the reparented core of the retired adapt.ts::comboToResult, MINUS the settled-artifact
 // plumbing (no defByTerm / workflowSteps / orderedEntries / stepGroups carriers — the pre-graph
@@ -10,26 +10,38 @@
 // locateGraph → projectMarkdown, replacing the deleted adapt.ts; the three legacy output paths
 // (routed / --glossary / --reference) still run the settle chain.
 //
-// It is a leaf over the canonical modules: graph.ts (types + computeSource), locate.ts (the
-// span-locate primitive), and slugSegment / Block from text.ts. It does NOT import distill-core.ts,
-// so it carries no runtime dependency on the orchestrator.
+// It is a leaf over the canonical modules: graph.ts (types + computeSource), snap.ts (the
+// block-granular anchor for idea-lane quotes), locate.ts (the byte-exact anchor for the payload
+// lane), and slugSegment / Block from text.ts. It does NOT import distill-core.ts, so it carries no
+// runtime dependency on the orchestrator.
 //
-// LOCKED: a failed `locate` HARD-ABORTS. `locate` throws a typed `LocateError` on a not-found or
-// ambiguous quote; locateGraph lets it propagate unchanged (the projection is the DEFAULT compress
-// body, so a bad quote must surface loudly). There is NO coarse-span fallback.
+// LOCKED: an idea-lane quote is an ABSTRACTIVE pointer (the model rewrote the source), so it SNAPS
+// to the enclosing mdstruct block via snapQuote — a paraphrase/glyph-swap/stitch resolves to a
+// block-granular span instead of hard-failing. A snap MISS still HARD-ABORTS: snapQuote throws
+// `SnapError` on a non-empty score-0 quote, and snapRequired ALSO aborts on the empty-quote null (a
+// head unit MUST anchor). The PAYLOAD lane alone stays on byte-exact `locate` (its statement IS the
+// verbatim block), keeping `LocateError`'s tight hard gate. There is NO coarse-span fallback.
 import { computeSource, type Edge, type PreGraph, type Unit } from "@/distill/graph/graph.ts";
 import { locate } from "@/distill/extract/locate.ts";
+import {
+  buildSnapTargets,
+  snapQuote,
+  snapRequired,
+  type SnapTarget,
+} from "@/distill/extract/snap.ts";
 import { oneLine } from "@/distill/extract/harvest.ts";
-import type { Span } from "@/distill/mdstruct.ts";
+import { parseDoc, type Span } from "@/distill/mdstruct.ts";
 import { slugSegment, type Block } from "@/core/text.ts";
 import type { Projection } from "@/distill/graph/project.ts";
 
-// Locate a sub-element's (bullet / tail-step) quote to a span, or `null` when the model gave no
-// quote (an empty quote is a deliberate no-anchor, not a hallucination — it renders unanchored,
-// the synthesized-step convention). A PRESENT quote still hard-aborts on a locate miss, so the
-// anti-hallucination gate holds for every anchored sub-element, not just the head.
-function locateSub(body: string, quote: string): Span | null {
-  return quote.trim().length === 0 ? null : locate(body, quote);
+// Snap a sub-element's (bullet / tail-step) quote to its enclosing-block span, or `null` when the
+// model gave no quote (an empty quote is a deliberate no-anchor, not a hallucination — it renders
+// unanchored, the synthesized-step convention). snapQuote itself returns null on an empty-normalized
+// quote, so no explicit empty guard is needed. A PRESENT quote still hard-aborts on a snap miss
+// (snapQuote throws SnapError), so the anti-hallucination gate holds for every anchored sub-element,
+// not just the head.
+function snapSub(quote: string, targets: SnapTarget[]): Span | null {
+  return snapQuote(quote, targets)?.span ?? null;
 }
 
 // A payload subsection key: the first meaningful source line (fence markers skipped; blockquote /
@@ -62,13 +74,14 @@ function resolveEndpoint(to: string, slugToId: Map<string, string>): string | un
   return slug ? slugToId.get(slug) : undefined;
 }
 
-// Turn a pre-graph into the span-anchored canonical graph. Every unit/edge span is
-// `locate(body, quote)`; a failed locate propagates (HARD-ABORT). `payloadBlocks` is the
-// deterministic retain lane — payload is NOT a pre-graph channel, so it rides in here as an
-// optional argument (the primary signature is `(pre, path, body)`; the pipeline passes the
-// retain-graded blocks in after extract). `title`/`abstract` ride on the returned `Projection`
-// (project.ts models them as optional on `Projection extends DistillationResult`, so the projector
-// renders them without widening the canonical `DistillationResult`).
+// Turn a pre-graph into the span-anchored canonical graph. Idea-lane unit/edge spans SNAP to their
+// enclosing block via `snapQuote` against `targets`; the payload lane alone uses byte-exact
+// `locate`. A snap/locate miss propagates (HARD-ABORT). `payloadBlocks` is the deterministic retain
+// lane — payload is NOT a pre-graph channel, so it rides in here as an optional argument. `targets`
+// is the snap-target list, built ONCE from `parseDoc(body)` and threaded to every idea-lane anchor.
+// `title`/`abstract` ride on the returned `Projection` (project.ts models them as optional on
+// `Projection extends DistillationResult`, so the projector renders them without widening the
+// canonical `DistillationResult`).
 export function locateGraph(
   pre: PreGraph,
   path: string,
@@ -76,22 +89,25 @@ export function locateGraph(
   payloadBlocks: Block[] = [],
 ): Projection {
   const source = computeSource(path, body);
+  const targets = buildSnapTargets(parseDoc(body));
   const units: Unit[] = [];
 
   // concept units ← pre.concepts: statement is the final def joined with any extension bullets;
-  // `span` locates the def's verbatim quote, `subSpans` locates each bullet's own quote
-  // (per-sub-element anchoring). A bullet with no quote yields a null hole.
+  // `span` SNAPS the def's quote to its enclosing block, `subSpans` snaps each bullet's own quote
+  // (per-sub-element anchoring). A bullet with no quote yields a null hole. NB: every idea-lane
+  // `span` here is BLOCK-GRANULAR — the enclosing mdstruct block, not the quote's exact byte
+  // extent — since the quote is an abstractive (paraphrased) pointer, not a verbatim slice (F3).
   for (const c of pre.concepts) {
     const bullets = (c.bullets ?? []).filter((b) => b.statement.trim().length > 0);
     const statement = [c.statement, ...bullets.map((b) => b.statement)]
       .filter((s) => s && s.trim().length > 0)
       .join("\n");
-    const subSpans = bullets.map((b) => locateSub(body, b.quote));
+    const subSpans = bullets.map((b) => snapSub(b.quote, targets));
     units.push({
       id: c.id ?? "",
       type: "concept",
       statement,
-      span: locate(body, c.quote),
+      span: snapRequired(c.quote, targets),
       ...(subSpans.length ? { subSpans } : {}),
     });
   }
@@ -103,7 +119,7 @@ export function locateGraph(
       id: `J${i + 1}`,
       type: "judgment",
       statement: j.statement,
-      span: locate(body, j.quote),
+      span: snapRequired(j.quote, targets),
       modality: j.modality,
     });
   });
@@ -114,7 +130,7 @@ export function locateGraph(
       id: `I${i + 1}`,
       type: "inference",
       statement: inf.statement,
-      span: locate(body, inf.quote),
+      span: snapRequired(inf.quote, targets),
     });
   });
 
@@ -127,12 +143,12 @@ export function locateGraph(
     if (steps.length === 0) return;
     const statement = steps.map((s) => s.statement).join("\n");
     const [lead, ...rest] = steps;
-    const subSpans = rest.map((s) => locateSub(body, s.quote));
+    const subSpans = rest.map((s) => snapSub(s.quote, targets));
     units.push({
       id: p.headword.trim() || `Procedure ${i + 1}`,
       type: "procedure",
       statement,
-      span: locate(body, lead.quote),
+      span: snapRequired(lead.quote, targets),
       ...(subSpans.length ? { subSpans } : {}),
     });
   });
@@ -160,13 +176,13 @@ export function locateGraph(
   // (a cross-note wikilink). `rel` is an OPEN token — REL_REGISTRY (text.ts) is a known
   // vocabulary, not a closed enum, so an off-registry rel (e.g. a deontic or causal predicate) is
   // KEPT, not dropped (Chesterton's Fence: a closed enum could not hold a deontic relation). Only
-  // a retained edge's quote is located (so a dropped edge's absent/bad quote never aborts the
-  // run); a retained edge's failed locate propagates (HARD-ABORT).
+  // a retained edge's quote is snapped (so a dropped edge's absent/bad quote never aborts the
+  // run); a retained edge is a head unit, so a snap miss propagates (HARD-ABORT).
   const edges: Edge[] = [];
   for (const e of pre.edges) {
     const to = resolveEndpoint(e.to, slugToId);
     if (to === undefined) continue; // no local unit endpoint → drop
-    edges.push({ from: e.fromHeadword, to, rel: e.rel, span: locate(body, e.quote) });
+    edges.push({ from: e.fromHeadword, to, rel: e.rel, span: snapRequired(e.quote, targets) });
   }
 
   return { source, units, edges, title: pre.title, abstract: pre.abstract };

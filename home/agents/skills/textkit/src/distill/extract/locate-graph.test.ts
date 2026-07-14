@@ -2,15 +2,19 @@
 // a hand-built PreGraph → locateGraph → projectMarkdown. Asserts the frontmatter Source, that the
 // expected sections populate, that every emitted start..end anchor round-trips against the body
 // bytes, that Relations render `from — rel → to`, and that the payload retain lane folds in.
-// Negative: an absent quote hard-aborts (LocateError); a no-unit endpoint is dropped, while an
+// Idea-lane spans are BLOCK-GRANULAR (the enclosing mdstruct block snapQuote resolves to, not the
+// quote's exact byte extent), so a concept/step/edge anchor round-trips to its whole enclosing
+// paragraph; the payload lane alone stays byte-exact (it rides `locate`). Negative: a garbage quote
+// sharing no token with any block hard-aborts (SnapError); a no-unit endpoint is dropped, while an
 // off-registry rel (open registry) is KEPT and rendered. Converges on the e2e.test.ts
 // template (build the graph directly). Run with
-// `bun test locate-graph.test.ts`.
+// `bun test locate-graph.test.ts` — parseDoc (the default `targets`) spawns the `mdstruct` binary,
+// which must be on PATH.
 import { expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
 import { computeSource, type PreGraph } from "@/distill/graph/graph.ts";
 import { locateGraph } from "@/distill/extract/locate-graph.ts";
-import { LocateError } from "@/distill/extract/locate.ts";
+import { SnapError } from "@/distill/extract/snap.ts";
 import { sliceBytes } from "@/distill/mdstruct.ts";
 import { projectMarkdown } from "@/distill/graph/project.ts";
 import type { Block } from "@/core/text.ts";
@@ -139,11 +143,13 @@ test("locateGraph: every emitted start..end anchor round-trips against the body 
   }
 });
 
-test("locateGraph: a concept anchor round-trips to its verbatim quote", () => {
+test("locateGraph: a concept anchor snaps to its enclosing block (block-granular, not the exact quote)", () => {
   const result = locateGraph(pre(), PATH, BODY, payloadBlocks);
   const widget = result.units.find((u) => u.id === "Widget")!;
+  // the quote is "A widget is a small composable unit of work."; snapQuote resolves it to the
+  // enclosing paragraph block, which pairs both widget/gadget definition lines.
   expect(sliceBytes(Buffer.from(BODY, "utf8"), widget.span)).toBe(
-    "A widget is a small composable unit of work.",
+    "A widget is a small composable unit of work.\nA gadget is a larger assembly built from widgets.",
   );
 });
 
@@ -157,10 +163,14 @@ test("locateGraph: procedure id is the group headword; statement joins the steps
 test("locateGraph: per-step spans — every non-lead procedure step is anchored by its own subSpan", () => {
   const result = locateGraph(pre(), PATH, BODY, payloadBlocks);
   const proc = result.units.find((u) => u.type === "procedure")!;
-  // two steps → one tail subSpan, located from the second step's own quote
+  // two steps → one tail subSpan, snapped from the second step's own quote to its enclosing block
   expect(proc.subSpans).toHaveLength(1);
   const buf = Buffer.from(BODY, "utf8");
-  expect(sliceBytes(buf, proc.subSpans![0]!)).toBe("Then bolt them together into a gadget.");
+  // "Then bolt them together into a gadget." snaps to the enclosing procedure paragraph (all three
+  // step lines share one block) — block-granular, not the exact step line.
+  expect(sliceBytes(buf, proc.subSpans![0]!)).toBe(
+    "First, assemble the widgets in order.\nThen bolt them together into a gadget.\nFinally, verify the assembly is sound.",
+  );
   // it renders as an anchored step 2 in the projection
   const md = projectMarkdown(result);
   expect(md).toMatch(/2\. Bolt them together into a gadget\.\s+\d+\.\.\d+/);
@@ -193,8 +203,10 @@ test("locateGraph: per-bullet spans — a concept's extension bullets locate to 
   expect(widget.statement).toBe("A widget is a small composable unit.\nis the base assembly unit");
   expect(widget.subSpans).toHaveLength(1);
   const buf = Buffer.from(BODY, "utf8");
+  // the bullet quote snaps to its enclosing paragraph block (block-granular), which carries both
+  // the widget and gadget definition lines.
   expect(sliceBytes(buf, widget.subSpans![0]!)).toBe(
-    "A gadget is a larger assembly built from widgets.",
+    "A widget is a small composable unit of work.\nA gadget is a larger assembly built from widgets.",
   );
 });
 
@@ -255,7 +267,10 @@ test("locateGraph: an off-registry rel (e.g. a causal predicate) survives end-to
   const result = locateGraph(pre(), PATH, BODY, payloadBlocks);
   const causal = result.edges.find((e) => e.rel === "causes");
   expect(causal).toBeDefined();
-  expect(sliceBytes(Buffer.from(BODY, "utf8"), causal!.span)).toBe("which is a strong claim");
+  // the edge quote "which is a strong claim" snaps to its enclosing block (block-granular).
+  expect(sliceBytes(Buffer.from(BODY, "utf8"), causal!.span)).toBe(
+    "Every gadget depends on at least one widget, which is a strong claim.",
+  );
   const md = projectMarkdown(result);
   expect(md).toContain("gadget — causes → widget");
   const causalLine = md.split("\n").find((l) => l.includes("causes"))!;
@@ -268,17 +283,19 @@ test("locateGraph: title/abstract ride on the returned projection", () => {
   expect(result.abstract).toBe("Widgets compose into gadgets.");
 });
 
-test("locateGraph: a quote absent from body hard-aborts with LocateError", () => {
+test("locateGraph: a head quote sharing no token with any block hard-aborts with SnapError", () => {
   const badPre = pre({
     concepts: [
       {
         type: "concept",
         id: "Ghost",
         statement: "raw",
-        quote: "this exact sentence is not present in the body",
+        // garbage: shares no token with any block, so snapQuote scores 0 and throws (a near-miss
+        // paraphrase would instead snap to its block — that is the point of the block-granular gate)
+        quote: "zzz qqq xkcd florble",
       },
     ],
     edges: [],
   });
-  expect(() => locateGraph(badPre, PATH, BODY)).toThrow(LocateError);
+  expect(() => locateGraph(badPre, PATH, BODY)).toThrow(SnapError);
 });

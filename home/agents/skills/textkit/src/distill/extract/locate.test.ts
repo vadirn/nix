@@ -1,8 +1,8 @@
-// locate.test.ts — tests for the span-locate fidelity primitive. Covers three invariants:
-// byte-offset conversion + round-trip, the 0/1/>1 match gate, and the whitespace-collapsed
-// single retry computing the span from the raw extent. Run with `bun test` from this
-// directory. No mdstruct binary needed — locate.ts only reuses the pure `sliceBytes`/`Span`
-// from mdstruct.ts, not the CLI wrapper.
+// locate.test.ts — tests for the span-locate fidelity primitive. Covers two invariants:
+// byte-offset conversion + round-trip, and the 0/1/>1 exact-match gate (byte-exact only — no
+// whitespace or glyph-equivalence retry; that tolerance now lives in snap.ts). Run with
+// `bun test` from this directory. No mdstruct binary needed — locate.ts only reuses the pure
+// `sliceBytes`/`Span` from mdstruct.ts, not the CLI wrapper.
 import { expect, test } from "bun:test";
 import { LocateError, locate } from "@/distill/extract/locate.ts";
 import { sliceBytes } from "@/distill/mdstruct.ts";
@@ -68,35 +68,16 @@ test("ambiguous: a quote appearing twice throws asking for a longer quote", () =
   }
 });
 
-test("whitespace-collapsed fallback: a line-wrapped quote locates and the RAW extent round-trips", () => {
-  // The source wraps the sentence across a newline and doubles a space; the model's quote uses
-  // single spaces. Exact match fails; the single collapsed retry locates it.
+test("line-wrapped or glyph-varied quotes are not-found: no normalization retry", () => {
+  // The source wraps the sentence across a newline; the model's quote uses a single space.
+  // locate() no longer retries under whitespace normalization — this is a hard not-found.
   const source = "Keep the note\nshort  and dense, then stop.";
-  const quote = "Keep the note short and dense";
+  expect(() => locate(source, "Keep the note short and dense")).toThrow(LocateError);
 
-  const span = locate(source, quote);
-  // The returned span covers the RAW extent in source (with the newline and double space), so
-  // sliceBytes round-trips to the raw text — NOT to the collapsed quote.
-  const raw = "Keep the note\nshort  and dense";
-  expect(slice(source, span)).toBe(raw);
-  expect(slice(source, span)).not.toBe(quote);
-});
-
-test("whitespace-collapsed fallback across non-ASCII line wrap round-trips byte-exact", () => {
-  const source = "приоритет\nдат, не булевых флагов — так надёжнее.";
-  const quote = "приоритет дат, не булевых флагов";
-  const span = locate(source, quote);
-  expect(slice(source, span)).toBe("приоритет\nдат, не булевых флагов");
-});
-
-test("whitespace-collapsed fallback is still gated: two collapsed occurrences are ambiguous", () => {
-  const source = "do it\nnow. and again, do it  now.";
-  expect(() => locate(source, "do it now")).toThrow(LocateError);
-  try {
-    locate(source, "do it now");
-  } catch (e) {
-    expect((e as LocateError).kind).toBe("ambiguous");
-  }
+  // Likewise a typographic-glyph variant (non-breaking hyphen) the source never carried.
+  expect(() => locate("you pay through the nose for a cloud-based setup.", "cloud‑based")).toThrow(
+    LocateError,
+  );
 });
 
 test("empty quote is a not-found gate, not a zero-length span", () => {

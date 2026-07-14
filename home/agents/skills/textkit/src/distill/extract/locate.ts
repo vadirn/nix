@@ -2,7 +2,9 @@
 // the source slice a unit was distilled from, and this module locates that quote and computes
 // the half-open UTF-8 byte span. That turns the anchor from an LLM promise into a DETERMINISTIC
 // fidelity check: a failed locate is a HARD GATE — it throws a typed LocateError, never returns a
-// sentinel, so a hallucinated or mis-copied quote cannot pass silently as a bogus span.
+// sentinel, so a hallucinated or mis-copied quote cannot pass silently as a bogus span. Matching is
+// byte-exact only — no whitespace or glyph-equivalence retry; block-granular tolerance for
+// model-approximate quotes now lives in `snap.ts`.
 //
 // It is a leaf over mdstruct.ts: reuses `Span` and `sliceBytes` (the byte-exact slice the
 // computed span must round-trip against). It does NOT validate edge `rel` — REL_REGISTRY in
@@ -27,11 +29,6 @@ export class LocateError extends Error {
   }
 }
 
-// Escape a literal for embedding in a RegExp (whitespace-collapsed fallback only).
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 // Every JS-string start index at which `quote` occurs exactly. Advances by one code unit so
 // overlapping occurrences are counted too — >1 means the span is not uniquely determined.
 function exactHits(source: string, quote: string): number[] {
@@ -42,23 +39,6 @@ function exactHits(source: string, quote: string): number[] {
     if (idx === -1) break;
     hits.push(idx);
     from = idx + 1;
-  }
-  return hits;
-}
-
-// Whitespace-collapsed matches: build a regex from the quote's tokens joined by `\s+`, so a
-// line-wrapped or multi-space-collapsed quote still matches, but report the RAW match extent from
-// the source (index + matched substring) so the computed span round-trips byte-exact. Matches are
-// non-overlapping (regex /g); good enough for prose anchors.
-function collapsedHits(source: string, quote: string): { index: number; text: string }[] {
-  const tokens = quote.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return [];
-  const re = new RegExp(tokens.map(escapeRegExp).join("\\s+"), "g");
-  const hits: { index: number; text: string }[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(source)) !== null) {
-    hits.push({ index: m.index, text: m[0] });
-    if (m.index === re.lastIndex) re.lastIndex++;
   }
   return hits;
 }
@@ -82,9 +62,9 @@ function toSpan(source: string, index: number, matched: string): Span {
   return span;
 }
 
-// Locate `quote` in `source` and return its half-open UTF-8 byte span. Exact byte-match first; on
-// a clean miss (0 exact matches), retry ONCE with inter-token whitespace collapsed. A failed
-// locate throws a LocateError (the hard gate). Never returns a sentinel.
+// Locate `quote` in `source` and return its half-open UTF-8 byte span. Byte-exact match only —
+// no whitespace or glyph-equivalence retry. A failed locate throws a LocateError (the hard gate).
+// Never returns a sentinel.
 export function locate(source: string, quote: string): Span {
   if (quote.trim().length === 0) {
     throw new LocateError("not-found", quote, "locate: empty quote — nothing to anchor.");
@@ -101,22 +81,9 @@ export function locate(source: string, quote: string): Span {
     );
   }
 
-  // 0 exact matches -> the single whitespace-tolerant retry.
-  const collapsed = collapsedHits(source, quote);
-  if (collapsed.length === 1) return toSpan(source, collapsed[0].index, collapsed[0].text);
-  if (collapsed.length > 1) {
-    throw new LocateError(
-      "ambiguous",
-      quote,
-      `locate: quote occurs ${collapsed.length} times (whitespace-collapsed) — span is not ` +
-        "unique. Re-emit a longer quote with disambiguating context.",
-    );
-  }
-
   throw new LocateError(
     "not-found",
     quote,
-    "locate: quote not found in source (exact or whitespace-collapsed). The quote must be a " +
-      "verbatim slice of the source.",
+    "locate: quote not found in source. The quote must be a verbatim slice of the source.",
   );
 }

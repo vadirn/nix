@@ -43,9 +43,10 @@ function verdictResidueFields(
 // extract emits the FINAL statements there is nothing to repair, so only the gate's VERDICT half
 // survives here. It runs AFTER projectMarkdown, takes the projection body itself as judge input, and
 // surfaces residue only — no recovery, no in-place mutation, no carriers. Each concept/procedure
-// unit's `sourceText` is the verbatim bytes its span locates (the anti-hallucination anchor
-// `locateGraph` already resolved), so the concept/workflow judges compare projection ↔ source with
-// no legacy shape. Rides the `--no-gate` switch.
+// unit's span now locates the ENCLOSING mdstruct block (block-granular, resolved by `snap.ts`), so
+// `sourceText` is the whole block's bytes, not the tight quote — the concept/workflow judges see
+// whole-block source context, not a hallucination-tight anchor, when comparing projection ↔ source.
+// Rides the `--no-gate` switch.
 export async function runFidelityBackstop(
   thesis: string,
   result: Projection,
@@ -62,9 +63,10 @@ export async function runFidelityBackstop(
     .filter((u) => u.type === "concept")
     .map((u) => ({ term: u.id, def: u.statement, sourceText: sliceBytes(buf, u.span) }));
   // one workflow group per procedure unit; its steps are the joined statement re-split, its
-  // sourceText the concatenation of every step's located slice (head `span` + each `subSpans`
-  // entry) so the coverage judge sees ALL prescribed source, not just the lead step — a null hole
-  // (a synthesized step) contributes nothing.
+  // sourceText the concatenation of every step's located BLOCK (head `span` + each `subSpans`
+  // entry, each now the enclosing block's bytes, not the tight quote) so the coverage judge sees
+  // ALL prescribed source in whole-block context, not just the lead step — a null hole (a
+  // synthesized step) contributes nothing.
   const groups = result.units
     .filter((u) => u.type === "procedure")
     .map((u) => ({
