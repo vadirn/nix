@@ -11,7 +11,12 @@ import { normalizeForContainment } from "@/distill/extract/harvest.ts";
 import type { ProseVerdict } from "@/distill/prompt/prompts.ts";
 import { buildFooter, expandGuardCap } from "@/distill/app/distill-core.ts";
 import { parseArgs, USAGE } from "@/distill/app/cli.ts";
-import { anchored, payloadResidue, proseResidue, wikilinkResidue } from "@/distill/review/residue.ts";
+import {
+  anchored,
+  payloadResidue,
+  proseResidue,
+  wikilinkResidue,
+} from "@/distill/review/residue.ts";
 
 // ---- expandGuardCap: the passthrough guard's threshold, customizable via --max-words ----
 test("expandGuardCap: unset maxWords defaults to the note's own input size (today's behavior)", () => {

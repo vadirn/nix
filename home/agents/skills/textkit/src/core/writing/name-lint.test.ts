@@ -10,7 +10,8 @@ import {
   nameLintSelfConsistency,
 } from "@/core/writing/name-lint.ts";
 
-const read = (name: string) => readFileSync(resolve(import.meta.dir, "../../fixtures", name), "utf8");
+const read = (name: string) =>
+  readFileSync(resolve(import.meta.dir, "../../fixtures", name), "utf8");
 
 test("nameLintAgainstSource: Firecurl vs source — exactly one corrupted pair, no invented", () => {
   const output = read("name-lint-firecurl-draft.md");

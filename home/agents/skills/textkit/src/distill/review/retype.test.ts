@@ -9,10 +9,20 @@
 // non-TTY skip (distill()'s TTY gate) is additionally pinned by every existing suite staying green.
 // Run with `bun test retype.test.ts` from this directory.
 import { expect, test } from "bun:test";
-import { computeSource, type DistillationResult, type Edge, type Unit } from "@/distill/graph/graph.ts";
+import {
+  computeSource,
+  type DistillationResult,
+  type Edge,
+  type Unit,
+} from "@/distill/graph/graph.ts";
 import { locate } from "@/distill/extract/locate.ts";
 import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
-import { type Block, type BlockSpec, parseInteract, renderBlock } from "@/distill/review/interact.ts";
+import {
+  type Block,
+  type BlockSpec,
+  parseInteract,
+  renderBlock,
+} from "@/distill/review/interact.ts";
 import { applyTyping, buildTypingReview, typingBlockId } from "@/distill/review/retype.ts";
 
 const PATH = "widgets.md";

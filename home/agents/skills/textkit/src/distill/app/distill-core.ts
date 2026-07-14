@@ -35,7 +35,11 @@ import {
 } from "@/core/frontmatter.ts";
 import { askJson, isTransient, TruncationError } from "@/core/fw.ts";
 import { extractGraph, gradeBlocks } from "@/distill/prompt/prompts.ts";
-import { formatNameLint, nameLintAgainstSource, type NameLintResult } from "@/core/writing/name-lint.ts";
+import {
+  formatNameLint,
+  nameLintAgainstSource,
+  type NameLintResult,
+} from "@/core/writing/name-lint.ts";
 import { locateGraph, payloadKey } from "@/distill/extract/locate-graph.ts";
 import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
 import { computeSource, type Unit } from "@/distill/graph/graph.ts";
@@ -46,7 +50,13 @@ import { buildIntermediary } from "@/distill/review/triage.ts";
 import { runApply, stampHash } from "@/distill/app/apply-mode.ts";
 import { runFidelityBackstop, runProseGate } from "@/distill/review/gates.ts";
 import { runTypingReview, runTtySession } from "@/distill/app/tty.ts";
-import { USAGE, parseArgs, refusePendingIntermediary, tempMdPath, tmpPathFor } from "@/distill/app/cli.ts";
+import {
+  USAGE,
+  parseArgs,
+  refusePendingIntermediary,
+  tempMdPath,
+  tmpPathFor,
+} from "@/distill/app/cli.ts";
 import { buildPassthroughEnvelope } from "@/distill/app/envelope.ts";
 
 // ---- pipeline ----

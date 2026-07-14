@@ -74,7 +74,12 @@
 
 import { existsSync, linkSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { type Item, parseInteract, resolveInteract, stripInteract } from "@/distill/review/interact.ts";
+import {
+  type Item,
+  parseInteract,
+  resolveInteract,
+  stripInteract,
+} from "@/distill/review/interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "@/distill/review/triage.ts";
 import { askJson, EXTRACT, rethrowIfBug } from "@/core/fw.ts";
 import {
