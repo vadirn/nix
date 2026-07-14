@@ -15,7 +15,7 @@ import { parseRelationsBlock } from "./rel-parse.ts";
 // the vault-query lint dir that holds the canonical JSON.
 const JSON_PATH = resolve(
   import.meta.dir,
-  "../../../../vault-query/src/commands/lint/rel-registry.json",
+  "../../../../../vault-query/src/commands/lint/rel-registry.json",
 );
 
 test("REL_REGISTRY matches canonical rel-registry.json", () => {
