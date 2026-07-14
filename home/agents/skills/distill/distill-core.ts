@@ -88,7 +88,7 @@ function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
-// build the success footer line — the one-line summary stderr carries beside the
+// buildFooter renders the success footer line — the one-line summary stderr carries beside the
 // temp-file path on stdout. Pure; the nothing-to-distill and expansion guards in distill()
 // emit their own footers, so this only renders a real (compressed-or-equal) run.
 export function buildFooter(m: {
@@ -129,12 +129,12 @@ function deterministicBackstop(
   return { residue: edgePayloadResidue(source, out), nameLint: nameLintAgainstSource(out, source) };
 }
 
-// The canonical compress core (blueprint §0): extract native typed units → retain-grade the
+// The canonical compress core: extract native typed units → retain-grade the
 // payload lane → locate spans (hard-gate). Returns the span-anchored graph (`result`), the
 // pre-graph (`pre`, for the backstop's thesis + section counts), and the retain-graded
 // `payloadBlocks`, or null when nothing distills (no unit of any type → passthrough). `bodyForSpans`
 // is the text every unit/edge span indexes into: the whole source for both the homogeneous run and
-// the routed head (so a routed head's spans index the reassembled source, blueprint §6.3). Reused by
+// the routed head (so a routed head's spans index the reassembled source). Reused by
 // distill() (default/--glossary/--reference) and distillRouted() (the re-authored head).
 async function compressToGraph(
   blocks: Block[],
@@ -160,7 +160,7 @@ async function compressToGraph(
   ) {
     return null;
   }
-  // payload retain lane (blueprint §1.1) — the ONE deterministic selection surviving the settle-chain
+  // payload retain lane — the ONE deterministic selection surviving the settle-chain
   // collapse. statement = block.text (verbatim), so its locate can never fail. Units render in
   // extract-emission order (the ordering role dies).
   opts.progress?.("grade…");
@@ -170,7 +170,7 @@ async function compressToGraph(
     blocks,
   );
   const payloadBlocks = blocks.filter((b) => grades.get(b.id) === "retain");
-  // locate: pre-graph → span-anchored graph. A bad quote HARD-ABORTS here (spec §2), before any
+  // locate: pre-graph → span-anchored graph. A bad quote HARD-ABORTS here, before any
   // projection — the earliest possible surfacing.
   const result = locateGraph(pre, path, bodyForSpans, payloadBlocks);
   return { pre, result, payloadBlocks };
@@ -196,7 +196,7 @@ async function distill(
   },
   selfSlug = "",
 ): Promise<DistillResult> {
-  // Per-section render-router (D12/D16, Backlog 10). When a note carries any payload-dense section,
+  // Per-section render-router. When a note carries any payload-dense section,
   // route: re-author the idea sections into ONE compact head graph, hold the payload sections
   // verbatim as `## Payload` units, and project the merged graph as one canonical note
   // (distillRouted). --glossary bypasses routing (it wants the flat structured extract).
@@ -210,7 +210,7 @@ async function distill(
   const blockById = new Map(blocks.map((b) => [b.id, b]));
   const beforeWords = wordCount(text);
 
-  // The note's own slug — the source endpoint of a note-level edge (D38) and the SELF
+  // The note's own slug — the source endpoint of a note-level edge and the SELF
   // anchor the extractor classifies links against. Prefer the filename slug (what other
   // vault notes wikilink to); fall back to the H1 title slug when reading from stdin (no
   // filename). Computed before extract so prompt and emit use one consistent slug.
@@ -219,8 +219,8 @@ async function distill(
 
   // Every compress run — default, --glossary, --reference — is the canonical graph-native pipeline:
   // extract native typed units → locate (span hard-gate) → project. --glossary omits the synthesized
-  // `## Abstract` head (§6.1); --reference keeps it but suppresses `## Relations` (§6.2, D30 —
-  // reference notes stay link-free); every other section renders identically. The deterministic link
+  // `## Abstract` head; --reference keeps it but suppresses `## Relations` (reference notes stay
+  // link-free); every other section renders identically. The deterministic link
   // inventory (every vault edge — [[wikilink]] or scheme-less [text](path) — UNION every external
   // [text](url)) feeds the extractor as a MUST-COVER checklist.
   const linkInventory: LinkInventory = {
@@ -229,7 +229,7 @@ async function distill(
   };
 
   // 1. extract the typed idea-graph (native FINAL statements + per-unit quotes) and 2. locate the
-  // spans against the source — a bad quote HARD-ABORTS in locate, BEFORE any projection (spec §2).
+  // spans against the source — a bad quote HARD-ABORTS in locate, BEFORE any projection.
   // Nothing to distill (no unit of any type) → passthrough.
   const core = await compressToGraph(
     blocks,
@@ -251,7 +251,7 @@ async function distill(
   }
   const { pre, result, payloadBlocks } = core;
 
-  // 2b. span-typing review (spec §4 step 3; blueprint §11): the one place semantic taste re-enters
+  // 2b. span-typing review: the one place semantic taste re-enters
   // the otherwise-deterministic pipeline — the reviewer confirms each unit's type against its
   // resolved source slice and re-types where wrong, mutating result.units IN PLACE before projection
   // (projectMarkdown re-buckets purely on unit.type via byType, so setting the field is the whole
@@ -275,7 +275,7 @@ async function distill(
     out = projectMarkdown(opts.glossaryOnly ? { ...result, abstract: undefined } : result);
   }
 
-  // 4. demoted fidelity backstop over the projection (residue-only, no recovery; blueprint §4.2).
+  // 4. demoted fidelity backstop over the projection (residue-only, no recovery).
   let residue: Residue[] = [];
   let gateSkipped = 0;
   if (!opts.noGate) {
@@ -303,7 +303,7 @@ async function distill(
       status: "passthrough",
     };
   }
-  // prose-list-item gate (D46): a glm matcher over a deterministic inventory of explicit
+  // prose-list-item gate: a glm matcher over a deterministic inventory of explicit
   // list-items under a heading — the must-cover prose class the spine is blind to. An LLM call, so
   // it rides --no-gate; skipped in --glossary (no prose body) and on facts/context dumps (wholesale
   // drop is licensed there, so the inventory would only flood the footer). The canonical projection
@@ -340,7 +340,7 @@ async function distill(
   return { out, footer, residue, status: "compressed" };
 }
 
-// The heterogeneous (per-section-routed) build (D12/D16, Backlog 10; blueprint §6.3). Re-author the
+// The heterogeneous (per-section-routed) build. Re-author the
 // idea sections as ONE head graph — a canonical extract→locate of their concatenation, whose spans
 // index the WHOLE source — then hold the payload sections verbatim as `## Payload` units and project
 // the merged graph as one canonical note. The whole-note expand guard is intentionally NOT applied:
@@ -367,7 +367,7 @@ async function distillRouted(
     external: harvestExternalLinks(text),
   };
   // The re-authored head becomes a span-anchored graph via extract→locate of reauthorText, with
-  // spans located against the WHOLE source (blueprint §6.3). null = the head distilled to nothing
+  // spans located against the WHOLE source. null = the head distilled to nothing
   // (its prose is then held verbatim as payload by assembleRoutedNote).
   const core = reauthorText
     ? await compressToGraph(
@@ -396,7 +396,7 @@ async function distillRouted(
   };
 }
 
-// Pure seam of the per-section routed build (the no-LLM tail of distillRouted; blueprint §6.3):
+// Pure seam of the per-section routed build (the no-LLM tail of distillRouted):
 // merge the re-authored head graph with the preserve sections (each held verbatim as a `## Payload`
 // unit whose span locates the section text in the WHOLE source), project the merged graph as one
 // canonical note, re-run the deterministic payload-coverage backstop ONCE at whole-note scope, and
@@ -450,7 +450,7 @@ export function assembleRoutedNote(a: {
   return { out, footer, residue };
 }
 
-// Atomic no-clobber write (plan §4, atomicity F2/F7): write a sibling .partial, then linkSync to
+// Atomic no-clobber write: write a sibling .partial, then linkSync to
 // the final name — link fails EEXIST instead of overwriting, so a racing emit that passed the
 // preflight minutes ago (LLM run) loses LOUD with the same exit-4 refusal, and a crash mid-write
 // never leaves a truncated intermediary visible at the .tmp.md path. An EEXIST link refuses (never
@@ -531,6 +531,13 @@ function handleCompressError(
   process.exit(3);
 }
 
+// main is the CLI entrypoint (invoked by distill.ts when the module is run as a binary): it parses
+// argv, acts on --help and misuse before the API-key gate or any network call, then dispatches the
+// verb — `apply` resolves a pending review intermediary offline, `prose` reconstructs prose from an
+// already-distilled note, and the default `compress` path runs distill() and writes either the
+// interactive review intermediary or a passthrough envelope beside the destination. It returns no
+// value; it sets the process exit code (0 success/passthrough-prose, 1 missing key, 2 misuse,
+// 3 passthrough, 4 pending intermediary).
 export async function main() {
   // The whole CLI surface resolves in parseArgs (help/misuse/ok). Act on help and misuse
   // here, before the API-key gate or any network call: help prints usage to stdout and exits
@@ -571,8 +578,8 @@ export async function main() {
   // run actually reaches the emit, so the no-body/empty-input exit-3 paths stay
   // byte-identical). Both the exit-4 preflight and the success emit key off this.
   // Resolved to absolute so stdout line 1 stays openable from any later cwd (the
-  // mktemp contract was always absolute; the plan-§4 transcript shows an absolute
-  // line 1 for a relative invocation) — agent callers re-open $path after a cwd reset.
+  // mktemp contract was always absolute; line 1 is absolute even for a relative
+  // invocation) — agent callers re-open $path after a cwd reset.
   const destRel = outOpt ?? (fromStdin ? undefined : inputPath);
   const dest = destRel === undefined ? undefined : resolve(destRel);
   // A bare `distill-text` at a terminal would hang silently on fd 0; say so.
@@ -595,7 +602,7 @@ export async function main() {
     const tmpPath = tmpPathFor(dest);
     if (existsSync(tmpPath)) refusePendingIntermediary(tmpPath);
   }
-  // --dry-run (Backlog 9): the deterministic front half only — segment → per-section
+  // --dry-run: the deterministic front half only — segment → per-section
   // payload density → route. Prints the report and returns, writing nothing, making no
   // LLM call, needing no API key. Runs on the note body (frontmatter stripped).
   if (dryRun) {
@@ -657,10 +664,11 @@ export async function main() {
   }
   const resolved = lang === "auto" ? detectLang(body) : lang;
   const frontDescription = parseDescription(front);
-  // D30: a type:reference body must stay link-free (no ## Relations). distill emits
-  // no references today, so this only future-proofs a reference-distill path.
+  // A source note whose own frontmatter is `type: reference` renders without `## Relations`
+  // (a reference body stays link-free) — automatic from the source frontmatter, not a flag.
+  // distill emits no references today, so this only future-proofs a reference-distill path.
   const isReference = parseType(front) === "reference";
-  // D46 genre gate: a superseded note or a "Context document" is licensed to drop wholesale,
+  // genre gate: a superseded note or a "Context document" is licensed to drop wholesale,
   // so the prose-list-item gate would only flood the footer — skip it there (the deterministic
   // spine still runs). Computed here, where the raw frontmatter is in scope.
   const factsDump = parseSuperseded(front) || /context document/i.test(frontDescription);

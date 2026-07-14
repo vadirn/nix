@@ -1,4 +1,4 @@
-// gates — the demoted, residue-only backstop gates (blueprint §4.2). The canonical pipeline
+// gates — the demoted, residue-only backstop gates. The canonical pipeline
 // runs these AFTER projectMarkdown: they never repair or mutate, only surface what did not
 // survive into the projection as residue. runFidelityBackstop judges the projection body
 // against each concept/procedure unit's located source slice; runProseGate matches the
@@ -37,7 +37,7 @@ function verdictResidueFields(
   };
 }
 
-// The DEMOTED fidelity gate for the canonical pipeline (blueprint §4.2). The retired settle-chain
+// The DEMOTED fidelity gate for the canonical pipeline. The retired settle-chain
 // gate authored defs/steps and repaired them in a recovery loop against a scratch render; once
 // extract emits the FINAL statements there is nothing to repair, so only the gate's VERDICT half
 // survives here. It runs AFTER projectMarkdown, takes the projection body itself as judge input, and
@@ -77,7 +77,7 @@ export async function runFidelityBackstop(
     groups.length ? workflowGate(groups, lang) : Promise.resolve([] as StepVerdict[]),
   ]);
   const residue: Residue[] = [];
-  // an unrecoverable thesis heads the residue, mirroring runFidelityGate's ordering.
+  // an unrecoverable thesis heads the residue, before the per-concept and per-workflow entries.
   if (!graded.thesisRecoverable) {
     residue.push({
       label: "(thesis)",
@@ -117,7 +117,9 @@ export async function runFidelityBackstop(
   return { residue, gateSkipped };
 }
 
-// orchestrate the gate: match the harvested inventory (glm, batched) and map to residue.
+// runProseGate matches the harvested prose-list inventory against the projection body (glm,
+// batched) and maps each verdict to prose-coverage residue; an empty inventory short-circuits
+// to no residue.
 export async function runProseGate(
   units: ProseUnit[],
   outputText: string,

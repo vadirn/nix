@@ -8,6 +8,9 @@ import { join } from "node:path";
 import { DEFAULT_TAU } from "./route.ts";
 
 // ---- arg parsing + io ----
+// USAGE is the full `--help` text printed to stdout on `-h`/`--help`: the invocation forms, every
+// option, the stdout/stderr output contract, and the exit-code table. It is the human-facing
+// counterpart to parseArgs (which enforces the same surface programmatically).
 export const USAGE = `distill-text — abstractive idea-compression: extract a note's typed knowledge
 graph (concepts / judgements / inferences / procedures / payload) and project it as a
 span-anchored seven-section canonical note (## Abstract/Concepts/Judgements/Inferences/
@@ -57,6 +60,9 @@ Output:
 Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
 `;
 
+// CliOpts is the validated options bag parseArgs hands to main() for a `compress`/`prose`/`apply`
+// run: the language rubric, the residue-gate and revise toggles, the glossary/dry-run flags, the
+// payload-density threshold, the expand-guard cap, and the input/output paths.
 export type CliOpts = {
   lang: "en" | "ru" | "auto";
   noRevise: boolean;
@@ -66,7 +72,7 @@ export type CliOpts = {
   tau: number;
   maxWords?: number;
   path?: string;
-  /// Compress-only destination override (plan Q6): the intermediary is written
+  /// Compress-only destination override: the intermediary is written
   /// sibling to THIS path (`<out minus .md>.tmp.md`) and apply derives its
   /// write-back target from it. Required when input is stdin AND the run reaches
   /// the emit (passthrough/no-body/empty paths never need a destination, which is
@@ -196,7 +202,7 @@ export function parseArgs(argv: string[]): ParseResult {
       i = t.next;
       continue;
     }
-    // --out: the compress-mode destination override (plan Q6). Value-checked here at
+    // --out: the compress-mode destination override. Value-checked here at
     // parse time — it must name a real .md destination, never the .tmp.md intermediary
     // itself; the stdin-requires---out refusal is a separate RUNTIME check (main()) so
     // the empty/no-body stdin exit-3 paths stay byte-identical.
@@ -336,9 +342,9 @@ export function tmpPathFor(dest: string): string {
   return dest.endsWith(".md") ? dest.replace(/\.md$/, ".tmp.md") : `${dest}.tmp.md`;
 }
 
-// The exit-4 pending-intermediary refusal (plan §4), shared by the pre-key preflight
+// The exit-4 pending-intermediary refusal, shared by the pre-key preflight
 // and the no-clobber final write (a racing emit's loser). The mtime staleness hint
-// (tmpfile F5) tells the reviewer whether the pending file is this morning's review
+// tells the reviewer whether the pending file is this morning's review
 // or a weeks-old orphan; refusal is loud either way.
 export function refusePendingIntermediary(tmpPath: string): never {
   let age = "";

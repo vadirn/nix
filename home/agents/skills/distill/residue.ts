@@ -206,7 +206,7 @@ export function edgePayloadResidue(text: string, out: string): Residue[] {
 // ---- prose-list-item gate (the prose-judge tier): the pure verdict→residue mapping ----
 // The deterministic spine above catches dropped literal/structural payload; this mapping catches
 // a dropped pure-prose list-item, the must-cover class the spine AND the fidelity/workflow
-// gates are all blind to. text.ts::harvestProseListItems is the deterministic answer key;
+// gates are all blind to. harvest.ts::harvestProseListItems is the deterministic answer key;
 // prompts.ts::proseGate (glm, the model that did not write the compression) is the matcher (wired
 // in gates.ts::runProseGate); the covered→clear decision is made HERE — surfaced is the DEFAULT
 // for every outcome except an explicit covered verdict whose anchor is verified present and on-topic.

@@ -4,7 +4,7 @@
 //
 // Not extractive (cut's verbatim-survivor trim, retired). distill rebuilds the note
 // around a canonical form: a typed, span-anchored graph over five knowledge-element
-// types — concept / judgment / inference / procedure / payload (distill-spec §1) — of
+// types — concept / judgment / inference / procedure / payload — of
 // which markdown is one projection. By default the output is the seven-section
 // canonical note: an unanchored `## Abstract` orientation, then `## Concepts` /
 // `## Judgements` / `## Inferences` / `## Procedures` / `## Payload` (a section
@@ -13,10 +13,11 @@
 // payload unit's statement is a verbatim slice, every other type's is the normalized
 // re-expression. `--glossary` drops the `## Abstract` head; a source note whose own
 // frontmatter is `type: reference` keeps the head but suppresses `## Relations`
-// (D30 — a reference body stays link-free; automatic, not a flag). Restatement
+// (a reference body stays link-free; automatic from the source frontmatter, not a
+// flag). Restatement
 // collapses structurally (N surface forms of one idea → one unit).
 //
-// Pipeline (spec §4; blueprint §0): extract(native typed units + per-unit source
+// Pipeline: extract(native typed units + per-unit source
 // quotes, gpt-oss-120b) → locate(resolve each quote to a byte span against the
 // source; a bad quote HARD-ABORTS here, before any projection) → [TTY-gated typing
 // review: at an interactive terminal, the reviewer confirms each unit's type against
@@ -53,10 +54,6 @@
 //
 // Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
 // `doppler run --project claude-code --config std --`).
-//
-// Design anchors: comments across this skill cite `spec §N`, `blueprint §N`, `D<n>`,
-// `W<n>`, and `Log <n>`. Those documents are retired; DESIGN.md is their in-repo
-// replacement — grep it for the token to resolve any anchor.
 //
 // Usage (full text: distill-text --help):
 //         distill-text input.md                      # seven-section canonical note (auto-detect language)
