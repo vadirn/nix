@@ -24,7 +24,7 @@ const entry = (term: string, def: string, relations: CardEdge[] = []): Harvested
   relations,
 });
 
-test("enumerateCandidates: one concept-arm candidate per glossary entry, no tie", () => {
+test("enumerateCandidates: one concept-arm candidate per concept entry, no tie", () => {
   const entries = [entry("alpha", "def a"), entry("beta", "def b")];
   const out = enumerateCandidates(entries, { tie: null, title: "Note", sourceNote: "/n.md" });
   expect(out).toHaveLength(2);
@@ -66,12 +66,12 @@ test("enumerateCandidates: empty tie string omits the thesis arm", () => {
   expect(out.every((c) => c.arm === "concept")).toBe(true);
 });
 
-test("enumerateCandidates: empty glossary with no tie yields no candidates", () => {
+test("enumerateCandidates: empty concept list with no tie yields no candidates", () => {
   const out = enumerateCandidates([], { tie: null, title: "Note", sourceNote: "/n.md" });
   expect(out).toEqual([]);
 });
 
-test("enumerateCandidates: empty glossary with a tie yields just the thesis candidate", () => {
+test("enumerateCandidates: empty concept list with a tie yields just the thesis candidate", () => {
   const out = enumerateCandidates([], { tie: "Tie text", title: "Note", sourceNote: "/n.md" });
   expect(out).toHaveLength(1);
   expect(out[0].arm).toBe("thesis");

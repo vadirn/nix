@@ -30,12 +30,12 @@ export type HarvestedConcept = { term: string; def: string; relations: CardEdge[
 export type Arm = "concept" | "thesis";
 
 // One prospective card enumerated from a distilled note. concept arm: one per
-// Glossary node. thesis arm: at most one per note, from the frontmatter
+// `## Concepts` entry. thesis arm: at most one per note, from the frontmatter
 // description (the certified tie). Enumeration never filters.
 export type Candidate = {
   arm: Arm;
-  term: string; // headword: the glossary term (concept) / the note's H1 or title (thesis)
-  def: string; // certified content: the glossary def (concept) / the tie text (thesis)
+  term: string; // headword: the concept headword (concept) / the note's H1 or title (thesis)
+  def: string; // certified content: the concept def (concept) / the tie text (thesis)
   relations: CardEdge[]; // edges parsed from `## Relations` for this term — UNCERTIFIED channel
   sourceNote: string; // absolute path of the emitted note the candidate came from
 };

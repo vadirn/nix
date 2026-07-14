@@ -10,7 +10,7 @@
 // distill fidelity gate: the band judge and the atomicity judge run on FIDELITY
 // (a different model than the writer); the card draft runs on EXTRACT.
 //
-// Certification boundary the prompts encode: a candidate's def (the glossary def /
+// Certification boundary the prompts encode: a candidate's def (the concept def /
 // the frontmatter tie) is the CERTIFIED channel; the note body and the parsed
 // `## Relations` edges are UNCERTIFIED leads — the draft may take illustration and
 // wording from them but may assert nothing the certified def does not support.

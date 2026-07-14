@@ -34,7 +34,7 @@ function stagingFilename(noteName: string, term: string): string {
 // caller threads ONE Set across every renderStagingFile call for the same note, so each
 // candidate reserves its slot before the next is computed). Two candidates collide
 // whenever their (noteName, term) pairs slug to the same string: a thesis candidate's
-// term is the note's own title, so a glossary entry sharing that term (verbatim, or a
+// term is the note's own title, so a concept entry sharing that term (verbatim, or a
 // case/punctuation variant — "Alpha" vs "alpha") collides with it, and any two terms
 // that both slug to "" collide with each other. Undetected, the later `writeFile`
 // silently clobbers the earlier one's review packet while `staged` keeps counting both.

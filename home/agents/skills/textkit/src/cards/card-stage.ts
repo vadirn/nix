@@ -262,7 +262,7 @@ export async function stageNote(
   let staged = 0;
   let corruptedNames = 0;
   // Threaded across every candidate of this note so renderStagingFile can dedupe a
-  // filename collision: a thesis term equal to a glossary term, a case/punctuation
+  // filename collision: a thesis term equal to a concept term, a case/punctuation
   // variant, or two terms that both slug to "" would otherwise silently clobber
   // one another's staging file.
   const usedFilenames = new Set<string>();
