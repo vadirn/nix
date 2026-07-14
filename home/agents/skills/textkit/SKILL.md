@@ -110,7 +110,7 @@ a later `apply`. Piped and command-substitution callers never see either interac
 typing review or this prompt) — the stdout path line is all they get, so the flow above is unchanged
 for scripts.
 
-## What it does (spec §4)
+## What it does
 
 1. **Extract** the typed idea-graph (`gpt-oss-120b`): units of each of the five knowledge-element
    types, every one carrying the FINAL normalized re-expression (`statement`) and the verbatim
