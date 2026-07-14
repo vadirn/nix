@@ -47,7 +47,7 @@ import {
 } from "@/distill/extract/route.ts";
 import { extractJson } from "@/core/fw.ts";
 import { assembleRoutedNote } from "@/distill/app/distill-core.ts";
-import { edgePayloadResidue, wikilinkResidue } from "@/distill/review/residue.ts";
+import { payloadResidueForProjection, wikilinkResidue } from "@/distill/review/residue.ts";
 import { parseDistilled } from "@/distill/app/prose-mode.ts";
 import { computeSource, type Unit } from "@/distill/graph/graph.ts";
 import { locate } from "@/distill/extract/locate.ts";
@@ -480,17 +480,17 @@ test("assembleRoutedNote: footer carries the name-lint fragment when the project
   expect(r.footer).toContain("name-lint: 1 probable corrupted name (Firecurl ← Firecrawl)");
 });
 
-test("edgePayloadResidue: surfaces a dropped payload span, ignores wikilinks (canonical drops cross-note edges)", () => {
+test("payloadResidueForProjection: surfaces a dropped payload span, ignores wikilinks (canonical drops cross-note edges)", () => {
   const src = "see [[bar]]\n\n```js\nconst x = 1;\n```";
   const out = "tight prose, link and code gone";
-  const res = edgePayloadResidue(src, out);
+  const res = payloadResidueForProjection(src, out);
   // the dropped fence surfaces; the dropped [[bar]] does NOT (the wikilink lane is off by design)
   expect(res.some((r) => r.kind === "payload")).toBe(true);
   expect(res.some((r) => r.label === "[[bar]]")).toBe(false);
 });
 
-test("edgePayloadResidue: a covered payload span surfaces nothing", () => {
-  expect(edgePayloadResidue("```js\nx = 1;\n```", "```js\nx = 1;\n```")).toEqual([]);
+test("payloadResidueForProjection: a covered payload span surfaces nothing", () => {
+  expect(payloadResidueForProjection("```js\nx = 1;\n```", "```js\nx = 1;\n```")).toEqual([]);
 });
 
 // ---- text.ts: small utilities ----

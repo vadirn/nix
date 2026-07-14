@@ -72,7 +72,7 @@
 // PURE by contract for the exported helpers below (no fs, no LLM) so they unit-test
 // offline; runApply is the only impure export.
 
-import { existsSync, linkSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import {
   type Item,
@@ -82,6 +82,7 @@ import {
 } from "@/distill/review/interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "@/distill/review/triage.ts";
 import { askJson, EXTRACT, rethrowIfBug } from "@/core/fw.ts";
+import { linkNoClobber } from "@/core/fs.ts";
 import {
   fidelityGate,
   renderEntryPrompt,
@@ -473,16 +474,11 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
   const partial = `${dest}.apply.partial`;
   writeFileSync(partial, finalBody);
   if (gate.src === "new") {
-    try {
-      linkSync(partial, dest);
-    } catch (e) {
-      try {
-        unlinkSync(partial);
-      } catch {}
-      if ((e as NodeJS.ErrnoException).code === "EEXIST") {
-        return fail(`destination already exists: ${dest} (src=new refuses to clobber)`, 2);
-      }
-      throw e;
+    // no-clobber link: EEXIST maps to the src=new refusal (exit 2); the helper
+    // cleans the partial itself on any failure, so only the success unlink remains here.
+    const link = linkNoClobber(partial, dest);
+    if (!link.ok) {
+      return fail(`destination already exists: ${dest} (src=new refuses to clobber)`, 2);
     }
     unlinkSync(partial);
   } else {

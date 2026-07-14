@@ -14,6 +14,7 @@
 // source note as a link) → ## On commit (the checklist that turns a draft into a
 // committed card) → a horizontal rule → the draft (or a draft-failed notice).
 import { relText, slugSegment } from "@/core/text.ts";
+import { neighbourDisplayText } from "@/cards/prompts.ts";
 import type { StagingRecord } from "@/cards/types.ts";
 
 const DRAFT_FAILED_NOTICE =
@@ -66,8 +67,7 @@ function renderVerdictSection(record: StagingRecord): string[] {
     lines.push("  - (none)");
   } else {
     for (const h of verdict.nearest) {
-      const desc = h.description.trim() || h.snippet.trim();
-      lines.push(`  - ${h.title} — ${desc} — \`${h.path}\``);
+      lines.push(`  - ${h.title} — ${neighbourDisplayText(h)} — \`${h.path}\``);
     }
   }
   return lines;

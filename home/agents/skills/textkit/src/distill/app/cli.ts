@@ -2,10 +2,9 @@
 // temp-file / pending-intermediary path helpers. parseArgs resolves the whole surface
 // (help/misuse/ok) before main() touches the API key or the network, so it is unit-testable
 // without spawning the binary. No LLM calls and no pipeline logic — parsing and path arithmetic.
-import { mkdtempSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { statSync } from "node:fs";
 import { DEFAULT_TAU } from "@/distill/extract/route.ts";
+import { takeValue } from "@/core/args.ts";
 
 // ---- arg parsing + io ----
 // USAGE is the full `--help` text printed to stdout on `-h`/`--help`: the invocation forms, every
@@ -98,19 +97,6 @@ export type ParseResult =
   | { kind: "help" }
   | { kind: "error"; message: string }
   | { kind: "ok"; mode: "compress" | "prose" | "apply"; opts: CliOpts };
-
-// Consumes the token AFTER a value-flag (`argv[i + 1]`), the shape every value-flag below
-// repeats: missing or blank (`--flag ""` / `--flag "  "`, the `--flag "$UNSET"` shell footgun)
-// both fail loudly rather than silently defaulting. `hint` completes "<flag> expects <hint>"
-// so each call site keeps its own wording; callers still do their own value-specific validation
-// (enum/range/suffix checks) on the returned value.
-type TakeValueResult = { ok: true; value: string; next: number } | { ok: false; message: string };
-
-function takeValue(argv: string[], i: number, flag: string, hint: string): TakeValueResult {
-  const v = argv[i + 1];
-  if (v === undefined || v.trim() === "") return { ok: false, message: `${flag} expects ${hint}` };
-  return { ok: true, value: v, next: i + 1 };
-}
 
 export function parseArgs(argv: string[]): ParseResult {
   let lang: CliOpts["lang"] = "auto";
@@ -321,16 +307,6 @@ export function parseArgs(argv: string[]): ParseResult {
       out,
     },
   };
-}
-
-// Create a fresh temp directory and return the path to a .md file inside it (not
-// yet created — the caller writeFileSync's the content). A dedicated dir per call
-// keeps the name collision-free without depending on a platform mktemp binary's
-// flag syntax (GNU coreutils' --suffix is not portable). The result is written
-// here instead of stdout so the caller gets a real .md artifact (openable,
-// diffable) and stdout carries only the path (footer on stderr).
-export function tempMdPath(): string {
-  return join(mkdtempSync(join(tmpdir(), "distill-")), "out.md");
 }
 
 // The pending-review intermediary sibling for a destination. `note.md` →

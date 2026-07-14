@@ -30,6 +30,19 @@ export const MARKED_MODALITIES = ["hypothesis", "necessarily"] as const;
 // forms back to `assertoric`.
 export type Modality = (typeof MARKED_MODALITIES)[number] | "assertoric";
 
+// The leading modality tag as emitted on a marked judgement bullet: the vocabulary token wrapped in
+// parens with a trailing space (`(hypothesis) `). project.ts's modalityTag emits it (gated on
+// MARKED_MODALITIES); MODALITY_TAG_RE strips it back off in parse-projection.ts. Canonicalized here
+// so the paren+space delimiter lives in exactly one place, mirroring the REL_DASH/REL_ARROW pair —
+// the wrapping cannot drift between the emit and strip sides.
+export function formatModalityTag(m: string): string {
+  return `(${m}) `;
+}
+
+// The strip-side of formatModalityTag: matches a leading `(modality) ` tag for any MARKED_MODALITIES
+// token (built once from the vocabulary) so parse-projection.ts can peel it off a judgement bullet.
+export const MODALITY_TAG_RE = new RegExp(`^\\((?:${MARKED_MODALITIES.join("|")})\\)\\s+`);
+
 // Mirrors mdstruct's Rust `Source` (model.rs:74) — the version-binding record. `bytes` and
 // `sha256` are computed over the UTF-8 bytes of the source (see computeSource); `source.sha256`
 // records which version a graph's spans index into, so a later divergence of the source fails
@@ -143,19 +156,25 @@ export function formatSpan(span: Span): string {
   return `${span[0]}..${span[1]}`;
 }
 
+// The span-anchor body grammar, canonicalized in one place: the bracketed `[start..end]` or bare
+// `start..end` alternation, with NO anchoring (`^...$`), trailing (`\s+…\s*$`), or capture wrapping.
+// parseSpan and TRAILING_ANCHOR_RE (here) and parse-projection.ts's ANCHOR_ONLY_RE each splice this
+// into their own framing so the byte-range spelling lives in exactly one place. A plain regex-source
+// string rather than a RegExp so it composes cleanly under `new RegExp(...)`.
+export const ANCHOR_BODY = String.raw`\[\d+\.\.\d+\]|\d+\.\.\d+`;
+
 // Parse the `start..end` anchor notation into a Span. Accepts both the bare `start..end` and the
 // bracketed `[start..end]` forms — both denote the same half-open byte range. Brackets must be
 // balanced; anything else throws (a hard parse failure, never a sentinel).
 export function parseSpan(str: string): Span {
-  const m = str.trim().match(/^(?:\[(\d+)\.\.(\d+)\]|(\d+)\.\.(\d+))$/);
+  const m = str.trim().match(new RegExp(`^(${ANCHOR_BODY})$`));
   if (!m) {
     throw new Error(
       `parseSpan: not a byte-span anchor: ${JSON.stringify(str)} (expected "start..end" or "[start..end]")`,
     );
   }
-  const start = Number(m[1] ?? m[3]);
-  const end = Number(m[2] ?? m[4]);
-  return [start, end];
+  const [start, end] = m[1]!.replace(/^\[|\]$/g, "").split("..");
+  return [Number(start), Number(end)];
 }
 
 // The trailing byte-anchor grammar, canonicalized in one place: matches a `start..end` or
@@ -165,7 +184,7 @@ export function parseSpan(str: string): Span {
 // anchor unchanged rather than reformatting it) read the group directly instead of going through
 // stripTrailingAnchor. The projector (formatSpan) only ever emits the bare form; the bracketed form
 // appears only in hand-edited notes.
-export const TRAILING_ANCHOR_RE = /\s+(\[\d+\.\.\d+\]|\d+\.\.\d+)\s*$/;
+export const TRAILING_ANCHOR_RE = new RegExp(`\\s+(${ANCHOR_BODY})\\s*$`);
 
 // Strip a trailing byte-anchor off a rendered line, in EITHER grammar form. Returns the bare text
 // with the anchor (and its separating whitespace) removed, and the parsed Span — null when the

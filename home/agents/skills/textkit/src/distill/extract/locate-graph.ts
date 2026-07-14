@@ -19,6 +19,7 @@
 // body, so a bad quote must surface loudly). There is NO coarse-span fallback.
 import { computeSource, type Edge, type PreGraph, type Unit } from "@/distill/graph/graph.ts";
 import { locate } from "@/distill/extract/locate.ts";
+import { oneLine } from "@/distill/extract/harvest.ts";
 import type { Span } from "@/distill/mdstruct.ts";
 import { slugSegment, type Block } from "@/core/text.ts";
 import type { Projection } from "@/distill/graph/project.ts";
@@ -44,7 +45,7 @@ export function payloadKey(text: string, n: number): string {
       .replace(/^[>#\-*+\s]+/, "") // blockquote / heading / list-marker prefix
       .replace(/`/g, "")
       .trim();
-    if (cleaned) return cleaned.length > 60 ? cleaned.slice(0, 59) + "…" : cleaned;
+    if (cleaned) return oneLine(cleaned, 60);
   }
   return `Payload ${n}`;
 }

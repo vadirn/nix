@@ -12,12 +12,12 @@
 // Failsafe mirrors distill: a TruncationError or transient throw escaping the passes
 // ships the ORIGINAL input with a "polish skipped" footer instead of aborting; a
 // non-transient throw (a code bug) propagates.
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { takeValue } from "@/core/args.ts";
 import { parseFrontmatter } from "@/core/frontmatter.ts";
-import { isTransient, TruncationError } from "@/core/fw.ts";
+import { askJson, isTransient, TruncationError } from "@/core/fw.ts";
 import { detectLang, segment, wordCount } from "@/core/text.ts";
+import { tempMdPath } from "@/core/tmp.ts";
 import {
   type NameLintResult,
   formatNameLint,
@@ -107,11 +107,13 @@ export function parseArgs(argv: string[]): ParseResult {
       continue;
     }
     if (a === "--lang") {
-      const v = argv[++i];
-      if (v === undefined) return { kind: "error", message: "--lang expects a value (en or ru)" };
+      const t = takeValue(argv, i, "--lang", "a value (en or ru)");
+      if (!t.ok) return { kind: "error", message: t.message };
+      const v = t.value;
       if (v !== "en" && v !== "ru")
         return { kind: "error", message: `--lang expects one of: en, ru (got '${v}')` };
       lang = v;
+      i = t.next;
       continue;
     }
     if (a.startsWith("-") && a !== "-") return { kind: "error", message: `unknown flag '${a}'` };
@@ -158,18 +160,70 @@ export function buildPolishFooter(m: {
   );
 }
 
-// Create a fresh temp directory and return the path to a .md file inside it (not
-// yet created — the caller writeFileSync's the content). Same helper shape as
-// cli.ts's tempMdPath: fs.mkdtempSync instead of shelling out to a platform
-// mktemp binary, whose --suffix flag is GNU-coreutils-specific (not portable).
-function tempMdPath(): string {
-  return join(mkdtempSync(join(tmpdir(), "polish-")), "out.md");
+// The seam runPolish takes to reach the model, injected so a unit test drives the
+// pass pipeline without a process-global module mock (default: the real fw askJson).
+// `progress` is the optional per-pass tick main wires to a TTY-gated stderr line.
+export type PolishDeps = {
+  ask?: typeof askJson;
+  progress?: (line: string) => void;
+};
+
+// runPolish is the pure pass pipeline: parse frontmatter, segment, run the four writing
+// passes then the spell pass, reassemble the polished content (frontmatter + body, final
+// newline preserved), and build the stderr report footer. It touches no process/fs state —
+// the model transport arrives via deps — so it is unit-testable in isolation. main() owns the
+// arg gate, stdin/file I/O, emit target, and the failsafe catch around this call.
+export async function runPolish(
+  input: string,
+  opts: PolishOpts,
+  deps: PolishDeps = {},
+): Promise<{ content: string; footer: string }> {
+  const { lang, noRevise, noSpell } = opts;
+  const { ask = askJson, progress } = deps;
+  const { front, body } = parseFrontmatter(input);
+  const resolvedLang = lang === "auto" ? detectLang(body) : lang;
+  const beforeWords = wordCount(body);
+  let blocks = segment(body);
+  let reverted: string[] = [];
+  let spellFailed = false;
+  if (!noRevise)
+    blocks = await revise(
+      blocks,
+      resolvedLang === "ru" ? PASS_RU : PASS_EN,
+      [],
+      (i, n) => progress?.(`revise ${i}/${n}`),
+      ask,
+    );
+  if (!noSpell) {
+    progress?.("spell…");
+    const r = await spellPass(blocks, [], ask);
+    blocks = r.blocks;
+    reverted = r.reverted;
+    spellFailed = r.failed;
+  }
+  const outBody = blocks.map((b) => b.text).join("\n\n");
+  const nameLint = nameLintSelfConsistency(outBody);
+  const afterWords = wordCount(outBody);
+  // block-join drops the source's final newline; restore it so a polished
+  // file round-trips POSIX-complete when the input was newline-terminated.
+  const nl = input.endsWith("\n") ? "\n" : "";
+  const content = (front ? front + "\n" + outBody : outBody) + nl;
+  const footer = buildPolishFooter({
+    beforeWords,
+    afterWords,
+    noRevise,
+    noSpell,
+    reverted: reverted.length,
+    spellFailed,
+    nameLint,
+  });
+  return { content, footer };
 }
 
 // main is the CLI entrypoint: it parses argv, acts on --help and misuse before the
-// API-key gate or any network call, reads the input (file or stdin), then runs the
-// revise/spell passes and emits the polished content. It returns no value; it sets the
-// process exit code (0 polished, 1 missing key, 2 usage error, 3 passthrough).
+// API-key gate or any network call, reads the input (file or stdin), then delegates the
+// revise/spell passes to runPolish and emits the polished content. It returns no value; it
+// sets the process exit code (0 polished, 1 missing key, 2 usage error, 3 passthrough).
 export async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.kind === "help") {
@@ -181,7 +235,7 @@ export async function main(): Promise<void> {
     process.exit(2);
     return; // process.exit ends the run; the explicit return also narrows `parsed` to "ok" below
   }
-  const { lang, noRevise, noSpell, tempFile, path: inputPath } = parsed.opts;
+  const { noRevise, noSpell, tempFile, path: inputPath } = parsed.opts;
   // Both passes skipped: nothing calls out, so the key gate would only block a
   // typography-only no-op run for no reason.
   if (!(noRevise && noSpell) && !process.env.FIREWORKS_API_KEY) {
@@ -205,7 +259,7 @@ export async function main(): Promise<void> {
   // the parent-loop contract: a fresh temp .md, stdout two lines (path, footer).
   const emit = (content: string, footer: string): void => {
     if (tempFile) {
-      const path = tempMdPath();
+      const path = tempMdPath("polish-");
       writeFileSync(path, content);
       process.stdout.write(`${path}\n${footer}\n`);
     } else {
@@ -219,40 +273,8 @@ export async function main(): Promise<void> {
     ? (line: string): void => void process.stderr.write(`${line}\n`)
     : undefined;
   try {
-    const { front, body } = parseFrontmatter(input);
-    const resolvedLang = lang === "auto" ? detectLang(body) : lang;
-    const beforeWords = wordCount(body);
-    let blocks = segment(body);
-    let reverted: string[] = [];
-    let spellFailed = false;
-    if (!noRevise)
-      blocks = await revise(blocks, resolvedLang === "ru" ? PASS_RU : PASS_EN, [], (i, n) =>
-        progress?.(`revise ${i}/${n}`),
-      );
-    if (!noSpell) {
-      progress?.("spell…");
-      const r = await spellPass(blocks);
-      blocks = r.blocks;
-      reverted = r.reverted;
-      spellFailed = r.failed;
-    }
-    const outBody = blocks.map((b) => b.text).join("\n\n");
-    const nameLint = nameLintSelfConsistency(outBody);
-    const afterWords = wordCount(outBody);
-    // block-join drops the source's final newline; restore it so a polished
-    // file round-trips POSIX-complete when the input was newline-terminated.
-    const nl = input.endsWith("\n") ? "\n" : "";
-    const result = (front ? front + "\n" + outBody : outBody) + nl;
-    const footer = buildPolishFooter({
-      beforeWords,
-      afterWords,
-      noRevise,
-      noSpell,
-      reverted: reverted.length,
-      spellFailed,
-      nameLint,
-    });
-    emit(result, footer);
+    const { content, footer } = await runPolish(input, parsed.opts, { progress });
+    emit(content, footer);
   } catch (e) {
     // Failsafe (mirrors distill's passthrough catch, not its emit/apply flow —
     // polish has no intermediary): a truncation or a transient flake escaping the

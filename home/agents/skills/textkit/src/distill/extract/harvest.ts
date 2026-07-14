@@ -133,7 +133,7 @@ export function harvestVaultEdges(text: string): VaultEdge[] {
 export type PayloadSpan = { markup: string; key: string };
 
 // Collapse a span to a single short line for the residue <entry term/source> label.
-const oneLine = (s: string, n = 80): string => {
+export const oneLine = (s: string, n = 80): string => {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > n ? t.slice(0, n - 1) + "…" : t;
 };
@@ -181,67 +181,101 @@ interface StructuralParts {
 // not once per consumer. Nothing mutates StructuralParts, so sharing the object is safe.
 const structuralCache = new WeakMap<ParsedDoc, StructuralParts>();
 
-// collectStructural walks a parsed document once and buckets its structural nodes (fences,
-// tables, table rows, blockquotes, images, pseudo-table rows) into a StructuralParts record,
-// memoized per ParsedDoc via structuralCache so repeated calls for the same document never
-// re-walk it.
-function collectStructural(parsed: ParsedDoc): StructuralParts {
-  const cached = structuralCache.get(parsed);
-  if (cached) return cached;
-  const { doc, buf } = parsed;
-  const parts: StructuralParts = {
-    fences: [],
-    blockquotes: [],
-    tables: [],
-    tableRows: [],
-    images: [],
-    pseudoRows: [],
-  };
-  // Full-descent walk: fences, tables (+ their line ownership), and tableRows in document order.
-  const tableLines = new Set<number>(); // 1-indexed lines owned by a real table (local bookkeeping)
-  walkNodes(doc.nodes, (n) => {
-    if (n.type === "codeBlock" && n.fenced) parts.fences.push(n);
-    if (n.type === "table") {
-      parts.tables.push(n);
-      if (n.startLine != null && n.endLine != null)
-        for (let ln = n.startLine; ln <= n.endLine; ln++) tableLines.add(ln);
-    }
-    if (n.type === "tableRow") parts.tableRows.push(n);
+// Full-descent walk: fenced code blocks, GFM tables, and tableRows in document order — the three
+// lanes that share ONE descent. tableRows carry the header (comrak never emits the delimiter row);
+// tables carry the line ownership detectPseudoRows reads to exclude real-table lines.
+function detectFencesTables(parsed: ParsedDoc): {
+  fences: MdNode[];
+  tables: MdNode[];
+  tableRows: MdNode[];
+} {
+  const fences: MdNode[] = [];
+  const tables: MdNode[] = [];
+  const tableRows: MdNode[] = [];
+  walkNodes(parsed.doc.nodes, (n) => {
+    if (n.type === "codeBlock" && n.fenced) fences.push(n);
+    if (n.type === "table") tables.push(n);
+    if (n.type === "tableRow") tableRows.push(n);
   });
-  // Top-level blockquotes only: noDescend so a nested `> >` quote is not double-counted.
+  return { fences, tables, tableRows };
+}
+
+// Top-level blockquotes only: noDescend so a nested `> >` quote is not double-counted.
+function detectBlockquotes(parsed: ParsedDoc): MdNode[] {
+  const blockquotes: MdNode[] = [];
   walkNodes(
-    doc.nodes,
+    parsed.doc.nodes,
     (n) => {
-      if (n.type === "blockQuote") parts.blockquotes.push(n);
+      if (n.type === "blockQuote") blockquotes.push(n);
     },
     new Set(["blockQuote"]),
   );
-  // Inline image lane: every markdown image, plus a wikilink embed whose target is an asset
-  // (the same ASSET_RE filter harvestImages / the old embed-mask regex applied). Inlines inside
-  // code spans/fences are not emitted by mdstruct, so a `![[x.png]]` in inline code is skipped.
-  for (const il of doc.inlines ?? []) {
-    if (il.type === "image") parts.images.push(il);
+  return blockquotes;
+}
+
+// Inline image lane: every markdown image, plus a wikilink embed whose target is an asset
+// (the same ASSET_RE filter harvestImages / the old embed-mask regex applied). Inlines inside
+// code spans/fences are not emitted by mdstruct, so a `![[x.png]]` in inline code is skipped.
+function detectImages(parsed: ParsedDoc): MdInline[] {
+  const images: MdInline[] = [];
+  for (const il of parsed.doc.inlines ?? []) {
+    if (il.type === "image") images.push(il);
     else if (il.type === "wikilink" && il.embed && il.page != null) {
       const t = wikilinkTarget(il.page);
-      if (ASSET_RE.test(t)) parts.images.push(il);
+      if (ASSET_RE.test(t)) images.push(il);
     }
   }
-  // Pseudo-table fallback (class-1 carve-out): a `- a | b` row has no `:?-+:?` delimiter, so
-  // comrak emits no table node — the old regex row-scan must keep catching it, restricted to
-  // lines OUTSIDE any real mdstruct table (tableLines) so a genuine row is never double-owned.
-  const text = buf.toString("utf8");
+  return images;
+}
+
+// Pseudo-table fallback (class-1 carve-out): a `- a | b` row has no `:?-+:?` delimiter, so
+// comrak emits no table node — the old regex row-scan must keep catching it, restricted to
+// lines OUTSIDE any real mdstruct table (`tables`' line ownership) so a genuine row is never
+// double-owned. raw/masked are precomputed here so harvestTableRows never re-splits.
+function detectPseudoRows(
+  parsed: ParsedDoc,
+  tables: MdNode[],
+): { span: Span; raw: string; masked: string }[] {
+  const tableLines = new Set<number>(); // 1-indexed lines owned by a real table
+  for (const n of tables) {
+    if (n.startLine != null && n.endLine != null)
+      for (let ln = n.startLine; ln <= n.endLine; ln++) tableLines.add(ln);
+  }
+  const text = parsed.buf.toString("utf8");
   const rawLines = text.split("\n");
   const off = lineByteOffsets(text);
   const probe = stripFences(text).replace(MASK_RE, " ").split("\n");
+  const rows: { span: Span; raw: string; masked: string }[] = [];
   for (let i = 0; i < probe.length; i++) {
     if (tableLines.has(i + 1)) continue;
     if (!isTableDataRow(probe[i])) continue;
-    parts.pseudoRows.push({
+    rows.push({
       span: [off[i], off[i] + byteLen(rawLines[i])],
       raw: rawLines[i],
       masked: probe[i],
     });
   }
+  return rows;
+}
+
+// collectStructural walks a parsed document once and buckets its structural nodes (fences,
+// tables, table rows, blockquotes, images, pseudo-table rows) into a StructuralParts record,
+// memoized per ParsedDoc via structuralCache so repeated calls for the same document never
+// re-walk it. Composes the four pure detect* helpers above, each reading the SAME parsed doc
+// (single-parse invariant) — detectPseudoRows takes the tables detectFencesTables found so it
+// need not re-collect them.
+function collectStructural(parsed: ParsedDoc): StructuralParts {
+  const cached = structuralCache.get(parsed);
+  if (cached) return cached;
+  const { fences, tables, tableRows } = detectFencesTables(parsed);
+  const parts: StructuralParts = {
+    fences,
+    tables,
+    tableRows,
+    blockquotes: detectBlockquotes(parsed),
+    images: detectImages(parsed),
+    pseudoRows: detectPseudoRows(parsed, tables),
+  };
   structuralCache.set(parsed, parts);
   return parts;
 }
@@ -416,11 +450,15 @@ export function harvestImages(text: string): PayloadSpan[] {
 // = symbol body, whitespace stripped, lowercased.
 const MATH_OP =
   /[=<>+\-*/^_{}\\]|\\(?:le|ge|leq|geq|neq|cdot|times|frac|sum|prod|int|sqrt|approx|propto|to)\b/;
+// The `$$…$$` display-math fence, inner captured — named on its own so harvestMath can scrub
+// it below by identity, not by DISPLAY_MATH_PATTERNS' array position (the array is exported and
+// iterated wholesale by route.ts, so a positional [0] reference would couple to its order).
+const DOLLAR_DISPLAY_MATH = /\$\$([\s\S]+?)\$\$/g;
 // Display-math spans (`$$…$$`, `\[…\]`, `\(…\)`), inner captured, multiline. Shared by
 // harvestMath (payload inventory here) and route.ts's payloadMask (router signal) — the
 // same pattern list drives both, so they can never disagree on what counts as display math.
 export const DISPLAY_MATH_PATTERNS = [
-  /\$\$([\s\S]+?)\$\$/g,
+  DOLLAR_DISPLAY_MATH,
   /\\\[([\s\S]+?)\\\]/g,
   /\\\(([\s\S]+?)\\\)/g,
 ];
@@ -434,7 +472,7 @@ export function harvestMath(text: string): PayloadSpan[] {
     if (key) out.push({ markup: oneLine(markup), key });
   };
   for (const re of DISPLAY_MATH_PATTERNS) for (const m of src.matchAll(re)) push(m[0], m[1]);
-  const noDisplay = src.replace(DISPLAY_MATH_PATTERNS[0], " ");
+  const noDisplay = src.replace(DOLLAR_DISPLAY_MATH, " ");
   for (const m of noDisplay.matchAll(/(?<![\d\\$])\$([^$\n]+?)\$(?![\d$])/g)) {
     const inner = m[1];
     if (!MATH_OP.test(inner)) continue; // no operator → a currency/number span, not a formula
@@ -443,6 +481,11 @@ export function harvestMath(text: string): PayloadSpan[] {
   }
   return out;
 }
+
+// The footnote-definition line head `[^id]:` (leading-space tolerant) as a source fragment, so
+// the definition grammar lives ONCE: the citation lane below appends a URL capture to it, and
+// scrubForNumbers appends `.*$` to blank the whole line. Both derive from this one prefix.
+const FOOTNOTE_DEF_LINE = String.raw`^[ \t]*\[\^[^\]]+\]:`;
 
 // External citations — the source/grounding links wikilinkResidue never covered (they are
 // not vault edges). Unions the three forms the vault actually uses: markdown `[text](url)`,
@@ -458,7 +501,8 @@ export function harvestCitations(text: string): PayloadSpan[] {
       out.push({ markup: oneLine(markup), key: u.toLowerCase() });
   };
   for (const l of harvestExternalLinks(src)) push(l.markup, l.url);
-  for (const m of src.matchAll(/^[ \t]*\[\^[^\]]+\]:\s*(\S+)/gm)) push(m[0].trim(), m[1]);
+  for (const m of src.matchAll(new RegExp(FOOTNOTE_DEF_LINE + String.raw`\s*(\S+)`, "gm")))
+    push(m[0].trim(), m[1]);
   for (const m of src.matchAll(/<((?:https?|ftp):\/\/[^>\s]+)>/gi)) push(m[0], m[1]);
   for (const m of src.matchAll(/(?<![("<\]])\b(?:https?|ftp):\/\/[^\s)\]>]+/gi)) push(m[0], m[0]);
   return out;
@@ -478,7 +522,7 @@ const SCALE_WORD =
   /^\W*(trillion|billion|million|thousand|hundred|percent|deaths|cases|people|users)\b/i;
 function scrubForNumbers(text: string): string {
   return stripFences(text)
-    .replace(/^[ \t]*\[\^[^\]]+\]:.*$/gm, " ") // footnote definitions (incl their URLs)
+    .replace(new RegExp(FOOTNOTE_DEF_LINE + ".*$", "gm"), " ") // footnote definitions (incl their URLs)
     .replace(/<[^>\s]+>/g, " ") // autolinks
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, " ") // scheme://… URLs
     .replace(/\]\([^)\s]+\)/g, "]()") // markdown link/image targets

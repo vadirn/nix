@@ -94,9 +94,19 @@ export async function runFidelityBackstop(
   }
   for (const c of graded.concepts) {
     if (c.grade === "translated") continue;
+    // A verdict whose term matches no judge INPUT concept is a judge-contract violation:
+    // there is no source slice to recover from, so an empty-source recover entry would only
+    // ship an entry apply cannot recover. Drop it loudly rather than emit that dead entry.
+    const match = concepts.find((r) => r.term === c.term);
+    if (!match) {
+      process.stderr.write(
+        `distill: fidelity judge graded unknown concept term '${c.term}' (not in gate input) — dropping\n`,
+      );
+      continue;
+    }
     residue.push({
       label: c.term,
-      source: concepts.find((r) => r.term === c.term)?.sourceText ?? "",
+      source: match.sourceText,
       ...verdictResidueFields(c, {
         kind: "def",
         failReason: `${c.direction || "residue"}: ${c.missing || "failed round-trip entailment"}`,
@@ -105,9 +115,19 @@ export async function runFidelityBackstop(
   }
   for (const v of gradedG) {
     if (v.grade === "translated") continue;
+    // Same judge-contract guard as the concept loop: a verdict for a procedure id absent
+    // from the gate input has no source to recover, so drop it rather than emit an
+    // empty-source recover entry apply cannot act on.
+    const match = groups.find((g) => g.id === v.id);
+    if (!match) {
+      process.stderr.write(
+        `distill: workflow judge graded unknown procedure id '${v.id}' (not in gate input) — dropping\n`,
+      );
+      continue;
+    }
     residue.push({
       label: v.id,
-      source: groups.find((g) => g.id === v.id)?.sourceText ?? "",
+      source: match.sourceText,
       ...verdictResidueFields(v, {
         kind: "steps",
         failReason: `workflow: ${v.missing || "directive coverage failed"}`,

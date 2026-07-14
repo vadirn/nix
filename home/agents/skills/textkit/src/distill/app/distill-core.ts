@@ -4,7 +4,7 @@
 // then dispatches the modes and writes the temp-file sink in main(). The focused concerns are
 // carved out around it: the backstop gates into gates.ts, the CLI surface + path helpers into
 // cli.ts, the interactive terminal halves into tty.ts. main() is invoked by the entrypoint.
-import { existsSync, linkSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import {
   type Block,
@@ -34,6 +34,8 @@ import {
   parseType,
 } from "@/core/frontmatter.ts";
 import { askJson, isTransient, TruncationError } from "@/core/fw.ts";
+import { linkNoClobber } from "@/core/fs.ts";
+import { tempMdPath } from "@/core/tmp.ts";
 import { extractGraph, gradeBlocks } from "@/distill/prompt/prompts.ts";
 import {
   formatNameLint,
@@ -44,24 +46,24 @@ import { locateGraph, payloadKey } from "@/distill/extract/locate-graph.ts";
 import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
 import { computeSource, type Unit } from "@/distill/graph/graph.ts";
 import { locate } from "@/distill/extract/locate.ts";
-import { type Residue, edgePayloadResidue } from "@/distill/review/residue.ts";
+import { type Residue, payloadResidueForProjection } from "@/distill/review/residue.ts";
 import { runProse } from "@/distill/app/prose-mode.ts";
 import { buildIntermediary } from "@/distill/review/triage.ts";
 import { runApply, stampHash } from "@/distill/app/apply-mode.ts";
 import { runFidelityBackstop, runProseGate } from "@/distill/review/gates.ts";
 import { runTypingReview, runTtySession } from "@/distill/app/tty.ts";
 import {
+  type CliOpts,
   USAGE,
   parseArgs,
   refusePendingIntermediary,
-  tempMdPath,
   tmpPathFor,
 } from "@/distill/app/cli.ts";
 import { buildPassthroughEnvelope } from "@/distill/app/envelope.ts";
 
 // ---- pipeline ----
 // The Residue type and the deterministic loss-surface primitives (wikilinkResidue,
-// payloadResidue, edgePayloadResidue, proseResidue/anchored) live in residue.ts.
+// payloadResidue, payloadResidueForProjection, proseResidue/anchored) live in residue.ts.
 // Did distill rewrite the body, or pass it through unchanged? The producer knows this at each
 // return site (nothing-to-distill and expand-guard pass through; the normal path compresses);
 // the routed build reads it to tag the footer rather than re-deriving it by byte-comparison.
@@ -132,7 +134,10 @@ function deterministicBackstop(
   source: string,
   out: string,
 ): { residue: Residue[]; nameLint: NameLintResult } {
-  return { residue: edgePayloadResidue(source, out), nameLint: nameLintAgainstSource(out, source) };
+  return {
+    residue: payloadResidueForProjection(source, out),
+    nameLint: nameLintAgainstSource(out, source),
+  };
 }
 
 // The canonical compress core: extract native typed units → retain-grade the
@@ -325,7 +330,7 @@ async function distill(
   }
 
   // deterministic payload-coverage backstop: surface any source payload span the projection dropped
-  // (edgePayloadResidue; the wikilink lane is off — the canonical projection drops cross-note edges
+  // (payloadResidueForProjection; the wikilink lane is off — the canonical projection drops cross-note edges
   // by design, so a wikilink lane would false-flag every source wikilink). Free, so it runs even
   // under --no-gate — dropped payload is irreversible loss the fidelity backstop never checks.
   // deterministic, zero-LLM, never blocks — findings go to the footer only, never into residue.
@@ -459,25 +464,17 @@ export function assembleRoutedNote(a: {
   return { out, footer, residue };
 }
 
-// Atomic no-clobber write: write a sibling .partial, then linkSync to
-// the final name — link fails EEXIST instead of overwriting, so a racing emit that passed the
+// Atomic no-clobber write: write a sibling .partial, then linkNoClobber it onto the
+// final name — link fails EEXIST instead of overwriting, so a racing emit that passed the
 // preflight minutes ago (LLM run) loses LOUD with the same exit-4 refusal, and a crash mid-write
-// never leaves a truncated intermediary visible at the .tmp.md path. An EEXIST link refuses (never
-// returns); any other link error unlinks the .partial and rethrows.
+// never leaves a truncated intermediary visible at the .tmp.md path. {exists:true} maps to the
+// exit-4 refusal (never returns); any other link error cleans the .partial and rethrows inside
+// the helper. On success the helper leaves the .partial in place for this final unlink.
 function writeIntermediaryAtomically(tmpPath: string, intermediary: string): void {
   const partial = `${tmpPath}.partial`;
   writeFileSync(partial, intermediary);
-  try {
-    linkSync(partial, tmpPath);
-  } catch (e) {
-    try {
-      unlinkSync(partial);
-    } catch {}
-    if ((e as NodeJS.ErrnoException).code === "EEXIST") {
-      refusePendingIntermediary(tmpPath);
-    }
-    throw e;
-  }
+  const link = linkNoClobber(partial, tmpPath);
+  if (!link.ok) refusePendingIntermediary(tmpPath);
   unlinkSync(partial);
 }
 
@@ -540,59 +537,20 @@ function handleCompressError(
   process.exit(3);
 }
 
-// main is the CLI entrypoint (invoked by distill.ts when the module is run as a binary): it parses
-// argv, acts on --help and misuse before the API-key gate or any network call, then dispatches the
-// verb — `apply` resolves a pending review intermediary offline, `prose` reconstructs prose from an
-// already-distilled note, and the default `compress` path runs distill() and writes either the
-// interactive review intermediary or a passthrough envelope beside the destination. It returns no
-// value; it sets the process exit code (0 success/passthrough-prose, 1 missing key, 2 misuse,
-// 3 passthrough, 4 pending intermediary).
-// `ask` is the model transport, injected so emit.test.ts / session.test.ts drive the
-// whole five-stage pipeline off a fake without a process-global module mock (it threads
-// down through distill → compressToGraph/extractGraph/gradeBlocks and the backstop gates).
-// The CLI entrypoint calls main() with no argument → real fw transport.
-export async function main(ask: typeof askJson = askJson) {
-  // The whole CLI surface resolves in parseArgs (help/misuse/ok). Act on help and misuse
-  // here, before the API-key gate or any network call: help prints usage to stdout and exits
-  // 0; a parse error prints to stderr and exits 2 (distinct from the runtime exit 1/0 paths).
-  const parsed = parseArgs(process.argv.slice(2));
-  if (parsed.kind === "help") {
-    process.stdout.write(USAGE);
-    return;
-  }
-  if (parsed.kind === "error") {
-    console.error(`distill: ${parsed.message}\nTry 'distill-text --help' for usage.`);
-    process.exit(2);
-    return; // process.exit ends the run; the explicit return also narrows `parsed` to "ok" below
-  }
-  const { mode } = parsed;
-  const {
-    lang,
-    noRevise,
-    noGate,
-    glossaryOnly,
-    dryRun,
-    tau,
-    maxWords,
-    path: inputPath,
-    out: outOpt,
-  } = parsed.opts;
-  // apply is a structurally distinct verb: it consumes a previously-emitted
-  // intermediary, checks the key LAZILY (only a checked recover DEF needs an LLM), and
-  // does its own path-on-stdout + footer/refusal-on-stderr. Dispatched BEFORE the compress-mode
-  // exit-4 preflight and the API-key gate below, so a keyless reject-all triage applies
-  // offline. parseArgs guarantees inputPath is present in this mode.
-  if (mode === "apply") {
-    process.exit(await runApply(inputPath as string, { lang }));
-  }
+// resolveDest resolves the compress/prose write-back destination and runs the exit-4 preflight in
+// one place. `fromStdin` is stdin (no path, or the '-' convention); `dest` is --out when given,
+// else the input path (stdin with no --out has none yet — a runtime refusal in runCompress once the
+// run reaches the emit, so the no-body/empty-input exit-3 paths stay byte-identical), resolved
+// absolute so stdout line 1 stays openable from any later cwd. The preflight refuses BEFORE the
+// API-key gate and any LLM call when a prior review intermediary is still pending at the sibling
+// .tmp.md path (nothing written, no stdout); an --out whose directory is absent is a usage error
+// (exit 2) caught here too, before the whole LLM budget is burned on a doomed final write.
+function resolveDest(
+  mode: "compress" | "prose",
+  opts: CliOpts,
+): { fromStdin: boolean; dest: string | undefined; stdinHint: () => void } {
+  const { dryRun, path: inputPath, out: outOpt } = opts;
   const fromStdin = inputPath === undefined || inputPath === "-";
-  // The compress-mode write-back destination: --out when given, else the input path
-  // (stdin with no --out has none yet — that is a runtime refusal below, once the
-  // run actually reaches the emit, so the no-body/empty-input exit-3 paths stay
-  // byte-identical). Both the exit-4 preflight and the success emit key off this.
-  // Resolved to absolute so stdout line 1 stays openable from any later cwd (the
-  // mktemp contract was always absolute; line 1 is absolute even for a relative
-  // invocation) — agent callers re-open $path after a cwd reset.
   const destRel = outOpt ?? (fromStdin ? undefined : inputPath);
   const dest = destRel === undefined ? undefined : resolve(destRel);
   // A bare `distill-text` at a terminal would hang silently on fd 0; say so.
@@ -600,77 +558,59 @@ export async function main(ask: typeof askJson = askJson) {
     if (fromStdin && process.stdin.isTTY)
       console.error("distill: reading stdin — pass a file or pipe input (ctrl-d ends input)");
   };
-  // Phase 3 preflight: refuse BEFORE the API-key gate and before any LLM call when a
-  // prior review intermediary is still pending at the sibling .tmp.md path — nothing
-  // written, no stdout, so a stuck run never masquerades as fresh progress. An --out
-  // whose directory is absent is a usage error caught here too: the destination file
-  // may be new (creation case) but its directory must exist, or the run would burn
-  // the whole LLM budget and die on the final write.
   if (mode === "compress" && !dryRun && dest !== undefined) {
     if (outOpt !== undefined && !existsSync(dirname(dest))) {
       console.error(`distill: --out directory does not exist: ${dirname(dest)}`);
       process.exit(2);
-      return;
     }
     const tmpPath = tmpPathFor(dest);
     if (existsSync(tmpPath)) refusePendingIntermediary(tmpPath);
   }
-  // --dry-run: the deterministic front half only — segment → per-section
-  // payload density → route. Prints the report and returns, writing nothing, making no
-  // LLM call, needing no API key. Runs on the note body (frontmatter stripped).
-  if (dryRun) {
-    stdinHint();
-    const input = readFileSync(fromStdin ? 0 : (inputPath as string), "utf8");
-    const { body } = parseFrontmatter(input);
-    const label = fromStdin ? "(stdin)" : (inputPath as string);
-    process.stdout.write(formatDryRun(label, routeNote(body, tau)) + "\n");
-    return;
-  }
-  if (!process.env.FIREWORKS_API_KEY) {
-    console.error(
-      "FIREWORKS_API_KEY not set (run under: doppler run --project claude-code --config std --)",
-    );
-    process.exit(1);
-  }
-  stdinHint();
-  const input = readFileSync(fromStdin ? 0 : (inputPath as string), "utf8");
-  if (!input.trim()) {
-    console.error("distill skipped: empty input");
-    process.exit(3);
-  }
-  // Lazy: mktemp CREATES the file, and the Phase-3 success path never uses it —
-  // an eager call would orphan one empty temp file per successful distill. Only
-  // the passthrough/error/no-body/prose paths (the `emit` callers) pay for it.
-  let mktempPath: string | undefined;
-  const emit = (body: string, footer: string): void => {
-    const path = (mktempPath ??= tempMdPath());
-    writeFileSync(path, body);
-    process.stdout.write(`${path}\n`);
-    process.stderr.write(`${footer}\n`);
-  };
-  // A full run is tens of seconds of LLM calls; tick per stage, TTY-gated so
-  // scripts and parent loops never see it.
-  const progress = process.stderr.isTTY
-    ? (line: string): void => void process.stderr.write(`${line}\n`)
-    : undefined;
-  if (mode === "prose") {
-    // runProse returns the exit code: 0 rendered, 3 skipped (output = the
-    // unmodified input — the same code compress passthrough uses).
-    process.exit(await runProse(input, { lang, noRevise }, emit));
-  }
-  // compress mode: strip leading frontmatter (it passes through verbatim; the
-  // pipeline + language detection operate on the body only). A block whose YAML
-  // failed to parse is flagged (not demoted to body) so it is surfaced in the
+  return { fromStdin, dest, stdinHint };
+}
+
+// runDryRun: the deterministic front half only — segment → per-section payload density → route.
+// Prints the report, writing nothing, making no LLM call, needing no API key. Runs on the note
+// body (frontmatter stripped).
+function runDryRun(o: {
+  fromStdin: boolean;
+  inputPath?: string;
+  stdinHint: () => void;
+  tau: number;
+}): void {
+  o.stdinHint();
+  const input = readFileSync(o.fromStdin ? 0 : (o.inputPath as string), "utf8");
+  const { body } = parseFrontmatter(input);
+  const label = o.fromStdin ? "(stdin)" : (o.inputPath as string);
+  process.stdout.write(formatDryRun(label, routeNote(body, o.tau)) + "\n");
+}
+
+// runCompress: the default verb. Strip leading frontmatter (it passes through verbatim; the
+// pipeline + language detection operate on the body only), run distill(), and write either the
+// interactive review intermediary or a passthrough envelope beside `dest`. Sets its own exit code
+// (3 passthrough/no-body, 2 stdin-without---out) or falls through to the emit's exit 0.
+async function runCompress(o: {
+  input: string;
+  opts: CliOpts;
+  dest: string | undefined;
+  fromStdin: boolean;
+  progress?: (line: string) => void;
+  ask: typeof askJson;
+  emit: (body: string, footer: string) => void;
+}): Promise<void> {
+  const { input, opts, dest, fromStdin, progress, ask, emit } = o;
+  const { lang, noGate, glossaryOnly, tau, maxWords, path: inputPath } = opts;
+  // A block whose YAML failed to parse is flagged (not demoted to body) so it is surfaced in the
   // footer rather than silently reworded as prose.
   const { front, body, error: fmError } = parseFrontmatter(input);
   if (!body.trim()) {
     emit(input, "— no body to distill");
     process.exit(3);
   }
-  // stdin without --out: a real body means this run WILL reach the emit, and stdin
-  // has no destination to name the sibling .tmp.md after. Fires here (after the
-  // no-body check, not in parseArgs) so the empty/no-body stdin exit-3 paths above
-  // stay byte-identical (stages.test.ts:656's recipe test pins that).
+  // stdin without --out: a real body means this run WILL reach the emit, and stdin has no
+  // destination to name the sibling .tmp.md after. Fires here (after the no-body check, not in
+  // parseArgs) so the empty/no-body stdin exit-3 paths stay byte-identical (stages.test.ts:656's
+  // recipe test pins that).
   if (dest === undefined) {
     console.error("distill: stdin input requires --out to name the destination");
     process.exit(2);
@@ -681,13 +621,12 @@ export async function main(ask: typeof askJson = askJson) {
   // (a reference body stays link-free) — automatic from the source frontmatter, not a flag.
   // distill emits no references today, so this only future-proofs a reference-distill path.
   const isReference = parseType(front) === "reference";
-  // genre gate: a superseded note or a "Context document" is licensed to drop wholesale,
-  // so the prose-list-item gate would only flood the footer — skip it there (the deterministic
-  // spine still runs). Computed here, where the raw frontmatter is in scope.
+  // genre gate: a superseded note or a "Context document" is licensed to drop wholesale, so the
+  // prose-list-item gate would only flood the footer — skip it there (the deterministic spine
+  // still runs). Computed here, where the raw frontmatter is in scope.
   const factsDump = parseSuperseded(front) || /context document/i.test(frontDescription);
-  // the note's canonical self-slug is its filename slug (what other vault notes
-  // wikilink to); empty when reading from stdin (including the '-' convention), where
-  // distill() falls back to the H1.
+  // the note's canonical self-slug is its filename slug (what other vault notes wikilink to);
+  // empty when reading from stdin (including the '-' convention), where distill() falls back to the H1.
   const selfSlug =
     !fromStdin && inputPath ? slugSegment(basename(inputPath).replace(/\.md$/, "")) : "";
   try {
@@ -725,4 +664,80 @@ export async function main(ask: typeof askJson = askJson) {
   } catch (e) {
     handleCompressError(e, input, emit);
   }
+}
+
+// main is the CLI entrypoint (invoked by distill.ts when the module is run as a binary): it parses
+// argv, acts on --help and misuse before the API-key gate or any network call, then dispatches the
+// verb — `apply` resolves a pending review intermediary offline, `prose` reconstructs prose from an
+// already-distilled note, and the default `compress` path runs distill() and writes either the
+// interactive review intermediary or a passthrough envelope beside the destination. It returns no
+// value; it sets the process exit code (0 success/passthrough-prose, 1 missing key, 2 misuse,
+// 3 passthrough, 4 pending intermediary).
+// `ask` is the model transport, injected so emit.test.ts / session.test.ts drive the
+// whole five-stage pipeline off a fake without a process-global module mock (it threads
+// down through distill → compressToGraph/extractGraph/gradeBlocks and the backstop gates).
+// The CLI entrypoint calls main() with no argument → real fw transport.
+export async function main(ask: typeof askJson = askJson) {
+  // The whole CLI surface resolves in parseArgs (help/misuse/ok). Act on help and misuse
+  // here, before the API-key gate or any network call: help prints usage to stdout and exits
+  // 0; a parse error prints to stderr and exits 2 (distinct from the runtime exit 1/0 paths).
+  const parsed = parseArgs(process.argv.slice(2));
+  if (parsed.kind === "help") {
+    process.stdout.write(USAGE);
+    return;
+  }
+  if (parsed.kind === "error") {
+    console.error(`distill: ${parsed.message}\nTry 'distill-text --help' for usage.`);
+    process.exit(2);
+    return; // process.exit ends the run; the explicit return also narrows `parsed` to "ok" below
+  }
+  const { mode, opts } = parsed;
+  // apply is a structurally distinct verb: it consumes a previously-emitted intermediary, checks
+  // the key LAZILY (only a checked recover DEF needs an LLM), and does its own path-on-stdout +
+  // footer/refusal-on-stderr. Dispatched BEFORE the compress-mode exit-4 preflight and the API-key
+  // gate below, so a keyless reject-all triage applies offline. parseArgs guarantees opts.path is
+  // present in this mode.
+  if (mode === "apply") {
+    process.exit(await runApply(opts.path as string, { lang: opts.lang }));
+  }
+  const { fromStdin, dest, stdinHint } = resolveDest(mode, opts);
+  // --dry-run: the deterministic front half only — prints the report and returns, writing nothing,
+  // making no LLM call, needing no API key.
+  if (opts.dryRun) {
+    runDryRun({ fromStdin, inputPath: opts.path, stdinHint, tau: opts.tau });
+    return;
+  }
+  if (!process.env.FIREWORKS_API_KEY) {
+    console.error(
+      "FIREWORKS_API_KEY not set (run under: doppler run --project claude-code --config std --)",
+    );
+    process.exit(1);
+  }
+  stdinHint();
+  const input = readFileSync(fromStdin ? 0 : (opts.path as string), "utf8");
+  if (!input.trim()) {
+    console.error("distill skipped: empty input");
+    process.exit(3);
+  }
+  // Lazy: mktemp CREATES the file, and the Phase-3 success path never uses it —
+  // an eager call would orphan one empty temp file per successful distill. Only
+  // the passthrough/error/no-body/prose paths (the `emit` callers) pay for it.
+  let mktempPath: string | undefined;
+  const emit = (body: string, footer: string): void => {
+    const path = (mktempPath ??= tempMdPath("distill-"));
+    writeFileSync(path, body);
+    process.stdout.write(`${path}\n`);
+    process.stderr.write(`${footer}\n`);
+  };
+  // A full run is tens of seconds of LLM calls; tick per stage, TTY-gated so
+  // scripts and parent loops never see it.
+  const progress = process.stderr.isTTY
+    ? (line: string): void => void process.stderr.write(`${line}\n`)
+    : undefined;
+  if (mode === "prose") {
+    // runProse returns the exit code: 0 rendered, 3 skipped (output = the
+    // unmodified input — the same code compress passthrough uses).
+    process.exit(await runProse(input, { lang: opts.lang, noRevise: opts.noRevise }, emit));
+  }
+  await runCompress({ input, opts, dest, fromStdin, progress, ask, emit });
 }

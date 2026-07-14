@@ -18,7 +18,10 @@ import { type ProseUnit } from "@/distill/extract/harvest.ts";
 // The block-grading verdict from the fidelity gate: "drop" the block, "distill"
 // it (compress into the projection), or "retain" it verbatim. Lives here, not in
 // text.ts, because prompts.ts is its sole producer/consumer (gradeBlocks below).
-export type Grade = "drop" | "distill" | "retain";
+// GRADES is the single source of truth: Grade derives from it and gradeBlocks'
+// runtime validation checks membership against it.
+export const GRADES = ["drop", "distill", "retain"] as const;
+export type Grade = (typeof GRADES)[number];
 import {
   askJson,
   EXTRACT,
@@ -333,7 +336,7 @@ export async function gradeBlocks(
   );
   const byId = new Map<string, Grade>();
   for (const g of judged.grades ?? []) {
-    if (g.id && (g.grade === "drop" || g.grade === "distill" || g.grade === "retain")) {
+    if (g.id && (GRADES as readonly string[]).includes(g.grade)) {
       byId.set(g.id, g.grade);
     }
   }
@@ -416,13 +419,18 @@ ${sourceText}`;
 // rather than re-spelling the three literals.
 export type GateGrade = "translated" | "residue" | "inconclusive";
 
+// The direction of a fidelity mismatch, matching the closed set the fidelityPrompt asks for:
+// "both" sides fail, OUTPUT drops source content, or OUTPUT invents content absent from source.
+export type MismatchDirection = "both" | "output-misses-source" | "output-invents";
+
 // One concept's fidelity-gate verdict: whether its rendered definition round-trips against the
-// source, the direction of any mismatch ("output-misses-source" or "output-invents"), and what
-// content is missing or invented.
+// source, the direction of any mismatch, and what content is missing or invented. `direction`
+// is absent when there is no mismatch to name (a "translated" verdict, or an "inconclusive"
+// parse-flake fallback).
 export type ConceptVerdict = {
   term: string;
   grade: GateGrade;
-  direction: string;
+  direction?: MismatchDirection;
   missing: string;
 };
 
@@ -463,6 +471,24 @@ CONCEPTS:
 ${concepts}`;
 }
 
+// Shared degradation shape for the per-unit gates (fidelityGate, workflowGate): run `call`,
+// and on a transient judge flake (no parseable verdict after retry) return `buildFallback()` —
+// which marks every unit "inconclusive" so the run ships surfaced-but-unverified rather than
+// discarded. `rethrowIfBug` still lets a genuine code bug propagate. proseGate does NOT use this:
+// it degrades per-batch into a flaked id set, not per-unit verdicts.
+async function withInconclusiveFallback<T>(
+  name: string,
+  call: () => Promise<T>,
+  buildFallback: () => T,
+): Promise<T> {
+  try {
+    return await call();
+  } catch (e) {
+    rethrowIfBug(e, name);
+    return buildFallback();
+  }
+}
+
 // Run the fidelity gate: call fidelityPrompt via the model and filter the response to verdicts
 // that named a term, defaulting `thesisRecoverable` to true when the model omits it. A
 // parse-flake (no JSON verdict after retry) marks every concept "inconclusive" rather than
@@ -481,31 +507,31 @@ export async function fidelityGate(
   // 3- and 4-arg callers are unaffected.
   defGate: "block" | "definition" = DEF_GATE,
 ): Promise<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }> {
-  try {
-    const res = await ask<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
-      FIDELITY,
-      fidelityPrompt(thesis, outputBody, rendered, defGate),
-      FIDELITY_TOKENS,
-    );
-    return {
-      thesisRecoverable: res.thesisRecoverable !== false,
-      concepts: (res.concepts ?? []).filter((c) => c.term),
-    };
-  } catch (e) {
-    rethrowIfBug(e, "fidelityGate");
-    // transient judge flake (no parseable verdict): mark every concept inconclusive
-    // (not residue) so each ships surfaced-but-unverified rather than discarding the
-    // run. thesisRecoverable stays optimistic — a parse flake is no evidence against it.
-    return {
+  return withInconclusiveFallback<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }>(
+    "fidelityGate",
+    async () => {
+      const res = await ask<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
+        FIDELITY,
+        fidelityPrompt(thesis, outputBody, rendered, defGate),
+        FIDELITY_TOKENS,
+      );
+      return {
+        thesisRecoverable: res.thesisRecoverable !== false,
+        concepts: (res.concepts ?? []).filter((c) => c.term),
+      };
+    },
+    // transient judge flake: mark every concept inconclusive (not residue) so each ships
+    // surfaced-but-unverified. thesisRecoverable stays optimistic — a parse flake is no
+    // evidence against it — and direction is omitted (no mismatch to name).
+    () => ({
       thesisRecoverable: true,
       concepts: rendered.map((r) => ({
         term: r.term,
         grade: "inconclusive" as const,
-        direction: "",
         missing: "judge returned no verdict",
       })),
-    };
-  }
+    }),
+  );
 }
 
 // ---- workflow gate: directive coverage, NOT bidirectional def↔source ----
@@ -562,23 +588,25 @@ export async function workflowGate(
   ask: typeof askJson = askJson,
 ): Promise<StepVerdict[]> {
   if (groups.length === 0) return [];
-  try {
-    const res = await ask<{ groups?: StepVerdict[] }>(
-      FIDELITY,
-      workflowGatePrompt(groups, lang),
-      FIDELITY_TOKENS,
-    );
-    return (res.groups ?? []).filter((g) => g.id);
-  } catch (e) {
-    rethrowIfBug(e, "workflowGate");
+  return withInconclusiveFallback<StepVerdict[]>(
+    "workflowGate",
+    async () => {
+      const res = await ask<{ groups?: StepVerdict[] }>(
+        FIDELITY,
+        workflowGatePrompt(groups, lang),
+        FIDELITY_TOKENS,
+      );
+      return (res.groups ?? []).filter((g) => g.id);
+    },
     // transient judge flake (no parseable verdict): mark every group inconclusive
     // (not residue) so the steps ship surfaced-but-unverified rather than discarding the run.
-    return groups.map((g) => ({
-      id: g.id,
-      grade: "inconclusive" as const,
-      missing: "judge returned no verdict",
-    }));
-  }
+    () =>
+      groups.map((g) => ({
+        id: g.id,
+        grade: "inconclusive" as const,
+        missing: "judge returned no verdict",
+      })),
+  );
 }
 
 // ---- prose gate: list-item coverage (the prose-judge tier) ----

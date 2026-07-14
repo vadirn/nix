@@ -5,6 +5,7 @@
 // footer or Flags line. Leaf module: only imports the leaf-tier levenshtein
 // helpers, so the core can depend on it without a cycle back to text.ts.
 import { levenshtein } from "@/core/writing/levenshtein.ts";
+import { MASK_TOKEN_RE } from "@/core/writing/mask.ts";
 
 // NameFinding pairs a name found in the output with the source name it likely corrupted from.
 export type NameFinding = { found: string; wanted: string };
@@ -42,7 +43,7 @@ function stripZones(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ") // fenced code
     .replace(/`[^`\n]+`/g, " ") // inline code
-    .replace(/⟦\d+⟧/g, " ") // mask tokens
+    .replace(MASK_TOKEN_RE, " ") // mask tokens
     .replace(/!?\[\[[^\]]+\]\]/g, " ") // wikilinks / embeds
     .replace(/\]\(([^)\s]+)(\s+"[^"]*")?\)/g, "] ") // markdown link targets (link TEXT survives)
     .replace(/https?:\/\/\S+/g, " "); // bare URLs
@@ -113,12 +114,46 @@ const isCandidateShape = (w: string): boolean =>
   w.replace(/[’']|\p{M}/gu, "").length >= 4;
 const isCapWord = (w: string): boolean => /^\p{Lu}/u.test(w);
 
-// nameLintAgainstSource compares `output` against `source` and flags candidate proper names
-// (see isCandidateShape) that appear in output but not in source: as `corrupted` when a
-// candidate sits within corruptionCap edit distance of a source name, with `wanted` naming
-// that source match, or as `invented` otherwise. Total: never throws, and the result is
-// advisory — callers only render it, never block on it.
-export function nameLintAgainstSource(output: string, source: string): NameLintResult {
+// A candidate name grouped by its fold key: the first-seen surface `word`, how many times it
+// occurs (`count`), and how many of those are mid-sentence (`nonInitial`). against-source
+// ignores `count`; self-consistency uses all three.
+type CandidateGroup = { word: string; count: number; nonInitial: number };
+
+// buildCandidateGroups folds every candidate-shape token (see isCandidateShape) into one group
+// per name, keyed by foldKey. Shared by both lanes.
+function buildCandidateGroups(toks: Tok[]): Map<string, CandidateGroup> {
+  const groups = new Map<string, CandidateGroup>();
+  for (const t of toks) {
+    if (!isCandidateShape(t.word)) continue;
+    const k = foldKey(t.word);
+    const g = groups.get(k) ?? { word: t.word, count: 0, nonInitial: 0 };
+    g.count++;
+    if (!t.initial) g.nonInitial++;
+    groups.set(k, g);
+  }
+  return groups;
+}
+
+// lowercaseKeys is the set of fold keys for tokens seen uncapitalized — evidence that a name
+// occurs lowercase, which relaxes the sentence-initial-only rule (see initialOnlyRelaxed).
+function lowercaseKeys(toks: Tok[]): Set<string> {
+  const s = new Set<string>();
+  for (const t of toks) if (!isCapWord(t.word)) s.add(foldKey(t.word));
+  return s;
+}
+
+// SourceIndex is the folded view of the source that against-source classifies output against:
+// `srcSet` is ALL source words (for the covered() membership test), `srcCapSurface` maps a
+// candidate's fold key to its first-seen surface form, `srcNonInitial` holds keys attested
+// mid-sentence, and `srcCaps` is the candidate-key list scanned for nearest-name matches.
+type SourceIndex = {
+  srcSet: Set<string>;
+  srcCapSurface: Map<string, string>;
+  srcNonInitial: Set<string>;
+  srcCaps: string[];
+};
+
+function buildSourceIndex(source: string): SourceIndex {
   const srcToks = tokens(source);
   const srcSet = new Set(srcToks.flatMap((t) => foldSet(t.word))); // ALL source words, folded
   const srcCapSurface = new Map<string, string>(); // lc key -> first-seen surface form
@@ -129,23 +164,19 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
     if (!srcCapSurface.has(lc)) srcCapSurface.set(lc, t.word);
     if (!t.initial) srcNonInitial.add(lc);
   }
-  const srcCaps = [...srcCapSurface.keys()];
-  const outToks = tokens(output);
-  const groups = new Map<string, { word: string; nonInitial: number }>();
-  const outLower = new Set<string>(); // words seen uncapitalized in the output
-  for (const t of outToks) if (!isCapWord(t.word)) outLower.add(foldKey(t.word));
-  const covered = (w: string) => foldSet(w).some((a) => srcSet.has(a));
-  const inKnownRun = new Map<string, boolean>(); // adjacency dampener
+  return { srcSet, srcCapSurface, srcNonInitial, srcCaps: [...srcCapSurface.keys()] };
+}
+
+// knownMultiWordRun is the adjacency dampener: a candidate inside a same-line contiguous
+// capitalized run that contains a source-covered token ("Apple M3 Max" with M3/Max in source)
+// is part of a known multi-word name, so it maps to true and is suppressed from the advisory
+// invented lane only. The flag is monotonic per key — one covered neighbor anywhere fixes it.
+function knownMultiWordRun(outToks: Tok[], covered: (w: string) => boolean): Map<string, boolean> {
+  const inKnownRun = new Map<string, boolean>();
   for (let i = 0; i < outToks.length; i++) {
     const t = outToks[i];
     if (!isCandidateShape(t.word)) continue;
     const k = foldKey(t.word);
-    const g = groups.get(k) ?? { word: t.word, nonInitial: 0 };
-    if (!t.initial) g.nonInitial++;
-    groups.set(k, g);
-    // a candidate inside a same-line contiguous capitalized run that contains a
-    // source-covered token ("Apple M3 Max" with M3/Max in source) is part of a
-    // known multi-word name -> suppressed from the ADVISORY list only
     let known = inKnownRun.get(k) ?? false;
     for (const dir of [-1, 1]) {
       for (let j = i + dir; j >= 0 && j < outToks.length; j += dir) {
@@ -159,6 +190,21 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
     }
     inKnownRun.set(k, known);
   }
+  return inKnownRun;
+}
+
+// nameLintAgainstSource compares `output` against `source` and flags candidate proper names
+// (see isCandidateShape) that appear in output but not in source: as `corrupted` when a
+// candidate sits within corruptionCap edit distance of a source name, with `wanted` naming
+// that source match, or as `invented` otherwise. Total: never throws, and the result is
+// advisory — callers only render it, never block on it.
+export function nameLintAgainstSource(output: string, source: string): NameLintResult {
+  const { srcSet, srcCapSurface, srcNonInitial, srcCaps } = buildSourceIndex(source);
+  const outToks = tokens(output);
+  const groups = buildCandidateGroups(outToks);
+  const outLower = lowercaseKeys(outToks); // words seen uncapitalized in the output
+  const covered = (w: string) => foldSet(w).some((a) => srcSet.has(a));
+  const inKnownRun = knownMultiWordRun(outToks, covered);
   const corrupted: NameLintResult["corrupted"] = [];
   const invented: string[] = [];
   for (const [k, g] of groups) {
@@ -192,17 +238,8 @@ export function nameLintAgainstSource(output: string, source: string): NameLintR
 // nothing to compare a single document against. Total: never throws.
 export function nameLintSelfConsistency(output: string): NameLintResult {
   const toks = tokens(output);
-  const lower = new Set<string>(); // words seen uncapitalized in the doc
-  for (const t of toks) if (!isCapWord(t.word)) lower.add(foldKey(t.word));
-  const groups = new Map<string, { word: string; count: number; nonInitial: number }>();
-  for (const t of toks) {
-    if (!isCandidateShape(t.word)) continue;
-    const k = foldKey(t.word);
-    const g = groups.get(k) ?? { word: t.word, count: 0, nonInitial: 0 };
-    g.count++;
-    if (!t.initial) g.nonInitial++;
-    groups.set(k, g);
-  }
+  const lower = lowercaseKeys(toks); // words seen uncapitalized in the doc
+  const groups = buildCandidateGroups(toks);
   const names = [...groups.keys()];
   const corrupted: NameLintResult["corrupted"] = [];
   for (const a of names)

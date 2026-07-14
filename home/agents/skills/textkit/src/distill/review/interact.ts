@@ -215,6 +215,299 @@ type Frame = {
   hasError: boolean;
 };
 
+/// The one mutable context the grammar steps thread instead of closing over parseInteract's
+/// locals: the two output accumulators (blocks, errors), the cross-block id-uniqueness set,
+/// and the CR-stripped source lines every step indexes into. Passing it explicitly makes each
+/// step (consumePayload/parseAnchor/parseBody/finalizeBlock) a module-scope, directly unit-
+/// testable function; parseInteract just seeds it and dispatches.
+type ParseState = {
+  errors: InteractError[];
+  blocks: Block[];
+  seenIds: Set<string>;
+  rawLines: string[];
+};
+
+// Looks ahead from the item at index i for a payload: zero or more blank pad lines, then
+// either a fence (consumed and attached), an anchor-like line (bailed), indented non-fence
+// content (unfenced-payload), or anything else (no payload). `limit` is the index of the
+// block's closing anchor, so the lookahead never scans past the region. Returns the index
+// the caller should resume from (the last line consumed).
+function consumePayload(
+  st: ParseState,
+  item: Item,
+  i: number,
+  frame: Frame,
+  limit: number,
+): number {
+  const { rawLines, errors } = st;
+  let j = i + 1;
+  while (j < limit && rawLines[j]!.trim() === "") j++;
+  if (j >= limit) return i;
+  const candidate = rawLines[j]!;
+  const fenceOpen = candidate.match(FENCE_OPEN_RE);
+  if (fenceOpen) {
+    const indent = fenceOpen[1]!;
+    const tickLen = fenceOpen[2]!.length;
+    const interior: string[] = [];
+    let k = j + 1;
+    let closed = false;
+    for (; k < limit; k++) {
+      const line = rawLines[k]!;
+      const closeMatch = line.trim().match(/^`{3,}$/);
+      if (closeMatch && closeMatch[0].length >= tickLen) {
+        closed = true;
+        break;
+      }
+      interior.push(line);
+    }
+    item.payload = interior.map((l) => dedentLine(l, indent)).join("\n");
+    if (!closed) {
+      errors.push({
+        code: "unclosed-fence",
+        blockId: frame.id,
+        line: j + 1,
+        message: `fenced payload opened at line ${j + 1} never closes`,
+      });
+      frame.hasError = true;
+      return limit - 1;
+    }
+    return k;
+  }
+  if (ANCHOR_LIKE_RE.test(candidate)) return i;
+  if (/^[ \t]/.test(candidate)) {
+    errors.push({
+      code: "unfenced-payload",
+      blockId: frame.id,
+      line: j + 1,
+      message: "indented content under an item must be a fenced payload",
+    });
+    frame.hasError = true;
+    return j;
+  }
+  return i;
+}
+
+// Read an opening anchor's post-`interact:` info into a Frame. Returns null when the content
+// is too malformed to open a block (bad-anchor: no kind token, or the kind is not a lowercase
+// slug). Emits kind/attribute/id errors and registers id uniqueness. `lineNo` is the anchor's
+// 1-indexed line. This is the attribute/kind/id grammar unchanged from the pre-migration scan.
+function parseAnchor(st: ParseState, info: string | undefined, lineNo: number): Frame | null {
+  const { errors, seenIds } = st;
+  const rest = info ?? "";
+  const tokens = rest.match(ANCHOR_TOKEN_RE) ?? [];
+  const kindToken = tokens[0];
+  if (tokens.length === 0 || !kindToken || !KIND_TOKEN_RE.test(kindToken)) {
+    errors.push({ code: "bad-anchor", line: lineNo, message: "malformed interact anchor" });
+    return null;
+  }
+  const frame: Frame = {
+    kindRaw: kindToken,
+    kindValid: (BLOCK_KINDS as readonly string[]).includes(kindToken)
+      ? (kindToken as BlockKind)
+      : null,
+    introLines: [],
+    sawFirstItem: false,
+    itemLinesSeen: 0,
+    items: [],
+    line: lineNo,
+    hasError: false,
+  };
+  if (frame.kindValid === null) {
+    errors.push({
+      code: "unknown-kind",
+      line: lineNo,
+      message: `unknown block kind '${kindToken}'`,
+    });
+    frame.hasError = true;
+  }
+  const seenKeys = new Set<string>();
+  for (const tok of tokens.slice(1)) {
+    const eq = tok.indexOf("=");
+    if (eq === -1) {
+      errors.push({
+        code: "unknown-attribute",
+        line: lineNo,
+        message: `malformed attribute '${tok}'`,
+      });
+      frame.hasError = true;
+      continue;
+    }
+    const key = tok.slice(0, eq);
+    let val = tok.slice(eq + 1);
+    if (val.length >= 2 && val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+    if (val.includes('"')) {
+      // an unterminated or embedded quote: never guess at the value
+      errors.push({
+        code: "unknown-attribute",
+        line: lineNo,
+        message: `malformed attribute value for '${key}'`,
+      });
+      frame.hasError = true;
+      continue;
+    }
+    if (!ATTR_KEYS.has(key)) {
+      errors.push({
+        code: "unknown-attribute",
+        line: lineNo,
+        message: `unknown attribute '${key}' (allowed: id, src, dest)`,
+      });
+      frame.hasError = true;
+      continue;
+    }
+    if (seenKeys.has(key)) {
+      errors.push({
+        code: "duplicate-attribute",
+        line: lineNo,
+        message: `duplicate attribute '${key}'`,
+      });
+      frame.hasError = true;
+      continue;
+    }
+    seenKeys.add(key);
+    if (key === "id") frame.id = val;
+    else if (key === "src") frame.src = val;
+    else frame.dest = val;
+  }
+  if (frame.id === undefined || frame.id === "") {
+    errors.push({
+      code: "missing-id",
+      line: lineNo,
+      message: frame.id === "" ? "empty id= attribute" : "missing id= attribute",
+    });
+    frame.hasError = true;
+  } else if (seenIds.has(frame.id)) {
+    errors.push({
+      code: "duplicate-id",
+      blockId: frame.id,
+      line: lineNo,
+      message: `duplicate block id '${frame.id}'`,
+    });
+    frame.hasError = true;
+  } else {
+    seenIds.add(frame.id);
+  }
+  return frame;
+}
+
+// The in-block grammar over the body line range [bodyStart, closeIdx) (0-indexed), where
+// closeIdx is the index of the closing anchor. Fills frame.items / introLines and pushes
+// item/intro/payload errors. Unchanged item/checkbox/intro/payload semantics.
+function parseBody(st: ParseState, frame: Frame, bodyStart: number, closeIdx: number): void {
+  const { rawLines, errors } = st;
+  for (let i = bodyStart; i < closeIdx; i++) {
+    const raw = rawLines[i]!;
+    const lineNo = i + 1;
+    if (raw.trim() === "") {
+      // interior blank lines of a multi-paragraph intro are part of the intro; leading
+      // blanks are padding, trailing ones are trimmed at finalize.
+      if (!frame.sawFirstItem && frame.introLines.length > 0) frame.introLines.push(raw);
+      continue;
+    }
+    const itemMatch = raw.match(ITEM_RE);
+    if (itemMatch) {
+      frame.sawFirstItem = true;
+      frame.itemLinesSeen++;
+      const stateChar = itemMatch[1]!;
+      const restAfterCheckbox = itemMatch[2]!;
+      let state: ItemState;
+      if (stateChar === " ") state = "unchecked";
+      else if (stateChar.toLowerCase() === "x") state = "checked";
+      else {
+        if (stateChar === "-") {
+          errors.push({
+            code: "bad-state",
+            blockId: frame.id,
+            line: lineNo,
+            message: "unsupported state '-' — leave unchecked and check the gate instead",
+          });
+        } else {
+          errors.push({
+            code: "bad-state",
+            blockId: frame.id,
+            line: lineNo,
+            message: `unsupported checkbox state '${stateChar}'`,
+          });
+        }
+        frame.hasError = true;
+        continue;
+      }
+      const vm = restAfterCheckbox.match(VERB_RE);
+      if (!vm) {
+        errors.push({
+          code: "bad-item",
+          blockId: frame.id,
+          line: lineNo,
+          message: "item line is missing a 'verb: target' marker",
+        });
+        frame.hasError = true;
+        continue;
+      }
+      const verb = vm[1]!;
+      const { targetRaw, note } = splitNote(vm[2]!);
+      const target = stripBackticks(targetRaw);
+      const item: Item = {
+        state,
+        verb,
+        target,
+        targetRaw,
+        note,
+        payload: undefined,
+        line: lineNo,
+      };
+      frame.items.push(item);
+      i = consumePayload(st, item, i, frame, closeIdx);
+      continue;
+    }
+    if (!frame.sawFirstItem) {
+      frame.introLines.push(raw);
+      continue;
+    }
+    // Stray content after the first item: a mistyped item line silently dropped would be a
+    // reviewer's decision lost, so it fails loud instead.
+    errors.push({
+      code: "bad-item",
+      blockId: frame.id,
+      line: lineNo,
+      message: `unparseable line inside block '${frame.id ?? ""}' — items look like '- [ ] verb: target', payloads are fenced and indented under their item`,
+    });
+    frame.hasError = true;
+  }
+}
+
+// Close-anchor handling: the empty-block gate, trailing-intro trim, and block push.
+// `closeLineNo` is the closing anchor's 1-indexed line (the span upper bound).
+function finalizeBlock(st: ParseState, frame: Frame, closeLineNo: number): void {
+  const { errors, blocks } = st;
+  if (frame.itemLinesSeen === 0) {
+    errors.push({
+      code: "empty-block",
+      blockId: frame.id,
+      line: frame.line,
+      message: `block '${frame.id ?? ""}' has no items`,
+    });
+    frame.hasError = true;
+  }
+  while (
+    frame.introLines.length > 0 &&
+    frame.introLines[frame.introLines.length - 1]!.trim() === ""
+  ) {
+    frame.introLines.pop();
+  }
+  const intro = frame.introLines.length ? frame.introLines.join("\n") : undefined;
+  if (!frame.hasError && frame.kindValid && frame.id !== undefined) {
+    blocks.push({
+      kind: frame.kindValid,
+      id: frame.id,
+      src: frame.src,
+      dest: frame.dest,
+      intro,
+      items: frame.items,
+      line: frame.line,
+      span: [frame.line, closeLineNo],
+    });
+  }
+}
+
 /// Nesting from geometry: an interact region whose span is properly contained in another's.
 /// Current-parity — neither the outer nor the inner emits a block; one nested-block error per
 /// contained region names the containing block's id at the inner anchor's opening line. Pure
@@ -293,280 +586,8 @@ export function parseInteract(text: string): {
   const rawLines = text.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
   if (text.endsWith("\n")) rawLines.pop();
 
-  const blocks: Block[] = [];
-  const errors: InteractError[] = [];
-  const seenIds = new Set<string>();
-
-  // Looks ahead from the item at index i for a payload: zero or more blank pad lines, then
-  // either a fence (consumed and attached), an anchor-like line (bailed), indented non-fence
-  // content (unfenced-payload), or anything else (no payload). `limit` is the index of the
-  // block's closing anchor, so the lookahead never scans past the region. Returns the index
-  // the caller should resume from (the last line consumed).
-  function consumePayload(item: Item, i: number, frame: Frame, limit: number): number {
-    let j = i + 1;
-    while (j < limit && rawLines[j]!.trim() === "") j++;
-    if (j >= limit) return i;
-    const candidate = rawLines[j]!;
-    const fenceOpen = candidate.match(FENCE_OPEN_RE);
-    if (fenceOpen) {
-      const indent = fenceOpen[1]!;
-      const tickLen = fenceOpen[2]!.length;
-      const interior: string[] = [];
-      let k = j + 1;
-      let closed = false;
-      for (; k < limit; k++) {
-        const line = rawLines[k]!;
-        const closeMatch = line.trim().match(/^`{3,}$/);
-        if (closeMatch && closeMatch[0].length >= tickLen) {
-          closed = true;
-          break;
-        }
-        interior.push(line);
-      }
-      item.payload = interior.map((l) => dedentLine(l, indent)).join("\n");
-      if (!closed) {
-        errors.push({
-          code: "unclosed-fence",
-          blockId: frame.id,
-          line: j + 1,
-          message: `fenced payload opened at line ${j + 1} never closes`,
-        });
-        frame.hasError = true;
-        return limit - 1;
-      }
-      return k;
-    }
-    if (ANCHOR_LIKE_RE.test(candidate)) return i;
-    if (/^[ \t]/.test(candidate)) {
-      errors.push({
-        code: "unfenced-payload",
-        blockId: frame.id,
-        line: j + 1,
-        message: "indented content under an item must be a fenced payload",
-      });
-      frame.hasError = true;
-      return j;
-    }
-    return i;
-  }
-
-  // Read an opening anchor's post-`interact:` info into a Frame. Returns null when the content
-  // is too malformed to open a block (bad-anchor: no kind token, or the kind is not a lowercase
-  // slug). Emits kind/attribute/id errors and registers id uniqueness. `lineNo` is the anchor's
-  // 1-indexed line. This is the attribute/kind/id grammar unchanged from the pre-migration scan.
-  function parseAnchor(info: string | undefined, lineNo: number): Frame | null {
-    const rest = info ?? "";
-    const tokens = rest.match(ANCHOR_TOKEN_RE) ?? [];
-    const kindToken = tokens[0];
-    if (tokens.length === 0 || !kindToken || !KIND_TOKEN_RE.test(kindToken)) {
-      errors.push({ code: "bad-anchor", line: lineNo, message: "malformed interact anchor" });
-      return null;
-    }
-    const frame: Frame = {
-      kindRaw: kindToken,
-      kindValid: (BLOCK_KINDS as readonly string[]).includes(kindToken)
-        ? (kindToken as BlockKind)
-        : null,
-      introLines: [],
-      sawFirstItem: false,
-      itemLinesSeen: 0,
-      items: [],
-      line: lineNo,
-      hasError: false,
-    };
-    if (frame.kindValid === null) {
-      errors.push({
-        code: "unknown-kind",
-        line: lineNo,
-        message: `unknown block kind '${kindToken}'`,
-      });
-      frame.hasError = true;
-    }
-    const seenKeys = new Set<string>();
-    for (const tok of tokens.slice(1)) {
-      const eq = tok.indexOf("=");
-      if (eq === -1) {
-        errors.push({
-          code: "unknown-attribute",
-          line: lineNo,
-          message: `malformed attribute '${tok}'`,
-        });
-        frame.hasError = true;
-        continue;
-      }
-      const key = tok.slice(0, eq);
-      let val = tok.slice(eq + 1);
-      if (val.length >= 2 && val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-      if (val.includes('"')) {
-        // an unterminated or embedded quote: never guess at the value
-        errors.push({
-          code: "unknown-attribute",
-          line: lineNo,
-          message: `malformed attribute value for '${key}'`,
-        });
-        frame.hasError = true;
-        continue;
-      }
-      if (!ATTR_KEYS.has(key)) {
-        errors.push({
-          code: "unknown-attribute",
-          line: lineNo,
-          message: `unknown attribute '${key}' (allowed: id, src, dest)`,
-        });
-        frame.hasError = true;
-        continue;
-      }
-      if (seenKeys.has(key)) {
-        errors.push({
-          code: "duplicate-attribute",
-          line: lineNo,
-          message: `duplicate attribute '${key}'`,
-        });
-        frame.hasError = true;
-        continue;
-      }
-      seenKeys.add(key);
-      if (key === "id") frame.id = val;
-      else if (key === "src") frame.src = val;
-      else frame.dest = val;
-    }
-    if (frame.id === undefined || frame.id === "") {
-      errors.push({
-        code: "missing-id",
-        line: lineNo,
-        message: frame.id === "" ? "empty id= attribute" : "missing id= attribute",
-      });
-      frame.hasError = true;
-    } else if (seenIds.has(frame.id)) {
-      errors.push({
-        code: "duplicate-id",
-        blockId: frame.id,
-        line: lineNo,
-        message: `duplicate block id '${frame.id}'`,
-      });
-      frame.hasError = true;
-    } else {
-      seenIds.add(frame.id);
-    }
-    return frame;
-  }
-
-  // The in-block grammar over the body line range [bodyStart, closeIdx) (0-indexed), where
-  // closeIdx is the index of the closing anchor. Fills frame.items / introLines and pushes
-  // item/intro/payload errors. Unchanged item/checkbox/intro/payload semantics.
-  function parseBody(frame: Frame, bodyStart: number, closeIdx: number): void {
-    for (let i = bodyStart; i < closeIdx; i++) {
-      const raw = rawLines[i]!;
-      const lineNo = i + 1;
-      if (raw.trim() === "") {
-        // interior blank lines of a multi-paragraph intro are part of the intro; leading
-        // blanks are padding, trailing ones are trimmed at finalize.
-        if (!frame.sawFirstItem && frame.introLines.length > 0) frame.introLines.push(raw);
-        continue;
-      }
-      const itemMatch = raw.match(ITEM_RE);
-      if (itemMatch) {
-        frame.sawFirstItem = true;
-        frame.itemLinesSeen++;
-        const stateChar = itemMatch[1]!;
-        const restAfterCheckbox = itemMatch[2]!;
-        let state: ItemState;
-        if (stateChar === " ") state = "unchecked";
-        else if (stateChar.toLowerCase() === "x") state = "checked";
-        else {
-          if (stateChar === "-") {
-            errors.push({
-              code: "bad-state",
-              blockId: frame.id,
-              line: lineNo,
-              message: "unsupported state '-' — leave unchecked and check the gate instead",
-            });
-          } else {
-            errors.push({
-              code: "bad-state",
-              blockId: frame.id,
-              line: lineNo,
-              message: `unsupported checkbox state '${stateChar}'`,
-            });
-          }
-          frame.hasError = true;
-          continue;
-        }
-        const vm = restAfterCheckbox.match(VERB_RE);
-        if (!vm) {
-          errors.push({
-            code: "bad-item",
-            blockId: frame.id,
-            line: lineNo,
-            message: "item line is missing a 'verb: target' marker",
-          });
-          frame.hasError = true;
-          continue;
-        }
-        const verb = vm[1]!;
-        const { targetRaw, note } = splitNote(vm[2]!);
-        const target = stripBackticks(targetRaw);
-        const item: Item = {
-          state,
-          verb,
-          target,
-          targetRaw,
-          note,
-          payload: undefined,
-          line: lineNo,
-        };
-        frame.items.push(item);
-        i = consumePayload(item, i, frame, closeIdx);
-        continue;
-      }
-      if (!frame.sawFirstItem) {
-        frame.introLines.push(raw);
-        continue;
-      }
-      // Stray content after the first item: a mistyped item line silently dropped would be a
-      // reviewer's decision lost, so it fails loud instead.
-      errors.push({
-        code: "bad-item",
-        blockId: frame.id,
-        line: lineNo,
-        message: `unparseable line inside block '${frame.id ?? ""}' — items look like '- [ ] verb: target', payloads are fenced and indented under their item`,
-      });
-      frame.hasError = true;
-    }
-  }
-
-  // Close-anchor handling: the empty-block gate, trailing-intro trim, and block push.
-  // `closeLineNo` is the closing anchor's 1-indexed line (the span upper bound).
-  function finalizeBlock(frame: Frame, closeLineNo: number): void {
-    if (frame.itemLinesSeen === 0) {
-      errors.push({
-        code: "empty-block",
-        blockId: frame.id,
-        line: frame.line,
-        message: `block '${frame.id ?? ""}' has no items`,
-      });
-      frame.hasError = true;
-    }
-    while (
-      frame.introLines.length > 0 &&
-      frame.introLines[frame.introLines.length - 1]!.trim() === ""
-    ) {
-      frame.introLines.pop();
-    }
-    const intro = frame.introLines.length ? frame.introLines.join("\n") : undefined;
-    if (!frame.hasError && frame.kindValid && frame.id !== undefined) {
-      blocks.push({
-        kind: frame.kindValid,
-        id: frame.id,
-        src: frame.src,
-        dest: frame.dest,
-        intro,
-        items: frame.items,
-        line: frame.line,
-        span: [frame.line, closeLineNo],
-      });
-    }
-  }
+  const st: ParseState = { errors: [], blocks: [], seenIds: new Set<string>(), rawLines };
+  const { errors, blocks } = st;
 
   // ---- region-driven dispatch (the single Rust engine locates the anchors) ----
   const { doc, buf } = parseDoc(text);
@@ -583,12 +604,12 @@ export function parseInteract(text: string): {
   for (let idx = 0; idx < regions.length; idx++) {
     if (nested.has(idx)) continue;
     const r = regions[idx]!;
-    const frame = parseAnchor(r.info, r.startLine);
+    const frame = parseAnchor(st, r.info, r.startLine);
     if (frame === null) continue; // bad-anchor: this anchor does not open a block
     // Body lines are (startLine+1 .. endLine-1), i.e. 0-indexed [startLine, endLine-1);
     // the closing anchor sits at index endLine-1.
-    parseBody(frame, r.startLine, r.endLine - 1);
-    finalizeBlock(frame, r.endLine);
+    parseBody(st, frame, r.startLine, r.endLine - 1);
+    finalizeBlock(st, frame, r.endLine);
   }
 
   // Dangling (unpaired) anchors come from the single engine's check pass. unpaired-close maps
@@ -602,7 +623,7 @@ export function parseInteract(text: string): {
       errors.push(c.error);
       continue;
     }
-    const frame = parseAnchor(c.info, c.line);
+    const frame = parseAnchor(st, c.info, c.line);
     if (frame !== null) {
       errors.push({
         code: "unclosed-block",

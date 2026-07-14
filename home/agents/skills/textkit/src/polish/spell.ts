@@ -69,13 +69,15 @@ export function verifySpellBlock(input: string, output: string): { ok: boolean; 
 // the unchanged input and `reverted` is empty).
 export async function spellPass(
   blocks: Block[],
+  // Exact spans to freeze alongside the reference spans (as in revise's `literals`);
+  // production polish passes [] since it runs no glossary term list.
   literals: string[] = [],
   // The model call, injected so tests drive a flake / revert case without a
   // process-global module mock; production callers omit it for the real fw transport.
   ask: typeof askJson = askJson,
 ): Promise<{ blocks: Block[]; reverted: string[]; failed: boolean }> {
-  // Same masking engine as revise() in passes.ts: reference spans (and caller literals) are
-  // frozen to ⟦N⟧ tokens the model cannot reword, restored verbatim at the end.
+  // Same masking engine as revise() in passes.ts: reference spans are frozen to ⟦N⟧
+  // tokens the model cannot reword, restored verbatim at the end.
   const { mask, unmask } = createMasker(literals);
   const stripIdMarkers = makeIdMarkerStripper(blocks);
   const masked = blocks.map((b) => ({ id: b.id, text: mask(b.text) }));

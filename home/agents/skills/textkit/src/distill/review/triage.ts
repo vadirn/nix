@@ -157,7 +157,10 @@ export function buildIntermediary(
 ): string {
   const { front, body } = parseFrontmatter(note);
   const forcedFront = forceEpistemicStatus(front);
-  const noteOut = forcedFront === "" ? body : `${forcedFront}\n${body}`;
+  // forceEpistemicStatus never returns "": an empty front yields the minimal fenced
+  // block, a malformed front is returned unchanged (non-empty), a normal front the
+  // filtered join — so there is no empty arm to guard.
+  const noteOut = `${forcedFront}\n${body}`;
 
   const blocks = residueToBlocks(residue);
   const gate: BlockSpec = {

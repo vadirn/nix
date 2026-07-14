@@ -14,7 +14,8 @@
 // PURE: no fs, no LLM, no model of the source bytes — it reads only the projected markdown.
 import {
   ABSTRACT_HEADING,
-  MARKED_MODALITIES,
+  ANCHOR_BODY,
+  MODALITY_TAG_RE,
   parseSpan,
   RELATIONS_HEADING,
   SECTION_HEADING,
@@ -91,14 +92,12 @@ export interface CanonNote {
 const FENCE_RE = /^(```|~~~)/;
 const SECTION_RE = /^##\s+(\S.*?)\s*$/; // `## Heading` — two hashes exactly (excludes `### `)
 const SUB_RE = /^###\s+(\S.*?)\s*$/; // `### headword` subsection
-// A line that is ONLY a byte-span anchor (the multi-line Payload fence's bare anchor line —
-// see the fenced-payload branch below). NOT derived from graph.ts's TRAILING_ANCHOR_RE — that
-// pattern requires a LEADING `\s+` before the anchor (it strips an anchor off the tail of a
-// text-bearing line), whereas this one whole-line-anchors (`^...$`) a line with no leading
-// text at all. Forcing a shared source for two different anchoring positions (trailing-after-
-// whitespace vs. whole-line) would need the anchor body factored into its own regex-source
-// string for both files to splice — more indirection than the one-line duplication it removes.
-const ANCHOR_ONLY_RE = /^(?:\[\d+\.\.\d+\]|\d+\.\.\d+)$/;
+// A line that is ONLY a byte-span anchor (the multi-line Payload fence's bare anchor line — see the
+// fenced-payload branch below). Whole-line-anchors (`^...$`) the shared ANCHOR_BODY grammar, a
+// distinct framing from graph.ts's TRAILING_ANCHOR_RE (which requires a LEADING `\s+` to strip an
+// anchor off the tail of a text-bearing line); both splice the same ANCHOR_BODY source so the
+// byte-range spelling stays in one place.
+const ANCHOR_ONLY_RE = new RegExp(`^(?:${ANCHOR_BODY})$`);
 
 // Split a note body into its `## ` sections. Content before the first `## ` (the `# title` and any
 // head prose) is not a section and is dropped from the result — callers that need it read the raw
@@ -168,10 +167,6 @@ function subsections(bodyLines: string[]): { headword: string; lines: string[] }
   }
   return out;
 }
-
-// The leading `(modality) ` tag the projector prepends to a marked judgement (MARKED_MODALITIES,
-// graph.ts).
-const MODALITY_TAG_RE = new RegExp(`^\\((?:${MARKED_MODALITIES.join("|")})\\)\\s+`);
 
 // Parse a canonical note body into its structured sections — the lossy READ view documented on
 // CanonNote (edge typing, unit quotes, and source provenance are NOT recovered; this never

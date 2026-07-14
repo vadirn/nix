@@ -20,14 +20,19 @@
 import { langRule, relText } from "@/core/text.ts";
 import type { Candidate, NeighbourHit } from "@/cards/types.ts";
 
+// One neighbour's own definition as text: the frontmatter description, falling back
+// to the BM25 snippet when the card has none. Shared by the prompt builders here and
+// the review-file renderer in stage.ts.
+export function neighbourDisplayText(hit: NeighbourHit): string {
+  return hit.description.trim() || hit.snippet.trim();
+}
+
 // Render the recall neighbours as the judge/writer sees them: title first (the
 // [[wikilink]] handle), then the frontmatter description — the card's own
 // definition — falling back to the BM25 snippet when the card has none.
 function neighbourList(hits: NeighbourHit[]): string {
   if (hits.length === 0) return "(none)";
-  return hits
-    .map((h, i) => `### N${i + 1}: ${h.title}\n${h.description.trim() || h.snippet.trim()}`)
-    .join("\n\n");
+  return hits.map((h, i) => `### N${i + 1}: ${h.title}\n${neighbourDisplayText(h)}`).join("\n\n");
 }
 
 // Render the candidate block shared by both LLM inputs: headword, arm, certified

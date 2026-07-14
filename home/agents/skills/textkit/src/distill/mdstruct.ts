@@ -5,7 +5,7 @@
 // Fail-loud: a missing or unparseable binary throws `mdstruct unavailable` rather than
 // degrading to regex. Residue is a correctness gate (it tells the user real payload was
 // dropped), so a silent fallback would reintroduce the very bugs this fixes.
-import { execFileSync } from "node:child_process";
+import { execFileSync, type StdioOptions } from "node:child_process";
 
 // MDSTRUCT_BIN overrides the bare-name PATH resolution so tests can point at a freshly-built
 // binary (with newer flags); production leaves it unset and resolves `mdstruct` on PATH.
@@ -111,6 +111,40 @@ export interface ParsedDoc {
 // payloadResidue runs the four lanes over two texts -> 2 parses, not 8.
 const cache = new Map<string, ParsedDoc>();
 
+// The single injection seam: spawn `MDSTRUCT_BIN` (PATH-resolved) with `args`, feeding `text` on
+// stdin, and return its stdout. A spawn failure (missing binary) throws `mdstruct unavailable` —
+// the fail-loud contract both call sites share, so neither degrades to regex. With `recoverNonzero`,
+// a ran-but-nonzero exit (numeric status) returns the child's stdout instead of throwing, so
+// checkRegion recovers its ndjson from a byte-integrity exit 4; parseDoc omits the flag and lets a
+// nonzero exit propagate. `stdio` overrides the default streams (checkRegion drops the child's
+// stderr summary so only ndjson reaches the pipeline).
+function runMdstruct(
+  text: string,
+  args: string[],
+  opts: { recoverNonzero?: boolean; stdio?: StdioOptions } = {},
+): string {
+  const bin = MDSTRUCT_BIN;
+  try {
+    return execFileSync(bin, args, {
+      input: text,
+      encoding: "utf8",
+      maxBuffer: MDSTRUCT_MAX_BUFFER,
+      ...(opts.stdio ? { stdio: opts.stdio } : {}),
+    });
+  } catch (e) {
+    const err = e as { status?: number | null; stdout?: string };
+    // A ran-but-nonzero exit (e.g. byte-integrity 4) still wrote to stdout; recover it when asked.
+    // A spawn failure has no numeric status -> fail loud so the binary never silently degrades.
+    if (opts.recoverNonzero && typeof err.status === "number") {
+      return typeof err.stdout === "string" ? err.stdout : "";
+    }
+    throw new Error(
+      `mdstruct unavailable: could not run '${bin}' (${(e as Error).message}). ` +
+        "The payload-residue gate needs the mdstruct binary on PATH; it must not degrade to regex.",
+    );
+  }
+}
+
 // Parse `text` to { doc, buf }. Spawns the bare name `mdstruct` (PATH-resolved, the
 // polish.ts:167 mktemp pattern). Throws `mdstruct unavailable` on a missing binary or
 // unparseable output (see the fail-loud note up top).
@@ -123,21 +157,8 @@ export function parseDoc(text: string): ParsedDoc {
   const hit = cache.get(key);
   if (hit) return hit;
   const buf = Buffer.from(text, "utf8");
-  const args = ["-"];
   const bin = MDSTRUCT_BIN;
-  let stdout: string;
-  try {
-    stdout = execFileSync(bin, args, {
-      input: text,
-      encoding: "utf8",
-      maxBuffer: MDSTRUCT_MAX_BUFFER,
-    });
-  } catch (e) {
-    throw new Error(
-      `mdstruct unavailable: could not run '${bin}' (${(e as Error).message}). ` +
-        "The payload-residue gate needs the mdstruct binary on PATH; it must not degrade to regex.",
-    );
-  }
+  const stdout = runMdstruct(text, ["-"]);
   const line = stdout.split("\n").find((l) => l.trim());
   if (!line) throw new Error("mdstruct unavailable: empty output from 'mdstruct'");
   let doc: MdDoc;
@@ -162,6 +183,7 @@ export function parseDoc(text: string): ParsedDoc {
   return parsed;
 }
 
+// Slice `buf` by a byte `Span` and decode the `[start, end)` range as UTF-8.
 export function sliceBytes(buf: Buffer, span: Span): string {
   return buf.subarray(span[0], span[1]).toString("utf8");
 }
@@ -189,32 +211,13 @@ export interface RegionDiagnostic {
 // records are recovered from the thrown error rather than lost. A spawn failure (missing binary)
 // throws `mdstruct unavailable`, matching parseDoc's fail-loud contract.
 export function checkRegion(text: string, label: string): RegionDiagnostic[] {
-  const bin = MDSTRUCT_BIN;
   const args = ["check", "--region", label, "--format", "ndjson", "-"];
-  let stdout: string;
-  try {
-    stdout = execFileSync(bin, args, {
-      input: text,
-      encoding: "utf8",
-      maxBuffer: MDSTRUCT_MAX_BUFFER,
-      // The `check` verb writes its `N/N files passed` summary (and any warn lines) to stderr;
-      // interact only wants the ndjson diagnostics on stdout, so drop the child's stderr rather
-      // than let it inherit onto the pipeline's stderr.
-      stdio: ["pipe", "pipe", "ignore"],
-    });
-  } catch (e) {
-    const err = e as { status?: number | null; stdout?: string };
-    // A ran-but-nonzero exit (e.g. byte-integrity 4) still wrote the ndjson to stdout; recover it.
-    // A spawn failure has no numeric status -> fail loud like parseDoc.
-    if (typeof err.status === "number") {
-      stdout = typeof err.stdout === "string" ? err.stdout : "";
-    } else {
-      throw new Error(
-        `mdstruct unavailable: could not run '${bin} check' (${(e as Error).message}). ` +
-          "interact's unclosed/unopened validation needs the mdstruct binary on PATH.",
-      );
-    }
-  }
+  // recoverNonzero: a byte-integrity exit 4 still wrote the ndjson to stdout, so keep it. stdio
+  // drops the child's stderr `N/N files passed` summary — interact only wants the ndjson on stdout.
+  const stdout = runMdstruct(text, args, {
+    recoverNonzero: true,
+    stdio: ["pipe", "pipe", "ignore"],
+  });
   const out: RegionDiagnostic[] = [];
   for (const raw of stdout.split("\n")) {
     const trimmed = raw.trim();

@@ -10,6 +10,7 @@
 // two-channel assemble step it replaced is gone. Pure formatting; no I/O, no model calls.
 import {
   ABSTRACT_HEADING,
+  formatModalityTag,
   formatSpan,
   MARKED_MODALITIES,
   REL_ARROW,
@@ -64,7 +65,7 @@ function lines(statement: string): string[] {
 // modalities (`MARKED_MODALITIES` in graph.ts); `assertoric` (or an unmarked judgment) emits no tag.
 function modalityTag(unit: Unit): string {
   const m = unit.modality;
-  return m && (MARKED_MODALITIES as readonly string[]).includes(m) ? `(${m}) ` : "";
+  return m && (MARKED_MODALITIES as readonly string[]).includes(m) ? formatModalityTag(m) : "";
 }
 
 // The trailing anchor for a TAIL line (concept bullet / procedure step past the lead), read from

@@ -199,7 +199,7 @@ export function payloadResidue(sourceText: string, outputText: string): Residue[
 // edges stay dropped by locked scope; wikilinkResidue survives as a standalone tested primitive
 // (its own suite), just no longer wired here. (Carrying cross-note edges via external endpoints is
 // Backlog.)
-export function edgePayloadResidue(text: string, out: string): Residue[] {
+export function payloadResidueForProjection(text: string, out: string): Residue[] {
   return payloadResidue(text, out);
 }
 

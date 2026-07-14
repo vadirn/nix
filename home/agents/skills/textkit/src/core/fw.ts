@@ -175,18 +175,33 @@ export function extractJson(s: string): string {
   throw new Error(`unbalanced JSON: ${s.slice(0, 200)}`);
 }
 
+// The transport askJson drives: the module-private fw signature. Injected via
+// askJson's optional `call` param so a test can drive the parse-retry/degrade loop
+// with a fake transport instead of mocking the module; production callers omit it
+// and get fw unchanged.
+type Transport = (
+  model: string,
+  messages: { role: string; content: string }[],
+  opts: { json?: boolean; maxTokens?: number; temp?: number },
+) => Promise<string>;
+
 // askJson calls `model` with `prompt`, requesting JSON-object output, and parses the response as
 // T. Retries once on a JSON-parse failure (the model returned no or unbalanced JSON) before
 // giving up with a TransientError; fw() below handles the separate network/HTTP retry
-// underneath.
-export async function askJson<T>(model: string, prompt: string, maxTokens: number): Promise<T> {
+// underneath. `call` defaults to fw and exists only so tests can inject a fake transport.
+export async function askJson<T>(
+  model: string,
+  prompt: string,
+  maxTokens: number,
+  call: Transport = fw,
+): Promise<T> {
   // Retry once on a PARSE failure (distinct from fw's network/5xx retry): the
   // FIDELITY thinking model sometimes returns only reasoning with no JSON object,
   // which extractJson rejects. It is non-deterministic, so a second call usually
   // complies — cheaper than dropping the whole run to the passthrough failsafe.
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await fw(model, [{ role: "user", content: prompt }], { json: true, maxTokens });
+    const raw = await call(model, [{ role: "user", content: prompt }], { json: true, maxTokens });
     try {
       return JSON.parse(extractJson(raw)) as T;
     } catch (e) {

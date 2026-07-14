@@ -36,6 +36,7 @@ import {
   FIDELITY_TOKENS,
   rethrowIfBug,
 } from "@/core/fw.ts";
+import { takeValue } from "@/core/args.ts";
 import { detectLang } from "@/core/text.ts";
 import { nameLintAgainstSource } from "@/core/writing/name-lint.ts";
 import {
@@ -56,6 +57,7 @@ import type {
   Candidate,
   DraftReply,
   NeighbourHit,
+  StagingRecord,
 } from "@/cards/types.ts";
 
 // ---- injected I/O seams (mirrors neighbours.ts's RunFn/ReadFn split) ----
@@ -166,6 +168,59 @@ export function stripInteractBelt(text: string): string {
   }
 }
 
+// Stage one candidate end-to-end: recall its neighbours, run the band judge and the
+// card draft (each degrading to a flag on a non-bug failure, never a throw), name-lint
+// the draft, and fold it all into a StagingRecord. Returns the record plus how many
+// corrupted names the lint found (the caller tallies them). No filename or write concern
+// lives here — stageNote owns dedupe and the disk write.
+async function stageCandidate(
+  candidate: Candidate,
+  body: string,
+  lang: "en" | "ru",
+  opts: StageOpts,
+  deps: StageDeps,
+): Promise<{ record: StagingRecord; corruptedNames: number }> {
+  const flags: CandidateFlag[] = [];
+  const { hits, ok } = await deps.fetchNeighbours(candidate, {
+    vaultRoot: opts.vaultRoot,
+    topK: opts.topK,
+  });
+  if (!ok) flags.push("recall-unavailable");
+
+  let verdict: BandVerdict | null = null;
+  try {
+    const reply = await deps.ask<BandJudgeReply>(
+      FIDELITY,
+      noveltyBandPrompt(candidate, hits, lang),
+      FIDELITY_TOKENS,
+    );
+    verdict = decideCard(reply, hits);
+  } catch (e) {
+    rethrowIfBug(e, "novelty-band");
+  }
+  if (verdict === null) flags.push("judge-inconclusive");
+
+  let draft = "";
+  try {
+    const reply = await deps.ask<DraftReply>(
+      EXTRACT,
+      cardDraftPrompt(candidate, hits, body, lang),
+      EXTRACT_TOKENS,
+    );
+    if (typeof reply?.draft === "string" && reply.draft.trim()) draft = reply.draft;
+  } catch (e) {
+    rethrowIfBug(e, "card-draft");
+  }
+  if (!draft) flags.push("draft-failed");
+
+  // deterministic, zero-LLM, never blocks. The draft is the only newly generated
+  // text — candidate.def is copied verbatim from the note, so linting it is a no-op.
+  const nameLint = draft ? nameLintAgainstSource(draft, body) : { corrupted: [], invented: [] };
+
+  const record = buildStagingRecord({ candidate, verdict, flags, lang, draft, nameLint });
+  return { record, corruptedNames: nameLint.corrupted.length };
+}
+
 // The whole staging flow, deps injected so cards/stage.test.ts drives every
 // degradation lane with fakes and asserts dry-run calls neither ask nor writeFile.
 export async function stageNote(
@@ -212,49 +267,18 @@ export async function stageNote(
   // one another's staging file.
   const usedFilenames = new Set<string>();
   for (const candidate of candidates) {
-    const flags: CandidateFlag[] = [];
-    const { hits, ok } = await deps.fetchNeighbours(candidate, {
-      vaultRoot: opts.vaultRoot,
-      topK: opts.topK,
-    });
-    if (!ok) flags.push("recall-unavailable");
-
-    let verdict: BandVerdict | null = null;
-    try {
-      const reply = await deps.ask<BandJudgeReply>(
-        FIDELITY,
-        noveltyBandPrompt(candidate, hits, lang),
-        FIDELITY_TOKENS,
-      );
-      verdict = decideCard(reply, hits);
-    } catch (e) {
-      rethrowIfBug(e, "novelty-band");
-    }
-    if (verdict === null) flags.push("judge-inconclusive");
-
-    let draft = "";
-    try {
-      const reply = await deps.ask<DraftReply>(
-        EXTRACT,
-        cardDraftPrompt(candidate, hits, body, lang),
-        EXTRACT_TOKENS,
-      );
-      if (typeof reply?.draft === "string" && reply.draft.trim()) draft = reply.draft;
-    } catch (e) {
-      rethrowIfBug(e, "card-draft");
-    }
-    if (!draft) flags.push("draft-failed");
-
-    // deterministic, zero-LLM, never blocks. The draft is the only newly generated
-    // text — candidate.def is copied verbatim from the note, so linting it is a no-op.
-    const nameLint = draft ? nameLintAgainstSource(draft, body) : { corrupted: [], invented: [] };
-    corruptedNames += nameLint.corrupted.length;
-
-    const record = buildStagingRecord({ candidate, verdict, flags, lang, draft, nameLint });
+    const { record, corruptedNames: corrupted } = await stageCandidate(
+      candidate,
+      body,
+      lang,
+      opts,
+      deps,
+    );
+    corruptedNames += corrupted;
     const { filename, content } = renderStagingFile(record, noteName, usedFilenames);
     await deps.writeFile(join(opts.stagingDir, filename), content);
     staged++;
-    for (const f of flags) flagCounts[f] = (flagCounts[f] ?? 0) + 1;
+    for (const f of record.flags) flagCounts[f] = (flagCounts[f] ?? 0) + 1;
   }
 
   return { mode: "staged", total: candidates.length, staged, flagCounts, corruptedNames };
@@ -358,32 +382,33 @@ export function parseArgs(argv: string[]): ParseResult {
       continue;
     }
     if (a === "--staging-dir") {
-      const v = argv[++i];
-      if (v === undefined)
-        return { kind: "error", message: "--staging-dir expects a directory path" };
-      stagingDir = v;
+      const r = takeValue(argv, i, "--staging-dir", "a directory path");
+      if (!r.ok) return { kind: "error", message: r.message };
+      stagingDir = r.value;
+      i = r.next;
       continue;
     }
     if (a === "--vault-root") {
-      const v = argv[++i];
-      if (v === undefined)
-        return { kind: "error", message: "--vault-root expects a directory path" };
-      vaultRoot = v;
+      const r = takeValue(argv, i, "--vault-root", "a directory path");
+      if (!r.ok) return { kind: "error", message: r.message };
+      vaultRoot = r.value;
+      i = r.next;
       continue;
     }
     if (a === "--source") {
-      const v = argv[++i];
-      if (v === undefined) return { kind: "error", message: "--source expects a file path" };
-      source = v;
+      const r = takeValue(argv, i, "--source", "a file path");
+      if (!r.ok) return { kind: "error", message: r.message };
+      source = r.value;
+      i = r.next;
       continue;
     }
     if (a === "--top-k") {
-      const v = argv[++i];
-      if (v === undefined || v.trim() === "")
-        return { kind: "error", message: "--top-k expects a positive integer" };
-      const n = Number(v);
+      const r = takeValue(argv, i, "--top-k", "a positive integer");
+      if (!r.ok) return { kind: "error", message: r.message };
+      i = r.next;
+      const n = Number(r.value);
       if (!Number.isInteger(n) || n < 1)
-        return { kind: "error", message: `--top-k expects a positive integer (got '${v}')` };
+        return { kind: "error", message: `--top-k expects a positive integer (got '${r.value}')` };
       topK = n;
       continue;
     }
