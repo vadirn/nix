@@ -1,8 +1,8 @@
 {
-  "name": "distill-text",
+  "name": "textkit",
   "version": "1.0.0",
   "private": true,
-  "description": "Engine for the distill skill: extract a note's typed knowledge graph and project it as a span-anchored canonical note. Driven by the distill-text CLI on PATH; see SKILL.md.",
+  "description": "Engine for the textkit skill: a shared text-processing core shipping three CLIs on PATH — distill-text (distill a note into its typed knowledge graph), polish-text (copy-edit prose), and card-stage (stage extraction candidates from a distilled note). See SKILL.md.",
   "scripts": {
     "test": "bun test src",
     "fmt": "oxfmt src",
