@@ -15,6 +15,56 @@ cited without an inline definition, the entry says so.
 The five knowledge-element types (`spec §1`) and the seven-section projection (`spec §3`)
 are the two anchors everything else orbits; read those first.
 
+## Architecture
+
+The anchors below fix the _why_ of each choice; this section fixes the _where_.
+`graph.ts`'s `DistillationResult` is the source of truth — every arrow either builds it,
+projects it, or reads a projection back. Module tiers, leaf → entry:
+
+- **leaves** — `mdstruct.ts`, `graph.ts`, `text.ts`, `frontmatter.ts`, `envelope.ts`, `fw.ts`, `writing/{typography,levenshtein,mask}.ts`
+- **derived** — `harvest.ts`, `route.ts`, `rel-parse.ts`, `parse-projection.ts`, `locate.ts`, `locate-graph.ts`, `residue.ts`, `writing/{name-lint,spell,passes}.ts`
+- **stages** — `prompts.ts` (LLM stages), `project.ts` (projector)
+- **orchestration** — `distill-core.ts`, `gates.ts`, `interact.ts`, `triage.ts`, `tty.ts`, `retype.ts`, `apply-mode.ts`, `prose-mode.ts`
+- **entry** — `distill.ts`, `polish.ts`, `cli.ts`
+
+```mermaid
+flowchart TB
+  src["source .md"] --> fm["frontmatter.ts<br/>split YAML (verbatim passthrough)"]
+
+  %% ---- compress spine: distill-core.ts ----
+  fm --> ex["extractGraph — prompts.ts + fw.ts<br/>PreGraph: typed units + verbatim quotes, no spans"]
+  ex --> loc["locateGraph — locate-graph.ts + locate.ts<br/>HARD span gate: quote to byte span"]
+  loc --> ir{{"DistillationResult — graph.ts<br/>the canonical IR (5 element types)"}}
+  ir -. optional .-> rev["TTY typing review<br/>retype.ts · tty.ts"]
+  rev -. types applied .-> ir
+  ir --> proj["projectMarkdown — project.ts<br/>7 sections + trailing byte-anchors"]
+  proj --> gate["residue gates — gates.ts<br/>surface untranslated, never repair"]
+  gate --> env["envelope.ts — result envelope (+ residue)"]
+
+  %% ---- deterministic lanes ----
+  harv["harvest.ts<br/>payload/link/prose-list loss surface"] --> ex
+  harv --> gate
+  route["route.ts<br/>per-section density router"] --> ex
+  mds["mdstruct.ts<br/>span seam to Rust parser"] --> harv
+  mds --> loc
+
+  %% ---- inverse / consumer flows ----
+  emitted["emitted .md note"] --> pp["parse-projection.ts + rel-parse.ts<br/>lossy READER inverse"]
+  pp --> cards["cards/ (out of scope)"]
+  pp --> apply["apply-mode.ts<br/>splice reviewed edits"]
+  interact["interact.ts → triage.ts → tty.ts<br/>interactive review loop"] --> apply
+  ir --> prose["prose-mode.ts<br/>reconstruct prose"]
+
+  classDef ir fill:#2b6,stroke:#173,color:#fff;
+  classDef gate fill:#e94,stroke:#a51,color:#fff;
+  class ir ir;
+  class loc,gate gate;
+```
+
+Compat seam: `text.ts` re-exports `sections` (from `route.ts`) and `parseRelationsBlock`
+(from `rel-parse.ts`) so the out-of-scope `cards/` importers keep resolving through the old
+`text.ts` path (D13); `text.ts` forwards but does not use them.
+
 ## Spec
 
 The spec fixes distill's data model and stage sequence — what a distillation _is_.
