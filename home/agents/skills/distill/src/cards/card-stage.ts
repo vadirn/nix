@@ -26,8 +26,8 @@
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { parseDescription, parseFrontmatter } from "../frontmatter.ts";
-import { InteractFormatError, stripInteract } from "../interact.ts";
+import { parseDescription, parseFrontmatter } from "@/kernel/frontmatter.ts";
+import { InteractFormatError, stripInteract } from "@/review/interact.ts";
 import {
   askJson,
   EXTRACT,
@@ -35,19 +35,20 @@ import {
   FIDELITY,
   FIDELITY_TOKENS,
   rethrowIfBug,
-} from "../fw.ts";
-import { detectLang, sections } from "../text.ts";
-import { nameLintAgainstSource } from "../writing/name-lint.ts";
+} from "@/kernel/fw.ts";
+import { detectLang } from "@/kernel/text.ts";
+import { sections } from "@/extract/route.ts";
+import { nameLintAgainstSource } from "@/writing/name-lint.ts";
 import {
   annotateEdges,
   buildStagingRecord,
   decideCard,
   enumerateCandidates,
   harvestConcepts,
-} from "./cards.ts";
-import { fetchNeighbours } from "./neighbours.ts";
-import { cardDraftPrompt, noveltyBandPrompt } from "./prompts.ts";
-import { renderStagingFile } from "./stage.ts";
+} from "@/cards/cards.ts";
+import { fetchNeighbours } from "@/cards/neighbours.ts";
+import { cardDraftPrompt, noveltyBandPrompt } from "@/cards/prompts.ts";
+import { renderStagingFile } from "@/cards/stage.ts";
 import type {
   Arm,
   BandJudgeReply,
@@ -56,7 +57,7 @@ import type {
   Candidate,
   DraftReply,
   NeighbourHit,
-} from "./types.ts";
+} from "@/cards/types.ts";
 
 // ---- injected I/O seams (mirrors neighbours.ts's RunFn/ReadFn split) ----
 

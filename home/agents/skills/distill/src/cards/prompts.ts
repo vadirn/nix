@@ -17,8 +17,8 @@
 //
 // Band discipline: the verdict these prompts elicit is an ANNOTATION a candidate
 // carries into staging, never a filter — nothing here gates.
-import { langRule, relText } from "../text.ts";
-import type { Candidate, NeighbourHit } from "./types.ts";
+import { langRule, relText } from "@/kernel/text.ts";
+import type { Candidate, NeighbourHit } from "@/cards/types.ts";
 
 // Render the recall neighbours as the judge/writer sees them: title first (the
 // [[wikilink]] handle), then the frontmatter description — the card's own

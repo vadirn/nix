@@ -2,8 +2,19 @@
 // `bun test cards/cards.test.ts` from the distill skill directory (NOT bare `bun
 // test` — sibling build agents' files are still in flight and would fail it).
 import { expect, test } from "bun:test";
-import { annotateEdges, buildStagingRecord, decideCard, enumerateCandidates } from "./cards.ts";
-import type { BandVerdict, Candidate, CardEdge, HarvestedConcept, NeighbourHit } from "./types.ts";
+import {
+  annotateEdges,
+  buildStagingRecord,
+  decideCard,
+  enumerateCandidates,
+} from "@/cards/cards.ts";
+import type {
+  BandVerdict,
+  Candidate,
+  CardEdge,
+  HarvestedConcept,
+  NeighbourHit,
+} from "@/cards/types.ts";
 
 // ---- enumerateCandidates ----
 

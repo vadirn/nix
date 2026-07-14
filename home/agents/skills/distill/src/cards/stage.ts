@@ -13,8 +13,8 @@
 // off-registry marker and a blanket uncertified-verify notice, the flags, the
 // source note as a link) → ## On commit (the checklist that turns a draft into a
 // committed card) → a horizontal rule → the draft (or a draft-failed notice).
-import { relText, slugSegment } from "../text.ts";
-import type { StagingRecord } from "./types.ts";
+import { relText, slugSegment } from "@/kernel/text.ts";
+import type { StagingRecord } from "@/cards/types.ts";
 
 const DRAFT_FAILED_NOTICE =
   "_Draft failed — the writer call did not return usable content. Draft this card manually from the candidate above._";

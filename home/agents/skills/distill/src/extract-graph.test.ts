@@ -4,8 +4,8 @@
 // byte-verbatim), the drop-if-no-valid-source rule per channel, modality clamping, relation
 // normalization with predicate dropped, and the frontDescription override. Run with `bun test`.
 import { expect, test } from "bun:test";
-import { parseExtractGraph, type RawGraph } from "./prompts.ts";
-import type { Block } from "./text.ts";
+import { parseExtractGraph, type RawGraph } from "@/prompt/prompts.ts";
+import type { Block } from "@/kernel/text.ts";
 
 const BLOCKS: Block[] = [
   { id: "B1", text: "b1" },

@@ -4,7 +4,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
-import { formatNameLint, nameLintAgainstSource, nameLintSelfConsistency } from "./name-lint.ts";
+import {
+  formatNameLint,
+  nameLintAgainstSource,
+  nameLintSelfConsistency,
+} from "@/writing/name-lint.ts";
 
 const read = (name: string) => readFileSync(resolve(import.meta.dir, "../fixtures", name), "utf8");
 

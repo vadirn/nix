@@ -1,6 +1,6 @@
 // writing/levenshtein tests — pinned distances for the plain and bounded variants.
 import { expect, test } from "bun:test";
-import { levenshtein, levenshteinBounded } from "./levenshtein.ts";
+import { levenshtein, levenshteinBounded } from "@/writing/levenshtein.ts";
 
 test("levenshtein: pinned distances", () => {
   expect(levenshtein("firecurl", "firecrawl")).toBe(3);

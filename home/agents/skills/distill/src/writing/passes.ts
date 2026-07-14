@@ -1,10 +1,10 @@
 // writing/passes — the four sequential writing passes (words → sentences →
 // paragraphs → AI patterns) and the revise() stage that runs them, masking
 // reference spans first so the rewriting model cannot reword or drop them.
-import { type Block, render } from "../text.ts";
-import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "../fw.ts";
-import { createMasker } from "./mask.ts";
-import { normalizeTypography } from "./typography.ts";
+import { type Block, render } from "@/kernel/text.ts";
+import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "@/kernel/fw.ts";
+import { createMasker } from "@/writing/mask.ts";
+import { normalizeTypography } from "@/kernel/typography.ts";
 
 // ---- writing passes (the revise-stage rubric — inline single source) ----
 // Four focused rule sets applied in sequence (words → sentences → paragraphs →

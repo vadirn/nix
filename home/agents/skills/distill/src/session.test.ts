@@ -18,9 +18,9 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { buildIntermediary } from "./triage.ts";
-import { runTtySession } from "./tty.ts";
-import type { Residue } from "./residue.ts";
+import { buildIntermediary } from "@/review/triage.ts";
+import { runTtySession } from "@/app/tty.ts";
+import type { Residue } from "@/review/residue.ts";
 
 const NOTE = `---
 type: distillation

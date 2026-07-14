@@ -5,8 +5,8 @@
 // vault-query spawn, no real Fireworks call, no real filesystem write anywhere
 // in this file.
 import { expect, test } from "bun:test";
-import { EXTRACT, FIDELITY, TransientError, TruncationError } from "../fw.ts";
-import { relText, slugSegment } from "../text.ts";
+import { EXTRACT, FIDELITY, TransientError, TruncationError } from "@/kernel/fw.ts";
+import { relText, slugSegment } from "@/kernel/text.ts";
 import {
   formatDryRunReport,
   formatSummary,
@@ -18,9 +18,9 @@ import {
   type AskFn,
   type FetchNeighboursFn,
   type WriteFn,
-} from "./card-stage.ts";
-import { renderStagingFile } from "./stage.ts";
-import type { BandVerdict, Candidate, NeighbourHit, StagingRecord } from "./types.ts";
+} from "@/cards/card-stage.ts";
+import { renderStagingFile } from "@/cards/stage.ts";
+import type { BandVerdict, Candidate, NeighbourHit, StagingRecord } from "@/cards/types.ts";
 
 // ---- renderStagingFile ----
 

@@ -3,12 +3,12 @@
 // candidate fails verification ships as its input, so the pass can only lose a
 // correction, never meaning. Consumed only by polish.ts — distill's pipeline does
 // not gain a spell stage.
-import { type Block, render } from "../text.ts";
-import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "../fw.ts";
-import { MASK_TOKEN_RE, createMasker } from "./mask.ts";
-import { levenshtein, levenshteinBounded } from "./levenshtein.ts";
-import { makeIdMarkerStripper } from "./passes.ts";
-import { normalizeTypography } from "./typography.ts";
+import { type Block, render } from "@/kernel/text.ts";
+import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "@/kernel/fw.ts";
+import { MASK_TOKEN_RE, createMasker } from "@/writing/mask.ts";
+import { levenshtein, levenshteinBounded } from "@/writing/levenshtein.ts";
+import { makeIdMarkerStripper } from "@/writing/passes.ts";
+import { normalizeTypography } from "@/kernel/typography.ts";
 
 // spellPassPrompt builds the proofreader prompt for one spellPass call: fix only spelling,
 // typo, and grammatical-agreement errors, changing nothing else. No langRule() here: that

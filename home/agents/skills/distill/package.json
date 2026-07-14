@@ -10,7 +10,7 @@
     "lint": "oxlint src",
     "typecheck": "tsc --noEmit",
     "dead": "knip",
-    "cycles": "madge --circular --extensions ts src"
+    "cycles": "madge --circular --extensions ts --ts-config tsconfig.json src"
   },
   "devDependencies": {
     "@types/bun": "1.3.4",

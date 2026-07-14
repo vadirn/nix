@@ -18,10 +18,10 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { parseInteract, stripInteract } from "./interact.ts";
-import { askJson } from "./fw.ts";
+import { parseInteract, stripInteract } from "@/review/interact.ts";
+import { askJson } from "@/kernel/fw.ts";
 
-const DISTILL = join(import.meta.dir, "distill.ts");
+const DISTILL = join(import.meta.dir, "app", "distill.ts");
 const DUMMY_KEY = { ...process.env, FIREWORKS_API_KEY: "test-dummy" };
 const NO_KEY = { PATH: process.env.PATH ?? "" };
 
@@ -273,7 +273,7 @@ async function runMain(
     throw new Error(`main() called process.exit(${code}) on a success path`);
   }) as typeof process.exit;
   try {
-    const { main } = await import("./distill-core.ts");
+    const { main } = await import("@/app/distill-core.ts");
     await main(ask);
   } finally {
     process.stdout.write = realWrite;
@@ -396,7 +396,7 @@ async function runMainExpectExit(
     throw Object.assign(new Error(`process.exit(${code})`), { sentinelExit: code ?? 0 });
   }) as typeof process.exit;
   try {
-    const { main } = await import("./distill-core.ts");
+    const { main } = await import("@/app/distill-core.ts");
     await main(ask);
   } catch (e) {
     const s = (e as { sentinelExit?: number }).sentinelExit;

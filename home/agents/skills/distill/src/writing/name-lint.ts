@@ -4,7 +4,7 @@
 // total (never throw) and never block: callers only render the result into a
 // footer or Flags line. Leaf module: only imports the leaf-tier levenshtein
 // helpers, so the core can depend on it without a cycle back to text.ts.
-import { levenshtein } from "./levenshtein.ts";
+import { levenshtein } from "@/writing/levenshtein.ts";
 
 // NameFinding pairs a name found in the output with the source name it likely corrupted from.
 export type NameFinding = { found: string; wanted: string };
