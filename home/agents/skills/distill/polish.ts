@@ -1,26 +1,17 @@
 #!/usr/bin/env bun
-// polish-text — copy-edit a markdown note: four writing passes, then a
-// spell/grammar pass, typography normalization, and a self-consistency name
-// lint. It does not compress the text, add a glossary, or apply a fidelity
-// gate — the original claims remain unchanged.
-// The input file is never modified (fallible LLM pass; the write-back is the
-// reviewer's act, not the tool's).
-// Shares the writing-core (writing/) with distill: revise() and spellPass() mask
-// reference spans before rewriting and normalize typography on the way out.
+// polish-text — copy-edit a markdown note. See the USAGE block below for the full CLI
+// surface (invocation, flags, output contract, exit codes).
 //
-// Frontmatter passes through verbatim. Default output: the polished content on
-// stdout as exact bytes (frontmatter + body, the input's trailing-newline
-// behavior preserved) so `polish-text in.md > out.md` composes; the report
-// footer and all diagnostics go to stderr. No <result> XML envelope (that
-// envelope exists to carry residue; polish has no residue channel and its
-// output IS the file content). -o/--temp-file keeps the parent-loop contract
-// instead: output written to a fresh temp .md, stdout two lines (path, footer).
+// The input file is never modified (fallible LLM pass; the write-back is the reviewer's
+// act, not the tool's). Shares the writing-core (writing/) with distill: revise() and
+// spellPass() mask reference spans before rewriting and normalize typography on the way
+// out. Frontmatter passes through verbatim, and there is no <result> XML envelope: that
+// envelope exists to carry residue, and polish has no residue channel — its output IS
+// the file content.
 //
-// Failsafe mirrors distill: a TruncationError or transient throw escaping the
-// passes ships the ORIGINAL input with a "polish skipped" footer instead of
-// aborting; a non-transient throw (a code bug) propagates.
-//
-// CLI usage, flags, exit codes, and env: see the USAGE block below.
+// Failsafe mirrors distill: a TruncationError or transient throw escaping the passes
+// ships the ORIGINAL input with a "polish skipped" footer instead of aborting; a
+// non-transient throw (a code bug) propagates.
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,6 +26,9 @@ import {
 import { PASS_EN, PASS_RU, revise } from "./writing/passes.ts";
 import { spellPass } from "./writing/spell.ts";
 
+// USAGE is the full `--help` text printed to stdout on `-h`/`--help`: the invocation forms,
+// every option, the output contract, and the exit codes — the human-facing counterpart to
+// parseArgs, which enforces the same surface programmatically.
 export const USAGE = `polish-text — copy-edit a markdown note: four writing passes, then a
 spell/grammar pass, typography normalization, and a self-consistency name lint.
 It does not compress the text, add a glossary, or apply a fidelity gate — the
@@ -62,6 +56,9 @@ Env: FIREWORKS_API_KEY (the deployed wrapper fills it from the macOS Keychain,
 service fireworks-api; or doppler run --project claude-code --config std --)
 `;
 
+// The validated options bag parseArgs hands to main(): the language override, which of the
+// two writing passes to skip, whether to write to a fresh temp file instead of stdout, and
+// the input path (undefined or "-" means stdin).
 export type PolishOpts = {
   lang: "en" | "ru" | "auto";
   noRevise: boolean;
@@ -70,6 +67,8 @@ export type PolishOpts = {
   path?: string;
 };
 
+// The result of parsing argv: "help" (print USAGE, exit 0), "error" (a usage mistake, exit
+// 2), or "ok" (a validated PolishOpts ready to run).
 export type ParseResult =
   | { kind: "help" }
   | { kind: "error"; message: string }
@@ -129,6 +128,9 @@ export function parseArgs(argv: string[]): ParseResult {
   return { kind: "ok", opts: { lang, noRevise, noSpell, tempFile, path } };
 }
 
+// Render the stderr report footer: the before/after word count and percent change, whether
+// each pass ran or was skipped (and, for spell, whether it failed or reverted blocks), and
+// the name-lint tail from formatNameLint.
 export function buildPolishFooter(m: {
   beforeWords: number;
   afterWords: number;
@@ -164,6 +166,10 @@ function tempMdPath(): string {
   return join(mkdtempSync(join(tmpdir(), "polish-")), "out.md");
 }
 
+// main is the CLI entrypoint: it parses argv, acts on --help and misuse before the
+// API-key gate or any network call, reads the input (file or stdin), then runs the
+// revise/spell passes and emits the polished content. It returns no value; it sets the
+// process exit code (0 polished, 1 missing key, 2 usage error, 3 passthrough).
 export async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.kind === "help") {

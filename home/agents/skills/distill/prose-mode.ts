@@ -1,22 +1,19 @@
 // prose-mode — the inverse flow: reconstruct a readable prose note from an
-// already-distilled note's concepts. No fidelity gate (the canonical note is the
-// certified artifact); the prose is its regenerable derivative.
+// already-distilled note's concepts. Input is a distilled file (this tool's own
+// output, or a saved canonical note): frontmatter + a `## Abstract` orientation + a
+// `## Concepts` section of `### headword` definitions + optional other sections
+// (`## Procedures` / `## Payload` / `## Relations` …). Output is a flowing prose note
+// grounded ONLY in the abstract + concepts, with the `## Concepts` section folded into
+// the prose and dropped from output (the abstract seeds the thesis/tie) — every other
+// section passes through verbatim. No fidelity gate: the canonical note is the
+// certified artifact, and the prose is its readable derivative, always regenerable and
+// checkable against it.
 import { detectLang, glossList, langRule, segment, wordCount } from "./text.ts";
 import { parseDescription, parseFrontmatter } from "./frontmatter.ts";
 import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "./fw.ts";
 import { PASS_EN, PASS_RU, revise } from "./prompts.ts";
 import { parseCanonicalNote, splitSections } from "./parse-projection.ts";
 import { unwrapResult } from "./envelope.ts";
-
-// ---- prose mode: reconstruct a prose note from a distilled note's concepts ----
-// The inverse of the compress pipeline. Input is a distilled file (this tool's own
-// output, or a saved canonical note): frontmatter + a `## Abstract` orientation + a
-// `## Concepts` section of `### headword` definitions + optional other sections
-// (`## Procedures` / `## Payload` / `## Relations` …). Output is a flowing prose note
-// grounded ONLY in the abstract + concepts — the certified reference. No fidelity gate:
-// the canonical note is the certified artifact, the prose its readable derivative (always
-// regenerable and checkable against it). The `## Concepts` section is folded into the prose
-// and dropped from output; the abstract seeds the thesis/tie.
 
 // Parse a distilled body into its parts: the tie-together prose (the `## Abstract`
 // orientation), the concept entries (each `### headword` under `## Concepts`, its
@@ -46,6 +43,9 @@ export function parseDistilled(body: string): {
   return { tie: note.abstract, entries, preserved };
 }
 
+// Build the reconstruction prompt: instructs the model to write flowing prose from ONLY
+// the description, thesis, and glossary definitions below, with no glossary/table/bullet
+// list or section headings in the output. `glossList` renders `entries` as the glossary block.
 function renderPrompt(
   description: string,
   tie: string,
@@ -66,8 +66,7 @@ ${gloss}`;
 
 // Renders the prose form of a glossary entry set via a single LLM call (never
 // per-entry). Local to runProse below — apply-mode's def-recover path leaves the
-// `## Abstract` as-authored instead of re-projecting through this chain (see
-// apply-mode.ts's note on the §12.4 simplification).
+// `## Abstract` as-authored instead of re-projecting through this chain (see apply-mode.ts).
 async function renderProse(
   description: string,
   tie: string,
