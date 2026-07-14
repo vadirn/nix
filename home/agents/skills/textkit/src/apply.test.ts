@@ -29,10 +29,10 @@ import { verbatimDef, verbatimDirectives } from "@/distill/prompt/prompts.ts";
 import { askJson } from "@/core/fw.ts";
 import type { Residue } from "@/distill/review/residue.ts";
 import {
-  type WorkflowOp,
+  type ProcedureOp,
   classifyItems,
   destinationFor,
-  editWorkflow,
+  editProcedure,
   insertThesis,
   resolveDefTerm,
   resolveStepTarget,
@@ -149,7 +149,7 @@ const R_WF: Residue = {
   reasonClass: "failed",
   label: "Block from the impression",
   stepIdxs: [1],
-  reason: "workflow: drying precondition missing from steps",
+  reason: "procedure: drying precondition missing from steps",
   source: WF_SRC,
 };
 const R_KEEP: Residue = {
@@ -759,20 +759,20 @@ test("spliceDef: replaces the def line (anchor preserved), deletes the subsectio
   expect(spliceDef(body, "Nonexistent", null)).toBe(body); // absent headword ⇒ unchanged
 });
 
-test("editWorkflow: deletes / replaces a headword's steps by 0-based index, batched against original indices, renumbered", () => {
+test("editProcedure: deletes / replaces a headword's steps by 0-based index, batched against original indices, renumbered", () => {
   const HW = "Block from the impression";
-  const del = editWorkflow(NOTE, [{ headword: HW, idx: 1, replace: null }]);
+  const del = editProcedure(NOTE, [{ headword: HW, idx: 1, replace: null }]);
   expect(del).toContain("1. Fix the anchor image before opening paints");
   expect(del).not.toContain("Re-check values against the anchor");
-  const rep: WorkflowOp[] = [
+  const rep: ProcedureOp[] = [
     { headword: HW, idx: 1, replace: ["dry the underlayer", "then glaze"] },
   ];
-  const out = editWorkflow(NOTE, rep);
+  const out = editProcedure(NOTE, rep);
   expect(out).toContain("1. Fix the anchor image before opening paints");
   expect(out).toContain("2. dry the underlayer");
   expect(out).toContain("3. then glaze");
   // a delete + a replace resolve against ORIGINAL indices, then renumber
-  const combo = editWorkflow(NOTE, [
+  const combo = editProcedure(NOTE, [
     { headword: HW, idx: 0, replace: null },
     { headword: HW, idx: 1, replace: ["only this"] },
   ]);
@@ -861,7 +861,7 @@ test("classifyItems: checked recover steps splices verbatim; the first slot carr
   const clauses = verbatimDirectives(WF_SRC);
   expect(r.recovered).toBe(1);
   expect(r.verbatim).toBe(1);
-  expect(r.workflowOps).toEqual([
+  expect(r.procedureOps).toEqual([
     { headword: "Block from the impression", idx: 0, replace: clauses },
     { headword: "Block from the impression", idx: 1, replace: null },
   ]);
@@ -908,7 +908,7 @@ test("classifyItems: a CHECKED recover that cannot execute lands in unrecoverabl
     "thesis",
   ]);
   expect(r.recovered).toBe(0);
-  expect(r.workflowOps).toEqual([]);
+  expect(r.procedureOps).toEqual([]);
   expect(r.thesisPara).toBeNull();
 });
 
@@ -940,7 +940,9 @@ test("classifyItems: unchecked entries remove by EFFECT — a resolving def/step
   );
   expect(r.removed).toBe(2);
   expect(r.defRemovals).toEqual(["Impression distance"]);
-  expect(r.workflowOps).toEqual([{ headword: "Block from the impression", idx: 1, replace: null }]);
+  expect(r.procedureOps).toEqual([
+    { headword: "Block from the impression", idx: 1, replace: null },
+  ]);
 });
 
 test("insertThesis: replaces the ## Abstract body with the paragraph", () => {
@@ -1029,7 +1031,7 @@ test("apply: an unchecked non-recoverable item stays dropped and does not inflat
 // The advisor's re-review: the steps and thesis lanes had the same silent-swallow /
 // content-delete root as finding 1 — a checked recover that cannot execute must refuse,
 // never no-op (an out-of-range idx) or, worse, DELETE the step (an empty payload →
-// verbatimDirectives("") → [] → replace:null → editWorkflow drops the slot).
+// verbatimDirectives("") → [] → replace:null → editProcedure drops the slot).
 
 test("apply: a checked recover on an out-of-range procedure step target refuses (exit 2), the list untouched", async () => {
   delete process.env.FIREWORKS_API_KEY;
@@ -1039,7 +1041,7 @@ test("apply: a checked recover on an out-of-range procedure step target refuses 
     reasonClass: "failed",
     label: "Block from the impression",
     stepIdxs: [98],
-    reason: "workflow: a step group beyond the emitted list",
+    reason: "procedure: a step group beyond the emitted list",
     source: "Some directive that has nowhere to land.",
   };
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);
@@ -1060,7 +1062,7 @@ test("apply: a checked recover on a procedure step with NO source payload refuse
     reasonClass: "failed",
     label: "Block from the impression",
     stepIdxs: [1],
-    reason: "workflow: the step-group source lookup returned empty",
+    reason: "procedure: the step-group source lookup returned empty",
     source: "", // emit omits the payload → the delete-instead-of-recover hazard
   };
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);
@@ -1098,7 +1100,7 @@ test("apply: an unchecked out-of-range procedure step item does not inflate the 
     reasonClass: "failed",
     label: "Block from the impression",
     stepIdxs: [98],
-    reason: "workflow: beyond the list",
+    reason: "procedure: beyond the list",
     source: "x",
   };
   const { tmpPath, tmp } = emit(dir, "note.md", NOTE, [R]);

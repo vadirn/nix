@@ -146,7 +146,7 @@ export function procedureTarget(target: string): { headword: string; idxs: numbe
 // the headword or the section is absent) — used to validate a step target's indices before
 // acting, so an out-of-range slot is refused (a checked recover) or ignored (an unchecked
 // remove) rather than silently no-oped, or worse, deleting the wrong step. Mirrors
-// editWorkflow's list scan.
+// editProcedure's list scan.
 function procedureLen(body: string, headword: string): number {
   const range = procedureStepRange(body.split("\n"), headword);
   return range ? range.count : 0;
@@ -178,7 +178,7 @@ export function resolveStepTarget(
 }
 
 // The classification result runApply fires: the deterministic op set (def re-renders,
-// def removals, workflow edits, a verbatim thesis) plus the effect counters the footer
+// def removals, procedure edits, a verbatim thesis) plus the effect counters the footer
 // reports. `verbatim` here counts only the pre-LLM verbatim splices (recover steps +
 // thesis); the def-recover lane bumps it again per second-grade failure in runApply.
 export type ClassifyResult = {
@@ -191,7 +191,7 @@ export type ClassifyResult = {
   // Unchecked def entries whose `### headword` subsection is spliced out.
   defRemovals: string[];
   // Checked recover steps (replace) and unchecked step removals (replace:null), batched.
-  workflowOps: WorkflowOp[];
+  procedureOps: ProcedureOp[];
   // The checked recover thesis payload set verbatim as the ## Abstract body, else null.
   thesisPara: string | null;
   // Checked recover targets with no applicable action — runApply refuses these LOUD.
@@ -218,7 +218,7 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
 
   const defRecovers: { term: string; src: string }[] = [];
   const defRemovals: string[] = [];
-  const workflowOps: WorkflowOp[] = [];
+  const procedureOps: ProcedureOp[] = [];
   let thesisPara: string | null = null;
   const unrecoverable: string[] = [];
 
@@ -251,7 +251,7 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
           continue;
         }
         idxs.forEach((idx, k) => {
-          workflowOps.push({ headword: hw, idx, replace: k === 0 ? clauses : null });
+          procedureOps.push({ headword: hw, idx, replace: k === 0 ? clauses : null });
         });
         recovered++;
         verbatim++;
@@ -277,7 +277,7 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
         }
       } else if (kind === "steps") {
         const { hw, idxs } = resolveStepTarget(body, it.target);
-        for (const idx of idxs) workflowOps.push({ headword: hw!, idx, replace: null });
+        for (const idx of idxs) procedureOps.push({ headword: hw!, idx, replace: null });
         if (idxs.length > 0) removed++;
       }
       // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
@@ -291,7 +291,7 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
     verbatim,
     defRecovers,
     defRemovals,
-    workflowOps,
+    procedureOps,
     thesisPara,
     unrecoverable,
   };
@@ -383,7 +383,7 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
     removed,
     defRecovers,
     defRemovals,
-    workflowOps,
+    procedureOps,
     thesisPara,
     unrecoverable,
   } = cls;
@@ -443,7 +443,7 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
 
   for (const s of defSplices) body = spliceDef(body, s.term, s.def);
   for (const term of defRemovals) body = spliceDef(body, term, null);
-  if (workflowOps.length) body = editWorkflow(body, workflowOps);
+  if (procedureOps.length) body = editProcedure(body, procedureOps);
 
   // A checked recover thesis sets the ## Abstract body verbatim. There is NO re-projection
   // step on a canonical note: the abstract is authored at extract time, not re-derived from
@@ -619,17 +619,17 @@ export function spliceDef(body: string, term: string, def: string | null): strin
 // addressing the canonical grouping forces). `replace` is the new step text(s) for the slot
 // (a verbatimDirectives splice may yield several); `replace: null` DELETES the slot. A group
 // target like `procedure:<hw>:2,3` expands to one op per index (all sharing the headword).
-export type WorkflowOp = { headword: string; idx: number; replace: string[] | null };
+export type ProcedureOp = { headword: string; idx: number; replace: string[] | null };
 
-// Apply every WorkflowOp in one rewrite, PER HEADWORD: ops are grouped by headword, and each
+// Apply every ProcedureOp in one rewrite, PER HEADWORD: ops are grouped by headword, and each
 // headword's numbered list is rebuilt against its ORIGINAL indices (deletions drop,
 // replacements substitute, untouched slots survive) and RENUMBERED from 1. Batching per list
 // keeps `procedure:<hw>:2` meaning that headword's 2nd step regardless of an earlier deletion.
 // A headword with no `### headword` procedure list is skipped (the caller already validated
 // in-range targets; a stale one is a no-op, not a crash).
-export function editWorkflow(body: string, ops: WorkflowOp[]): string {
+export function editProcedure(body: string, ops: ProcedureOp[]): string {
   let lines = body.split("\n");
-  const byHead = new Map<string, WorkflowOp[]>();
+  const byHead = new Map<string, ProcedureOp[]>();
   for (const op of ops) {
     const g = byHead.get(op.headword);
     if (g) g.push(op);
