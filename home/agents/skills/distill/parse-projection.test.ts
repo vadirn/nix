@@ -131,15 +131,12 @@ test("parseCanonicalNote: a ###-look-alike line inside a fenced Payload block st
   expect(note.payload[0]!.span).toEqual([71, 120]);
 });
 
-// ---- BUG-3: stripAnchor ignored the bracketed anchor form (fixed via graph.ts's
-// stripTrailingAnchor, W2) ----
-// Before the fix: stripAnchor's own regex (`/^(.*?)\s+(\d+\.\.\d+)\s*$/`) matched the BARE form
-// only. A hand-edited line ending `... [128..192]` fell through to the no-match branch, so
-// `text` kept the literal brackets (`"...[128..192]"`) and `span` came back null — the anchor
-// was both unparsed AND left visible in the text. After the fix: stripAnchor delegates to the
-// shared stripTrailingAnchor, whose TRAILING_ANCHOR_RE matches both forms, so the brackets are
-// stripped and the span parses.
-test("parseCanonicalNote: a concept def line and a judgement line ending in a BRACKETED anchor both strip the brackets and parse the span (BUG-3)", () => {
+// ---- stripAnchor recognizes the bracketed anchor form, not just the bare one ----
+// stripAnchor delegates to graph.ts's shared stripTrailingAnchor, whose TRAILING_ANCHOR_RE
+// matches both the bare `start..end` and the bracketed `[start..end]` form. A hand-rolled
+// bare-only regex here would leave a bracketed anchor unparsed AND visible in the text: `text`
+// would keep the literal brackets (`"...[128..192]"`) and `span` would come back null.
+test("parseCanonicalNote: a concept def line and a judgement line ending in a BRACKETED anchor both strip the brackets and parse the span", () => {
   const body = [
     "## Concepts",
     "",

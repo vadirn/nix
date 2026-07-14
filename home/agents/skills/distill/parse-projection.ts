@@ -1,5 +1,5 @@
 // parse-projection — the READER inverse of project.ts's seven-section projector. A canonical
-// distillation note (spec §3) is `# title` + `## Abstract` + the type-as-section blocks
+// distillation note is `# title` + `## Abstract` + the type-as-section blocks
 // (`## Concepts` / `## Judgements` / `## Inferences` / `## Procedures` / `## Payload`) +
 // `## Relations`; this parses that markdown back into structured sections so the interactive
 // consumers (apply-mode's body edits, prose-mode's re-prose) can locate and edit `### headword`
@@ -7,7 +7,7 @@
 // four times. It reuses parseSpan (graph.ts) for the trailing `start..end` anchors.
 //
 // The cards-harvest path (cards/cards.ts::harvestConcepts) reads its concepts THROUGH this
-// reader now (D6): `parseCanonicalNote(body).concepts` for term/def, paired with text.ts's
+// reader now: `parseCanonicalNote(body).concepts` for term/def, paired with text.ts's
 // surviving `## Relations` parser for edges. The legacy `## Glossary` table reader
 // (parseConceptGraph) and its GlossEntry/Relation types are gone.
 //
@@ -37,7 +37,7 @@ export interface CanonSection {
 // A concept subsection: `### headword`, a first-line definition, `- bullet` extension lines, each
 // stripped of its trailing anchor. `span` is the def line's anchor (null when hand-edited away);
 // `bulletSpans` is parallel to `bullets` — each bullet's OWN anchor (null when it carries none),
-// recovering the per-sub-element spans the projector now emits (design Backlog 12).
+// recovering the per-sub-element spans the projector now emits.
 export interface CanonConcept {
   headword: string;
   def: string;
@@ -49,7 +49,7 @@ export interface CanonConcept {
 // A procedure subsection: `### headword` + numbered steps, each stripped of a trailing anchor.
 // `span` is the lead step's anchor; `stepSpans` is parallel to `steps` — each step's OWN anchor
 // (null when hand-edited away or a synthesized step), so `stepSpans[0]` equals `span`. Recovers the
-// per-step anchors the projector now emits (design Backlog 12).
+// per-step anchors the projector now emits.
 export interface CanonProcedure {
   headword: string;
   steps: string[];
@@ -92,9 +92,9 @@ const FENCE_RE = /^(```|~~~)/;
 const SECTION_RE = /^##\s+(\S.*?)\s*$/; // `## Heading` — two hashes exactly (excludes `### `)
 const SUB_RE = /^###\s+(\S.*?)\s*$/; // `### headword` subsection
 // A line that is ONLY a byte-span anchor (the multi-line Payload fence's bare anchor line —
-// see the fenced-payload branch below). W2: NOT derived from graph.ts's TRAILING_ANCHOR_RE —
-// that pattern requires a LEADING `\s+` before the anchor (it strips an anchor off the tail of
-// a text-bearing line), whereas this one whole-line-anchors (`^...$`) a line with no leading
+// see the fenced-payload branch below). NOT derived from graph.ts's TRAILING_ANCHOR_RE — that
+// pattern requires a LEADING `\s+` before the anchor (it strips an anchor off the tail of a
+// text-bearing line), whereas this one whole-line-anchors (`^...$`) a line with no leading
 // text at all. Forcing a shared source for two different anchoring positions (trailing-after-
 // whitespace vs. whole-line) would need the anchor body factored into its own regex-source
 // string for both files to splice — more indirection than the one-line duplication it removes.
@@ -128,11 +128,11 @@ export function splitSections(body: string): CanonSection[] {
 }
 
 // Strip a trailing byte-anchor off a rendered line, returning the bare text and the parsed span
-// (null when the line carries no anchor — a hand-edited note may have dropped it). BUG-3: this
-// used to hand-spell a BARE-ONLY regex (`/^(.*?)\s+(\d+\.\.\d+)\s*$/`), so a hand-edited line
-// ending in the bracketed form (`... [128..192]`) fell through the no-match branch — the brackets
-// leaked into `text` and `span` came back null. Delegates to graph.ts's stripTrailingAnchor (W2),
-// which accepts both forms, closing that gap.
+// (null when the line carries no anchor — a hand-edited note may have dropped it). Delegates to
+// graph.ts's shared stripTrailingAnchor, which accepts both the bare `start..end` and bracketed
+// `[start..end]` anchor forms — a hand-rolled bare-only regex here would leave a bracketed
+// anchor unparsed AND visible in the text: `text` would keep the literal brackets
+// (`"...[128..192]"`) and `span` would come back null instead of parsing.
 export function stripAnchor(line: string): { text: string; span: Span | null } {
   return stripTrailingAnchor(line);
 }
@@ -169,8 +169,8 @@ function subsections(bodyLines: string[]): { headword: string; lines: string[] }
   return out;
 }
 
-// The leading `(modality) ` tag the projector prepends to a marked judgement (W5:
-// MARKED_MODALITIES, graph.ts).
+// The leading `(modality) ` tag the projector prepends to a marked judgement (MARKED_MODALITIES,
+// graph.ts).
 const MODALITY_TAG_RE = new RegExp(`^\\((?:${MARKED_MODALITIES.join("|")})\\)\\s+`);
 
 // Parse a canonical note body into its structured sections — the lossy READ view documented on

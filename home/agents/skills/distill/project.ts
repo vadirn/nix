@@ -1,5 +1,5 @@
-// project — the seven-section markdown projector for the canonical distillation graph
-// (spec §3). A `DistillationResult` is the source of truth; this renders ONE projection of
+// project — the seven-section markdown projector for the canonical distillation graph. A
+// `DistillationResult` is the source of truth; this renders ONE projection of
 // it: YAML frontmatter mirroring mdstruct Source, a `# title`, an unanchored `## Abstract`,
 // then the type-as-section blocks (`## Concepts` / `## Judgements` / `## Inferences` /
 // `## Procedures` / `## Payload`) and finally `## Relations`. A section appears only when a
@@ -28,10 +28,9 @@ const PROJECTION_SCHEMA = "1.0";
 // The canonical graph does not (yet) carry the title or the synthesized abstract as
 // first-class fields — the abstract is the one unanchored, non-unit block and the title is
 // authored orientation. They ride alongside the graph here so the projector can render them
-// without widening the canonical `DistillationResult` in graph.ts (the extract prompt will
-// populate them; design Backlog). A `Projection` is structurally a `DistillationResult`, so
-// callers may pass either: a plain `DistillationResult` structurally satisfies `Projection` (the
-// extra fields are optional), so the param types as `Projection` with no downcast at the call.
+// without widening the canonical `DistillationResult` in graph.ts. A plain `DistillationResult`
+// structurally satisfies `Projection` since its extra fields are optional, so callers may pass
+// either one with no downcast at the call site.
 export interface Projection extends DistillationResult {
   title?: string;
   abstract?: string;
@@ -61,8 +60,8 @@ function lines(statement: string): string[] {
     .filter((l) => l.length > 0);
 }
 
-// The leading `(modality)` tag on a judgment bullet — ONLY for the two admission-gating
-// modalities (W5: MARKED_MODALITIES, graph.ts). `assertoric` (or unmarked) emits no tag (spec §3).
+// The leading `(modality)` tag on a judgment bullet — rendered only for the two admission-gating
+// modalities (`MARKED_MODALITIES` in graph.ts); `assertoric` (or an unmarked judgment) emits no tag.
 function modalityTag(unit: Unit): string {
   const m = unit.modality;
   return m && (MARKED_MODALITIES as readonly string[]).includes(m) ? `(${m}) ` : "";
@@ -71,7 +70,9 @@ function modalityTag(unit: Unit): string {
 // The trailing anchor for a TAIL line (concept bullet / procedure step past the lead), read from
 // `unit.subSpans` aligned so tail index `i` (0-based over lines after the head) uses
 // `subSpans[i]`. Returns the ` start..end` suffix (leading space) when a span exists, else "" — a
-// null hole or an absent `subSpans` renders the line unanchored (spec §3's synthesized step-2).
+// null hole or an absent `subSpans` renders the line unanchored: a line the model synthesized
+// without a locatable source quote carries no anchor at all, rather than falling back to the
+// head span.
 function tailAnchor(unit: Unit, tailIndex: number): string {
   const s = unit.subSpans?.[tailIndex];
   return s ? ` ${formatSpan(s)}` : "";
@@ -79,8 +80,8 @@ function tailAnchor(unit: Unit, tailIndex: number): string {
 
 // A concept subsection: `### headword`, a definition line, and per-bullet anchored extension(s).
 // The statement's first line is the definition (= intension), anchored by the unit's head `span`;
-// each subsequent line is an extension bullet anchored by its OWN `subSpans` entry (per-sub-element
-// anchoring, design Backlog 12) — a bullet with no located quote renders unanchored.
+// each subsequent line is an extension bullet anchored by its OWN `subSpans` entry — a bullet
+// with no located quote renders unanchored.
 function renderConcept(unit: Unit): string {
   const [def, ...bullets] = lines(unit.statement);
   const parts = [`### ${unit.id}`, `${def} ${formatSpan(unit.span)}`];
@@ -91,8 +92,8 @@ function renderConcept(unit: Unit): string {
 }
 
 // A procedure subsection: `### headword` + numbered steps. The lead step bears the unit's head
-// `span`; each later step bears its OWN `subSpans` entry (per-step anchoring, design Backlog 12) —
-// a step with no located quote renders unanchored (spec §3's step-2 example).
+// `span`; each later step bears its OWN `subSpans` entry — a step with no located quote renders
+// unanchored.
 function renderProcedure(unit: Unit): string {
   const steps = lines(unit.statement).map((step, i) =>
     i === 0
@@ -114,7 +115,7 @@ function renderPayload(unit: Unit): string {
 
 // A relation line: `from — predicate → to  <anchor>` (em-dash, right-arrow, TWO spaces before
 // the anchor). `from`/`to` reference unit ids; the endpoint label is the referenced unit's
-// headword, lower-initial. `rel` is an OPEN token (spec §3): REL_REGISTRY (text.ts) is a known
+// headword, lower-initial. `rel` is an OPEN token: REL_REGISTRY (text.ts) is a known
 // vocabulary, not a closed enum — an off-registry rel (e.g. a deontic or causal predicate) still
 // renders. Only a blank rel is rejected; a real one always has a source (normalizeRelation drops
 // an empty rel upstream), so this is a defensive floor, not a registry check.
@@ -146,11 +147,11 @@ function typeSection(
   return [`## ${heading}`, units.map(render).join(join)].join("\n\n");
 }
 
-// Project the canonical graph to its seven-section markdown form (spec §3). Sections emit in
+// Project the canonical graph to its seven-section markdown form. Sections emit in
 // fixed order and only when populated; the `## Abstract` is the sole unanchored block.
 // `opts.relations` defaults `true`; passing `false` suppresses the `## Relations` section so a
-// `type:reference` note stays link-free (D30) — the one projector-signature knob the `--reference`
-// output path needs (blueprint §6/§6.2).
+// `type:reference` note stays link-free — the one projector-signature knob the `--reference`
+// output path needs.
 export function projectMarkdown(result: Projection, opts?: { relations?: boolean }): string {
   const { source, units, edges, title, abstract } = result;
   const relations = opts?.relations ?? true;

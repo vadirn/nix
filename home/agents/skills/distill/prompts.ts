@@ -78,7 +78,7 @@ EXTERNAL LINKS (citations / sources, NOT vault relations — NEVER encode a URL 
 ${ex}`;
 }
 
-// ---- canonical extract: native typed pre-graph (spec §4 step 1; blueprint §1.2/§1.4) ----
+// ---- canonical extract: the model call producing the native typed pre-graph ----
 // The extractor's only prompt+parse path: it emits the five knowledge channels shaped as the
 // pre-graph (graph.ts PreGraph): `concepts`/`headword`/`statement`, grouped `procedures` (steps
 // grouped under a headword), and relations without `predicate` (the projection never renders
@@ -86,7 +86,7 @@ ${ex}`;
 // unit's wording is authored; nothing downstream (locate, the typing review, the projector, the
 // residue backstop) rewrites it. `procedures` carry a `headword` + per-step quotes so the
 // projector can render `### headword` + numbered steps. Payload is NOT a channel here — it is
-// the deterministic retain lane (blueprint §1.1), computed separately by gradeBlocks.
+// the deterministic retain lane, computed separately by gradeBlocks.
 
 // The raw JSON shape the model returns for the pre-graph prompt (parsed defensively — every
 // field is optional; a missing array defaults to `[]` rather than throwing).
@@ -111,6 +111,10 @@ export interface RawGraph {
   }[];
 }
 
+// Build the prompt for the canonical extract call: instructs the model to read the note's
+// blocks (each tagged with a `[Bn]` id) and return the five-channel pre-graph as JSON —
+// concepts, judgements, inferences, procedures, and each concept's relations — appending the
+// link-inventory checklist (linkInventorySection) when the note carries any links.
 export function extractGraphPrompt(
   blocks: Block[],
   frontDescription: string,
@@ -139,23 +143,14 @@ TEXT (block IDs in [Bn] markers):
 ${render(blocks)}`;
 }
 
-// Normalize the raw pre-graph JSON into a typed PreGraph — the PURE core of extractGraph, exported
-// so it is testable without a network round-trip. Its validation discipline: `quote` is trimmed
-// byte-verbatim (NEVER typography-normalized — it is the span-locate
-// anchor and must round-trip against source bytes), `source` ids are validated against the block
-// set, the drop-if-no-valid-source rule holds per unit, relations pass through `normalizeRelation`
-// (lowercase+hyphenate rel, trim to, trim-only quote; predicate DROPPED here), and judgement
-// modality is clamped to the two marked forms (null → assertoric). `frontDescription`, when set,
-// overrides the model's description (the one anchor never paraphrased). Spans are NOT computed here
-// — the model emits no offsets; locateGraph turns each quote into a span (spec §4 step 2).
 // Trim-only, byte-verbatim: a quote is the span-locate anchor, so it is never typography-
 // normalized. Empty → "" (a unit with no quote hard-aborts at locate — the fidelity gate).
 // Shared by every parseExtractGraph channel below.
 const quoteField = (q: unknown): string => (typeof q === "string" ? q.trim() : "");
 const withSource = (s: unknown, ids: Set<string>): string[] =>
   (Array.isArray(s) ? s : []).filter((id) => ids.has(id));
-// judgement modality: accept only the two marked forms (W5: MARKED_MODALITIES, graph.ts);
-// anything else is assertoric.
+// judgement modality: accept only the two marked forms (MARKED_MODALITIES, graph.ts); anything
+// else is assertoric.
 const modalityOf = (m: unknown): Modality =>
   (MARKED_MODALITIES as readonly unknown[]).includes(m) ? (m as Modality) : "assertoric";
 
@@ -185,7 +180,7 @@ function parseConcepts(
       ...(bullets.length ? { bullets } : {}),
     });
     for (const r of Array.isArray(c.relations) ? c.relations : []) {
-      const norm = normalizeRelation(r); // lossy (D29): drops only rel/to-missing; predicate dropped below
+      const norm = normalizeRelation(r); // lossy: drops only rel/to-missing; predicate dropped below
       if (!norm) continue;
       edges.push({ fromHeadword: headword, rel: norm.rel, to: norm.to, quote: norm.quote ?? "" });
     }
@@ -240,6 +235,14 @@ function parseProcedures(
   return procedures;
 }
 
+// Normalize the raw pre-graph JSON into a typed PreGraph — the pure core of extractGraph,
+// exported so it is testable without a network round-trip. Validates `source` ids against the
+// block set and drops a unit with no valid source id; relations pass through
+// `normalizeRelation` (lowercase+hyphenate rel, trim `to`, trim-only quote; `predicate` is
+// dropped here since the projection never renders it); judgement modality is clamped to the two
+// marked forms (anything else becomes assertoric). `frontDescription`, when set, overrides the
+// model's own description — the one field never paraphrased. Spans are not computed here: the
+// model never emits byte offsets, so `locateGraph` resolves each quote to a span downstream.
 export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescription = ""): PreGraph {
   const ids = new Set(blocks.map((b) => b.id));
   const { concepts, edges } = parseConcepts(raw.concepts, ids);
@@ -258,6 +261,8 @@ export function parseExtractGraph(raw: RawGraph, blocks: Block[], frontDescripti
   };
 }
 
+// Run the canonical extract stage: call the model with extractGraphPrompt, then normalize its
+// JSON response into a typed PreGraph via parseExtractGraph.
 export async function extractGraph(
   blocks: Block[],
   frontDescription: string,
@@ -274,9 +279,10 @@ export async function extractGraph(
 }
 
 // ---- grade each block drop / distill / retain ----
-// The payload retain lane (blueprint §1.1): the ONE deterministic selection that survives the
-// settle-chain collapse. Reads a thesis + a concept list ({term,def}), fed from the pre-graph's
-// concepts (id→term, statement→def) — its one live caller, compressToGraph in distill-core.ts.
+// The payload retain lane: the deterministic per-block grading that decides which blocks are the
+// ONE selection graded "retain" (kept verbatim) rather than distilled into the glossary or
+// dropped. Reads a thesis + a concept list ({term,def}), fed from the pre-graph's concepts
+// (id→term, statement→def) — its one live caller, compressToGraph in distill-core.ts.
 function gradeBlocksPrompt(
   thesis: string,
   concepts: { term: string; def: string }[],
@@ -298,6 +304,10 @@ BLOCKS (ids in [Bn] markers):
 ${render(blocks)}`;
 }
 
+// Run the block-grading stage: call the model with gradeBlocksPrompt, then default any ungraded
+// block to "distill" (never silently dropped) and force a wikilink-carrying block that graded
+// "drop" up to "retain" (or "distill" if non-operational) so a deliberate connection never
+// disappears.
 export async function gradeBlocks(
   thesis: string,
   concepts: { term: string; def: string }[],
@@ -326,12 +336,7 @@ export async function gradeBlocks(
   return byId;
 }
 
-// Extract the source's own imperative clause(s) for the verbatim fallback: prefer
-// the bolded directive spans the note emphasizes (notes bold their directives),
-// else the first sentence of the block. The terminal floor when the repair ladder
-// cannot clear a flagged group — the result is a literal substring of source, so
-// it covers the action and cannot invent or invert.
-// flatten a run of whitespace to a single space, then split into sentences on a
+// Flatten a run of whitespace to a single space, then split into sentences on a
 // terminal-punctuation boundary. Idempotent — safe to call on already-flattened text.
 // Shared by verbatimDirectives' fallback sentence and verbatimDef's needle search.
 function flattenSentences(text: string): string[] {
@@ -341,6 +346,10 @@ function flattenSentences(text: string): string[] {
     .split(/(?<=[.!?])\s+/);
 }
 
+// Extract the source's own imperative clause(s) as a verbatim fallback: prefer the bolded
+// directive spans the note emphasizes (notes bold their directives), else the note's first
+// sentence. Used as the terminal floor when the repair ladder cannot clear a flagged group — the
+// result is a literal substring of the source, so it can neither invent nor invert the action.
 export function verbatimDirectives(sourceText: string): string[] {
   const bold = [...sourceText.matchAll(/\*\*([\s\S]+?)\*\*/g)]
     .map((m) => m[1].replace(/\s+/g, " ").trim())
@@ -365,7 +374,7 @@ export function verbatimDef(term: string, sourceText: string): string {
   return (hit ?? sentences[0] ?? flat).trim();
 }
 
-// single-entry render from source — used by stage-5 recovery to re-ground a residue def.
+// Single-entry render from source — used by stage-5 recovery to re-ground a residue def.
 // defRelations defaults to the module-level env lever (DISTILL_DEF_RELATIONS) so it can be
 // exercised without process-global env mutation; production callers that pass nothing get
 // the same behavior as before this param existed.
@@ -390,10 +399,13 @@ ${sourceText}`;
 // the judge returns no parseable verdict (no JSON after askJson's retry). It is kept
 // distinct from "residue": inconclusive items skip recovery (re-rendering cannot fix
 // a judge that will not parse) and surface directly, so a flake never discards the run.
-// W6: the one spelling of the verdict-grade union; ConceptVerdict and StepVerdict both
-// reference it rather than re-spelling the three literals.
+// The one spelling of the verdict-grade union; ConceptVerdict and StepVerdict both reference it
+// rather than re-spelling the three literals.
 export type GateGrade = "translated" | "residue" | "inconclusive";
 
+// One concept's fidelity-gate verdict: whether its rendered definition round-trips against the
+// source, the direction of any mismatch ("output-misses-source" or "output-invents"), and what
+// content is missing or invented.
 export type ConceptVerdict = {
   term: string;
   grade: GateGrade;
@@ -401,6 +413,11 @@ export type ConceptVerdict = {
   missing: string;
 };
 
+// Build the fidelity-gate prompt: pairs each concept's SOURCE and rendered OUTPUT and asks an
+// independent judge for bidirectional round-trip entailment. `defGate` switches the judged
+// scope: "block" checks the full source block against the output; "definition" (default)
+// restricts the check to definitional content, since relations, rationale, and examples are
+// expected to live in the note's surrounding prose rather than in the definition itself.
 function fidelityPrompt(
   thesis: string,
   outputBody: string,
@@ -433,6 +450,11 @@ CONCEPTS:
 ${concepts}`;
 }
 
+// Run the fidelity gate: call fidelityPrompt via the model and filter the response to verdicts
+// that named a term, defaulting `thesisRecoverable` to true when the model omits it. A
+// parse-flake (no JSON verdict after retry) marks every concept "inconclusive" rather than
+// "residue", so a judge hiccup ships the run surfaced-but-unverified instead of discarding it;
+// `rethrowIfBug` still lets a genuine code bug propagate.
 export async function fidelityGate(
   thesis: string,
   outputBody: string,
@@ -490,6 +512,9 @@ export type StepVerdict = {
   missing: string;
 };
 
+// Build the workflow-gate prompt: for each step-group, judge coverage (every source directive
+// appears as an output step), no invented actions, and no invented reasons — omitted rationale
+// is allowed, invented rationale is not.
 function workflowGatePrompt(
   groups: { id: string; steps: string[]; sourceText: string }[],
   lang: "en" | "ru",
@@ -512,6 +537,10 @@ GROUPS:
 ${blocks}`;
 }
 
+// Run the workflow gate over step-groups: returns [] for no groups, else calls
+// workflowGatePrompt via the model and filters to verdicts that echoed a group id. A parse-flake
+// marks every group "inconclusive" rather than "residue", so the steps ship
+// surfaced-but-unverified instead of the run being discarded.
 export async function workflowGate(
   groups: { id: string; steps: string[]; sourceText: string }[],
   lang: "en" | "ru",
@@ -539,8 +568,8 @@ export async function workflowGate(
   }
 }
 
-// ---- prose gate: list-item coverage (the prose-judge tier, D46) ----
-// A deterministic inventory (text.ts::harvestProseListItems) is the answer key; glm — the
+// ---- prose gate: list-item coverage (the prose-judge tier) ----
+// A deterministic inventory (harvest.ts::harvestProseListItems) is the answer key; glm — the
 // DIFFERENT model from the one that wrote the compression — is the MATCHER ONLY, deciding
 // per item whether its information SURVIVED somewhere in the output (covered) or was DROPPED.
 // It never decides the key. A "covered" verdict must quote a verbatim output anchor; the
@@ -554,6 +583,10 @@ export type ProseVerdict = {
   missing: string;
 };
 
+// Build the prose-coverage-match prompt: pairs the full compressed OUTPUT with a batch of
+// verbatim source list-ITEMs and asks an independent judge whether each item's information
+// survived anywhere in the output (any paraphrase, merge, or reorder counts as covered) or was
+// dropped outright. A "covered" verdict must anchor to a real quoted substring of the output.
 function proseMatchPrompt(outputBody: string, units: ProseUnit[], lang: "en" | "ru"): string {
   const items = units
     .map((u) => `### ${u.id}\nFROM SECTION "${u.heading}":\n${u.span}`)
@@ -579,9 +612,9 @@ ${items}`;
 // flaked (transient / no-parse), so proseResidue can surface a flaked id distinctly from one
 // the judge simply omitted. The covered/dropped→residue MAPPING and anchor re-check are pure
 // and live in residue.ts::proseResidue. A real bug propagates through rethrowIfBug.
-// The batches are independent full-output matches, so they fire concurrently (mirrors the
-// Promise.all over independent glm calls in runFidelityGate); the try/catch is PER batch so a
-// flake flags only its own ids while a real bug rejects Promise.all and propagates.
+// The batches are independent full-output matches against the model, so they fire concurrently;
+// the try/catch is PER batch so a flake flags only its own ids while a real bug rejects
+// Promise.all and propagates.
 export async function proseGate(
   units: ProseUnit[],
   outputBody: string,
