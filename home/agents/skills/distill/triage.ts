@@ -17,11 +17,11 @@ import {
 import { parseFrontmatter } from "./frontmatter.ts";
 import type { Residue } from "./residue.ts";
 
-/// The triage vocabulary (plan §1): `recover` — failed items; checked = re-render
-/// from the fenced source at apply (verbatim splice on a second grade failure).
-/// `keep` — gate-inconclusive items, which SHIPPED in the body unverified; checked
-/// = keep as shipped, no LLM. `reviewed` — the confirm-all gate item. Unchecked is
-/// uniform across the block: the entry is removed from the final note.
+/// The triage vocabulary: `recover` — failed items; checked = re-render from the fenced
+/// source at apply (verbatim splice on a second grade failure). `keep` — gate-inconclusive
+/// items, which SHIPPED in the body unverified; checked = keep as shipped, no LLM.
+/// `reviewed` — the confirm-all gate item. Unchecked is uniform across the block: the entry
+/// is removed from the final note.
 export const TRIAGE_VERBS = ["recover", "keep", "reviewed"] as const satisfies readonly string[];
 
 const RESIDUE_INTRO =
@@ -43,6 +43,8 @@ export function safeHandle(label: string): string {
   return truncated || "(unlabeled)";
 }
 
+/// The render target (and whether it should render backticked) for one residue entry, keyed
+/// by its kind — see the case comments below for the addressing scheme per kind.
 function targetFor(r: Residue): { target: string; targetCode?: boolean } {
   switch (r.kind) {
     case "def":
@@ -78,18 +80,17 @@ function targetFor(r: Residue): { target: string; targetCode?: boolean } {
   }
 }
 
-/// One `pick-any id=residue` block, one unchecked item per residue entry in array
-/// order (plan Q2: nothing pre-checked, the reason string is diagnosis not
-/// recommendation). Verb by reason class: "gate-inconclusive" → `keep`, everything
-/// else → `recover`. Targets: def → the term (backticked via targetCode);
-/// steps → `procedure:<headword>:<stepIdxs 1-based, comma-joined>` (the headword-scoped
-/// step address into the canonical `## Procedures` list; drops the `:<idxs>` tail to
-/// address the whole procedure when stepIdxs is absent/empty); thesis → `thesis`;
-/// edge/payload/prose → a single-line handle
-/// derived from the label (backticks stripped, whitespace collapsed, truncated —
-/// the fenced payload carries the verbatim truth). Item note = the reason string,
-/// newlines flattened to spaces. Payload = the verbatim source excerpt; omitted
-/// when the entry carries none. Returns [] when residue is empty.
+/// One `pick-any id=residue` block, one unchecked item per residue entry in array order —
+/// nothing pre-checked, since the reason string is diagnosis, not a recommendation. Verb by
+/// reason class: "gate-inconclusive" → `keep`, everything else → `recover`. Targets: def →
+/// the term (backticked via targetCode); steps → `procedure:<headword>:<stepIdxs 1-based,
+/// comma-joined>` (the headword-scoped step address into the canonical `## Procedures` list;
+/// drops the `:<idxs>` tail to address the whole procedure when stepIdxs is absent/empty);
+/// thesis → `thesis`; edge/payload/prose → a single-line handle derived from the label
+/// (backticks stripped, whitespace collapsed, truncated — the fenced payload carries the
+/// verbatim truth). Item note = the reason string, newlines flattened to spaces. Payload = the
+/// verbatim source excerpt; omitted when the entry carries none. Returns [] when residue is
+/// empty.
 export function residueToBlocks(residue: Residue[]): BlockSpec[] {
   if (residue.length === 0) return [];
   return [
@@ -137,7 +138,7 @@ function forceEpistemicStatus(front: string): string {
   return filtered.join(nl) + nl;
 }
 
-/// Serialize the intermediary (plan §5, byte-exact): the future note (frontmatter
+/// Serialize the intermediary (byte-exact): the future note (frontmatter
 /// with epistemic_status FORCED to "in-review" — the leak self-label; created when
 /// the note has no frontmatter) + the residueToBlocks block (when any) + the
 /// mandatory `confirm-all id=triage-final` gate LAST, carrying dest=<opts.dest>

@@ -1,15 +1,15 @@
-// interact — the grammar core of the interactive-text format (spec:
-// interactive-text-format.md; frozen by interact.test.ts). Markdown intermediaries
-// carry reviewer decisions as native task-list checkboxes inside HTML-comment-
-// anchored blocks; a processor parses the checked states and acts. Both directions
-// live here so the round-trip law parseInteract(renderBlock(spec)) ≡ spec is a
+// interact — the grammar core of the interactive-text format, frozen by interact.test.ts.
+// Markdown intermediaries carry reviewer decisions as native task-list checkboxes inside
+// HTML-comment-anchored blocks; a processor parses the checked states and acts. Both
+// directions live here so the round-trip law parseInteract(renderBlock(spec)) ≡ spec is a
 // testable property.
 //
 // Region recognition delegates to the single Rust engine (mdstruct): parseDoc emits
 // every comment-anchor pair (fence-aware, inline-code-aware), and checkRegion reports
 // unpaired anchors. interact is a pure FILTER over that — it owns no document scanner,
-// no fence tracking. Its own recognizer (the "thin pass") was retired in Phase B; what
-// stays here is the block-body grammar (kind/attribute/intro/item/payload semantics).
+// no fence tracking. Its own recognizer (the "thin pass") is retired now that region
+// recognition lives in mdstruct; what stays here is the block-body grammar
+// (kind/attribute/intro/item/payload semantics).
 //
 // Deterministic by contract: no fs, no LLM, no imports from distill-core.ts. It does shell
 // mdstruct (via mdstruct.ts, synchronously) to locate regions — determinism is preserved
@@ -40,18 +40,25 @@ import type { MdRegion, RegionDiagnostic } from "./mdstruct.ts";
 
 // ---- kinds and attribute set ----
 
+/// The three block behaviors a reviewer selects between: pick-one (exactly one item must end
+/// checked), pick-any (any subset may end checked), confirm-all (every item must end checked —
+/// the gate form).
 export type BlockKind = "pick-one" | "pick-any" | "confirm-all";
+/// BlockKind's own values as a runtime array, for membership checks (`Set`/`includes`) against
+/// a token parsed from an anchor's kind slot.
 export const BLOCK_KINDS = [
   "pick-one",
   "pick-any",
   "confirm-all",
 ] as const satisfies readonly BlockKind[];
 
-/// Checked/unchecked only — '[-]' is a loud bad-state teaching error, not a
-/// third state (plan Q1: Obsidian won't toggle it; the "reviewed" bit lives on
-/// the confirm-all gate).
+/// Checked/unchecked only — '[-]' is a loud bad-state teaching error, not a third state:
+/// Obsidian won't toggle a third checkbox state, so the "reviewed" bit lives on the
+/// confirm-all gate instead.
 export type ItemState = "checked" | "unchecked";
 
+/// One reviewer-facing item inside a block: a checkbox with a `verb: target` marker, an
+/// optional note, and an optional fenced payload.
 export type Item = {
   state: ItemState;
   /// Lowercase token before ':'. Validated by resolveInteract against the
@@ -69,6 +76,9 @@ export type Item = {
   line: number;
 };
 
+/// One interact region: everything between an opening `<!-- interact: kind id=... -->`
+/// anchor and its matching `<!-- /interact -->` close, parsed into its kind, attributes,
+/// intro prose, and items.
 export type Block = {
   kind: BlockKind;
   /// Required, unique per file: the reviewer's grep-handle, the machine address,
@@ -92,6 +102,8 @@ export type Block = {
 
 // ---- typed errors ----
 
+/// Every failure mode parseInteract or resolveInteract can report, split into parse-time
+/// (malformed anchors/items/attributes) and resolve-time (vocabulary/gate violations) groups.
 export type InteractErrorCode =
   // parse-time
   | "bad-anchor" // an interact comment that does not parse as an anchor
@@ -113,6 +125,8 @@ export type InteractErrorCode =
   | "unresolved-pick-one"
   | "gate-unsatisfied";
 
+/// One parse or resolve failure: an error code, the line it was found at, the block id when
+/// known, and a human-readable message.
 export type InteractError = {
   code: InteractErrorCode;
   blockId?: string;
@@ -122,7 +136,9 @@ export type InteractError = {
   message: string;
 };
 
-/// Thrown by stripInteract on malformed input; carries the parse errors.
+/// Carries one or more InteractError entries from a failed parse or resolve. Thrown by
+/// stripInteract, and by any caller (e.g. retype.ts's applyTyping) that requires a clean parse
+/// before mutating state.
 export class InteractFormatError extends Error {
   readonly errors: InteractError[];
   constructor(errors: InteractError[]) {
@@ -602,15 +618,18 @@ export function parseInteract(text: string): {
 
 // ---- resolve (kind semantics + per-consumer verb vocabulary) ----
 
+/// Per-invoker resolve parameters: currently just the verb vocabulary a parsed document is
+/// checked against.
 export type ResolveSpec = {
-  /// The invoker's verb vocabulary; any verb outside it (checked or not) is an
-  /// unknown-verb error.
+  /// Any verb outside this list (checked or not) is an unknown-verb error.
   verbs: readonly string[];
 };
 
+/// The result of resolving parsed blocks against a ResolveSpec: which items fired (checked and
+/// valid), each confirm-all block's gate state, and any vocabulary/gate errors found.
 export type Resolution = {
-  /// Checked items in document order across all blocks. Empty whenever errors
-  /// is non-empty (apply rule 1: abort before any action).
+  /// Checked items in document order across all blocks. Empty whenever errors is non-empty, so
+  /// a caller stops before taking any action on a resolution with errors.
   fired: {
     blockId: string;
     kind: BlockKind;
@@ -625,6 +644,10 @@ export type Resolution = {
   errors: InteractError[];
 };
 
+/// Validate parsed blocks' verbs against spec.verbs, resolve each pick-one block's
+/// exactly-one-checked requirement and each confirm-all block's gate, and collect the checked
+/// items as `fired` — but only when no errors were found; a resolution with any error fires
+/// nothing, so callers never act on a partially-valid document.
 export function resolveInteract(blocks: Block[], spec: ResolveSpec): Resolution {
   const errors: InteractError[] = [];
   const gates: Resolution["gates"] = [];
@@ -735,6 +758,9 @@ export function stripInteract(text: string): string {
 
 // ---- render ----
 
+/// The block shape renderBlock renders: the same information Block carries after a successful
+/// parse, but supplied by a caller rather than read off a document — the write side of the
+/// parseInteract(renderBlock(spec)) ≡ spec round-trip law.
 export type BlockSpec = {
   kind: BlockKind;
   id: string;
@@ -745,11 +771,10 @@ export type BlockSpec = {
     state: ItemState;
     verb: string;
     target: string;
-    /// Render the target wrapped in backticks — the reading-view cue for a
-    /// glossary term (plan-§5 fixture: def targets are backticked, workflow/gate
-    /// targets are not). Purely presentational: parse strips the backticks back
-    /// to the same semantic target, so the round-trip law still holds. The
-    /// backtick-in-target throw is unaffected — the semantic target itself may
+    /// Render the target wrapped in backticks — the reading-view cue for a glossary term (def
+    /// targets are backticked, workflow/gate targets are not). Purely presentational: parse
+    /// strips the backticks back to the same semantic target, so the round-trip law still
+    /// holds. The backtick-in-target throw is unaffected — the semantic target itself may
     /// never carry one.
     targetCode?: boolean;
     note?: string;
@@ -757,17 +782,6 @@ export type BlockSpec = {
   }[];
 };
 
-/// Emit side. Anchor attributes in the order id, dest, src; values quoted only
-/// when they contain whitespace. Payload fences untagged, indented two spaces
-/// under the item, fence length = longest backtick run in the payload + 1
-/// (min 3). Targets containing " — " (or leading/trailing space) are backticked
-/// so the note split stays unambiguous. Blank line before and after every
-/// closing anchor (the oxfmt reflow fix). Round-trip law:
-/// parseInteract(renderBlock(spec)) ≡ spec — enforced by throwing on any spec
-/// the grammar cannot carry back: newlines/carriage returns in fields, a
-/// backtick in a target (pass the semantic target; formatting is the
-/// renderer's), a non-slug id or verb, a quote in dest/src, an intro that is
-/// empty, starts/ends blank, or holds a line that would re-parse as structure.
 function needsBacktick(target: string): boolean {
   return target === "" || target !== target.trim() || target.includes(" — ");
 }
@@ -861,6 +875,17 @@ function assertRenderable(spec: BlockSpec): void {
   }
 }
 
+/// Emit side. Anchor attributes in the order id, dest, src; values quoted only
+/// when they contain whitespace. Payload fences untagged, indented two spaces
+/// under the item, fence length = longest backtick run in the payload + 1
+/// (min 3). Targets containing " — " (or leading/trailing space) are backticked
+/// so the note split stays unambiguous. Blank line before and after every
+/// closing anchor (the oxfmt reflow fix). Round-trip law:
+/// parseInteract(renderBlock(spec)) ≡ spec — enforced by throwing on any spec
+/// the grammar cannot carry back: newlines/carriage returns in fields, a
+/// backtick in a target (pass the semantic target; formatting is the
+/// renderer's), a non-slug id or verb, a quote in dest/src, an intro that is
+/// empty, starts/ends blank, or holds a line that would re-parse as structure.
 export function renderBlock(spec: BlockSpec): string {
   assertRenderable(spec);
 

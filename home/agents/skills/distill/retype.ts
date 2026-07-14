@@ -1,19 +1,22 @@
-// retype — the span-typing review (spec §4 step 3; blueprint §11), distill's second interactive
-// moment. It gates each unit's `type` against its resolved source slice: one `pick-one` block per
-// unit, the five `UnitType`s as options, the unit's standing type pre-checked, and the located slice
-// riding as the pre-checked item's payload — so the reviewer checks the type against the ACTUAL span,
-// not the model's paraphrase. A mandatory `confirm-all` gate closes the set. Re-typing a unit SETS
-// `unit.type` on the flat `DistillationResult.units[]`; it does NOT move units between arrays, because
-// this runs AFTER locate where the per-channel `PreGraph` arrays no longer exist — `projectMarkdown`
-// re-buckets purely on `unit.type` via `byType`, so setting the field is the whole operation.
+// retype — the span-typing review, distill's second interactive moment. It gates each unit's
+// `type` against its resolved source slice: one `pick-one` block per unit, the five `UnitType`s
+// as options, the unit's standing type pre-checked, and the located slice riding as the
+// pre-checked item's payload — so the reviewer checks the type against the ACTUAL span, not the
+// model's paraphrase. A mandatory `confirm-all` gate closes the set. Re-typing a unit SETS
+// `unit.type` on the flat `DistillationResult.units[]`; it does NOT move units between arrays,
+// because this runs AFTER locate where the per-channel `PreGraph` arrays no longer exist —
+// `projectMarkdown` re-buckets purely on `unit.type` via `byType`, so setting the field is the
+// whole operation.
 //
-// This is the interact analogue of triage.ts: the grammar (parse/resolve/render, the round-trip law
-// parseInteract(renderBlock(spec)) ≡ spec) lives in interact.ts and is untouched; this module owns
-// only the typing-review policy — the verb vocabulary, the block-builder, and the `type` apply verb.
+// This is the interact analogue of triage.ts: the grammar (parse/resolve/render, the round-trip
+// law parseInteract(renderBlock(spec)) ≡ spec) lives in interact.ts and is untouched; this
+// module owns only the typing-review policy — the verb vocabulary, the block-builder, and the
+// `type` apply verb.
 //
-// PURE by contract: no fs, no LLM, no imports from distill-core.ts. The TTY orchestration (writing the
-// scratch review, the reviewer sugar-loop) lives in tty.ts; these two functions are the pure
-// halves it drives and the whole of what the test surface (retype.test.ts) exercises.
+// PURE by contract: no fs, no LLM, no imports from distill-core.ts. The TTY orchestration
+// (writing the scratch review, the reviewer sugar-loop) lives in tty.ts; these two functions
+// are the pure halves it drives and the whole of what the test surface (retype.test.ts)
+// exercises.
 import { Buffer } from "node:buffer";
 import {
   type BlockSpec,
@@ -26,9 +29,9 @@ import type { DistillationResult, Unit, UnitType } from "./graph.ts";
 import { sliceBytes } from "./mdstruct.ts";
 import { slugSegment } from "./text.ts";
 
-/// The typing-review vocabulary (blueprint §11.1): `type` on the pick-one items (re-type a unit),
-/// `reviewed` on the confirm-all gate (mirroring triage's gate verb). resolveInteract validates a
-/// parsed file against exactly this set — any other verb is `unknown-verb`.
+/// The typing-review vocabulary: `type` on the pick-one items (re-type a unit), `reviewed` on
+/// the confirm-all gate (mirroring triage's gate verb). resolveInteract validates a parsed file
+/// against exactly this set — any other verb is `unknown-verb`.
 export const TYPING_VERBS = ["type", "reviewed"] as const satisfies readonly string[];
 
 // The five knowledge-element types, in projection order — the pick-one options and the guard the
@@ -66,16 +69,17 @@ function typingIntro(unit: Unit): string {
   return shown ? `${head}: ${shown}` : `${head}.`;
 }
 
-/// Build the span-typing review as interact blocks (blueprint §11.1): one `pick-one` per unit — the
-/// five UnitType slugs as `type:` items, the unit's standing type pre-checked — followed by one
-/// mandatory `confirm-all` gate. The resolved source slice (`sliceBytes(body, unit.span)`) rides as
-/// the payload of the pre-checked (standing-type) item ONLY (apply reads the checked target, never a
-/// payload, so carrying the slice once rather than across five items loses nothing). The slice is
-/// LF-normalized because renderBlock rejects `\r` in a payload — the graph's span still indexes the
-/// true bytes, so this display normalization loses no fidelity. Satisfies the round-trip law by
-/// construction: type-name targets are bare lowercase slugs, block ids are slug+index, the intro is
-/// a single safe line, the gate is a well-formed confirm-all. `body` is the SAME text the spans index
-/// into (the compress body). Returns [] when the graph has no units.
+/// Build the span-typing review as interact blocks: one `pick-one` per unit — the five UnitType
+/// slugs as `type:` items, the unit's standing type pre-checked — followed by one mandatory
+/// `confirm-all` gate. The resolved source slice (`sliceBytes(body, unit.span)`) rides as the
+/// payload of the pre-checked (standing-type) item ONLY (apply reads the checked target, never
+/// a payload, so carrying the slice once rather than across five items loses nothing). The
+/// slice is LF-normalized because renderBlock rejects `\r` in a payload — the graph's span
+/// still indexes the true bytes, so this display normalization loses no fidelity. Satisfies the
+/// round-trip law by construction: type-name targets are bare lowercase slugs, block ids are
+/// slug+index, the intro is a single safe line, the gate is a well-formed confirm-all. `body`
+/// is the SAME text the spans index into (the compress body). Returns [] when the graph has no
+/// units.
 export function buildTypingReview(result: DistillationResult, body: string): BlockSpec[] {
   if (result.units.length === 0) return [];
   const buf = Buffer.from(body, "utf8");
@@ -103,13 +107,13 @@ export function buildTypingReview(result: DistillationResult, body: string): Blo
   return blocks;
 }
 
-/// Apply a reviewed typing document to the graph IN PLACE (blueprint §11.3): parse + resolve the
-/// (reviewer-edited) text against TYPING_VERBS, then for each fired `type:` item set
-/// `units[i].type = target`. The re-type SETS THE FIELD on the flat units[]; it moves nothing between
-/// arrays and preserves unit ids, so incident edges stay valid and `projectMarkdown` re-buckets on
-/// the field. REFUSES (throws InteractFormatError, graph untouched) on any parse error, an unchecked
-/// gate, an unresolved pick-one (zero or two checked), or an unknown verb — resolveInteract returns
-/// no fired items when it errors, so no mutation ever lands on a bad review. A fired target outside
+/// Apply a reviewed typing document to the graph IN PLACE: parse + resolve the (reviewer-edited)
+/// text against TYPING_VERBS, then for each fired `type:` item set `units[i].type = target`. The
+/// re-type SETS THE FIELD on the flat units[]; it moves nothing between arrays and preserves
+/// unit ids, so incident edges stay valid and `projectMarkdown` re-buckets on the field. REFUSES
+/// (throws InteractFormatError, graph untouched) on any parse error, an unchecked gate, an
+/// unresolved pick-one (zero or two checked), or an unknown verb — resolveInteract returns no
+/// fired items when it errors, so no mutation ever lands on a bad review. A fired target outside
 /// the five UnitTypes, or a block id that maps to no unit, is ignored (never assigned).
 export function applyTyping(result: DistillationResult, editedText: string): void {
   const { blocks, errors: parseErrors } = parseInteract(editedText);

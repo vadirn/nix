@@ -1,8 +1,7 @@
-// tty — the interactive terminal half of the pipeline: the span-typing review (blueprint
-// §11.4) and the emit->apply TTY session (plan §4). Both are sugar over the pure retype.ts /
-// triage.ts / apply-mode.ts machinery, driven only at a real terminal; a non-TTY caller never
-// reaches here. `ask` is the readline round-trip; `askFn` is the injection seam tests script to
-// answer without a terminal.
+// tty — the interactive terminal half of the pipeline: the span-typing review and the
+// emit->apply TTY session. Both are sugar over the pure retype.ts / triage.ts / apply-mode.ts
+// machinery, driven only at a real terminal; a non-TTY caller never reaches here. `ask` is the
+// readline round-trip; `askFn` is the injection seam tests script to answer without a terminal.
 import { createInterface } from "node:readline";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12,11 +11,11 @@ import { applyTyping, buildTypingReview } from "./retype.ts";
 import { type Block, parseInteract, renderBlock } from "./interact.ts";
 import { runApply } from "./apply-mode.ts";
 
-// The confirm-all gate-satisfied predicate (plan §4 / blueprint §11.4): a document's gate is
-// satisfied only when a confirm-all block exists AND has at least one item AND every item is
-// checked (an empty confirm-all block never auto-satisfies). Both TTY loops below re-read the
-// file on every iteration and re-derive this off the fresh parse, so it stays a pure function
-// of the current blocks rather than cached state.
+// The confirm-all gate-satisfied predicate: a document's gate is satisfied only when a
+// confirm-all block exists AND has at least one item AND every item is checked (an empty
+// confirm-all block never auto-satisfies). Both TTY loops below re-read the file on every
+// iteration and re-derive this off the fresh parse, so it stays a pure function of the
+// current blocks rather than cached state.
 function isGateChecked(blocks: Block[]): boolean {
   const gate = blocks.find((b) => b.kind === "confirm-all");
   return (
@@ -24,7 +23,7 @@ function isGateChecked(blocks: Block[]): boolean {
   );
 }
 
-// ---- TTY session (Phase 5, plan §4): sugar over emit+apply, never a third code path ----
+// ---- TTY session (Phase 5): sugar over emit+apply, never a third code path ----
 
 /// One `prompt [y/N]` round-trip against the real terminal: the prompt lands on
 /// stderr (stdout stays the frozen one-line path even at a TTY), the answer
@@ -52,16 +51,17 @@ function ask(prompt: string): Promise<string | null> {
 const isYes = (answer: string | null): boolean =>
   answer !== null && answer.trim().toLowerCase() === "y";
 
-/// The span-typing review's TTY orchestration (blueprint §11.4): the interactive half of the pure
-/// retype.ts helpers, driven only at a real terminal (the caller in distill() TTY-gates it, so a
-/// non-TTY run never reaches here — the review is skipped and the graph keeps its extract-assigned
-/// types). Writes the per-unit `pick-one` review (buildTypingReview → renderBlock) to a scratch file,
-/// then runs the SAME gate-aware sugar loop as runTtySession: re-read on each iteration, prompt until
-/// the confirm-all gate is checked (the reviewer toggles types + the gate in their editor), then
-/// applyTyping the result — mutating result.units IN PLACE before the caller projects. A non-"y"
-/// answer or EOF declines: the graph is left with its extract-assigned types. `askFn` is the same
-/// injection seam runTtySession uses; production wires the real `ask`. The scratch file is always
-/// removed. Returns true when the reviewer confirmed (types applied), false when they declined.
+/// The span-typing review's TTY orchestration: the interactive half of the pure retype.ts
+/// helpers, driven only at a real terminal (the caller in distill() TTY-gates it, so a non-TTY
+/// run never reaches here — the review is skipped and the graph keeps its extract-assigned
+/// types). Writes the per-unit `pick-one` review (buildTypingReview → renderBlock) to a scratch
+/// file, then runs the SAME gate-aware sugar loop as runTtySession: re-read on each iteration,
+/// prompt until the confirm-all gate is checked (the reviewer toggles types + the gate in their
+/// editor), then applyTyping the result — mutating result.units IN PLACE before the caller
+/// projects. A non-"y" answer or EOF declines: the graph is left with its extract-assigned
+/// types. `askFn` is the same injection seam runTtySession uses; production wires the real
+/// `ask`. The scratch file is always removed. Returns true when the reviewer confirmed (types
+/// applied), false when they declined.
 export async function runTypingReview(
   result: Projection,
   body: string,
@@ -92,18 +92,16 @@ export async function runTypingReview(
   }
 }
 
-/// The gate-aware sugar loop (plan §4 transcript): re-reads `tmpPath` from disk on
-/// every iteration (Sync may have landed a cross-device edit between prompts), so
-/// it never asks a question the file itself already answers. The confirm-all gate
-/// (triage.ts always names it "triage-final") unchecked → a diagnosis prompt whose
-/// "y" only asks for a re-read, never substitutes for the tick; gate fully checked →
-/// one count-confirm naming what apply is about to do, then `runApply` runs
-/// in-process with its stdout REDIRECTED to stderr for the duration of the call —
-/// the stdout path line belongs to emit alone, even in-session. Any
-/// non-"y" answer or EOF returns 0 with the intermediary untouched; the file
-/// predates the prompt, so nothing is lost. `askFn` is the injection seam unit
-/// tests use to script answers without a real terminal; production always uses the
-/// real `ask` above.
+/// The gate-aware sugar loop: re-reads `tmpPath` from disk on every iteration (Sync may have
+/// landed a cross-device edit between prompts), so it never asks a question the file itself
+/// already answers. The confirm-all gate (triage.ts always names it "triage-final") unchecked
+/// → a diagnosis prompt whose "y" only asks for a re-read, never substitutes for the tick; gate
+/// fully checked → one count-confirm naming what apply is about to do, then `runApply` runs
+/// in-process with its stdout REDIRECTED to stderr for the duration of the call — the stdout
+/// path line belongs to emit alone, even in-session. Any non-"y" answer or EOF returns 0 with
+/// the intermediary untouched; the file predates the prompt, so nothing is lost. `askFn` is the
+/// injection seam unit tests use to script answers without a real terminal; production always
+/// uses the real `ask` above.
 export async function runTtySession(
   tmpPath: string,
   dest: string,
