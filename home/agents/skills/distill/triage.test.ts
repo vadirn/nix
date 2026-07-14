@@ -1,6 +1,6 @@
 // triage red corpus — run with `bun test` from this directory.
 //
-// Freezes Phase 3's serialization contract (build plan §5/§6) ahead of the
+// Freezes Phase 3's serialization contract ahead of the
 // implementation. Pins: buildIntermediary reproducing fixtures/interact-triage-emit.md
 // BYTE-EXACT (the stamp src= is injectable, so the fixture's illustrative hash is
 // passed literally); the reason-class → verb mapping (gate-inconclusive → keep,
@@ -58,7 +58,7 @@ test("TRIAGE_VERBS is exactly recover/keep/reviewed", () => {
   expect([...TRIAGE_VERBS]).toEqual(["recover", "keep", "reviewed"]);
 });
 
-// ---- buildIntermediary: the plan-§5 golden ----
+// ---- buildIntermediary: the golden ----
 
 test("buildIntermediary golden: byte-exact against fixtures/interact-triage-emit.md", () => {
   // the future note is the fixture minus its own blocks — strip is the inverse

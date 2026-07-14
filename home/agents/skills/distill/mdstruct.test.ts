@@ -131,7 +131,7 @@ test("harvestImages: a markdown image and an asset embed each key by target slug
 
 // ---- router migration goldens: structuralSpans-fed payloadMask + sections (one per class) ----
 // The four harvesters above feed the residue inventory; these pin the SECOND consumer of the
-// same detection (D2) — the density router's payloadMask/sections — over the divergence classes
+// same detection — the density router's payloadMask/sections — over the divergence classes
 // the parity harness materialized (delimiter-row + frontmatter fix) and the structural classes
 // the mask must keep covering (pseudo-table, nested fence, list-nested quote/table).
 

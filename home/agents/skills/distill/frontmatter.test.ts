@@ -1,11 +1,11 @@
 // frontmatter structural-parser tests — run with `bun test` from this directory.
 //
 // Pins the one structural frontmatter scan (parseFrontmatter) against fixtures that
-// exercise the three fence/YAML hazards §4.4 of the architecture plan flagged as a
-// silent-loss bug: a BOM-prefixed fence, a trailing-space `---` fence, and malformed
-// inner YAML. The contract is: well-formed input is unchanged, and a hazard never
-// demotes the frontmatter block to body (where the pipeline would reword it as prose)
-// — a malformed block is flagged via `error` while still returned verbatim in `front`.
+// exercise three fence/YAML hazards flagged as a silent-loss bug: a BOM-prefixed
+// fence, a trailing-space `---` fence, and malformed inner YAML. The contract is:
+// well-formed input is unchanged, and a hazard never demotes the frontmatter block
+// to body (where the pipeline would reword it as prose) — a malformed block is
+// flagged via `error` while still returned verbatim in `front`.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";

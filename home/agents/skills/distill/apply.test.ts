@@ -1,11 +1,11 @@
-// apply red corpus (Phase 4, build plan §4/§6) — run with `bun test` from here.
+// apply red corpus (Phase 4) — run with `bun test` from here.
 //
 // Freezes the apply contract AHEAD of the implementation: apply-mode.ts's bodies
 // are unimplemented (each throws), so every behavioral assertion below is RED until
 // the green pass turns them on without touching a signature. The suite loads clean
 // and the pre-existing files stay green.
 //
-// The check order under test (plan §4, FROZEN): path exists → suffix → parse+resolve
+// The check order under test (FROZEN): path exists → suffix → parse+resolve
 // (vocab recover/keep/reviewed) → mandatory confirm-all gate present+checked → stamp
 // (dest= basename vs the tmp-derived destination; src=sha256 vs the destination's
 // current bytes; src=new ⇒ destination absent) → key gate iff a checked recover DEF
@@ -585,7 +585,7 @@ test("apply: checked recover DEF → one re-render + one grade, concept def line
   // the def line of the `### Impression distance` subsection is rewritten, its anchor kept
   expect(out).toContain("### Impression distance");
   expect(out).toContain("A re-grounded gap definition. 41..70");
-  // no re-projection on a canonical note: the ## Abstract is left as-authored (§12.4)
+  // no re-projection on a canonical note: the ## Abstract is left as-authored
   expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(0);
   expect(out).toContain("## Abstract");
   expect(out).toContain("Blocking from the felt sense rather than the scene");
@@ -604,12 +604,12 @@ test("apply: checked recover DEF whose second grade fails is spliced VERBATIM (v
   // the failed re-render is discarded; the source's own defining clause is spliced
   expect(out).toContain(`${verbatimDef("Impression distance", DEF_SRC)} 41..70`);
   expect(out).not.toContain("AN INVERTED RE-RENDER");
-  // no re-projection on a canonical note (§12.4)
+  // no re-projection on a canonical note
   expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(0);
   expect(r.stderr.trim()).toBe("— applied: 1 recovered · 0 kept · 0 removed (1 verbatim)");
 });
 
-test("apply: a non-transient error in the recover-def LLM window propagates (BUG-2 regression) — not floored to verbatim", async () => {
+test("apply: a non-transient error in the recover-def LLM window propagates (regression) — not floored to verbatim", async () => {
   process.env.FIREWORKS_API_KEY = "test-dummy";
   const dir = tmpdirFor("recover-def-bug");
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF]);
@@ -682,7 +682,7 @@ test("apply: a recovered THESIS and a recovered DEF are independent — abstract
   expect(out).toContain(THESIS_SRC);
   expect(out.indexOf("## Abstract")).toBeLessThan(out.indexOf(THESIS_SRC));
   expect(out).toContain("A re-grounded gap def. 41..70");
-  // no re-projection on a canonical note (§12.4)
+  // no re-projection on a canonical note
   expect(r.prompts.filter((p) => p.includes(RENDER_PROSE_MARKER)).length).toBe(0);
   expect(r.stderr.trim()).toBe("— applied: 2 recovered · 0 kept · 0 removed (1 verbatim)");
 });
@@ -810,7 +810,7 @@ test("resolveDefTerm: exact match, degraded safeHandle match, and no-match null"
 });
 
 // ---------------------------------------------------------------------------
-// classifyItems (W19) + resolveStepTarget (W12): the PURE core of the apply pass,
+// classifyItems + resolveStepTarget: the PURE core of the apply pass,
 // unit-tested offline directly (no fs, no LLM), the way the module's helpers-test
 // contract asks. Items are built as plain records — the same shape parseInteract
 // yields — so the whole branch matrix (checked/unchecked × def/steps/thesis/keep,

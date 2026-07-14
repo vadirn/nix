@@ -94,7 +94,7 @@ test("parseRelationsBlock: section closes at the next heading", () => {
   ]);
 });
 
-test("parseRelationsBlock: unknown rel token is parsed and kept (open vocabulary, D32)", () => {
+test("parseRelationsBlock: unknown rel token is parsed and kept (open vocabulary)", () => {
   const md = "## Relations\n\n- a relates-to:: b\n";
   expect(parseRelationsBlock(md)).toEqual([
     { from: "a", rel: "relates-to", to: "b", predicate: null },

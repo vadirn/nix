@@ -1,6 +1,6 @@
 // interact grammar-core red corpus — run with `bun test` from this directory.
 //
-// Freezes the interactive-text grammar (build plan §5 + Phase 1) ahead of the
+// Freezes the interactive-text grammar (Phase 1) ahead of the
 // implementation. Pins: every typed error class including the '[-]' teaching
 // error; the round-trip law parseInteract(renderBlock(spec)) ≡ spec for all
 // three kinds; fence-state-first scanning (anchor text inside a fenced payload
@@ -320,7 +320,7 @@ test("parse error: opening anchor inside an open block (blocks do not nest)", ()
 // After region recognition moved into the single mdstruct engine, interact is a pure
 // filter over anchor pairs mdstruct locates by geometry over a masked raw-byte scan.
 // Three inputs resolve differently than the retired thin-pass scanner did; these are the
-// accepted new behavior (build plan open question #1), pinned so they can't silently regress.
+// accepted new behavior, pinned so they can't silently regress.
 
 test("region divergence: a paired region whose OPEN anchor is malformed is bad-anchor alone — its matched close is not orphaned", () => {
   // mdstruct pairs `<!-- interact: -->` with its `<!-- /interact -->` into one region, so the
@@ -735,7 +735,7 @@ test("renderBlock: target containing ' — ' is backticked so the note split sta
   expect(b!.items[0]!.note).toBe("real note");
 });
 
-// targetCode is presentational only (the plan-§5 fixture backticks def terms):
+// targetCode is presentational only (the fixture backticks def terms):
 // render wraps the target, parse strips it back to the same semantic target, and
 // a plain-target item in the same block stays unbackticked.
 test("renderBlock: targetCode wraps the target in backticks; parse strips them back", () => {

@@ -121,7 +121,7 @@ test("extractGraphPrompt: the concept schema asks for an optional extension-bull
 });
 
 // ---- def-scope experiment levers: DI seams over the DISTILL_DEF_RELATIONS /
-// DISTILL_DEF_GATE env reads (W17). Each lever now threads as a trailing param
+// DISTILL_DEF_GATE env reads. Each lever now threads as a trailing param
 // defaulting to the module-level env value, so a caller can flip it without
 // process-global env mutation. These pin that the param — not just the env var —
 // actually changes the prompt text.

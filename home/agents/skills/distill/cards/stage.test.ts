@@ -1,8 +1,9 @@
-// cards/stage.test.ts — pins the W5 staging writer (renderStagingFile) and the
+// cards/stage.test.ts — pins the staging writer (renderStagingFile) and the
 // card-stage CLI's flow function (stageNote) against injected fakes. Run scoped:
 // `bun test cards/stage.test.ts` from the distill dir (bare `bun test` picks up
-// sibling in-progress files — see brief). No real vault-query spawn, no real
-// Fireworks call, no real filesystem write anywhere in this file.
+// sibling in-progress files still in flight and would fail it). No real
+// vault-query spawn, no real Fireworks call, no real filesystem write anywhere
+// in this file.
 import { expect, test } from "bun:test";
 import { EXTRACT, FIDELITY, TransientError, TruncationError } from "../fw.ts";
 import { relText, slugSegment } from "../text.ts";

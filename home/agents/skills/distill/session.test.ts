@@ -1,11 +1,11 @@
-// TTY session wrapper (Phase 5, build plan §4/§6) — run with `bun test` from here.
+// TTY session wrapper (Phase 5) — run with `bun test` from here.
 //
 // `runTtySession` is the gate-aware sugar loop main() hands off to at a real
 // terminal (both process.stdin.isTTY and process.stdout.isTTY — the guard itself
 // is one line in main() and is proven OFF-by-default at emit.test.ts's "Phase 5"
 // pin, colocated there to share its mocked-pipeline lifecycle). A real terminal
-// resists subprocess pinning (plan §6: "TTY loops resist subprocess pinning; smoke-
-// tested by hand"), so every test here calls `runTtySession` directly with a
+// resists subprocess pinning (smoke-tested by hand), so every test here calls
+// `runTtySession` directly with a
 // scripted `askFn` — that parameter IS the TTY seam this suite fakes: production
 // wires the real readline-over-stdin reader, tests wire a canned answer queue.
 //

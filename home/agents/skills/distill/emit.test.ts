@@ -1,4 +1,4 @@
-// emit-path red corpus (Phase 3, build plan §6) — run with `bun test` from this directory.
+// emit-path red corpus (Phase 3) — run with `bun test` from this directory.
 //
 // Freezes the pipeline emit swap: every successful distill writes the interactive
 // intermediary to `<dest>.tmp.md` (sibling of the destination — the input path by
@@ -526,9 +526,9 @@ test("emit: --out into a missing directory is a usage refusal (exit 2) BEFORE th
 });
 
 test("emit preflight: a cwd-relative input names the pending intermediary by ABSOLUTE path", () => {
-  // agent callers re-open the named path after a cwd reset; the plan-§4 transcript
-  // shows an absolute line 1 for a relative invocation, and the mktemp contract was
-  // always absolute — relative paths must not leak out of a relative invocation
+  // agent callers re-open the named path after a cwd reset; stdout line 1 must be
+  // absolute even for a relative invocation, and the mktemp contract was always
+  // absolute — relative paths must not leak out of a relative invocation
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   writeFileSync(join(dir, "note.md"), NOTE);
   writeFileSync(join(dir, "note.tmp.md"), "pending intermediary bytes\n");
@@ -537,7 +537,7 @@ test("emit preflight: a cwd-relative input names the pending intermediary by ABS
   const err = proc.stderr.toString();
   expect(err).toMatch(/pending intermediary exists: \//);
   expect(err).toContain("note.tmp.md");
-  // the refusal appends the mtime staleness hint (plan §4, tmpfile F5)
+  // the refusal appends the mtime staleness hint
   expect(err).toMatch(/\(\d+[mhd] old\)/);
 });
 
@@ -561,7 +561,7 @@ test("emit success: a cwd-relative input still puts an ABSOLUTE intermediary pat
 
 test("emit write is no-clobber: an intermediary that appears mid-run (racing emit) loses LOUD with exit 4, raced bytes intact", async () => {
   // both racers pass the preflight before their minutes-long LLM runs; the final
-  // write must be linkSync-no-clobber (plan §4, atomicity F7), never a silent
+  // write must be linkSync-no-clobber, never a silent
   // last-writer-wins overwrite
   mockPipeline();
   const mocked = await import(FW);

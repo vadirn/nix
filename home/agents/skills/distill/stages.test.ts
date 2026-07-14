@@ -236,7 +236,7 @@ test("residue threading: proseResidue distinguishes dropped from prose-inconclus
   });
 });
 
-// ---- proseResidue + anchored: the prose-judge mapping (D46) ----
+// ---- proseResidue + anchored: the prose-judge mapping ----
 // surfaced is the DEFAULT; a unit clears only on an explicit covered verdict whose anchor is
 // verified present in the output AND on-topic for the judged item.
 const pu = (id: string, span: string): ProseUnit => ({ id, heading: "Sec", depth: 4, span });

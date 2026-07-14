@@ -1,5 +1,5 @@
 // project.test.ts — tests for the seven-section markdown projector (project.ts) against the
-// spec's two worked examples (distill-spec §3, "Reference render 1/2"). Pure formatting; no
+// spec's two worked examples ("Reference render 1/2"). Pure formatting; no
 // mdstruct binary needed. Run with `bun test project.test.ts` from this directory.
 import { expect, test } from "bun:test";
 import { projectMarkdown, type Projection } from "./project.ts";
@@ -136,7 +136,7 @@ test("render 1: no empty sections are emitted", () => {
   expect(md).not.toMatch(/## [A-Za-z]+\n\n(?:## |#(?!#)|---|$)/);
 });
 
-test("relations: false suppresses ## Relations but keeps every other section (--reference, D30)", () => {
+test("relations: false suppresses ## Relations but keeps every other section (--reference)", () => {
   // The --reference output path: pointer notes stay link-free, but the ## Abstract orientation and
   // the concept/judgement/inference/procedure sections all survive.
   const md = projectMarkdown(RENDER_1, { relations: false });
@@ -237,7 +237,7 @@ test("a hypothesis judgement carries the problematic modality tag", () => {
   expect(projectMarkdown(hypo)).toContain("- (hypothesis) maybe true 0..5");
 });
 
-test("an off-registry edge rel renders (open registry, spec §3) instead of throwing", () => {
+test("an off-registry edge rel renders (open registry) instead of throwing", () => {
   const deontic: Projection = {
     source: { path: "x.txt", bytes: 10, sha256: "deadbeef" },
     title: "X",

@@ -1,14 +1,14 @@
-// locate.test.ts — tests for the span-locate fidelity primitive. Covers the three LOCKED
-// DECISIONS: byte-offset conversion + round-trip (1), the 0/1/>1 match gate (2), and the
-// whitespace-collapsed single retry computing the span from the raw extent (3). Run with
-// `bun test` from this directory. No mdstruct binary needed — locate.ts only reuses the pure
-// `sliceBytes`/`Span` from mdstruct.ts, not the CLI wrapper.
+// locate.test.ts — tests for the span-locate fidelity primitive. Covers three invariants:
+// byte-offset conversion + round-trip, the 0/1/>1 match gate, and the whitespace-collapsed
+// single retry computing the span from the raw extent. Run with `bun test` from this
+// directory. No mdstruct binary needed — locate.ts only reuses the pure `sliceBytes`/`Span`
+// from mdstruct.ts, not the CLI wrapper.
 import { expect, test } from "bun:test";
 import { LocateError, locate } from "./locate.ts";
 import { sliceBytes } from "./mdstruct.ts";
 
 // Round-trip a computed span against the byte-exact slice — the hard invariant every locate must
-// satisfy (LOCKED DECISION 1).
+// satisfy.
 function slice(source: string, span: [number, number]): string {
   return sliceBytes(Buffer.from(source, "utf8"), span);
 }

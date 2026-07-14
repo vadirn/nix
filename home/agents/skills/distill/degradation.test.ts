@@ -1,4 +1,4 @@
-// degradation tests — the narrowed gate/helper catches (§4.3).
+// degradation tests — the narrowed gate/helper catches.
 //
 // Every LLM stage wraps its askJson call in a graceful-degradation catch. Before
 // this step those catches swallowed ANY throw, so a real code bug shipped an
@@ -165,7 +165,7 @@ test("revise: an echoed block-id marker is stripped from the returned text (live
   expect(out[1].text).toBe("Mid-sentence echo survives content.");
 });
 
-// ---- proseGate: parallel batches keep the per-batch flake isolation (D46 / FIX B) ----
+// ---- proseGate: parallel batches keep the per-batch flake isolation ----
 // The batches now fire concurrently, but a flake must still flag ONLY its own ids while a
 // sibling batch's verdicts survive — never collapsing into one outer catch.
 const proseUnits = (n: number) =>

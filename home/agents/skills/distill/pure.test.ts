@@ -68,7 +68,7 @@ test("segment: a fenced code block stays one whole block, blank line included", 
   expect(blocks[0].text).toBe("```\ncode\n\nmore\n```");
 });
 
-test("segment: a nested opposite fence marker does not mis-segment the tail (BUG-1)", () => {
+test("segment: a nested opposite fence marker does not mis-segment the tail (regression)", () => {
   // a ~~~ line inside a ```py block must not flip fence parity — otherwise the real
   // closing ``` reads as an opener and every later block is swallowed into one phantom block.
   const blocks = segment("```py\nx = 1\n~~~\ny = 2\n```\n\nafter");
@@ -77,7 +77,7 @@ test("segment: a nested opposite fence marker does not mis-segment the tail (BUG
   expect(blocks[1].text).toBe("after");
 });
 
-// ---- text.ts: per-section density router (D12) ----
+// ---- text.ts: per-section density router ----
 test("routeSection: payload-dense routes to preserve, idea-dense to re-author", () => {
   const codeHeavy = [
     "## Usage",
@@ -172,7 +172,7 @@ test("sections: a `#`-comment inside a fenced code block is not a heading bounda
   expect(secs[0].text).toContain("# a comment that looks like a heading\necho hi");
 });
 
-test("sections + routeSection: a heterogeneous note routes per section (D12)", () => {
+test("sections + routeSection: a heterogeneous note routes per section", () => {
   const note = [
     "## Idea",
     "",
@@ -254,7 +254,7 @@ test("formatDryRun: one note line with route-mix, one line per section", () => {
   );
 });
 
-// ---- text.ts: per-section build partition (D12/D16; Backlog 10) ----
+// ---- text.ts: per-section build partition ----
 test("partition: extracts the H1 title and routes flat top-level units (fix #1)", () => {
   const note = [
     "# Homelab Guide",
@@ -334,7 +334,7 @@ test("compactSection: v1 holds a payload section byte-verbatim (fix #3)", () => 
   expect(compactSection(section)).toBe(section);
 });
 
-// ---- distill-core.ts: routed-build seam (assembleRoutedNote's typed-unit splice; blueprint §6.3) ----
+// ---- distill-core.ts: routed-build seam (assembleRoutedNote's typed-unit splice) ----
 // The routed note is now ONE canonical projection: the re-authored head graph merged with the
 // preserve sections as `## Payload` units, projected via projectMarkdown. Spans index the WHOLE
 // source. A pure, no-LLM seam — the head graph is hand-built here (the e2e/project template).
@@ -756,7 +756,7 @@ test("harvestVaultEdges: [[note#heading]] and [x](note.md#heading) both harvest 
   ]);
 });
 
-// ---- text.ts: external-link harvest (the citation lane, D38) ----
+// ---- text.ts: external-link harvest (the citation lane) ----
 test("harvestExternalLinks: collects [text](url) with text+url, strips a title suffix", () => {
   expect(
     harvestExternalLinks('see [Pólya](https://x.test/heuristic) and [t](http://y.test "title")'),
@@ -1021,7 +1021,7 @@ test("harvestNumbers: comma-grouped and plain forms share a key", () => {
   expect(harvestNumbers("1,200 items").map((r) => r.key)).toEqual(["1200"]);
 });
 
-// ---- harvestProseListItems: the prose-judge inventory (D46) ----
+// ---- harvestProseListItems: the prose-judge inventory ----
 test("normalizeForContainment: lowercases, strips markdown punctuation, collapses whitespace", () => {
   expect(normalizeForContainment("  **Foo**  `bar`  (Baz)!  ")).toBe("foo bar baz");
 });

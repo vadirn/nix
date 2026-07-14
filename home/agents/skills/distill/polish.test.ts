@@ -19,7 +19,7 @@ function err(argv: string[]) {
   return r.message;
 }
 
-// ---- USAGE (frozen text, §4.2) ----
+// ---- USAGE (frozen text) ----
 test("USAGE: names the flags and the env requirement", () => {
   expect(USAGE).toContain("--lang <en|ru>");
   expect(USAGE).toContain("--no-revise");
@@ -106,7 +106,7 @@ test("parseArgs: a value flag with no following token errors instead of silently
   expect(err(["--lang"])).toContain("--lang");
 });
 
-// ---- buildPolishFooter (frozen format, §4.5) ----
+// ---- buildPolishFooter (frozen format) ----
 const CLEAN = { corrupted: [], invented: [] };
 
 test("buildPolishFooter: clean run — 4 passes, spell ok, no name-lint fragment", () => {

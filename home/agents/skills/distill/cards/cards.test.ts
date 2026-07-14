@@ -1,4 +1,4 @@
-// cards.test.ts — pins the W2 pure card-extraction layer: run with
+// cards.test.ts — pins the pure card-extraction layer: run with
 // `bun test cards/cards.test.ts` from the distill skill directory (NOT bare `bun
 // test` — sibling build agents' files are still in flight and would fail it).
 import { expect, test } from "bun:test";

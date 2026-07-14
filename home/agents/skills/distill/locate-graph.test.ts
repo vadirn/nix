@@ -3,7 +3,7 @@
 // expected sections populate, that every emitted start..end anchor round-trips against the body
 // bytes, that Relations render `from — rel → to`, and that the payload retain lane folds in.
 // Negative: an absent quote hard-aborts (LocateError); a no-unit endpoint is dropped, while an
-// off-registry rel (spec §3, open registry) is KEPT and rendered. Converges on the e2e.test.ts
+// off-registry rel (open registry) is KEPT and rendered. Converges on the e2e.test.ts
 // template (build the graph directly). Run with
 // `bun test locate-graph.test.ts`.
 import { expect, test } from "bun:test";
@@ -92,7 +92,7 @@ function pre(overrides: Partial<PreGraph> = {}): PreGraph {
         to: "Widget",
         quote: "gadget depends on at least one widget",
       },
-      // off-registry rel (spec §3, open registry) → KEPT, located like any other edge
+      // off-registry rel (open registry) → KEPT, located like any other edge
       { fromHeadword: "Gadget", rel: "causes", to: "Widget", quote: "which is a strong claim" },
       // no local unit for endpoint → dropped before locate (quote is never located, so it can
       // stay a placeholder)

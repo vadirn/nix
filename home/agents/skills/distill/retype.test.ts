@@ -1,4 +1,4 @@
-// retype.test.ts — the span-typing review (retype.ts; spec §4 step 3, blueprint §11). Converges on
+// retype.test.ts — the span-typing review (retype.ts). Converges on
 // the e2e.test.ts / project.test.ts template: a hand-built DistillationResult (real located spans) +
 // a body, driven through buildTypingReview / applyTyping / projectMarkdown — no live model, no TTY.
 // Covers: (1) the round-trip law parseInteract(renderBlock(spec)) ≡ spec for the pick-one-per-unit +
