@@ -23,11 +23,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, expect, test } from "bun:test";
-import { type Item, parseInteract, stripInteract } from "@/review/interact.ts";
-import { buildIntermediary, safeHandle } from "@/review/triage.ts";
-import { verbatimDef, verbatimDirectives } from "@/prompt/prompts.ts";
-import { askJson } from "@/kernel/fw.ts";
-import type { Residue } from "@/review/residue.ts";
+import { type Item, parseInteract, stripInteract } from "@/distill/review/interact.ts";
+import { buildIntermediary, safeHandle } from "@/distill/review/triage.ts";
+import { verbatimDef, verbatimDirectives } from "@/distill/prompt/prompts.ts";
+import { askJson } from "@/core/fw.ts";
+import type { Residue } from "@/distill/review/residue.ts";
 import {
   type WorkflowOp,
   classifyItems,
@@ -39,8 +39,8 @@ import {
   runApply,
   spliceDef,
   unlinkIfPresent,
-} from "@/app/apply-mode.ts";
-import { parseArgs } from "@/app/cli.ts";
+} from "@/distill/app/apply-mode.ts";
+import { parseArgs } from "@/distill/app/cli.ts";
 
 // ---------------------------------------------------------------------------
 // CLI wiring (parseArgs) — GREEN: the `apply` subcommand surface is implemented,

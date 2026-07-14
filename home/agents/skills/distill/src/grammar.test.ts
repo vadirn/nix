@@ -10,15 +10,15 @@
 //   - the READ pins parse those FROZEN bytes (never projectMarkdown's live output) and assert
 //     hand-written structures, so a reader that stops understanding the grammar fails here.
 // Regenerate the fixture only when the format changes intentionally:
-//   bun -e 'import {projectMarkdown} from "@/graph/project.ts"; import {GOLDEN} from "@/grammar.test.ts";
+//   bun -e 'import {projectMarkdown} from "@/distill/graph/project.ts"; import {GOLDEN} from "@/grammar.test.ts";
 //           await Bun.write("fixtures/canonical-golden.md", projectMarkdown(GOLDEN))'
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
-import { projectMarkdown, type Projection } from "@/graph/project.ts";
-import { parseCanonicalNote } from "@/graph/parse-projection.ts";
+import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
+import { parseCanonicalNote } from "@/distill/graph/parse-projection.ts";
 import { harvestConcepts } from "@/cards/cards.ts";
-import { parseDistilled } from "@/app/prose-mode.ts";
+import { parseDistilled } from "@/distill/app/prose-mode.ts";
 
 // The one graph the golden fixture is emitted from — exercises every section and both Payload
 // forms (a single-line blockquote and a multi-line fence whose body holds a `### `-lookalike line

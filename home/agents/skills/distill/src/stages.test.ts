@@ -6,12 +6,12 @@
 // and buildFooter (the success-footer renderer). The async stages route through
 // the network and are covered by the end-to-end + degradation suites.
 import { expect, test } from "bun:test";
-import type { ProseUnit } from "@/extract/harvest.ts";
-import { normalizeForContainment } from "@/extract/harvest.ts";
-import type { ProseVerdict } from "@/prompt/prompts.ts";
-import { buildFooter, expandGuardCap } from "@/app/distill-core.ts";
-import { parseArgs, USAGE } from "@/app/cli.ts";
-import { anchored, payloadResidue, proseResidue, wikilinkResidue } from "@/review/residue.ts";
+import type { ProseUnit } from "@/distill/extract/harvest.ts";
+import { normalizeForContainment } from "@/distill/extract/harvest.ts";
+import type { ProseVerdict } from "@/distill/prompt/prompts.ts";
+import { buildFooter, expandGuardCap } from "@/distill/app/distill-core.ts";
+import { parseArgs, USAGE } from "@/distill/app/cli.ts";
+import { anchored, payloadResidue, proseResidue, wikilinkResidue } from "@/distill/review/residue.ts";
 
 // ---- expandGuardCap: the passthrough guard's threshold, customizable via --max-words ----
 test("expandGuardCap: unset maxWords defaults to the note's own input size (today's behavior)", () => {
@@ -572,7 +572,7 @@ test("USAGE: states the output contract — intermediary envelope, path-on-stdou
 // and the missing-key lane. Mirrors polish.test.ts:227-281. ----
 const { readFileSync: readMainOut } = require("node:fs");
 const { join: joinMainPath } = require("node:path");
-const DISTILL = joinMainPath(import.meta.dir, "app", "distill.ts");
+const DISTILL = joinMainPath(import.meta.dir, "distill", "app", "distill.ts");
 const DUMMY_KEY = { ...process.env, FIREWORKS_API_KEY: "test-dummy" };
 
 test("main: empty input exits 3 with a stderr note and no stdout", () => {

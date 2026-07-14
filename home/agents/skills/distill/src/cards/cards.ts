@@ -12,9 +12,9 @@
 //   - decideCard/buildStagingRecord treat the band verdict as an ANNOTATION, never a
 //     filter: enumerateCandidates never filters on it, so every candidate is staged
 //     regardless of its verdict.
-import { REL_REGISTRY, slugSegment } from "@/kernel/text.ts";
-import { parseCanonicalNote, parseRelationsBlock } from "@/emit.ts";
-import type { NameLintResult } from "@/writing/name-lint.ts";
+import { REL_REGISTRY, slugSegment } from "@/core/text.ts";
+import { parseCanonicalNote, parseRelationsBlock } from "@/distill/emit.ts";
+import type { NameLintResult } from "@/core/writing/name-lint.ts";
 import type {
   Band,
   BandJudgeReply,

@@ -16,8 +16,8 @@ import {
   TruncationError,
   isTransient,
   rethrowIfBug,
-} from "@/kernel/fw.ts";
-import { fidelityGate, proseGate, revise, workflowGate } from "@/prompt/prompts.ts";
+} from "@/core/fw.ts";
+import { fidelityGate, proseGate, revise, workflowGate } from "@/distill/prompt/prompts.ts";
 
 // ---- the classifier + the gate it backs (pure, no network) ----
 test("isTransient: only TransientError is transient", () => {

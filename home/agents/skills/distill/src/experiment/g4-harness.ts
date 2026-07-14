@@ -31,11 +31,11 @@
 //   doppler run --project claude-code --config std -- \
 //     bun experiment/g4-harness.ts --expect atomic "20 cards/Parse, don't type-check.md" ...
 import { readFileSync } from "node:fs";
-import { parseFrontmatter, parseDescription } from "@/kernel/frontmatter.ts";
-import { detectLang } from "@/kernel/text.ts";
+import { parseFrontmatter, parseDescription } from "@/core/frontmatter.ts";
+import { detectLang } from "@/core/text.ts";
 import { atomicityJudgePrompt } from "@/cards/prompts.ts";
 import type { AtomicityReply } from "@/cards/types.ts";
-import { askJson, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "@/kernel/fw.ts";
+import { askJson, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "@/core/fw.ts";
 
 export const USAGE = `g4-harness — calibrate the G4 atomicity judge over vault card files
 

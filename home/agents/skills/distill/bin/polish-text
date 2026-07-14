@@ -8,4 +8,4 @@ set -u
 if [ -z "${FIREWORKS_API_KEY:-}" ]; then
   FIREWORKS_API_KEY="$(security find-generic-password -s fireworks-api -w 2>/dev/null)" && export FIREWORKS_API_KEY
 fi
-exec bun "$(dirname "$(readlink -f "$0")")/../src/app/polish.ts" "$@"
+exec bun "$(dirname "$(readlink -f "$0")")/../src/polish/polish.ts" "$@"

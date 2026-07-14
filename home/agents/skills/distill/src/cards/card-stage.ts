@@ -26,8 +26,8 @@
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { parseDescription, parseFrontmatter } from "@/kernel/frontmatter.ts";
-import { InteractFormatError, sections, stripInteract } from "@/emit.ts";
+import { parseDescription, parseFrontmatter } from "@/core/frontmatter.ts";
+import { InteractFormatError, sections, stripInteract } from "@/distill/emit.ts";
 import {
   askJson,
   EXTRACT,
@@ -35,9 +35,9 @@ import {
   FIDELITY,
   FIDELITY_TOKENS,
   rethrowIfBug,
-} from "@/kernel/fw.ts";
-import { detectLang } from "@/kernel/text.ts";
-import { nameLintAgainstSource } from "@/writing/name-lint.ts";
+} from "@/core/fw.ts";
+import { detectLang } from "@/core/text.ts";
+import { nameLintAgainstSource } from "@/core/writing/name-lint.ts";
 import {
   annotateEdges,
   buildStagingRecord,
