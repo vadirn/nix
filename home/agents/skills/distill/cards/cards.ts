@@ -1,14 +1,17 @@
 // cards — pure card-extraction layer: harvest a distilled note's concepts from the
 // canonical `## Concepts`/`## Relations` channels, enumerate candidates from them and
 // the tie, validate untrusted band-judge replies, annotate relations against
-// REL_REGISTRY, and assemble the staging record. Zero I/O, zero LLM calls (W2 brief).
+// REL_REGISTRY, and assemble the staging record. Zero I/O, zero LLM calls.
 //
 // Boundary rules this module upholds:
-//   D13  — never imports distill-core.ts. Callers hand in an emitted note's body string
-//          (harvestConcepts reads its channels); this layer never reads a file or spawns
-//          a process.
-//   D22  — decideCard/buildStagingRecord treat the band verdict as an ANNOTATION.
-//          enumerateCandidates never filters on it — every candidate is staged.
+//   - Never imports distill-core.ts and never calls distill(). Callers hand in an emitted
+//     note's body string (harvestConcepts reads its channels); this layer only ever reads
+//     that string, never a file, and never spawns a process. Structural channels — the
+//     `## Relations` block — are read through one leaf-module seam, text.ts's
+//     parseRelationsBlock, imported below.
+//   - decideCard/buildStagingRecord treat the band verdict as an ANNOTATION, never a
+//     filter: enumerateCandidates never filters on it, so every candidate is staged
+//     regardless of its verdict.
 import { REL_REGISTRY, parseRelationsBlock, slugSegment } from "../text.ts";
 import { parseCanonicalNote } from "../parse-projection.ts";
 import type { NameLintResult } from "../writing/name-lint.ts";
@@ -27,14 +30,15 @@ import type {
 
 const BANDS: readonly Band[] = ["defer-link", "mint", "work-through"];
 
-// Harvest an emitted note's concepts for card enumeration (D6): term/def from the
-// canonical `## Concepts` reader (`### headword` + first-line def), edges from the
-// `## Relations` block attached to the concept whose slug matches each edge's `from`
-// label. A single-atom edge (`from === null`) attaches to the sole concept when there is
-// exactly one; over zero or many concepts it has no unambiguous owner and is dropped
-// (lossy, matches parseRelationsBlock's tolerance). Both sides of the slug comparison are
-// slugged so a hand-typed, unslugged from-label (Log 10's expected human-edit path) still
-// resolves to its concept instead of silently detaching.
+// Harvest an emitted note's concepts for card enumeration: term/def from the canonical
+// `## Concepts` reader (`### headword` + first-line def), edges from the `## Relations`
+// block attached to the concept whose slug matches each edge's `from` label. A
+// single-atom edge (`from === null`) attaches to the sole concept when there is exactly
+// one; over zero or many concepts it has no unambiguous owner and is dropped (lossy,
+// matches parseRelationsBlock's tolerance). Both sides of the slug comparison are slugged
+// so a hand-typed, unslugged from-label — the expected shape when a human edits the
+// relations block before committing the card — still resolves to its concept instead of
+// silently detaching.
 export function harvestConcepts(body: string): HarvestedConcept[] {
   const concepts: HarvestedConcept[] = parseCanonicalNote(body).concepts.map((c) => ({
     term: c.headword,
@@ -57,8 +61,9 @@ export function harvestConcepts(body: string): HarvestedConcept[] {
 // One concept-arm candidate per harvested concept, term/def/relations carried
 // verbatim, plus one thesis-arm candidate when `tie` is non-empty (term = title,
 // def = tie, relations = [] — the tie is prose, not a Relations-block source).
-// Never filters: every concept becomes a candidate regardless of content (D22 applies
-// downstream at staging, but enumeration itself has no admission logic at all).
+// Never filters: every concept becomes a candidate regardless of content — the band
+// verdict is applied downstream at staging, so enumeration itself has no admission
+// logic at all.
 export function enumerateCandidates(
   concepts: HarvestedConcept[],
   meta: { tie: string | null; title: string; sourceNote: string },
@@ -102,13 +107,14 @@ export function decideCard(reply: unknown, nearest: NeighbourHit[]): BandVerdict
 }
 
 // Annotate each relation with whether its `rel` token is in REL_REGISTRY. Off-registry
-// is a review flag, not an error (D32, open vocabulary) — every relation is kept.
+// is a review flag, not an error — the relation vocabulary is open, not a closed set —
+// so every relation is kept.
 export function annotateEdges(relations: CardEdge[]): StagedEdge[] {
   return relations.map((r) => ({ ...r, offRegistry: !REL_REGISTRY.includes(r.rel) }));
 }
 
 // Assemble one StagingRecord, deriving `edges` from `candidate.relations` via
-// annotateEdges. Enforces the frozen invariant (types.ts:72): verdict is null
+// annotateEdges. Enforces the frozen invariant (types.ts:85): verdict is null
 // if-and-only-if flags include "judge-inconclusive". Both directions of the
 // biconditional are checked and violation throws — a caller bug, never data to
 // tolerate, since the two fields would otherwise silently disagree in staged output.

@@ -1,7 +1,7 @@
 // cards/prompts — pure prompt builders for the card-extraction LLM stages.
 // No LLM call and no transport import lives here: each builder maps typed input
 // to a prompt string; the stage wiring feeds it to fw's askJson and validates the
-// reply against types.ts (BandJudgeReply / DraftReply / AtomicityReply). D13: this
+// reply against types.ts (BandJudgeReply / DraftReply / AtomicityReply). This
 // module never imports distill-core.ts.
 //
 // The instruction text carries the whole lexicographer discipline (the vault note
@@ -15,8 +15,8 @@
 // `## Relations` edges are UNCERTIFIED leads — the draft may take illustration and
 // wording from them but may assert nothing the certified def does not support.
 //
-// Band discipline (D22 context): the verdict these prompts elicit is an ANNOTATION
-// a candidate carries into staging, never a filter — nothing here gates.
+// Band discipline: the verdict these prompts elicit is an ANNOTATION a candidate
+// carries into staging, never a filter — nothing here gates.
 import { langRule, relText } from "../text.ts";
 import type { Candidate, NeighbourHit } from "./types.ts";
 
@@ -124,8 +124,8 @@ ${noteBody}`;
 }
 
 // ---- stage: atomicity judge (FIDELITY — the judge, not the writer) ----
-// G4, description–body coherence: a card holds exactly one headword, so a body
-// claim the description does not name means the entry holds more than one concept.
+// Description-body coherence: a card holds exactly one headword, so a body claim
+// the description does not name means the entry holds more than one concept.
 // The embedded counter-example is the corpus's own ([[Measuring time]]: one named
 // technique over a body covering three concepts), anonymized to a pattern.
 export function atomicityJudgePrompt(description: string, body: string, lang: "en" | "ru"): string {

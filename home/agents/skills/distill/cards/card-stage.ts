@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
-// card-stage — CLI: read one already-emitted distilled note (D13: a file path,
-// never a distill() call) and stage a review file per candidate under a
-// card-staging inbox. Every candidate is staged regardless of its band verdict or
-// any recall/judge/draft flag (D22) — nothing here gates or drops.
+// card-stage — CLI: read one already-emitted distilled note (a file path, never a
+// distill() call) and stage a review file per candidate under a card-staging
+// inbox. Every candidate is staged regardless of its band verdict or any
+// recall/judge/draft flag — nothing here gates or drops.
 //
 // Flow per candidate: fetchNeighbours (a spawn/parse failure degrades to the
 // recall-unavailable flag with empty hits, never a throw — see neighbours.ts) →
@@ -60,19 +60,33 @@ import type {
 
 // ---- injected I/O seams (mirrors neighbours.ts's RunFn/ReadFn split) ----
 
+// AskFn is the shape of fw.ts's askJson — the LLM-call seam stageNote calls through
+// for both the band judge and the card draft.
 export type AskFn = typeof askJson;
+
+// FetchNeighboursFn is the shape of neighbours.ts's fetchNeighbours — the recall
+// seam stageNote calls through for each candidate.
 export type FetchNeighboursFn = (
   candidate: Candidate,
   opts: { vaultRoot: string; topK: number },
 ) => Promise<{ hits: NeighbourHit[]; ok: boolean }>;
+
+// WriteFn writes `content` to `path` — the filesystem seam stageNote calls through
+// to persist one rendered staging file.
 export type WriteFn = (path: string, content: string) => Promise<void>;
 
+// StageDeps bundles the three injected seams (AskFn/FetchNeighboursFn/WriteFn)
+// stageNote needs, so cards/stage.test.ts can drive every degradation lane with
+// fakes instead of the real Fireworks call, recall, and disk write.
 export type StageDeps = {
   ask: AskFn;
   fetchNeighbours: FetchNeighboursFn;
   writeFile: WriteFn;
 };
 
+// StageOpts is the resolved run configuration for one stageNote call: where recall
+// searches, where staging files are written, how many neighbours to fetch, and
+// whether to run in dry-run mode.
 export type StageOpts = {
   vaultRoot: string;
   stagingDir: string;
@@ -89,13 +103,16 @@ export type StageOpts = {
 // heading anywhere in the body (not anchored to line 1: a note may open with prose
 // above its heading), mirroring distill-core.ts's own H1-detection intent. Reuses
 // sections()'s fence-masked scan (the d06c6fa fix) instead of a raw regex, so a
-// fenced code block's own `# comment` line cannot be misread as the note's title
-// (Finding 6) the way sections() itself was fixed to never misread it as a heading.
+// fenced code block's own `# comment` line cannot be misread as the note's title,
+// the same way sections() itself was fixed to never misread it as a heading.
 function extractTitle(body: string): string {
   const h1 = sections(body).find((s) => s.depth === 1);
   return h1 ? h1.heading.trim() : "";
 }
 
+// DryRunEntry summarizes one candidate's --dry-run report: its term and arm, how
+// many neighbours recall found and whether recall succeeded, and how many
+// relation edges it carries with how many of those off-registry.
 export type DryRunEntry = {
   term: string;
   arm: Arm;
@@ -105,8 +122,14 @@ export type DryRunEntry = {
   offRegistryCount: number;
 };
 
+// StagedFlagCounts tallies how many staged candidates carried each CandidateFlag,
+// keyed by flag with absent keys meaning zero.
 export type StagedFlagCounts = Partial<Record<CandidateFlag, number>>;
 
+// StageRunResult is stageNote's outcome: either the dry-run report (total
+// candidates plus one DryRunEntry each) or the staged-run summary (total
+// candidates, how many were staged, the flag tally, and how many drafts carried a
+// corrupted name per name-lint).
 export type StageRunResult =
   | { mode: "dry-run"; total: number; entries: DryRunEntry[] }
   | {
@@ -119,11 +142,11 @@ export type StageRunResult =
 
 // distill writes its emitted note inside an XML envelope (`<result>…</result>`,
 // plus an optional `<residue>` sibling) for a parent process to consume; the note
-// itself — frontmatter and all — is the envelope's payload. Since that file IS the
-// D13 handshake artifact, accept it directly: unwrap when present, pass a bare
-// note through untouched. Without this, parseFrontmatter sees `<result>` at byte 0,
-// the tie reads as absent, and the thesis candidate silently vanishes (live-run
-// finding).
+// itself — frontmatter and all — is the envelope's payload. Since that file is
+// exactly the emitted note this layer expects to receive, accept it directly:
+// unwrap when present, pass a bare note through untouched. Without this,
+// parseFrontmatter sees `<result>` at byte 0, the tie reads as absent, and the
+// thesis candidate silently vanishes (live-run finding).
 export function unwrapResult(text: string): string {
   const m = /^\s*<result>\n?([\s\S]*?)<\/result>/.exec(text);
   return m ? m[1] : text;
@@ -184,9 +207,9 @@ export async function stageNote(
   let staged = 0;
   let corruptedNames = 0;
   // Threaded across every candidate of this note so renderStagingFile can dedupe a
-  // filename collision (Finding 1: a thesis term equal to a glossary term, a
-  // case/punctuation variant, or two terms that both slug to "" would otherwise
-  // silently clobber one another's staging file).
+  // filename collision: a thesis term equal to a glossary term, a case/punctuation
+  // variant, or two terms that both slug to "" would otherwise silently clobber
+  // one another's staging file.
   const usedFilenames = new Set<string>();
   for (const candidate of candidates) {
     const flags: CandidateFlag[] = [];
@@ -239,6 +262,8 @@ export async function stageNote(
 
 // ---- pure stdout formatting (kept apart from I/O so it's unit-testable too) ----
 
+// Render a --dry-run report as one line per DryRunEntry, or a placeholder when the
+// note yielded no candidates.
 export function formatDryRunReport(entries: DryRunEntry[]): string {
   if (entries.length === 0) return "(no candidates)";
   return entries
@@ -250,6 +275,9 @@ export function formatDryRunReport(entries: DryRunEntry[]): string {
     .join("\n");
 }
 
+// Render a staged-run summary line: how many candidates were staged out of the
+// total, the per-flag tally when any flag fired, and the corrupted-name count
+// when name-lint found one.
 export function formatSummary(
   total: number,
   staged: number,
@@ -269,6 +297,7 @@ export function formatSummary(
 // ---- arg parsing (pure, mirrors cli.ts's parseArgs discipline: unknown
 // flags, missing values, and extra positionals fail loudly) ----
 
+// USAGE is the CLI's help text, printed verbatim on `-h`/`--help` and on an arg-parse error.
 export const USAGE = `card-stage — stage extraction candidates from a distilled note as review
 files under a card-staging inbox. Every candidate is staged regardless of its band
 verdict or any recall/judge/draft flag (D22) — nothing here gates or drops; a
@@ -290,6 +319,9 @@ Options:
 Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
 `;
 
+// RawOpts is the argv-parsed options, still unresolved: vaultRoot/stagingDir may
+// be absent (resolveOpts fills their $HOME-relative defaults) and every value is
+// exactly as the user typed it.
 export type RawOpts = {
   vaultRoot?: string;
   stagingDir?: string;
@@ -299,11 +331,17 @@ export type RawOpts = {
   notePath: string;
 };
 
+// ParseResult is parseArgs's outcome: "help" when -h/--help was passed, "error"
+// with a human-readable message on a bad or missing argument, or "ok" with the
+// parsed RawOpts.
 export type ParseResult =
   | { kind: "help" }
   | { kind: "error"; message: string }
   | { kind: "ok"; opts: RawOpts };
 
+// Parse argv into a ParseResult. Unknown flags, a flag missing its value, and
+// extra positionals all fail with a named "error" result rather than throwing
+// (mirrors cli.ts's parseArgs discipline).
 export function parseArgs(argv: string[]): ParseResult {
   let vaultRoot: string | undefined;
   let stagingDir: string | undefined;

@@ -1,8 +1,8 @@
 // neighbours — recall: surface the existing vault cards nearest a candidate by
 // spawning the vault-query CLI (BM25 today; the seam is recall-agnostic, see
-// NeighbourHit in types.ts). Never imports distill-core.ts (D13) — the candidate
-// arrives already built from an emitted note; this module only talks to
-// vault-query and to the filesystem for each hit's frontmatter description.
+// NeighbourHit in types.ts). Never imports distill-core.ts — the candidate arrives
+// already built from an emitted note; this module only talks to vault-query and
+// to the filesystem for each hit's frontmatter description.
 //
 // Failure is a lane, not a throw: a spawn error, a non-zero exit, or unparseable
 // JSON all resolve to `{ hits: [], ok: false }` — the recall-unavailable lane
@@ -20,16 +20,22 @@ import type { Candidate, NeighbourHit } from "./types.ts";
 
 // ---- injected I/O seams ----
 
+// RunFn spawns a command and resolves its exit code and captured stdout — the process
+// seam fetchNeighbours calls through, so cards/neighbours.test.ts can drive every lane
+// with a fake instead of a real vault-query spawn.
 export type RunFn = (cmd: string[]) => Promise<{ exitCode: number; stdout: string }>;
+
+// ReadFn reads the file at an absolute path, resolving null on any failure (missing
+// file, permission error) rather than throwing — the filesystem seam fetchNeighbours
+// calls through, faked the same way as RunFn in tests.
 export type ReadFn = (absPath: string) => Promise<string | null>;
 
 // Real vault-query spawn. Captures stdout only — stderr is diagnostic noise the
 // recall-unavailable lane doesn't need to render, so it is discarded at the OS level
-// (stderr: "ignore") rather than piped-and-left-undrained (Finding 4): an undrained
-// pipe fills its OS buffer (~64 KB) once vault-query writes enough to it, and the
-// child then blocks on that write before its stdout ever reaches EOF — a mutual hang
-// between this await and the child, not the recall-unavailable lane it should degrade
-// to.
+// (stderr: "ignore") rather than piped-and-left-undrained: an undrained pipe fills its
+// OS buffer (~64 KB) once vault-query writes enough to it, and the child then blocks on
+// that write before its stdout ever reaches EOF — a mutual hang between this await and
+// the child, not the recall-unavailable lane it should degrade to.
 export async function spawnRun(cmd: string[]): Promise<{ exitCode: number; stdout: string }> {
   const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "ignore" });
   const stdout = await new Response(proc.stdout).text();

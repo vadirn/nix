@@ -1,13 +1,13 @@
-// cards/types.ts — frozen contracts for the card-extraction layer (B16; D13/D22/Log 10).
-// Every cards/ module builds against these shapes; the build agents may not widen them.
+// cards/types.ts — frozen contracts for the card-extraction layer. Every cards/ module
+// builds against these shapes; the build agents may not widen them.
 //
 // Boundary rules the shapes encode:
-//   D13  — this layer reads an EMITTED distilled note (a .md file path), never calls
-//          distill() and never imports distill-core.ts. The file path is the handshake.
-//   D22  — the band verdict is an ANNOTATION a candidate carries into staging, never
-//          a filter. Every candidate is staged regardless of verdict.
-//   Log 10 — the only path from staging to `20 cards/` is a human commit; drafts
-//          exist to be rewritten, not accepted.
+//   - This layer reads an EMITTED distilled note — a .md file path is the handshake — and
+//     never calls distill() or imports distill-core.ts.
+//   - The band verdict is an ANNOTATION a candidate carries into staging, never a filter:
+//     every candidate is staged regardless of its verdict.
+//   - The only path from a staging file into `20 cards/` is a human commit; a staging
+//     file's draft exists to be rewritten by that human, never to be accepted as-is.
 
 import type { NameLintResult } from "../writing/name-lint.ts";
 
@@ -58,8 +58,8 @@ export type NeighbourHit = {
 //   work-through — too far, not yet a clean node: develop the concept before minting.
 export type Band = "defer-link" | "mint" | "work-through";
 
-// The band judge's verdict. Annotation only (D22); `nearest` is what the judge
-// actually saw, best first, so review can audit the call.
+// The band judge's verdict. Annotation only — it never gates or filters a candidate;
+// `nearest` is what the judge actually saw, best first, so review can audit the call.
 export type BandVerdict = {
   band: Band;
   rationale: string; // one clause
@@ -75,8 +75,8 @@ export type BandVerdict = {
 //   draft-failed — the draft call failed after fw.ts retries; staged with draft "".
 export type CandidateFlag = "recall-unavailable" | "judge-inconclusive" | "draft-failed";
 
-// A relation annotated against REL_REGISTRY. Off-registry is a review flag,
-// never an error (open vocabulary, D32).
+// A relation annotated against REL_REGISTRY. Off-registry is a review flag, never an
+// error — the relation vocabulary is open, not a closed enum.
 export type StagedEdge = CardEdge & { offRegistry: boolean };
 
 // Everything the staging writer renders for one candidate — one file per record.

@@ -1,22 +1,18 @@
 // cards/stage — render one StagingRecord into a review file. Pure formatting,
-// zero I/O (the CLI owns writing the result to disk). No import of distill-core.ts (D13).
+// zero I/O (the CLI owns writing the result to disk). No import of distill-core.ts.
 //
 // A staging file is untyped inbox material, never a vault card: it carries NO
-// frontmatter (the vault frontmatter schema owns typed `20 cards/` files — Log 10
-// says the only path there is a human commit, so this file is a review packet, not
-// a draft-in-place). Every candidate is staged regardless of its band verdict or
-// flags (D22) — a null verdict or a failed draft is rendered as a visible notice,
-// never as a reason to skip the file.
+// frontmatter (the vault frontmatter schema owns typed `20 cards/` files, and the
+// only path from a staging file into `20 cards/` is a human commit, so this file
+// is a review packet, not a draft-in-place). Every candidate is staged regardless
+// of its band verdict or flags — a null verdict or a failed draft is rendered as a
+// visible notice, never as a reason to skip the file.
 //
 // Layout: H1 (term) → ## Review (arm, band verdict+rationale or the judge-
 // inconclusive notice, the neighbours the judge saw, the relation leads with an
 // off-registry marker and a blanket uncertified-verify notice, the flags, the
 // source note as a link) → ## On commit (the checklist that turns a draft into a
 // committed card) → a horizontal rule → the draft (or a draft-failed notice).
-//
-// Filename collisions: renderStagingFile takes an optional `used` Set (default a fresh
-// one per call, so a single standalone call is unaffected) that the caller threads
-// across every candidate of one note — see dedupeFilename below.
 import { relText, slugSegment } from "../text.ts";
 import type { StagingRecord } from "./types.ts";
 
@@ -40,8 +36,8 @@ function stagingFilename(noteName: string, term: string): string {
 // term is the note's own title, so a glossary entry sharing that term (verbatim, or a
 // case/punctuation variant — "Alpha" vs "alpha") collides with it, and any two terms
 // that both slug to "" collide with each other. Undetected, the later `writeFile`
-// silently clobbers the earlier one's review packet while `staged` keeps counting both
-// (Finding 1). Suffix `-2`, `-3`, ... before `.md` until the name is free, then reserve it.
+// silently clobbers the earlier one's review packet while `staged` keeps counting both.
+// Suffix `-2`, `-3`, ... before `.md` until the name is free, then reserve it.
 function dedupeFilename(base: string, used: Set<string>): string {
   if (!used.has(base)) {
     used.add(base);
@@ -88,6 +84,10 @@ function renderRelationsSection(record: StagingRecord): string[] {
   return lines;
 }
 
+// Render one StagingRecord as a markdown review file (see the layout above). `used`
+// is an optional Set of already-reserved filenames that the caller threads across
+// every candidate of one note, so dedupeFilename can catch a collision between them;
+// omitted, a fresh Set means a single standalone call is unaffected.
 export function renderStagingFile(
   record: StagingRecord,
   noteName: string,
