@@ -26,7 +26,7 @@ import { afterEach, expect, test } from "bun:test";
 import { type Item, parseInteract, stripInteract } from "@/distill/review/interact.ts";
 import { buildIntermediary, safeHandle } from "@/distill/review/triage.ts";
 import { verbatimDef, verbatimDirectives } from "@/distill/prompt/prompts.ts";
-import { askJson } from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
 import type { Residue } from "@/distill/review/residue.ts";
 import {
   type ProcedureOp,
@@ -265,7 +265,7 @@ async function apply(
 // ---------------------------------------------------------------------------
 // LLM stubbing by DEPENDENCY INJECTION — runApply takes an `ask` seam (ApplyOpts.ask,
 // defaulting to fw's askJson), so a test hands it a fake transport directly. No
-// globalThis.fetch swap and no mock.module("./fw.ts"): nothing process-global is
+// globalThis.fetch swap and no mock.module("./llm.ts"): nothing process-global is
 // mutated, so a file running concurrently over the shared module registry can never
 // see this file's stub (the race that a fetch/module mock invites). Every apply LLM
 // call (renderEntryPrompt re-render, fidelityGate re-grade) routes through the injected
@@ -606,14 +606,14 @@ test("apply: a non-transient error in the recover-def LLM window propagates (reg
   const dir = tmpdirFor("recover-def-bug");
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF]);
   writeTmp(tmpPath, checkGate(check(tmp, "recover: `Impression distance`")));
-  // A 4xx status is fw.ts's own classification of a real code bug (bad request / auth /
+  // A 4xx status is llm.ts's own classification of a real code bug (bad request / auth /
   // content-policy) — NOT TransientError, NOT TruncationError — so fw() throws a plain
   // Error that askJson never catches. Before the fix, the recover-def loop's bare
   // `catch {}` floored ANY throw (including this one) to verbatimDef and returned exit 0;
   // after the fix, rethrowIfBug(e, "apply-recover-def") sees a non-transient error and
   // rethrows, so runApply itself throws and nothing is written.
   // The injected transport throws exactly what fw() raises for a 4xx: a plain Error
-  // (`FW 400: …`), NOT TransientError/TruncationError. fw.ts's own status→error
+  // (`FW 400: …`), NOT TransientError/TruncationError. llm.ts's own status→error
   // classification is exercised in degradation.test.ts; here the point is that a
   // non-transient throw survives the recover-def catch (rethrowIfBug rethrows it).
   const r = await applyWith(tmpPath, (prompt) => {

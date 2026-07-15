@@ -10,7 +10,7 @@ import { levenshtein } from "@/core/writing/levenshtein.ts";
 import { MASK_TOKEN_RE } from "@/core/writing/mask.ts";
 
 // NameFinding pairs a name found in the output with the source name it likely corrupted from.
-export type NameFinding = { found: string; wanted: string };
+type NameFinding = { found: string; wanted: string };
 // NameLintResult is the outcome of one name-lint pass: `corrupted` lists names probably
 // mangled from a source name (see NameFinding), `invented` lists names with no source
 // counterpart at all (nameLintSelfConsistency always leaves this empty).

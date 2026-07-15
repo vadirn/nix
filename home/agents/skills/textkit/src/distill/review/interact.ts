@@ -43,14 +43,10 @@ import type { MdRegion, RegionDiagnostic } from "@/distill/mdstruct.ts";
 /// The three block behaviors a reviewer selects between: pick-one (exactly one item must end
 /// checked), pick-any (any subset may end checked), confirm-all (every item must end checked —
 /// the gate form).
-export type BlockKind = "pick-one" | "pick-any" | "confirm-all";
+type BlockKind = "pick-one" | "pick-any" | "confirm-all";
 /// BlockKind's own values as a runtime array, for membership checks (`Set`/`includes`) against
 /// a token parsed from an anchor's kind slot.
-export const BLOCK_KINDS = [
-  "pick-one",
-  "pick-any",
-  "confirm-all",
-] as const satisfies readonly BlockKind[];
+const BLOCK_KINDS = ["pick-one", "pick-any", "confirm-all"] as const satisfies readonly BlockKind[];
 
 /// Checked/unchecked only — '[-]' is a loud bad-state teaching error, not a third state:
 /// Obsidian won't toggle a third checkbox state, so the "reviewed" bit lives on the
@@ -104,7 +100,7 @@ export type Block = {
 
 /// Every failure mode parseInteract or resolveInteract can report, split into parse-time
 /// (malformed anchors/items/attributes) and resolve-time (vocabulary/gate violations) groups.
-export type InteractErrorCode =
+type InteractErrorCode =
   // parse-time
   | "bad-anchor" // an interact comment that does not parse as an anchor
   | "unknown-kind"

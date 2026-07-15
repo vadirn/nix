@@ -327,7 +327,7 @@ export function harvestFences(text: string): PayloadSpan[] {
 // harvestBlockquotes to recover a quote's inner prose from the mdstruct blockQuote span
 // collectStructural already found — the span itself, not this regex, is what route.ts's
 // payloadMask blanks for the router signal.
-export const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
+const BLOCKQUOTE_LINE = /^\s*>+\s?(.*)$/;
 
 // mdstruct `blockQuote` nodes, no-descend (the regex merged a `>`/`>>` run into ONE key, so
 // nested quotes must not be double-counted). Fixes two regex bugs: a `> quote` INSIDE a code
@@ -372,7 +372,7 @@ function tableCells(maskedLine: string): string[] {
 // consumers: collectStructural calls this to find pseudo-table rows for route.ts's density
 // router (via structuralSpans), and harvestTableRows calls it again to inventory the same
 // rows' payload for the residue gate.
-export function isTableDataRow(maskedLine: string): boolean {
+function isTableDataRow(maskedLine: string): boolean {
   if (!maskedLine.includes("|")) return false;
   const cells = tableCells(maskedLine);
   if (cells.length < 2 || cells.every((c) => c === "")) return false;

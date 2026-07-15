@@ -39,7 +39,7 @@ export interface CanonSection {
 // stripped of its trailing anchor. `span` is the def line's anchor (null when hand-edited away);
 // `bulletSpans` is parallel to `bullets` — each bullet's OWN anchor (null when it carries none),
 // recovering the per-sub-element spans the projector now emits.
-export interface CanonConcept {
+interface CanonConcept {
   headword: string;
   def: string;
   bullets: string[];
@@ -51,7 +51,7 @@ export interface CanonConcept {
 // `span` is the lead step's anchor; `stepSpans` is parallel to `steps` — each step's OWN anchor
 // (null when hand-edited away or a synthesized step), so `stepSpans[0]` equals `span`. Recovers the
 // per-step anchors the projector now emits.
-export interface CanonProcedure {
+interface CanonProcedure {
   headword: string;
   steps: string[];
   stepSpans: (Span | null)[];
@@ -59,13 +59,13 @@ export interface CanonProcedure {
 }
 
 // A flat one-bullet-per-unit item (judgement / inference): statement stripped of anchor.
-export interface CanonFlat {
+interface CanonFlat {
   statement: string;
   span: Span | null;
 }
 
 // A payload subsection: `### key` + the verbatim slice (blockquote or fenced), anchor.
-export interface CanonPayload {
+interface CanonPayload {
   headword: string;
   body: string;
   span: Span | null;
@@ -132,7 +132,7 @@ export function splitSections(body: string): CanonSection[] {
 // `[start..end]` anchor forms — a hand-rolled bare-only regex here would leave a bracketed
 // anchor unparsed AND visible in the text: `text` would keep the literal brackets
 // (`"...[128..192]"`) and `span` would come back null instead of parsing.
-export function stripAnchor(line: string): { text: string; span: Span | null } {
+function stripAnchor(line: string): { text: string; span: Span | null } {
   return stripTrailingAnchor(line);
 }
 

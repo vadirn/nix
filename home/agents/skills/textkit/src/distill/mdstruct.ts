@@ -82,7 +82,7 @@ export interface MdRegion {
 // The whole document mdstruct parses from one note: its schema version, the block-node tree,
 // the flat inline list, the heading tree, and the comment-anchor regions. Any field may be
 // absent when the binary emits nothing for that lane (e.g. a note with no regions).
-export interface MdDoc {
+interface MdDoc {
   schemaVersion?: string;
   nodes?: MdNode[];
   inlines?: MdInline[];

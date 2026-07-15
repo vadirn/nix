@@ -2,9 +2,9 @@
 //
 // 17a split distill.ts into leaf modules whose helpers are pure string/data
 // functions with no I/O. This suite pins those helpers directly now that they are
-// importable: the text utilities (text.ts), the balanced-JSON extractor over loose
-// model output (fw.ts::extractJson), and the distilled-body parser that prose mode
-// inverts the compress pipeline through (prose-mode.ts::parseDistilled). It also
+// importable: the text utilities (text.ts) and the distilled-body parser that prose
+// mode inverts the compress pipeline through (prose-mode.ts::parseDistilled). The
+// balanced-JSON extractor moved with the transport to _shared/llm/llm.test.ts. It also
 // pins the one hardening this step adds — parseDistilled drops a term row with no
 // definition, malformed glossary output the model produced by splitting a row.
 import { expect, test } from "bun:test";
@@ -45,7 +45,6 @@ import {
   routeSection,
   sections,
 } from "@/distill/extract/route.ts";
-import { extractJson } from "@/core/fw.ts";
 import { assembleRoutedNote } from "@/distill/app/distill-core.ts";
 import { payloadResidueForProjection, wikilinkResidue } from "@/distill/review/residue.ts";
 import { parseDistilled } from "@/distill/app/prose-mode.ts";
@@ -575,25 +574,6 @@ test("detectLang: Cyrillic-majority is ru, Latin is en, letterless defaults to e
   expect(detectLang("hello world")).toBe("en");
   expect(detectLang("привет мир")).toBe("ru");
   expect(detectLang("123 !!!")).toBe("en");
-});
-
-// ---- fw.ts: balanced-JSON extraction over loose model output ----
-test("extractJson: returns a clean object verbatim", () => {
-  expect(extractJson('{"a":1}')).toBe('{"a":1}');
-});
-
-test("extractJson: pulls the first balanced object out of surrounding reasoning", () => {
-  expect(extractJson('thinking... {"prose":"hi"} trailing text')).toBe('{"prose":"hi"}');
-});
-
-test("extractJson: respects nesting and braces inside strings", () => {
-  expect(extractJson('x {"a":{"b":1}} y')).toBe('{"a":{"b":1}}');
-  expect(extractJson('{"a":"}"}')).toBe('{"a":"}"}'); // brace in a string value
-});
-
-test("extractJson: throws on no object and on an unbalanced object", () => {
-  expect(() => extractJson("no braces here")).toThrow(/no JSON/);
-  expect(() => extractJson('{"a":1')).toThrow(/unbalanced JSON/);
 });
 
 // ---- prose-mode.ts: parseDistilled (canonical ## Concepts reader) ----

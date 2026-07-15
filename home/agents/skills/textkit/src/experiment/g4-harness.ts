@@ -35,7 +35,9 @@ import { parseFrontmatter, parseDescription } from "@/core/frontmatter.ts";
 import { detectLang } from "@/core/text.ts";
 import { atomicityJudgePrompt } from "@/cards/prompts.ts";
 import type { AtomicityReply } from "@/cards/types.ts";
-import { askJson, FIDELITY, FIDELITY_TOKENS, rethrowIfBug } from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
+import { g4Degrade as rethrowIfBug } from "@/core/degrade.ts";
+import { FIDELITY, FIDELITY_TOKENS } from "@/core/models.ts";
 
 export const USAGE = `g4-harness — calibrate the G4 atomicity judge over vault card files
 
@@ -89,7 +91,7 @@ export function parseArgs(argv: string[]): ParseResult {
 
 // Validate a raw judge reply into the typed AtomicityReply the card prompts contract
 // promises — a thinking model's json_object mode is a strong hint, not a guarantee
-// (see fw.ts's extractJson comment), so a malformed reply must fail loud (null) here
+// (see llm.ts's extractJson comment), so a malformed reply must fail loud (null) here
 // rather than let `undefined.atomic` crash the run or a truthy-but-wrong shape pass.
 function validateAtomicityReply(reply: unknown): AtomicityReply | null {
   if (typeof reply !== "object" || reply === null) return null;
@@ -171,9 +173,9 @@ async function main() {
       console.log(line);
     } catch (e) {
       // a non-transient throw (a real bug, not a judge flake) propagates and aborts
-      // the batch — see fw.ts's rethrowIfBug; only a transient flake degrades to an
+      // the batch — see llm.ts's rethrowIfBug; only a transient flake degrades to an
       // inconclusive line here so the batch can continue.
-      rethrowIfBug(e, `g4-harness ${p}`);
+      rethrowIfBug(e, p);
       console.log(`${p}\tinconclusive\t${e instanceof Error ? e.message : String(e)}`);
       inconclusive++;
     }

@@ -5,7 +5,8 @@
 // vault-query spawn, no real Fireworks call, no real filesystem write anywhere
 // in this file.
 import { expect, test } from "bun:test";
-import { EXTRACT, FIDELITY, TransientError, TruncationError } from "@/core/fw.ts";
+import { TransientError, TruncationError } from "@shared/llm/llm.ts";
+import { EXTRACT, FIDELITY } from "@/core/models.ts";
 import { relText, slugSegment } from "@/core/text.ts";
 import {
   formatDryRunReport,

@@ -66,13 +66,13 @@ export type BandVerdict = {
   nearest: NeighbourHit[];
 };
 
-// Failure lanes — surface, never silent (the fw.ts discipline extended to the
+// Failure lanes — surface, never silent (the llm.ts discipline extended to the
 // CLI's first non-LLM side effects):
 //   recall-unavailable — the vault-query spawn failed; candidate staged anyway,
 //     flagged, with zero neighbours.
 //   judge-inconclusive — the band judge returned no parseable verdict; staged,
 //     flagged (mirrors the pipeline's gate-inconclusive lane).
-//   draft-failed — the draft call failed after fw.ts retries; staged with draft "".
+//   draft-failed — the draft call failed after llm.ts retries; staged with draft "".
 export type CandidateFlag = "recall-unavailable" | "judge-inconclusive" | "draft-failed";
 
 // A relation annotated against REL_REGISTRY. Off-registry is a review flag, never an

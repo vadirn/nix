@@ -12,7 +12,7 @@
 // Every scenario below is deliberately a REJECT-ALL-OR-KEEP triage (the checked
 // `recover` item is never exercised): `keep` never calls the LLM and an unchecked
 // `recover`/`keep` is a pure removal, so the whole suite runs OFFLINE — no
-// mock.module("./fw.ts"), no FIREWORKS_API_KEY, no race with any other file's fw
+// mock.module("./llm.ts"), no FIREWORKS_API_KEY, no race with any other file's fw
 // mock (the hazard emit.test.ts's own banner names).
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

@@ -21,7 +21,7 @@ import { type ProseVerdict } from "@/distill/prompt/prompts.ts";
 // What failed and where, carried structurally (not re-derived from the reason string) so
 // triage.ts's residueToBlocks can pick the decision verb and target per entry straight off
 // `kind` and `stepIdxs`.
-export type ResidueKind = "def" | "steps" | "thesis" | "edge" | "payload" | "prose";
+type ResidueKind = "def" | "steps" | "thesis" | "edge" | "payload" | "prose";
 // Why the item is residue: "failed" — a gate judged it unfaithful (def/steps/thesis);
 // "gate-inconclusive" — the fidelity/workflow judge returned no verdict, so the entry
 // SHIPPED in the body surfaced-but-unverified (the one class triage maps to `keep:`);
@@ -29,7 +29,7 @@ export type ResidueKind = "def" | "steps" | "thesis" | "edge" | "payload" | "pro
 // slug-collision "verify manually" case, whose recover semantics match a drop's);
 // "prose-inconclusive" — the coverage judge returned no usable verdict for an item
 // that is NOT known to be in the body, so it triages as recover, not keep.
-export type ResidueClass = "failed" | "gate-inconclusive" | "dropped" | "prose-inconclusive";
+type ResidueClass = "failed" | "gate-inconclusive" | "dropped" | "prose-inconclusive";
 // One residue entry: what was lost (`source`), why (`reason`/`reasonClass`), and what kind of
 // unit it came from (`kind`). wikilinkResidue, payloadResidue, and proseResidue each produce
 // these for triage.ts to render.

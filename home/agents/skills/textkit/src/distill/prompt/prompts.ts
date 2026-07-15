@@ -20,16 +20,11 @@ import { type ProseUnit } from "@/distill/extract/harvest.ts";
 // text.ts, because prompts.ts is its sole producer/consumer (gradeBlocks below).
 // GRADES is the single source of truth: Grade derives from it and gradeBlocks'
 // runtime validation checks membership against it.
-export const GRADES = ["drop", "distill", "retain"] as const;
+const GRADES = ["drop", "distill", "retain"] as const;
 export type Grade = (typeof GRADES)[number];
-import {
-  askJson,
-  EXTRACT,
-  EXTRACT_TOKENS,
-  FIDELITY,
-  FIDELITY_TOKENS,
-  rethrowIfBug,
-} from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
+import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
+import { EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS } from "@/core/models.ts";
 import {
   MARKED_MODALITIES,
   type Modality,
@@ -37,7 +32,7 @@ import {
   type PreGraph,
   type PreUnit,
 } from "@/distill/graph/graph.ts";
-export { type Pass, PASS_EN, PASS_RU, revise } from "@/core/writing/passes.ts";
+export { PASS_EN, PASS_RU, revise } from "@/core/writing/passes.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
 // carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while
@@ -413,7 +408,7 @@ export type GateGrade = "translated" | "residue" | "inconclusive";
 
 // The direction of a fidelity mismatch, matching the closed set the fidelityPrompt asks for:
 // "both" sides fail, OUTPUT drops source content, or OUTPUT invents content absent from source.
-export type MismatchDirection = "both" | "output-misses-source" | "output-invents";
+type MismatchDirection = "both" | "output-misses-source" | "output-invents";
 
 // One concept's fidelity-gate verdict: whether its rendered definition round-trips against the
 // source, the direction of any mismatch, and what content is missing or invented. `direction`

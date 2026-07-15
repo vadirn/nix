@@ -68,7 +68,7 @@
 //         distill-text apply input.tmp.md            # resolve a review intermediary, write the note back to source
 //
 // Module layout (split along the pipeline's phase seams; this file is the entrypoint
-// and the stable public surface): text · frontmatter · fw · graph · prompts ·
+// and the stable public surface): text · frontmatter · llm · graph · prompts ·
 // locate(-graph) · retype (the typing review) · project · parse-projection ·
 // interact/triage (the review grammar) · apply-mode · prose-mode · writing/
 // (writing-core: typography, mask, passes) · distill-core (the orchestration core:

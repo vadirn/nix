@@ -2,7 +2,9 @@
 // paragraphs → AI patterns) and the revise() stage that runs them, masking
 // reference spans first so the rewriting model cannot reword or drop them.
 import { type Block, render } from "@/core/text.ts";
-import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
+import { writingDegrade as rethrowIfBug } from "@/core/degrade.ts";
+import { EXTRACT, EXTRACT_TOKENS } from "@/core/models.ts";
 import { createMasker } from "@/core/writing/mask.ts";
 import { normalizeTypography } from "@/core/typography.ts";
 

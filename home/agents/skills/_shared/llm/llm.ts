@@ -1,12 +1,15 @@
-// fw — the Fireworks transport layer: model ids, the HTTP call with transient
-// retry, and the JSON-extracting wrapper every stage uses. No prompt text and no
-// pipeline logic live here.
+// llm — a provider-neutral LLM transport: the provider HTTP call with transient
+// retry (fw, currently Fireworks) and the JSON-extracting wrapper (askJson) that
+// callers drive. askJson is the provider-neutral seam — it takes model + token cap
+// as arguments; fw() is the Fireworks-specific call behind it. No model-policy
+// constants (model ids, token budgets), no prompt text, and no pipeline logic live
+// here — a caller supplies those.
 
-// A failure distill knows how to ride out: a network/timeout throw, a 429/5xx
+// A failure a caller can ride out: a network/timeout throw, a 429/5xx
 // gateway status, or an unparseable model response. fw/askJson tag every such
 // failure by throwing this class; everything else — a TypeError from our own
 // logic, a ReferenceError, a 4xx request/auth/content-policy fault — is a real
-// bug that carries no tag and must surface rather than degrade to "inconclusive".
+// bug that carries no tag and must surface rather than be swallowed as a flake.
 export class TransientError extends Error {
   override readonly name = "TransientError";
 }
@@ -26,48 +29,28 @@ export function isTransient(e: unknown): boolean {
   return e instanceof TransientError;
 }
 
-// The single gate every graceful-degradation catch routes through: a transient
-// flake returns (the caller keeps its fallback, exactly as before), but a
+// The single gate every graceful-degradation catch routes through, bound to the
+// consumer's log `prefix` (its app/tool name — this lib names no consumer): a
+// transient flake returns (the caller keeps its fallback, exactly as before), but a
 // non-transient throw is logged to stderr and re-thrown so a code bug cannot
 // masquerade as a judge flake and ship an unverified result. `stage` names the
-// failing stage in the log line.
-export function rethrowIfBug(e: unknown, stage: string): void {
-  // A truncation rides out the same way a transient flake does: at every
-  // degrade-site the caller's safe fallback (inconclusive / thesis / kept draft)
-  // is the right outcome — a cap exhausted on a thinking model (glm legitimately
-  // spends FIDELITY_TOKENS) must never abort the whole distill. The clean
-  // actionable skip for a truncation in a NO-CATCH core stage lives in main().
-  if (isTransient(e) || e instanceof TruncationError) return;
-  console.error(`distill: ${stage} failed with a non-transient error (propagating):`, e);
-  throw e;
+// failing stage in the log line. Each consumer binds this once, e.g.
+// `const rethrowIfBug = makeRethrowIfBug("myapp")`.
+export function makeRethrowIfBug(prefix: string): (e: unknown, stage: string) => void {
+  return (e: unknown, stage: string): void => {
+    // A truncation rides out the same way a transient flake does: at every
+    // degrade-site the caller's safe fallback is the right outcome — a cap
+    // exhausted on a thinking model that legitimately spends its whole token budget
+    // must never abort the caller's run. A caller that wants a truncation to surface
+    // (an actionable "raise the cap" skip) simply omits this catch.
+    if (isTransient(e) || e instanceof TruncationError) return;
+    console.error(`${prefix}: ${stage} failed with a non-transient error (propagating):`, e);
+    throw e;
+  };
 }
 
 const FW = "https://api.fireworks.ai/inference/v1/chat/completions";
-// EXTRACT is the fast, obedient gpt-oss model id: used for the extract, grade, and revise
-// passes (~3s per call).
-export const EXTRACT = "accounts/fireworks/models/gpt-oss-120b";
-// FIDELITY is the slower glm thinking-model id, deliberately a DIFFERENT model than EXTRACT so
-// the fidelity backstop is not grading the same model's own output: used only for that
-// independent fidelity pass (~15-20s per call).
-export const FIDELITY = "accounts/fireworks/models/glm-5p2";
 const TIMEOUT_MS = 180_000;
-// Token budget for the FIDELITY thinking model. Its reasoning is inlined in the
-// content, so the cap must cover BOTH the thinking and the trailing JSON — too low
-// and the model exhausts it mid-thought, returning prose with no `{`, which fails
-// extractJson and drops the whole run to the passthrough failsafe. Sized with
-// headroom for the longest gate input (rationale-carrying workflow steps).
-export const FIDELITY_TOKENS = 16_384;
-// Output ceiling for the content-scaling EXTRACT stages (extractGraph, gradeBlocks,
-// revise, proseFix, renderProse). gpt-oss inlines reasoning in
-// the content, so the budget must cover reasoning + JSON; a dense note overran the old
-// per-stage caps (4096/2048) and truncated. max_tokens is a CEILING, not a target — a
-// normal note generates only what its content needs (~3-5k) and costs the same at any
-// ceiling, so this is sized generously to never truncate a real note. The 180s
-// TIMEOUT_MS is the de-facto limit (a runaway times out long before 96k); a genuine
-// length-truncation now surfaces as an actionable TruncationError, not silent loss.
-// The intentionally-tiny stages (tieTogether, recover-def: ~1024) keep their small caps
-// as sanity bounds.
-export const EXTRACT_TOKENS = 96_000;
 
 // The retry backoff delay, shared by both wait points in fw's attempt loop (network-error
 // retry and 429/5xx retry) so the two can never drift apart.
@@ -150,9 +133,10 @@ async function fw(
 }
 
 // Defensive layer over json_object mode: that mode is a strong hint, not a
-// guarantee — a thinking model (the FIDELITY judge) can still emit reasoning
-// around the JSON. Pull the first balanced {...} object so such violations parse
-// instead of dropping to the passthrough failsafe. Kept deliberately.
+// guarantee — a thinking model can still emit reasoning around the JSON. Pull the
+// first balanced {...} object so such violations parse instead of dropping to the
+// caller's failsafe. Kept deliberately.
+
 export function extractJson(s: string): string {
   const start = s.indexOf("{");
   if (start < 0) throw new Error(`no JSON in: ${s.slice(0, 200)}`);
@@ -195,10 +179,10 @@ export async function askJson<T>(
   maxTokens: number,
   call: Transport = fw,
 ): Promise<T> {
-  // Retry once on a PARSE failure (distinct from fw's network/5xx retry): the
-  // FIDELITY thinking model sometimes returns only reasoning with no JSON object,
-  // which extractJson rejects. It is non-deterministic, so a second call usually
-  // complies — cheaper than dropping the whole run to the passthrough failsafe.
+  // Retry once on a PARSE failure (distinct from fw's network/5xx retry): a
+  // thinking model sometimes returns only reasoning with no JSON object, which
+  // extractJson rejects. It is non-deterministic, so a second call usually
+  // complies — cheaper than dropping the whole run to the caller's failsafe.
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     const raw = await call(model, [{ role: "user", content: prompt }], {

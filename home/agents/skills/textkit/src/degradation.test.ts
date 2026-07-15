@@ -8,79 +8,19 @@
 // re-throws everything else after logging it. These tests pin both directions:
 // (i) a non-transient code bug surfaces/propagates, (ii) a transient judge flake
 // still degrades gracefully.
-import { expect, mock, test } from "bun:test";
-import {
-  askJson,
-  EXTRACT,
-  TransientError,
-  TruncationError,
-  isTransient,
-  rethrowIfBug,
-} from "@/core/fw.ts";
+import { expect, test } from "bun:test";
+import { askJson, TransientError, TruncationError } from "@shared/llm/llm.ts";
 import { fidelityGate, proseGate, revise, workflowGate } from "@/distill/prompt/prompts.ts";
 
-// ---- the classifier + the gate it backs (pure, no network) ----
-test("isTransient: only TransientError is transient", () => {
-  expect(isTransient(new TransientError("flake"))).toBe(true);
-  expect(isTransient(new Error("plain"))).toBe(false);
-  expect(isTransient(new TypeError("bug"))).toBe(false);
-  expect(isTransient("string throw")).toBe(false);
-});
-
-test("rethrowIfBug: a transient flake returns; a code bug logs and propagates", () => {
-  // transient: returns without throwing (the caller keeps its fallback)
-  expect(() => rethrowIfBug(new TransientError("flake"), "stage")).not.toThrow();
-  // non-transient: re-thrown verbatim so it cannot masquerade as a flake
-  const bug = new TypeError("real bug");
-  expect(() => rethrowIfBug(bug, "stage")).toThrow(bug);
-});
-
-test("rethrowIfBug: a truncation is swallowed like a transient flake", () => {
-  // a cap exhausted mid-output rides out to the caller's safe fallback, never aborts
-  expect(() =>
-    rethrowIfBug(new TruncationError("output truncated at max_tokens=16384"), "stage"),
-  ).not.toThrow();
-  expect(isTransient(new TruncationError("x"))).toBe(false); // distinct from TransientError
-});
-
-// ---- the truncation signal: finish_reason "length" → TruncationError, no retry ----
-// A length-truncation throws TruncationError out of fw's attempt loop, so it is never
-// network-retried; askJson awaits fw OUTSIDE its parse-retry, so it propagates
-// immediately with no wasted parse-retry either. We mock fetch (not the module) to
-// drive the real transport and count the calls.
-test("askJson: a length finish_reason throws TruncationError, not retried", async () => {
-  const fetchMock = mock(
-    async () =>
-      new Response(
-        JSON.stringify({
-          choices: [{ finish_reason: "length", message: { content: '{"partial":' } }],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-  );
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
-  try {
-    let err: unknown;
-    try {
-      await askJson(EXTRACT, "prompt", 16384);
-    } catch (e) {
-      err = e;
-    }
-    expect(err).toBeInstanceOf(TruncationError);
-    expect(isTransient(err)).toBe(false); // a truncation is NOT a transient flake
-    expect((err as Error).message).toContain("max_tokens=16384");
-    expect((err as Error).message).toContain("gpt-oss-120b");
-    expect(fetchMock).toHaveBeenCalledTimes(1); // no network retry, no parse retry
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-});
+// The transport primitives these gates lean on (isTransient / rethrowIfBug / the
+// finish_reason→TruncationError signal, in isolation) are tested in the shared lib
+// at _shared/llm/llm.test.ts. This suite pins the PIPELINE wiring: an actual distill
+// stage degrades on a transient/truncation flake and propagates a real code bug.
 
 // ---- the wiring: an actual stage degrades on transient, propagates on a bug ----
 // Each gate takes its model call as a trailing `ask` param that defaults to the real
 // fw askJson; the tests pass a stand-in instead. This is dependency injection, NOT a
-// process-global module mock — `mock.module("./fw.ts")` would repoint fw for EVERY
+// process-global module mock — `mock.module("./llm.ts")` would repoint fw for EVERY
 // file, and under bun's concurrent file execution it leaks into another suite's live
 // LLM call (e.g. apply.test.ts's recover). An injected `ask` is scoped to the one call.
 const throwsAsk = (err: unknown): typeof askJson =>

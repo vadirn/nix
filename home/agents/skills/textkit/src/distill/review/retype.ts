@@ -32,7 +32,7 @@ import { slugSegment } from "@/core/text.ts";
 /// The typing-review vocabulary: `type` on the pick-one items (re-type a unit), `reviewed` on
 /// the confirm-all gate (mirroring triage's gate verb). resolveInteract validates a parsed file
 /// against exactly this set — any other verb is `unknown-verb`.
-export const TYPING_VERBS = ["type", "reviewed"] as const satisfies readonly string[];
+const TYPING_VERBS = ["type", "reviewed"] as const satisfies readonly string[];
 
 // The five knowledge-element types, in projection order — the pick-one options and the guard the
 // apply verb checks a re-type target against (a target outside the set is ignored, never assigned).

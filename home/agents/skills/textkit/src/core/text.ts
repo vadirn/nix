@@ -181,7 +181,7 @@ export const isExternalUrl = (url: string): boolean =>
 // a slug-grammar one. Shared by both harvest lanes so the two never drift. Without this,
 // a fragment-bearing source edge slugged WITH its anchor and read as dropped against an
 // output that links the bare note — a wikilinkResidue false positive.
-export function normalizeEdgeTarget(raw: string): string {
+function normalizeEdgeTarget(raw: string): string {
   return raw.replace(/#.*$/, "");
 }
 

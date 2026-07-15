@@ -1,12 +1,12 @@
 // polish.test.ts — polish-text's own test surface: arg parsing (help / misuse /
 // flag composition), the footer renderer, and the revise→spell composition order
-// polish's main() encodes, driven offline through a mocked fw.ts (spell.test.ts /
+// polish's main() encodes, driven offline through a mocked llm.ts (spell.test.ts /
 // degradation.test.ts pattern).
 import { expect, test } from "bun:test";
 import { USAGE, buildPolishFooter, parseArgs } from "@/polish/polish.ts";
 import { PASS_EN, revise } from "@/core/writing/passes.ts";
 import { spellPass } from "@/polish/spell.ts";
-import { askJson } from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
 
 function ok(argv: string[]) {
   const r = parseArgs(argv);

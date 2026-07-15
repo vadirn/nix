@@ -33,7 +33,7 @@ import {
   parseSuperseded,
   parseType,
 } from "@/core/frontmatter.ts";
-import { askJson, isTransient, TruncationError } from "@/core/fw.ts";
+import { askJson, isTransient, TruncationError } from "@shared/llm/llm.ts";
 import { linkNoClobber } from "@/core/fs.ts";
 import { tempMdPath } from "@/core/tmp.ts";
 import { extractGraph, gradeBlocks } from "@/distill/prompt/prompts.ts";

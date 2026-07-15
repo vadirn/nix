@@ -1,0 +1,9 @@
+{
+  "entry": [
+    "src/distill/app/distill.ts",
+    "src/polish/polish.ts",
+    "src/cards/card-stage.ts",
+    "src/experiment/g4-harness.ts"
+  ],
+  "ignoreBinaries": ["oxfmt", "knip", "madge"]
+}

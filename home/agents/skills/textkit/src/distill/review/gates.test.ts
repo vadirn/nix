@@ -12,7 +12,7 @@ import { type Span } from "@/distill/mdstruct.ts";
 import { type Projection } from "@/distill/graph/project.ts";
 import { type ConceptVerdict, type StepVerdict } from "@/distill/prompt/prompts.ts";
 import { runFidelityBackstop } from "@/distill/review/gates.ts";
-import { askJson } from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
 
 // One source note carrying one concept sentence and one procedure sentence. ASCII, so byte offsets
 // equal char offsets and the spans below are plain indexOf ranges.

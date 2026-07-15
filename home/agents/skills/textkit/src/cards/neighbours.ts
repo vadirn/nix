@@ -36,7 +36,7 @@ export type ReadFn = (absPath: string) => Promise<string | null>;
 // OS buffer (~64 KB) once vault-query writes enough to it, and the child then blocks on
 // that write before its stdout ever reaches EOF — a mutual hang between this await and
 // the child, not the recall-unavailable lane it should degrade to.
-export async function spawnRun(cmd: string[]): Promise<{ exitCode: number; stdout: string }> {
+async function spawnRun(cmd: string[]): Promise<{ exitCode: number; stdout: string }> {
   const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "ignore" });
   const stdout = await new Response(proc.stdout).text();
   const exitCode = await proc.exited;
@@ -45,7 +45,7 @@ export async function spawnRun(cmd: string[]): Promise<{ exitCode: number; stdou
 
 // Real card-file read. null on any failure (missing file, permission error) —
 // the caller treats that identically to "no description", never as a fatal lane.
-export async function readCardFile(absPath: string): Promise<string | null> {
+async function readCardFile(absPath: string): Promise<string | null> {
   try {
     const f = Bun.file(absPath);
     if (!(await f.exists())) return null;

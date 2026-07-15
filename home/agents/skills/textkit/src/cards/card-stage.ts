@@ -28,14 +28,9 @@ import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseDescription, parseFrontmatter } from "@/core/frontmatter.ts";
 import { InteractFormatError, sections, stripInteract } from "@/distill/emit.ts";
-import {
-  askJson,
-  EXTRACT,
-  EXTRACT_TOKENS,
-  FIDELITY,
-  FIDELITY_TOKENS,
-  rethrowIfBug,
-} from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
+import { cardStageDegrade as rethrowIfBug } from "@/core/degrade.ts";
+import { EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS } from "@/core/models.ts";
 import { takeValue } from "@/core/args.ts";
 import { detectLang } from "@/core/text.ts";
 import { nameLintAgainstSource } from "@/core/writing/name-lint.ts";
@@ -62,7 +57,7 @@ import type {
 
 // ---- injected I/O seams (mirrors neighbours.ts's RunFn/ReadFn split) ----
 
-// AskFn is the shape of fw.ts's askJson — the LLM-call seam stageNote calls through
+// AskFn is the shape of llm.ts's askJson — the LLM-call seam stageNote calls through
 // for both the band judge and the card draft.
 export type AskFn = typeof askJson;
 

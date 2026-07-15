@@ -15,7 +15,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { takeValue } from "@/core/args.ts";
 import { parseFrontmatter } from "@/core/frontmatter.ts";
-import { askJson, isTransient, TruncationError } from "@/core/fw.ts";
+import { askJson, isTransient, TruncationError } from "@shared/llm/llm.ts";
 import { detectLang, segment, wordCount } from "@/core/text.ts";
 import { tempMdPath } from "@/core/tmp.ts";
 import {

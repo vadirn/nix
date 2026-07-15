@@ -10,7 +10,9 @@
 // checkable against it.
 import { detectLang, glossList, langRule, segment, wordCount } from "@/core/text.ts";
 import { parseDescription, parseFrontmatter } from "@/core/frontmatter.ts";
-import { askJson, EXTRACT, EXTRACT_TOKENS, rethrowIfBug } from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
+import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
+import { EXTRACT, EXTRACT_TOKENS } from "@/core/models.ts";
 import { PASS_EN, PASS_RU, revise } from "@/distill/prompt/prompts.ts";
 import { parseCanonicalNote, splitSections } from "@/distill/graph/parse-projection.ts";
 import { unwrapResult } from "@/distill/app/envelope.ts";

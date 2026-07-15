@@ -81,7 +81,9 @@ import {
   stripInteract,
 } from "@/distill/review/interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "@/distill/review/triage.ts";
-import { askJson, EXTRACT, rethrowIfBug } from "@/core/fw.ts";
+import { askJson } from "@shared/llm/llm.ts";
+import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
+import { EXTRACT } from "@/core/models.ts";
 import { linkNoClobber } from "@/core/fs.ts";
 import {
   fidelityGate,
@@ -131,7 +133,7 @@ function targetKind(target: string): "thesis" | "steps" | "def" {
 // whole-procedure recover is not actionable — apply refuses it loud). A trailing numeric
 // segment is parsed as the step list; everything before it is the headword (which may itself
 // carry `:` — the parse anchors on a numeric tail, matching triage's stamp).
-export function procedureTarget(target: string): { headword: string; idxs: number[] } {
+function procedureTarget(target: string): { headword: string; idxs: number[] } {
   const rest = target.replace(/^procedure:/, "");
   const m = rest.match(/^(.*):(\d+(?:,\d+)*)$/);
   if (!m) return { headword: rest, idxs: [] };
@@ -694,7 +696,7 @@ export function resolveDefTerm(body: string, target: string): string | null {
 
 // Resolve a `procedure:<headword>` target back to the actual `### headword` under
 // `## Procedures` — exact then safeHandle-degraded, the procedure-side twin of resolveDefTerm.
-export function resolveProcedureHeadword(body: string, target: string): string | null {
+function resolveProcedureHeadword(body: string, target: string): string | null {
   const heads = headwordsUnder(body, "procedures");
   if (heads.includes(target)) return target;
   return heads.find((h) => safeHandle(h) === target) ?? null;
