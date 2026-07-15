@@ -16,6 +16,7 @@ import {
 } from "@/distill/prompt/prompts.ts";
 import { type ProseUnit } from "@/distill/extract/harvest.ts";
 import { type Residue, proseResidue } from "@/distill/review/residue.ts";
+import { normalizeCitation } from "@/distill/review/normalize-citation.ts";
 import { askJson } from "@/core/fw.ts";
 
 // Shared inconclusive→residue mapping: both the concept and workflow verdict loops below grade
@@ -35,6 +36,42 @@ function verdictResidueFields(
       ? `gate-inconclusive: ${v.missing || "judge returned no verdict"}`
       : opts.failReason,
     reasonClass: inconclusive ? "gate-inconclusive" : "failed",
+  };
+}
+
+// The deterministic citation floor (Backlog 23). A judge's `evidence` BACKS a verdict only when it
+// is a literal span of the target source — compared through `normalizeCitation`, the gentle fold
+// that strips markdown markup but PRESERVES prose punctuation, so a numeric/symbolic distortion
+// cannot slip past. Empty (or markup-only) evidence is NEVER a match: `normalizeCitation("") === ""`
+// and every string `.includes("") === true`, so the empty case must be rejected explicitly — an
+// uncited grade is exactly the cheap, unjustified pass this check exists to catch. Scope honesty: a
+// PASS proves the cited span is PRESENT in the source, not that it entails the OUTPUT's claim.
+function citationBacked(evidence: string, source: string): boolean {
+  const needle = normalizeCitation(evidence);
+  if (needle === "") return false;
+  return normalizeCitation(source).includes(needle);
+}
+
+// Evidence-forced downgrade of a "translated" verdict. Returns null when the citation is backed
+// (keep skipping — a citation-backed translation). Otherwise returns the inconclusive coercion
+// (grade + a reason-carrying `missing`) that routes the verdict through `verdictResidueFields`'
+// existing inconclusive path — no new residue state. SOURCE is the target regardless of mismatch
+// direction: the downgrade fires on the "translated" grade alone, and the plan's grade+direction
+// keying routes "translated" to SOURCE, so direction never selects the target here (the reason a
+// procedure verdict needs no `direction`). The reason keeps the integrity-not-entailment framing:
+// the run is surfaced because the citation could not be VERIFIED, not because the claim was
+// disproved.
+function uncitedDowngrade(
+  evidence: string,
+  source: string,
+): { grade: "inconclusive"; missing: string } | null {
+  if (citationBacked(evidence, source)) return null;
+  return {
+    grade: "inconclusive",
+    missing:
+      normalizeCitation(evidence) === ""
+        ? "translated grade left uncited (empty evidence) — unverifiable (citation integrity, not entailment)"
+        : "translated grade cited a span absent from source — unverifiable (citation integrity, not entailment)",
   };
 }
 
@@ -94,11 +131,14 @@ export async function runFidelityBackstop(
       reasonClass: "failed",
     });
   }
+  // count of "translated" verdicts the citation floor demoted to inconclusive, folded into
+  // gateSkipped alongside the judge's own inconclusive verdicts (both ship surfaced-but-unverified).
+  let downgraded = 0;
   for (const c of graded.concepts) {
-    if (c.grade === "translated") continue;
-    // A verdict whose term matches no judge INPUT concept is a judge-contract violation:
-    // there is no source slice to recover from, so an empty-source recover entry would only
-    // ship an entry apply cannot recover. Drop it loudly rather than emit that dead entry.
+    // The unknown-term guard now runs for EVERY grade (translated included): a translated verdict
+    // also needs its source slice to validate the citation, and a term absent from the gate input
+    // is a judge-contract violation with no source to check against. A verdict whose term matches
+    // no judge INPUT concept would only ship an entry apply cannot recover — drop it loudly.
     const match = concepts.find((r) => r.term === c.term);
     if (!match) {
       process.stderr.write(
@@ -106,26 +146,45 @@ export async function runFidelityBackstop(
       );
       continue;
     }
+    // Evidence-forced downgrade: a "translated" grade survives (stays skipped, no residue) only
+    // when its citation is a literal span of the SOURCE block. An uncited or fabricated citation is
+    // coerced to inconclusive and surfaced, so a cheap unjustified pass can no longer launder
+    // invention past the sole anti-hallucination floor.
+    let v: ConceptVerdict = c;
+    if (c.grade === "translated") {
+      const down = uncitedDowngrade(c.evidence, match.sourceText);
+      if (!down) continue;
+      v = { ...c, ...down };
+      downgraded++;
+    }
     residue.push({
-      label: c.term,
+      label: v.term,
       source: match.sourceText,
-      ...verdictResidueFields(c, {
+      ...verdictResidueFields(v, {
         kind: "def",
-        failReason: `${c.direction || "residue"}: ${c.missing || "failed round-trip entailment"}`,
+        failReason: `${v.direction || "residue"}: ${v.missing || "failed round-trip entailment"}`,
       }),
     });
   }
-  for (const v of gradedG) {
-    if (v.grade === "translated") continue;
-    // Same judge-contract guard as the concept loop: a verdict for a procedure id absent
-    // from the gate input has no source to recover, so drop it rather than emit an
-    // empty-source recover entry apply cannot act on.
-    const match = groups.find((g) => g.id === v.id);
+  for (const g of gradedG) {
+    // Same all-grade unknown-id guard as the concept loop: a translated verdict needs its source
+    // to validate the citation, and an id absent from the gate input has no source to check.
+    const match = groups.find((gr) => gr.id === g.id);
     if (!match) {
       process.stderr.write(
-        `distill: workflow judge graded unknown procedure id '${v.id}' (not in gate input) — dropping\n`,
+        `distill: workflow judge graded unknown procedure id '${g.id}' (not in gate input) — dropping\n`,
       );
       continue;
+    }
+    // Mirror of the concept downgrade: "translated" survives only on a citation that is a literal
+    // SOURCE span. Direction is moot — the "translated" grade routes to SOURCE regardless — so the
+    // procedure gate reuses the identical check with no `direction` field (drift #1 resolution).
+    let v: StepVerdict = g;
+    if (g.grade === "translated") {
+      const down = uncitedDowngrade(g.evidence, match.sourceText);
+      if (!down) continue;
+      v = { ...g, ...down };
+      downgraded++;
     }
     residue.push({
       label: v.id,
@@ -140,7 +199,8 @@ export async function runFidelityBackstop(
   }
   const gateSkipped =
     graded.concepts.filter((c) => c.grade === "inconclusive").length +
-    gradedG.filter((v) => v.grade === "inconclusive").length;
+    gradedG.filter((v) => v.grade === "inconclusive").length +
+    downgraded;
   return { residue, gateSkipped };
 }
 

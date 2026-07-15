@@ -426,13 +426,24 @@ export type MismatchDirection = "both" | "output-misses-source" | "output-invent
 // One concept's fidelity-gate verdict: whether its rendered definition round-trips against the
 // source, the direction of any mismatch, and what content is missing or invented. `direction`
 // is absent when there is no mismatch to name (a "translated" verdict, or an "inconclusive"
-// parse-flake fallback).
+// parse-flake fallback). `evidence` is the judge's copied verbatim SOURCE span grounding the
+// grade (empty only on pure fabrication) — the review-side substring-check (gates.ts) confirms
+// it is a literal span of the block, downgrading an uncited "translated" to "inconclusive".
 export type ConceptVerdict = {
   term: string;
   grade: GateGrade;
   direction?: MismatchDirection;
+  evidence: string;
   missing: string;
 };
+
+// The judge must ground every verdict in a copied SOURCE span, so the review-side substring-check
+// (gates.ts::runFidelityBackstop) can mechanically confirm the citation is real — the deterministic
+// anti-hallucination floor that makes a bare "translated" expensive (Backlog 23). Reused verbatim
+// from the exactness-probe harness; the concept and procedure prompts each prepend their own
+// grade-specific "what to cite" preamble before this shared contiguity rule.
+const VERBATIM_RULE =
+  'copy VERBATIM — character-for-character, exactly as written, INCLUDING punctuation, casing, and symbols — the single CONTIGUOUS span of SOURCE that most directly grounds your verdict. Do NOT paraphrase, normalize, translate, add ellipses, or stitch together non-adjacent fragments: the evidence MUST be a literal substring of SOURCE. If the OUTPUT\'s offending content corresponds to NO span in SOURCE (pure fabrication), return an empty string "".';
 
 // Build the fidelity-gate prompt: pairs each concept's SOURCE and rendered OUTPUT and asks an
 // independent judge for bidirectional round-trip entailment. `defGate` switches the judged
@@ -459,8 +470,9 @@ Grade "translated" if both hold; "residue" if either fails — name the directio
 - does SOURCE entail OUTPUT (nothing invented — no claim absent from the source)?
 Grade "translated" if both hold; "residue" if either fails — name the direction ("output-misses-source" or "output-invents") and the definitional content missing or invented.`;
   return `You are an independent fidelity judge. You did NOT write this compression. For EACH concept you see its SOURCE (verbatim from the original note) and its OUTPUT (the compressed definition). ${criterion}
+Then CITE YOUR EVIDENCE for the grade: for "translated" the span the OUTPUT faithfully renders; for "residue" the span the OUTPUT distorts or contradicts (or "" if the invented content maps to no source span). ${VERBATIM_RULE}
 Also judge whether the THESIS is still recoverable from the OUTPUT alone.
-Return ONLY JSON {"thesisRecoverable":true|false,"concepts":[{"term":"...","grade":"translated|residue","direction":"both|output-misses-source|output-invents","missing":"..."}]}.
+Return ONLY JSON {"thesisRecoverable":true|false,"concepts":[{"term":"...","grade":"translated|residue","direction":"both|output-misses-source|output-invents","evidence":"<verbatim SOURCE substring or empty>","missing":"..."}]}.
 
 THESIS: ${thesis}
 
@@ -517,17 +529,23 @@ export async function fidelityGate(
       );
       return {
         thesisRecoverable: res.thesisRecoverable !== false,
-        concepts: (res.concepts ?? []).filter((c) => c.term),
+        // default a missing `evidence` to "" so the review-side substring-check always sees a
+        // string (an uncited verdict then reads as a non-match, exactly the cheap unjustified
+        // "translated" the check exists to catch).
+        concepts: (res.concepts ?? [])
+          .filter((c) => c.term)
+          .map((c) => ({ ...c, evidence: c.evidence ?? "" })),
       };
     },
     // transient judge flake: mark every concept inconclusive (not residue) so each ships
     // surfaced-but-unverified. thesisRecoverable stays optimistic — a parse flake is no
-    // evidence against it — and direction is omitted (no mismatch to name).
+    // evidence against it — and direction/evidence are empty (no mismatch to name, no citation).
     () => ({
       thesisRecoverable: true,
       concepts: rendered.map((r) => ({
         term: r.term,
         grade: "inconclusive" as const,
+        evidence: "",
         missing: "judge returned no verdict",
       })),
     }),
@@ -545,9 +563,16 @@ export async function fidelityGate(
 // INVENTING a reason the source does not give. So the unit is asymmetric: an
 // action must be covered and uninvented (total on directives); a reason may be
 // dropped freely but never fabricated (invention-only on the "why").
+// One step-group's workflow-gate verdict. `evidence` is the judge's copied verbatim SOURCE
+// directive span grounding the grade (empty only on pure fabrication) — the same review-side
+// substring-check as ConceptVerdict downgrades an uncited "translated" to "inconclusive".
+// Deliberately carries NO `direction`: the downgrade fires on the "translated" grade alone, which
+// routes to SOURCE regardless of any mismatch direction, so a direction field would be plumbing
+// the downgrade never reads (drift #1, resolved by scoping direction-routing to concepts).
 export type StepVerdict = {
   id: string;
   grade: GateGrade;
+  evidence: string;
   missing: string;
 };
 
@@ -570,7 +595,8 @@ function workflowGatePrompt(
 - NO INVENTION (reason): a step MAY carry a reason ("because/so that Y"). Grade it "residue" only when that reason is NOT stated in the SOURCE — a step that states a reason the source gives is fine; a step that invents a reason the source does not give is "residue".
 A checklist is ALLOWED to omit the source's rationale, explanation, examples, and "why" — omitting a reason the source gives is NEVER missing. The asymmetry: an action must be both covered and uninvented; a reason may be dropped freely but never invented. Judge actions and any stated reasons, not prose. ${langRule(lang)}
 Grade "translated" when coverage holds and nothing is invented; else "residue", naming the dropped or invented action in "missing".
-Return ONLY JSON {"groups":[{"id":"...","grade":"translated|residue","missing":"..."}]} — echo each group's id.
+Then CITE YOUR EVIDENCE for the grade: for "translated" the most representative directive span the OUTPUT STEPS render; for "residue" the span the OUTPUT distorts or contradicts (or "" if an added/invented step maps to no source span). ${VERBATIM_RULE}
+Return ONLY JSON {"groups":[{"id":"...","grade":"translated|residue","evidence":"<verbatim SOURCE substring or empty>","missing":"..."}]} — echo each group's id.
 
 GROUPS:
 ${blocks}`;
@@ -596,7 +622,11 @@ export async function workflowGate(
         workflowGatePrompt(groups, lang),
         FIDELITY_TOKENS,
       );
-      return (res.groups ?? []).filter((g) => g.id);
+      // default a missing `evidence` to "" (see fidelityGate) so the substring-check reads an
+      // uncited group verdict as a non-match rather than throwing on undefined.
+      return (res.groups ?? [])
+        .filter((g) => g.id)
+        .map((g) => ({ ...g, evidence: g.evidence ?? "" }));
     },
     // transient judge flake (no parseable verdict): mark every group inconclusive
     // (not residue) so the steps ship surfaced-but-unverified rather than discarding the run.
@@ -604,6 +634,7 @@ export async function workflowGate(
       groups.map((g) => ({
         id: g.id,
         grade: "inconclusive" as const,
+        evidence: "",
         missing: "judge returned no verdict",
       })),
   );
