@@ -2,8 +2,10 @@
 // passes may have corrupted (a proper noun mangled toward a near neighbor) or
 // invented (a capitalized token with no source counterpart). Both modes are
 // total (never throw) and never block: callers only render the result into a
-// footer or Flags line. Leaf module: only imports the leaf-tier levenshtein
-// helpers, so the core can depend on it without a cycle back to text.ts.
+// footer or Flags line. Imports only leaf-tier core helpers (levenshtein, mask's
+// token regex, and the frontmatter scanner — all free of a back-edge to this
+// module), so the core can depend on it without a cycle.
+import { parseFrontmatter } from "@/core/frontmatter.ts";
 import { levenshtein } from "@/core/writing/levenshtein.ts";
 import { MASK_TOKEN_RE } from "@/core/writing/mask.ts";
 
@@ -36,12 +38,16 @@ function initialOnlyRelaxed(
   return initialOnly && (everLowercase || !counterpartAttestedNonInitial);
 }
 
-// stripZones blanks zones where capitalization is not a meaningful proper-noun signal — code
-// spans, mask tokens, wikilink/embed brackets, markdown link targets, and bare URLs — so
-// tokens() below only sees prose capitalization.
+// stripZones blanks zones where capitalization is not a meaningful proper-noun signal — the
+// leading YAML frontmatter block, code spans, mask tokens, wikilink/embed brackets, markdown
+// link targets, and bare URLs — so tokens() below only sees prose capitalization. Frontmatter
+// is metadata, not authored prose: a capitalized token inside it (e.g. the `/Users/Documents/…`
+// segments of a `source:` path) is neither an invented nor a corrupted NAME, so it is dropped
+// up front via the leaf-tier parseFrontmatter scanner rather than re-encoding the `---` fence
+// rule here (parseFrontmatter is a no-op on text without a leading block).
 function stripZones(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, " ") // fenced code
+  return parseFrontmatter(text)
+    .body.replace(/```[\s\S]*?```/g, " ") // fenced code
     .replace(/`[^`\n]+`/g, " ") // inline code
     .replace(MASK_TOKEN_RE, " ") // mask tokens
     .replace(/!?\[\[[^\]]+\]\]/g, " ") // wikilinks / embeds

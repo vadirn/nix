@@ -87,6 +87,19 @@ test("nameLintAgainstSource: exclusion zones suppress a corrupted spelling", () 
   expect(nameLintAgainstSource(masked, source)).toEqual({ corrupted: [], invented: [] });
 });
 
+test("nameLintAgainstSource: frontmatter path segments are not invented names", () => {
+  // A distilled note records its input path in frontmatter; those `/Users/Documents/…`
+  // segments are metadata, not prose, so they must not surface as invented names.
+  const source = "Firecrawl is a scraping API.";
+  const output =
+    "---\n" +
+    "type: distillation\n" +
+    "source: { path: /Users/vadim/Documents/vault-archive/note.md }\n" +
+    "---\n\n" +
+    "Firecrawl scrapes pages. It works well.";
+  expect(nameLintAgainstSource(output, source)).toEqual({ corrupted: [], invented: [] });
+});
+
 // live miss: revise fronted "Firecurl" to sentence-initial position and the
 // initial-only dampener swallowed the flag. The corrupted lane now skips an
 // initial-only group only when the word also occurs uncapitalized.
