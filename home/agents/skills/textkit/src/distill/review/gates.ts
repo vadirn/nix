@@ -75,103 +75,6 @@ function uncitedDowngrade(
   };
 }
 
-// ---- the DISTILL_FIDELITY_ENSEMBLE leaf (Backlog 23) --------------------------------------------
-// Opt-in "paranoid mode": run each fidelity judge ENSEMBLE_N times at ENSEMBLE_TEMP and fold with
-// ANY-INVENTION voting — a unit keeps "translated" only when EVERY run graded it translated AND
-// every run's citation is a literal source span; a single dissenting run (grade residue/inconclusive
-// OR a citation that fails the Step-3 substring floor) wins the non-translated outcome. Default OFF
-// for two independent reasons: (1) it is DOWNSTREAM of the residual-invention measurement (Log 10) —
-// nothing yet proves invention survives the Step-3 citation floor, so paying 3× is unjustified; and
-// (2) temp > 0 breaks emit→review→apply reproducibility, since the same note then yields different
-// residue boxes, violating the pending-intermediary contract. OFF is exactly the single temp-0 call.
-//
-// KILL CONDITION — this flag is EXPLICITLY TEMPORARY and must be removed on BOTH outcomes, never left
-// standing. Measure on the labelled gold set whether invention still slips past the Step-3 citation
-// floor (a false "translated" on a known-invention unit), then collapse to ONE branch and delete the
-// flag:
-//   - residual invention survives citation-forcing → promote the ensemble to the default, DELETE the
-//     off path (the single temp-0 call);
-//   - none survives → DELETE this on path (the ensemble code), keep the single call.
-// A flag that "measures then flips" rots into permanent debt when the measurement is never scheduled,
-// so deletion is mandatory under either result — the removal criterion, not the flag, is the contract.
-const ENSEMBLE_N = 3;
-const ENSEMBLE_TEMP = 0.4;
-
-// Read at call time (not module load) so runFidelityBackstop's `ensemble` param can DEFAULT to the
-// env while a test overrides it per-call without process-global env mutation (mirrors fidelityGate's
-// `defGate`). "Set" means any non-empty value other than the explicit off spellings.
-function ensembleEnabled(): boolean {
-  const v = process.env.DISTILL_FIDELITY_ENSEMBLE;
-  return v !== undefined && v !== "" && v !== "0" && v !== "false";
-}
-
-// Bind a sampling temperature onto an injected transport by threading it through askJson's trailing
-// `temp` param, reusing the existing `ask` seam rather than widening every gate signature. A test
-// fake ignores the extra args; the real askJson forwards temp to fw. The `as typeof askJson` cast
-// matches the throwsAsk/askBy idiom (degradation.test.ts) — the generic T is erased through closure.
-const withTemp = (ask: typeof askJson, temp: number): typeof askJson =>
-  ((model: string, prompt: string, maxTokens: number) =>
-    ask(model, prompt, maxTokens, undefined, temp)) as typeof askJson;
-
-// Any-invention fold of ONE unit's verdicts across the ensemble runs (concept or step — both carry
-// grade + evidence). Pure SELECTION among the runs' own verdicts, never a synthesized grade, so the
-// downstream Step-3 downgrade (uncitedDowngrade) consumes the result UNCHANGED:
-//   - all runs graded "translated": forward a run whose citation is NOT a source span if one exists,
-//     so the existing downgrade fires (any citation fails → surface); else the first (citation-backed)
-//     translated verdict, which stays skipped (unanimous AND all-cited);
-//   - otherwise: a concrete "residue" finding beats an "inconclusive" flake beats the first run.
-function foldVerdict<V extends { grade: GateGrade; evidence: string }>(vs: V[], source: string): V {
-  if (vs.every((v) => v.grade === "translated")) {
-    return vs.find((v) => !citationBacked(v.evidence, source)) ?? vs[0]!;
-  }
-  return (
-    vs.find((v) => v.grade === "residue") ?? vs.find((v) => v.grade === "inconclusive") ?? vs[0]!
-  );
-}
-
-// Fan out both fidelity lanes ENSEMBLE_N times at ENSEMBLE_TEMP (all runs concurrent) and fold each
-// unit's verdicts. Preserves runFidelityBackstop's empty-lane short-circuits (no judge call when a
-// lane is empty) and returns the SAME [{thesisRecoverable,concepts}, StepVerdict[]] shape the
-// single-call path returns, so the caller's residue loops are byte-identical on both paths.
-async function runFidelityEnsemble(
-  thesis: string,
-  out: string,
-  concepts: { term: string; def: string; sourceText: string }[],
-  groups: { id: string; steps: string[]; sourceText: string }[],
-  lang: "en" | "ru",
-  ask: typeof askJson,
-): Promise<[{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }, StepVerdict[]]> {
-  const hot = withTemp(ask, ENSEMBLE_TEMP);
-  const runs = Array.from({ length: ENSEMBLE_N });
-  const [conceptRuns, groupRuns] = await Promise.all([
-    concepts.length
-      ? Promise.all(runs.map(() => fidelityGate(thesis, out, concepts, hot)))
-      : Promise.resolve([] as { thesisRecoverable: boolean; concepts: ConceptVerdict[] }[]),
-    groups.length
-      ? Promise.all(runs.map(() => workflowGate(groups, lang, hot)))
-      : Promise.resolve([] as StepVerdict[][]),
-  ]);
-  // thesis stays recoverable only if EVERY run agrees — a single "not recoverable" run surfaces it.
-  const thesisRecoverable = conceptRuns.every((r) => r.thesisRecoverable);
-  const conceptTerms = [...new Set(conceptRuns.flatMap((r) => r.concepts.map((c) => c.term)))];
-  const foldedConcepts = conceptTerms.map((term) => {
-    const vs = conceptRuns
-      .map((r) => r.concepts.find((c) => c.term === term))
-      .filter((c): c is ConceptVerdict => c !== undefined);
-    const source = concepts.find((c) => c.term === term)?.sourceText ?? "";
-    return foldVerdict(vs, source);
-  });
-  const groupIds = [...new Set(groupRuns.flatMap((r) => r.map((v) => v.id)))];
-  const foldedGroups = groupIds.map((id) => {
-    const vs = groupRuns
-      .map((r) => r.find((v) => v.id === id))
-      .filter((v): v is StepVerdict => v !== undefined);
-    const source = groups.find((g) => g.id === id)?.sourceText ?? "";
-    return foldVerdict(vs, source);
-  });
-  return [{ thesisRecoverable, concepts: foldedConcepts }, foldedGroups];
-}
-
 // The DEMOTED fidelity gate for the canonical pipeline. The retired settle-chain
 // gate authored defs/steps and repaired them in a recovery loop against a scratch render; once
 // extract emits the FINAL statements there is nothing to repair, so only the gate's VERDICT half
@@ -191,11 +94,6 @@ export async function runFidelityBackstop(
   // backstop's fidelity/workflow judges run off a fake without a process-global module
   // mock (see fidelityGate). Production omits it → real fw.
   ask: typeof askJson = askJson,
-  // The DISTILL_FIDELITY_ENSEMBLE leaf (Backlog 23), defaulting to the env read so a test flips it
-  // per-call without process-global env mutation (mirrors fidelityGate's defGate). Trails `ask` so
-  // the sole production caller (distill-core.ts) is unchanged. OFF = today's single temp-0 call; ON =
-  // ENSEMBLE_N calls at ENSEMBLE_TEMP with any-invention voting. See the KILL CONDITION above.
-  ensemble: boolean = ensembleEnabled(),
 ): Promise<{ residue: Residue[]; gateSkipped: number }> {
   const buf = Buffer.from(body, "utf8");
   const concepts = result.units
@@ -216,17 +114,12 @@ export async function runFidelityBackstop(
         .map((s) => sliceBytes(buf, s))
         .join("\n"),
     }));
-  // The flag-OFF branch is LITERALLY today's expression — one temp-0 call per non-empty lane; the
-  // flag-ON branch fans out to the ensemble. Both produce the same [graded, gradedG] shape, so the
-  // residue loops below (and the Step-3 citation downgrade they run) are shared and unchanged.
-  const [graded, gradedG] = ensemble
-    ? await runFidelityEnsemble(thesis, out, concepts, groups, lang, ask)
-    : await Promise.all([
-        concepts.length
-          ? fidelityGate(thesis, out, concepts, ask)
-          : Promise.resolve({ thesisRecoverable: true, concepts: [] as ConceptVerdict[] }),
-        groups.length ? workflowGate(groups, lang, ask) : Promise.resolve([] as StepVerdict[]),
-      ]);
+  const [graded, gradedG] = await Promise.all([
+    concepts.length
+      ? fidelityGate(thesis, out, concepts, ask)
+      : Promise.resolve({ thesisRecoverable: true, concepts: [] as ConceptVerdict[] }),
+    groups.length ? workflowGate(groups, lang, ask) : Promise.resolve([] as StepVerdict[]),
+  ]);
   const residue: Residue[] = [];
   // an unrecoverable thesis heads the residue, before the per-concept and per-workflow entries.
   if (!graded.thesisRecoverable) {
