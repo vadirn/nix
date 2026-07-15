@@ -41,19 +41,11 @@ export { type Pass, PASS_EN, PASS_RU, revise } from "@/core/writing/passes.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
 // carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while
-// the `## Glossary` table carries what each concept IS. But synth and the fidelity
-// gate historically held a def to its whole source block — folding relation-edges
-// into the def and round-tripping it against rationale the prose was meant to carry,
-// which bloated defs 3–4×. Two levers, each overridable for the def-scope experiment:
-//   DISTILL_DEF_RELATIONS: "drop" (default) keeps relations OUT of the def; "keep"
-//     folds them in (the prior behavior).
-//   DISTILL_DEF_GATE: "definition" (default) grades a def for definitional content
-//     only, letting relations/rationale ride the prose; "block" round-trips it against
-//     the whole source block (the prior behavior).
+// the `## Glossary` table carries what each concept IS. The synth prompt can still
+// fold relation-edges into the def via the DISTILL_DEF_RELATIONS experiment lever:
+//   "drop" (default) keeps relations OUT of the def; "keep" folds them in.
 const DEF_RELATIONS: "keep" | "drop" =
   process.env.DISTILL_DEF_RELATIONS === "keep" ? "keep" : "drop";
-const DEF_GATE: "block" | "definition" =
-  process.env.DISTILL_DEF_GATE === "block" ? "block" : "definition";
 
 // ---- extract: the link-inventory checklist shared by the canonical extract prompt ----
 // Render the deterministic link inventory as a MUST-COVER checklist appended to the
@@ -446,40 +438,26 @@ const VERBATIM_RULE =
   'copy VERBATIM — character-for-character, exactly as written, INCLUDING punctuation, casing, and symbols — the single CONTIGUOUS span of SOURCE that most directly grounds your verdict. Do NOT paraphrase, normalize, translate, add ellipses, or stitch together non-adjacent fragments: the evidence MUST be a literal substring of SOURCE. If the OUTPUT\'s offending content corresponds to NO span in SOURCE (pure fabrication), return an empty string "".';
 
 // Build the fidelity-gate prompt: pairs each concept's SOURCE and rendered OUTPUT and asks an
-// independent judge for bidirectional round-trip entailment. `defGate` switches the judged
-// scope: "block" checks the full source block against the output; "definition" (default)
-// restricts the check to definitional content, since relations, rationale, and examples are
-// expected to live in the note's surrounding prose rather than in the definition itself.
+// independent judge for bidirectional round-trip entailment. The check is definition-scoped:
+// relations, rationale, and examples live in the note's surrounding prose, not in the definition.
 function fidelityPrompt(
   thesis: string,
   outputBody: string,
   rendered: { term: string; def: string; sourceText: string }[],
-  defGate: "block" | "definition" = DEF_GATE,
 ): string {
   const concepts = rendered
     .map((r) => `### ${r.term}\nSOURCE:\n${r.sourceText}\nOUTPUT: ${r.def}`)
     .join("\n\n");
-  const criterion =
-    defGate === "block"
-      ? `Decide round-trip entailment in BOTH directions:
-- does OUTPUT entail SOURCE (nothing load-bearing dropped)?
-- does SOURCE entail OUTPUT (nothing invented)?
-Grade "translated" if both hold; "residue" if either fails — name the direction ("output-misses-source" or "output-invents") and what is missing or invented.`
-      : `The OUTPUT is a DEFINITION of the concept. How it relates to other terms (subsumes / contrasts / precondition for), the rationale or "why", and examples are carried by the note's surrounding prose, NOT by the definition — a def that omits any of them is NEVER missing. Judge only the definitional content, in BOTH directions:
+  const criterion = `The OUTPUT is a DEFINITION of the concept. How it relates to other terms (subsumes / contrasts / precondition for), the rationale or "why", and examples are carried by the note's surrounding prose, NOT by the definition — a def that omits any of them is NEVER missing. Judge only the definitional content, in BOTH directions:
 - does OUTPUT capture what the SOURCE says the concept IS (nothing DEFINITIONAL dropped)? Omitting a relation, a reason, or an example is allowed, not missing.
 - does SOURCE entail OUTPUT (nothing invented — no claim absent from the source)?
 Grade "translated" if both hold; "residue" if either fails — name the direction ("output-misses-source" or "output-invents") and the definitional content missing or invented.`;
-  // What to cite for a "translated" grade. In block mode this is a coverage citation
-  // (the span the OUTPUT renders). In definition mode the citation must be GROUNDING, not
-  // coverage: a faithful partial def compresses only PART of the block, so demanding "the span
-  // the OUTPUT renders" made the judge re-read that legitimate omission as output-misses-source
-  // residue — the def-mode partiality regression (Backlog 23 recheck). Reframing the cite as the
-  // span that GROUNDS the definitional claim, and stating that surrounding block content is not
-  // residue, keeps the partiality grant the criterion already gives from being undone here.
-  const citeTranslated =
-    defGate === "block"
-      ? `the span the OUTPUT faithfully renders`
-      : `the contiguous SOURCE span whose content the OUTPUT's definition compresses — the span that GROUNDS its definitional claim. In definition mode this span is normally only PART of a longer SOURCE block; cite exactly that span, and do NOT regrade "residue" merely because the block says more than the definition covers — that surrounding content is carried by the prose, and per the rule above its omission is not missing`;
+  // The citation for a "translated" grade must be GROUNDING, not coverage: a faithful partial
+  // def compresses only PART of the block, so demanding "the span the OUTPUT renders" made the
+  // judge re-read that legitimate omission as output-misses-source residue (Backlog 23 recheck).
+  // Reframing the cite as the span that GROUNDS the definitional claim keeps the partiality grant
+  // the criterion already gives from being undone here.
+  const citeTranslated = `the contiguous SOURCE span whose content the OUTPUT's definition compresses — the span that GROUNDS its definitional claim. In definition mode this span is normally only PART of a longer SOURCE block; cite exactly that span, and do NOT regrade "residue" merely because the block says more than the definition covers — that surrounding content is carried by the prose, and per the rule above its omission is not missing`;
   return `You are an independent fidelity judge. You did NOT write this compression. For EACH concept you see its SOURCE (verbatim from the original note) and its OUTPUT (the compressed definition). ${criterion}
 Then CITE YOUR EVIDENCE for the grade: for "translated" ${citeTranslated}; for "residue" the span the OUTPUT distorts or contradicts (or "" if the invented content maps to no source span). ${VERBATIM_RULE}
 Also judge whether the THESIS is still recoverable from the OUTPUT alone.
@@ -525,17 +503,13 @@ export async function fidelityGate(
   // TransientError / TruncationError / code bug) without a process-global module
   // mock. Production callers omit it and get the real fw transport.
   ask: typeof askJson = askJson,
-  // The def-scope gate lever, defaulting to the module-level env read (DISTILL_DEF_GATE)
-  // so it can be exercised without process-global env mutation. Trails `ask` so existing
-  // 3- and 4-arg callers are unaffected.
-  defGate: "block" | "definition" = DEF_GATE,
 ): Promise<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }> {
   return withInconclusiveFallback<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }>(
     "fidelityGate",
     async () => {
       const res = await ask<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
         FIDELITY,
-        fidelityPrompt(thesis, outputBody, rendered, defGate),
+        fidelityPrompt(thesis, outputBody, rendered),
         FIDELITY_TOKENS,
       );
       return {

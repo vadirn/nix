@@ -120,11 +120,10 @@ test("extractGraphPrompt: the concept schema asks for an optional extension-bull
   expect(p).toContain("do NOT invent a bullet the note does not state");
 });
 
-// ---- def-scope experiment levers: DI seams over the DISTILL_DEF_RELATIONS /
-// DISTILL_DEF_GATE env reads. Each lever now threads as a trailing param
-// defaulting to the module-level env value, so a caller can flip it without
-// process-global env mutation. These pin that the param — not just the env var —
-// actually changes the prompt text.
+// ---- def-scope experiment lever: DI seam over the DISTILL_DEF_RELATIONS env read.
+// The lever threads as a trailing param defaulting to the module-level env value,
+// so a caller can flip it without process-global env mutation. This pins that the
+// param — not just the env var — actually changes the prompt text.
 test("renderEntryPrompt: the defRelations param overrides the env-derived default", () => {
   const dropDefault = renderEntryPrompt({ term: "x", def: "" }, "source text", "en");
   expect(dropDefault).toContain("state no relations to other terms");
@@ -133,22 +132,18 @@ test("renderEntryPrompt: the defRelations param overrides the env-derived defaul
   expect(kept).not.toContain("state no relations to other terms");
 });
 
-test("fidelityGate: the defGate param overrides the env-derived default", async () => {
+test("fidelityGate: the fidelity prompt uses definition-scoped grading with grounding citation", async () => {
   let seenPrompt = "";
   const captureAsk = (async (_model: string, prompt: string) => {
     seenPrompt = prompt;
     return { thesisRecoverable: true, concepts: [] };
   }) as typeof askJson;
   const rendered = [{ term: "x", def: "d", sourceText: "s" }];
-  await fidelityGate("thesis", "body", rendered, captureAsk); // default lever: "definition"
+  await fidelityGate("thesis", "body", rendered, captureAsk);
   expect(seenPrompt).toContain("The OUTPUT is a DEFINITION of the concept");
-  // def mode cites GROUNDING, not coverage: the translated-citation clause must ask for the
-  // span that grounds the definitional claim and NOT for "the span the OUTPUT renders" — the
-  // coverage framing that flipped faithful partial defs to residue (Backlog 23 recheck).
+  // The translated-citation clause must ask for the span that grounds the definitional
+  // claim and NOT for "the span the OUTPUT renders" — the coverage framing that flipped
+  // faithful partial defs to residue (Backlog 23 recheck).
   expect(seenPrompt).toContain("GROUNDS its definitional claim");
   expect(seenPrompt).not.toContain("the span the OUTPUT faithfully renders");
-  await fidelityGate("thesis", "body", rendered, captureAsk, "block");
-  expect(seenPrompt).toContain("Decide round-trip entailment in BOTH directions");
-  // block mode keeps the prior coverage citation wording byte-for-byte.
-  expect(seenPrompt).toContain("the span the OUTPUT faithfully renders");
 });
