@@ -194,6 +194,11 @@ export async function askJson<T>(
   prompt: string,
   maxTokens: number,
   call: Transport = fw,
+  // Sampling temperature, forwarded to fw (which applies `temperature: opts.temp ?? 0`). OPTIONAL
+  // and TRAILING so every existing caller is unchanged; an omitted temp reads as fw's hard 0, so the
+  // default single call stays byte-for-byte reproducible. Only the DISTILL_FIDELITY_ENSEMBLE path
+  // (gates.ts) sets temp > 0, trading reproducibility for any-invention sampling variance.
+  temp?: number,
 ): Promise<T> {
   // Retry once on a PARSE failure (distinct from fw's network/5xx retry): the
   // FIDELITY thinking model sometimes returns only reasoning with no JSON object,
@@ -201,7 +206,11 @@ export async function askJson<T>(
   // complies — cheaper than dropping the whole run to the passthrough failsafe.
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await call(model, [{ role: "user", content: prompt }], { json: true, maxTokens });
+    const raw = await call(model, [{ role: "user", content: prompt }], {
+      json: true,
+      maxTokens,
+      temp,
+    });
     try {
       return JSON.parse(extractJson(raw)) as T;
     } catch (e) {
