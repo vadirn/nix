@@ -469,8 +469,19 @@ Grade "translated" if both hold; "residue" if either fails — name the directio
 - does OUTPUT capture what the SOURCE says the concept IS (nothing DEFINITIONAL dropped)? Omitting a relation, a reason, or an example is allowed, not missing.
 - does SOURCE entail OUTPUT (nothing invented — no claim absent from the source)?
 Grade "translated" if both hold; "residue" if either fails — name the direction ("output-misses-source" or "output-invents") and the definitional content missing or invented.`;
+  // What to cite for a "translated" grade. In block mode this is a coverage citation
+  // (the span the OUTPUT renders). In definition mode the citation must be GROUNDING, not
+  // coverage: a faithful partial def compresses only PART of the block, so demanding "the span
+  // the OUTPUT renders" made the judge re-read that legitimate omission as output-misses-source
+  // residue — the def-mode partiality regression (Backlog 23 recheck). Reframing the cite as the
+  // span that GROUNDS the definitional claim, and stating that surrounding block content is not
+  // residue, keeps the partiality grant the criterion already gives from being undone here.
+  const citeTranslated =
+    defGate === "block"
+      ? `the span the OUTPUT faithfully renders`
+      : `the contiguous SOURCE span whose content the OUTPUT's definition compresses — the span that GROUNDS its definitional claim. In definition mode this span is normally only PART of a longer SOURCE block; cite exactly that span, and do NOT regrade "residue" merely because the block says more than the definition covers — that surrounding content is carried by the prose, and per the rule above its omission is not missing`;
   return `You are an independent fidelity judge. You did NOT write this compression. For EACH concept you see its SOURCE (verbatim from the original note) and its OUTPUT (the compressed definition). ${criterion}
-Then CITE YOUR EVIDENCE for the grade: for "translated" the span the OUTPUT faithfully renders; for "residue" the span the OUTPUT distorts or contradicts (or "" if the invented content maps to no source span). ${VERBATIM_RULE}
+Then CITE YOUR EVIDENCE for the grade: for "translated" ${citeTranslated}; for "residue" the span the OUTPUT distorts or contradicts (or "" if the invented content maps to no source span). ${VERBATIM_RULE}
 Also judge whether the THESIS is still recoverable from the OUTPUT alone.
 Return ONLY JSON {"thesisRecoverable":true|false,"concepts":[{"term":"...","grade":"translated|residue","direction":"both|output-misses-source|output-invents","evidence":"<verbatim SOURCE substring or empty>","missing":"..."}]}.
 

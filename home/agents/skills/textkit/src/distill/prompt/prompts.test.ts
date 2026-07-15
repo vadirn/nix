@@ -142,6 +142,13 @@ test("fidelityGate: the defGate param overrides the env-derived default", async 
   const rendered = [{ term: "x", def: "d", sourceText: "s" }];
   await fidelityGate("thesis", "body", rendered, captureAsk); // default lever: "definition"
   expect(seenPrompt).toContain("The OUTPUT is a DEFINITION of the concept");
+  // def mode cites GROUNDING, not coverage: the translated-citation clause must ask for the
+  // span that grounds the definitional claim and NOT for "the span the OUTPUT renders" — the
+  // coverage framing that flipped faithful partial defs to residue (Backlog 23 recheck).
+  expect(seenPrompt).toContain("GROUNDS its definitional claim");
+  expect(seenPrompt).not.toContain("the span the OUTPUT faithfully renders");
   await fidelityGate("thesis", "body", rendered, captureAsk, "block");
   expect(seenPrompt).toContain("Decide round-trip entailment in BOTH directions");
+  // block mode keeps the prior coverage citation wording byte-for-byte.
+  expect(seenPrompt).toContain("the span the OUTPUT faithfully renders");
 });
