@@ -1,9 +1,9 @@
 // distill-core — the orchestration core: sequences the canonical compress pipeline (distill) —
-// extractGraph → locateGraph (hard span gate) → [TTY-gated typing review] → projectMarkdown,
-// with the demoted fidelity/prose gates riding as a residue-only backstop over the projection —
-// then dispatches the modes and writes the temp-file sink in main(). The focused concerns are
-// carved out around it: the backstop gates into gates.ts, the CLI surface + path helpers into
-// cli.ts, the interactive terminal halves into tty.ts. main() is invoked by the entrypoint.
+// extractGraph → locateGraph (hard span gate) → projectMarkdown, with the demoted fidelity/prose
+// gates riding as a residue-only backstop over the projection — then dispatches the modes and
+// writes the temp-file sink in main(). The focused concerns are carved out around it: the backstop
+// gates into gates.ts, the CLI surface + path helpers into cli.ts, the interactive terminal half
+// (the Phase-5 gate session) into tty.ts. main() is invoked by the entrypoint.
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import {
@@ -53,7 +53,7 @@ import { runProse } from "@/distill/app/prose-mode.ts";
 import { buildIntermediary } from "@/distill/review/triage.ts";
 import { runApply, stampHash } from "@/distill/app/apply-mode.ts";
 import { runFidelityBackstop, runProseGate } from "@/distill/review/gates.ts";
-import { runTypingReview, runTtySession } from "@/distill/app/tty.ts";
+import { runTtySession } from "@/distill/app/tty.ts";
 import {
   type CliOpts,
   USAGE,
@@ -93,7 +93,7 @@ export function expandGuardCap(_beforeWords: number, maxWords?: number): number 
 }
 
 // Both ends must be a real terminal (command substitution and pipes must never see a
-// prompt) before the typing review or the Phase-5 gate session take over the process.
+// prompt) before the Phase-5 gate session takes over the process.
 function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
@@ -306,18 +306,6 @@ async function distill(
   }
   const { pre, result } = core;
 
-  // 2b. span-typing review: the one place semantic taste re-enters
-  // the otherwise-deterministic pipeline — the reviewer confirms each unit's type against its
-  // resolved source slice and re-types where wrong, mutating result.units IN PLACE before projection
-  // (projectMarkdown re-buckets purely on unit.type via byType, so setting the field is the whole
-  // operation). TTY-gated exactly like the residue-triage session below: when EITHER stream is
-  // non-TTY (piped, redirected, the test harness, agent callers) the review is skipped and the graph
-  // keeps its extract-assigned types, so the default non-interactive pipeline stays
-  // extract→locate→project and is byte-identical.
-  if (isInteractive()) {
-    await withHeartbeat("type", opts.progress, () => runTypingReview(result, text));
-  }
-
   // 3. project the seven-section canonical markdown (carries its own frontmatter). --glossary drops
   // the `## Abstract` head (`Projection.abstract` is optional, so omitting it suppresses the one
   // unanchored block); --reference keeps `## Abstract` but suppresses `## Relations` via the
@@ -339,8 +327,8 @@ async function distill(
     residue = bs.residue;
     gateSkipped = bs.gateSkipped;
   }
-  // Tally the projected graph per type (post typing-review, so it reflects any re-typing) —
-  // the same buckets projectMarkdown renders into the note's sections.
+  // Tally the projected graph per type — the same buckets projectMarkdown renders into the
+  // note's sections.
   const counts: Record<UnitType, number> = {
     concept: 0,
     judgment: 0,

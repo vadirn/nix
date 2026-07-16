@@ -1,14 +1,10 @@
-// tty — the interactive terminal half of the pipeline: the span-typing review and the
-// emit->apply TTY session. Both are sugar over the pure retype.ts / triage.ts / apply-mode.ts
-// machinery, driven only at a real terminal; a non-TTY caller never reaches here. `ask` is the
-// readline round-trip; `askFn` is the injection seam tests script to answer without a terminal.
+// tty — the interactive terminal half of the pipeline: the emit->apply TTY session. Sugar over
+// the pure triage.ts / apply-mode.ts machinery, driven only at a real terminal; a non-TTY caller
+// never reaches here. `ask` is the readline round-trip; `askFn` is the injection seam tests
+// script to answer without a terminal.
 import { createInterface } from "node:readline";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { type Projection } from "@/distill/graph/project.ts";
-import { applyTyping, buildTypingReview } from "@/distill/review/retype.ts";
-import { type Block, parseInteract, renderBlock } from "@/distill/review/interact.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { type Block, parseInteract } from "@/distill/review/interact.ts";
 import { runApply } from "@/distill/app/apply-mode.ts";
 
 // The confirm-all gate-satisfied predicate: a document's gate is satisfied only when a
@@ -50,47 +46,6 @@ function ask(prompt: string): Promise<string | null> {
 
 const isYes = (answer: string | null): boolean =>
   answer !== null && answer.trim().toLowerCase() === "y";
-
-/// The span-typing review's TTY orchestration: the interactive half of the pure retype.ts
-/// helpers, driven only at a real terminal (the caller in distill() TTY-gates it, so a non-TTY
-/// run never reaches here — the review is skipped and the graph keeps its extract-assigned
-/// types). Writes the per-unit `pick-one` review (buildTypingReview → renderBlock) to a scratch
-/// file, then runs the SAME gate-aware sugar loop as runTtySession: re-read on each iteration,
-/// prompt until the confirm-all gate is checked (the reviewer toggles types + the gate in their
-/// editor), then applyTyping the result — mutating result.units IN PLACE before the caller
-/// projects. A non-"y" answer or EOF declines: the graph is left with its extract-assigned
-/// types. `askFn` is the same injection seam runTtySession uses; production wires the real
-/// `ask`. The scratch file is always removed. Returns true when the reviewer confirmed (types
-/// applied), false when they declined.
-export async function runTypingReview(
-  result: Projection,
-  body: string,
-  askFn: (prompt: string) => Promise<string | null> = ask,
-): Promise<boolean> {
-  const blocks = buildTypingReview(result, body);
-  if (blocks.length === 0) return false; // no units → nothing to type
-  const scratch = join(tmpdir(), `distill-typing-${process.pid}-${Date.now()}.md`);
-  writeFileSync(scratch, blocks.map(renderBlock).join(""));
-  try {
-    for (;;) {
-      const text = readFileSync(scratch, "utf8");
-      const { blocks: parsed } = parseInteract(text);
-      if (!isGateChecked(parsed)) {
-        const answer = await askFn(
-          `typing review '${scratch}' — set each unit's type, check the gate, then press y [y/N] `,
-        );
-        if (!isYes(answer)) return false;
-        continue; // re-read before applying — the tick is the file's, not the terminal's
-      }
-      applyTyping(result, text);
-      return true;
-    }
-  } finally {
-    try {
-      unlinkSync(scratch);
-    } catch {}
-  }
-}
 
 /// The gate-aware sugar loop: re-reads `tmpPath` from disk on every iteration (Sync may have
 /// landed a cross-device edit between prompts), so it never asks a question the file itself

@@ -51,7 +51,7 @@ const BLOCK_KINDS = ["pick-one", "pick-any", "confirm-all"] as const satisfies r
 /// Checked/unchecked only — '[-]' is a loud bad-state teaching error, not a third state:
 /// Obsidian won't toggle a third checkbox state, so the "reviewed" bit lives on the
 /// confirm-all gate instead.
-export type ItemState = "checked" | "unchecked";
+type ItemState = "checked" | "unchecked";
 
 /// One reviewer-facing item inside a block: a checkbox with a `verb: target` marker, an
 /// optional note, and an optional fenced payload.
@@ -133,8 +133,7 @@ export type InteractError = {
 };
 
 /// Carries one or more InteractError entries from a failed parse or resolve. Thrown by
-/// stripInteract, and by any caller (e.g. retype.ts's applyTyping) that requires a clean parse
-/// before mutating state.
+/// stripInteract, and by any caller that requires a clean parse before mutating state.
 export class InteractFormatError extends Error {
   readonly errors: InteractError[];
   constructor(errors: InteractError[]) {

@@ -1,5 +1,5 @@
-// locate-graph — the locate stage: the second of distill's three pipeline stages (extract →
-// locate → span-typing review). It turns a `PreGraph` (parseExtractGraph's output: typed units
+// locate-graph — the locate stage: the second of distill's pipeline stages (extract → locate →
+// project). It turns a `PreGraph` (parseExtractGraph's output: typed units
 // carrying their verbatim `quote` but no `span`) into the span-anchored canonical
 // `DistillationResult`. This runs IMMEDIATELY after extract, not at end-of-pipeline — so a bad
 // quote surfaces at the earliest possible point.

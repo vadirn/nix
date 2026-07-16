@@ -86,8 +86,8 @@ ${ex}`;
 // pre-graph (graph.ts PreGraph): `concepts`/`headword`/`statement`, grouped `procedures` (steps
 // grouped under a headword), and relations without `predicate` (the projection never renders
 // it). `statement` is the FINAL normalized re-expression — extractGraph is the one place a
-// unit's wording is authored; nothing downstream (locate, the typing review, the projector, the
-// residue backstop) rewrites it. `procedures` carry a `headword` + per-step quotes so the
+// unit's wording is authored; nothing downstream (locate, the projector, the residue backstop)
+// rewrites it. `procedures` carry a `headword` + per-step quotes so the
 // projector can render `### headword` + numbered steps. Payload is NOT a channel here — it is
 // the deterministic retain lane, computed separately by gradeBlocks.
 

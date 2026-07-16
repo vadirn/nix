@@ -19,10 +19,7 @@
 //
 // Pipeline: extract(native typed units + per-unit source
 // quotes, gpt-oss-120b) → locate(resolve each quote to a byte span against the
-// source; a bad quote HARD-ABORTS here, before any projection) → [TTY-gated typing
-// review: at an interactive terminal, the reviewer confirms each unit's type against
-// its resolved source slice and re-types where wrong — skipped for any non-TTY
-// caller, so the default pipeline stays extract→locate→project] → project(render the
+// source; a bad quote HARD-ABORTS here, before any projection) → project(render the
 // seven-section markdown). What survives of the old settle chain (synth/revise/
 // fidelity-gate) is only the gates' VERDICT half, demoted to a residue-only backstop
 // that runs AFTER projection: a fidelity backstop (glm-5p2, the different model, by
@@ -70,11 +67,11 @@
 //
 // Module layout (split along the pipeline's phase seams; this file is the entrypoint
 // and the stable public surface): text · frontmatter · llm · graph · prompts ·
-// locate(-graph) · retype (the typing review) · project · parse-projection ·
+// locate(-graph) · project · parse-projection ·
 // interact/triage (the review grammar) · apply-mode · prose-mode · writing/
 // (writing-core: typography, mask, passes) · distill-core (the orchestration core:
 // compress/route/main) with its carved-out concerns gates (residue backstops) · cli
-// (arg parsing + path helpers) · tty (interactive terminal halves). The four exports
+// (arg parsing + path helpers) · tty (interactive terminal half). The four exports
 // below are the public API the test suite (and any importer) depends on; everything
 // else is an internal module detail.
 export { REL_REGISTRY, slugSegment } from "@/core/text.ts";
