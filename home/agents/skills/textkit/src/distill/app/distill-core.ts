@@ -46,7 +46,7 @@ import {
 } from "@/core/writing/name-lint.ts";
 import { locateGraph, payloadKey } from "@/distill/extract/locate-graph.ts";
 import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
-import { computeSource, type Unit } from "@/distill/graph/graph.ts";
+import { computeSource, type Unit, type UnitType } from "@/distill/graph/graph.ts";
 import { locate } from "@/distill/extract/locate.ts";
 import { type Residue, payloadResidueForProjection } from "@/distill/review/residue.ts";
 import { runProse } from "@/distill/app/prose-mode.ts";
@@ -98,28 +98,47 @@ function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
+// Footer unit tally: one singular noun per UnitType, in projection order (matches project.ts's
+// section order), so the footer reads as a mini table-of-contents of the note's `## Concepts`,
+// `## Judgements`, … sections. Pluralized by count at render time.
+const UNIT_ORDER: readonly UnitType[] = [
+  "concept",
+  "judgment",
+  "inference",
+  "procedure",
+  "payload",
+];
+const UNIT_NOUN: Record<UnitType, string> = {
+  concept: "concept",
+  judgment: "judgement",
+  inference: "inference",
+  procedure: "procedure",
+  payload: "payload",
+};
+
 // buildFooter renders the success footer line — the one-line summary stderr carries beside the
 // temp-file path on stdout. Pure; the nothing-to-distill and expansion guards in distill()
-// emit their own footers, so this only renders a real (compressed-or-equal) run.
+// emit their own footers, so this only renders a real (compressed-or-equal) run. It tallies the
+// projected units per type (a zero-count type is omitted) and always carries the residue count.
 export function buildFooter(m: {
-  entries: number;
-  steps: number;
-  verbatim: number;
+  counts: Record<UnitType, number>;
   residue: number;
   gateSkipped: number;
   glossaryOnly: boolean;
   proseGateOffFactsDump: boolean;
   nameLint?: NameLintResult;
 }): string {
-  const stepsTag = m.steps ? ` · ${m.steps} steps` : "";
+  const shapeTag = m.glossaryOnly ? "gloss" : "prose+gloss";
+  const typeTags = UNIT_ORDER.filter((t) => m.counts[t] > 0)
+    .map((t) => ` · ${m.counts[t]} ${UNIT_NOUN[t]}${m.counts[t] === 1 ? "" : "s"}`)
+    .join("");
   // gate-skipped items are a subset of residue.length — flag them so a batch log
   // distinguishes "judge couldn't verify" from a genuine fidelity miss.
   const gateTag = m.gateSkipped ? ` · ${m.gateSkipped} gate-skipped` : "";
-  const shapeTag = m.glossaryOnly ? "gloss" : "prose+gloss";
   // the prose gate would have run (!noGate && !glossaryOnly) but the facts-dump genre gate
   // skipped it — surface the skip so disabling a loss detector is never silent.
   const proseGateTag = m.proseGateOffFactsDump ? ` · prose-gate off (facts-dump)` : "";
-  return `— distilled ${shapeTag} · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
+  return `— distilled ${shapeTag}${typeTags} · ${m.residue} residue${gateTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
 }
 
 // The deterministic, zero-LLM whole-note backstop: payload-coverage residue (irreversible
@@ -285,7 +304,7 @@ async function distill(
       status: "passthrough",
     };
   }
-  const { pre, result, payloadBlocks } = core;
+  const { pre, result } = core;
 
   // 2b. span-typing review: the one place semantic taste re-enters
   // the otherwise-deterministic pipeline — the reviewer confirms each unit's type against its
@@ -320,8 +339,16 @@ async function distill(
     residue = bs.residue;
     gateSkipped = bs.gateSkipped;
   }
-  const entriesCount = pre.concepts.length;
-  const stepsCount = pre.procedures.reduce((n, p) => n + p.steps.length, 0);
+  // Tally the projected graph per type (post typing-review, so it reflects any re-typing) —
+  // the same buckets projectMarkdown renders into the note's sections.
+  const counts: Record<UnitType, number> = {
+    concept: 0,
+    judgment: 0,
+    inference: 0,
+    procedure: 0,
+    payload: 0,
+  };
+  for (const u of result.units) counts[u.type]++;
 
   const afterWords = wordCount(out);
   // passthrough guard: a distillation that expands the note has failed its one job.
@@ -363,9 +390,7 @@ async function distill(
   residue = residue.concat(backstop.residue);
   const nameLint = backstop.nameLint;
   const footer = buildFooter({
-    entries: entriesCount,
-    steps: stepsCount,
-    verbatim: payloadBlocks.length,
+    counts,
     residue: residue.length,
     gateSkipped,
     glossaryOnly: opts.glossaryOnly,
@@ -521,11 +546,16 @@ async function emitReviewIntermediary(
   });
   writeIntermediaryAtomically(tmpPath, intermediary);
   const reviewSuffix =
-    residue.length > 0 ? ` · review: ${residue.length} items + gate` : " · review: gate";
+    residue.length > 0
+      ? ` · review: ${residue.length} item${residue.length === 1 ? "" : "s"} + gate`
+      : " · review: gate";
   process.stdout.write(`${tmpPath}\n`);
   process.stderr.write(`${footer2}${reviewSuffix}\n`);
   if (isInteractive()) {
-    const reviewLabel = residue.length > 0 ? `${residue.length} items + gate` : "gate";
+    const reviewLabel =
+      residue.length > 0
+        ? `${residue.length} item${residue.length === 1 ? "" : "s"} + gate`
+        : "gate";
     process.stderr.write(`review: ${tmpPath} — ${reviewLabel}\n`);
     process.stderr.write(`apply later with: distill-text apply ${tmpPath}\n`);
     // Ctrl-C loses nothing (the intermediary is already on disk) — exit 0 rather than the

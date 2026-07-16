@@ -33,62 +33,54 @@ test("expandGuardCap: a positive maxWords sets an absolute ceiling, ignoring inp
 });
 
 // ---- buildFooter: tag composition branches ----
-test("buildFooter: compressed run renders the steps tag, omits the zero tags", () => {
+test("buildFooter: per-type counts in section order, omits zero types, pluralizes by count", () => {
   expect(
     buildFooter({
-      entries: 3,
-      steps: 2,
-      verbatim: 1,
+      counts: { concept: 3, judgment: 0, inference: 2, procedure: 1, payload: 1 },
       residue: 0,
       gateSkipped: 0,
       glossaryOnly: false,
       proseGateOffFactsDump: false,
     }),
-  ).toBe("— distilled prose+gloss · 3 entries · 2 steps · 1 verbatim · 0 residue");
+  ).toBe(
+    "— distilled prose+gloss · 3 concepts · 2 inferences · 1 procedure · 1 payload · 0 residue",
+  );
 });
 
 test("buildFooter: --glossary shape, gate-skipped tag", () => {
   expect(
     buildFooter({
-      entries: 2,
-      steps: 0,
-      verbatim: 0,
+      counts: { concept: 2, judgment: 0, inference: 0, procedure: 0, payload: 0 },
       residue: 1,
       gateSkipped: 1,
       glossaryOnly: true,
       proseGateOffFactsDump: false,
     }),
-  ).toBe("— distilled gloss · 2 entries · 0 verbatim · 1 residue · 1 gate-skipped");
+  ).toBe("— distilled gloss · 2 concepts · 1 residue · 1 gate-skipped");
 });
 
 test("buildFooter: facts-dump skip of the in-scope prose gate surfaces as a tag", () => {
   expect(
     buildFooter({
-      entries: 4,
-      steps: 0,
-      verbatim: 0,
+      counts: { concept: 4, judgment: 0, inference: 0, procedure: 0, payload: 0 },
       residue: 0,
       gateSkipped: 0,
       glossaryOnly: false,
       proseGateOffFactsDump: true,
     }),
-  ).toBe(
-    "— distilled prose+gloss · 4 entries · 0 verbatim · 0 residue · prose-gate off (facts-dump)",
-  );
+  ).toBe("— distilled prose+gloss · 4 concepts · 0 residue · prose-gate off (facts-dump)");
 });
 
 test("buildFooter: nameLint findings append the fragment; omitted nameLint is unchanged (pins the compressed-run string above)", () => {
   const base = {
-    entries: 3,
-    steps: 2,
-    verbatim: 1,
+    counts: { concept: 3, judgment: 0, inference: 0, procedure: 2, payload: 1 },
     residue: 0,
     gateSkipped: 0,
     glossaryOnly: false,
     proseGateOffFactsDump: false,
   };
   expect(buildFooter(base)).toBe(
-    "— distilled prose+gloss · 3 entries · 2 steps · 1 verbatim · 0 residue",
+    "— distilled prose+gloss · 3 concepts · 2 procedures · 1 payload · 0 residue",
   );
   expect(
     buildFooter({
@@ -96,7 +88,7 @@ test("buildFooter: nameLint findings append the fragment; omitted nameLint is un
       nameLint: { corrupted: [{ found: "Firecurl", wanted: "Firecrawl" }], invented: [] },
     }),
   ).toBe(
-    "— distilled prose+gloss · 3 entries · 2 steps · 1 verbatim · 0 residue" +
+    "— distilled prose+gloss · 3 concepts · 2 procedures · 1 payload · 0 residue" +
       " · name-lint: 1 probable corrupted name (Firecurl ← Firecrawl)",
   );
 });
