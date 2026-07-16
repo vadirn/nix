@@ -336,7 +336,8 @@ Options:
   --dry-run             enumerate + fetch neighbours only; no LLM call, writes nothing
   -h, --help            show this help and exit
 
-Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
+Env: OPENAI_API_KEY + DASHSCOPE_API_KEY (Doppler claude-code/std; e.g.
+     doppler run --project claude-code --config std --)
 `;
 
 // RawOpts is the argv-parsed options, still unresolved: vaultRoot/stagingDir may

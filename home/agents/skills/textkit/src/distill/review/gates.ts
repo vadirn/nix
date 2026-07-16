@@ -92,7 +92,7 @@ export async function runFidelityBackstop(
   lang: "en" | "ru",
   // Injected transport threaded from the emit pipeline (main → distill → here), so the
   // backstop's fidelity/workflow judges run off a fake without a process-global module
-  // mock (see fidelityGate). Production omits it → real fw.
+  // mock (see fidelityGate). Production omits it → the real transport.
   ask: typeof askJson = askJson,
 ): Promise<{ residue: Residue[]; gateSkipped: number }> {
   const buf = Buffer.from(body, "utf8");
@@ -211,7 +211,7 @@ export async function runProseGate(
   units: ProseUnit[],
   outputText: string,
   lang: "en" | "ru",
-  // Injected transport (see runFidelityBackstop); production omits it → real fw.
+  // Injected transport (see runFidelityBackstop); production omits it → the real transport.
   ask: typeof askJson = askJson,
 ): Promise<Residue[]> {
   if (units.length === 0) return [];

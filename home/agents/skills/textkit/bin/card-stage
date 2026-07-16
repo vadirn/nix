@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy seam for card-stage: provider API keys are resolved lazily in TypeScript
 # (see _shared/llm/keys.ts — env → macOS Keychain → Doppler, cached per process), so this
-# wrapper only execs the entrypoint. card-stage uses Fireworks (draft) + qwencloud (fidelity);
-# Fireworks' key lives in the Keychain (service: fireworks-api) and all keys in Doppler.
+# wrapper only execs the entrypoint. card-stage uses OpenAI (draft) + qwencloud/DashScope
+# (fidelity); their keys live in Doppler (claude-code/std).
 set -u
 exec bun "$(dirname "$(readlink -f "$0")")/../src/cards/card-stage.ts" "$@"

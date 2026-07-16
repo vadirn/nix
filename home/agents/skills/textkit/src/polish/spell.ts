@@ -75,7 +75,7 @@ export async function spellPass(
   // production polish passes [] since it runs no glossary term list.
   literals: string[] = [],
   // The model call, injected so tests drive a flake / revert case without a
-  // process-global module mock; production callers omit it for the real fw transport.
+  // process-global module mock; production callers omit it for the real transport.
   ask: typeof askJson = askJson,
 ): Promise<{ blocks: Block[]; reverted: string[]; failed: boolean }> {
   // Same masking engine as revise() in passes.ts: reference spans are frozen to ⟦N⟧

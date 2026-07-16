@@ -18,11 +18,11 @@
 // body (parseFrontmatter), build atomicityJudgePrompt, askJson on CARD_JUDGE, print
 // one line: path, verdict, reason, and PASS/FAIL when --expect is set. A card with
 // no frontmatter description cannot be judged (the judge needs both channels) and
-// is skipped with a note, not silently counted. A judge call that fails after fw's
+// is skipped with a note, not silently counted. A judge call that fails after the transport's
 // own retries prints "inconclusive" for that card and the run continues — one flaky
 // call must not abort a 15-card batch.
 //
-// IMPORTANT: no paid call runs without FIREWORKS_API_KEY. --dry-run prints each
+// IMPORTANT: no paid call runs without DASHSCOPE_API_KEY. --dry-run prints each
 // built prompt and exits before touching the network, for offline calibration
 // against experiment/fixtures/g4-fixture.md.
 //
@@ -50,7 +50,7 @@ Options:
   --dry-run                      print each built prompt; call nothing
   -h, --help                     show this help and exit
 
-Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --),
+Env: DASHSCOPE_API_KEY (e.g. doppler run --project claude-code --config std --),
      not required for --dry-run.
 `;
 
@@ -113,8 +113,8 @@ async function main() {
     return;
   }
   const { paths, expect, dryRun } = parsed;
-  if (!dryRun && !process.env.FIREWORKS_API_KEY) {
-    console.error("g4-harness: FIREWORKS_API_KEY not set — run under doppler, or pass --dry-run.");
+  if (!dryRun && !process.env.DASHSCOPE_API_KEY) {
+    console.error("g4-harness: DASHSCOPE_API_KEY not set — run under doppler, or pass --dry-run.");
     process.exit(1);
     return;
   }
@@ -197,6 +197,6 @@ async function main() {
 // Guarded (Finding 5, mirrors card-stage.ts:345): USAGE/parseArgs are exported for
 // testing, which makes this file importable — without the guard, importing it runs
 // main() with the test runner's own argv, which can process.exit() mid-suite or,
-// worse, make a real paid Fireworks call if FIREWORKS_API_KEY is set and an argv
+// worse, make a real paid DashScope call if DASHSCOPE_API_KEY is set and an argv
 // token looks like a .md path.
 if (import.meta.main) main();

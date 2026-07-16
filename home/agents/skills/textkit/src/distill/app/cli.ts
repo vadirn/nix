@@ -46,7 +46,7 @@ Output:
     path=$(distill-text input.md); status=$?
   Exit: 0 distilled or prose rendered (a pending review intermediary, residue, and
   gate-inconclusive items still exit 0 — they are surfaced in the footer and the
-  intermediary itself) · 1 FIREWORKS_API_KEY
+  intermediary itself) · 1 OPENAI_API_KEY or DASHSCOPE_API_KEY
   missing · 2 usage error (compress mode: stdin without --out once the run reaches
   the emit; --out naming a missing directory) · 3 passthrough (the
   output is the unmodified original — compress failsafe, expand-guard, nothing to
@@ -56,7 +56,7 @@ Output:
   exists at the sibling .tmp.md path (refused before the key gate and before any
   LLM call — apply or delete it first).
 
-Env: FIREWORKS_API_KEY (e.g. doppler run --project claude-code --config std --)
+Env: OPENAI_API_KEY + DASHSCOPE_API_KEY (e.g. doppler run --project claude-code --config std --)
 `;
 
 // CliOpts is the validated options bag parseArgs hands to main() for a `compress`/`prose`/`apply`

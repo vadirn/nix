@@ -44,9 +44,7 @@ test("buildFooter: compressed run renders the steps tag, omits the zero tags", (
       glossaryOnly: false,
       proseGateOffFactsDump: false,
     }),
-  ).toBe(
-    "— distilled prose+gloss · 3 entries · 2 steps · 1 verbatim · 0 residue",
-  );
+  ).toBe("— distilled prose+gloss · 3 entries · 2 steps · 1 verbatim · 0 residue");
 });
 
 test("buildFooter: --glossary shape, gate-skipped tag", () => {
@@ -60,9 +58,7 @@ test("buildFooter: --glossary shape, gate-skipped tag", () => {
       glossaryOnly: true,
       proseGateOffFactsDump: false,
     }),
-  ).toBe(
-    "— distilled gloss · 2 entries · 0 verbatim · 1 residue · 1 gate-skipped",
-  );
+  ).toBe("— distilled gloss · 2 entries · 0 verbatim · 1 residue · 1 gate-skipped");
 });
 
 test("buildFooter: facts-dump skip of the in-scope prose gate surfaces as a tag", () => {

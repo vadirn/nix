@@ -54,8 +54,8 @@ Output:
   Exit: 0 polished · 2 usage error · 3 passthrough (failsafe or empty input —
   the output is the unpolished input).
 
-Env: FIREWORKS_API_KEY (the deployed wrapper fills it from the macOS Keychain,
-service fireworks-api; or doppler run --project claude-code --config std --)
+Env: OPENAI_API_KEY, resolved from Doppler (claude-code/std) via keys.ts
+(e.g. doppler run --project claude-code --config std --)
 `;
 
 // The validated options bag parseArgs hands to main(): the language override, which of the
@@ -163,7 +163,7 @@ export function buildPolishFooter(m: {
 }
 
 // The seam runPolish takes to reach the model, injected so a unit test drives the
-// pass pipeline without a process-global module mock (default: the real fw askJson).
+// pass pipeline without a process-global module mock (default: the real askJson).
 // `progress` is the optional per-pass tick main wires to a TTY-gated stderr line.
 export type PolishDeps = {
   ask?: typeof askJson;

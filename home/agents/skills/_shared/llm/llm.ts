@@ -10,7 +10,7 @@
 import { type KeySource, resolveKey } from "./keys.ts";
 
 // A failure a caller can ride out: a network/timeout throw, a 429/5xx
-// gateway status, or an unparseable model response. fw/askJson tag every such
+// gateway status, or an unparseable model response. callProvider/askJson tag every such
 // failure by throwing this class; everything else — a TypeError from our own
 // logic, a ReferenceError, a 4xx request/auth/content-policy fault — is a real
 // bug that carries no tag and must surface rather than be swallowed as a flake.
@@ -21,7 +21,7 @@ export class TransientError extends Error {
 // A length-truncation: the model hit its max_tokens cap and returned a partial
 // response (finish_reason "length"). Distinct from TransientError because retrying
 // the same call burns another timeout and truncates identically — the cap, not the
-// network, is the fault. A throw exits fw's attempt loop, so it is never
+// network, is the fault. A throw exits callProvider's attempt loop, so it is never
 // network-retried; the message names the model and cap so the cure is actionable.
 export class TruncationError extends Error {
   override readonly name = "TruncationError";
@@ -65,10 +65,12 @@ const BACKOFF_MS = 2000;
 const transientStatus = (status: number): boolean => status === 429 || status >= 500;
 
 type Msg = { role: string; content: string };
-// The reasoning knobs a ModelRef may carry, passed through to the provider's buildBody:
-// `effort` is OpenAI's reasoning_effort; `thinking` is qwencloud's enable_thinking /
-// thinking_budget. Fireworks reads neither. A caller sets only what its provider honors.
-type ReasoningOpts = { json?: boolean; maxTokens?: number; temp?: number };
+// The per-call transport options: `json` requests json_object output, `maxTokens` caps the
+// response, `temp` sets sampling temperature. These are the provider-neutral knobs of a call;
+// the reasoning knobs `effort` (OpenAI's reasoning_effort) and `thinking` (qwencloud's
+// enable_thinking / thinking_budget) are added per use site via the intersection below, and
+// each provider's buildBody reads only the ones it honors.
+type CallOpts = { json?: boolean; maxTokens?: number; temp?: number };
 type Effort = "low" | "medium" | "high";
 type Thinking = { enable?: boolean; budget?: number };
 
@@ -83,7 +85,7 @@ type Provider = {
   buildBody: (
     id: string,
     messages: Msg[],
-    opts: ReasoningOpts & { effort?: Effort; thinking?: Thinking },
+    opts: CallOpts & { effort?: Effort; thinking?: Thinking },
   ) => Record<string, unknown>;
 };
 
@@ -187,7 +189,7 @@ export function ensureKeys(models: ModelRef[]): void {
 async function callProvider(
   model: ModelRef,
   messages: Msg[],
-  opts: ReasoningOpts & { timeoutMs?: number } = {},
+  opts: CallOpts & { timeoutMs?: number } = {},
 ): Promise<string> {
   const p = model.provider;
   const key = resolveKey(p.key);
@@ -290,10 +292,10 @@ type Transport = (
 
 // askJson calls `model` with `prompt`, requesting JSON-object output, and parses the response as
 // T. Retries once on a JSON-parse failure (the model returned no or unbalanced JSON) before
-// giving up with a TransientError; fw() below handles the separate network/HTTP retry
+// giving up with a TransientError; callProvider below handles the separate network/HTTP retry
 // underneath. `timeoutMs` sets a per-call abort ceiling (default the module's 180s) — a
-// runaway-prone stage passes a tight one so fw's timeout retry re-rolls cheaply. `call` defaults
-// to fw and exists only so tests can inject a fake transport.
+// runaway-prone stage passes a tight one so callProvider's timeout retry re-rolls cheaply. `call` defaults
+// to callProvider and exists only so tests can inject a fake transport.
 export async function askJson<T>(
   model: ModelRef,
   prompt: string,
@@ -301,7 +303,7 @@ export async function askJson<T>(
   timeoutMs?: number,
   call: Transport = callProvider,
 ): Promise<T> {
-  // Retry once on a PARSE failure (distinct from fw's network/5xx retry): a
+  // Retry once on a PARSE failure (distinct from callProvider's network/5xx retry): a
   // thinking model sometimes returns only reasoning with no JSON object, which
   // extractJson rejects. It is non-deterministic, so a second call usually
   // complies — cheaper than dropping the whole run to the caller's failsafe.

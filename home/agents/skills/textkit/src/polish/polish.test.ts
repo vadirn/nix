@@ -26,7 +26,7 @@ test("USAGE: names the flags and the env requirement", () => {
   expect(USAGE).toContain("--no-spell");
   expect(USAGE).toContain("-o, --temp-file");
   expect(USAGE).toContain("-h, --help");
-  expect(USAGE).toContain("Env: FIREWORKS_API_KEY");
+  expect(USAGE).toContain("Env: OPENAI_API_KEY");
   expect(USAGE).toContain("does not compress the text, add a glossary, or apply a fidelity gate");
 });
 

@@ -1,5 +1,5 @@
 // prompts — the LLM stages: every prompt builder and the async stage function that
-// calls it. Each stage maps a typed input to a typed output through fw's askJson;
+// calls it. Each stage maps a typed input to a typed output through the transport's askJson;
 // the pipeline (distill-core.ts) sequences them. The writing-core passes moved to
 // writing/passes.ts and are re-exported below for callers that still import them
 // from here.
@@ -274,7 +274,7 @@ export async function extractGraph(
   selfSlug = "",
   // The model call, injected so the emit pipeline can drive extract from a fake
   // transport without a process-global module mock (see fidelityGate). Production
-  // callers omit it → real fw transport.
+  // callers omit it → the real transport.
   ask: typeof askJson = askJson,
 ): Promise<PreGraph> {
   const raw = await ask<RawGraph>(
@@ -320,7 +320,7 @@ export async function gradeBlocks(
   thesis: string,
   concepts: { term: string; def: string }[],
   blocks: Block[],
-  // Injected transport (see extractGraph); production omits it → real fw.
+  // Injected transport (see extractGraph); production omits it → the real transport.
   ask: typeof askJson = askJson,
 ): Promise<Map<string, Grade>> {
   const judged = await ask<{ grades: { id: string; grade: Grade }[] }>(
@@ -503,7 +503,7 @@ export async function fidelityGate(
   rendered: { term: string; def: string; sourceText: string }[],
   // The model call, injected so tests drive the degradation catch (a thrown
   // TransientError / TruncationError / code bug) without a process-global module
-  // mock. Production callers omit it and get the real fw transport.
+  // mock. Production callers omit it and get the real transport.
   ask: typeof askJson = askJson,
 ): Promise<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }> {
   return withInconclusiveFallback<{ thesisRecoverable: boolean; concepts: ConceptVerdict[] }>(
@@ -597,7 +597,7 @@ export async function workflowGate(
   groups: { id: string; steps: string[]; sourceText: string }[],
   lang: "en" | "ru",
   // Injected so tests drive the degradation catch without a process-global module
-  // mock (see fidelityGate); production callers omit it for the real fw transport.
+  // mock (see fidelityGate); production callers omit it for the real transport.
   ask: typeof askJson = askJson,
 ): Promise<StepVerdict[]> {
   if (groups.length === 0) return [];
@@ -679,7 +679,7 @@ export async function proseGate(
   outputBody: string,
   lang: "en" | "ru",
   // Injected so tests drive the per-batch degradation catch without a global module
-  // mock (see fidelityGate); production callers omit it for the real fw transport.
+  // mock (see fidelityGate); production callers omit it for the real transport.
   ask: typeof askJson = askJson,
 ): Promise<{ verdicts: Map<string, ProseVerdict>; flaked: Set<string> }> {
   const verdicts = new Map<string, ProseVerdict>();

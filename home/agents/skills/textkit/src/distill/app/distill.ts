@@ -52,7 +52,8 @@
 // is still pending. The stdout path line still prints except on empty input; the skip
 // reason goes to stderr.
 //
-// Standalone headless CLI. Fireworks via FIREWORKS_API_KEY (e.g.
+// Standalone headless CLI. OpenAI (extract) + qwencloud/DashScope (fidelity), keyed by
+// OPENAI_API_KEY + DASHSCOPE_API_KEY via Doppler (e.g.
 // `doppler run --project claude-code --config std --`).
 //
 // Usage (full text: distill-text --help):

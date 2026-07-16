@@ -26,7 +26,8 @@
 //                             pure and I/O-free; a checked recover with no applicable
 //                             action (an unrecoverable target) → exit 2, nothing written
 //   8. key gate               iff ≥1 CHECKED `recover` whose target is a concept DEF (the
-//                             only action that calls an LLM) and FIREWORKS_API_KEY is unset
+//                             only action that calls an LLM) and OPENAI_API_KEY or
+//                             DASHSCOPE_API_KEY is unset
 //                             → exit 1, nothing written. A checked recover of procedure
 //                             steps or the thesis is verbatim (no LLM, no key); a checked
 //                             `keep` is a no-op (no LLM, no key).
@@ -106,7 +107,7 @@ export type ApplyOpts = {
   lang: "en" | "ru" | "auto";
   // The model call, injected so tests drive the recover-def LLM window (re-render +
   // re-grade) without a process-global fetch/module mock (see fidelityGate in
-  // prompts.ts). Production callers (main/tty) omit it → real fw transport.
+  // prompts.ts). Production callers (main/tty) omit it → the real transport.
   ask?: typeof askJson;
 };
 

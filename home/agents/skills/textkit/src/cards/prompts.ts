@@ -1,6 +1,6 @@
 // cards/prompts — pure prompt builders for the card-extraction LLM stages.
 // No LLM call and no transport import lives here: each builder maps typed input
-// to a prompt string; the stage wiring feeds it to fw's askJson and validates the
+// to a prompt string; the stage wiring feeds it to the transport's askJson and validates the
 // reply against types.ts (BandJudgeReply / DraftReply / AtomicityReply). This
 // module never imports distill-core.ts.
 //

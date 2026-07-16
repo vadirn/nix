@@ -228,7 +228,7 @@ async function distill(
     path?: string;
     progress?: (line: string) => void;
     // Injected model transport, threaded from main() to compressToGraph and the backstop
-    // gates so the pipeline runs off a fake in tests; undefined → real fw everywhere.
+    // gates so the pipeline runs off a fake in tests; undefined → the real transport everywhere.
     ask?: typeof askJson;
   },
   selfSlug = "",
@@ -696,7 +696,7 @@ async function runCompress(o: {
 // `ask` is the model transport, injected so emit.test.ts / session.test.ts drive the
 // whole five-stage pipeline off a fake without a process-global module mock (it threads
 // down through distill → compressToGraph/extractGraph/gradeBlocks and the backstop gates).
-// The CLI entrypoint calls main() with no argument → real fw transport.
+// The CLI entrypoint calls main() with no argument → the real transport.
 export async function main(ask: typeof askJson = askJson) {
   // The whole CLI surface resolves in parseArgs (help/misuse/ok). Act on help and misuse
   // here, before the API-key gate or any network call: help prints usage to stdout and exits
