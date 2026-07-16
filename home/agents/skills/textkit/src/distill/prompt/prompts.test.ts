@@ -7,7 +7,7 @@
 // no-fabrication guard is present. It also pins the typed pre-graph schema the prompt asks
 // for. parseExtractGraph (the pure normalizer) is covered by extract-graph.test.ts.
 import { expect, test } from "bun:test";
-import type { askJson, ModelRef } from "@shared/llm/llm.ts";
+import type { askJson, ModelRef } from "@skills/llm/llm.ts";
 import type { Block, LinkInventory } from "@/core/text.ts";
 import { extractGraphPrompt, fidelityGate, renderEntryPrompt } from "@/distill/prompt/prompts.ts";
 

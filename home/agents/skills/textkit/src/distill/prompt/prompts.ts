@@ -22,7 +22,7 @@ import { type ProseUnit } from "@/distill/extract/harvest.ts";
 // runtime validation checks membership against it.
 const GRADES = ["drop", "distill", "retain"] as const;
 export type Grade = (typeof GRADES)[number];
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson } from "@skills/llm/llm.ts";
 import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
 import {
   DISTILL_EXTRACT,

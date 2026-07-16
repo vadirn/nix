@@ -1,11 +1,11 @@
 // models — textkit's model policy, decoupled PER CLIENT so each CLI (distill / polish /
 // card-stage) configures its own provider+model independently. Kept out of the shared
-// transport (`@shared/llm/llm.ts`), which is provider-neutral and takes a ModelRef + token
+// transport (`@skills/llm/llm.ts`), which is provider-neutral and takes a ModelRef + token
 // cap as call arguments; these are textkit's choices, built here with the transport's provider
 // helpers and passed in at every call site. Change a client's model by editing its block below
 // — a shared writer function (revise) takes the model as a parameter so two clients can drive
 // it with different models.
-import { dashscope, openai } from "@shared/llm/llm.ts";
+import { dashscope, openai } from "@skills/llm/llm.ts";
 
 // ---- distill ----
 // EXTRACT rides the extract/grade/revise passes: gpt-5.6-luna on OpenAI at medium reasoning

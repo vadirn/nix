@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { parseInteract, stripInteract } from "@/distill/review/interact.ts";
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson } from "@skills/llm/llm.ts";
 
 const DISTILL = join(import.meta.dir, "distill", "app", "distill.ts");
 const DUMMY_KEY = {

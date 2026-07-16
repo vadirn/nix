@@ -33,8 +33,8 @@ import {
   parseSuperseded,
   parseType,
 } from "@/core/frontmatter.ts";
-import { askJson, ensureKeys, isTransient, TruncationError } from "@shared/llm/llm.ts";
-import { MissingKeyError } from "@shared/llm/keys.ts";
+import { askJson, ensureKeys, isTransient, TruncationError } from "@skills/llm/llm.ts";
+import { MissingKeyError } from "@skills/llm/keys.ts";
 import { DISTILL_EXTRACT, DISTILL_FIDELITY } from "@/core/models.ts";
 import { linkNoClobber } from "@/core/fs.ts";
 import { tempMdPath } from "@/core/tmp.ts";

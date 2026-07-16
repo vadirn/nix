@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
 import { USAGE, buildPolishFooter, parseArgs } from "@/polish/polish.ts";
 import { PASS_EN, revise } from "@/core/writing/passes.ts";
 import { spellPass } from "@/polish/spell.ts";
-import { askJson, fireworks } from "@shared/llm/llm.ts";
+import { askJson, fireworks } from "@skills/llm/llm.ts";
 
 function ok(argv: string[]) {
   const r = parseArgs(argv);

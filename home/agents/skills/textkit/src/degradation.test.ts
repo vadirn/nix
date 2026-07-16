@@ -9,7 +9,7 @@
 // (i) a non-transient code bug surfaces/propagates, (ii) a transient judge flake
 // still degrades gracefully.
 import { expect, test } from "bun:test";
-import { askJson, fireworks, TransientError, TruncationError } from "@shared/llm/llm.ts";
+import { askJson, fireworks, TransientError, TruncationError } from "@skills/llm/llm.ts";
 import { fidelityGate, proseGate, revise, workflowGate } from "@/distill/prompt/prompts.ts";
 
 // The transport primitives these gates lean on (isTransient / rethrowIfBug / the

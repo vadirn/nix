@@ -5,5 +5,5 @@
     "src/cards/card-stage.ts",
     "src/experiment/g4-harness.ts"
   ],
-  "ignoreBinaries": ["oxfmt", "knip", "madge"]
+  "ignoreBinaries": ["oxfmt", "knip", "madge", "oxlint", "tsc"]
 }

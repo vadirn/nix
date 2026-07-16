@@ -81,8 +81,8 @@ import {
   stripInteract,
 } from "@/distill/review/interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "@/distill/review/triage.ts";
-import { askJson, ensureKeys } from "@shared/llm/llm.ts";
-import { MissingKeyError } from "@shared/llm/keys.ts";
+import { askJson, ensureKeys } from "@skills/llm/llm.ts";
+import { MissingKeyError } from "@skills/llm/keys.ts";
 import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
 import { DISTILL_EXTRACT } from "@/core/models.ts";
 import { linkNoClobber } from "@/core/fs.ts";

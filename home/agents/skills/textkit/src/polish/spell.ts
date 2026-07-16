@@ -4,7 +4,7 @@
 // correction, never meaning. Consumed only by polish.ts — distill's pipeline does
 // not gain a spell stage.
 import { type Block, render } from "@/core/text.ts";
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson } from "@skills/llm/llm.ts";
 import { polishDegrade as rethrowIfBug } from "@/core/degrade.ts";
 import { POLISH_MODEL, POLISH_TOKENS } from "@/core/models.ts";
 import { MASK_TOKEN_RE, createMasker } from "@/core/writing/mask.ts";

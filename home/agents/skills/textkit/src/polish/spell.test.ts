@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
-import { askJson, TransientError } from "@shared/llm/llm.ts";
+import { askJson, TransientError } from "@skills/llm/llm.ts";
 import { langRule, segment } from "@/core/text.ts";
 import { spellPass, spellPassPrompt, verifySpellBlock } from "@/polish/spell.ts";
 

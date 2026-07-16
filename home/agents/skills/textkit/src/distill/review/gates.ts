@@ -17,7 +17,7 @@ import {
 import { type ProseUnit } from "@/distill/extract/harvest.ts";
 import { type Residue, proseResidue } from "@/distill/review/residue.ts";
 import { normalizeCitation } from "@/distill/review/normalize-citation.ts";
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson } from "@skills/llm/llm.ts";
 
 // Shared inconclusive→residue mapping: both the concept and workflow verdict loops below grade
 // "inconclusive" identically (a `gate-inconclusive:` reason, surfaced-but-unverified) and derive

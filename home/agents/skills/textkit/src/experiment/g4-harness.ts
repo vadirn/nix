@@ -35,7 +35,7 @@ import { parseFrontmatter, parseDescription } from "@/core/frontmatter.ts";
 import { detectLang } from "@/core/text.ts";
 import { atomicityJudgePrompt } from "@/cards/prompts.ts";
 import type { AtomicityReply } from "@/cards/types.ts";
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson } from "@skills/llm/llm.ts";
 import { g4Degrade as rethrowIfBug } from "@/core/degrade.ts";
 import { CARD_JUDGE, CARD_JUDGE_TOKENS } from "@/core/models.ts";
 

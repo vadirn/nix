@@ -26,7 +26,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { type Item, parseInteract, stripInteract } from "@/distill/review/interact.ts";
 import { buildIntermediary, safeHandle } from "@/distill/review/triage.ts";
 import { verbatimDef, verbatimDirectives } from "@/distill/prompt/prompts.ts";
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson } from "@skills/llm/llm.ts";
 import type { Residue } from "@/distill/review/residue.ts";
 import {
   type ProcedureOp,
