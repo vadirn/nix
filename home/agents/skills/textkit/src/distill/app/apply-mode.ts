@@ -81,9 +81,10 @@ import {
   stripInteract,
 } from "@/distill/review/interact.ts";
 import { TRIAGE_VERBS, safeHandle } from "@/distill/review/triage.ts";
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson, ensureKeys } from "@shared/llm/llm.ts";
+import { MissingKeyError } from "@shared/llm/keys.ts";
 import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { EXTRACT } from "@/core/models.ts";
+import { DISTILL_EXTRACT } from "@/core/models.ts";
 import { linkNoClobber } from "@/core/fs.ts";
 import {
   fidelityGate,
@@ -403,8 +404,13 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
 
   // 8. key gate — only a checked recover DEF that resolved calls an LLM. A checked
   //    recover of procedure steps / the thesis is verbatim (no LLM); keep is a no-op.
-  if (defRecovers.length > 0 && !process.env.FIREWORKS_API_KEY) {
-    return fail("FIREWORKS_API_KEY not set — a checked recover needs it; nothing written", 1);
+  if (defRecovers.length > 0) {
+    try {
+      ensureKeys([DISTILL_EXTRACT]);
+    } catch (e) {
+      if (e instanceof MissingKeyError) return fail(`${e.message}; nothing written`, 1);
+      throw e;
+    }
   }
 
   // 9. fire verbs — the LLM window: re-render each checked recover def, re-grade once, and
@@ -415,7 +421,7 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
     let finalDef: string;
     try {
       const rr = await ask<{ def: string }>(
-        EXTRACT,
+        DISTILL_EXTRACT,
         renderEntryPrompt({ term: d.term, def: "" }, d.src, lang),
         1024,
       );

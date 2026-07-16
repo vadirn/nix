@@ -22,7 +22,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { type Item, parseInteract, stripInteract } from "@/distill/review/interact.ts";
 import { buildIntermediary, safeHandle } from "@/distill/review/triage.ts";
 import { verbatimDef, verbatimDirectives } from "@/distill/prompt/prompts.ts";
@@ -319,10 +319,27 @@ async function applyWith(
   return { ...cap, prompts };
 }
 
-const HAD_KEY = process.env.FIREWORKS_API_KEY;
+// Hermetic keys: apply's LLM gate is DISTILL_EXTRACT (OpenAI). Run env-only (no Keychain/
+// Doppler shell-out) with a dummy set fresh each test, so has-key tests pass deterministically
+// and the missing-key test forces the exit-1 path by deleting the dummy.
+const HAD_KEYS = {
+  fw: process.env.FIREWORKS_API_KEY,
+  oai: process.env.OPENAI_API_KEY,
+  ds: process.env.DASHSCOPE_API_KEY,
+  envOnly: process.env.LLM_KEYS_ENV_ONLY,
+};
+beforeEach(() => {
+  process.env.LLM_KEYS_ENV_ONLY = "1";
+  process.env.OPENAI_API_KEY = "test-dummy";
+  process.env.DASHSCOPE_API_KEY = "test-dummy";
+});
 afterEach(() => {
-  if (HAD_KEY === undefined) delete process.env.FIREWORKS_API_KEY;
-  else process.env.FIREWORKS_API_KEY = HAD_KEY;
+  const restore = (k: string, v: string | undefined) =>
+    v === undefined ? delete process.env[k] : (process.env[k] = v);
+  restore("FIREWORKS_API_KEY", HAD_KEYS.fw);
+  restore("OPENAI_API_KEY", HAD_KEYS.oai);
+  restore("DASHSCOPE_API_KEY", HAD_KEYS.ds);
+  restore("LLM_KEYS_ENV_ONLY", HAD_KEYS.envOnly);
 });
 
 // ===========================================================================
@@ -533,13 +550,13 @@ test("apply: a degraded backticked-term def, all-unchecked → its glossary row 
 // ===========================================================================
 
 test("apply: a checked recover DEF with no key exits 1 (nothing written); the source is untouched", async () => {
-  delete process.env.FIREWORKS_API_KEY;
+  delete process.env.OPENAI_API_KEY; // the distill extract key the recover-def render needs
   const dir = tmpdirFor("key-missing");
   const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF]);
   writeTmp(tmpPath, checkGate(check(tmp, "recover: `Impression distance`")));
   const r = await applyWith(tmpPath, NO_LLM);
   expect(r.code).toBe(1);
-  expect(r.stderr).toContain("FIREWORKS_API_KEY");
+  expect(r.stderr).toContain("no API key");
   expect(r.prompts.length).toBe(0); // exited before any LLM call
   expect(readFileSync(destPath, "utf8")).toBe(SOURCE); // nothing written
   expect(existsSync(tmpPath)).toBe(true);

@@ -15,7 +15,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { takeValue } from "@/core/args.ts";
 import { parseFrontmatter } from "@/core/frontmatter.ts";
-import { askJson, isTransient, TruncationError } from "@shared/llm/llm.ts";
+import { askJson, ensureKeys, isTransient, TruncationError } from "@shared/llm/llm.ts";
+import { MissingKeyError } from "@shared/llm/keys.ts";
+import { POLISH_MODEL, POLISH_TOKENS } from "@/core/models.ts";
 import { detectLang, segment, wordCount } from "@/core/text.ts";
 import { tempMdPath } from "@/core/tmp.ts";
 import {
@@ -190,6 +192,8 @@ export async function runPolish(
     blocks = await revise(
       blocks,
       resolvedLang === "ru" ? PASS_RU : PASS_EN,
+      POLISH_MODEL,
+      POLISH_TOKENS,
       [],
       (i, n) => progress?.(`revise ${i}/${n}`),
       ask,
@@ -237,14 +241,18 @@ export async function main(): Promise<void> {
   }
   const { noRevise, noSpell, tempFile, path: inputPath } = parsed.opts;
   // Both passes skipped: nothing calls out, so the key gate would only block a
-  // typography-only no-op run for no reason.
-  if (!(noRevise && noSpell) && !process.env.FIREWORKS_API_KEY) {
-    console.error(
-      "FIREWORKS_API_KEY not set — the deployed wrapper (bin/polish-text) fills it from the " +
-        "macOS Keychain (service fireworks-api), or prefix: " +
-        "doppler run --project claude-code --config std --",
-    );
-    process.exit(1);
+  // typography-only no-op run for no reason. Otherwise resolve POLISH_MODEL's key up front
+  // (env → Keychain → Doppler) so a missing key exits 1 here rather than mid-run.
+  if (!(noRevise && noSpell)) {
+    try {
+      ensureKeys([POLISH_MODEL]);
+    } catch (e) {
+      if (e instanceof MissingKeyError) {
+        console.error(`${e.message}\nSeed it in the Keychain or Doppler (claude-code/std).`);
+        process.exit(1);
+      }
+      throw e;
+    }
   }
   const fromStdin = inputPath === undefined || inputPath === "-";
   // A bare `polish-text` at a terminal would hang silently on fd 0; say so.

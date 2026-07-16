@@ -15,7 +15,7 @@
 //      against each printed reason).
 //
 // Per card: read the file, split frontmatter description (parseDescription) from
-// body (parseFrontmatter), build atomicityJudgePrompt, askJson on FIDELITY, print
+// body (parseFrontmatter), build atomicityJudgePrompt, askJson on CARD_JUDGE, print
 // one line: path, verdict, reason, and PASS/FAIL when --expect is set. A card with
 // no frontmatter description cannot be judged (the judge needs both channels) and
 // is skipped with a note, not silently counted. A judge call that fails after fw's
@@ -37,7 +37,7 @@ import { atomicityJudgePrompt } from "@/cards/prompts.ts";
 import type { AtomicityReply } from "@/cards/types.ts";
 import { askJson } from "@shared/llm/llm.ts";
 import { g4Degrade as rethrowIfBug } from "@/core/degrade.ts";
-import { FIDELITY, FIDELITY_TOKENS } from "@/core/models.ts";
+import { CARD_JUDGE, CARD_JUDGE_TOKENS } from "@/core/models.ts";
 
 export const USAGE = `g4-harness — calibrate the G4 atomicity judge over vault card files
 
@@ -152,7 +152,7 @@ async function main() {
     }
 
     try {
-      const rawReply = await askJson<AtomicityReply>(FIDELITY, prompt, FIDELITY_TOKENS);
+      const rawReply = await askJson<AtomicityReply>(CARD_JUDGE, prompt, CARD_JUDGE_TOKENS);
       const reply = validateAtomicityReply(rawReply);
       if (!reply) {
         console.log(`${p}\tinconclusive\tjudge returned an unparseable reply`);

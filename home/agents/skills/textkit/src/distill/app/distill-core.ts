@@ -33,7 +33,9 @@ import {
   parseSuperseded,
   parseType,
 } from "@/core/frontmatter.ts";
-import { askJson, isTransient, TruncationError } from "@shared/llm/llm.ts";
+import { askJson, ensureKeys, isTransient, TruncationError } from "@shared/llm/llm.ts";
+import { MissingKeyError } from "@shared/llm/keys.ts";
+import { DISTILL_EXTRACT, DISTILL_FIDELITY } from "@/core/models.ts";
 import { linkNoClobber } from "@/core/fs.ts";
 import { tempMdPath } from "@/core/tmp.ts";
 import { extractGraph, gradeBlocks } from "@/distill/prompt/prompts.ts";
@@ -80,14 +82,14 @@ type DistillResult = {
   status: DistillStatus;
 };
 // The whole-note (and, via the routed head's recursive call, per-head-scoped) expand-guard's
-// threshold, customizable via --max-words: unset defaults to the note's own input size
-// (today's behavior — any growth at all reverts to the original); a positive value sets an
-// absolute ceiling instead; 0 disables the guard entirely, returning null (a debugging escape
-// hatch to inspect what the model actually produced even when it grew).
-export function expandGuardCap(beforeWords: number, maxWords?: number): number | null {
-  if (maxWords === 0) return null;
+// threshold. The guard is OFF by default: the canonical note is a STRUCTURED artifact
+// (concepts + bullets + judgements + inferences + procedures + relations), so a faithful
+// distillation of a short, dense note is legitimately ~its source length — comparing word
+// counts vetoed good output. It survives only as an opt-in cap via --max-words: a positive
+// value sets an absolute ceiling; 0 (or unset) means no guard, returning null.
+export function expandGuardCap(_beforeWords: number, maxWords?: number): number | null {
   if (maxWords !== undefined && maxWords > 0) return maxWords;
-  return beforeWords;
+  return null;
 }
 
 // Both ends must be a real terminal (command substitution and pipes must never see a
@@ -140,6 +142,30 @@ function deterministicBackstop(
   };
 }
 
+// Tick a slow stage's progress label with elapsed seconds instead of a frozen label, so a call
+// stuck against the transport's 180s ceiling reads as "still working (Ns)" rather than a dead
+// hang. TTY-gated through the caller's `progress` sink (undefined off a TTY → scripts and parent
+// loops stay silent and no timer runs). The tick overwrites its own line via \r and closes with a
+// newline on settle so the next stage or the footer starts clean.
+async function withHeartbeat<T>(
+  label: string,
+  progress: ((line: string) => void) | undefined,
+  call: () => Promise<T>,
+): Promise<T> {
+  if (!progress) return call();
+  const t0 = Date.now();
+  const tick = (): void =>
+    void process.stderr.write(`\r${label}… (${Math.round((Date.now() - t0) / 1000)}s)`);
+  tick();
+  const timer = setInterval(tick, 5000);
+  try {
+    return await call();
+  } finally {
+    clearInterval(timer);
+    process.stderr.write("\n");
+  }
+}
+
 // The canonical compress core: extract native typed units → retain-grade the
 // payload lane → locate spans (hard-gate). Returns the span-anchored graph (`result`), the
 // pre-graph (`pre`, for the backstop's thesis + section counts), and the retain-graded
@@ -161,8 +187,9 @@ async function compressToGraph(
   result: Projection;
   payloadBlocks: Block[];
 } | null> {
-  opts.progress?.("extract…");
-  const pre = await extractGraph(blocks, frontDescription, lang, linkInventory, selfSlug, opts.ask);
+  const pre = await withHeartbeat("extract", opts.progress, () =>
+    extractGraph(blocks, frontDescription, lang, linkInventory, selfSlug, opts.ask),
+  );
   if (
     pre.concepts.length === 0 &&
     pre.judgements.length === 0 &&
@@ -174,12 +201,13 @@ async function compressToGraph(
   // payload retain lane — the ONE deterministic selection surviving the settle-chain
   // collapse. statement = block.text (verbatim), so its locate can never fail. Units render in
   // extract-emission order (the ordering role dies).
-  opts.progress?.("grade…");
-  const grades = await gradeBlocks(
-    pre.thesis,
-    pre.concepts.map((c) => ({ term: c.id ?? "", def: c.statement })),
-    blocks,
-    opts.ask,
+  const grades = await withHeartbeat("grade", opts.progress, () =>
+    gradeBlocks(
+      pre.thesis,
+      pre.concepts.map((c) => ({ term: c.id ?? "", def: c.statement })),
+      blocks,
+      opts.ask,
+    ),
   );
   const payloadBlocks = blocks.filter((b) => grades.get(b.id) === "retain");
   // locate: pre-graph → span-anchored graph. A bad quote HARD-ABORTS here, before any
@@ -274,8 +302,7 @@ async function distill(
   // keeps its extract-assigned types, so the default non-interactive pipeline stays
   // extract→locate→project and is byte-identical.
   if (isInteractive()) {
-    opts.progress?.("type…");
-    await runTypingReview(result, text);
+    await withHeartbeat("type", opts.progress, () => runTypingReview(result, text));
   }
 
   // 3. project the seven-section canonical markdown (carries its own frontmatter). --glossary drops
@@ -293,8 +320,9 @@ async function distill(
   let residue: Residue[] = [];
   let gateSkipped = 0;
   if (!opts.noGate) {
-    opts.progress?.("gate…");
-    const bs = await runFidelityBackstop(pre.thesis, result, out, text, lang, opts.ask);
+    const bs = await withHeartbeat("gate", opts.progress, () =>
+      runFidelityBackstop(pre.thesis, result, out, text, lang, opts.ask),
+    );
     residue = bs.residue;
     gateSkipped = bs.gateSkipped;
   }
@@ -325,8 +353,11 @@ async function distill(
   // body (a broad backstop). Appends to residue only.
   if (!opts.noGate && !opts.glossaryOnly && !opts.factsDump) {
     const units = harvestProseListItems(text, []);
-    opts.progress?.("prose-gate…");
-    residue = residue.concat(await runProseGate(units, out, lang, opts.ask));
+    residue = residue.concat(
+      await withHeartbeat("prose-gate", opts.progress, () =>
+        runProseGate(units, out, lang, opts.ask),
+      ),
+    );
   }
 
   // deterministic payload-coverage backstop: surface any source payload span the projection dropped
@@ -707,11 +738,17 @@ export async function main(ask: typeof askJson = askJson) {
     runDryRun({ fromStdin, inputPath: opts.path, stdinHint, tau: opts.tau });
     return;
   }
-  if (!process.env.FIREWORKS_API_KEY) {
-    console.error(
-      "FIREWORKS_API_KEY not set (run under: doppler run --project claude-code --config std --)",
-    );
-    process.exit(1);
+  // Resolve the keys distill actually uses — EXTRACT (OpenAI) + FIDELITY (qwencloud) — up front,
+  // so a missing key exits 1 here rather than mid-pipeline. keys.ts resolves each from env →
+  // Keychain → Doppler (claude-code/std).
+  try {
+    ensureKeys([DISTILL_EXTRACT, DISTILL_FIDELITY]);
+  } catch (e) {
+    if (e instanceof MissingKeyError) {
+      console.error(`${e.message}\nSeed it in the Keychain or Doppler (claude-code/std).`);
+      process.exit(1);
+    }
+    throw e;
   }
   stdinHint();
   const input = readFileSync(fromStdin ? 0 : (opts.path as string), "utf8");

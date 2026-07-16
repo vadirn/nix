@@ -7,8 +7,8 @@
 // The instruction text carries the whole lexicographer discipline (the vault note
 // "The lexicographer" is the source): the runtime models are small and obedient,
 // so every rule is explicit and self-contained. Writer/judge split mirrors the
-// distill fidelity gate: the band judge and the atomicity judge run on FIDELITY
-// (a different model than the writer); the card draft runs on EXTRACT.
+// distill fidelity gate: the band judge and the atomicity judge run on CARD_JUDGE
+// (a different model than the writer); the card draft runs on CARD_DRAFT.
 //
 // Certification boundary the prompts encode: a candidate's def (the concept def /
 // the frontmatter tie) is the CERTIFIED channel; the note body and the parsed
@@ -45,7 +45,7 @@ def (CERTIFIED): ${candidate.def}
 relations (UNCERTIFIED leads): ${rels}`;
 }
 
-// ---- stage: novelty band (FIDELITY — the judge, not the writer) ----
+// ---- stage: novelty band (CARD_JUDGE — the judge, not the writer) ----
 // Classifies a candidate into exactly one admission band by comparing its certified
 // def against each neighbour's description. "Admission is a band, not a threshold":
 // the three bands are named with their deciding distances so a small model can
@@ -74,7 +74,7 @@ ${candidateBlock(candidate)}
 ${neighbourRule}`;
 }
 
-// ---- stage: card draft (EXTRACT — the writer) ----
+// ---- stage: card draft (CARD_DRAFT — the writer) ----
 // The lexicographer skeleton. Per arm the description states what the headword IS
 // (concept: genus + differentia; thesis: the claim + its ground) over a body that
 // illustrates it once. The few-shot exemplar is real corpus material (the concept
@@ -128,7 +128,7 @@ NOTE BODY (UNCERTIFIED — leads for illustration only):
 ${noteBody}`;
 }
 
-// ---- stage: atomicity judge (FIDELITY — the judge, not the writer) ----
+// ---- stage: atomicity judge (CARD_JUDGE — the judge, not the writer) ----
 // Description-body coherence: a card holds exactly one headword, so a body claim
 // the description does not name means the entry holds more than one concept.
 // The embedded counter-example is the corpus's own ([[Measuring time]]: one named

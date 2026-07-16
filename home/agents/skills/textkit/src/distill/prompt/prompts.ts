@@ -24,7 +24,13 @@ const GRADES = ["drop", "distill", "retain"] as const;
 export type Grade = (typeof GRADES)[number];
 import { askJson } from "@shared/llm/llm.ts";
 import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS } from "@/core/models.ts";
+import {
+  DISTILL_EXTRACT,
+  DISTILL_EXTRACT_TIMEOUT_MS,
+  DISTILL_EXTRACT_TOKENS,
+  DISTILL_FIDELITY,
+  DISTILL_FIDELITY_TOKENS,
+} from "@/core/models.ts";
 import {
   MARKED_MODALITIES,
   type Modality,
@@ -272,9 +278,10 @@ export async function extractGraph(
   ask: typeof askJson = askJson,
 ): Promise<PreGraph> {
   const raw = await ask<RawGraph>(
-    EXTRACT,
+    DISTILL_EXTRACT,
     extractGraphPrompt(blocks, frontDescription, lang, inventory, selfSlug),
-    EXTRACT_TOKENS,
+    DISTILL_EXTRACT_TOKENS,
+    DISTILL_EXTRACT_TIMEOUT_MS,
   );
   return parseExtractGraph(raw, blocks, frontDescription);
 }
@@ -317,9 +324,9 @@ export async function gradeBlocks(
   ask: typeof askJson = askJson,
 ): Promise<Map<string, Grade>> {
   const judged = await ask<{ grades: { id: string; grade: Grade }[] }>(
-    EXTRACT,
+    DISTILL_EXTRACT,
     gradeBlocksPrompt(thesis, concepts, blocks),
-    EXTRACT_TOKENS,
+    DISTILL_EXTRACT_TOKENS,
   );
   const byId = new Map<string, Grade>();
   for (const g of judged.grades ?? []) {
@@ -503,9 +510,9 @@ export async function fidelityGate(
     "fidelityGate",
     async () => {
       const res = await ask<{ thesisRecoverable?: boolean; concepts?: ConceptVerdict[] }>(
-        FIDELITY,
+        DISTILL_FIDELITY,
         fidelityPrompt(thesis, outputBody, rendered),
-        FIDELITY_TOKENS,
+        DISTILL_FIDELITY_TOKENS,
       );
       return {
         thesisRecoverable: res.thesisRecoverable !== false,
@@ -598,9 +605,9 @@ export async function workflowGate(
     "workflowGate",
     async () => {
       const res = await ask<{ groups?: StepVerdict[] }>(
-        FIDELITY,
+        DISTILL_FIDELITY,
         workflowGatePrompt(groups, lang),
-        FIDELITY_TOKENS,
+        DISTILL_FIDELITY_TOKENS,
       );
       // default a missing `evidence` to "" (see fidelityGate) so the substring-check reads an
       // uncited group verdict as a non-match rather than throwing on undefined.
@@ -660,7 +667,7 @@ ${items}`;
 }
 
 // Match the inventory against the output, in batches of 5 (each payload stays under
-// FIDELITY_TOKENS). Returns the raw verdicts keyed by id plus the set of ids whose batch
+// DISTILL_FIDELITY_TOKENS). Returns the raw verdicts keyed by id plus the set of ids whose batch
 // flaked (transient / no-parse), so proseResidue can surface a flaked id distinctly from one
 // the judge simply omitted. The covered/dropped→residue MAPPING and anchor re-check are pure
 // and live in residue.ts::proseResidue. A real bug propagates through rethrowIfBug.
@@ -684,9 +691,9 @@ export async function proseGate(
     batches.map(async (batch) => {
       try {
         const res = await ask<{ units?: ProseVerdict[] }>(
-          FIDELITY,
+          DISTILL_FIDELITY,
           proseMatchPrompt(outputBody, batch, lang),
-          FIDELITY_TOKENS,
+          DISTILL_FIDELITY_TOKENS,
         );
         for (const v of res.units ?? []) if (v.id) verdicts.set(v.id, v);
       } catch (e) {

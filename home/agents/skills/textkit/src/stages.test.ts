@@ -19,8 +19,8 @@ import {
 } from "@/distill/review/residue.ts";
 
 // ---- expandGuardCap: the passthrough guard's threshold, customizable via --max-words ----
-test("expandGuardCap: unset maxWords defaults to the note's own input size (today's behavior)", () => {
-  expect(expandGuardCap(100, undefined)).toBe(100);
+test("expandGuardCap: unset maxWords means no guard (dropped default — structured output may match source length)", () => {
+  expect(expandGuardCap(100, undefined)).toBeNull();
 });
 
 test("expandGuardCap: maxWords 0 disables the guard (debugging escape hatch)", () => {
@@ -578,7 +578,15 @@ test("USAGE: states the output contract — intermediary envelope, path-on-stdou
 const { readFileSync: readMainOut } = require("node:fs");
 const { join: joinMainPath } = require("node:path");
 const DISTILL = joinMainPath(import.meta.dir, "distill", "app", "distill.ts");
-const DUMMY_KEY = { ...process.env, FIREWORKS_API_KEY: "test-dummy" };
+// Hermetic keys for the subprocess CLI tests: env-only resolution with a dummy for every
+// provider a client might gate on, so no real Keychain/Doppler shell-out happens in the child.
+const DUMMY_KEY = {
+  ...process.env,
+  LLM_KEYS_ENV_ONLY: "1",
+  FIREWORKS_API_KEY: "test-dummy",
+  OPENAI_API_KEY: "test-dummy",
+  DASHSCOPE_API_KEY: "test-dummy",
+};
 
 test("main: empty input exits 3 with a stderr note and no stdout", () => {
   const proc = Bun.spawnSync(["bun", DISTILL], {
@@ -637,11 +645,12 @@ test("main: the documented capture recipe (path/status) observes exit 3 and the 
   expect(path).toEndWith(".md");
 });
 
-test("main: missing FIREWORKS_API_KEY exits 1 with the key message", () => {
+test("main: a missing provider key exits 1 with the key message", () => {
+  // env-only resolution with no provider keys set → the key gate fails deterministically
   const proc = Bun.spawnSync(["bun", DISTILL], {
-    env: { PATH: process.env.PATH ?? "" },
+    env: { PATH: process.env.PATH ?? "", LLM_KEYS_ENV_ONLY: "1" },
     stdin: Buffer.from("Some note body.\n"),
   });
   expect(proc.exitCode).toBe(1);
-  expect(proc.stderr.toString()).toContain("FIREWORKS_API_KEY");
+  expect(proc.stderr.toString()).toContain("no API key");
 });

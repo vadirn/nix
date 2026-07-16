@@ -12,7 +12,7 @@ import { detectLang, glossList, langRule, segment, wordCount } from "@/core/text
 import { parseDescription, parseFrontmatter } from "@/core/frontmatter.ts";
 import { askJson } from "@shared/llm/llm.ts";
 import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { EXTRACT, EXTRACT_TOKENS } from "@/core/models.ts";
+import { DISTILL_EXTRACT, DISTILL_EXTRACT_TOKENS } from "@/core/models.ts";
 import { PASS_EN, PASS_RU, revise } from "@/distill/prompt/prompts.ts";
 import { parseCanonicalNote, splitSections } from "@/distill/graph/parse-projection.ts";
 import { unwrapResult } from "@/distill/app/envelope.ts";
@@ -76,9 +76,9 @@ async function renderProse(
   lang: "en" | "ru",
 ): Promise<string> {
   const res = await askJson<{ prose: string }>(
-    EXTRACT,
+    DISTILL_EXTRACT,
     renderPrompt(description, tie, entries, lang),
-    EXTRACT_TOKENS,
+    DISTILL_EXTRACT_TOKENS,
   );
   return (res.prose ?? "").trim();
 }
@@ -106,7 +106,12 @@ export async function runProse(
       return 3;
     }
     if (!opts.noRevise) {
-      const revised = await revise(segment(prose), lang === "ru" ? PASS_RU : PASS_EN);
+      const revised = await revise(
+        segment(prose),
+        lang === "ru" ? PASS_RU : PASS_EN,
+        DISTILL_EXTRACT,
+        DISTILL_EXTRACT_TOKENS,
+      );
       prose = revised.map((b) => b.text).join("\n\n");
     }
     const outBody = preserved ? `${prose}\n\n${preserved}` : prose;

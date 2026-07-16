@@ -22,7 +22,13 @@ import { parseInteract, stripInteract } from "@/distill/review/interact.ts";
 import { askJson } from "@shared/llm/llm.ts";
 
 const DISTILL = join(import.meta.dir, "distill", "app", "distill.ts");
-const DUMMY_KEY = { ...process.env, FIREWORKS_API_KEY: "test-dummy" };
+const DUMMY_KEY = {
+  ...process.env,
+  LLM_KEYS_ENV_ONLY: "1",
+  FIREWORKS_API_KEY: "test-dummy",
+  OPENAI_API_KEY: "test-dummy",
+  DASHSCOPE_API_KEY: "test-dummy",
+};
 const NO_KEY = { PATH: process.env.PATH ?? "" };
 
 const NOTE = `---

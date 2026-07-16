@@ -6,9 +6,9 @@
 //
 // Flow per candidate: fetchNeighbours (a spawn/parse failure degrades to the
 // recall-unavailable flag with empty hits, never a throw — see neighbours.ts) →
-// the novelty-band judge on FIDELITY (a non-bug failure or an unparseable reply
+// the novelty-band judge on CARD_JUDGE (a non-bug failure or an unparseable reply
 // degrades to the judge-inconclusive flag, verdict null) → the card draft on
-// EXTRACT (a non-bug failure or an empty reply degrades to the draft-failed flag,
+// CARD_DRAFT (a non-bug failure or an empty reply degrades to the draft-failed flag,
 // draft "") → buildStagingRecord → renderStagingFile → write. Error discipline
 // mirrors the pipeline (distill-core.ts's recover-def/recover-steps sites): every
 // per-candidate LLM call is wrapped in try/rethrowIfBug, so a programmer bug
@@ -28,9 +28,10 @@ import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseDescription, parseFrontmatter } from "@/core/frontmatter.ts";
 import { InteractFormatError, sections, stripInteract } from "@/distill/emit.ts";
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson, ensureKeys } from "@shared/llm/llm.ts";
+import { MissingKeyError } from "@shared/llm/keys.ts";
 import { cardStageDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { EXTRACT, EXTRACT_TOKENS, FIDELITY, FIDELITY_TOKENS } from "@/core/models.ts";
+import { CARD_DRAFT, CARD_DRAFT_TOKENS, CARD_JUDGE, CARD_JUDGE_TOKENS } from "@/core/models.ts";
 import { takeValue } from "@/core/args.ts";
 import { detectLang } from "@/core/text.ts";
 import { nameLintAgainstSource } from "@/core/writing/name-lint.ts";
@@ -185,9 +186,9 @@ async function stageCandidate(
   let verdict: BandVerdict | null = null;
   try {
     const reply = await deps.ask<BandJudgeReply>(
-      FIDELITY,
+      CARD_JUDGE,
       noveltyBandPrompt(candidate, hits, lang),
-      FIDELITY_TOKENS,
+      CARD_JUDGE_TOKENS,
     );
     verdict = decideCard(reply, hits);
   } catch (e) {
@@ -198,9 +199,9 @@ async function stageCandidate(
   let draft = "";
   try {
     const reply = await deps.ask<DraftReply>(
-      EXTRACT,
+      CARD_DRAFT,
       cardDraftPrompt(candidate, hits, body, lang),
-      EXTRACT_TOKENS,
+      CARD_DRAFT_TOKENS,
     );
     if (typeof reply?.draft === "string" && reply.draft.trim()) draft = reply.draft;
   } catch (e) {
@@ -463,12 +464,17 @@ async function main(): Promise<void> {
     return;
   }
   const opts = resolveOpts(parsed.opts, process.env.HOME ?? "");
-  if (!opts.dryRun && !process.env.FIREWORKS_API_KEY) {
-    console.error(
-      "FIREWORKS_API_KEY not set (run under: doppler run --project claude-code --config std --)",
-    );
-    process.exit(1);
-    return;
+  if (!opts.dryRun) {
+    try {
+      ensureKeys([CARD_DRAFT, CARD_JUDGE]);
+    } catch (e) {
+      if (e instanceof MissingKeyError) {
+        console.error(`${e.message}\nSeed it in the Keychain or Doppler (claude-code/std).`);
+        process.exit(1);
+        return;
+      }
+      throw e;
+    }
   }
   const noteText = readFileSync(opts.notePath, "utf8");
   const result = await stageNote(

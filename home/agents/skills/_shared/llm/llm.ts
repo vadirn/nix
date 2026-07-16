@@ -1,9 +1,13 @@
-// llm — a provider-neutral LLM transport: the provider HTTP call with transient
-// retry (fw, currently Fireworks) and the JSON-extracting wrapper (askJson) that
-// callers drive. askJson is the provider-neutral seam — it takes model + token cap
-// as arguments; fw() is the Fireworks-specific call behind it. No model-policy
-// constants (model ids, token budgets), no prompt text, and no pipeline logic live
-// here — a caller supplies those.
+// llm — a multi-provider LLM transport: one OpenAI-compatible HTTP call with transient
+// retry (callProvider) behind the JSON-extracting wrapper (askJson) that callers drive.
+// A caller passes a ModelRef — {provider, id, reasoning knobs} — so each call routes to
+// Fireworks, OpenAI, or qwencloud (DashScope) by the model's own declaration. All three
+// speak `/chat/completions`, so only the base URL, auth key, and a few body params differ
+// (see the Provider descriptors); the response half — content, usage, finish_reason,
+// retry — is shared. No model-policy (which model rides which stage, token budgets), no
+// prompt text, and no pipeline logic live here — a caller supplies those via the ModelRef.
+
+import { type KeySource, resolveKey } from "./keys.ts";
 
 // A failure a caller can ride out: a network/timeout throw, a 429/5xx
 // gateway status, or an unparseable model response. fw/askJson tag every such
@@ -49,11 +53,10 @@ export function makeRethrowIfBug(prefix: string): (e: unknown, stage: string) =>
   };
 }
 
-const FW = "https://api.fireworks.ai/inference/v1/chat/completions";
 const TIMEOUT_MS = 180_000;
 
-// The retry backoff delay, shared by both wait points in fw's attempt loop (network-error
-// retry and 429/5xx retry) so the two can never drift apart.
+// The retry backoff delay, shared by both wait points in callProvider's attempt loop
+// (network-error retry and 429/5xx retry) so the two can never drift apart.
 const BACKOFF_MS = 2000;
 
 // A transient-HTTP status: rate-limited (429) or a server-side gateway fault (5xx). Shared
@@ -61,41 +64,158 @@ const BACKOFF_MS = 2000;
 // retry" and "is this a TransientError" can never mean two different things.
 const transientStatus = (status: number): boolean => status === 429 || status >= 500;
 
-// ---- Fireworks call with retry ----
-// Retry once, but only on transient failures: a network/timeout throw, or a
-// 429/5xx status. A 401/400/content-policy error fails the same way on retry, so
-// retrying it only burns a second TIMEOUT_MS before the outer failsafe fires —
-// fail those fast with the status in the message instead.
-async function fw(
-  model: string,
-  messages: { role: string; content: string }[],
-  opts: { json?: boolean; maxTokens?: number; temp?: number } = {},
-): Promise<string> {
-  const body: Record<string, unknown> = {
-    model,
+type Msg = { role: string; content: string };
+// The reasoning knobs a ModelRef may carry, passed through to the provider's buildBody:
+// `effort` is OpenAI's reasoning_effort; `thinking` is qwencloud's enable_thinking /
+// thinking_budget. Fireworks reads neither. A caller sets only what its provider honors.
+type ReasoningOpts = { json?: boolean; maxTokens?: number; temp?: number };
+type Effort = "low" | "medium" | "high";
+type Thinking = { enable?: boolean; budget?: number };
+
+// A Provider is one OpenAI-compatible endpoint: its URL, where its key lives (resolved
+// lazily by keys.ts), and buildBody — the ONE thing that varies per provider (token-param
+// name, whether temperature is allowed, the reasoning knob). The response half is shared
+// below in callProvider.
+type Provider = {
+  id: string;
+  url: string;
+  key: KeySource;
+  buildBody: (
+    id: string,
+    messages: Msg[],
+    opts: ReasoningOpts & { effort?: Effort; thinking?: Thinking },
+  ) => Record<string, unknown>;
+};
+
+const jsonFmt = (json?: boolean) =>
+  json ? { response_format: { type: "json_object" as const } } : {};
+
+const FIREWORKS: Provider = {
+  id: "fireworks",
+  url: "https://api.fireworks.ai/inference/v1/chat/completions",
+  key: {
+    env: "FIREWORKS_API_KEY",
+    keychain: "fireworks-api",
+    doppler: { secret: "FIREWORKS_API_KEY", project: "claude-code", config: "std" },
+  },
+  buildBody: (id, messages, o) => ({
+    model: id,
     messages,
-    max_tokens: opts.maxTokens ?? 2048,
-    temperature: opts.temp ?? 0,
-  };
-  if (opts.json) body.response_format = { type: "json_object" };
+    max_tokens: o.maxTokens ?? 2048,
+    temperature: o.temp ?? 0,
+    ...jsonFmt(o.json),
+  }),
+};
+
+// OpenAI reasoning models: `max_completion_tokens` (not max_tokens), NO temperature
+// (a value ≠ 1 is rejected), and reasoning_effort as the depth knob.
+const OPENAI: Provider = {
+  id: "openai",
+  url: "https://api.openai.com/v1/chat/completions",
+  key: {
+    env: "OPENAI_API_KEY",
+    doppler: { secret: "OPENAI_API_KEY", project: "claude-code", config: "std" },
+  },
+  buildBody: (id, messages, o) => ({
+    model: id,
+    messages,
+    max_completion_tokens: o.maxTokens ?? 2048,
+    ...(o.effort ? { reasoning_effort: o.effort } : {}),
+    ...jsonFmt(o.json),
+  }),
+};
+
+// qwencloud (DashScope international, OpenAI-compatible): max_tokens + temperature like
+// Fireworks, plus optional thinking control — enable_thinking:false to run non-thinking,
+// or a thinking_budget ceiling. Omitting both uses the model's default (thinking on for glm).
+const DASHSCOPE: Provider = {
+  id: "dashscope",
+  url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+  key: {
+    env: "DASHSCOPE_API_KEY",
+    doppler: { secret: "DASHSCOPE_API_KEY", project: "claude-code", config: "std" },
+  },
+  buildBody: (id, messages, o) => ({
+    model: id,
+    messages,
+    max_tokens: o.maxTokens ?? 2048,
+    temperature: o.temp ?? 0,
+    ...(o.thinking?.enable === false ? { enable_thinking: false } : {}),
+    ...(o.thinking?.budget ? { enable_thinking: true, thinking_budget: o.thinking.budget } : {}),
+    ...jsonFmt(o.json),
+  }),
+};
+
+// A ModelRef binds a model id to its provider plus any reasoning knobs. Model-policy modules
+// build these via the helpers below; the transport reads `provider` to route and `effort`/
+// `thinking` to shape the body. Equality is by reference — `model === FIDELITY` still works
+// because callers pass the same imported constant.
+export type ModelRef = { provider: Provider; id: string; effort?: Effort; thinking?: Thinking };
+
+export const fireworks = (id: string): ModelRef => ({ provider: FIREWORKS, id });
+export const openai = (id: string, o: { effort?: Effort } = {}): ModelRef => ({
+  provider: OPENAI,
+  id,
+  effort: o.effort,
+});
+export const dashscope = (id: string, o: { thinking?: Thinking } = {}): ModelRef => ({
+  provider: DASHSCOPE,
+  id,
+  thinking: o.thinking,
+});
+
+// Resolve every provider key a set of models will use, up front, so a missing key fails fast
+// (the CLI maps MissingKeyError to exit 1) instead of mid-run. Dedups by provider so each
+// key is queried at most once. A CLI calls this with the ModelRefs its run will touch.
+export function ensureKeys(models: ModelRef[]): void {
+  const seen = new Set<string>();
+  for (const m of models) {
+    if (seen.has(m.provider.id)) continue;
+    seen.add(m.provider.id);
+    resolveKey(m.provider.key);
+  }
+}
+
+// ---- provider call with retry ----
+// Retry once, but only on transient failures: a network/timeout throw, or a 429/5xx status.
+// A 401/400/content-policy error fails the same way on retry, so retrying it only burns a
+// second timeout before the outer failsafe fires — fail those fast with the status instead.
+// The timeout retry is a deliberate re-roll: a thinking model's generation length is
+// non-deterministic, so a call that ran to a (short, per-call `timeoutMs`) ceiling usually
+// clears on the next try. resolveKey runs before the loop, so a missing key surfaces as a
+// (non-transient) MissingKeyError rather than being swallowed as a flake.
+async function callProvider(
+  model: ModelRef,
+  messages: Msg[],
+  opts: ReasoningOpts & { timeoutMs?: number } = {},
+): Promise<string> {
+  const p = model.provider;
+  const key = resolveKey(p.key);
+  const body = p.buildBody(model.id, messages, {
+    json: opts.json,
+    maxTokens: opts.maxTokens,
+    temp: opts.temp,
+    effort: model.effort,
+    thinking: model.thinking,
+  });
   for (let attempt = 0; attempt < 2; attempt++) {
     let res: Response;
     try {
-      res = await fetch(FW, {
+      res = await fetch(p.url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.FIREWORKS_API_KEY}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
       });
     } catch (e) {
+      // A timeout or a network error is transient — retry once. A timeout is a re-roll: an
+      // attempt that ran to the per-call ceiling usually clears on the next try (see the header
+      // note), and a network error (connection reset, DNS) is cheap to re-send.
       if (attempt === 0) {
         await new Promise((r) => setTimeout(r, BACKOFF_MS));
-        continue; // network error / timeout: transient
+        continue; // network error / timeout: transient, retry
       }
-      throw new TransientError(`FW network/timeout: ${String(e).slice(0, 200)}`, { cause: e });
+      throw new TransientError(`${p.id} network/timeout: ${String(e).slice(0, 200)}`, { cause: e });
     }
     const j = await res.json().catch(() => ({}) as Record<string, unknown>); // 5xx gateways return HTML
     if (!res.ok) {
@@ -105,7 +225,7 @@ async function fw(
       }
       // 429/5xx stay transient even after the retry is spent (rate-limit / server);
       // a 4xx (bad request, auth, content-policy) is a real fault — fail it hard.
-      const msg = `FW ${res.status}: ${JSON.stringify(j).slice(0, 300)}`;
+      const msg = `${p.id} ${res.status}: ${JSON.stringify(j).slice(0, 300)}`;
       throw transientStatus(res.status) ? new TransientError(msg) : new Error(msg);
     }
     const choice = (
@@ -117,19 +237,18 @@ async function fw(
     // non-retried TruncationError naming the model + cap. The extractJson
     // "unbalanced JSON" path stays as the fallback for when finish_reason is absent.
     if (choice?.finish_reason === "length") {
-      const shortModel = model.split("/").pop() ?? model;
       throw new TruncationError(
-        `output truncated at max_tokens=${body.max_tokens} (${shortModel}) — raise this stage's cap`,
+        `output truncated at cap=${opts.maxTokens ?? 2048} (${model.id}) — raise this stage's cap`,
       );
     }
     const content = choice?.message?.content;
     if (typeof content !== "string") {
       // model returned no content: a model-output flake, retryable — transient.
-      throw new TransientError(`FW empty choices: ${JSON.stringify(j).slice(0, 300)}`);
+      throw new TransientError(`${p.id} empty choices: ${JSON.stringify(j).slice(0, 300)}`);
     }
     return content;
   }
-  throw new Error("FW unreachable"); // loop always returns or throws
+  throw new Error("provider call unreachable"); // loop always returns or throws
 }
 
 // Defensive layer over json_object mode: that mode is a strong hint, not a
@@ -159,25 +278,28 @@ export function extractJson(s: string): string {
   throw new Error(`unbalanced JSON: ${s.slice(0, 200)}`);
 }
 
-// The transport askJson drives: the module-private fw signature. Injected via
+// The transport askJson drives: the module-private callProvider signature. Injected via
 // askJson's optional `call` param so a test can drive the parse-retry/degrade loop
 // with a fake transport instead of mocking the module; production callers omit it
-// and get fw unchanged.
+// and get callProvider unchanged.
 type Transport = (
-  model: string,
-  messages: { role: string; content: string }[],
-  opts: { json?: boolean; maxTokens?: number; temp?: number },
+  model: ModelRef,
+  messages: Msg[],
+  opts: { json?: boolean; maxTokens?: number; temp?: number; timeoutMs?: number },
 ) => Promise<string>;
 
 // askJson calls `model` with `prompt`, requesting JSON-object output, and parses the response as
 // T. Retries once on a JSON-parse failure (the model returned no or unbalanced JSON) before
 // giving up with a TransientError; fw() below handles the separate network/HTTP retry
-// underneath. `call` defaults to fw and exists only so tests can inject a fake transport.
+// underneath. `timeoutMs` sets a per-call abort ceiling (default the module's 180s) — a
+// runaway-prone stage passes a tight one so fw's timeout retry re-rolls cheaply. `call` defaults
+// to fw and exists only so tests can inject a fake transport.
 export async function askJson<T>(
-  model: string,
+  model: ModelRef,
   prompt: string,
   maxTokens: number,
-  call: Transport = fw,
+  timeoutMs?: number,
+  call: Transport = callProvider,
 ): Promise<T> {
   // Retry once on a PARSE failure (distinct from fw's network/5xx retry): a
   // thinking model sometimes returns only reasoning with no JSON object, which
@@ -188,6 +310,7 @@ export async function askJson<T>(
     const raw = await call(model, [{ role: "user", content: prompt }], {
       json: true,
       maxTokens,
+      timeoutMs,
     });
     try {
       return JSON.parse(extractJson(raw)) as T;

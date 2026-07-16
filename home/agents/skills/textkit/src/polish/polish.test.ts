@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
 import { USAGE, buildPolishFooter, parseArgs } from "@/polish/polish.ts";
 import { PASS_EN, revise } from "@/core/writing/passes.ts";
 import { spellPass } from "@/polish/spell.ts";
-import { askJson } from "@shared/llm/llm.ts";
+import { askJson, fireworks } from "@shared/llm/llm.ts";
 
 function ok(argv: string[]) {
   const r = parseArgs(argv);
@@ -206,7 +206,7 @@ test("pipeline order: revise's output is what spellPass receives, not the origin
     return { blocks: [{ id: "B1", text: "The the text is revised now." }] };
   }) as typeof askJson;
   const blocks = [{ id: "B1", text: "Teh original text." }];
-  const revised = await revise(blocks, PASS_EN, [], undefined, ask);
+  const revised = await revise(blocks, PASS_EN, fireworks("test"), 2048, [], undefined, ask);
   expect(revised[0].text).toContain("revised now");
   const spelled = await spellPass(revised, [], ask);
   expect(spelled.reverted).toEqual([]); // the fix landed, not reverted

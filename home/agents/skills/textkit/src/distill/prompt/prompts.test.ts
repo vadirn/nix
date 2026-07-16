@@ -7,7 +7,7 @@
 // no-fabrication guard is present. It also pins the typed pre-graph schema the prompt asks
 // for. parseExtractGraph (the pure normalizer) is covered by extract-graph.test.ts.
 import { expect, test } from "bun:test";
-import type { askJson } from "@shared/llm/llm.ts";
+import type { askJson, ModelRef } from "@shared/llm/llm.ts";
 import type { Block, LinkInventory } from "@/core/text.ts";
 import { extractGraphPrompt, fidelityGate, renderEntryPrompt } from "@/distill/prompt/prompts.ts";
 
@@ -134,7 +134,7 @@ test("renderEntryPrompt: the defRelations param overrides the env-derived defaul
 
 test("fidelityGate: the fidelity prompt uses definition-scoped grading with grounding citation", async () => {
   let seenPrompt = "";
-  const captureAsk = (async (_model: string, prompt: string) => {
+  const captureAsk = (async (_model: ModelRef, prompt: string) => {
     seenPrompt = prompt;
     return { thesisRecoverable: true, concepts: [] };
   }) as typeof askJson;

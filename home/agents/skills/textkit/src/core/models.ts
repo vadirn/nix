@@ -1,29 +1,48 @@
-// models — textkit's model policy: which Fireworks model each stage rides and the
-// token budget it gets. Kept out of the shared transport (`@shared/llm/llm.ts`),
-// which is provider-neutral and takes model + token cap as call arguments; these
-// are textkit's choices, passed in at every call site.
+// models — textkit's model policy, decoupled PER CLIENT so each CLI (distill / polish /
+// card-stage) configures its own provider+model independently. Kept out of the shared
+// transport (`@shared/llm/llm.ts`), which is provider-neutral and takes a ModelRef + token
+// cap as call arguments; these are textkit's choices, built here with the transport's provider
+// helpers and passed in at every call site. Change a client's model by editing its block below
+// — a shared writer function (revise) takes the model as a parameter so two clients can drive
+// it with different models.
+import { dashscope, openai } from "@shared/llm/llm.ts";
 
-// EXTRACT is the fast, obedient gpt-oss model id: used for the extract, grade, and revise
-// passes (~3s per call).
-export const EXTRACT = "accounts/fireworks/models/gpt-oss-120b";
-// FIDELITY is the slower glm thinking-model id, deliberately a DIFFERENT model than EXTRACT so
-// the fidelity backstop is not grading the same model's own output: used only for that
-// independent fidelity pass (~15-20s per call).
-export const FIDELITY = "accounts/fireworks/models/glm-5p2";
-// Token budget for the FIDELITY thinking model. Its reasoning is inlined in the
-// content, so the cap must cover BOTH the thinking and the trailing JSON — too low
-// and the model exhausts it mid-thought, returning prose with no `{`, which fails
-// extractJson and drops the whole run to the passthrough failsafe. Sized with
-// headroom for the longest gate input (rationale-carrying workflow steps).
-export const FIDELITY_TOKENS = 16_384;
-// Output ceiling for the content-scaling EXTRACT stages (extractGraph, gradeBlocks,
-// revise, proseFix, renderProse). gpt-oss inlines reasoning in
-// the content, so the budget must cover reasoning + JSON; a dense note overran the old
-// per-stage caps (4096/2048) and truncated. max_tokens is a CEILING, not a target — a
-// normal note generates only what its content needs (~3-5k) and costs the same at any
-// ceiling, so this is sized generously to never truncate a real note. The 180s
-// TIMEOUT_MS is the de-facto limit (a runaway times out long before 96k); a genuine
-// length-truncation now surfaces as an actionable TruncationError, not silent loss.
-// The intentionally-tiny stages (tieTogether, recover-def: ~1024) keep their small caps
-// as sanity bounds.
-export const EXTRACT_TOKENS = 96_000;
+// ---- distill ----
+// EXTRACT rides the extract/grade/revise passes: gpt-5.6-luna on OpenAI at medium reasoning
+// effort. Chosen after a ten-model sweep — the one current, first-party model that keeps the
+// dense OpenAI-lineage extraction (5 concepts + bullets) AND serves reliably (no runaway),
+// unlike gpt-oss-120b on Fireworks whose runaway rate climbed under load. Medium is the
+// cost/quality sweet spot (low unstable, high over-reasoned); its ~1.7-2.1k reasoning tokens
+// keep it cheaper than gpt-5.4-mini despite the tier.
+export const DISTILL_EXTRACT = openai("gpt-5.6-luna", { effort: "medium" });
+export const DISTILL_EXTRACT_TOKENS = 96_000;
+// Per-call abort ceiling for the EXTRACT stage, over the transport's 180s default. luna at
+// medium completes in ~20-30s; this leaves headroom while still catching a genuine hang before
+// 180s, and a timeout re-rolls via the transport's retry.
+export const DISTILL_EXTRACT_TIMEOUT_MS = 150_000;
+// FIDELITY is glm-5.2 on qwencloud — a DIFFERENT model than EXTRACT (and a different provider),
+// so the fidelity backstop is not grading the same model's own output. On qwencloud to burn the
+// prepaid credit; it thinks hard on the full-projection gate input (~90-150s/call), the price of
+// its judgment. Swap to a faster fidelity model here if that latency bites.
+export const DISTILL_FIDELITY = dashscope("glm-5.2");
+// Token budget for the FIDELITY thinking model. Its reasoning is inlined in the content, so the
+// cap must cover BOTH the thinking and the trailing JSON — too low and it exhausts mid-thought,
+// returning prose with no `{`, which fails extractJson and drops the run to the passthrough
+// failsafe. Sized with headroom for the longest gate input.
+export const DISTILL_FIDELITY_TOKENS = 16_384;
+
+// ---- polish ----
+// The spell/grammar rewrite model. Defaults to luna like distill; a rewrite pass is lighter than
+// graph extraction, so dial the effort down (or swap to a cheaper model) here if cost matters —
+// this is independent of distill now.
+export const POLISH_MODEL = openai("gpt-5.6-luna", { effort: "medium" });
+export const POLISH_TOKENS = 96_000;
+
+// ---- card-stage ----
+// The card-draft writer. Its own model, independent of distill/polish.
+export const CARD_DRAFT = openai("gpt-5.6-luna", { effort: "medium" });
+export const CARD_DRAFT_TOKENS = 96_000;
+// The novelty-band + atomicity judges — a DIFFERENT model than the writer (independence), on
+// qwencloud to burn the prepaid credit, mirroring distill's fidelity choice.
+export const CARD_JUDGE = dashscope("glm-5.2");
+export const CARD_JUDGE_TOKENS = 16_384;

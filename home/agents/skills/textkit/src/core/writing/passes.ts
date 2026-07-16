@@ -4,7 +4,7 @@
 import { type Block, render } from "@/core/text.ts";
 import { askJson } from "@shared/llm/llm.ts";
 import { writingDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { EXTRACT, EXTRACT_TOKENS } from "@/core/models.ts";
+import type { ModelRef } from "@shared/llm/llm.ts";
 import { createMasker } from "@/core/writing/mask.ts";
 import { normalizeTypography } from "@/core/typography.ts";
 
@@ -94,12 +94,16 @@ ${render(blocks)}`;
 export async function revise(
   blocks: Block[],
   passes: Pass[],
+  // The rewrite model + its token cap, injected by the client — revise is shared writing-core
+  // (polish and distill's prose mode drive it with their own per-client models; see models.ts).
+  model: ModelRef,
+  maxTokens: number,
   literals: string[] = [],
   // progress seam for CLIs: fires as pass `index` of `total` starts (1-based);
   // the passes themselves are unchanged
   onPass?: (index: number, total: number) => void,
   // The model call, injected so tests drive a pass flake / echoed-marker case without a
-  // process-global module mock; production callers omit it for the real fw transport.
+  // process-global module mock; production callers omit it for the real transport.
   ask: typeof askJson = askJson,
 ): Promise<Block[]> {
   // Mask reference spans ([[wikilinks]], ![[embeds]], inline code) to opaque ⟦N⟧
@@ -119,9 +123,9 @@ export async function revise(
     onPass?.(i + 1, passes.length);
     try {
       const { blocks: rev } = await ask<{ blocks: { id: string; text: string }[] }>(
-        EXTRACT,
+        model,
         revisePrompt(cur, pass),
-        EXTRACT_TOKENS,
+        maxTokens,
       );
       const byId = new Map(rev.map((r) => [r.id, r.text]));
       cur = cur.map((b) => {

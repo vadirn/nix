@@ -5,8 +5,8 @@
 // vault-query spawn, no real Fireworks call, no real filesystem write anywhere
 // in this file.
 import { expect, test } from "bun:test";
-import { TransientError, TruncationError } from "@shared/llm/llm.ts";
-import { EXTRACT, FIDELITY } from "@/core/models.ts";
+import { type ModelRef, TransientError, TruncationError } from "@shared/llm/llm.ts";
+import { CARD_DRAFT, CARD_JUDGE } from "@/core/models.ts";
 import { relText, slugSegment } from "@/core/text.ts";
 import {
   formatDryRunReport,
@@ -231,8 +231,8 @@ test("parseArgs: --source takes a path and a bare --source errors", () => {
 // staging filename prefix, AND the thesis-term fallback — not the temp path.
 test("stageNote: opts.source overrides Source line, filename prefix, and thesis fallback", async () => {
   const { writeFile, calls } = recordingWriteFile();
-  const ask: AskFn = (async (model: string) => {
-    if (model === FIDELITY) return { band: "mint", rationale: "close" };
+  const ask: AskFn = (async (model: ModelRef) => {
+    if (model === CARD_JUDGE) return { band: "mint", rationale: "close" };
     return { draft: "A draft." };
   }) as AskFn;
   const noTitle = NOTE_MD.replace("# My Note\n", ""); // force the thesis-term fallback
@@ -270,8 +270,8 @@ test("resolveOpts + stageNote round-trip: --source flows through main()'s wiring
   expect(opts.source).toBe("/vault/00 inbox/Real Stub.md");
 
   const { writeFile, calls } = recordingWriteFile();
-  const ask: AskFn = (async (model: string) => {
-    if (model === FIDELITY) return { band: "mint", rationale: "close" };
+  const ask: AskFn = (async (model: ModelRef) => {
+    if (model === CARD_JUDGE) return { band: "mint", rationale: "close" };
     return { draft: "A draft." };
   }) as AskFn;
   const result = await stageNote(
@@ -295,8 +295,8 @@ test("resolveOpts + stageNote round-trip: --source flows through main()'s wiring
 
 test("stageNote: a transient band-judge failure degrades to judge-inconclusive; drafting still runs", async () => {
   const { writeFile, calls } = recordingWriteFile();
-  const ask: AskFn = (async (model: string) => {
-    if (model === FIDELITY) throw new TransientError("flaky judge");
+  const ask: AskFn = (async (model: ModelRef) => {
+    if (model === CARD_JUDGE) throw new TransientError("flaky judge");
     return { draft: "A draft." };
   }) as AskFn;
   const result = await stageNote(NOTE_MD, "/abs/note.md", STAGE_OPTS, {
@@ -316,9 +316,9 @@ test("stageNote: a transient band-judge failure degrades to judge-inconclusive; 
 
 test("stageNote: a truncation on the draft call degrades to draft-failed; the band verdict still lands", async () => {
   const { writeFile, calls } = recordingWriteFile();
-  const ask: AskFn = (async (model: string) => {
-    if (model === FIDELITY) return { band: "mint", rationale: "close" };
-    if (model === EXTRACT) throw new TruncationError("cap hit");
+  const ask: AskFn = (async (model: ModelRef) => {
+    if (model === CARD_JUDGE) return { band: "mint", rationale: "close" };
+    if (model === CARD_DRAFT) throw new TruncationError("cap hit");
     throw new Error(`unexpected model ${model}`);
   }) as AskFn;
   const result = await stageNote(NOTE_MD, "/abs/note.md", STAGE_OPTS, {
@@ -340,8 +340,8 @@ test("stageNote: a draft that corrupts a source name carries the pair through to
     "# My Note\n",
     "# My Note\n\nWe rely on Firecrawl for scraping.\n",
   );
-  const ask: AskFn = (async (model: string) => {
-    if (model === FIDELITY) return { band: "mint", rationale: "close" };
+  const ask: AskFn = (async (model: ModelRef) => {
+    if (model === CARD_JUDGE) return { band: "mint", rationale: "close" };
     // "Firecurl" (mid-sentence, non-initial) corrupts the body's "Firecrawl".
     return { draft: "We used Firecurl again for this one." };
   }) as AskFn;
@@ -357,8 +357,8 @@ test("stageNote: a draft that corrupts a source name carries the pair through to
 });
 
 test("stageNote: a non-transient error from the band judge propagates instead of degrading", async () => {
-  const ask: AskFn = (async (model: string) => {
-    if (model === FIDELITY) throw new Error("bad request: 400 content policy");
+  const ask: AskFn = (async (model: ModelRef) => {
+    if (model === CARD_JUDGE) throw new Error("bad request: 400 content policy");
     return { draft: "d" };
   }) as AskFn;
   const { writeFile } = recordingWriteFile();
