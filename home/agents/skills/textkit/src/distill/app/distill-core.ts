@@ -102,8 +102,6 @@ function isInteractive(): boolean {
 // temp-file path on stdout. Pure; the nothing-to-distill and expansion guards in distill()
 // emit their own footers, so this only renders a real (compressed-or-equal) run.
 export function buildFooter(m: {
-  beforeWords: number;
-  afterWords: number;
   entries: number;
   steps: number;
   verbatim: number;
@@ -113,10 +111,6 @@ export function buildFooter(m: {
   proseGateOffFactsDump: boolean;
   nameLint?: NameLintResult;
 }): string {
-  const pct = m.beforeWords
-    ? Math.round((100 * (m.beforeWords - m.afterWords)) / m.beforeWords)
-    : 0;
-  const sizeTag = `${pct > 0 ? "-" : pct < 0 ? "+" : "±"}${Math.abs(pct)}%`; // expansion is guarded in distill(), so this is -N% or ±0%
   const stepsTag = m.steps ? ` · ${m.steps} steps` : "";
   // gate-skipped items are a subset of residue.length — flag them so a batch log
   // distinguishes "judge couldn't verify" from a genuine fidelity miss.
@@ -125,7 +119,7 @@ export function buildFooter(m: {
   // the prose gate would have run (!noGate && !glossaryOnly) but the facts-dump genre gate
   // skipped it — surface the skip so disabling a loss detector is never silent.
   const proseGateTag = m.proseGateOffFactsDump ? ` · prose-gate off (facts-dump)` : "";
-  return `— distilled ${shapeTag} · ${m.beforeWords}→${m.afterWords} words (${sizeTag}) · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
+  return `— distilled ${shapeTag} · ${m.entries} entries${stepsTag} · ${m.verbatim} verbatim · ${m.residue} residue${gateTag}${proseGateTag}${m.nameLint ? formatNameLint(m.nameLint) : ""}`;
 }
 
 // The deterministic, zero-LLM whole-note backstop: payload-coverage residue (irreversible
@@ -369,8 +363,6 @@ async function distill(
   residue = residue.concat(backstop.residue);
   const nameLint = backstop.nameLint;
   const footer = buildFooter({
-    beforeWords,
-    afterWords,
     entries: entriesCount,
     steps: stepsCount,
     verbatim: payloadBlocks.length,
@@ -460,7 +452,6 @@ export function assembleRoutedNote(a: {
   headVerbatim: boolean;
   sections: { route: Route; text: string }[];
 }): { out: string; footer: string; residue: Residue[] } {
-  const beforeWords = wordCount(a.source);
   const units: Unit[] = a.head ? [...a.head.units] : [];
   const edges = a.head?.edges ?? [];
   // Every preserve section — plus, when the head is verbatim, every re-author section — is held
@@ -481,14 +472,12 @@ export function assembleRoutedNote(a: {
   const source = a.head?.source ?? computeSource(a.path, a.source);
   const title = a.title.replace(/^#+\s*/, "").trim() || a.head?.title;
   const out = projectMarkdown({ source, units, edges, title, abstract: a.head?.abstract });
-  const afterWords = wordCount(out);
   // deterministic, zero-LLM, never blocks — assembleRoutedNote owns the one whole-note check.
   const { residue, nameLint } = deterministicBackstop(a.source, out);
   const reCount = a.sections.filter((u) => u.route === "re-author").length;
   const preserveCount = a.sections.length - reCount;
   const footer =
     `— per-section route: ${reCount} re-author / ${preserveCount} preserve` +
-    ` · ${beforeWords}→${afterWords} words` +
     (a.headVerbatim ? " · head kept verbatim (prose not compressed)" : "") +
     (residue.length ? ` · ${residue.length} residue` : "") +
     formatNameLint(nameLint);

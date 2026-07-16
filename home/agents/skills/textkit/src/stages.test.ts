@@ -32,12 +32,10 @@ test("expandGuardCap: a positive maxWords sets an absolute ceiling, ignoring inp
   expect(expandGuardCap(100, 10)).toBe(10);
 });
 
-// ---- buildFooter: tag composition + size-tag branches ----
-test("buildFooter: compressed run renders size + steps tags, omits the zero tags", () => {
+// ---- buildFooter: tag composition branches ----
+test("buildFooter: compressed run renders the steps tag, omits the zero tags", () => {
   expect(
     buildFooter({
-      beforeWords: 100,
-      afterWords: 60,
       entries: 3,
       steps: 2,
       verbatim: 1,
@@ -47,15 +45,13 @@ test("buildFooter: compressed run renders size + steps tags, omits the zero tags
       proseGateOffFactsDump: false,
     }),
   ).toBe(
-    "— distilled prose+gloss · 100→60 words (-40%) · 3 entries · 2 steps · 1 verbatim · 0 residue",
+    "— distilled prose+gloss · 3 entries · 2 steps · 1 verbatim · 0 residue",
   );
 });
 
-test("buildFooter: ±0% on no shrink, --glossary shape, gate-skipped tag", () => {
+test("buildFooter: --glossary shape, gate-skipped tag", () => {
   expect(
     buildFooter({
-      beforeWords: 50,
-      afterWords: 50,
       entries: 2,
       steps: 0,
       verbatim: 0,
@@ -65,15 +61,13 @@ test("buildFooter: ±0% on no shrink, --glossary shape, gate-skipped tag", () =>
       proseGateOffFactsDump: false,
     }),
   ).toBe(
-    "— distilled gloss · 50→50 words (±0%) · 2 entries · 0 verbatim · 1 residue · 1 gate-skipped",
+    "— distilled gloss · 2 entries · 0 verbatim · 1 residue · 1 gate-skipped",
   );
 });
 
 test("buildFooter: facts-dump skip of the in-scope prose gate surfaces as a tag", () => {
   expect(
     buildFooter({
-      beforeWords: 100,
-      afterWords: 70,
       entries: 4,
       steps: 0,
       verbatim: 0,
@@ -83,14 +77,12 @@ test("buildFooter: facts-dump skip of the in-scope prose gate surfaces as a tag"
       proseGateOffFactsDump: true,
     }),
   ).toBe(
-    "— distilled prose+gloss · 100→70 words (-30%) · 4 entries · 0 verbatim · 0 residue · prose-gate off (facts-dump)",
+    "— distilled prose+gloss · 4 entries · 0 verbatim · 0 residue · prose-gate off (facts-dump)",
   );
 });
 
 test("buildFooter: nameLint findings append the fragment; omitted nameLint is unchanged (pins the compressed-run string above)", () => {
   const base = {
-    beforeWords: 100,
-    afterWords: 60,
     entries: 3,
     steps: 2,
     verbatim: 1,
@@ -100,7 +92,7 @@ test("buildFooter: nameLint findings append the fragment; omitted nameLint is un
     proseGateOffFactsDump: false,
   };
   expect(buildFooter(base)).toBe(
-    "— distilled prose+gloss · 100→60 words (-40%) · 3 entries · 2 steps · 1 verbatim · 0 residue",
+    "— distilled prose+gloss · 3 entries · 2 steps · 1 verbatim · 0 residue",
   );
   expect(
     buildFooter({
@@ -108,7 +100,7 @@ test("buildFooter: nameLint findings append the fragment; omitted nameLint is un
       nameLint: { corrupted: [{ found: "Firecurl", wanted: "Firecrawl" }], invented: [] },
     }),
   ).toBe(
-    "— distilled prose+gloss · 100→60 words (-40%) · 3 entries · 2 steps · 1 verbatim · 0 residue" +
+    "— distilled prose+gloss · 3 entries · 2 steps · 1 verbatim · 0 residue" +
       " · name-lint: 1 probable corrupted name (Firecurl ← Firecrawl)",
   );
 });
