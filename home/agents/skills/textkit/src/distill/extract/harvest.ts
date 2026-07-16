@@ -299,7 +299,7 @@ export function structuralSpans(parsed: ParsedDoc): Span[] {
 // leading/trailing blank lines dropped — the language tag and fence width are excluded, so
 // a retained block (held verbatim as a `## Payload` unit, statement = b.text) covers its
 // source twin regardless of info-string. Internal whitespace is KEPT: code indentation is
-// load-bearing.
+// significant.
 // Fenced-ONLY: comrak also emits indented code blocks the old regex never saw, so
 // collectStructural.fences is fenced-only. Fixes the nested-fence mis-split — the old
 // line-scanner closed the block at the FIRST inner ` ``` `; comrak parses the outer block whole.

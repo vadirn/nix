@@ -22,7 +22,7 @@ import { parseDistilled } from "@/distill/app/prose-mode.ts";
 
 // The one graph the golden fixture is emitted from — exercises every section and both Payload
 // forms (a single-line blockquote and a multi-line fence whose body holds a `### `-lookalike line
-// that must stay INSIDE its entry, the fence-aware reader's load-bearing case), all three
+// that must stay INSIDE its entry, the fence-aware reader's critical case), all three
 // modalities, an inference with ⇐, and a relation.
 export const GOLDEN: Projection = {
   source: { path: "canonical-grammar.txt", bytes: 812, sha256: "a1b2c3d4e5f6" },

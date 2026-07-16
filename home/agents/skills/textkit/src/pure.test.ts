@@ -930,7 +930,7 @@ test("harvestFences: keys the body, ignoring the language tag and fence width", 
   expect(b[0].key).toBe(a[0].key); // info-string + fence width excluded from the key
 });
 
-test("harvestFences: internal indentation is load-bearing (kept in the key)", () => {
+test("harvestFences: internal indentation is significant (kept in the key)", () => {
   const a = harvestFences("```\n  indented\n```");
   const b = harvestFences("```\nindented\n```");
   expect(a[0].key).not.toBe(b[0].key);

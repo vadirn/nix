@@ -1,7 +1,7 @@
 // cards/prompts tests — run with `bun test cards/prompts.test.ts` from the distill root.
 //
 // The three builders are pure string functions (no model call); this suite pins
-// their load-bearing instruction substrings in the exact-substring idiom of
+// their essential instruction substrings in the exact-substring idiom of
 // stages.test.ts / prompts.test.ts: the three band tokens, the delta instruction,
 // the one-extension rule, the uncertified warning, the verbatim-specimen rule,
 // the embedded inputs (term, def, neighbour descriptions), langRule for both

@@ -62,7 +62,7 @@ test("extractGraphPrompt: states the three-lane classification and the no-fabric
   expect(p).toContain(
     "SELF: this note's own slug is [[pragmatic-first-is-reconnaissance-for-elegance]]",
   );
-  // no-fabrication guard, load-bearing
+  // no-fabrication guard, critical
   expect(p).toContain('NEVER fabricate a "rel"');
   expect(p).toContain("audit trail");
 });

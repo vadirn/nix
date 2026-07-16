@@ -36,7 +36,7 @@ const ATX_HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 // `## Glossary` to `### Glossary` (assembleRoutedNote's demote sweep) precisely to
 // mark it as source material, not channel. Any-depth opening reads those demoted
 // source tables back as channel rows (live-run finding: a preserve section's 20-row
-// property table enumerated as 20 card candidates), so depth is load-bearing here.
+// property table enumerated as 20 card candidates), so depth matters here.
 function extractSection(md: string, name: string): string {
   const lines = md.split("\n");
   const masked = stripFences(md).split("\n");

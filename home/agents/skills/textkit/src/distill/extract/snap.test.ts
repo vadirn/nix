@@ -8,7 +8,7 @@
 //
 // The fixture quotes below are the exact model-emitted strings from the cached pre-graph (concept
 // ids noted inline). normalizeForSnap folds all punctuation to spaces, so only the word tokens are
-// load-bearing — a glyph-swap (U+2011), a flattened link, or a case change still snaps.
+// significant — a glyph-swap (U+2011), a flattened link, or a case change still snaps.
 //
 // `line` is gone from SnapTarget, so assertions slice the snapped span out of the fixture buffer
 // (sliceBytes) and check it contains the expected block's distinctive text.

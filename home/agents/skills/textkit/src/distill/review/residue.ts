@@ -228,7 +228,7 @@ const contentWords = (s: string): string[] =>
 
 // A "covered" verdict clears a unit only when its quoted anchor (i) is a real ≥16-char
 // substring of the output AND (ii) shares ≥2 content words with the item it claims to cover.
-// (ii) is the load-bearing fix: existence alone let glm launder a dropped item by quoting
+// (ii) is the decisive fix: existence alone let glm launder a dropped item by quoting
 // unrelated true output text (e.g. the thesis); requiring shared content words binds the
 // anchor to the JUDGED item, so the model cannot point at the thesis to clear a dropped caveat.
 export function anchored(v: ProseVerdict, span: string, normOut: string): boolean {
