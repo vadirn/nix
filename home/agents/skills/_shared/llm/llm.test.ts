@@ -211,6 +211,28 @@ test("askJson: a persistent timeout is retried once, then surfaces", async () =>
   }
 });
 
+// attempts=1 opts OUT of the re-roll: an advisory stage (the fidelity gate) that would rather
+// degrade than pay a second full-length call fails fast on the first flake.
+test("askJson: attempts=1 fails fast on a timeout — no re-roll", async () => {
+  const fetchMock = mock(async () => {
+    throw new DOMException("The operation timed out.", "TimeoutError");
+  });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  try {
+    let err: unknown;
+    try {
+      await askJson(demo(), "prompt", 2048, undefined, 1);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(TransientError);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // attempts=1: no network re-roll
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 // The point of retrying a timeout: a single runaway attempt clears on the re-roll, so the run
 // recovers instead of dropping to passthrough.
 test("askJson: a timeout that clears on the retry recovers the run", async () => {
@@ -265,6 +287,6 @@ test("askJson: forwards the per-call timeoutMs to the transport", async () => {
       return '{"ok":true}';
     },
   );
-  await askJson(demo(), "prompt", 2048, 75_000, fakeCall as never);
+  await askJson(demo(), "prompt", 2048, 75_000, 2, fakeCall as never);
   expect(seen).toBe(75_000);
 });

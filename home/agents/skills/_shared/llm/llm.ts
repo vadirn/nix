@@ -189,7 +189,7 @@ export function ensureKeys(models: ModelRef[]): void {
 async function callProvider(
   model: ModelRef,
   messages: Msg[],
-  opts: CallOpts & { timeoutMs?: number } = {},
+  opts: CallOpts & { timeoutMs?: number; attempts?: number } = {},
 ): Promise<string> {
   const p = model.provider;
   const key = resolveKey(p.key);
@@ -200,7 +200,8 @@ async function callProvider(
     effort: model.effort,
     thinking: model.thinking,
   });
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const maxAttempts = opts.attempts ?? 2;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     let res: Response;
     try {
       res = await fetch(p.url, {
@@ -213,7 +214,7 @@ async function callProvider(
       // A timeout or a network error is transient — retry once. A timeout is a re-roll: an
       // attempt that ran to the per-call ceiling usually clears on the next try (see the header
       // note), and a network error (connection reset, DNS) is cheap to re-send.
-      if (attempt === 0) {
+      if (attempt < maxAttempts - 1) {
         await new Promise((r) => setTimeout(r, BACKOFF_MS));
         continue; // network error / timeout: transient, retry
       }
@@ -221,7 +222,7 @@ async function callProvider(
     }
     const j = await res.json().catch(() => ({}) as Record<string, unknown>); // 5xx gateways return HTML
     if (!res.ok) {
-      if (transientStatus(res.status) && attempt === 0) {
+      if (transientStatus(res.status) && attempt < maxAttempts - 1) {
         await new Promise((r) => setTimeout(r, BACKOFF_MS));
         continue;
       }
@@ -287,20 +288,22 @@ export function extractJson(s: string): string {
 type Transport = (
   model: ModelRef,
   messages: Msg[],
-  opts: { json?: boolean; maxTokens?: number; temp?: number; timeoutMs?: number },
+  opts: { json?: boolean; maxTokens?: number; temp?: number; timeoutMs?: number; attempts?: number },
 ) => Promise<string>;
 
 // askJson calls `model` with `prompt`, requesting JSON-object output, and parses the response as
-// T. Retries once on a JSON-parse failure (the model returned no or unbalanced JSON) before
-// giving up with a TransientError; callProvider below handles the separate network/HTTP retry
-// underneath. `timeoutMs` sets a per-call abort ceiling (default the module's 180s) — a
-// runaway-prone stage passes a tight one so callProvider's timeout retry re-rolls cheaply. `call` defaults
-// to callProvider and exists only so tests can inject a fake transport.
+// T. `attempts` (default 2) bounds BOTH this parse-retry loop and, forwarded to callProvider, the
+// transport's network/timeout retry underneath: a JSON-parse failure or a transient network/HTTP
+// error re-rolls until attempts is spent, then surfaces a TransientError. An advisory stage that
+// would rather degrade than pay a re-roll passes `attempts: 1` to fail fast on the first flake.
+// `timeoutMs` sets a per-call abort ceiling (default the module's 180s). `call` defaults to
+// callProvider and exists only so tests can inject a fake transport.
 export async function askJson<T>(
   model: ModelRef,
   prompt: string,
   maxTokens: number,
   timeoutMs?: number,
+  attempts = 2,
   call: Transport = callProvider,
 ): Promise<T> {
   // Retry once on a PARSE failure (distinct from callProvider's network/5xx retry): a
@@ -308,11 +311,12 @@ export async function askJson<T>(
   // extractJson rejects. It is non-deterministic, so a second call usually
   // complies — cheaper than dropping the whole run to the caller's failsafe.
   let lastErr: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const raw = await call(model, [{ role: "user", content: prompt }], {
       json: true,
       maxTokens,
       timeoutMs,
+      attempts,
     });
     try {
       return JSON.parse(extractJson(raw)) as T;
