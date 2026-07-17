@@ -165,7 +165,7 @@ function deterministicBackstop(
 // production uses the real timer, unref'd so a lingering final wait can't delay process exit (the
 // in-flight call keeps the loop alive while it runs, so the ticker never starves). The tick
 // overwrites its own line via \r.
-const HEARTBEAT_MS = 5000;
+const HEARTBEAT_MS = 1000;
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms).unref());
 
