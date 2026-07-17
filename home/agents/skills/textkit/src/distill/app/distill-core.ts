@@ -160,7 +160,7 @@ function deterministicBackstop(
 // hang. TTY-gated through the caller's `progress` sink (undefined off a TTY → scripts and parent
 // loops stay silent and no timer runs). The tick overwrites its own line via \r and closes with a
 // newline on settle so the next stage or the footer starts clean.
-async function withHeartbeat<T>(
+export async function withHeartbeat<T>(
   label: string,
   progress: ((line: string) => void) | undefined,
   call: () => Promise<T>,

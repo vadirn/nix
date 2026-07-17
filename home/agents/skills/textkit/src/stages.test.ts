@@ -9,7 +9,7 @@ import { expect, test } from "bun:test";
 import type { ProseUnit } from "@/distill/extract/harvest.ts";
 import { normalizeForContainment } from "@/distill/extract/harvest.ts";
 import type { ProseVerdict } from "@/distill/prompt/prompts.ts";
-import { buildFooter, expandGuardCap } from "@/distill/app/distill-core.ts";
+import { buildFooter, expandGuardCap, withHeartbeat } from "@/distill/app/distill-core.ts";
 import { parseArgs, USAGE } from "@/distill/app/cli.ts";
 import {
   anchored,
@@ -633,4 +633,57 @@ test("main: a missing provider key exits 1 with the key message", () => {
   });
   expect(proc.exitCode).toBe(1);
   expect(proc.stderr.toString()).toContain("no API key");
+});
+
+// ---- withHeartbeat: the progress ticker wrapping each slow stage ----
+// Characterization tests. They pin the observable contract — result/error propagation, the
+// trailing newline, and the no-progress bypass — using fast-settling calls, so they hold for
+// both the timer and the loop implementations. The ticker writes to process.stderr, so each
+// test swaps in a capturing writer and restores it in a finally.
+function captureStderr(): { writes: string[]; restore: () => void } {
+  const orig = process.stderr.write.bind(process.stderr);
+  const writes: string[] = [];
+  process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+    writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+    return true;
+  }) as typeof process.stderr.write;
+  return { writes, restore: () => void (process.stderr.write = orig) };
+}
+
+test("withHeartbeat: no progress sink bypasses the ticker and returns the call result untouched", async () => {
+  const cap = captureStderr();
+  try {
+    const r = await withHeartbeat("extract", undefined, async () => "value");
+    expect(r).toBe("value");
+    expect(cap.writes).toHaveLength(0);
+  } finally {
+    cap.restore();
+  }
+});
+
+test("withHeartbeat: a progress sink ticks the label, returns the result, and closes with a newline", async () => {
+  const cap = captureStderr();
+  try {
+    const r = await withHeartbeat("extract", () => {}, async () => 42);
+    expect(r).toBe(42);
+    const out = cap.writes.join("");
+    expect(out).toContain("extract…");
+    expect(out.endsWith("\n")).toBe(true);
+  } finally {
+    cap.restore();
+  }
+});
+
+test("withHeartbeat: a rejected call propagates the error and still closes with a newline", async () => {
+  const cap = captureStderr();
+  try {
+    await expect(
+      withHeartbeat("gate", () => {}, async () => {
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+    expect(cap.writes.join("").endsWith("\n")).toBe(true);
+  } finally {
+    cap.restore();
+  }
 });
