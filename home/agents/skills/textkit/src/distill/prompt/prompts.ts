@@ -513,6 +513,8 @@ export async function fidelityGate(
         DISTILL_FIDELITY,
         fidelityPrompt(thesis, outputBody, rendered),
         DISTILL_FIDELITY_TOKENS,
+        undefined, // timeoutMs: keep the 180s ceiling (a healthy glm gate is ~90-150s)
+        1, // attempts: advisory backstop — a stall degrades to inconclusive rather than re-rolling to ~362s
       );
       return {
         thesisRecoverable: res.thesisRecoverable !== false,
@@ -608,6 +610,8 @@ export async function workflowGate(
         DISTILL_FIDELITY,
         workflowGatePrompt(groups, lang),
         DISTILL_FIDELITY_TOKENS,
+        undefined, // timeoutMs: keep the 180s ceiling (a healthy glm gate is ~90-150s)
+        1, // attempts: advisory backstop — a stall degrades to inconclusive rather than re-rolling to ~362s
       );
       // default a missing `evidence` to "" (see fidelityGate) so the substring-check reads an
       // uncited group verdict as a non-match rather than throwing on undefined.

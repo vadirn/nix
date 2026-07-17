@@ -9,7 +9,12 @@
 import { expect, test } from "bun:test";
 import type { askJson, ModelRef } from "@skills/llm/llm.ts";
 import type { Block, LinkInventory } from "@/core/text.ts";
-import { extractGraphPrompt, fidelityGate, renderEntryPrompt } from "@/distill/prompt/prompts.ts";
+import {
+  extractGraphPrompt,
+  fidelityGate,
+  renderEntryPrompt,
+  workflowGate,
+} from "@/distill/prompt/prompts.ts";
 
 const blocks: Block[] = [{ id: "B1", text: "Pragmatic first is reconnaissance for elegance." }];
 
@@ -146,4 +151,39 @@ test("fidelityGate: the fidelity prompt uses definition-scoped grading with grou
   // faithful partial defs to residue (Backlog 23 recheck).
   expect(seenPrompt).toContain("GROUNDS its definitional claim");
   expect(seenPrompt).not.toContain("the span the OUTPUT faithfully renders");
+});
+
+// The two fidelity judges are advisory backstops that degrade safe. They opt OUT of the transport
+// re-roll (attempts=1): a stalled/blipped judge falls to inconclusive at the ~180s ceiling instead
+// of paying a second full-length call to ship the same safe-degraded note. Assert each requests it.
+test("fidelityGate: requests attempts=1 so an advisory stall degrades instead of re-rolling", async () => {
+  let seenAttempts: number | undefined;
+  const captureAsk = (async (
+    _model: ModelRef,
+    _prompt: string,
+    _maxTokens: number,
+    _timeoutMs?: number,
+    attempts?: number,
+  ) => {
+    seenAttempts = attempts;
+    return { thesisRecoverable: true, concepts: [] };
+  }) as typeof askJson;
+  await fidelityGate("thesis", "body", [{ term: "x", def: "d", sourceText: "s" }], captureAsk);
+  expect(seenAttempts).toBe(1);
+});
+
+test("workflowGate: requests attempts=1 (same advisory fail-fast as fidelityGate)", async () => {
+  let seenAttempts: number | undefined;
+  const captureAsk = (async (
+    _model: ModelRef,
+    _prompt: string,
+    _maxTokens: number,
+    _timeoutMs?: number,
+    attempts?: number,
+  ) => {
+    seenAttempts = attempts;
+    return { groups: [] };
+  }) as typeof askJson;
+  await workflowGate([{ id: "g", steps: ["step a"], sourceText: "s" }], "en", captureAsk);
+  expect(seenAttempts).toBe(1);
 });
