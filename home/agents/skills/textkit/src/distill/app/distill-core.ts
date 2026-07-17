@@ -158,25 +158,42 @@ function deterministicBackstop(
 // Tick a slow stage's progress label with elapsed seconds instead of a frozen label, so a call
 // stuck against the transport's 180s ceiling reads as "still working (Ns)" rather than a dead
 // hang. TTY-gated through the caller's `progress` sink (undefined off a TTY → scripts and parent
-// loops stay silent and no timer runs). The tick overwrites its own line via \r and closes with a
-// newline on settle so the next stage or the footer starts clean.
+// loops stay silent and the ticker loop is skipped entirely). A self-terminating loop drives the
+// ticks: it re-renders every HEARTBEAT_MS while the wrapped call is in flight, waking early via the
+// race the instant the call settles, then closes the line with a newline so the next stage or the
+// footer starts clean. `sleep` is injected in tests to drive the cadence without real time;
+// production uses the real timer, unref'd so a lingering final wait can't delay process exit (the
+// in-flight call keeps the loop alive while it runs, so the ticker never starves). The tick
+// overwrites its own line via \r.
+const HEARTBEAT_MS = 5000;
+const realSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms).unref());
+
 export async function withHeartbeat<T>(
   label: string,
   progress: ((line: string) => void) | undefined,
   call: () => Promise<T>,
+  sleep: (ms: number) => Promise<void> = realSleep,
 ): Promise<T> {
   if (!progress) return call();
   const t0 = Date.now();
+  const work = call();
+  let settled = false;
+  // guard never rejects — both arms only flip the flag — so the loop always terminates; `work`
+  // keeps its own rejection for the caller via the `return work` below.
+  const guard = work.then(
+    () => void (settled = true),
+    () => void (settled = true),
+  );
   const tick = (): void =>
     void process.stderr.write(`\r${label}… (${Math.round((Date.now() - t0) / 1000)}s)`);
   tick();
-  const timer = setInterval(tick, 5000);
-  try {
-    return await call();
-  } finally {
-    clearInterval(timer);
-    process.stderr.write("\n");
+  while (!settled) {
+    await Promise.race([guard, sleep(HEARTBEAT_MS)]);
+    if (!settled) tick();
   }
+  process.stderr.write("\n");
+  return work;
 }
 
 // The canonical compress core: extract native typed units → retain-grade the

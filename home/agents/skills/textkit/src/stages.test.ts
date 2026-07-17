@@ -687,3 +687,27 @@ test("withHeartbeat: a rejected call propagates the error and still closes with 
     cap.restore();
   }
 });
+
+test("withHeartbeat: re-ticks each interval while the call outlives it (injected sleep)", async () => {
+  const cap = captureStderr();
+  try {
+    let resolveWork!: (v: string) => void;
+    const work = new Promise<string>((resolve) => {
+      resolveWork = resolve;
+    });
+    // resolves immediately and, after three intervals, lets the call finish — driving the loop
+    // through multiple ticks without real time passing.
+    let intervals = 0;
+    const fakeSleep = (): Promise<void> => {
+      intervals += 1;
+      if (intervals >= 3) resolveWork("done");
+      return Promise.resolve();
+    };
+    const r = await withHeartbeat("locate", () => {}, () => work, fakeSleep);
+    expect(r).toBe("done");
+    const ticks = cap.writes.filter((w) => w.includes("locate…"));
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
+  } finally {
+    cap.restore();
+  }
+});
