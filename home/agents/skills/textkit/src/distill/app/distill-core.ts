@@ -2,8 +2,9 @@
 // extractGraph → locateGraph (hard span gate) → projectMarkdown, with the demoted fidelity/prose
 // gates riding as a residue-only backstop over the projection — then dispatches the modes and
 // writes the temp-file sink in main(). The focused concerns are carved out around it: the backstop
-// gates into gates.ts, the CLI surface + path helpers into cli.ts, the interactive terminal half
-// (the Phase-5 gate session) into tty.ts. main() is invoked by the entrypoint.
+// gates into gates.ts, the CLI surface + path helpers into cli.ts. The default run emits a review
+// intermediary and exits; review + apply are a separate step (a review subagent, or `distill-text
+// apply`), so no interactive terminal half remains here. main() is invoked by the entrypoint.
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import {

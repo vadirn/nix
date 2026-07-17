@@ -439,19 +439,17 @@ test("emit success (--out to a new destination): intermediary sibling of --out, 
   expect(existsSync(join(dir, "note.tmp.md"))).toBe(false);
 });
 
-// ---- Phase 5 pin: the TTY session guard is OFF for this whole file ----
+// ---- emit-and-exit pin: the default run is non-interactive ----
 //
-// `bun test` gives main() a non-TTY stdin AND stdout (there is no real terminal
-// behind either descriptor here), which is exactly the guard's off condition —
-// so a real, successful, residue-bearing distill run is the sharpest proof that
-// the session never fires unless BOTH ends are a TTY: it shares runMain's
-// process.exit-throws-on-success sentinel and its injected `pipelineAsk` transport, so
-// nothing process-global is mutated and no cross-file fw mock race is possible (the
-// reason this file uses dependency injection rather than mock.module). If the guard's
-// condition were ever inverted, runMain's stubbed process.exit would throw and fail this
-// test loudly; stderr is captured too, so a bug that printed prompt text WITHOUT
-// exiting (guard fires, loop never reaches the exit call) is caught as well.
-test("Phase 5: a non-TTY success run never enters the session — stdout stays the path line, stderr carries no prompt text", async () => {
+// distill emits the review intermediary and returns — there is no interactive TTY session
+// (removed: review + apply is a separate step, a review subagent or `distill-text apply`). A
+// real, successful, residue-bearing distill run is the sharpest proof that the run never blocks
+// on a prompt: it shares runMain's process.exit-throws-on-success sentinel and its injected
+// `pipelineAsk` transport, so nothing process-global is mutated and no cross-file fw mock race is
+// possible (the reason this file uses dependency injection rather than mock.module). The forbidden
+// strings below are the vocabulary the deleted session used to print — if any interactivity is ever
+// re-added to the emit path, a prompt or apply line would surface in stdout/stderr and fail here.
+test("emit is non-interactive: a success run stays the path line on stdout with no prompt text on stderr", async () => {
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.md");
   const tmpPath = join(dir, "note.tmp.md");
