@@ -8,6 +8,7 @@
 // for. parseExtractGraph (the pure normalizer) is covered by extract-graph.test.ts.
 import { expect, test } from "bun:test";
 import type { askJson, ModelRef } from "@skills/llm/llm.ts";
+import { DISTILL_FIDELITY_TIMEOUT_MS } from "@/core/models.ts";
 import type { Block, LinkInventory } from "@/core/text.ts";
 import {
   extractGraphPrompt,
@@ -156,34 +157,40 @@ test("fidelityGate: the fidelity prompt uses definition-scoped grading with grou
 // The two fidelity judges are advisory backstops that degrade safe. They opt OUT of the transport
 // re-roll (attempts=1): a stalled/blipped judge falls to inconclusive at the ~180s ceiling instead
 // of paying a second full-length call to ship the same safe-degraded note. Assert each requests it.
-test("fidelityGate: requests attempts=1 so an advisory stall degrades instead of re-rolling", async () => {
+test("fidelityGate: requests attempts=1 and the widened gate ceiling so a slow-but-working judge lands", async () => {
+  let seenTimeout: number | undefined;
   let seenAttempts: number | undefined;
   const captureAsk = (async (
     _model: ModelRef,
     _prompt: string,
     _maxTokens: number,
-    _timeoutMs?: number,
+    timeoutMs?: number,
     attempts?: number,
   ) => {
+    seenTimeout = timeoutMs;
     seenAttempts = attempts;
     return { thesisRecoverable: true, concepts: [] };
   }) as typeof askJson;
   await fidelityGate("thesis", "body", [{ term: "x", def: "d", sourceText: "s" }], captureAsk);
+  expect(seenTimeout).toBe(DISTILL_FIDELITY_TIMEOUT_MS);
   expect(seenAttempts).toBe(1);
 });
 
-test("workflowGate: requests attempts=1 (same advisory fail-fast as fidelityGate)", async () => {
+test("workflowGate: requests attempts=1 and the widened gate ceiling (same as fidelityGate)", async () => {
+  let seenTimeout: number | undefined;
   let seenAttempts: number | undefined;
   const captureAsk = (async (
     _model: ModelRef,
     _prompt: string,
     _maxTokens: number,
-    _timeoutMs?: number,
+    timeoutMs?: number,
     attempts?: number,
   ) => {
+    seenTimeout = timeoutMs;
     seenAttempts = attempts;
     return { groups: [] };
   }) as typeof askJson;
   await workflowGate([{ id: "g", steps: ["step a"], sourceText: "s" }], "en", captureAsk);
+  expect(seenTimeout).toBe(DISTILL_FIDELITY_TIMEOUT_MS);
   expect(seenAttempts).toBe(1);
 });

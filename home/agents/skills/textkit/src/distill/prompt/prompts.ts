@@ -29,6 +29,7 @@ import {
   DISTILL_EXTRACT_TIMEOUT_MS,
   DISTILL_EXTRACT_TOKENS,
   DISTILL_FIDELITY,
+  DISTILL_FIDELITY_TIMEOUT_MS,
   DISTILL_FIDELITY_TOKENS,
 } from "@/core/models.ts";
 import {
@@ -513,8 +514,8 @@ export async function fidelityGate(
         DISTILL_FIDELITY,
         fidelityPrompt(thesis, outputBody, rendered),
         DISTILL_FIDELITY_TOKENS,
-        undefined, // timeoutMs: keep the 180s ceiling (a healthy glm gate is ~90-150s)
-        1, // attempts: advisory backstop — a stall degrades to inconclusive rather than re-rolling to ~362s
+        DISTILL_FIDELITY_TIMEOUT_MS, // 320s ceiling: headroom above the ~179s healthy call so it lands
+        1, // attempts: advisory backstop — degrade rather than re-roll; bounds the wait at the ceiling
       );
       return {
         thesisRecoverable: res.thesisRecoverable !== false,
@@ -610,8 +611,8 @@ export async function workflowGate(
         DISTILL_FIDELITY,
         workflowGatePrompt(groups, lang),
         DISTILL_FIDELITY_TOKENS,
-        undefined, // timeoutMs: keep the 180s ceiling (a healthy glm gate is ~90-150s)
-        1, // attempts: advisory backstop — a stall degrades to inconclusive rather than re-rolling to ~362s
+        DISTILL_FIDELITY_TIMEOUT_MS, // 320s ceiling: headroom above the ~179s healthy call so it lands
+        1, // attempts: advisory backstop — degrade rather than re-roll; bounds the wait at the ceiling
       );
       // default a missing `evidence` to "" (see fidelityGate) so the substring-check reads an
       // uncited group verdict as a non-match rather than throwing on undefined.

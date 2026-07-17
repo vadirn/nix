@@ -23,13 +23,20 @@ export const DISTILL_EXTRACT_TIMEOUT_MS = 150_000;
 // FIDELITY is glm-5.2 on qwencloud — a DIFFERENT model than EXTRACT (and a different provider),
 // so the fidelity backstop is not grading the same model's own output. On qwencloud to burn the
 // prepaid credit; it thinks hard on the full-projection gate input (~90-150s/call), the price of
-// its judgment. Swap to a faster fidelity model here if that latency bites.
+// its judgment (~90-180s/call — observed ~179s in the wild, above the estimate). Swap to a faster
+// fidelity model, or cap thinking_budget, here if that latency bites.
 export const DISTILL_FIDELITY = dashscope("glm-5.2");
 // Token budget for the FIDELITY thinking model. Its reasoning is inlined in the content, so the
 // cap must cover BOTH the thinking and the trailing JSON — too low and it exhausts mid-thought,
 // returning prose with no `{`, which fails extractJson and drops the run to the passthrough
 // failsafe. Sized with headroom for the longest gate input.
 export const DISTILL_FIDELITY_TOKENS = 16_384;
+// Per-call ceiling for the advisory fidelity/workflow gate. The gate runs at attempts=1 (it
+// degrades safe rather than re-rolling), and its healthy call sits near the old 180s default
+// (observed ~179s), so a genuinely-slow-but-working judge was landing a hair under the cliff.
+// Give the single attempt real headroom so it LANDS a verdict instead of degrading to
+// gate-skipped; attempts=1 bounds the total wait at this value, with no retry behind it.
+export const DISTILL_FIDELITY_TIMEOUT_MS = 320_000;
 
 // ---- polish ----
 // The spell/grammar rewrite model. Defaults to luna like distill; a rewrite pass is lighter than
