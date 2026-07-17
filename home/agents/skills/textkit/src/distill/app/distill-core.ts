@@ -157,7 +157,7 @@ function deterministicBackstop(
 
 // Tick a slow stage's progress label with elapsed seconds instead of a frozen label, so a call
 // stuck against the transport's 180s ceiling reads as "still working (Ns)" rather than a dead
-// hang. TTY-gated through the caller's `progress` sink (undefined off a TTY → scripts and parent
+// hang. TTY-gated through the caller's `showProgress` flag (false off a TTY → scripts and parent
 // loops stay silent and the ticker loop is skipped entirely). A self-terminating loop drives the
 // ticks: it re-renders every HEARTBEAT_MS while the wrapped call is in flight, waking early via the
 // race the instant the call settles, then closes the line with a newline so the next stage or the
@@ -171,11 +171,11 @@ const realSleep = (ms: number): Promise<void> =>
 
 export async function withHeartbeat<T>(
   label: string,
-  progress: ((line: string) => void) | undefined,
+  showProgress: boolean | undefined,
   call: () => Promise<T>,
   sleep: (ms: number) => Promise<void> = realSleep,
 ): Promise<T> {
-  if (!progress) return call();
+  if (!showProgress) return call();
   const t0 = Date.now();
   const work = call();
   let settled = false;
@@ -211,13 +211,13 @@ async function compressToGraph(
   lang: "en" | "ru",
   selfSlug: string,
   linkInventory: LinkInventory,
-  opts: { progress?: (line: string) => void; ask?: typeof askJson },
+  opts: { showProgress?: boolean; ask?: typeof askJson },
 ): Promise<{
   pre: Awaited<ReturnType<typeof extractGraph>>;
   result: Projection;
   payloadBlocks: Block[];
 } | null> {
-  const pre = await withHeartbeat("extract", opts.progress, () =>
+  const pre = await withHeartbeat("extract", opts.showProgress, () =>
     extractGraph(blocks, frontDescription, lang, linkInventory, selfSlug, opts.ask),
   );
   if (
@@ -231,7 +231,7 @@ async function compressToGraph(
   // payload retain lane — the ONE deterministic selection surviving the settle-chain
   // collapse. statement = block.text (verbatim), so its locate can never fail. Units render in
   // extract-emission order (the ordering role dies).
-  const grades = await withHeartbeat("grade", opts.progress, () =>
+  const grades = await withHeartbeat("grade", opts.showProgress, () =>
     gradeBlocks(
       pre.thesis,
       pre.concepts.map((c) => ({ term: c.id ?? "", def: c.statement })),
@@ -262,7 +262,7 @@ async function distill(
     // The source file path recorded in the canonical projection's `source:` frontmatter (read on
     // the default-compress path — the seven-section projection). Undefined for stdin.
     path?: string;
-    progress?: (line: string) => void;
+    showProgress?: boolean;
     // Injected model transport, threaded from main() to compressToGraph and the backstop
     // gates so the pipeline runs off a fake in tests; undefined → the real transport everywhere.
     ask?: typeof askJson;
@@ -338,7 +338,7 @@ async function distill(
   let residue: Residue[] = [];
   let gateSkipped = 0;
   if (!opts.noGate) {
-    const bs = await withHeartbeat("gate", opts.progress, () =>
+    const bs = await withHeartbeat("gate", opts.showProgress, () =>
       runFidelityBackstop(pre.thesis, result, out, text, lang, opts.ask),
     );
     residue = bs.residue;
@@ -380,7 +380,7 @@ async function distill(
   if (!opts.noGate && !opts.glossaryOnly && !opts.factsDump) {
     const units = harvestProseListItems(text, []);
     residue = residue.concat(
-      await withHeartbeat("prose-gate", opts.progress, () =>
+      await withHeartbeat("prose-gate", opts.showProgress, () =>
         runProseGate(units, out, lang, opts.ask),
       ),
     );
@@ -649,11 +649,11 @@ async function runCompress(o: {
   opts: CliOpts;
   dest: string | undefined;
   fromStdin: boolean;
-  progress?: (line: string) => void;
+  showProgress: boolean;
   ask: typeof askJson;
   emit: (body: string, footer: string) => void;
 }): Promise<void> {
-  const { input, opts, dest, fromStdin, progress, ask, emit } = o;
+  const { input, opts, dest, fromStdin, showProgress, ask, emit } = o;
   const { lang, noGate, glossaryOnly, tau, maxWords, path: inputPath } = opts;
   // A block whose YAML failed to parse is flagged (not demoted to body) so it is surfaced in the
   // footer rather than silently reworded as prose.
@@ -697,7 +697,7 @@ async function runCompress(o: {
         tau,
         maxWords,
         path: inputPath,
-        progress,
+        showProgress,
         ask,
       },
       selfSlug,
@@ -792,13 +792,11 @@ export async function main(ask: typeof askJson = askJson) {
   };
   // A full run is tens of seconds of LLM calls; tick per stage, TTY-gated so
   // scripts and parent loops never see it.
-  const progress = process.stderr.isTTY
-    ? (line: string): void => void process.stderr.write(`${line}\n`)
-    : undefined;
+  const showProgress = process.stderr.isTTY;
   if (mode === "prose") {
     // runProse returns the exit code: 0 rendered, 3 skipped (output = the
     // unmodified input — the same code compress passthrough uses).
     process.exit(await runProse(input, { lang: opts.lang, noRevise: opts.noRevise }, emit));
   }
-  await runCompress({ input, opts, dest, fromStdin, progress, ask, emit });
+  await runCompress({ input, opts, dest, fromStdin, showProgress, ask, emit });
 }

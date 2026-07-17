@@ -637,7 +637,7 @@ test("main: a missing provider key exits 1 with the key message", () => {
 
 // ---- withHeartbeat: the progress ticker wrapping each slow stage ----
 // Characterization tests. They pin the observable contract — result/error propagation, the
-// trailing newline, and the no-progress bypass — using fast-settling calls, so they hold for
+// trailing newline, and the showProgress-false bypass — using fast-settling calls, so they hold for
 // both the timer and the loop implementations. The ticker writes to process.stderr, so each
 // test swaps in a capturing writer and restores it in a finally.
 function captureStderr(): { writes: string[]; restore: () => void } {
@@ -650,10 +650,10 @@ function captureStderr(): { writes: string[]; restore: () => void } {
   return { writes, restore: () => void (process.stderr.write = orig) };
 }
 
-test("withHeartbeat: no progress sink bypasses the ticker and returns the call result untouched", async () => {
+test("withHeartbeat: showProgress false bypasses the ticker and returns the call result untouched", async () => {
   const cap = captureStderr();
   try {
-    const r = await withHeartbeat("extract", undefined, async () => "value");
+    const r = await withHeartbeat("extract", false, async () => "value");
     expect(r).toBe("value");
     expect(cap.writes).toHaveLength(0);
   } finally {
@@ -661,10 +661,10 @@ test("withHeartbeat: no progress sink bypasses the ticker and returns the call r
   }
 });
 
-test("withHeartbeat: a progress sink ticks the label, returns the result, and closes with a newline", async () => {
+test("withHeartbeat: showProgress true ticks the label, returns the result, and closes with a newline", async () => {
   const cap = captureStderr();
   try {
-    const r = await withHeartbeat("extract", () => {}, async () => 42);
+    const r = await withHeartbeat("extract", true, async () => 42);
     expect(r).toBe(42);
     const out = cap.writes.join("");
     expect(out).toContain("extract…");
@@ -678,7 +678,7 @@ test("withHeartbeat: a rejected call propagates the error and still closes with 
   const cap = captureStderr();
   try {
     await expect(
-      withHeartbeat("gate", () => {}, async () => {
+      withHeartbeat("gate", true, async () => {
         throw new Error("boom");
       }),
     ).rejects.toThrow("boom");
@@ -703,7 +703,7 @@ test("withHeartbeat: re-ticks each interval while the call outlives it (injected
       if (intervals >= 3) resolveWork("done");
       return Promise.resolve();
     };
-    const r = await withHeartbeat("locate", () => {}, () => work, fakeSleep);
+    const r = await withHeartbeat("locate", true, () => work, fakeSleep);
     expect(r).toBe("done");
     const ticks = cap.writes.filter((w) => w.includes("locate…"));
     expect(ticks.length).toBeGreaterThanOrEqual(2);
