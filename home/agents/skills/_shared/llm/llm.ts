@@ -288,7 +288,13 @@ export function extractJson(s: string): string {
 type Transport = (
   model: ModelRef,
   messages: Msg[],
-  opts: { json?: boolean; maxTokens?: number; temp?: number; timeoutMs?: number; attempts?: number },
+  opts: {
+    json?: boolean;
+    maxTokens?: number;
+    temp?: number;
+    timeoutMs?: number;
+    attempts?: number;
+  },
 ) => Promise<string>;
 
 // askJson calls `model` with `prompt`, requesting JSON-object output, and parses the response as
