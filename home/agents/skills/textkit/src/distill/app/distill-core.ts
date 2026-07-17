@@ -53,7 +53,6 @@ import { runProse } from "@/distill/app/prose-mode.ts";
 import { buildIntermediary } from "@/distill/review/triage.ts";
 import { runApply, stampHash } from "@/distill/app/apply-mode.ts";
 import { runFidelityBackstop, runProseGate } from "@/distill/review/gates.ts";
-import { runTtySession } from "@/distill/app/tty.ts";
 import {
   type CliOpts,
   USAGE,
@@ -90,12 +89,6 @@ type DistillResult = {
 export function expandGuardCap(_beforeWords: number, maxWords?: number): number | null {
   if (maxWords !== undefined && maxWords > 0) return maxWords;
   return null;
-}
-
-// Both ends must be a real terminal (command substitution and pipes must never see a
-// prompt) before the Phase-5 gate session takes over the process.
-function isInteractive(): boolean {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
 // Footer unit tally: one singular noun per UnitType, in projection order (matches project.ts's
@@ -528,21 +521,21 @@ function writeIntermediaryAtomically(tmpPath: string, intermediary: string): voi
   unlinkSync(partial);
 }
 
-// Phase 3/5 success: write the interactive review intermediary sibling to `destPath` (never the
-// source — the input file is never modified), stamped with dest= (the destination basename) and
-// src= (a hash of destPath's current bytes, or "new" when it does not yet exist — the creation
-// case). `out` is the canonical projection, taken verbatim: it already carries its own
-// type/source/schema YAML, so prepending the source front would emit two YAML blocks;
-// buildIntermediary stamps epistemic_status: in-review into that single block. At a real terminal
-// (both ends) the gate-aware session takes over the SAME process and exits its code; otherwise
-// (the common agent-caller case) this returns and main() falls through to exit 0.
-async function emitReviewIntermediary(
+// Phase 3 success: write the review intermediary sibling to `destPath` (never the source — the
+// input file is never modified), stamped with dest= (the destination basename) and src= (a hash
+// of destPath's current bytes, or "new" when it does not yet exist — the creation case). `out` is
+// the canonical projection, taken verbatim: it already carries its own type/source/schema YAML, so
+// prepending the source front would emit two YAML blocks; buildIntermediary stamps
+// epistemic_status: in-review into that single block. Emit-and-exit: distill writes the
+// intermediary and returns, main() falls through to exit 0, and review + apply are a SEPARATE step
+// (a review subagent, or a hand edit in Obsidian, then `distill-text apply <tmp>`). The run never
+// blocks on an interactive session — the tmp path on stdout is all any caller waits for.
+function emitReviewIntermediary(
   destPath: string,
   out: string,
   residue: Residue[],
   footer2: string,
-  resolved: "en" | "ru",
-): Promise<void> {
+): void {
   const tmpPath = tmpPathFor(destPath);
   const src = existsSync(destPath) ? stampHash(readFileSync(destPath)) : "new";
   const intermediary = buildIntermediary(out, residue, {
@@ -556,18 +549,6 @@ async function emitReviewIntermediary(
       : " · review: gate";
   process.stdout.write(`${tmpPath}\n`);
   process.stderr.write(`${footer2}${reviewSuffix}\n`);
-  if (isInteractive()) {
-    const reviewLabel =
-      residue.length > 0
-        ? `${residue.length} item${residue.length === 1 ? "" : "s"} + gate`
-        : "gate";
-    process.stderr.write(`review: ${tmpPath} — ${reviewLabel}\n`);
-    process.stderr.write(`apply later with: distill-text apply ${tmpPath}\n`);
-    // Ctrl-C loses nothing (the intermediary is already on disk) — exit 0 rather than the
-    // default SIGINT death, matching decline/EOF's exit code.
-    process.once("SIGINT", () => process.exit(0));
-    process.exit(await runTtySession(tmpPath, destPath, resolved));
-  }
 }
 
 // The compress-mode catch: a non-transient throw is a real bug — surface it (a stage catch has
@@ -712,10 +693,10 @@ async function runCompress(o: {
       emit(buildPassthroughEnvelope(front, out, residue), footer2);
       process.exit(3);
     }
-    // Phase 3/5 success: hand the canonical projection to the interactive review intermediary,
-    // atomically written beside `dest`. narrowed above: stdin without --out already exited.
+    // Phase 3 success: write the canonical projection as the review intermediary, atomically
+    // beside `dest`, then return (exit 0). narrowed above: stdin without --out already exited.
     const destPath = dest as string;
-    await emitReviewIntermediary(destPath, out, residue, footer2, resolved);
+    emitReviewIntermediary(destPath, out, residue, footer2);
   } catch (e) {
     handleCompressError(e, input, emit);
   }
