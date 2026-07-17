@@ -264,6 +264,8 @@
         "cli.doppler.com",
         "generativelanguage.googleapis.com",
         "api.fireworks.ai",
+        "dashscope-intl.aliyuncs.com",
+        "api.openai.com",
         "fal.run",
         "*.fal.run",
         "*.fal.media",

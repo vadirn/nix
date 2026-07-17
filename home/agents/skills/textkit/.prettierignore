@@ -1,0 +1,5 @@
+# Test fixtures are crafted inputs — oxfmt must never reflow them (proseWrap would
+# rewrap the .md payloads and break the golden comparisons).
+src/fixtures/
+src/experiment/fixtures/
+node_modules/

@@ -56,6 +56,7 @@
       "glow"
       "gum"
       "hyperfine"
+      "jscpd"
       "micro"
       "rustup"
       "tealdeer"

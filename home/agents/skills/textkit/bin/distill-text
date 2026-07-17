@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Deploy seam for distill-text: provider API keys are resolved lazily in TypeScript
+# (see _shared/llm/keys.ts — env → macOS Keychain → Doppler, cached per process), so this
+# wrapper only execs the entrypoint. distill uses OpenAI (extract) + qwencloud/DashScope
+# (fidelity); their keys live in Doppler (claude-code/std).
+set -u
+exec bun "$(dirname "$(readlink -f "$0")")/../src/distill/app/distill.ts" "$@"

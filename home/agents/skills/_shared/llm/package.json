@@ -1,0 +1,11 @@
+{
+  "name": "@skills/llm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Provider-neutral LLM transport shared across skills: the HTTP call with transient/truncation retry classification and the JSON-extracting askJson wrapper. No model-policy constants — callers pass model + token cap. See llm.ts.",
+  "scripts": {
+    "test": "bun test",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
+  }
+}
