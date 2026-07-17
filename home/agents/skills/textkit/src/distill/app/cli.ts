@@ -33,10 +33,12 @@ Options:
   -h, --help             show this help and exit
 
 Output:
-  The input file is never modified. A distilled run writes an interactive review
-  intermediary sibling to the destination, \`<dest>.tmp.md\` (destination defaults to
-  the input path, overridable with --out): a decision block per residue item (verbs
-  recover/keep) plus a mandatory trailing confirm-all gate stamped with dest=/src=.
+  The input file is never modified. A distilled run writes a review intermediary
+  sibling to the destination, \`<dest>.tmp.md\` (destination defaults to the input
+  path, overridable with --out), then exits — review and apply are a separate step
+  (a review subagent, or a hand edit in Obsidian, then \`distill-text apply\`). The
+  intermediary holds a decision block per residue item (verbs recover/keep) plus a
+  mandatory trailing confirm-all gate stamped with dest=/src=.
   A passthrough run (failsafe, expand-guard, nothing to distill) instead writes a
   fresh temp .md holding the legacy envelope: <result>…</result> is exactly the text
   to write back to source, <residue> (omitted when empty) holds each item that
