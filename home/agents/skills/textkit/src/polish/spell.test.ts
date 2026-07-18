@@ -5,8 +5,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
 import { askJson, TransientError } from "@skills/llm/llm.ts";
-import { langRule, segment } from "@/core/text.ts";
-import { spellPass, spellPassPrompt, verifySpellBlock } from "@/polish/spell.ts";
+import { langRule, segment } from "#src/core/text.ts";
+import { spellPass, spellPassPrompt, verifySpellBlock } from "#src/polish/spell.ts";
 
 const read = (name: string) => readFileSync(resolve(import.meta.dir, "../fixtures", name), "utf8");
 

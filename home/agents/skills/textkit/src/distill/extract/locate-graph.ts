@@ -21,18 +21,18 @@
 // `SnapError` on a non-empty score-0 quote, and snapRequired ALSO aborts on the empty-quote null (a
 // head unit MUST anchor). The PAYLOAD lane alone stays on byte-exact `locate` (its statement IS the
 // verbatim block), keeping `LocateError`'s tight hard gate. There is NO coarse-span fallback.
-import { computeSource, type Edge, type PreGraph, type Unit } from "@/distill/graph/graph.ts";
-import { locate } from "@/distill/extract/locate.ts";
+import { computeSource, type Edge, type PreGraph, type Unit } from "#src/distill/graph/graph.ts";
+import { locate } from "#src/distill/extract/locate.ts";
 import {
   buildSnapTargets,
   snapQuote,
   snapRequired,
   type SnapTarget,
-} from "@/distill/extract/snap.ts";
-import { oneLine } from "@/distill/extract/harvest.ts";
-import { parseDoc, type Span } from "@/distill/mdstruct.ts";
-import { slugSegment, type Block } from "@/core/text.ts";
-import type { Projection } from "@/distill/graph/project.ts";
+} from "#src/distill/extract/snap.ts";
+import { oneLine } from "#src/distill/extract/harvest.ts";
+import { parseDoc, type Span } from "#src/distill/mdstruct.ts";
+import { slugSegment, type Block } from "#src/core/text.ts";
+import type { Projection } from "#src/distill/graph/project.ts";
 
 // Snap a sub-element's (bullet / tail-step) quote to its enclosing-block span, or `null` when the
 // model gave no quote (an empty quote is a deliberate no-anchor, not a hallucination — it renders

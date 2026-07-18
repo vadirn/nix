@@ -8,7 +8,7 @@ import {
   formatNameLint,
   nameLintAgainstSource,
   nameLintSelfConsistency,
-} from "@/core/writing/name-lint.ts";
+} from "#src/core/writing/name-lint.ts";
 
 const read = (name: string) =>
   readFileSync(resolve(import.meta.dir, "../../fixtures", name), "utf8");

@@ -4,5 +4,4 @@
 # wrapper only execs the entrypoint. card-stage uses OpenAI (draft) + qwencloud/DashScope
 # (fidelity); their keys live in Doppler (claude-code/std).
 set -u
-BIN="$(dirname "$(readlink -f "$0")")"
-exec bun --preload "$BIN/_alias.ts" "$BIN/../src/cards/card-stage.ts" "$@"
+exec bun "$(dirname "$(readlink -f "$0")")/../src/cards/card-stage.ts" "$@"

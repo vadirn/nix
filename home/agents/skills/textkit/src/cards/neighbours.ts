@@ -15,8 +15,8 @@
 // with fakes; the real Bun.spawn/Bun.file implementations are exported but are
 // only the trailing-default wiring, never called directly by the pure logic.
 import { join } from "node:path";
-import { parseDescription, parseFrontmatter } from "@/core/frontmatter.ts";
-import type { Candidate, NeighbourHit } from "@/cards/types.ts";
+import { parseDescription, parseFrontmatter } from "#src/core/frontmatter.ts";
+import type { Candidate, NeighbourHit } from "#src/cards/types.ts";
 
 // ---- injected I/O seams ----
 

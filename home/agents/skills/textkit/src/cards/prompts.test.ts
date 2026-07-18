@@ -7,9 +7,9 @@
 // the embedded inputs (term, def, neighbour descriptions), langRule for both
 // languages, and each builder's strict-JSON shape demand.
 import { expect, test } from "bun:test";
-import { langRule } from "@/core/text.ts";
-import { atomicityJudgePrompt, cardDraftPrompt, noveltyBandPrompt } from "@/cards/prompts.ts";
-import type { Candidate, NeighbourHit } from "@/cards/types.ts";
+import { langRule } from "#src/core/text.ts";
+import { atomicityJudgePrompt, cardDraftPrompt, noveltyBandPrompt } from "#src/cards/prompts.ts";
+import type { Candidate, NeighbourHit } from "#src/cards/types.ts";
 
 const conceptCandidate: Candidate = {
   arm: "concept",

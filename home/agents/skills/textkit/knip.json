@@ -1,6 +1,5 @@
 {
   "entry": [
-    "bin/_alias.ts",
     "src/distill/app/distill.ts",
     "src/polish/polish.ts",
     "src/cards/card-stage.ts",

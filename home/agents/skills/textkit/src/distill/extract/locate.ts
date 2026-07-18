@@ -9,7 +9,7 @@
 // It is a leaf over mdstruct.ts: reuses `Span` and `sliceBytes` (the byte-exact slice the
 // computed span must round-trip against). It does NOT validate edge `rel` — REL_REGISTRY in
 // text.ts stays the sole source of truth for that.
-import { sliceBytes, type Span } from "@/distill/mdstruct.ts";
+import { sliceBytes, type Span } from "#src/distill/mdstruct.ts";
 
 // The two ways a locate can fail the gate. `not-found` = the quote does not occur in the source
 // (0 matches). `ambiguous` = it occurs at more than one position, so the span is not uniquely

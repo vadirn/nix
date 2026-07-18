@@ -20,7 +20,7 @@ import {
   segment,
   slugSegment,
   wordCount,
-} from "@/core/text.ts";
+} from "#src/core/text.ts";
 import {
   harvestBlockquotes,
   harvestCitations,
@@ -35,7 +35,7 @@ import {
   harvestVaultEdges,
   harvestWikilinks,
   normalizeForContainment,
-} from "@/distill/extract/harvest.ts";
+} from "#src/distill/extract/harvest.ts";
 import {
   formatDryRun,
   compactSection,
@@ -44,13 +44,13 @@ import {
   routeNote,
   routeSection,
   sections,
-} from "@/distill/extract/route.ts";
-import { assembleRoutedNote } from "@/distill/app/distill-core.ts";
-import { payloadResidueForProjection, wikilinkResidue } from "@/distill/review/residue.ts";
-import { parseDistilled } from "@/distill/app/prose-mode.ts";
-import { computeSource, type Unit } from "@/distill/graph/graph.ts";
-import { locate } from "@/distill/extract/locate.ts";
-import type { Projection } from "@/distill/graph/project.ts";
+} from "#src/distill/extract/route.ts";
+import { assembleRoutedNote } from "#src/distill/app/distill-core.ts";
+import { payloadResidueForProjection, wikilinkResidue } from "#src/distill/review/residue.ts";
+import { parseDistilled } from "#src/distill/app/prose-mode.ts";
+import { computeSource, type Unit } from "#src/distill/graph/graph.ts";
+import { locate } from "#src/distill/extract/locate.ts";
+import type { Projection } from "#src/distill/graph/project.ts";
 
 // ---- text.ts: segmentation ----
 test("segment: splits on blank lines into B-indexed blocks", () => {

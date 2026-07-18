@@ -13,9 +13,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
-import { parseInteract, renderBlock, stripInteract } from "@/distill/review/interact.ts";
-import type { Residue } from "@/distill/review/residue.ts";
-import { TRIAGE_VERBS, buildIntermediary, residueToBlocks } from "@/distill/review/triage.ts";
+import { parseInteract, renderBlock, stripInteract } from "#src/distill/review/interact.ts";
+import type { Residue } from "#src/distill/review/residue.ts";
+import { TRIAGE_VERBS, buildIntermediary, residueToBlocks } from "#src/distill/review/triage.ts";
 
 const FIXTURE = readFileSync(
   resolve(import.meta.dir, "..", "..", "fixtures", "interact-triage-emit.md"),

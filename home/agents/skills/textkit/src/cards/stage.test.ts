@@ -6,8 +6,8 @@
 // in this file.
 import { expect, test } from "bun:test";
 import { type ModelRef, TransientError, TruncationError } from "@skills/llm/llm.ts";
-import { CARD_DRAFT, CARD_JUDGE } from "@/core/models.ts";
-import { relText, slugSegment } from "@/core/text.ts";
+import { CARD_DRAFT, CARD_JUDGE } from "#src/core/models.ts";
+import { relText, slugSegment } from "#src/core/text.ts";
 import {
   formatDryRunReport,
   formatSummary,
@@ -19,9 +19,9 @@ import {
   type AskFn,
   type FetchNeighboursFn,
   type WriteFn,
-} from "@/cards/card-stage.ts";
-import { renderStagingFile } from "@/cards/stage.ts";
-import type { BandVerdict, Candidate, NeighbourHit, StagingRecord } from "@/cards/types.ts";
+} from "#src/cards/card-stage.ts";
+import { renderStagingFile } from "#src/cards/stage.ts";
+import type { BandVerdict, Candidate, NeighbourHit, StagingRecord } from "#src/cards/types.ts";
 
 // ---- renderStagingFile ----
 

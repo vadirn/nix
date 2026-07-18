@@ -5,9 +5,9 @@
 // footer or Flags line. Imports only leaf-tier core helpers (levenshtein, mask's
 // token regex, and the frontmatter scanner — all free of a back-edge to this
 // module), so the core can depend on it without a cycle.
-import { parseFrontmatter } from "@/core/frontmatter.ts";
-import { levenshtein } from "@/core/writing/levenshtein.ts";
-import { MASK_TOKEN_RE } from "@/core/writing/mask.ts";
+import { parseFrontmatter } from "#src/core/frontmatter.ts";
+import { levenshtein } from "#src/core/writing/levenshtein.ts";
+import { MASK_TOKEN_RE } from "#src/core/writing/mask.ts";
 
 // NameFinding pairs a name found in the output with the source name it likely corrupted from.
 type NameFinding = { found: string; wanted: string };

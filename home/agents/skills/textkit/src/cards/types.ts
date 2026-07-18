@@ -9,7 +9,7 @@
 //   - The only path from a staging file into `20 cards/` is a human commit; a staging
 //     file's draft exists to be rewritten by that human, never to be accepted as-is.
 
-import type { NameLintResult } from "@/core/writing/name-lint.ts";
+import type { NameLintResult } from "#src/core/writing/name-lint.ts";
 
 // One structural edge harvested from an emitted note's `## Relations` block and attached
 // to its owning concept (the from-label's slug), stripped of the from-field. `rel` an open

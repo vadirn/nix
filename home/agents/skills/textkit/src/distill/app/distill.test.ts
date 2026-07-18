@@ -8,8 +8,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
-import { REL_REGISTRY, ensureEpistemicStatus, slugSegment } from "@/distill/app/distill.ts";
-import { parseRelationsBlock } from "@/distill/graph/rel-parse.ts";
+import { REL_REGISTRY, ensureEpistemicStatus, slugSegment } from "#src/distill/app/distill.ts";
+import { parseRelationsBlock } from "#src/distill/graph/rel-parse.ts";
 
 // 7 levels up from this dir (src/distill/app → src/distill → src → distill →
 // skills → agents → home → /Users/vadim/nix), then into the vault-query lint dir

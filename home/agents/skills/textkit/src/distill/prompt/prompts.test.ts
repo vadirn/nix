@@ -8,14 +8,14 @@
 // for. parseExtractGraph (the pure normalizer) is covered by extract-graph.test.ts.
 import { expect, test } from "bun:test";
 import type { askJson, ModelRef } from "@skills/llm/llm.ts";
-import { DISTILL_FIDELITY_TIMEOUT_MS } from "@/core/models.ts";
-import type { Block, LinkInventory } from "@/core/text.ts";
+import { DISTILL_FIDELITY_TIMEOUT_MS } from "#src/core/models.ts";
+import type { Block, LinkInventory } from "#src/core/text.ts";
 import {
   extractGraphPrompt,
   fidelityGate,
   renderEntryPrompt,
   workflowGate,
-} from "@/distill/prompt/prompts.ts";
+} from "#src/distill/prompt/prompts.ts";
 
 const blocks: Block[] = [{ id: "B1", text: "Pragmatic first is reconnaissance for elegance." }];
 

@@ -9,10 +9,10 @@
 // `bun test e2e.test.ts`.
 import { expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
-import { computeSource, type Edge, type Unit } from "@/distill/graph/graph.ts";
-import { locate } from "@/distill/extract/locate.ts";
-import { sliceBytes } from "@/distill/mdstruct.ts";
-import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
+import { computeSource, type Edge, type Unit } from "#src/distill/graph/graph.ts";
+import { locate } from "#src/distill/extract/locate.ts";
+import { sliceBytes } from "#src/distill/mdstruct.ts";
+import { projectMarkdown, type Projection } from "#src/distill/graph/project.ts";
 
 const PATH = "widgets.md";
 const BODY = [

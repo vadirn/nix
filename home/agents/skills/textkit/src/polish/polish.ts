@@ -13,20 +13,20 @@
 // ships the ORIGINAL input with a "polish skipped" footer instead of aborting; a
 // non-transient throw (a code bug) propagates.
 import { readFileSync, writeFileSync } from "node:fs";
-import { takeValue } from "@/core/args.ts";
-import { parseFrontmatter } from "@/core/frontmatter.ts";
+import { takeValue } from "#src/core/args.ts";
+import { parseFrontmatter } from "#src/core/frontmatter.ts";
 import { askJson, ensureKeys, isTransient, TruncationError } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
-import { POLISH_MODEL, POLISH_TOKENS } from "@/core/models.ts";
-import { detectLang, segment, wordCount } from "@/core/text.ts";
-import { tempMdPath } from "@/core/tmp.ts";
+import { POLISH_MODEL, POLISH_TOKENS } from "#src/core/models.ts";
+import { detectLang, segment, wordCount } from "#src/core/text.ts";
+import { tempMdPath } from "#src/core/tmp.ts";
 import {
   type NameLintResult,
   formatNameLint,
   nameLintSelfConsistency,
-} from "@/core/writing/name-lint.ts";
-import { PASS_EN, PASS_RU, revise } from "@/core/writing/passes.ts";
-import { spellPass } from "@/polish/spell.ts";
+} from "#src/core/writing/name-lint.ts";
+import { PASS_EN, PASS_RU, revise } from "#src/core/writing/passes.ts";
+import { spellPass } from "#src/polish/spell.ts";
 
 // USAGE is the full `--help` text printed to stdout on `-h`/`--help`: the invocation forms,
 // every option, the output contract, and the exit codes — the human-facing counterpart to

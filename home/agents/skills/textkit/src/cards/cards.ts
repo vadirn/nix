@@ -12,9 +12,9 @@
 //   - decideCard/buildStagingRecord treat the band verdict as an ANNOTATION, never a
 //     filter: enumerateCandidates never filters on it, so every candidate is staged
 //     regardless of its verdict.
-import { REL_REGISTRY, slugSegment } from "@/core/text.ts";
-import { parseCanonicalNote, parseRelationsBlock } from "@/distill/emit.ts";
-import type { NameLintResult } from "@/core/writing/name-lint.ts";
+import { REL_REGISTRY, slugSegment } from "#src/core/text.ts";
+import { parseCanonicalNote, parseRelationsBlock } from "#src/distill/emit.ts";
+import type { NameLintResult } from "#src/core/writing/name-lint.ts";
 import type {
   Band,
   BandJudgeReply,
@@ -26,7 +26,7 @@ import type {
   NeighbourHit,
   StagedEdge,
   StagingRecord,
-} from "@/cards/types.ts";
+} from "#src/cards/types.ts";
 
 const BANDS: readonly Band[] = ["defer-link", "mint", "work-through"];
 

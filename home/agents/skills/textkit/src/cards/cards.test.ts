@@ -7,14 +7,14 @@ import {
   buildStagingRecord,
   decideCard,
   enumerateCandidates,
-} from "@/cards/cards.ts";
+} from "#src/cards/cards.ts";
 import type {
   BandVerdict,
   Candidate,
   CardEdge,
   HarvestedConcept,
   NeighbourHit,
-} from "@/cards/types.ts";
+} from "#src/cards/types.ts";
 
 // ---- enumerateCandidates ----
 

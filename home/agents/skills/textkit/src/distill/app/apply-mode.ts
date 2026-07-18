@@ -63,32 +63,32 @@
 // apply.test.ts drive the whole apply middle (classify → gates → mutate → footer) with
 // no temp files. runApply is the only export that touches disk.
 
-import type { Item } from "@/distill/review/interact.ts";
+import type { Item } from "#src/distill/review/interact.ts";
 import {
   type InteractApplyHook,
   type InteractApplyOpts,
   type InteractApplyResult,
   runInteractApply,
-} from "@/distill/review/execute.ts";
-import { TRIAGE_VERBS, safeHandle } from "@/distill/review/triage.ts";
+} from "#src/distill/review/execute.ts";
+import { TRIAGE_VERBS, safeHandle } from "#src/distill/review/triage.ts";
 import { askJson, ensureKeys } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
-import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { DISTILL_EXTRACT } from "@/core/models.ts";
+import { distillDegrade as rethrowIfBug } from "#src/core/degrade.ts";
+import { DISTILL_EXTRACT } from "#src/core/models.ts";
 import {
   fidelityGate,
   renderEntryPrompt,
   verbatimDef,
   verbatimDirectives,
-} from "@/distill/prompt/prompts.ts";
+} from "#src/distill/prompt/prompts.ts";
 import {
   parseCanonicalNote,
   splitSections,
   subsectionRanges,
-} from "@/distill/graph/parse-projection.ts";
-import { parseFrontmatter } from "@/core/frontmatter.ts";
-import { detectLang } from "@/core/text.ts";
-import { TRAILING_ANCHOR_RE } from "@/distill/graph/graph.ts";
+} from "#src/distill/graph/parse-projection.ts";
+import { parseFrontmatter } from "#src/core/frontmatter.ts";
+import { detectLang } from "#src/core/text.ts";
+import { TRAILING_ANCHOR_RE } from "#src/distill/graph/graph.ts";
 
 // ---- runApply: the orchestrator ----
 

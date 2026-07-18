@@ -7,9 +7,9 @@
 // compaction); low → re-author (compact prose). Deterministic and free — no LLM. Sits a
 // tier above harvest.ts + text.ts and never cycles back into them (text.ts re-exports
 // `sections` only as a compat shim for cards/).
-import { parseDoc, sliceBytes, walkHeadings, type Heading } from "@/distill/mdstruct.ts";
-import { DISPLAY_MATH_PATTERNS, structuralSpans } from "@/distill/extract/harvest.ts";
-import { wordCount } from "@/core/text.ts";
+import { parseDoc, sliceBytes, walkHeadings, type Heading } from "#src/distill/mdstruct.ts";
+import { DISPLAY_MATH_PATTERNS, structuralSpans } from "#src/distill/extract/harvest.ts";
+import { wordCount } from "#src/core/text.ts";
 
 // One heading-delimited section of a note: `heading` its title text (empty for the intro
 // section before any heading), `depth` its ATX/setext level (0 for the intro), `text` its

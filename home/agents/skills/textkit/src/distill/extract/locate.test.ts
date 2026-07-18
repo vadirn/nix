@@ -4,8 +4,8 @@
 // `bun test` from this directory. No mdstruct binary needed — locate.ts only reuses the pure
 // `sliceBytes`/`Span` from mdstruct.ts, not the CLI wrapper.
 import { expect, test } from "bun:test";
-import { LocateError, locate } from "@/distill/extract/locate.ts";
-import { sliceBytes } from "@/distill/mdstruct.ts";
+import { LocateError, locate } from "#src/distill/extract/locate.ts";
+import { sliceBytes } from "#src/distill/mdstruct.ts";
 
 // Round-trip a computed span against the byte-exact slice — the hard invariant every locate must
 // satisfy.

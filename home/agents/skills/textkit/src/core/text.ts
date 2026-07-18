@@ -9,7 +9,7 @@
 // spine (harvest.ts), the per-section density router (route.ts), and the `## Relations` REBUILD
 // parser (rel-parse.ts). cards/ imports those symbols (sections, parseRelationsBlock) from
 // their real homes directly, so text.ts stays a pure leaf with no upward edge.
-import { normalizeTypography } from "@/core/typography.ts";
+import { normalizeTypography } from "#src/core/typography.ts";
 
 // Relations registry — TS-native copy of the open relation vocabulary (structural
 // channel only). Mirror of vault-query/src/commands/lint/rel-registry.json, the
@@ -219,7 +219,7 @@ export const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
 // Deterministic typographic normalization — owned by kernel/typography.ts (the
 // core), re-exported here so text.ts's existing importers (pure.test.ts:35 and
 // every internal user below) keep working unchanged.
-export { normalizeTypography } from "@/core/typography.ts";
+export { normalizeTypography } from "#src/core/typography.ts";
 
 // Slug a single label — TS-native mirror of vault-query slug.rs::segment /
 // normalize_segment (the unified slugifier). Strip wikilink syntax (keeping an

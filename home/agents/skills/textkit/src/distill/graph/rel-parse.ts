@@ -4,8 +4,8 @@
 // consts); text.ts re-exports `parseRelationsBlock` only as a compat shim so cards/ keeps
 // reading a distilled note's structural channels through one seam. Lossy-tolerant
 // throughout: a malformed line yields no edge and parsing never throws.
-import { REL_ARROW, REL_DASH, TRAILING_ANCHOR_RE } from "@/distill/graph/graph.ts";
-import { fenceScan, type FenceState, slugSegment, stripFences } from "@/core/text.ts";
+import { REL_ARROW, REL_DASH, TRAILING_ANCHOR_RE } from "#src/distill/graph/graph.ts";
+import { fenceScan, type FenceState, slugSegment, stripFences } from "#src/core/text.ts";
 
 // One structural edge parsed off a `## Relations` list item. `from` is the entry's
 // own slug (multi-node form) or null (the single-atom form omits the from-label).

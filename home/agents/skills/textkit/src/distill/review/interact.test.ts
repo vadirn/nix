@@ -24,8 +24,8 @@ import {
   renderBlock,
   resolveInteract,
   stripInteract,
-} from "@/distill/review/interact.ts";
-import type { MdRegion, RegionDiagnostic } from "@/distill/mdstruct.ts";
+} from "#src/distill/review/interact.ts";
+import type { MdRegion, RegionDiagnostic } from "#src/distill/mdstruct.ts";
 
 const FIX = (name: string): string =>
   readFileSync(resolve(import.meta.dir, "..", "..", "fixtures", name), "utf8");

@@ -20,9 +20,9 @@ import {
   RELATIONS_HEADING,
   SECTION_HEADING,
   stripTrailingAnchor,
-} from "@/distill/graph/graph.ts";
-import { fenceScan, type FenceState } from "@/core/text.ts";
-import type { Span } from "@/distill/mdstruct.ts";
+} from "#src/distill/graph/graph.ts";
+import { fenceScan, type FenceState } from "#src/core/text.ts";
+import type { Span } from "#src/distill/mdstruct.ts";
 
 // One `## ` section: its heading text (verbatim, e.g. "Concepts"), the body lines between the
 // heading and the next `## ` (or EOF), and the half-open line range [start, end). Fence-aware:

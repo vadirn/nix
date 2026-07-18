@@ -10,7 +10,7 @@
 // still degrades gracefully.
 import { expect, test } from "bun:test";
 import { askJson, fireworks, TransientError, TruncationError } from "@skills/llm/llm.ts";
-import { fidelityGate, proseGate, revise, workflowGate } from "@/distill/prompt/prompts.ts";
+import { fidelityGate, proseGate, revise, workflowGate } from "#src/distill/prompt/prompts.ts";
 
 // The transport primitives these gates lean on (isTransient / rethrowIfBug / the
 // finish_reason→TruncationError signal, in isolation) are tested in the shared lib

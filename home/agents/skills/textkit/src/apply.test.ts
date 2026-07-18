@@ -23,11 +23,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { type Item, parseInteract, stripInteract } from "@/distill/review/interact.ts";
-import { buildIntermediary, safeHandle } from "@/distill/review/triage.ts";
-import { verbatimDef, verbatimDirectives } from "@/distill/prompt/prompts.ts";
+import { type Item, parseInteract, stripInteract } from "#src/distill/review/interact.ts";
+import { buildIntermediary, safeHandle } from "#src/distill/review/triage.ts";
+import { verbatimDef, verbatimDirectives } from "#src/distill/prompt/prompts.ts";
 import { askJson, TransientError } from "@skills/llm/llm.ts";
-import type { Residue } from "@/distill/review/residue.ts";
+import type { Residue } from "#src/distill/review/residue.ts";
 import {
   type ProcedureOp,
   asResolvedHeadword as rhw,
@@ -39,9 +39,9 @@ import {
   resolveStepTarget,
   runApply,
   spliceDef,
-} from "@/distill/app/apply-mode.ts";
-import { destinationFor, unlinkIfPresent } from "@/distill/review/execute.ts";
-import { parseArgs } from "@/distill/app/cli.ts";
+} from "#src/distill/app/apply-mode.ts";
+import { destinationFor, unlinkIfPresent } from "#src/distill/review/execute.ts";
+import { parseArgs } from "#src/distill/app/cli.ts";
 
 // ---------------------------------------------------------------------------
 // CLI wiring (parseArgs) — GREEN: the `apply` subcommand surface is implemented,

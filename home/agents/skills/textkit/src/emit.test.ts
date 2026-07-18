@@ -18,13 +18,12 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { parseInteract, stripInteract } from "@/distill/review/interact.ts";
+import { parseInteract, stripInteract } from "#src/distill/review/interact.ts";
 import { askJson } from "@skills/llm/llm.ts";
 
 // The bin/ wrapper, not the entrypoint module: spawning what PATH actually resolves
-// keeps the deploy seam under test. The entrypoint alone resolves its `@/*` imports
-// only when cwd is the textkit root, so a `cwd:`-bearing spawn below would exit 1 on
-// a module-resolution crash rather than exercising the path it names.
+// keeps the deploy seam itself under test, so a wrapper that stops exec'ing the right
+// entrypoint fails here rather than only in a vault.
 const DISTILL = join(import.meta.dir, "..", "bin", "distill-text");
 const DUMMY_KEY = {
   ...process.env,
@@ -283,11 +282,7 @@ async function runMain(
     throw new Error(`main() called process.exit(${code}) on a success path`);
   }) as typeof process.exit;
   try {
-    // Relative, not `@/`: this import resolves lazily, and the cwd-relative test below
-    // runs it inside a process.chdir() window. A `@/` specifier is resolved against the
-    // cwd of the moment (Bun reads tsconfig paths only from cwd), so it would miss from
-    // the temp dir; a relative specifier resolves against this file either way.
-    const { main } = await import("./distill/app/distill-core.ts");
+    const { main } = await import("#src/distill/app/distill-core.ts");
     await main(ask);
   } finally {
     process.stdout.write = realWrite;
@@ -410,7 +405,7 @@ async function runMainExpectExit(
     throw Object.assign(new Error(`process.exit(${code})`), { sentinelExit: code ?? 0 });
   }) as typeof process.exit;
   try {
-    const { main } = await import("./distill/app/distill-core.ts");
+    const { main } = await import("#src/distill/app/distill-core.ts");
     await main(ask);
   } catch (e) {
     const s = (e as { sentinelExit?: number }).sentinelExit;
