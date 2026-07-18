@@ -30,6 +30,7 @@ import { askJson } from "@skills/llm/llm.ts";
 import type { Residue } from "@/distill/review/residue.ts";
 import {
   type ProcedureOp,
+  asResolvedHeadword as rhw,
   classifyItems,
   distillApplyHook,
   editProcedure,
@@ -764,20 +765,25 @@ test("destinationFor: .tmp.md → the absolute sibling .md; any other suffix →
   expect(destinationFor("note.tmp.md")).toBe(resolve("note.md")); // resolved absolute
 });
 
+// `rhw` (asResolvedHeadword) is the brand constructor spliceDef/editProcedure/ProcedureOp
+// require: these headwords are exact `### ` headings in NOTE, so it asserts what resolveDefTerm
+// would have returned. It erases at runtime — every value below is the same string as before.
 test("spliceDef: replaces the def line (anchor preserved), deletes the subsection on null, no-ops an absent headword", () => {
   const body = NOTE;
-  const replaced = spliceDef(body, "Impression distance", "a newly dense def");
+  const replaced = spliceDef(body, rhw("Impression distance"), "a newly dense def");
   expect(replaced).toContain("a newly dense def 41..70"); // def line rewritten, anchor kept
   expect(replaced).toContain("### Anchor image"); // siblings untouched
-  const removed = spliceDef(body, "Impression distance", null);
+  const removed = spliceDef(body, rhw("Impression distance"), null);
   expect(removed).not.toContain("### Impression distance");
   expect(removed).toContain("### Anchor image");
   expect(removed).toContain("### Scene");
-  expect(spliceDef(body, "Nonexistent", null)).toBe(body); // absent headword ⇒ unchanged
+  // absent headword ⇒ unchanged (the brand asserts resolution; this case pins the stale-target
+  // no-op the brand cannot rule out — a headword resolved against an EARLIER body)
+  expect(spliceDef(body, rhw("Nonexistent"), null)).toBe(body);
 });
 
 test("editProcedure: deletes / replaces a headword's steps by 0-based index, batched against original indices, renumbered", () => {
-  const HW = "Block from the impression";
+  const HW = rhw("Block from the impression");
   const del = editProcedure(NOTE, [{ headword: HW, idx: 1, replace: null }]);
   expect(del).toContain("1. Fix the anchor image before opening paints");
   expect(del).not.toContain("Re-check values against the anchor");
@@ -798,10 +804,10 @@ test("editProcedure: deletes / replaces a headword's steps by 0-based index, bat
 });
 
 test("resolveDefTerm: exact match, degraded safeHandle match, and no-match null", () => {
-  expect(resolveDefTerm(NOTE, "Impression distance")).toBe("Impression distance");
+  expect(resolveDefTerm(NOTE, "Impression distance")).toBe(rhw("Impression distance"));
   // the degraded target keys off safeHandle(headword), not the raw backticked headword
   expect(safeHandle("`tau` threshold")).toBe("tau threshold");
-  expect(resolveDefTerm(NOTE_TAU, "tau threshold")).toBe("`tau` threshold");
+  expect(resolveDefTerm(NOTE_TAU, "tau threshold")).toBe(rhw("`tau` threshold"));
   expect(resolveDefTerm(NOTE, "nonexistent")).toBeNull();
 });
 
@@ -814,7 +820,7 @@ test("resolveDefTerm: exact match, degraded safeHandle match, and no-match null"
 // ---------------------------------------------------------------------------
 
 // The NOTE procedure "Block from the impression" carries 2 steps (idx 0,1). A steps
-// target is `procedure:<headword>:<1-based idxs>`; procedureTarget re-bases to 0.
+// target is `procedure:<headword>:<1-based idxs>`; parseTarget re-bases to 0.
 function mkItem(over: Partial<Item> & Pick<Item, "state" | "verb" | "target">): Item {
   return { targetRaw: over.target, line: 1, ...over };
 }
@@ -822,17 +828,17 @@ function mkItem(over: Partial<Item> & Pick<Item, "state" | "verb" | "target">): 
 test("resolveStepTarget: resolves headword + in-range idxs, drops out-of-range, nulls a missing headword", () => {
   // 1-based 1,2 → 0-based 0,1; both in range (2 steps)
   expect(resolveStepTarget(NOTE, "procedure:Block from the impression:1,2")).toEqual({
-    hw: "Block from the impression",
+    hw: rhw("Block from the impression"),
     idxs: [0, 1],
   });
   // 1-based 2,99 → 0-based 1,98; 98 is beyond the 2-step list and is dropped
   expect(resolveStepTarget(NOTE, "procedure:Block from the impression:2,99")).toEqual({
-    hw: "Block from the impression",
+    hw: rhw("Block from the impression"),
     idxs: [1],
   });
   // a whole-procedure target (no `:<idxs>`) resolves the headword but yields no slots
   expect(resolveStepTarget(NOTE, "procedure:Block from the impression")).toEqual({
-    hw: "Block from the impression",
+    hw: rhw("Block from the impression"),
     idxs: [],
   });
   // an absent headword → null headword, empty idxs (never a phantom slot)
@@ -857,7 +863,7 @@ test("classifyItems: checked keep is counted, never executed; checked recover de
   );
   expect(r.kept).toBe(1);
   expect(r.recovered).toBe(1);
-  expect(r.defRecovers).toEqual([{ term: "Impression distance", src: DEF_SRC }]);
+  expect(r.defRecovers).toEqual([{ term: rhw("Impression distance"), src: DEF_SRC }]);
   expect(r.defRemovals).toEqual([]);
   expect(r.unrecoverable).toEqual([]);
   expect(r.verbatim).toBe(0); // def recovers do NOT bump verbatim in the pure pass
@@ -879,8 +885,8 @@ test("classifyItems: checked recover steps splices verbatim; the first slot carr
   expect(r.recovered).toBe(1);
   expect(r.verbatim).toBe(1);
   expect(r.procedureOps).toEqual([
-    { headword: "Block from the impression", idx: 0, replace: clauses },
-    { headword: "Block from the impression", idx: 1, replace: null },
+    { headword: rhw("Block from the impression"), idx: 0, replace: clauses },
+    { headword: rhw("Block from the impression"), idx: 1, replace: null },
   ]);
 });
 
@@ -956,9 +962,9 @@ test("classifyItems: unchecked entries remove by EFFECT — a resolving def/step
     NOTE,
   );
   expect(r.removed).toBe(2);
-  expect(r.defRemovals).toEqual(["Impression distance"]);
+  expect(r.defRemovals).toEqual([rhw("Impression distance")]);
   expect(r.procedureOps).toEqual([
-    { headword: "Block from the impression", idx: 1, replace: null },
+    { headword: rhw("Block from the impression"), idx: 1, replace: null },
   ]);
 });
 

@@ -86,31 +86,49 @@ import { TRAILING_ANCHOR_RE } from "@/distill/graph/graph.ts";
 // export so distill-core.ts's call site reads `ApplyOpts` rather than reaching into execute.ts.
 export type ApplyOpts = InteractApplyOpts;
 
-// Classify a residue item's target the way triage's targetFor stamped it:
-// `thesis` → the thesis payload; `procedure:<headword>[:<n,…>]` → numbered steps under a
-// `## Procedures` `### headword` subsection; anything else → a concept def term (the only
-// class that calls an LLM).
-function targetKind(target: string): "thesis" | "steps" | "def" {
-  if (target === "thesis") return "thesis";
-  if (target.startsWith("procedure:")) return "steps";
-  return "def";
-}
+// ---- the residue-target grammar ----
 
-// Decode a `procedure:<headword>[:<n,…>]` steps target into its (headword, 0-based step
-// indices). The trailing `:<n,…>` (1-based, comma-joined) is the step address; when absent
-// the target names the WHOLE procedure and `idxs` is empty (per-step spans deferred, so a
-// whole-procedure recover is not actionable — apply refuses it loud). A trailing numeric
-// segment is parsed as the step list; everything before it is the headword (which may itself
-// carry `:` — the parse anchors on a numeric tail, matching triage's stamp).
-function procedureTarget(target: string): { headword: string; idxs: number[] } {
+// A residue item's target, parsed. triage's targetFor stamps ONE of three shapes into the
+// intermediary — `thesis`, `procedure:<headword>[:<n,…>]`, or a bare concept term — and this
+// union is that grammar decoded: the string is inspected ONCE, at parseTarget, and every
+// downstream branch reads a field rather than re-testing a prefix. `steps.idxs` is the 0-based
+// step address; empty means the target named the WHOLE procedure (per-step spans deferred, so a
+// whole-procedure recover is not actionable — apply refuses it loud). `def.term` is the only
+// class that calls an LLM.
+type StepsTarget = { kind: "steps"; headword: string; idxs: number[] };
+type ResidueTarget = { kind: "thesis" } | StepsTarget | { kind: "def"; term: string };
+
+// Parse a stamped target into the union. The `procedure:` case takes a TRAILING numeric segment
+// as the 1-based comma-joined step list and everything before it as the headword (which may
+// itself carry `:` — the parse anchors on the numeric tail, matching triage's stamp); a
+// 1-based index below 1 is dropped rather than wrapping to a negative slot.
+function parseTarget(target: string): ResidueTarget {
+  if (target === "thesis") return { kind: "thesis" };
+  if (!target.startsWith("procedure:")) return { kind: "def", term: target };
   const rest = target.replace(/^procedure:/, "");
   const m = rest.match(/^(.*):(\d+(?:,\d+)*)$/);
-  if (!m) return { headword: rest, idxs: [] };
+  if (!m) return { kind: "steps", headword: rest, idxs: [] };
   const idxs = m[2]!
     .split(",")
     .map((s) => Number.parseInt(s, 10) - 1)
     .filter((n) => Number.isInteger(n) && n >= 0);
-  return { headword: m[1]!, idxs };
+  return { kind: "steps", headword: m[1]!, idxs };
+}
+
+// A headword that resolveHeadword has already matched against the note body — the exact
+// `### headword` string, not the possibly-degraded target the reviewer's file carried. The
+// brand is nominal and erases at runtime; its job is to make the resolve-BEFORE-splice
+// invariant a compile error rather than a doc comment, since spliceDef and editProcedure
+// match by exact headword and would silently no-op on an unresolved one. Minted in exactly
+// one place (resolveHeadword) plus asResolvedHeadword for callers holding a headword read
+// straight out of a body.
+type ResolvedHeadword = string & { readonly __resolved: unique symbol };
+
+// Assert that a string IS an exact `### headword` from the body — the escape hatch for a
+// caller that obtained one without going through resolveHeadword (a fixture, a headword read
+// off the note directly). Erases at runtime.
+export function asResolvedHeadword(headword: string): ResolvedHeadword {
+  return headword as ResolvedHeadword;
 }
 
 // Promote the intermediary's forced `epistemic_status: in-review` to `distilled`
@@ -122,22 +140,29 @@ function promoteEpistemic(body: string): string {
   return body.replace(/^epistemic_status:.*$/m, "epistemic_status: distilled");
 }
 
-// Resolve a `procedure:<headword>[:<n,…>]` steps target against the note body into its
-// resolved headword and the in-range subset of its 0-based step indices (an out-of-range slot
-// is dropped). Apply's two step lanes — checked recover and unchecked remove — both resolve a
-// step target through this ONE function, so the resolution is stated once and the two lanes
-// can't drift apart. The return type is the invariant: idxs is non-empty only alongside a
-// resolved hw, so callers narrow on `hw === null` rather than asserting past it.
-export function resolveStepTarget(
-  body: string,
-  target: string,
-): { hw: string; idxs: number[] } | { hw: null; idxs: [] } {
-  const { headword, idxs: raw } = procedureTarget(target);
-  const hw = resolveHeadword(body, "procedures", headword);
+// Resolve a parsed steps target against the note body into its resolved headword and the
+// in-range subset of its 0-based step indices (an out-of-range slot is dropped). Apply's two
+// step lanes — checked recover and unchecked remove — both resolve a step target through this
+// ONE function, so the resolution is stated once and the two lanes can't drift apart. The
+// return type is the invariant: idxs is non-empty only alongside a resolved hw, so callers
+// narrow on `hw === null` rather than asserting past it.
+type StepResolution = { hw: ResolvedHeadword; idxs: number[] } | { hw: null; idxs: [] };
+
+function resolveSteps(body: string, t: StepsTarget): StepResolution {
+  const hw = resolveHeadword(body, "procedures", t.headword);
   if (hw === null) return { hw: null, idxs: [] };
   const range = procedureStepRange(body.split("\n"), hw);
-  const idxs = raw.filter((idx) => idx < (range?.count ?? 0));
+  const idxs = t.idxs.filter((idx) => idx < (range?.count ?? 0));
   return { hw, idxs };
+}
+
+// The stamped-string form of resolveSteps: parse the target, then resolve. A target that is not
+// a `procedure:` one names no procedure and resolves to nothing. Exported as apply's
+// step-resolution contract (apply.test.ts drives it with the stamped strings triage writes);
+// the classify lanes call resolveSteps directly on the already-parsed target.
+export function resolveStepTarget(body: string, target: string): StepResolution {
+  const t = parseTarget(target);
+  return t.kind === "steps" ? resolveSteps(body, t) : { hw: null, idxs: [] };
 }
 
 // The classification result distillApplyHook fires: the deterministic op set (def
@@ -151,9 +176,9 @@ export type ClassifyResult = {
   removed: number;
   verbatim: number;
   // Checked recover defs → (resolved term, source clause) to re-render under the key gate.
-  defRecovers: { term: string; src: string }[];
+  defRecovers: { term: ResolvedHeadword; src: string }[];
   // Unchecked def entries whose `### headword` subsection is spliced out.
-  defRemovals: string[];
+  defRemovals: ResolvedHeadword[];
   // Checked recover steps (replace) and unchecked step removals (replace:null), batched.
   procedureOps: ProcedureOp[];
   // The checked recover thesis payload set verbatim as the ## Abstract body, else null.
@@ -212,8 +237,8 @@ type ItemEffect = {
   kept?: true;
   removed?: true;
   verbatim?: true;
-  defRecover?: { term: string; src: string };
-  defRemoval?: string;
+  defRecover?: { term: ResolvedHeadword; src: string };
+  defRemoval?: ResolvedHeadword;
   procedureOps?: ProcedureOp[];
   thesisPara?: string;
   unrecoverable?: string;
@@ -225,36 +250,40 @@ type ItemEffect = {
 function classifyChecked(it: Item, body: string): ItemEffect {
   if (it.verb === "keep") return { kept: true }; // held as shipped — no LLM, no removal
   const payload = it.payload ?? "";
-  const kind = targetKind(it.target);
-  if (kind === "def") {
-    const term = resolveDefTerm(body, it.target);
-    if (term === null) return { unrecoverable: it.target }; // no concept subsection → no action
-    return { recovered: true, defRecover: { term, src: payload } };
-  }
-  if (kind === "steps") {
-    // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
-    // spans deferred) or no source directive (empty payload) cannot execute — and an empty
-    // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
-    // rather than no-op or delete.
-    const stepTarget = resolveStepTarget(body, it.target);
-    const clauses = verbatimDirectives(payload);
-    if (stepTarget.hw === null || stepTarget.idxs.length === 0 || clauses.length === 0) {
-      return { unrecoverable: it.target };
+  const t = parseTarget(it.target);
+  switch (t.kind) {
+    case "def": {
+      const term = resolveDefTerm(body, t.term);
+      if (term === null) return { unrecoverable: it.target }; // no concept subsection → no action
+      return { recovered: true, defRecover: { term, src: payload } };
     }
-    const { hw, idxs } = stepTarget;
-    return {
-      recovered: true,
-      verbatim: true,
-      procedureOps: idxs.map((idx, k) => ({
-        headword: hw,
-        idx,
-        replace: k === 0 ? clauses : null,
-      })),
-    };
+    case "steps": {
+      // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
+      // spans deferred) or no source directive (empty payload) cannot execute — and an empty
+      // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
+      // rather than no-op or delete.
+      const stepTarget = resolveSteps(body, t);
+      const clauses = verbatimDirectives(payload);
+      if (stepTarget.hw === null || stepTarget.idxs.length === 0 || clauses.length === 0) {
+        return { unrecoverable: it.target };
+      }
+      const { hw, idxs } = stepTarget;
+      return {
+        recovered: true,
+        verbatim: true,
+        procedureOps: idxs.map((idx, k) => ({
+          headword: hw,
+          idx,
+          replace: k === 0 ? clauses : null,
+        })),
+      };
+    }
+    case "thesis": {
+      // an empty payload is nothing to recover; refuse rather than insert a blank.
+      if (payload.trim() === "") return { unrecoverable: it.target };
+      return { recovered: true, verbatim: true, thesisPara: payload };
+    }
   }
-  // thesis — an empty payload is nothing to recover; refuse rather than insert a blank.
-  if (payload.trim() === "") return { unrecoverable: it.target };
-  return { recovered: true, verbatim: true, thesisPara: payload };
 }
 
 // An UNCHECKED recover|keep: the entry is REMOVED, but only COUNTED when there is a real
@@ -262,20 +291,23 @@ function classifyChecked(it: Item, body: string): ItemEffect {
 // stays dropped with no effect rather than a phantom "removed". An unchecked thesis and an
 // unresolvable target both have nothing to remove and return the empty effect.
 function classifyUnchecked(it: Item, body: string): ItemEffect {
-  const kind = targetKind(it.target);
-  if (kind === "def") {
-    const term = resolveDefTerm(body, it.target);
-    return term === null ? {} : { removed: true, defRemoval: term };
+  const t = parseTarget(it.target);
+  switch (t.kind) {
+    case "def": {
+      const term = resolveDefTerm(body, t.term);
+      return term === null ? {} : { removed: true, defRemoval: term };
+    }
+    case "steps": {
+      const { hw, idxs } = resolveSteps(body, t);
+      if (hw === null || idxs.length === 0) return {};
+      return {
+        removed: true,
+        procedureOps: idxs.map((idx) => ({ headword: hw, idx, replace: null })),
+      };
+    }
+    case "thesis":
+      return {}; // nothing was projected for a thesis residue ⇒ nothing to remove
   }
-  if (kind === "steps") {
-    const { hw, idxs } = resolveStepTarget(body, it.target);
-    if (hw === null || idxs.length === 0) return {};
-    return {
-      removed: true,
-      procedureOps: idxs.map((idx) => ({ headword: hw, idx, replace: null })),
-    };
-  }
-  return {};
 }
 
 // The footer grammar distillApplyHook reports on stderr — the ONE place
@@ -332,9 +364,9 @@ async function recoverDefs(args: {
   tie0: string;
   lang: "en" | "ru";
   ask: typeof askJson;
-}): Promise<{ splices: { term: string; def: string }[]; defVerbatim: number }> {
+}): Promise<{ splices: { term: ResolvedHeadword; def: string }[]; defVerbatim: number }> {
   const { defRecovers, body, tie0, lang, ask } = args;
-  const splices: { term: string; def: string }[] = [];
+  const splices: { term: ResolvedHeadword; def: string }[] = [];
   let defVerbatim = 0;
   for (const d of defRecovers) {
     let finalDef: string;
@@ -379,7 +411,7 @@ async function recoverDefs(args: {
 function mutateBody(
   body: string,
   cls: ClassifyResult,
-  splices: { term: string; def: string }[],
+  splices: { term: ResolvedHeadword; def: string }[],
 ): string {
   let out = body;
   for (const s of splices) out = spliceDef(out, s.term, s.def);
@@ -549,9 +581,10 @@ function headwordsUnder(body: string, section: string): string[] {
 // `def` is a string, or DELETE the whole subsection (with its preceding blank separator) when
 // `def` is null. A headword with no matching subsection leaves the body unchanged (a
 // removed-then-recovered race is a no-op, not a crash). Every other subsection, its bullets,
-// and the anchors are byte-preserved. The caller resolves a possibly-degraded target to the
-// real headword via resolveDefTerm BEFORE calling this (spliceDef matches by exact headword).
-export function spliceDef(body: string, term: string, def: string | null): string {
+// and the anchors are byte-preserved. `term` is a ResolvedHeadword because spliceDef matches by
+// EXACT headword: the resolve-before-splice step is the brand, so a possibly-degraded target
+// fails to compile here rather than no-opping at runtime.
+export function spliceDef(body: string, term: ResolvedHeadword, def: string | null): string {
   const lines = body.split("\n");
   const sub = subsectionRange(lines, "concepts", term);
   if (!sub) return body; // absent headword ⇒ byte-identical no-op
@@ -581,8 +614,10 @@ export function spliceDef(body: string, term: string, def: string | null): strin
 // headword and the 0-based step index within THAT headword's list (the (headword, stepIdx)
 // addressing the canonical grouping forces). `replace` is the new step text(s) for the slot
 // (a verbatimDirectives splice may yield several); `replace: null` DELETES the slot. A group
-// target like `procedure:<hw>:2,3` expands to one op per index (all sharing the headword).
-export type ProcedureOp = { headword: string; idx: number; replace: string[] | null };
+// target like `procedure:<hw>:2,3` expands to one op per index (all sharing the headword). The
+// headword is branded for the same reason spliceDef's term is: editProcedure locates the list by
+// exact heading and skips what it cannot find.
+export type ProcedureOp = { headword: ResolvedHeadword; idx: number; replace: string[] | null };
 
 // Apply every ProcedureOp in one rewrite, PER HEADWORD: ops are grouped by headword, and each
 // headword's numbered list is rebuilt against its ORIGINAL indices (deletions drop,
@@ -592,7 +627,7 @@ export type ProcedureOp = { headword: string; idx: number; replace: string[] | n
 // in-range targets; a stale one is a no-op, not a crash).
 export function editProcedure(body: string, ops: ProcedureOp[]): string {
   let lines = body.split("\n");
-  const byHead = new Map<string, ProcedureOp[]>();
+  const byHead = new Map<ResolvedHeadword, ProcedureOp[]>();
   for (const op of ops) {
     const g = byHead.get(op.headword);
     if (g) g.push(op);
@@ -650,15 +685,18 @@ export function insertThesis(body: string, para: string): string {
 // matches (the caller counts it removed/skipped rather than crashing) — the emit transform run
 // backward, no handle→headword channel in the file. Holds the resolution fact once for both
 // the concepts side (resolveDefTerm) and the procedures side (resolveStepTarget).
-function resolveHeadword(body: string, section: string, target: string): string | null {
+// The ONE place a ResolvedHeadword is minted from a raw target.
+function resolveHeadword(body: string, section: string, target: string): ResolvedHeadword | null {
   const heads = headwordsUnder(body, section);
-  if (heads.includes(target)) return target; // exact (the common case)
-  return heads.find((h) => safeHandle(h) === target) ?? null; // the emit run backward
+  const hit = heads.includes(target)
+    ? target // exact (the common case)
+    : (heads.find((h) => safeHandle(h) === target) ?? null); // the emit run backward
+  return hit === null ? null : asResolvedHeadword(hit);
 }
 
 // Resolve a residue item's (possibly degraded) def target back to the actual `### headword`
 // under `## Concepts`. See resolveHeadword for the resolution fact; this is a one-line binding
 // of section "concepts".
-export function resolveDefTerm(body: string, target: string): string | null {
+export function resolveDefTerm(body: string, target: string): ResolvedHeadword | null {
   return resolveHeadword(body, "concepts", target);
 }
