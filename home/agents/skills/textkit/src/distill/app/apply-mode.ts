@@ -9,11 +9,8 @@
 // `distill-text apply <path>` (distill-core.ts's runApply) is the production
 // caller; apply.test.ts is its contract suite.
 //
-// ── Check order — the sequence every refusal is measured against, in order. Steps
-//    1–6 and 10–14 belong to the generic executor (execute.ts, which documents them);
-//    steps 7–9 and 12 are this module's, inside distillApplyHook:
-//   1–6  preflight            path · suffix · parse · gate present · resolve against
-//                             TRIAGE_VERBS · stamp (dest= basename, src= hash / no-clobber)
+// ── Check order — execute.ts documents the full 14-step sequence. This module owns
+//    steps 7–9 and 12, run inside distillApplyHook:
 //   7. classify               classifyItems turns every item into deterministic ops,
 //                             pure and I/O-free; a checked recover with no applicable
 //                             action (an unrecoverable target) → exit 2, nothing written
@@ -39,7 +36,6 @@
 //                             def recover leaves it as-authored.)
 //  12. promote epistemic      set `epistemic_status: distilled` (the emit forced
 //                             `in-review`; write-back is the promotion)
-//  10–11, 13–14  write-back   re-hash tmp · re-verify dest · atomic dest write · unlink tmp
 //
 // ── Success output (standalone apply): path on stdout, footer on stderr, exit 0.
 //   stdout  the destination path (absolute) — the only stdout line
@@ -159,10 +155,11 @@ export function resolveStepTarget(
   return { hw, idxs };
 }
 
-// The classification result runApply fires: the deterministic op set (def re-renders,
-// def removals, procedure edits, a verbatim thesis) plus the effect counters the footer
-// reports. `verbatim` here counts only the pre-LLM verbatim splices (recover steps +
-// thesis); the def-recover lane bumps it again per second-grade failure in runApply.
+// The classification result distillApplyHook fires: the deterministic op set (def
+// re-renders, def removals, procedure edits, a verbatim thesis) plus the effect counters
+// the footer reports. `verbatim` here counts only the pre-LLM verbatim splices (recover
+// steps + thesis); the def-recover lane bumps it again per second-grade failure in
+// distillApplyHook.
 export type ClassifyResult = {
   recovered: number;
   kept: number;
@@ -176,22 +173,23 @@ export type ClassifyResult = {
   procedureOps: ProcedureOp[];
   // The checked recover thesis payload set verbatim as the ## Abstract body, else null.
   thesisPara: string | null;
-  // Checked recover targets with no applicable action — runApply refuses these LOUD.
+  // Checked recover targets with no applicable action — distillApplyHook refuses these LOUD.
   unrecoverable: string[];
 };
 
-// Classify every residue item against the note body into the op set runApply executes —
-// the PURE core of the apply pass: no LLM, no fs, no stdout, a transform from (items,
-// body) to a ClassifyResult. Kept as a standalone exported function, separate from the
-// impure runApply, so the branch matrix (checked/unchecked × def/steps/thesis/keep, with
-// target-resolution misses) is unit-testable offline, per the module's own
+// Classify every residue item against the note body into the op set distillApplyHook
+// executes — the PURE core of the apply pass: no LLM, no fs, no stdout, a transform from
+// (items, body) to a ClassifyResult. Kept as a standalone exported function, separate from
+// the impure distillApplyHook, so the branch matrix (checked/unchecked × def/steps/thesis/
+// keep, with target-resolution misses) is unit-testable offline, per the module's own
 // helpers-test-offline contract.
 //
 // Counts reflect EFFECTS, not decisions: a checked keep is `kept`; a checked recover that
 // resolves is `recovered`; an unchecked recover|keep that had a real removal is `removed`;
 // a non-recoverable class (edge/payload/prose def with no glossary row, an out-of-range or
 // whole-procedure step target, an empty payload) is collected in `unrecoverable` when
-// CHECKED (runApply aborts) and silently dropped when unchecked (never in the output).
+// CHECKED (distillApplyHook aborts) and silently dropped when unchecked (never in the
+// output).
 export function classifyItems(items: Item[], body: string): ClassifyResult {
   let recovered = 0;
   let kept = 0;
