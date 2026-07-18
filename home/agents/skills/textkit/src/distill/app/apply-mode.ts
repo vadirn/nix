@@ -285,7 +285,7 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
 // (execute.ts) and calls this hook for the middle. A refusal here carries its own exit code
 // (a lost reviewer decision → 2, a missing key → 1); the success case hands back the final
 // body and the stderr footer.
-export function distillApplyHook(opts: ApplyOpts): InteractApplyHook {
+function distillApplyHook(opts: ApplyOpts): InteractApplyHook {
   return async ({ items, strippedBody }): Promise<InteractApplyResult> => {
     // 7. classify every item into deterministic ops (no LLM, no write). This precedes
     //    the key gate on purpose: a checked recover that resolves to no actionable target
