@@ -3,25 +3,17 @@
 // decisions against the real note seams, and write the scaffold-free note back to
 // `<dest>.md`. The grammar core (parse/resolve/strip) lives in interact.ts; the
 // triage instance (verb vocabulary, the emit that produced this file) lives in
-// triage.ts; this module owns the verb ACTIONS and the write-back discipline.
+// triage.ts; this module owns distill's verb ACTIONS. The write-back DISCIPLINE —
+// the stamp preflight, the mid-run re-verification, the atomic write — is generic
+// and lives in execute.ts, which this module binds via `distillApplyHook`.
 // `distill-text apply <path>` (distill-core.ts's runApply) is the production
 // caller; apply.test.ts is its contract suite.
 //
-// ── Check order — the sequence every refusal in runApply is measured against, in order:
-//   1. path exists            ENOENT → exit 2 "no intermediary at <path> — already
-//                             applied, or re-run distill" (the fat-finger's first error)
-//   2. suffix                 non-`.tmp.md` → exit 2 (destinationFor returns null)
-//   3. parse                  parseInteract structural errors → exit 2, nothing executed
-//   4. gate present           the confirm-all gate is MANDATORY (triage policy): zero
-//                             confirm-all blocks — including a blockless file — is
-//                             malformed, exit 2 with the same teaching message
-//   5. resolve                resolveInteract against TRIAGE_VERBS — unknown verb,
-//                             unresolved pick-one, or an UNCHECKED confirm-all gate →
-//                             exit 2, nothing executed
-//   6. stamp                  dest= basename must equal basename(destinationFor(tmp))
-//                             (a renamed tmp refuses); src=sha256 must equal the
-//                             destination's current hash (an edited dest refuses);
-//                             src=new requires the destination ABSENT (no-clobber)
+// ── Check order — the sequence every refusal is measured against, in order. Steps
+//    1–6 and 10–14 belong to the generic executor (execute.ts, which documents them);
+//    steps 7–9 and 12 are this module's, inside distillApplyHook:
+//   1–6  preflight            path · suffix · parse · gate present · resolve against
+//                             TRIAGE_VERBS · stamp (dest= basename, src= hash / no-clobber)
 //   7. classify               classifyItems turns every item into deterministic ops,
 //                             pure and I/O-free; a checked recover with no applicable
 //                             action (an unrecoverable target) → exit 2, nothing written
@@ -45,17 +37,9 @@
 //                             (No re-projection step: on a canonical note the ## Abstract is
 //                             authored at extract time, not re-derived from concept defs, so a
 //                             def recover leaves it as-authored.)
-//  10. re-hash tmp            re-read the tmp and compare to the hash taken at step 1;
-//                             a mismatch (Obsidian Sync rewrote it during the LLM window)
-//                             → exit 2 "intermediary changed during apply", nothing written
-//  11. re-verify dest         overwrite case only: re-read the destination's hash and
-//                             compare to step 6's src= value again, since that check ran
-//                             before the (seconds-long) LLM window → a mismatch exits 2
 //  12. promote epistemic      set `epistemic_status: distilled` (the emit forced
 //                             `in-review`; write-back is the promotion)
-//  13. atomic dest write      overwrite case → rename a same-dir temp onto dest (atomic
-//                             replace); new case → link no-clobber
-//  14. unlink tmp             ENOENT tolerated (a racing applier may have removed it)
+//  10–11, 13–14  write-back   re-hash tmp · re-verify dest · atomic dest write · unlink tmp
 //
 // ── Success output (standalone apply): path on stdout, footer on stderr, exit 0.
 //   stdout  the destination path (absolute) — the only stdout line
@@ -73,20 +57,17 @@
 // PURE by contract for the exported helpers below (no fs, no LLM) so they unit-test
 // offline; runApply is the only impure export.
 
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import type { Item } from "@/distill/review/interact.ts";
 import {
-  type Item,
-  parseInteract,
-  resolveInteract,
-  stripInteract,
-} from "@/distill/review/interact.ts";
+  type InteractApplyHook,
+  type InteractApplyResult,
+  runInteractApply,
+} from "@/distill/review/execute.ts";
 import { TRIAGE_VERBS, safeHandle } from "@/distill/review/triage.ts";
 import { askJson, ensureKeys } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
 import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
 import { DISTILL_EXTRACT } from "@/core/models.ts";
-import { linkNoClobber } from "@/core/fs.ts";
 import {
   fidelityGate,
   renderEntryPrompt,
@@ -96,7 +77,12 @@ import {
 import { parseCanonicalNote, splitSections } from "@/distill/graph/parse-projection.ts";
 import { parseFrontmatter } from "@/core/frontmatter.ts";
 import { detectLang } from "@/core/text.ts";
-import { stampSha, TRAILING_ANCHOR_RE } from "@/distill/graph/graph.ts";
+import { TRAILING_ANCHOR_RE } from "@/distill/graph/graph.ts";
+
+// The generic machinery moved to execute.ts is re-exported here so the emit preflight
+// (distill-core.ts) and the contract suites keep resolving it from this module: the
+// protocol moved, the import sites did not.
+export { destinationFor, stampHash, unlinkIfPresent } from "@/distill/review/execute.ts";
 
 // ---- runApply: the orchestrator ----
 
@@ -110,14 +96,6 @@ export type ApplyOpts = {
   // prompts.ts). Production callers (main/tty) omit it → the real transport.
   ask?: typeof askJson;
 };
-
-// The stamp hash form the emit and the compress preflight both use: the shared 12-hex
-// stampSha (graph.ts) under a `sha256:` label. Compared against the gate's src= value
-// (step 6) and used to re-hash the tmp across the LLM window (step 10). Exported so the
-// emit preflight (distill-core.ts) stamps through this ONE prefixed form, not a copy.
-export function stampHash(bytes: string | Buffer): string {
-  return `sha256:${stampSha(bytes)}`;
-}
 
 // Classify a residue item's target the way triage's targetFor stamped it:
 // `thesis` → the thesis payload; `procedure:<headword>[:<n,…>]` → numbered steps under a
@@ -301,219 +279,141 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
   };
 }
 
+// Distill's action binding: steps 7–9 and 12 of the interact check order, closed over the
+// run options. The generic half of the run — the stamp preflight (1–6), the mid-run
+// re-verification (10–11), and the atomic write-back (13–14) — belongs to the executor
+// (execute.ts) and calls this hook for the middle. A refusal here carries its own exit code
+// (a lost reviewer decision → 2, a missing key → 1); the success case hands back the final
+// body and the stderr footer.
+export function distillApplyHook(opts: ApplyOpts): InteractApplyHook {
+  return async ({ items, strippedBody }): Promise<InteractApplyResult> => {
+    // 7. classify every item into deterministic ops (no LLM, no write). This precedes
+    //    the key gate on purpose: a checked recover that resolves to no actionable target
+    //    (an edge/payload/prose residue class, or a def whose concept subsection is gone) is a
+    //    LOST reviewer decision if allowed to no-op, so it aborts LOUD below — and only a
+    //    checked recover DEF that actually resolves is what forces the key gate.
+    let body = strippedBody;
+    const { body: bodyNoFront } = parseFrontmatter(body);
+    const lang = opts.lang === "auto" ? detectLang(bodyNoFront) : opts.lang;
+    const ask = opts.ask ?? askJson;
+    // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
+    // analogue of the old tie-together line).
+    const tie0 = parseCanonicalNote(bodyNoFront).abstract;
+
+    // The classification is the pure core (classifyItems): a transform from (items, body)
+    // to the op set + counters, with NO I/O. `verbatim` is `let` because the def-recover lane
+    // below bumps it per second-grade failure; every other field is final here.
+    const cls = classifyItems(items, body);
+    const {
+      recovered,
+      kept,
+      removed,
+      defRecovers,
+      defRemovals,
+      procedureOps,
+      thesisPara,
+      unrecoverable,
+    } = cls;
+    let verbatim = cls.verbatim;
+
+    // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
+    // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
+    // item for the same reason). Fires before the key gate and before any write.
+    if (unrecoverable.length > 0) {
+      return {
+        kind: "refuse",
+        code: 2,
+        message: `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
+      };
+    }
+
+    // 8. key gate — only a checked recover DEF that resolved calls an LLM. A checked
+    //    recover of procedure steps / the thesis is verbatim (no LLM); keep is a no-op.
+    if (defRecovers.length > 0) {
+      try {
+        ensureKeys([DISTILL_EXTRACT]);
+      } catch (e) {
+        if (e instanceof MissingKeyError) {
+          return { kind: "refuse", code: 1, message: `${e.message}; nothing written` };
+        }
+        throw e;
+      }
+    }
+
+    // 9. fire verbs — the LLM window: re-render each checked recover def, re-grade once, and
+    // splice either the re-render (translated/inconclusive) or the source's own verbatim
+    // clause (a second grade failure) into its `### headword` concept subsection.
+    const defSplices: { term: string; def: string }[] = [];
+    for (const d of defRecovers) {
+      let finalDef: string;
+      try {
+        const rr = await ask<{ def: string }>(
+          DISTILL_EXTRACT,
+          renderEntryPrompt({ term: d.term, def: "" }, d.src, lang),
+          1024,
+        );
+        const reRendered = (rr.def ?? "").trim();
+        const graded = await fidelityGate(
+          tie0,
+          body,
+          [{ term: d.term, def: reRendered, sourceText: d.src }],
+          ask,
+        );
+        const grade = graded.concepts[0]?.grade ?? "translated";
+        if (grade === "residue" || !reRendered) {
+          finalDef = verbatimDef(d.term, d.src);
+          verbatim++;
+        } else {
+          finalDef = reRendered;
+        }
+      } catch (e) {
+        rethrowIfBug(e, "apply-recover-def");
+        // a transient re-render/grade flake floors to the source's own clause rather
+        // than dropping the entry — a verbatim splice cannot invert.
+        finalDef = verbatimDef(d.term, d.src);
+        verbatim++;
+      }
+      defSplices.push({ term: d.term, def: finalDef });
+    }
+
+    for (const s of defSplices) body = spliceDef(body, s.term, s.def);
+    for (const term of defRemovals) body = spliceDef(body, term, null);
+    if (procedureOps.length) body = editProcedure(body, procedureOps);
+
+    // A checked recover thesis sets the ## Abstract body verbatim. There is NO re-projection
+    // step on a canonical note: the abstract is authored at extract time, not re-derived from
+    // concept defs, so a def recover leaves it as-authored — the old renderProse/
+    // replaceHeadProse head-prose chain has no canonical analogue.
+    if (thesisPara !== null) body = insertThesis(body, thesisPara);
+
+    // 12. promote the epistemic status. Pure over `body` — the executor's steps 10–11 read
+    // the tmp and the destination off disk, never this string, so promoting here rather than
+    // after them changes nothing that reaches the write.
+    return {
+      kind: "write",
+      body: promoteEpistemic(body),
+      footer: `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim)`,
+    };
+  };
+}
+
 // Apply a single intermediary and return the process exit code (0 | 1 | 2). Writes the
 // destination path to stdout, the applied-summary footer and every refusal to stderr;
 // NEVER prompts, NEVER reads stdin. main() does `process.exit(await runApply(...))`.
 // Before the write-back, the destination and the tmp are BOTH untouched on every refusal
-// path — pinned by hash in apply.test.ts.
-export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number> {
-  const fail = (msg: string, code: number): number => {
-    process.stderr.write(`distill apply: ${msg}\n`);
-    return code;
-  };
-
-  // 1. path exists — a fat-finger at an already-consumed (or never-emitted) path.
-  if (!existsSync(tmpPath)) {
-    return fail(`no intermediary at ${tmpPath} — already applied, or re-run distill`, 2);
-  }
-  // 2. suffix — a non-`.tmp.md` path never derives a destination onto itself.
-  const dest = destinationFor(tmpPath);
-  if (dest === null) {
-    return fail(`${tmpPath} is not a .tmp.md intermediary`, 2);
-  }
-
-  // 3. parse — structural grammar errors abort before any action.
-  const text = readFileSync(tmpPath, "utf8");
-  const hashAtStart = stampHash(text);
-  const { blocks, errors: parseErrors } = parseInteract(text);
-  if (parseErrors.length > 0) {
-    return fail(parseErrors.map((e) => `${e.line}: ${e.message}`).join("; "), 2);
-  }
-  // 4. gate present — the confirm-all gate is mandatory triage policy; a blockless
-  //    or gate-less intermediary is malformed (same teaching message either way).
-  const gate = blocks.find((b) => b.kind === "confirm-all");
-  if (!gate) {
-    return fail("no confirm-all gate — this is not a triage intermediary (re-run distill)", 2);
-  }
-  // 5. resolve — unknown verb, unresolved pick-one, and an UNCHECKED gate abort here.
-  const res = resolveInteract(blocks, { verbs: TRIAGE_VERBS });
-  if (res.errors.length > 0) {
-    return fail(res.errors.map((e) => e.message).join("; "), 2);
-  }
-
-  // 6. stamp — a renamed tmp (dest= basename) or an edited/absent destination
-  //    (src= hash, or src=new no-clobber) refuses before the destination is derived.
-  const destBase = basename(dest);
-  if (gate.dest !== destBase) {
-    return fail(
-      `intermediary dest=${gate.dest ?? "(none)"} does not match ${destBase} — was the tmp renamed?`,
-      2,
-    );
-  }
-  if (gate.src === "new") {
-    if (existsSync(dest)) {
-      return fail(`destination already exists: ${dest} (src=new refuses to clobber)`, 2);
-    }
-  } else {
-    const current = existsSync(dest) ? stampHash(readFileSync(dest, "utf8")) : null;
-    if (current !== gate.src) {
-      return fail(`destination changed since distill: ${dest} — re-run distill`, 2);
-    }
-  }
-
-  // The residue items (every non-gate block); the gate itself is skipped.
-  const items = blocks.filter((b) => b.kind !== "confirm-all").flatMap((b) => b.items);
-
-  // 7. classify every item into deterministic ops (no LLM, no write). This precedes
-  //    the key gate on purpose: a checked recover that resolves to no actionable target
-  //    (an edge/payload/prose residue class, or a def whose concept subsection is gone) is a
-  //    LOST reviewer decision if allowed to no-op, so it aborts LOUD below — and only a
-  //    checked recover DEF that actually resolves is what forces the key gate.
-  let body = stripInteract(text);
-  const { body: bodyNoFront } = parseFrontmatter(body);
-  const lang = opts.lang === "auto" ? detectLang(bodyNoFront) : opts.lang;
-  const ask = opts.ask ?? askJson;
-  // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
-  // analogue of the old tie-together line).
-  const tie0 = parseCanonicalNote(bodyNoFront).abstract;
-
-  // The classification is the pure core (classifyItems): a transform from (items, body)
-  // to the op set + counters, with NO I/O. `verbatim` is `let` because the def-recover lane
-  // below bumps it per second-grade failure; every other field is final here.
-  const cls = classifyItems(items, body);
-  const {
-    recovered,
-    kept,
-    removed,
-    defRecovers,
-    defRemovals,
-    procedureOps,
-    thesisPara,
-    unrecoverable,
-  } = cls;
-  let verbatim = cls.verbatim;
-
-  // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
-  // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
-  // item for the same reason). Fires before the key gate and before any write.
-  if (unrecoverable.length > 0) {
-    return fail(
-      `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
-      2,
-    );
-  }
-
-  // 8. key gate — only a checked recover DEF that resolved calls an LLM. A checked
-  //    recover of procedure steps / the thesis is verbatim (no LLM); keep is a no-op.
-  if (defRecovers.length > 0) {
-    try {
-      ensureKeys([DISTILL_EXTRACT]);
-    } catch (e) {
-      if (e instanceof MissingKeyError) return fail(`${e.message}; nothing written`, 1);
-      throw e;
-    }
-  }
-
-  // 9. fire verbs — the LLM window: re-render each checked recover def, re-grade once, and
-  // splice either the re-render (translated/inconclusive) or the source's own verbatim
-  // clause (a second grade failure) into its `### headword` concept subsection.
-  const defSplices: { term: string; def: string }[] = [];
-  for (const d of defRecovers) {
-    let finalDef: string;
-    try {
-      const rr = await ask<{ def: string }>(
-        DISTILL_EXTRACT,
-        renderEntryPrompt({ term: d.term, def: "" }, d.src, lang),
-        1024,
-      );
-      const reRendered = (rr.def ?? "").trim();
-      const graded = await fidelityGate(
-        tie0,
-        body,
-        [{ term: d.term, def: reRendered, sourceText: d.src }],
-        ask,
-      );
-      const grade = graded.concepts[0]?.grade ?? "translated";
-      if (grade === "residue" || !reRendered) {
-        finalDef = verbatimDef(d.term, d.src);
-        verbatim++;
-      } else {
-        finalDef = reRendered;
-      }
-    } catch (e) {
-      rethrowIfBug(e, "apply-recover-def");
-      // a transient re-render/grade flake floors to the source's own clause rather
-      // than dropping the entry — a verbatim splice cannot invert.
-      finalDef = verbatimDef(d.term, d.src);
-      verbatim++;
-    }
-    defSplices.push({ term: d.term, def: finalDef });
-  }
-
-  for (const s of defSplices) body = spliceDef(body, s.term, s.def);
-  for (const term of defRemovals) body = spliceDef(body, term, null);
-  if (procedureOps.length) body = editProcedure(body, procedureOps);
-
-  // A checked recover thesis sets the ## Abstract body verbatim. There is NO re-projection
-  // step on a canonical note: the abstract is authored at extract time, not re-derived from
-  // concept defs, so a def recover leaves it as-authored — the old renderProse/
-  // replaceHeadProse head-prose chain has no canonical analogue.
-  if (thesisPara !== null) body = insertThesis(body, thesisPara);
-
-  // 10. re-hash the tmp — an Obsidian Sync rewrite during the LLM window invalidates
-  //     the decision set we acted on; refuse rather than write a stale apply.
-  if (stampHash(readFileSync(tmpPath, "utf8")) !== hashAtStart) {
-    return fail("intermediary changed during apply — nothing written; re-run apply", 2);
-  }
-  // 11. re-verify the destination stamp for the overwrite case. Step 6's src=sha256 check
-  //     read dest BEFORE the (seconds-long) LLM window; an edit landing during that window
-  //     (a cross-device Sync push, a hand edit) would otherwise be clobbered by the atomic
-  //     replace below — the same class of loss the start-of-run stamp exists to refuse, just
-  //     inside the apply's own window. The src=new case needs no re-check: its linkSync is
-  //     no-clobber, so a destination that appeared meanwhile fails EEXIST (handled below).
-  if (gate.src !== "new") {
-    const current = existsSync(dest) ? stampHash(readFileSync(dest, "utf8")) : null;
-    if (current !== gate.src) {
-      return fail(`destination changed during apply: ${dest} — nothing written; re-run distill`, 2);
-    }
-  }
-
-  // 12. promote the epistemic status, then 13. write atomically and 14. consume.
-  const finalBody = promoteEpistemic(body);
-  const partial = `${dest}.apply.partial`;
-  writeFileSync(partial, finalBody);
-  if (gate.src === "new") {
-    // no-clobber link: EEXIST maps to the src=new refusal (exit 2); the helper
-    // cleans the partial itself on any failure, so only the success unlink remains here.
-    const link = linkNoClobber(partial, dest);
-    if (!link.ok) {
-      return fail(`destination already exists: ${dest} (src=new refuses to clobber)`, 2);
-    }
-    unlinkSync(partial);
-  } else {
-    renameSync(partial, dest); // atomic replace of the verified destination
-  }
-  unlinkIfPresent(tmpPath);
-
-  process.stdout.write(`${dest}\n`);
-  process.stderr.write(
-    `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim)\n`,
+// path — pinned by hash in apply.test.ts. Distill's binding of the generic interact
+// executor: the label every refusal is prefixed with, the triage verb vocabulary step 5
+// resolves against, and the action hook above.
+export function runApply(tmpPath: string, opts: ApplyOpts): Promise<number> {
+  return runInteractApply(
+    tmpPath,
+    {
+      label: "distill apply",
+      verbs: TRIAGE_VERBS,
+      apply: distillApplyHook(opts),
+    },
+    opts,
   );
-  return 0;
-}
-
-// ---- pure seams (exported for offline unit tests) ----
-
-// The write-back destination for an intermediary path: `<x>.tmp.md` → the sibling
-// `<x>.md`, resolved absolute (stdout line 1 must reopen from any later cwd).
-// Returns null when the path does not end `.tmp.md` — the suffix check (step 2)
-// that keeps a fat-fingered `apply note.md` from ever deriving a destination onto
-// the note it was told to read. basename(destinationFor(tmp)) is also the value
-// the gate's `dest=` stamp is verified against (step 6), so a hand-renamed tmp
-// refuses instead of silently creating `<other>.md`.
-export function destinationFor(tmpPath: string): string | null {
-  if (!tmpPath.endsWith(".tmp.md")) return null;
-  return resolve(`${tmpPath.slice(0, -".tmp.md".length)}.md`);
 }
 
 // ---- canonical section/subsection locators (shared by the body-editing primitives) ----
@@ -707,16 +607,4 @@ function resolveProcedureHeadword(body: string, target: string): string | null {
   const heads = headwordsUnder(body, "procedures");
   if (heads.includes(target)) return target;
   return heads.find((h) => safeHandle(h) === target) ?? null;
-}
-
-// Unlink a path, tolerating ENOENT — the final consume step (step 14). A crash
-// between the dest write and this unlink, or a racing second applier, may have
-// already removed the tmp; its absence is success, not an error. Any other errno
-// (EPERM, EISDIR) still throws.
-export function unlinkIfPresent(path: string): void {
-  try {
-    unlinkSync(path);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
 }
