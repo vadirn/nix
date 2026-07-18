@@ -31,6 +31,7 @@ import type { Residue } from "@/distill/review/residue.ts";
 import {
   type ProcedureOp,
   classifyItems,
+  distillApplyHook,
   editProcedure,
   insertThesis,
   resolveDefTerm,
@@ -959,6 +960,89 @@ test("classifyItems: unchecked entries remove by EFFECT — a resolving def/step
   expect(r.procedureOps).toEqual([
     { headword: "Block from the impression", idx: 1, replace: null },
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// distillApplyHook: the apply MIDDLE (steps 7–9 and 12) driven directly, with an
+// injected `ask` and NO filesystem — no tmp dir, no intermediary, no write-back. The
+// executor (execute.ts) owns the impure halves (stamp preflight, re-verify, atomic
+// write) and every runApply test above exercises them through real files; these two
+// pin the middle's own sequence — classify → lost-decision gate → key gate → the def
+// lane's LLM window → body mutations → footer — as the module's helpers-test-offline
+// contract asks.
+// ---------------------------------------------------------------------------
+
+// Drive the hook with a recording transport, the same marker dispatch applyWith uses.
+async function hook(
+  items: Item[],
+  body: string,
+  handler: (prompt: string) => unknown,
+  lang: "en" | "ru" | "auto" = "en",
+): Promise<{ result: Awaited<ReturnType<typeof distillApplyHook>>; prompts: string[] }> {
+  const prompts: string[] = [];
+  const ask = (async (_model: unknown, prompt: string) => {
+    prompts.push(prompt);
+    return handler(prompt);
+  }) as typeof askJson;
+  const result = await distillApplyHook({ items, strippedBody: body, lang, ask });
+  return { result, prompts };
+}
+
+test("distillApplyHook: classify → key gate → def re-render → body mutations, offline", async () => {
+  const { result, prompts } = await hook(
+    [
+      mkItem({
+        state: "checked",
+        verb: "recover",
+        target: "Impression distance",
+        payload: DEF_SRC,
+      }),
+      mkItem({ state: "checked", verb: "keep", target: "Anchor image" }),
+      mkItem({ state: "unchecked", verb: "recover", target: "Scene", payload: "x" }),
+      mkItem({ state: "checked", verb: "recover", target: "thesis", payload: THESIS_SRC }),
+    ],
+    NOTE,
+    defRecover("translated"),
+  );
+  expect(result.kind).toBe("write");
+  if (result.kind !== "write") throw new Error("expected write");
+  // the re-render + one re-grade, and nothing else, reached the transport
+  expect(prompts.length).toBe(2);
+  expect(prompts.some((p) => p.includes(RENDER_ENTRY_MARKER))).toBe(true);
+  // the graded-translated re-render is spliced in, byte-anchor preserved
+  expect(result.body).toContain("MOCKDEF 41..70");
+  // the unchecked def's whole subsection is gone
+  expect(result.body).not.toContain("### Scene");
+  // the checked recover thesis lands verbatim as the ## Abstract body
+  expect(result.body).toContain(THESIS_SRC);
+  expect(result.body).not.toContain("Blocking from the felt sense rather than the scene");
+  // step 12 — the write-back is the promotion
+  expect(result.body).toContain("epistemic_status: distilled");
+  // 2 checked recovers (def + thesis) · 1 checked keep · 1 unchecked removal; the thesis is
+  // the only verbatim splice (the def graded translated, so its lane adds none)
+  expect(result.footer).toBe("— applied: 2 recovered · 1 kept · 1 removed (1 verbatim)");
+});
+
+test("distillApplyHook: a lost decision refuses (exit 2) before the key gate and before any LLM call", async () => {
+  const { result, prompts } = await hook(
+    [
+      mkItem({ state: "checked", verb: "recover", target: "nonexistent", payload: "x" }),
+      // a resolving def recover in the same batch would otherwise force the key gate + LLM
+      mkItem({
+        state: "checked",
+        verb: "recover",
+        target: "Impression distance",
+        payload: DEF_SRC,
+      }),
+    ],
+    NOTE,
+    NO_LLM,
+  );
+  expect(result.kind).toBe("refuse");
+  if (result.kind !== "refuse") throw new Error("expected refuse");
+  expect(result.code).toBe(2);
+  expect(result.message).toContain("nonexistent");
+  expect(prompts).toEqual([]);
 });
 
 test("insertThesis: replaces the ## Abstract body with the paragraph", () => {

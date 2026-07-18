@@ -51,7 +51,10 @@
 //   code would be dead surface.
 //
 // PURE by contract for the exported helpers below (no fs, no LLM) so they unit-test
-// offline; runApply is the only impure export.
+// offline. distillApplyHook is the one partial exception: it reaches an LLM, but only
+// through the injected `ask` seam and NEVER the filesystem, which is what lets
+// apply.test.ts drive the whole apply middle (classify → gates → mutate → footer) with
+// no temp files. runApply is the only export that touches disk.
 
 import type { Item } from "@/distill/review/interact.ts";
 import {
@@ -173,95 +176,106 @@ export type ClassifyResult = {
 // CHECKED (distillApplyHook aborts) and silently dropped when unchecked (never in the
 // output).
 export function classifyItems(items: Item[], body: string): ClassifyResult {
-  let recovered = 0;
-  let kept = 0;
-  let removed = 0;
-  let verbatim = 0;
-
-  const defRecovers: { term: string; src: string }[] = [];
-  const defRemovals: string[] = [];
-  const procedureOps: ProcedureOp[] = [];
-  let thesisPara: string | null = null;
-  const unrecoverable: string[] = [];
-
-  for (const it of items) {
-    const kind = targetKind(it.target);
-    const payload = it.payload ?? "";
-    if (it.state === "checked") {
-      if (it.verb === "keep") {
-        kept++; // held as shipped — no LLM, no removal
-        continue;
-      }
-      // recover — every lane must be executable or refuse; counts reflect EFFECTS.
-      if (kind === "def") {
-        const term = resolveDefTerm(body, it.target);
-        if (term === null) {
-          unrecoverable.push(it.target); // no concept subsection → apply has no action
-          continue;
-        }
-        defRecovers.push({ term, src: payload });
-        recovered++;
-      } else if (kind === "steps") {
-        // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
-        // spans deferred) or no source directive (empty payload) cannot execute — and an empty
-        // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
-        // rather than no-op or delete.
-        const stepTarget = resolveStepTarget(body, it.target);
-        const clauses = verbatimDirectives(payload);
-        if (stepTarget.hw === null || stepTarget.idxs.length === 0 || clauses.length === 0) {
-          unrecoverable.push(it.target);
-          continue;
-        }
-        const { hw, idxs } = stepTarget;
-        idxs.forEach((idx, k) => {
-          procedureOps.push({ headword: hw, idx, replace: k === 0 ? clauses : null });
-        });
-        recovered++;
-        verbatim++;
-      } else {
-        // thesis — an empty payload is nothing to recover; refuse rather than insert a blank.
-        if (payload.trim() === "") {
-          unrecoverable.push(it.target);
-          continue;
-        }
-        thesisPara = payload;
-        recovered++;
-        verbatim++;
-      }
-    } else {
-      // unchecked recover|keep → the entry is REMOVED, but only counted when there is a
-      // real removal: a non-recoverable class (or an out-of-range slot) was never in the
-      // output, so it stays dropped with no effect (not a phantom "removed").
-      if (kind === "def") {
-        const term = resolveDefTerm(body, it.target);
-        if (term !== null) {
-          defRemovals.push(term);
-          removed++;
-        }
-      } else if (kind === "steps") {
-        const stepTarget = resolveStepTarget(body, it.target);
-        if (stepTarget.hw !== null) {
-          for (const idx of stepTarget.idxs) {
-            procedureOps.push({ headword: stepTarget.hw, idx, replace: null });
-          }
-          if (stepTarget.idxs.length > 0) removed++;
-        }
-      }
-      // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
-    }
-  }
-
-  return {
-    recovered,
-    kept,
-    removed,
-    verbatim,
-    defRecovers,
-    defRemovals,
-    procedureOps,
-    thesisPara,
-    unrecoverable,
+  const out: ClassifyResult = {
+    recovered: 0,
+    kept: 0,
+    removed: 0,
+    verbatim: 0,
+    defRecovers: [],
+    defRemovals: [],
+    procedureOps: [],
+    thesisPara: null,
+    unrecoverable: [],
   };
+  for (const it of items) {
+    const eff = it.state === "checked" ? classifyChecked(it, body) : classifyUnchecked(it, body);
+    if (eff.recovered) out.recovered++;
+    if (eff.kept) out.kept++;
+    if (eff.removed) out.removed++;
+    if (eff.verbatim) out.verbatim++;
+    if (eff.defRecover) out.defRecovers.push(eff.defRecover);
+    if (eff.defRemoval !== undefined) out.defRemovals.push(eff.defRemoval);
+    if (eff.procedureOps) out.procedureOps.push(...eff.procedureOps);
+    if (eff.thesisPara !== undefined) out.thesisPara = eff.thesisPara; // last checked thesis wins
+    if (eff.unrecoverable !== undefined) out.unrecoverable.push(eff.unrecoverable);
+  }
+  return out;
+}
+
+// What ONE item contributes to the accumulating ClassifyResult. Every field is optional and
+// absence means "this lane is untouched", so a branch names only the effect it has; the
+// counters are flags rather than numbers because a single item bumps each counter at most
+// once. classifyItems folds these in document order, which is what keeps procedureOps,
+// defRecovers and unrecoverable in the order the reviewer's file listed them.
+type ItemEffect = {
+  recovered?: true;
+  kept?: true;
+  removed?: true;
+  verbatim?: true;
+  defRecover?: { term: string; src: string };
+  defRemoval?: string;
+  procedureOps?: ProcedureOp[];
+  thesisPara?: string;
+  unrecoverable?: string;
+};
+
+// A CHECKED item's effect: keep holds the entry as shipped, recover must be executable in its
+// own lane or land in `unrecoverable` — every lane refuses rather than no-ops, because a
+// checked decision that silently does nothing is a LOST reviewer decision.
+function classifyChecked(it: Item, body: string): ItemEffect {
+  if (it.verb === "keep") return { kept: true }; // held as shipped — no LLM, no removal
+  const payload = it.payload ?? "";
+  const kind = targetKind(it.target);
+  if (kind === "def") {
+    const term = resolveDefTerm(body, it.target);
+    if (term === null) return { unrecoverable: it.target }; // no concept subsection → no action
+    return { recovered: true, defRecover: { term, src: payload } };
+  }
+  if (kind === "steps") {
+    // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
+    // spans deferred) or no source directive (empty payload) cannot execute — and an empty
+    // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
+    // rather than no-op or delete.
+    const stepTarget = resolveStepTarget(body, it.target);
+    const clauses = verbatimDirectives(payload);
+    if (stepTarget.hw === null || stepTarget.idxs.length === 0 || clauses.length === 0) {
+      return { unrecoverable: it.target };
+    }
+    const { hw, idxs } = stepTarget;
+    return {
+      recovered: true,
+      verbatim: true,
+      procedureOps: idxs.map((idx, k) => ({
+        headword: hw,
+        idx,
+        replace: k === 0 ? clauses : null,
+      })),
+    };
+  }
+  // thesis — an empty payload is nothing to recover; refuse rather than insert a blank.
+  if (payload.trim() === "") return { unrecoverable: it.target };
+  return { recovered: true, verbatim: true, thesisPara: payload };
+}
+
+// An UNCHECKED recover|keep: the entry is REMOVED, but only COUNTED when there is a real
+// removal — a non-recoverable class (or an out-of-range slot) was never in the output, so it
+// stays dropped with no effect rather than a phantom "removed". An unchecked thesis and an
+// unresolvable target both have nothing to remove and return the empty effect.
+function classifyUnchecked(it: Item, body: string): ItemEffect {
+  const kind = targetKind(it.target);
+  if (kind === "def") {
+    const term = resolveDefTerm(body, it.target);
+    return term === null ? {} : { removed: true, defRemoval: term };
+  }
+  if (kind === "steps") {
+    const { hw, idxs } = resolveStepTarget(body, it.target);
+    if (hw === null || idxs.length === 0) return {};
+    return {
+      removed: true,
+      procedureOps: idxs.map((idx) => ({ headword: hw, idx, replace: null })),
+    };
+  }
+  return {};
 }
 
 // The footer grammar distillApplyHook reports on stderr — the ONE place
@@ -275,66 +289,53 @@ function applyFooter(cls: ClassifyResult, defVerbatim: number): string {
   return `— applied: ${cls.recovered} recovered · ${cls.kept} kept · ${cls.removed} removed (${cls.verbatim + defVerbatim} verbatim)`;
 }
 
-// Distill's action binding: steps 7–9 and 12 of the interact check order. Its run options
-// (lang, ask) arrive through ctx — runInteractApply forwards its own opts argument into every
-// ctx it builds — so this hook is a plain constant, not a factory closing over them. The
-// generic half of the run — the stamp preflight (1–6), the mid-run re-verification (10–11),
-// and the atomic write-back (13–14) — belongs to the executor (execute.ts) and calls this hook
-// for the middle. A refusal here carries its own exit code (a lost reviewer decision → 2, a
-// missing key → 1); the success case hands back the final body and the stderr footer.
-const distillApplyHook: InteractApplyHook = async ({
-  items,
-  strippedBody,
-  lang: rawLang,
-  ask: rawAsk,
-}): Promise<InteractApplyResult> => {
-  // 7. classify every item into deterministic ops (no LLM, no write). This precedes
-  //    the key gate on purpose: a checked recover that resolves to no actionable target
-  //    (an edge/payload/prose residue class, or a def whose concept subsection is gone) is a
-  //    LOST reviewer decision if allowed to no-op, so it aborts LOUD below — and only a
-  //    checked recover DEF that actually resolves is what forces the key gate.
-  let body = strippedBody;
-  const { body: bodyNoFront } = parseFrontmatter(body);
-  const lang = rawLang === "auto" ? detectLang(bodyNoFront) : rawLang;
-  const ask = rawAsk ?? askJson;
-  // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
-  // analogue of the old tie-together line).
-  const tie0 = parseCanonicalNote(bodyNoFront).abstract;
+// A checked recover apply cannot execute is refused LOUD — never silently swallowed; a lost
+// reviewer decision is the format's disaster class (interact.ts fails a mistyped item for the
+// same reason). Returns the refusal, or null when every checked decision is executable. Fires
+// before the key gate and before any write.
+function lostDecisionGate(unrecoverable: string[]): InteractApplyResult | null {
+  if (unrecoverable.length === 0) return null;
+  return {
+    kind: "refuse",
+    code: 2,
+    message: `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
+  };
+}
 
-  // The classification is the pure core (classifyItems): a transform from (items, body)
-  // to the op set + counters, with NO I/O — every field here is final.
-  const cls = classifyItems(items, body);
-  const { defRecovers, defRemovals, procedureOps, thesisPara, unrecoverable } = cls;
-
-  // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
-  // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
-  // item for the same reason). Fires before the key gate and before any write.
-  if (unrecoverable.length > 0) {
-    return {
-      kind: "refuse",
-      code: 2,
-      message: `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
-    };
-  }
-
-  // 8. key gate — only a checked recover DEF that resolved calls an LLM. A checked
-  //    recover of procedure steps / the thesis is verbatim (no LLM); keep is a no-op.
-  if (defRecovers.length > 0) {
-    try {
-      ensureKeys([DISTILL_EXTRACT]);
-    } catch (e) {
-      if (e instanceof MissingKeyError) {
-        return { kind: "refuse", code: 1, message: `${e.message}; nothing written` };
-      }
-      throw e;
+// 8. key gate — only a checked recover DEF that resolved calls an LLM, so an empty
+// `defRecovers` passes the gate unconditionally. A checked recover of procedure steps / the
+// thesis is verbatim (no LLM); keep is a no-op. Returns the exit-1 refusal when the key the
+// def lane needs is unset, null when the run may proceed; a non-key failure propagates.
+function keyGate(defRecovers: ClassifyResult["defRecovers"]): InteractApplyResult | null {
+  if (defRecovers.length === 0) return null;
+  try {
+    ensureKeys([DISTILL_EXTRACT]);
+    return null;
+  } catch (e) {
+    if (e instanceof MissingKeyError) {
+      return { kind: "refuse", code: 1, message: `${e.message}; nothing written` };
     }
+    throw e;
   }
+}
 
-  // 9. fire verbs — the LLM window: re-render each checked recover def, re-grade once, and
-  // splice either the re-render (translated/inconclusive) or the source's own verbatim
-  // clause (a second grade failure) into its `### headword` concept subsection.
-  const defSplices: { term: string; def: string }[] = [];
-  let defVerbatim = 0; // this lane's own count — applyFooter sums it with cls.verbatim
+// 9. fire verbs, def lane — the whole LLM window. Re-render each checked recover def, re-grade
+// it once against `tie0` (the ## Abstract orientation, the canonical analogue of the old
+// tie-together line), and settle on either the re-render (grade translated/inconclusive) or the
+// source's own verbatim clause (a second grade failure, an empty re-render, or a caught
+// re-render/grade flake — a verbatim splice cannot invert, so flooring beats dropping the
+// entry). Returns the splices in document order plus this lane's own verbatim count, which
+// applyFooter sums with the pure pass's.
+async function recoverDefs(args: {
+  defRecovers: ClassifyResult["defRecovers"];
+  body: string;
+  tie0: string;
+  lang: "en" | "ru";
+  ask: typeof askJson;
+}): Promise<{ splices: { term: string; def: string }[]; defVerbatim: number }> {
+  const { defRecovers, body, tie0, lang, ask } = args;
+  const splices: { term: string; def: string }[] = [];
+  let defVerbatim = 0;
   for (const d of defRecovers) {
     let finalDef: string;
     try {
@@ -364,25 +365,84 @@ const distillApplyHook: InteractApplyHook = async ({
       finalDef = verbatimDef(d.term, d.src);
       defVerbatim++;
     }
-    defSplices.push({ term: d.term, def: finalDef });
+    splices.push({ term: d.term, def: finalDef });
   }
+  return { splices, defVerbatim };
+}
 
-  for (const s of defSplices) body = spliceDef(body, s.term, s.def);
-  for (const term of defRemovals) body = spliceDef(body, term, null);
-  if (procedureOps.length) body = editProcedure(body, procedureOps);
+// 9. fire verbs, body lane — every deterministic edit, in the one order that makes the splices
+// address the body they were classified against: settled def re-renders, then unchecked def
+// removals, then the batched procedure edits, then the checked recover thesis (verbatim, as the
+// ## Abstract body). There is NO re-projection step on a canonical note: the abstract is
+// authored at extract time, not re-derived from concept defs, so a def recover leaves it
+// as-authored — the old renderProse/replaceHeadProse head-prose chain has no canonical analogue.
+function mutateBody(
+  body: string,
+  cls: ClassifyResult,
+  splices: { term: string; def: string }[],
+): string {
+  let out = body;
+  for (const s of splices) out = spliceDef(out, s.term, s.def);
+  for (const term of cls.defRemovals) out = spliceDef(out, term, null);
+  if (cls.procedureOps.length) out = editProcedure(out, cls.procedureOps);
+  if (cls.thesisPara !== null) out = insertThesis(out, cls.thesisPara);
+  return out;
+}
 
-  // A checked recover thesis sets the ## Abstract body verbatim. There is NO re-projection
-  // step on a canonical note: the abstract is authored at extract time, not re-derived from
-  // concept defs, so a def recover leaves it as-authored — the old renderProse/
-  // replaceHeadProse head-prose chain has no canonical analogue.
-  if (thesisPara !== null) body = insertThesis(body, thesisPara);
+// Distill's action binding: steps 7–9 and 12 of the interact check order, read as that
+// sequence — classify, refuse a lost decision, gate on the key, run the def lane's LLM window,
+// mutate the body, promote the epistemic status. Its run options (lang, ask) arrive through ctx
+// — runInteractApply forwards its own opts argument into every ctx it builds — so this hook is
+// a plain constant, not a factory closing over them. The generic half of the run — the stamp
+// preflight (1–6), the mid-run re-verification (10–11), and the atomic write-back (13–14) —
+// belongs to the executor (execute.ts) and calls this hook for the middle. A refusal here
+// carries its own exit code (a lost reviewer decision → 2, a missing key → 1); the success case
+// hands back the final body and the stderr footer. Exported for apply.test.ts, which drives
+// this middle offline with an injected `ask` and no filesystem; runApply below is the
+// production caller.
+export const distillApplyHook: InteractApplyHook = async ({
+  items,
+  strippedBody,
+  lang: rawLang,
+  ask: rawAsk,
+}): Promise<InteractApplyResult> => {
+  const body = strippedBody;
+  const { body: bodyNoFront } = parseFrontmatter(body);
+  const lang = rawLang === "auto" ? detectLang(bodyNoFront) : rawLang;
+  const ask = rawAsk ?? askJson;
+  // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
+  // analogue of the old tie-together line).
+  const tie0 = parseCanonicalNote(bodyNoFront).abstract;
 
-  // 12. promote the epistemic status. Pure over `body` — the executor's steps 10–11 read
-  // the tmp and the destination off disk, never this string, so promoting here rather than
+  // 7. classify every item into deterministic ops (no LLM, no write) — the pure core
+  //    (classifyItems): a transform from (items, body) to the op set + counters, with NO I/O,
+  //    so every field of `cls` is final. This precedes the key gate on purpose: a checked
+  //    recover that resolves to no actionable target (an edge/payload/prose residue class, or a
+  //    def whose concept subsection is gone) is a LOST reviewer decision if allowed to no-op,
+  //    so it aborts LOUD below — and only a checked recover DEF that actually resolves is what
+  //    forces the key gate.
+  const cls = classifyItems(items, body);
+
+  const lost = lostDecisionGate(cls.unrecoverable);
+  if (lost) return lost;
+
+  const keyless = keyGate(cls.defRecovers);
+  if (keyless) return keyless;
+
+  const { splices, defVerbatim } = await recoverDefs({
+    defRecovers: cls.defRecovers,
+    body,
+    tie0,
+    lang,
+    ask,
+  });
+
+  // 12. promote the epistemic status. Pure over the mutated body — the executor's steps 10–11
+  // read the tmp and the destination off disk, never this string, so promoting here rather than
   // after them changes nothing that reaches the write.
   return {
     kind: "write",
-    body: promoteEpistemic(body),
+    body: promoteEpistemic(mutateBody(body, cls, splices)),
     footer: applyFooter(cls, defVerbatim),
   };
 };
