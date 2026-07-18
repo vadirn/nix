@@ -15,7 +15,7 @@ import { parseArgs } from "util";
 import { mkdirSync, writeFileSync, renameSync, appendFileSync } from "fs";
 import { join, basename } from "path";
 import os from "node:os";
-import { expandTilde, sniffSourceMimes, dryRunExit } from "../../_shared/scripts/media-utils.ts";
+import { expandTilde, sniffSourceMimes, dryRunExit } from "@skills/media/media-utils.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

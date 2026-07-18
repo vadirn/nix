@@ -4,7 +4,7 @@
 // functions with no I/O. This suite pins those helpers directly now that they are
 // importable: the text utilities (text.ts) and the distilled-body parser that prose
 // mode inverts the compress pipeline through (prose-mode.ts::parseDistilled). The
-// balanced-JSON extractor moved with the transport to _shared/llm/llm.test.ts. It also
+// balanced-JSON extractor moved with the transport to libs/llm/llm.test.ts. It also
 // pins the one hardening this step adds — parseDistilled drops a term row with no
 // definition, malformed glossary output the model produced by splitting a row.
 import { expect, test } from "bun:test";

@@ -10,19 +10,27 @@
         "typescript": "7.0.2",
       },
     },
-    "_shared/llm": {
-      "name": "@skills/llm",
-      "version": "1.0.0",
-    },
     "imagen-fal/scripts": {
       "name": "imagen-fal-scripts",
       "version": "1.0.0",
       "dependencies": {
         "@fal-ai/client": "1.10.1",
+        "@skills/media": "workspace:*",
       },
     },
     "imagen-nanobanana/scripts": {
       "name": "imagen-nanobanana-scripts",
+      "version": "1.0.0",
+      "dependencies": {
+        "@skills/media": "workspace:*",
+      },
+    },
+    "libs/llm": {
+      "name": "@skills/llm",
+      "version": "1.0.0",
+    },
+    "libs/media": {
+      "name": "@skills/media",
       "version": "1.0.0",
     },
     "textkit": {
@@ -83,7 +91,9 @@
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.73.0", "", { "os": "win32", "cpu": "x64" }, "sha512-WaNRvh4f6zY9CvUQk2YoA1O90ieWrIklI84+HXFr9Isjz9CSESrdqo/RtIYt4Dll/cAchqGDMehfaZd0vqEFZw=="],
 
-    "@skills/llm": ["@skills/llm@workspace:_shared/llm"],
+    "@skills/llm": ["@skills/llm@workspace:libs/llm"],
+
+    "@skills/media": ["@skills/media@workspace:libs/media"],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

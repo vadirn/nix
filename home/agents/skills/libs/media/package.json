@@ -1,0 +1,10 @@
+{
+  "name": "@skills/media",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared media helpers for imagen-* and vidgen-* workers: tilde expansion, magic-byte/extension MIME sniffing for --source images, and a dry-run payload printer.",
+  "scripts": {
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
+  }
+}

@@ -2,7 +2,7 @@
   "name": "skills",
   "private": true,
   "workspaces": [
-    "_shared/*",
+    "libs/*",
     "textkit",
     "imagen-fal/scripts",
     "vidgen-fal/scripts",

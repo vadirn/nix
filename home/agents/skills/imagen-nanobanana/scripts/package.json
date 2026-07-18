@@ -6,5 +6,8 @@
     "test": "bun test",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@skills/media": "workspace:*"
   }
 }

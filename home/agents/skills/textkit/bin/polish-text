@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy seam for polish-text: provider API keys are resolved lazily in TypeScript
-# (see _shared/llm/keys.ts — env → macOS Keychain → Doppler, cached per process), so this
+# (see libs/llm/keys.ts — env → macOS Keychain → Doppler, cached per process), so this
 # wrapper only execs the entrypoint. polish runs on OpenAI; its key lives in Doppler
 # (claude-code/std).
 set -u
