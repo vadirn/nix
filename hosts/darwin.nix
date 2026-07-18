@@ -3,8 +3,6 @@
   lib,
   config,
   self,
-  vault-query,
-  mdstruct,
   inputs,
   hostname,
   ...
@@ -13,23 +11,18 @@
 
   nixpkgs.config.allowUnfree = true;
 
-  environment.systemPackages =
-    (with pkgs; [
-      yazi
-      alejandra
-      nixd
-      nodejs
-      curl
-      typst
-      uv
-      coreutils
-      delta
-      check-jsonschema
-    ])
-    ++ [
-      vault-query
-      mdstruct
-    ];
+  environment.systemPackages = with pkgs; [
+    yazi
+    alejandra
+    nixd
+    nodejs
+    curl
+    typst
+    uv
+    coreutils
+    delta
+    check-jsonschema
+  ];
 
   environment.systemPath = [
     "/nix/var/nix/profiles/system/sw/bin"

@@ -94,6 +94,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
+            inherit vault-query mdstruct;
           })
         ];
       };
