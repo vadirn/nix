@@ -4,4 +4,5 @@
 # wrapper only execs the entrypoint. polish runs on OpenAI; its key lives in Doppler
 # (claude-code/std).
 set -u
-exec bun "$(dirname "$(readlink -f "$0")")/../src/polish/polish.ts" "$@"
+BIN="$(dirname "$(readlink -f "$0")")"
+exec bun --preload "$BIN/_alias.ts" "$BIN/../src/polish/polish.ts" "$@"
