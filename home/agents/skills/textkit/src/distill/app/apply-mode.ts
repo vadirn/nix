@@ -74,7 +74,11 @@ import {
   verbatimDef,
   verbatimDirectives,
 } from "@/distill/prompt/prompts.ts";
-import { parseCanonicalNote, splitSections } from "@/distill/graph/parse-projection.ts";
+import {
+  parseCanonicalNote,
+  splitSections,
+  subsectionRanges,
+} from "@/distill/graph/parse-projection.ts";
 import { parseFrontmatter } from "@/core/frontmatter.ts";
 import { detectLang } from "@/core/text.ts";
 import { TRAILING_ANCHOR_RE } from "@/distill/graph/graph.ts";
@@ -504,12 +508,14 @@ export function runApply(tmpPath: string, opts: ApplyOpts): Promise<number> {
 
 // ---- canonical section/subsection locators (shared by the body-editing primitives) ----
 
-const SUB_HEAD_RE = /^###\s+(.+?)\s*$/; // a `### headword` subsection heading
 const STEP_RE = /^\s*\d+\.\s(.*)$/; // a numbered `N. step` line, capturing the step text
 
 // The line range of a `### headword` subsection under `## <section>`: [subStart, subEnd) where
-// subStart is the `### headword` line and subEnd is the next `### ` (or the section's end).
-// Fence-aware via splitSections. null when the section or the headword is absent.
+// subStart is the `### headword` line and subEnd is the next `### ` (or the section's end),
+// in WHOLE-NOTE line numbers. Fence-aware at both levels — splitSections finds the section,
+// subsectionRanges finds the subsections within it, so a `### ` inside a ``` block is literal
+// content rather than a heading (a hand-rolled scan here treated it as a boundary and cut the
+// range short at the fake heading). null when the section or the headword is absent.
 function subsectionRange(
   lines: string[],
   section: string,
@@ -517,28 +523,19 @@ function subsectionRange(
 ): { subStart: number; subEnd: number } | null {
   const sec = splitSections(lines.join("\n")).find((s) => s.name === section);
   if (!sec) return null;
-  let subStart = -1;
-  for (let i = sec.start + 1; i < sec.end; i++) {
-    const m = SUB_HEAD_RE.exec(lines[i]!);
-    if (m && m[1] === headword) {
-      subStart = i;
-      break;
-    }
-  }
-  if (subStart < 0) return null;
-  let subEnd = sec.end;
-  for (let i = subStart + 1; i < sec.end; i++) {
-    if (/^###\s/.test(lines[i]!)) {
-      subEnd = i;
-      break;
-    }
-  }
-  return { subStart, subEnd };
+  const hit = subsectionRanges(sec.bodyLines).find((r) => r.headword === headword);
+  if (!hit) return null;
+  const base = sec.start + 1; // subsectionRanges indexes bodyLines; rebase to whole-note lines
+  return { subStart: base + hit.start, subEnd: base + hit.end };
 }
 
 // The inclusive line range and count of the numbered step list under a `## Procedures`
 // `### headword` subsection (null when absent) — used to validate a step target's indices
-// and to locate the list for editing.
+// and to locate the list for editing. The subsection boundary is fence-aware (subsectionRange),
+// so a fenced markdown sample quoting `N. ` lines below the real list is outside it: the scan
+// stops at the first non-step, non-blank line, which the opening fence is. A fence placed
+// BEFORE the list likewise stops the scan and reads as "no list" — canonical projections put
+// the numbered list first, and a hand edit that does not is unaddressable rather than miscounted.
 function procedureStepRange(
   lines: string[],
   headword: string,
@@ -563,17 +560,12 @@ function procedureStepRange(
   return { start, end, count: end - start + 1 };
 }
 
-// The `### headword`s under a `## <section>` block, in document order.
+// The `### headword`s under a `## <section>` block, in document order. Same fence-aware walk
+// subsectionRange uses, so a fenced `### ` look-alike never surfaces as a resolvable headword.
 function headwordsUnder(body: string, section: string): string[] {
-  const lines = body.split("\n");
   const sec = splitSections(body).find((s) => s.name === section);
   if (!sec) return [];
-  const out: string[] = [];
-  for (let i = sec.start + 1; i < sec.end; i++) {
-    const m = SUB_HEAD_RE.exec(lines[i]!);
-    if (m) out.push(m[1]!);
-  }
-  return out;
+  return subsectionRanges(sec.bodyLines).map((r) => r.headword);
 }
 
 // Edit the `## Concepts` note body: replace the DEFINITION LINE (the first non-blank,

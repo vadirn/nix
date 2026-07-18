@@ -106,6 +106,56 @@ The shifting subject in front of the painter. 71..90
 2. Re-check values against the anchor, not the scene
 `;
 
+// A distilled note whose Concepts and Procedures bodies each carry a FENCED markdown sample
+// containing `### ` and `N. ` look-alike lines. Inside a ``` block those are literal content,
+// never a subsection heading and never a numbered step — the locators must read them that way.
+const NOTE_FENCED = `---
+type: distillation
+epistemic_status: distilled
+---
+
+# Fenced
+
+## Abstract
+
+A note whose bodies quote canonical markdown back at the reader.
+
+## Concepts
+
+### Anchor image
+
+The first felt impression, fixed as the reference. 10..40
+
+- Rendered as:
+
+\`\`\`md
+### Not a headword
+
+Not a definition.
+\`\`\`
+
+### Scene
+
+The shifting subject in front of the painter. 71..90
+
+## Procedures
+
+### Block from the impression
+
+1. Fix the anchor image before opening paints 100..140
+2. Re-check values against the anchor, not the scene
+
+\`\`\`md
+### Not a step heading
+
+1. Not a step
+\`\`\`
+
+### Close the block
+
+1. Wipe the palette 200..220
+`;
+
 // A distilled note whose concept headword is BACKTICKED — the Phase-3 emit seam: its
 // residue target degrades to safeHandle("`tau` threshold") = "tau threshold", so apply
 // must match it back to the `### headword` via safeHandle, not the degraded target string.
@@ -809,6 +859,48 @@ test("resolveDefTerm: exact match, degraded safeHandle match, and no-match null"
   expect(safeHandle("`tau` threshold")).toBe("tau threshold");
   expect(resolveDefTerm(NOTE_TAU, "tau threshold")).toBe(rhw("`tau` threshold"));
   expect(resolveDefTerm(NOTE, "nonexistent")).toBeNull();
+});
+
+// The locators walk a note the way splitSections does — fence-tracked. A `### ` or `N. ` line
+// inside a ``` block is quoted markdown, so it opens no subsection and fills no step slot. Two
+// consequences are pinned here: a fenced look-alike never resolves as a target, and a real
+// subsection's range spans its whole body (fence included) rather than stopping at the fake
+// heading — which is what makes a delete remove the fence instead of orphaning its tail.
+test("the subsection/step locators are fence-aware: a fenced `### ` / `N. ` is literal content", () => {
+  // fenced look-alikes are not addressable targets
+  expect(resolveDefTerm(NOTE_FENCED, "Not a headword")).toBeNull();
+  expect(resolveStepTarget(NOTE_FENCED, "procedure:Not a step heading:1")).toEqual({
+    hw: null,
+    idxs: [],
+  });
+  // the real headwords on either side of the fence still resolve
+  expect(resolveDefTerm(NOTE_FENCED, "Anchor image")).toBe(rhw("Anchor image"));
+  expect(resolveDefTerm(NOTE_FENCED, "Scene")).toBe(rhw("Scene"));
+  expect(resolveStepTarget(NOTE_FENCED, "procedure:Close the block:1")).toEqual({
+    hw: rhw("Close the block"),
+    idxs: [0],
+  });
+  // deleting the fence-carrying subsection takes the whole fenced sample with it, and leaves
+  // the following sibling intact — no orphaned ``` or fake heading survives
+  const removed = spliceDef(NOTE_FENCED, rhw("Anchor image"), null);
+  expect(removed).not.toContain("### Anchor image");
+  expect(removed).not.toContain("Not a headword");
+  expect(removed).toContain("### Scene");
+  // four fence lines went in (one pair per section); only the Procedures pair is left
+  expect(removed.match(/^```/gm)?.length).toBe(2);
+  expect(removed).toContain("### Not a step heading");
+  // the fenced sample sits after the real steps, so it is outside the numbered list: editing
+  // step 2 renumbers only the real list and leaves the fence byte-identical
+  const edited = editProcedure(NOTE_FENCED, [
+    {
+      headword: rhw("Block from the impression"),
+      idx: 1,
+      replace: ["Re-check against the anchor"],
+    },
+  ]);
+  expect(edited).toContain("2. Re-check against the anchor");
+  expect(edited).toContain("1. Not a step");
+  expect(edited).toContain("1. Wipe the palette 200..220");
 });
 
 // ---------------------------------------------------------------------------
