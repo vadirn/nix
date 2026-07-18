@@ -4,8 +4,8 @@
 // against each concept/procedure unit's located source slice; runProseGate matches the
 // harvested prose-list inventory (glm, batched). The deterministic loss-surface primitives
 // they build on (proseResidue et al.) live in residue.ts.
-import { sliceBytes, type Span } from "#src/distill/mdstruct.ts";
-import { type Projection } from "#src/distill/graph/project.ts";
+import { sliceBytes, type Span } from "textkit/distill/mdstruct.ts";
+import { type Projection } from "textkit/distill/graph/project.ts";
 import {
   type ConceptVerdict,
   type GateGrade,
@@ -13,10 +13,10 @@ import {
   fidelityGate,
   proseGate,
   workflowGate,
-} from "#src/distill/prompt/prompts.ts";
-import { type ProseUnit } from "#src/distill/extract/harvest.ts";
-import { type Residue, proseResidue } from "#src/distill/review/residue.ts";
-import { normalizeCitation } from "#src/distill/review/normalize-citation.ts";
+} from "textkit/distill/prompt/prompts.ts";
+import { type ProseUnit } from "textkit/distill/extract/harvest.ts";
+import { type Residue, proseResidue } from "textkit/distill/review/residue.ts";
+import { normalizeCitation } from "textkit/distill/review/normalize-citation.ts";
 import { askJson } from "@skills/llm/llm.ts";
 
 // Shared inconclusive→residue mapping: both the concept and workflow verdict loops below grade

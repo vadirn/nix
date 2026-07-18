@@ -18,7 +18,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { parseInteract, stripInteract } from "#src/distill/review/interact.ts";
+import { parseInteract, stripInteract } from "textkit/distill/review/interact.ts";
 import { askJson } from "@skills/llm/llm.ts";
 
 // The bin/ wrapper, not the entrypoint module: spawning what PATH actually resolves
@@ -282,7 +282,7 @@ async function runMain(
     throw new Error(`main() called process.exit(${code}) on a success path`);
   }) as typeof process.exit;
   try {
-    const { main } = await import("#src/distill/app/distill-core.ts");
+    const { main } = await import("textkit/distill/app/distill-core.ts");
     await main(ask);
   } finally {
     process.stdout.write = realWrite;
@@ -405,7 +405,7 @@ async function runMainExpectExit(
     throw Object.assign(new Error(`process.exit(${code})`), { sentinelExit: code ?? 0 });
   }) as typeof process.exit;
   try {
-    const { main } = await import("#src/distill/app/distill-core.ts");
+    const { main } = await import("textkit/distill/app/distill-core.ts");
     await main(ask);
   } catch (e) {
     const s = (e as { sentinelExit?: number }).sentinelExit;

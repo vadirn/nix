@@ -17,8 +17,8 @@
 //
 // Band discipline: the verdict these prompts elicit is an ANNOTATION a candidate
 // carries into staging, never a filter — nothing here gates.
-import { langRule, relText } from "#src/core/text.ts";
-import type { Candidate, NeighbourHit } from "#src/cards/types.ts";
+import { langRule, relText } from "textkit/core/text.ts";
+import type { Candidate, NeighbourHit } from "textkit/cards/types.ts";
 
 // One neighbour's own definition as text: the frontmatter description, falling back
 // to the BM25 snippet when the card has none. Shared by the prompt builders here and

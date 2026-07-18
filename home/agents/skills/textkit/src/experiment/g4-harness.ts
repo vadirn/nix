@@ -31,15 +31,15 @@
 //   doppler run --project claude-code --config std -- \
 //     bun experiment/g4-harness.ts --expect atomic "20 cards/Parse, don't type-check.md" ...
 import { readFileSync } from "node:fs";
-import { parseFrontmatter, parseDescription } from "#src/core/frontmatter.ts";
-import { detectLang } from "#src/core/text.ts";
-import { atomicityJudgePrompt } from "#src/cards/prompts.ts";
-import type { AtomicityReply } from "#src/cards/types.ts";
+import { parseFrontmatter, parseDescription } from "textkit/core/frontmatter.ts";
+import { detectLang } from "textkit/core/text.ts";
+import { atomicityJudgePrompt } from "textkit/cards/prompts.ts";
+import type { AtomicityReply } from "textkit/cards/types.ts";
 import { askJson } from "@skills/llm/llm.ts";
-import { g4Degrade as rethrowIfBug } from "#src/core/degrade.ts";
-import { CARD_JUDGE, CARD_JUDGE_TOKENS } from "#src/core/models.ts";
+import { g4Degrade as rethrowIfBug } from "textkit/core/degrade.ts";
+import { CARD_JUDGE, CARD_JUDGE_TOKENS } from "textkit/core/models.ts";
 
-export const USAGE = `g4-harness — calibrate the G4 atomicity judge over vault card files
+const USAGE = `g4-harness — calibrate the G4 atomicity judge over vault card files
 
 Usage:
   g4-harness [options] <card.md>...
@@ -56,12 +56,12 @@ Env: DASHSCOPE_API_KEY (e.g. doppler run --project claude-code --config std --),
 
 type Expect = "atomic" | "non-atomic";
 
-export type ParseResult =
+type ParseResult =
   | { kind: "help" }
   | { kind: "error"; message: string }
   | { kind: "ok"; paths: string[]; expect: Expect | null; dryRun: boolean };
 
-export function parseArgs(argv: string[]): ParseResult {
+function parseArgs(argv: string[]): ParseResult {
   let expect: Expect | null = null;
   let dryRun = false;
   const paths: string[] = [];

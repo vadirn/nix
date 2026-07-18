@@ -6,7 +6,7 @@
 // supplied as a single `InteractBinding`.
 //
 // Nothing here knows any producer's verb vocabulary. Distill's binding lives in
-// `#src/distill/app/apply-mode.ts` (`distillApplyHook`) — the only binding today. A
+// `textkit/distill/app/apply-mode.ts` (`distillApplyHook`) — the only binding today. A
 // card-inbox or destination-triage consumer could bind the same seam later; the
 // executor is generic precisely so they would not need their own write-back discipline.
 //
@@ -56,10 +56,10 @@ import {
   parseInteract,
   resolveInteract,
   stripInteract,
-} from "#src/distill/review/interact.ts";
+} from "textkit/distill/review/interact.ts";
 import type { askJson } from "@skills/llm/llm.ts";
-import { atomicNoClobberWrite } from "#src/core/fs.ts";
-import { stampSha } from "#src/distill/graph/graph.ts";
+import { atomicNoClobberWrite } from "textkit/core/fs.ts";
+import { stampSha } from "textkit/distill/graph/graph.ts";
 
 // ---- the seam ----
 

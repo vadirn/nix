@@ -14,12 +14,12 @@ import {
   segment,
   slugSegment,
   wordCount,
-} from "#src/core/text.ts";
+} from "textkit/core/text.ts";
 import {
   harvestExternalLinks,
   harvestProseListItems,
   harvestVaultEdges,
-} from "#src/distill/extract/harvest.ts";
+} from "textkit/distill/extract/harvest.ts";
 import {
   type Route,
   type RoutedSection,
@@ -27,42 +27,42 @@ import {
   formatDryRun,
   partition,
   routeNote,
-} from "#src/distill/extract/route.ts";
+} from "textkit/distill/extract/route.ts";
 import {
   parseDescription,
   parseFrontmatter,
   parseSuperseded,
   parseType,
-} from "#src/core/frontmatter.ts";
+} from "textkit/core/frontmatter.ts";
 import { askJson, ensureKeys, isTransient, TruncationError } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
-import { DISTILL_EXTRACT, DISTILL_FIDELITY } from "#src/core/models.ts";
-import { atomicNoClobberWrite } from "#src/core/fs.ts";
-import { tempMdPath } from "#src/core/tmp.ts";
-import { extractGraph, gradeBlocks } from "#src/distill/prompt/prompts.ts";
+import { DISTILL_EXTRACT, DISTILL_FIDELITY } from "textkit/core/models.ts";
+import { atomicNoClobberWrite } from "textkit/core/fs.ts";
+import { tempMdPath } from "textkit/core/tmp.ts";
+import { extractGraph, gradeBlocks } from "textkit/distill/prompt/prompts.ts";
 import {
   formatNameLint,
   nameLintAgainstSource,
   type NameLintResult,
-} from "#src/core/writing/name-lint.ts";
-import { locateGraph, payloadKey } from "#src/distill/extract/locate-graph.ts";
-import { projectMarkdown, type Projection } from "#src/distill/graph/project.ts";
-import { computeSource, type Unit, type UnitType } from "#src/distill/graph/graph.ts";
-import { locate } from "#src/distill/extract/locate.ts";
-import { type Residue, payloadResidueForProjection } from "#src/distill/review/residue.ts";
-import { runProse } from "#src/distill/app/prose-mode.ts";
-import { buildIntermediary } from "#src/distill/review/triage.ts";
-import { runApply } from "#src/distill/app/apply-mode.ts";
-import { stampHash } from "#src/distill/review/execute.ts";
-import { runFidelityBackstop, runProseGate } from "#src/distill/review/gates.ts";
+} from "textkit/core/writing/name-lint.ts";
+import { locateGraph, payloadKey } from "textkit/distill/extract/locate-graph.ts";
+import { projectMarkdown, type Projection } from "textkit/distill/graph/project.ts";
+import { computeSource, type Unit, type UnitType } from "textkit/distill/graph/graph.ts";
+import { locate } from "textkit/distill/extract/locate.ts";
+import { type Residue, payloadResidueForProjection } from "textkit/distill/review/residue.ts";
+import { runProse } from "textkit/distill/app/prose-mode.ts";
+import { buildIntermediary } from "textkit/distill/review/triage.ts";
+import { runApply } from "textkit/distill/app/apply-mode.ts";
+import { stampHash } from "textkit/distill/review/execute.ts";
+import { runFidelityBackstop, runProseGate } from "textkit/distill/review/gates.ts";
 import {
   type CliOpts,
   USAGE,
   parseArgs,
   refusePendingIntermediary,
   tmpPathFor,
-} from "#src/distill/app/cli.ts";
-import { buildPassthroughEnvelope } from "#src/distill/app/envelope.ts";
+} from "textkit/distill/app/cli.ts";
+import { buildPassthroughEnvelope } from "textkit/distill/app/envelope.ts";
 
 // ---- pipeline ----
 // The Residue type and the deterministic loss-surface primitives (wikilinkResidue,

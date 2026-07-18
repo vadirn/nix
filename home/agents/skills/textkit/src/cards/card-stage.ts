@@ -26,25 +26,30 @@
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { parseDescription, parseFrontmatter } from "#src/core/frontmatter.ts";
-import { InteractFormatError, sections, stripInteract } from "#src/distill/emit.ts";
+import { parseDescription, parseFrontmatter } from "textkit/core/frontmatter.ts";
+import { InteractFormatError, sections, stripInteract } from "textkit/distill/emit.ts";
 import { askJson, ensureKeys } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
-import { cardStageDegrade as rethrowIfBug } from "#src/core/degrade.ts";
-import { CARD_DRAFT, CARD_DRAFT_TOKENS, CARD_JUDGE, CARD_JUDGE_TOKENS } from "#src/core/models.ts";
-import { takeValue } from "#src/core/args.ts";
-import { detectLang } from "#src/core/text.ts";
-import { nameLintAgainstSource } from "#src/core/writing/name-lint.ts";
+import { cardStageDegrade as rethrowIfBug } from "textkit/core/degrade.ts";
+import {
+  CARD_DRAFT,
+  CARD_DRAFT_TOKENS,
+  CARD_JUDGE,
+  CARD_JUDGE_TOKENS,
+} from "textkit/core/models.ts";
+import { takeValue } from "textkit/core/args.ts";
+import { detectLang } from "textkit/core/text.ts";
+import { nameLintAgainstSource } from "textkit/core/writing/name-lint.ts";
 import {
   annotateEdges,
   buildStagingRecord,
   decideCard,
   enumerateCandidates,
   harvestConcepts,
-} from "#src/cards/cards.ts";
-import { fetchNeighbours } from "#src/cards/neighbours.ts";
-import { cardDraftPrompt, noveltyBandPrompt } from "#src/cards/prompts.ts";
-import { renderStagingFile } from "#src/cards/stage.ts";
+} from "textkit/cards/cards.ts";
+import { fetchNeighbours } from "textkit/cards/neighbours.ts";
+import { cardDraftPrompt, noveltyBandPrompt } from "textkit/cards/prompts.ts";
+import { renderStagingFile } from "textkit/cards/stage.ts";
 import type {
   Arm,
   BandJudgeReply,
@@ -54,7 +59,7 @@ import type {
   DraftReply,
   NeighbourHit,
   StagingRecord,
-} from "#src/cards/types.ts";
+} from "textkit/cards/types.ts";
 
 // ---- injected I/O seams (mirrors neighbours.ts's RunFn/ReadFn split) ----
 
@@ -318,7 +323,7 @@ export function formatSummary(
 // flags, missing values, and extra positionals fail loudly) ----
 
 // USAGE is the CLI's help text, printed verbatim on `-h`/`--help` and on an arg-parse error.
-export const USAGE = `card-stage — stage extraction candidates from a distilled note as review
+const USAGE = `card-stage — stage extraction candidates from a distilled note as review
 files under a card-staging inbox. Every candidate is staged regardless of its band
 verdict or any recall/judge/draft flag — nothing here gates or drops; a
 staging file is a review packet, never a committed card.

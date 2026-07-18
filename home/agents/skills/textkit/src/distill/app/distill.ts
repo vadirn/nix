@@ -74,10 +74,10 @@
 // (arg parsing + path helpers) · tty (interactive terminal half). The four exports
 // below are the public API the test suite (and any importer) depends on; everything
 // else is an internal module detail.
-export { REL_REGISTRY, slugSegment } from "#src/core/text.ts";
-export { ensureEpistemicStatus } from "#src/core/frontmatter.ts";
+export { REL_REGISTRY, slugSegment } from "textkit/core/text.ts";
+export { ensureEpistemicStatus } from "textkit/core/frontmatter.ts";
 
-import { main } from "#src/distill/app/distill-core.ts";
+import { main } from "textkit/distill/app/distill-core.ts";
 
 // Guard the CLI entrypoint so test imports (e.g. distill.test.ts importing
 // REL_REGISTRY) can load this module without running the pipeline against stdin.

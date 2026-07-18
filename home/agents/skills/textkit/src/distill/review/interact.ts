@@ -35,8 +35,8 @@
 //   resolveInteract validates them against the invoker's spec. The vocabulary
 //   never comes from the file.
 
-import { checkRegion, parseDoc, sliceBytes } from "#src/distill/mdstruct.ts";
-import type { MdRegion, RegionDiagnostic } from "#src/distill/mdstruct.ts";
+import { checkRegion, parseDoc, sliceBytes } from "textkit/distill/mdstruct.ts";
+import type { MdRegion, RegionDiagnostic } from "textkit/distill/mdstruct.ts";
 
 // ---- kinds and attribute set ----
 

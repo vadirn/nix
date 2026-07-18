@@ -15,7 +15,7 @@ import {
   type Span,
   type MdNode,
   type MdInline,
-} from "#src/distill/mdstruct.ts";
+} from "textkit/distill/mdstruct.ts";
 import {
   ASSET_RE,
   decodeTarget,
@@ -27,7 +27,7 @@ import {
   stripFences,
   type VaultEdge,
   wikilinkTarget,
-} from "#src/core/text.ts";
+} from "textkit/core/text.ts";
 
 // The Markdown inline-link grammar `[text](url "title")`, shared by harvestExternalLinks
 // and harvestInternalLinks so the two complementary lanes (split by isExternalUrl) can

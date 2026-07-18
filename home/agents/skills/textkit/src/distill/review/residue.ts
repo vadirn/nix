@@ -15,8 +15,8 @@ import {
   harvestTableRows,
   harvestVaultEdges,
   normalizeForContainment,
-} from "#src/distill/extract/harvest.ts";
-import { type ProseVerdict } from "#src/distill/prompt/prompts.ts";
+} from "textkit/distill/extract/harvest.ts";
+import { type ProseVerdict } from "textkit/distill/prompt/prompts.ts";
 
 // What failed and where, carried structurally (not re-derived from the reason string) so
 // triage.ts's residueToBlocks can pick the decision verb and target per entry straight off

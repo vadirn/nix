@@ -5,8 +5,8 @@
 // apart — the writer buried in distill-core's dispatch code, the reader in
 // prose-mode.ts, which re-consumes this tool's own output as its input. Both
 // halves of the grammar now sit together here.
-import { ensureEpistemicStatus } from "#src/core/frontmatter.ts";
-import type { Residue } from "#src/distill/review/residue.ts";
+import { ensureEpistemicStatus } from "textkit/core/frontmatter.ts";
+import type { Residue } from "textkit/distill/review/residue.ts";
 
 // Escape the three characters an XML attribute value cannot carry raw. The passthrough envelope
 // (distill-core's main(), the exit-3 legacy sink) stamps residue labels/reasons into

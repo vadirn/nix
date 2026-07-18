@@ -3,8 +3,8 @@
 // (help/misuse/ok) before main() touches the API key or the network, so it is unit-testable
 // without spawning the binary. No LLM calls and no pipeline logic — parsing and path arithmetic.
 import { statSync } from "node:fs";
-import { DEFAULT_TAU } from "#src/distill/extract/route.ts";
-import { takeValue } from "#src/core/args.ts";
+import { DEFAULT_TAU } from "textkit/distill/extract/route.ts";
+import { takeValue } from "textkit/core/args.ts";
 
 // ---- arg parsing + io ----
 // USAGE is the full `--help` text printed to stdout on `-h`/`--help`: the invocation forms, every

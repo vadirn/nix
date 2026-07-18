@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "description": "Engine for the textkit skill: a shared text-processing core shipping three CLIs on PATH — distill-text (distill a note into its typed knowledge graph), polish-text (copy-edit prose), and card-stage (stage extraction candidates from a distilled note). See SKILL.md.",
-  "imports": {
-    "#src/*": "./src/*"
+  "exports": {
+    "./*": "./src/*"
   },
   "scripts": {
     "test": "bun test src",
@@ -12,7 +12,7 @@
     "fmt:check": "oxfmt --check src",
     "lint": "oxlint src",
     "typecheck": "tsc --noEmit",
-    "dead": "knip",
+    "dead": "knip && bun scripts/orphans.ts",
     "cycles": "madge --circular --extensions ts --ts-config tsconfig.json src",
     "boundaries": "bun scripts/boundaries.ts"
   },
