@@ -6,8 +6,9 @@
 // supplied as a single `InteractBinding`.
 //
 // Nothing here knows any producer's verb vocabulary. Distill's binding lives in
-// `@/distill/app/apply-mode.ts` (`distillApplyHook`); the card-inbox and
-// destination-triage consumers are expected to bind the same seam.
+// `@/distill/app/apply-mode.ts` (`distillApplyHook`) — the only binding today. A
+// card-inbox or destination-triage consumer could bind the same seam later; the
+// executor is generic precisely so they would not need their own write-back discipline.
 //
 // ── Check order — the sequence every refusal is measured against, in order.
 //    Steps 7–9 and 12 are the BINDING's (they run inside `binding.apply`); every
@@ -51,7 +52,6 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import {
-  type Block,
   type Item,
   parseInteract,
   resolveInteract,
@@ -71,15 +71,14 @@ export type InteractApplyResult =
   | { kind: "write"; body: string; footer: string }; // final body + stderr footer
 
 // The producer-specific middle of the run: classify → refuse-on-lost-decision → key gate →
-// mutate → return the final body. Receives the resolved items, the raw intermediary text,
-// the scaffold-free body to edit, the derived destination, the gate block (its src=/dest=
-// stamps), and the run options.
+// mutate → return the final body. Receives the resolved items, the scaffold-free body to
+// edit, and the run options (lang, ask) runInteractApply forwards from its own opts argument.
+// Every field here is read by the one binding that exists (apply-mode.ts); a field a real
+// consumer needs but this ctx lacks — the raw intermediary text, the derived destination, the
+// gate block — returns when that consumer arrives, not before.
 export type InteractApplyHook = (ctx: {
   items: Item[];
-  text: string;
   strippedBody: string;
-  dest: string;
-  gate: Block; // gate.src / gate.dest stamps
   lang: "en" | "ru" | "auto";
   ask?: typeof askJson;
 }) => Promise<InteractApplyResult>;
@@ -212,10 +211,7 @@ export async function runInteractApply(
   // fire its verbs IN MEMORY over the scaffold-free body, and hand back the final body.
   const applied = await binding.apply({
     items,
-    text,
     strippedBody: stripInteract(text),
-    dest,
-    gate,
     lang: opts.lang,
     ask: opts.ask,
   });

@@ -56,6 +56,7 @@
 import type { Item } from "@/distill/review/interact.ts";
 import {
   type InteractApplyHook,
+  type InteractApplyOpts,
   type InteractApplyResult,
   runInteractApply,
 } from "@/distill/review/execute.ts";
@@ -82,16 +83,10 @@ export { destinationFor, stampHash, unlinkIfPresent } from "@/distill/review/exe
 
 // ---- runApply: the orchestrator ----
 
-// Options threading through runApply.
-export type ApplyOpts = {
-  // Overrides body-language detection for the re-render/re-projection prompts;
-  // "auto" detects from the stripped note body (parity with compress mode).
-  lang: "en" | "ru" | "auto";
-  // The model call, injected so tests drive the recover-def LLM window (re-render +
-  // re-grade) without a process-global fetch/module mock (see fidelityGate in
-  // prompts.ts). Production callers (main/tty) omit it → the real transport.
-  ask?: typeof askJson;
-};
+// Options threading through runApply — the executor's InteractApplyOpts, unchanged: distill
+// has no options of its own beyond what every binding needs (lang, ask). Kept as a named
+// export so distill-core.ts's call site reads `ApplyOpts` rather than reaching into execute.ts.
+export type ApplyOpts = InteractApplyOpts;
 
 // Classify a residue item's target the way triage's targetFor stamped it:
 // `thesis` → the thesis payload; `procedure:<headword>[:<n,…>]` → numbered steps under a
@@ -277,123 +272,127 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
   };
 }
 
-// Distill's action binding: steps 7–9 and 12 of the interact check order, closed over the
-// run options. The generic half of the run — the stamp preflight (1–6), the mid-run
-// re-verification (10–11), and the atomic write-back (13–14) — belongs to the executor
-// (execute.ts) and calls this hook for the middle. A refusal here carries its own exit code
-// (a lost reviewer decision → 2, a missing key → 1); the success case hands back the final
-// body and the stderr footer.
-function distillApplyHook(opts: ApplyOpts): InteractApplyHook {
-  return async ({ items, strippedBody }): Promise<InteractApplyResult> => {
-    // 7. classify every item into deterministic ops (no LLM, no write). This precedes
-    //    the key gate on purpose: a checked recover that resolves to no actionable target
-    //    (an edge/payload/prose residue class, or a def whose concept subsection is gone) is a
-    //    LOST reviewer decision if allowed to no-op, so it aborts LOUD below — and only a
-    //    checked recover DEF that actually resolves is what forces the key gate.
-    let body = strippedBody;
-    const { body: bodyNoFront } = parseFrontmatter(body);
-    const lang = opts.lang === "auto" ? detectLang(bodyNoFront) : opts.lang;
-    const ask = opts.ask ?? askJson;
-    // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
-    // analogue of the old tie-together line).
-    const tie0 = parseCanonicalNote(bodyNoFront).abstract;
+// Distill's action binding: steps 7–9 and 12 of the interact check order. Its run options
+// (lang, ask) arrive through ctx — runInteractApply forwards its own opts argument into every
+// ctx it builds — so this hook is a plain constant, not a factory closing over them. The
+// generic half of the run — the stamp preflight (1–6), the mid-run re-verification (10–11),
+// and the atomic write-back (13–14) — belongs to the executor (execute.ts) and calls this hook
+// for the middle. A refusal here carries its own exit code (a lost reviewer decision → 2, a
+// missing key → 1); the success case hands back the final body and the stderr footer.
+const distillApplyHook: InteractApplyHook = async ({
+  items,
+  strippedBody,
+  lang: rawLang,
+  ask: rawAsk,
+}): Promise<InteractApplyResult> => {
+  // 7. classify every item into deterministic ops (no LLM, no write). This precedes
+  //    the key gate on purpose: a checked recover that resolves to no actionable target
+  //    (an edge/payload/prose residue class, or a def whose concept subsection is gone) is a
+  //    LOST reviewer decision if allowed to no-op, so it aborts LOUD below — and only a
+  //    checked recover DEF that actually resolves is what forces the key gate.
+  let body = strippedBody;
+  const { body: bodyNoFront } = parseFrontmatter(body);
+  const lang = rawLang === "auto" ? detectLang(bodyNoFront) : rawLang;
+  const ask = rawAsk ?? askJson;
+  // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
+  // analogue of the old tie-together line).
+  const tie0 = parseCanonicalNote(bodyNoFront).abstract;
 
-    // The classification is the pure core (classifyItems): a transform from (items, body)
-    // to the op set + counters, with NO I/O. `verbatim` is `let` because the def-recover lane
-    // below bumps it per second-grade failure; every other field is final here.
-    const cls = classifyItems(items, body);
-    const {
-      recovered,
-      kept,
-      removed,
-      defRecovers,
-      defRemovals,
-      procedureOps,
-      thesisPara,
-      unrecoverable,
-    } = cls;
-    let verbatim = cls.verbatim;
+  // The classification is the pure core (classifyItems): a transform from (items, body)
+  // to the op set + counters, with NO I/O. `verbatim` is `let` because the def-recover lane
+  // below bumps it per second-grade failure; every other field is final here.
+  const cls = classifyItems(items, body);
+  const {
+    recovered,
+    kept,
+    removed,
+    defRecovers,
+    defRemovals,
+    procedureOps,
+    thesisPara,
+    unrecoverable,
+  } = cls;
+  let verbatim = cls.verbatim;
 
-    // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
-    // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
-    // item for the same reason). Fires before the key gate and before any write.
-    if (unrecoverable.length > 0) {
-      return {
-        kind: "refuse",
-        code: 2,
-        message: `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
-      };
-    }
+  // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
+  // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
+  // item for the same reason). Fires before the key gate and before any write.
+  if (unrecoverable.length > 0) {
+    return {
+      kind: "refuse",
+      code: 2,
+      message: `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
+    };
+  }
 
-    // 8. key gate — only a checked recover DEF that resolved calls an LLM. A checked
-    //    recover of procedure steps / the thesis is verbatim (no LLM); keep is a no-op.
-    if (defRecovers.length > 0) {
-      try {
-        ensureKeys([DISTILL_EXTRACT]);
-      } catch (e) {
-        if (e instanceof MissingKeyError) {
-          return { kind: "refuse", code: 1, message: `${e.message}; nothing written` };
-        }
-        throw e;
+  // 8. key gate — only a checked recover DEF that resolved calls an LLM. A checked
+  //    recover of procedure steps / the thesis is verbatim (no LLM); keep is a no-op.
+  if (defRecovers.length > 0) {
+    try {
+      ensureKeys([DISTILL_EXTRACT]);
+    } catch (e) {
+      if (e instanceof MissingKeyError) {
+        return { kind: "refuse", code: 1, message: `${e.message}; nothing written` };
       }
+      throw e;
     }
+  }
 
-    // 9. fire verbs — the LLM window: re-render each checked recover def, re-grade once, and
-    // splice either the re-render (translated/inconclusive) or the source's own verbatim
-    // clause (a second grade failure) into its `### headword` concept subsection.
-    const defSplices: { term: string; def: string }[] = [];
-    for (const d of defRecovers) {
-      let finalDef: string;
-      try {
-        const rr = await ask<{ def: string }>(
-          DISTILL_EXTRACT,
-          renderEntryPrompt({ term: d.term, def: "" }, d.src, lang),
-          1024,
-        );
-        const reRendered = (rr.def ?? "").trim();
-        const graded = await fidelityGate(
-          tie0,
-          body,
-          [{ term: d.term, def: reRendered, sourceText: d.src }],
-          ask,
-        );
-        const grade = graded.concepts[0]?.grade ?? "translated";
-        if (grade === "residue" || !reRendered) {
-          finalDef = verbatimDef(d.term, d.src);
-          verbatim++;
-        } else {
-          finalDef = reRendered;
-        }
-      } catch (e) {
-        rethrowIfBug(e, "apply-recover-def");
-        // a transient re-render/grade flake floors to the source's own clause rather
-        // than dropping the entry — a verbatim splice cannot invert.
+  // 9. fire verbs — the LLM window: re-render each checked recover def, re-grade once, and
+  // splice either the re-render (translated/inconclusive) or the source's own verbatim
+  // clause (a second grade failure) into its `### headword` concept subsection.
+  const defSplices: { term: string; def: string }[] = [];
+  for (const d of defRecovers) {
+    let finalDef: string;
+    try {
+      const rr = await ask<{ def: string }>(
+        DISTILL_EXTRACT,
+        renderEntryPrompt({ term: d.term, def: "" }, d.src, lang),
+        1024,
+      );
+      const reRendered = (rr.def ?? "").trim();
+      const graded = await fidelityGate(
+        tie0,
+        body,
+        [{ term: d.term, def: reRendered, sourceText: d.src }],
+        ask,
+      );
+      const grade = graded.concepts[0]?.grade ?? "translated";
+      if (grade === "residue" || !reRendered) {
         finalDef = verbatimDef(d.term, d.src);
         verbatim++;
+      } else {
+        finalDef = reRendered;
       }
-      defSplices.push({ term: d.term, def: finalDef });
+    } catch (e) {
+      rethrowIfBug(e, "apply-recover-def");
+      // a transient re-render/grade flake floors to the source's own clause rather
+      // than dropping the entry — a verbatim splice cannot invert.
+      finalDef = verbatimDef(d.term, d.src);
+      verbatim++;
     }
+    defSplices.push({ term: d.term, def: finalDef });
+  }
 
-    for (const s of defSplices) body = spliceDef(body, s.term, s.def);
-    for (const term of defRemovals) body = spliceDef(body, term, null);
-    if (procedureOps.length) body = editProcedure(body, procedureOps);
+  for (const s of defSplices) body = spliceDef(body, s.term, s.def);
+  for (const term of defRemovals) body = spliceDef(body, term, null);
+  if (procedureOps.length) body = editProcedure(body, procedureOps);
 
-    // A checked recover thesis sets the ## Abstract body verbatim. There is NO re-projection
-    // step on a canonical note: the abstract is authored at extract time, not re-derived from
-    // concept defs, so a def recover leaves it as-authored — the old renderProse/
-    // replaceHeadProse head-prose chain has no canonical analogue.
-    if (thesisPara !== null) body = insertThesis(body, thesisPara);
+  // A checked recover thesis sets the ## Abstract body verbatim. There is NO re-projection
+  // step on a canonical note: the abstract is authored at extract time, not re-derived from
+  // concept defs, so a def recover leaves it as-authored — the old renderProse/
+  // replaceHeadProse head-prose chain has no canonical analogue.
+  if (thesisPara !== null) body = insertThesis(body, thesisPara);
 
-    // 12. promote the epistemic status. Pure over `body` — the executor's steps 10–11 read
-    // the tmp and the destination off disk, never this string, so promoting here rather than
-    // after them changes nothing that reaches the write.
-    return {
-      kind: "write",
-      body: promoteEpistemic(body),
-      footer: `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim)`,
-    };
+  // 12. promote the epistemic status. Pure over `body` — the executor's steps 10–11 read
+  // the tmp and the destination off disk, never this string, so promoting here rather than
+  // after them changes nothing that reaches the write.
+  return {
+    kind: "write",
+    body: promoteEpistemic(body),
+    footer: `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim)`,
   };
-}
+};
 
 // Apply a single intermediary and return the process exit code (0 | 1 | 2). Writes the
 // destination path to stdout, the applied-summary footer and every refusal to stderr;
@@ -401,14 +400,18 @@ function distillApplyHook(opts: ApplyOpts): InteractApplyHook {
 // Before the write-back, the destination and the tmp are BOTH untouched on every refusal
 // path — pinned by hash in apply.test.ts. Distill's binding of the generic interact
 // executor: the label every refusal is prefixed with, the triage verb vocabulary step 5
-// resolves against, and the action hook above.
+// resolves against, and the action hook above. `opts` reaches distillApplyHook through this
+// one call's third argument — runInteractApply forwards it into every ctx it builds, so the
+// hook never closes over it. `opts.lang: "auto"` detects from the stripped note body, parity
+// with compress mode's own auto-detection; `opts.ask` is the injected-transport seam
+// apply.test.ts drives.
 export function runApply(tmpPath: string, opts: ApplyOpts): Promise<number> {
   return runInteractApply(
     tmpPath,
     {
       label: "distill apply",
       verbs: TRIAGE_VERBS,
-      apply: distillApplyHook(opts),
+      apply: distillApplyHook,
     },
     opts,
   );
