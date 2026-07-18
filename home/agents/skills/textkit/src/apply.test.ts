@@ -26,7 +26,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { type Item, parseInteract, stripInteract } from "@/distill/review/interact.ts";
 import { buildIntermediary, safeHandle } from "@/distill/review/triage.ts";
 import { verbatimDef, verbatimDirectives } from "@/distill/prompt/prompts.ts";
-import { askJson } from "@skills/llm/llm.ts";
+import { askJson, TransientError } from "@skills/llm/llm.ts";
 import type { Residue } from "@/distill/review/residue.ts";
 import {
   type ProcedureOp,
@@ -694,6 +694,37 @@ test("apply: a non-transient error in the recover-def LLM window propagates (reg
   // srcMode:"sha256" write) is untouched, and the tmp is never consumed.
   expect(readFileSync(destPath, "utf8")).toBe(SOURCE);
   expect(existsSync(tmpPath)).toBe(true);
+});
+
+test("apply: a caught transport flake in the recover-def LLM window degrades to verbatim, visibly", async () => {
+  process.env.FIREWORKS_API_KEY = "test-dummy";
+  const dir = tmpdirFor("recover-def-degraded");
+  const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF]);
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: `Impression distance`")));
+  // A TransientError is exactly what rethrowIfBug LETS THROUGH (isTransient(e) → return,
+  // no rethrow) — the transport-outage case, not the regression test's code-bug case above.
+  // Before this test's fix, the catch branch's fallback to verbatimDef was reported
+  // identically to a legitimate residue-grade verbatim (the "second grade fails" test
+  // below), so a total transport outage exited 0 looking like a clean run.
+  const r = await applyWith(tmpPath, (prompt) => {
+    if (prompt.includes(RENDER_ENTRY_MARKER)) {
+      throw new TransientError("fw network/timeout: ECONNRESET");
+    }
+    return {};
+  });
+  expect(r.code).toBe(0);
+  const out = readFileSync(destPath, "utf8");
+  // floored to the source's own verbatim clause, same splice as a legitimate residue grade
+  expect(out).toContain(`${verbatimDef("Impression distance", DEF_SRC)} 41..70`);
+  // the footer's verbatim total counts it same as always, but the `(1 degraded)` suffix
+  // distinguishes this caught flake from an intended verbatim (compare the byte-identical
+  // "1 verbatim" prefix on the residue-grade test below, which carries no such suffix)
+  expect(r.stderr).toContain(
+    "— applied: 1 recovered · 0 kept · 0 removed (1 verbatim) (1 degraded)",
+  );
+  // one stderr diagnostic line names the flake per caught entry, not just a bare count
+  expect(r.stderr).toContain('recover def "Impression distance" degraded to verbatim');
+  expect(r.stderr).toContain("ECONNRESET");
 });
 
 test("apply: checked recover THESIS sets the ## Abstract body verbatim (no LLM)", async () => {

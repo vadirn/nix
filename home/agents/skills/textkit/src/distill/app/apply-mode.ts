@@ -39,10 +39,17 @@
 //
 // ── Success output (standalone apply): path on stdout, footer on stderr, exit 0.
 //   stdout  the destination path (absolute) — the only stdout line
-//   stderr  `— applied: N recovered · M kept · K removed (V verbatim)`
+//   stderr  `— applied: N recovered · M kept · K removed (V verbatim)`, plus
+//           ` (D degraded)` appended ONLY when D > 0
 //           N = checked recover items · M = checked keep items · K = removed
 //           (unchecked recover|keep) · V = entries written verbatim (recover defs whose
-//           second grade failed + every recover procedure/thesis).
+//           second grade failed + every recover procedure/thesis) · D = of V, how many
+//           were forced verbatim by a caught LLM transport flake (rethrowIfBug let it
+//           through) rather than a legitimate residue-grade verdict — a total transport
+//           outage would otherwise exit 0 looking identical to a clean run. Each caught
+//           flake also gets its own stderr diagnostic line (recoverDefs), so an operator
+//           gets the per-entry cause, not just the count. A run with zero degradations
+//           produces the exact byte-identical footer as before this suffix existed.
 //
 // ── Exit codes: 0 applied · 1 key missing AND a checked recover def needed it
 //   (nothing written) · 2 everything else refused (missing/malformed/gate/stamp/
@@ -320,9 +327,14 @@ function classifyUnchecked(it: Item, body: string): ItemEffect {
 // the def-recover lane's own count (a re-render whose second grade failed, or a caught
 // re-render/grade flake floored to the source's own clause) — both are verbatim by the
 // same definition, written unchanged from the source rather than LLM-authored, so they
-// contribute to one total.
-function applyFooter(cls: ClassifyResult, defVerbatim: number): string {
-  return `— applied: ${cls.recovered} recovered · ${cls.kept} kept · ${cls.removed} removed (${cls.verbatim + defVerbatim} verbatim)`;
+// contribute to one total. `degraded` is the of-V subset forced verbatim by a caught
+// transport flake rather than a legitimate residue grade; it is appended as
+// ` (D degraded)` ONLY when D > 0, so a clean run's footer stays byte-identical to
+// before this parameter existed — the design constraint every zero-degradation
+// assertion in apply.test.ts depends on.
+function applyFooter(cls: ClassifyResult, defVerbatim: number, degraded: number): string {
+  const base = `— applied: ${cls.recovered} recovered · ${cls.kept} kept · ${cls.removed} removed (${cls.verbatim + defVerbatim} verbatim)`;
+  return degraded > 0 ? `${base} (${degraded} degraded)` : base;
 }
 
 // A checked recover apply cannot execute is refused LOUD — never silently swallowed; a lost
@@ -361,17 +373,27 @@ function keyGate(defRecovers: ClassifyResult["defRecovers"]): InteractApplyResul
 // source's own verbatim clause (a second grade failure, an empty re-render, or a caught
 // re-render/grade flake — a verbatim splice cannot invert, so flooring beats dropping the
 // entry). Returns the splices in document order plus this lane's own verbatim count, which
-// applyFooter sums with the pure pass's.
+// applyFooter sums with the pure pass's. `degraded` is the of-defVerbatim subset forced
+// verbatim by a CAUGHT flake (the catch branch) rather than a legitimate residue grade — a
+// total transport outage bumps defVerbatim exactly as a real residue grade would, so without
+// this separate count the run would exit 0 looking clean. Each caught flake also gets its own
+// stderr line here, naming the term and the underlying error, so an operator sees the cause
+// per entry rather than a single opaque number.
 async function recoverDefs(args: {
   defRecovers: ClassifyResult["defRecovers"];
   body: string;
   tie0: string;
   lang: "en" | "ru";
   ask: typeof askJson;
-}): Promise<{ splices: { term: ResolvedHeadword; def: string }[]; defVerbatim: number }> {
+}): Promise<{
+  splices: { term: ResolvedHeadword; def: string }[];
+  defVerbatim: number;
+  degraded: number;
+}> {
   const { defRecovers, body, tie0, lang, ask } = args;
   const splices: { term: ResolvedHeadword; def: string }[] = [];
   let defVerbatim = 0;
+  let degraded = 0;
   for (const d of defRecovers) {
     let finalDef: string;
     try {
@@ -397,13 +419,21 @@ async function recoverDefs(args: {
     } catch (e) {
       rethrowIfBug(e, "apply-recover-def");
       // a transient re-render/grade flake floors to the source's own clause rather
-      // than dropping the entry — a verbatim splice cannot invert.
+      // than dropping the entry — a verbatim splice cannot invert. Unlike a legitimate
+      // residue grade, this fallback is a DEGRADATION: the operator gets one stderr
+      // line per flake here (process.stderr.write, matching execute.ts's own footer
+      // write rather than console.error, so apply.test.ts's stdout/stderr capture sees
+      // it), and the footer's `(D degraded)` suffix below.
+      process.stderr.write(
+        `distill apply: recover def "${d.term}" degraded to verbatim after a caught LLM flake: ${e instanceof Error ? e.message : String(e)}\n`,
+      );
       finalDef = verbatimDef(d.term, d.src);
       defVerbatim++;
+      degraded++;
     }
     splices.push({ term: d.term, def: finalDef });
   }
-  return { splices, defVerbatim };
+  return { splices, defVerbatim, degraded };
 }
 
 // 9. fire verbs, body lane — every deterministic edit, in the one order that makes the splices
@@ -465,7 +495,7 @@ export const distillApplyHook: InteractApplyHook = async ({
   const keyless = keyGate(cls.defRecovers);
   if (keyless) return keyless;
 
-  const { splices, defVerbatim } = await recoverDefs({
+  const { splices, defVerbatim, degraded } = await recoverDefs({
     defRecovers: cls.defRecovers,
     body,
     tie0,
@@ -479,7 +509,7 @@ export const distillApplyHook: InteractApplyHook = async ({
   return {
     kind: "write",
     body: promoteEpistemic(mutateBody(body, cls, splices)),
-    footer: applyFooter(cls, defVerbatim),
+    footer: applyFooter(cls, defVerbatim, degraded),
   };
 };
 
