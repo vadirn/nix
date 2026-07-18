@@ -139,9 +139,9 @@ export function resolveStepTarget(
 
 // The classification result distillApplyHook fires: the deterministic op set (def
 // re-renders, def removals, procedure edits, a verbatim thesis) plus the effect counters
-// the footer reports. `verbatim` here counts only the pre-LLM verbatim splices (recover
-// steps + thesis); the def-recover lane bumps it again per second-grade failure in
-// distillApplyHook.
+// the footer reports. `verbatim` counts only the pre-LLM verbatim splices this pure pass
+// makes (recover steps + thesis) — applyFooter adds the def-recover lane's own count for
+// the reported total.
 export type ClassifyResult = {
   recovered: number;
   kept: number;
@@ -264,6 +264,17 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
   };
 }
 
+// The footer grammar distillApplyHook reports on stderr — the ONE place
+// `— applied: N recovered · M kept · K removed (V verbatim)` is constructed. V sums the
+// pure classification's own verbatim splices (recover steps + thesis, cls.verbatim) with
+// the def-recover lane's own count (a re-render whose second grade failed, or a caught
+// re-render/grade flake floored to the source's own clause) — both are verbatim by the
+// same definition, written unchanged from the source rather than LLM-authored, so they
+// contribute to one total.
+function applyFooter(cls: ClassifyResult, defVerbatim: number): string {
+  return `— applied: ${cls.recovered} recovered · ${cls.kept} kept · ${cls.removed} removed (${cls.verbatim + defVerbatim} verbatim)`;
+}
+
 // Distill's action binding: steps 7–9 and 12 of the interact check order. Its run options
 // (lang, ask) arrive through ctx — runInteractApply forwards its own opts argument into every
 // ctx it builds — so this hook is a plain constant, not a factory closing over them. The
@@ -291,20 +302,9 @@ const distillApplyHook: InteractApplyHook = async ({
   const tie0 = parseCanonicalNote(bodyNoFront).abstract;
 
   // The classification is the pure core (classifyItems): a transform from (items, body)
-  // to the op set + counters, with NO I/O. `verbatim` is `let` because the def-recover lane
-  // below bumps it per second-grade failure; every other field is final here.
+  // to the op set + counters, with NO I/O — every field here is final.
   const cls = classifyItems(items, body);
-  const {
-    recovered,
-    kept,
-    removed,
-    defRecovers,
-    defRemovals,
-    procedureOps,
-    thesisPara,
-    unrecoverable,
-  } = cls;
-  let verbatim = cls.verbatim;
+  const { defRecovers, defRemovals, procedureOps, thesisPara, unrecoverable } = cls;
 
   // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
   // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
@@ -334,6 +334,7 @@ const distillApplyHook: InteractApplyHook = async ({
   // splice either the re-render (translated/inconclusive) or the source's own verbatim
   // clause (a second grade failure) into its `### headword` concept subsection.
   const defSplices: { term: string; def: string }[] = [];
+  let defVerbatim = 0; // this lane's own count — applyFooter sums it with cls.verbatim
   for (const d of defRecovers) {
     let finalDef: string;
     try {
@@ -352,7 +353,7 @@ const distillApplyHook: InteractApplyHook = async ({
       const grade = graded.concepts[0]?.grade ?? "translated";
       if (grade === "residue" || !reRendered) {
         finalDef = verbatimDef(d.term, d.src);
-        verbatim++;
+        defVerbatim++;
       } else {
         finalDef = reRendered;
       }
@@ -361,7 +362,7 @@ const distillApplyHook: InteractApplyHook = async ({
       // a transient re-render/grade flake floors to the source's own clause rather
       // than dropping the entry — a verbatim splice cannot invert.
       finalDef = verbatimDef(d.term, d.src);
-      verbatim++;
+      defVerbatim++;
     }
     defSplices.push({ term: d.term, def: finalDef });
   }
@@ -382,7 +383,7 @@ const distillApplyHook: InteractApplyHook = async ({
   return {
     kind: "write",
     body: promoteEpistemic(body),
-    footer: `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim)`,
+    footer: applyFooter(cls, defVerbatim),
   };
 };
 
