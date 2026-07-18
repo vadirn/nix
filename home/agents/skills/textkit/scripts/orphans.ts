@@ -11,16 +11,17 @@
 // madge already ships for the `cycles` script and computes the import graph, so the
 // orphan set comes from `madge --orphans --json` rather than a second parser.
 //
-// Two exemptions, both legitimately unreachable from the graph:
-//   1. *.test.ts — the test runner is their entry point, not an import.
-//   2. ALLOWED — standalone scripts executed directly by path.
+// One exemption: *.test.ts — the test runner is their entry point, not an import.
+// ALLOWED covers standalone scripts run directly by path, which have no importer by
+// design; it is empty today (the g4 calibration harness that held the only entry was
+// deleted once its result was recorded in the track).
 
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 
 /** Standalone modules run by path, so no importer exists by design. */
-const ALLOWED = new Set(["experiment/g4-harness.ts"]);
+const ALLOWED = new Set<string>();
 
 const proc = Bun.spawnSync(
   [

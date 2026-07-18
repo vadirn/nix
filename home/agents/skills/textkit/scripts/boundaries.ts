@@ -2,9 +2,8 @@
 // Boundary lint: enforces the slice contract across src/.
 //
 // Slices are the four first path segments under src/: core | distill | polish | cards.
-// Everything else — files directly under src/ (e.g. *.test.ts), src/experiment/**,
-// src/fixtures/** — is UNCLASSIFIED and exempt as an importer (tests and experiments
-// may reach into anything).
+// Everything else — files directly under src/ (e.g. *.test.ts), src/fixtures/** — is
+// UNCLASSIFIED and exempt as an importer (tests may reach into anything).
 //
 // Rules on a classified importer's `textkit/<seg>/...` specifiers:
 //   1. A cross-slice import (importer slice != imported slice) is allowed only when the

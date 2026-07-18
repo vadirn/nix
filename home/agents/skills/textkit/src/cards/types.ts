@@ -94,4 +94,3 @@ export type StagingRecord = {
 // pure layer before anything trusts them).
 export type BandJudgeReply = { band: string; rationale: string };
 export type DraftReply = { draft: string };
-export type AtomicityReply = { atomic: boolean; reason: string };

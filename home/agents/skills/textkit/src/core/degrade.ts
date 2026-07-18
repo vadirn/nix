@@ -9,4 +9,3 @@ export const distillDegrade = makeRethrowIfBug("distill");
 export const polishDegrade = makeRethrowIfBug("polish");
 export const cardStageDegrade = makeRethrowIfBug("card-stage");
 export const writingDegrade = makeRethrowIfBug("writing");
-export const g4Degrade = makeRethrowIfBug("g4-harness");
