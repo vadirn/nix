@@ -31,15 +31,14 @@ import type { Residue } from "@/distill/review/residue.ts";
 import {
   type ProcedureOp,
   classifyItems,
-  destinationFor,
   editProcedure,
   insertThesis,
   resolveDefTerm,
   resolveStepTarget,
   runApply,
   spliceDef,
-  unlinkIfPresent,
 } from "@/distill/app/apply-mode.ts";
+import { destinationFor, unlinkIfPresent } from "@/distill/review/execute.ts";
 import { parseArgs } from "@/distill/app/cli.ts";
 
 // ---------------------------------------------------------------------------

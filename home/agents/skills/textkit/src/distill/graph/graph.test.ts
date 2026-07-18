@@ -4,7 +4,7 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { computeSource, formatSpan, parseSpan, stampSha } from "@/distill/graph/graph.ts";
-import { stampHash } from "@/distill/app/apply-mode.ts";
+import { stampHash } from "@/distill/review/execute.ts";
 import type { Span } from "@/distill/mdstruct.ts";
 
 test("formatSpan emits the bare start..end notation", () => {

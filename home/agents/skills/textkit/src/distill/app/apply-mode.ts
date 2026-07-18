@@ -76,11 +76,6 @@ import { parseFrontmatter } from "@/core/frontmatter.ts";
 import { detectLang } from "@/core/text.ts";
 import { TRAILING_ANCHOR_RE } from "@/distill/graph/graph.ts";
 
-// The generic machinery moved to execute.ts is re-exported here so the emit preflight
-// (distill-core.ts) and the contract suites keep resolving it from this module: the
-// protocol moved, the import sites did not.
-export { destinationFor, stampHash, unlinkIfPresent } from "@/distill/review/execute.ts";
-
 // ---- runApply: the orchestrator ----
 
 // Options threading through runApply — the executor's InteractApplyOpts, unchanged: distill

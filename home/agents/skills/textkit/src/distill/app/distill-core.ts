@@ -52,7 +52,8 @@ import { locate } from "@/distill/extract/locate.ts";
 import { type Residue, payloadResidueForProjection } from "@/distill/review/residue.ts";
 import { runProse } from "@/distill/app/prose-mode.ts";
 import { buildIntermediary } from "@/distill/review/triage.ts";
-import { runApply, stampHash } from "@/distill/app/apply-mode.ts";
+import { runApply } from "@/distill/app/apply-mode.ts";
+import { stampHash } from "@/distill/review/execute.ts";
 import { runFidelityBackstop, runProseGate } from "@/distill/review/gates.ts";
 import {
   type CliOpts,
