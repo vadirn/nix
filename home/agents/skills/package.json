@@ -4,7 +4,9 @@
   "workspaces": [
     "_shared/*",
     "textkit",
-    "*/scripts"
+    "imagen-fal/scripts",
+    "vidgen-fal/scripts",
+    "imagen-nanobanana/scripts"
   ],
   "scripts": {
     "typecheck": "bun run --filter '*' typecheck",

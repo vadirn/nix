@@ -2,6 +2,11 @@
   "name": "imagen-fal-scripts",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "test": "bun test",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@fal-ai/client": "1.10.1"
   }
