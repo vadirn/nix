@@ -110,16 +110,6 @@ function procedureTarget(target: string): { headword: string; idxs: number[] } {
   return { headword: m[1]!, idxs };
 }
 
-// The count of numbered steps under the `### headword` subsection of `## Procedures` (0 when
-// the headword or the section is absent) — used to validate a step target's indices before
-// acting, so an out-of-range slot is refused (a checked recover) or ignored (an unchecked
-// remove) rather than silently no-oped, or worse, deleting the wrong step. Mirrors
-// editProcedure's list scan.
-function procedureLen(body: string, headword: string): number {
-  const range = procedureStepRange(body.split("\n"), headword);
-  return range ? range.count : 0;
-}
-
 // Promote the intermediary's forced `epistemic_status: in-review` to `distilled`
 // (step 12 — write-back is the promotion). The emit always forces the in-review
 // line into frontmatter, so a bounded first-line replace preserves every other
@@ -130,18 +120,20 @@ function promoteEpistemic(body: string): string {
 }
 
 // Resolve a `procedure:<headword>[:<n,…>]` steps target against the note body into its
-// resolved headword (null when the `### headword` subsection is absent) and the in-range
-// subset of its 0-based step indices (an out-of-range slot is dropped; the list is empty
-// when the headword is gone). Apply's two step lanes — checked recover and unchecked
-// remove — both resolve a step target through this ONE function, so the resolution is
-// stated once and the two lanes can't drift apart.
+// resolved headword and the in-range subset of its 0-based step indices (an out-of-range slot
+// is dropped). Apply's two step lanes — checked recover and unchecked remove — both resolve a
+// step target through this ONE function, so the resolution is stated once and the two lanes
+// can't drift apart. The return type is the invariant: idxs is non-empty only alongside a
+// resolved hw, so callers narrow on `hw === null` rather than asserting past it.
 export function resolveStepTarget(
   body: string,
   target: string,
-): { hw: string | null; idxs: number[] } {
+): { hw: string; idxs: number[] } | { hw: null; idxs: [] } {
   const { headword, idxs: raw } = procedureTarget(target);
-  const hw = resolveProcedureHeadword(body, headword);
-  const idxs = hw ? raw.filter((idx) => idx < procedureLen(body, hw)) : [];
+  const hw = resolveHeadword(body, "procedures", headword);
+  if (hw === null) return { hw: null, idxs: [] };
+  const range = procedureStepRange(body.split("\n"), hw);
+  const idxs = raw.filter((idx) => idx < (range?.count ?? 0));
   return { hw, idxs };
 }
 
@@ -214,12 +206,13 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
         // spans deferred) or no source directive (empty payload) cannot execute — and an empty
         // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
         // rather than no-op or delete.
-        const { hw, idxs } = resolveStepTarget(body, it.target);
+        const stepTarget = resolveStepTarget(body, it.target);
         const clauses = verbatimDirectives(payload);
-        if (hw === null || idxs.length === 0 || clauses.length === 0) {
+        if (stepTarget.hw === null || stepTarget.idxs.length === 0 || clauses.length === 0) {
           unrecoverable.push(it.target);
           continue;
         }
+        const { hw, idxs } = stepTarget;
         idxs.forEach((idx, k) => {
           procedureOps.push({ headword: hw, idx, replace: k === 0 ? clauses : null });
         });
@@ -246,9 +239,13 @@ export function classifyItems(items: Item[], body: string): ClassifyResult {
           removed++;
         }
       } else if (kind === "steps") {
-        const { hw, idxs } = resolveStepTarget(body, it.target);
-        for (const idx of idxs) procedureOps.push({ headword: hw!, idx, replace: null });
-        if (idxs.length > 0) removed++;
+        const stepTarget = resolveStepTarget(body, it.target);
+        if (stepTarget.hw !== null) {
+          for (const idx of stepTarget.idxs) {
+            procedureOps.push({ headword: stepTarget.hw, idx, replace: null });
+          }
+          if (stepTarget.idxs.length > 0) removed++;
+        }
       }
       // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
     }
@@ -585,22 +582,22 @@ export function insertThesis(body: string, para: string): string {
   return [...head, ...block, ...after.slice(k)].join("\n");
 }
 
-// Resolve a residue item's (possibly degraded) def target back to the actual `### headword`
-// under `## Concepts`. Exact match first (the common case: target === headword); then the
-// degraded case — the emit shipped `safeHandle(headword)` because the headword carried a
-// backtick or newline, so match the headword whose `safeHandle` equals the target. Returns the
-// real headword, or null when none matches (the caller counts it removed/skipped rather than
-// crashing) — the emit transform run backward, no handle→headword channel in the file.
-export function resolveDefTerm(body: string, target: string): string | null {
-  const heads = headwordsUnder(body, "concepts");
+// Resolve a target back to the actual `### headword` under `## <section>`. Exact match first
+// (the common case: target === headword); then the degraded case — the emit shipped
+// `safeHandle(headword)` because the headword carried a backtick or newline, so match the
+// headword whose `safeHandle` equals the target. Returns the real headword, or null when none
+// matches (the caller counts it removed/skipped rather than crashing) — the emit transform run
+// backward, no handle→headword channel in the file. Holds the resolution fact once for both
+// the concepts side (resolveDefTerm) and the procedures side (resolveStepTarget).
+function resolveHeadword(body: string, section: string, target: string): string | null {
+  const heads = headwordsUnder(body, section);
   if (heads.includes(target)) return target; // exact (the common case)
   return heads.find((h) => safeHandle(h) === target) ?? null; // the emit run backward
 }
 
-// Resolve a `procedure:<headword>` target back to the actual `### headword` under
-// `## Procedures` — exact then safeHandle-degraded, the procedure-side twin of resolveDefTerm.
-function resolveProcedureHeadword(body: string, target: string): string | null {
-  const heads = headwordsUnder(body, "procedures");
-  if (heads.includes(target)) return target;
-  return heads.find((h) => safeHandle(h) === target) ?? null;
+// Resolve a residue item's (possibly degraded) def target back to the actual `### headword`
+// under `## Concepts`. See resolveHeadword for the resolution fact; this is a one-line binding
+// of section "concepts".
+export function resolveDefTerm(body: string, target: string): string | null {
+  return resolveHeadword(body, "concepts", target);
 }

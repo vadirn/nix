@@ -58,7 +58,7 @@ import {
   stripInteract,
 } from "@/distill/review/interact.ts";
 import type { askJson } from "@skills/llm/llm.ts";
-import { linkNoClobber } from "@/core/fs.ts";
+import { atomicNoClobberWrite } from "@/core/fs.ts";
 import { stampSha } from "@/distill/graph/graph.ts";
 
 // ---- the seam ----
@@ -242,17 +242,19 @@ export async function runInteractApply(
   }
 
   // 13. write atomically and 14. consume.
-  const partial = `${dest}.apply.partial`;
-  writeFileSync(partial, applied.body);
   if (gate.src === "new") {
-    // no-clobber link: EEXIST maps to the src=new refusal (exit 2); the helper
-    // cleans the partial itself on any failure, so only the success unlink remains here.
-    const link = linkNoClobber(partial, dest);
-    if (!link.ok) {
+    // partial-then-link, no-clobber: EEXIST maps to the src=new refusal (exit 2); the shared
+    // helper (core/fs.ts) cleans the partial itself on any failure.
+    const write = atomicNoClobberWrite(dest, applied.body, ".apply.partial");
+    if (!write.ok) {
       return fail(label, `destination already exists: ${dest} (src=new refuses to clobber)`, 2);
     }
-    unlinkSync(partial);
   } else {
+    // overwrite case: a plain atomic replace, a different discipline from the no-clobber
+    // link above (there is no destination to protect against clobbering — it's being
+    // replaced on purpose), so it keeps its own partial-write-then-rename here.
+    const partial = `${dest}.apply.partial`;
+    writeFileSync(partial, applied.body);
     renameSync(partial, dest); // atomic replace of the verified destination
   }
   unlinkIfPresent(tmpPath);

@@ -5,7 +5,7 @@
 // gates into gates.ts, the CLI surface + path helpers into cli.ts. The default run emits a review
 // intermediary and exits; review + apply are a separate step (a review subagent, or `distill-text
 // apply`), so no interactive terminal half remains here. main() is invoked by the entrypoint.
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import {
   type Block,
@@ -37,7 +37,7 @@ import {
 import { askJson, ensureKeys, isTransient, TruncationError } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
 import { DISTILL_EXTRACT, DISTILL_FIDELITY } from "@/core/models.ts";
-import { linkNoClobber } from "@/core/fs.ts";
+import { atomicNoClobberWrite } from "@/core/fs.ts";
 import { tempMdPath } from "@/core/tmp.ts";
 import { extractGraph, gradeBlocks } from "@/distill/prompt/prompts.ts";
 import {
@@ -509,18 +509,14 @@ export function assembleRoutedNote(a: {
   return { out, footer, residue };
 }
 
-// Atomic no-clobber write: write a sibling .partial, then linkNoClobber it onto the
-// final name — link fails EEXIST instead of overwriting, so a racing emit that passed the
-// preflight minutes ago (LLM run) loses LOUD with the same exit-4 refusal, and a crash mid-write
-// never leaves a truncated intermediary visible at the .tmp.md path. {exists:true} maps to the
-// exit-4 refusal (never returns); any other link error cleans the .partial and rethrows inside
-// the helper. On success the helper leaves the .partial in place for this final unlink.
+// Atomic no-clobber write (core/fs.ts's atomicNoClobberWrite): write a sibling .partial, then
+// link it onto the final name — link fails EEXIST instead of overwriting, so a racing emit
+// that passed the preflight minutes ago (LLM run) loses LOUD with the same exit-4 refusal, and
+// a crash mid-write never leaves a truncated intermediary visible at the .tmp.md path.
+// {ok:false} maps to the exit-4 refusal (never returns); any other write/link error propagates.
 function writeIntermediaryAtomically(tmpPath: string, intermediary: string): void {
-  const partial = `${tmpPath}.partial`;
-  writeFileSync(partial, intermediary);
-  const link = linkNoClobber(partial, tmpPath);
-  if (!link.ok) refusePendingIntermediary(tmpPath);
-  unlinkSync(partial);
+  const write = atomicNoClobberWrite(tmpPath, intermediary);
+  if (!write.ok) refusePendingIntermediary(tmpPath);
 }
 
 // Phase 3 success: write the review intermediary sibling to `destPath` (never the source — the
