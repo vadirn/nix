@@ -48,7 +48,7 @@ if existing:
     if stop: stop
     // update path — reuses template resolved above
     title = do("regenerate conventional commit-style title from diff and log")
-    body  = do("regenerate body from diff and log, filling template_content sections; preserve every heading, emoji, and section verbatim")
+    body  = do("regenerate body from diff and log, filling template_content sections; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim")
     AskUserQuestion("confirm updated title and body")
     Bash(rm -f /tmp/claude/pr.md)
     Write(/tmp/claude/pr.md, body)
@@ -57,7 +57,7 @@ if existing:
     show PR URL, stop
 
 title = do("generate conventional commit-style title: '<prefix>: <message>' (see /commit skill for prefix and message rules)")
-body = do("fill template_content placeholders from diff and log; preserve every heading, emoji, and section verbatim")
+body = do("fill template_content placeholders from diff and log; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim")
 
 AskUserQuestion("confirm title, body, base branch, draft status")
 Bash(rm -f /tmp/claude/pr.md)
@@ -74,6 +74,7 @@ show PR URL
 - **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready".
 - **Title:** matches the /commit skill's conventions — `<prefix>: <message>`, lowercase after prefix, <70 chars, focus on WHY. The PR title becomes the commit message on squash-and-merge, so the same prefix selection (feat/fix/chore) and message style apply.
 - **Body:** Always start from a template. The `pr-template` script (at `home/agents/scripts/pr-template.sh`) resolves which template to use and prints one of three modes on its first line: `MODE: single` (full template content follows), `MODE: multi` (one repo-relative `.md` path per line — ask the user which), or `MODE: default` (the colocated `pr-template.md` default follows; used when the repo ships no template). In every mode the resulting body MUST keep the template's headings, emoji, and section count verbatim; only the placeholder content gets filled in from the diff and log.
+- **Self-contained body.** The reader has the repo and nothing else. Derive the body from the diff and log — never from session-only context. Name only artifacts a reader can resolve from the repo (files, commits, symbols); strip references to private planning notes (vault tracks, note slugs like `track-*`), local paths outside the repo, ticket IDs, and prior-conversation shorthand. If a why comes from such a source, restate the reasoning inline rather than pointing at the source.
 - **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations) and zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `/tmp/claude/pr.md`, pass `--body-file`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read). Always remove the file before writing so a stale artifact left over from a crashed prior session cannot survive into a new PR — the `require-pr-body-file.sh` hook treats artifact existence as proof of skill use but has no freshness check, so freshness is enforced here via the pre-write rm:
   ```
   Bash(rm -f /tmp/claude/pr.md)
