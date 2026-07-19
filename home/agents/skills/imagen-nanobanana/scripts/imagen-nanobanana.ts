@@ -406,7 +406,7 @@ async function runWithConcurrency<T>(
   concurrency: number,
   fn: (i: number) => Promise<T>,
 ): Promise<T[]> {
-  const results: T[] = new Array(count);
+  const results: T[] = Array.from({ length: count });
   let next = 0;
 
   async function worker(): Promise<void> {
