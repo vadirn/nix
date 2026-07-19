@@ -9,7 +9,8 @@
     "imagen-nanobanana/scripts"
   ],
   "scripts": {
-    "typecheck": "bun run --filter '*' typecheck",
+    "check:bun": "bun run scripts/check-bun-version.ts",
+    "typecheck": "bun run check:bun && bun run --filter '*' typecheck",
     "lint": "bun run --filter '*' lint",
     "test": "bun run --filter '*' test"
   },
