@@ -1,0 +1,12 @@
+// Zed keymap
+//
+// Managed by home-manager (symlinked from ~/nix/home/zed/keymap.json).
+// Docs: https://zed.dev/docs/key-bindings
+[
+  {
+    "context": "Workspace",
+    "bindings": {
+      "cmd-w": null
+    }
+  }
+]
