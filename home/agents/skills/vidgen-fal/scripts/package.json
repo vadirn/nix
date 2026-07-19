@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "lint": "oxlint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@fal-ai/client": "1.10.1"
