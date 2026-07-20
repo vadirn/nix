@@ -16,3 +16,11 @@ When the exceptions hit, suggest `/commit` normally.
 ### Why
 
 Obsidian Sync propagates the vast majority of vault content without git involvement. A `/commit` prompt after every card or note adds friction that the user has to dismiss every time, and risks staging files that `.gitignore` would refuse anyway. The git-tracked subtrees are small and obvious from `git status` — when something does land there, the suggestion is informative rather than noise.
+
+## By-product entries get an audience review
+
+If the entry was created as a by-product of other work (a migration, an experiment, a session synthesis) rather than through a deliberate capture flow, run /justify on it before wrapping, asking one question per sentence: who is the reader? An entry's only reader is its future consumer; text addressed to the entry's editor, the process that produced it, or the reviewer is an audience leak — cut it. The Unresolved questions section is the exception, where the entry may talk about itself. Deliberate captures (user-initiated cards, notes, references) skip this pass.
+
+### Why
+
+Entries written mid-task inherit the task's context: mechanics of how the entry is delivered, rules addressed to its editor, commentary on the process that produced it. The leak is semantic, so no lint catches it; a one-command review at write time does.
