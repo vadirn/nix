@@ -38,5 +38,5 @@ Read `mocking.md` when a step raises a boundary or mocking question — typicall
 ### Doctrine loading
 
 - `vault-query get "Implementation"` resolves the note; the exact basename match `Implementation.md` is the intended target.
-- Structured reads (`vault-query read` with addresses) load the intro (address `0`) and each named section — everything except the note's own Unresolved-questions housekeeping.
+- Structured reads (`vault-query read` with addresses) load the intro (address `0`) and each named section, keeping the note's frontmatter out of context.
 - Fail loud, never improvise: on any resolution or address error the doctrine has moved or its headings were renamed — a process reconstructed from memory looks like success while silently degrading the contract. The section headings named above are part of this wrapper's contract with the note.
