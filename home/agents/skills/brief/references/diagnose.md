@@ -1,9 +1,6 @@
 # diagnose — classify a complaint before reacting
 
-Goal: take a stakeholder reaction the user relays and name which gap it is, so the user applies
-the remedy that closes it instead of the one that deepens it. The expensive error is one-
-directional: a status report aimed at a target gap confirms the stakeholder's sense that you
-did not hear them. So the guard is asymmetric — bias toward "target" when unsure.
+Goal: take a stakeholder reaction the user relays and name which gap it is, so the user applies the remedy that closes it instead of the one that deepens it. The expensive error is one- directional: a status report aimed at a target gap confirms the stakeholder's sense that you did not hear them. So the guard is asymmetric — bias toward "target" when unsure.
 
 ## The asymmetric guard (do this first)
 
@@ -66,8 +63,7 @@ When it is a target gap, the user usually needs two things, and the order matter
    task list ("why before what"): an unrealistic target usually means the why was never pinned.
 ```
 
-Offer both, in that order. Draft #1 via draft.md; compose #2 as a short framing that names the
-divergence and hands the decision back to the stakeholder. Both stay drafts — the user sends.
+Offer both, in that order. Draft #1 via draft.md; compose #2 as a short framing that names the divergence and hands the decision back to the stakeholder. Both stay drafts — the user sends.
 
 ## Output shape
 
@@ -81,5 +77,4 @@ Remedy: <the matching practice above>.
 Want me to draft <the update | the renegotiation framing | both, in order>?
 ```
 
-Point to the source for the full argument when useful (`vault-query get "Target distance"` resolves the path; Read it).
-Do not paste the note's prose into the output.
+Point to the source for the full argument when useful (`vault-query get "Target distance"` resolves the path; `vault-query read` it, unfolding only the needed section). Do not paste the note's prose into the output.
