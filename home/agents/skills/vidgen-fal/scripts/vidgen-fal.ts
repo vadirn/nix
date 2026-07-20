@@ -16,26 +16,13 @@ import { appendFileSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import { homedir } from "os";
+import { expandTilde } from "@skills/media/media-utils.ts";
 
 // ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
 const ENDPOINT_STANDARD = "fal-ai/kling-video/v1.6/standard/text-to-video";
 const ENDPOINT_PRO = "fal-ai/kling-video/v1.6/pro/text-to-video";
-
-// ---------------------------------------------------------------------------
-// Tilde expansion — only ~/path or bare ~ (not ~user/path)
-// ---------------------------------------------------------------------------
-function expandTilde(p: string): string {
-  if (p === "~" || p.startsWith("~/")) {
-    return p.replace(/^~/, process.env.HOME ?? homedir());
-  }
-  if (p.startsWith("~")) {
-    console.error(`ERROR: --out: ~user form not supported; use ~/path or an absolute path`);
-    process.exit(1);
-  }
-  return p;
-}
 
 // ---------------------------------------------------------------------------
 // Usage
