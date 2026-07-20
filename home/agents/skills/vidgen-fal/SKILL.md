@@ -47,6 +47,7 @@ Pass the file path directly — `bun run` is not used because it would interpret
 | `--webm`                           | off                              | Also encode a WebM loop (VP9) alongside the MP4. Both files are kept and emitted.                                                             |
 | `--scale <number>`                 | `640`                            | Width in pixels for the WebM output. Must be a positive even integer. Height is computed automatically. Has no effect unless `--webm` is set. |
 | `--webm-crf <number>`              | `32`                             | VP9 quality, 0–63. Lower = larger file / better quality. Out-of-range values are rejected. Has no effect unless `--webm` is set.              |
+| `--dry-run`                        | off                              | Resolve all options, print the request payload as JSON and exit. No fal call, no files written, no `FAL_KEY` needed.                          |
 
 ## Workflow
 

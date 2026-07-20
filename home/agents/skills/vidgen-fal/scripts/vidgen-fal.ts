@@ -16,7 +16,7 @@ import { appendFileSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import { homedir } from "os";
-import { expandTilde } from "@skills/media/media-utils.ts";
+import { expandTilde, dryRunExit } from "@skills/media/media-utils.ts";
 
 // ---------------------------------------------------------------------------
 // Endpoints
@@ -50,6 +50,8 @@ Options:
                              Has no effect unless --webm is set.
   --webm-crf <number>        VP9 quality, 0–63 (default: 32). Lower = larger/better.
                              Has no effect unless --webm is set.
+  --dry-run                  Resolve all options, print the request payload as JSON and
+                             exit without calling fal or writing any file.
   -h, --help                 Show this help and exit.
 
 Environment:
@@ -78,6 +80,7 @@ const { values } = parseArgs({
     webm: { type: "boolean", default: false },
     scale: { type: "string" },
     "webm-crf": { type: "string" },
+    "dry-run": { type: "boolean", default: false },
     help: { type: "boolean", default: false, short: "h" },
   },
   allowPositionals: false,
@@ -95,11 +98,13 @@ if (!PROMPT) {
   process.exit(1);
 }
 
+const DRY_RUN = values["dry-run"] ?? false;
+
 // ---------------------------------------------------------------------------
-// FAL_KEY — fail fast unless we are just printing help
+// FAL_KEY — fail fast unless we are just printing help or doing a dry-run
 // ---------------------------------------------------------------------------
 const FAL_KEY = process.env.FAL_KEY;
-if (!FAL_KEY) {
+if (!FAL_KEY && !DRY_RUN) {
   console.error(
     "ERROR: FAL_KEY is not set.\n" +
       "Inject it via: doppler run -p claude-code -c std --no-fallback --",
@@ -107,7 +112,7 @@ if (!FAL_KEY) {
   process.exit(1);
 }
 
-fal.config({ credentials: FAL_KEY });
+if (FAL_KEY) fal.config({ credentials: FAL_KEY });
 
 // ---------------------------------------------------------------------------
 // Resolve options
@@ -244,6 +249,26 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
+  // ---------------------------------------------------------------------------
+  // --dry-run: print the resolved request payload and exit (no API call, no writes)
+  // ---------------------------------------------------------------------------
+  if (DRY_RUN) {
+    dryRunExit({
+      endpoint: ENDPOINT,
+      input: {
+        prompt: PROMPT,
+        duration: DURATION,
+        aspect_ratio: ASPECT_RATIO,
+        negative_prompt: NEGATIVE_PROMPT,
+        cfg_scale: CFG_SCALE,
+      },
+      out_dir: OUT_DIR,
+      webm: DO_WEBM,
+      scale: SCALE,
+      webm_crf: WEBM_CRF,
+    });
+  }
+
   mkdirSync(OUT_DIR, { recursive: true });
 
   const startMs = Date.now();
