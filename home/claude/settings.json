@@ -79,7 +79,7 @@
     "deny": [],
     "defaultMode": "auto"
   },
-  "model": "opus[1m]",
+  "model": "fable",
   "enableAllProjectMcpServers": true,
   "hooks": {
     "Notification": [
@@ -288,21 +288,34 @@
         "~/Pictures/vidgen",
         "$TMPDIR"
       ],
-      "denyRead": ["~/.ssh"],
-      "allowRead": ["~/.ssh/*.pub"]
+      "denyRead": [
+        "~/.ssh"
+      ],
+      "allowRead": [
+        "~/.ssh/*.pub"
+      ]
     },
     "credentials": {
       "files": [
-        { "path": "~/.aws", "mode": "deny" },
-        { "path": "~/.netrc", "mode": "deny" },
-        { "path": "~/.claude/.credentials.json", "mode": "deny" }
+        {
+          "path": "~/.aws",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.netrc",
+          "mode": "deny"
+        },
+        {
+          "path": "~/.claude/.credentials.json",
+          "mode": "deny"
+        }
       ]
     },
     "enableWeakerNetworkIsolation": true
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "effortLevel": "high",
+  "effortLevel": "low",
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
