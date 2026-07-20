@@ -19,10 +19,12 @@
 #   - For deno.json: runs `deno fmt` at the nearest deno root.
 #   - Universal fallback: global oxfmt on the file. Runs when no ancestor
 #     defines `format:file`, including the no-manifest case (scratch files,
-#     vault .md, etc.). oxfmt discovers the nearest .oxfmtrc.json by walking up
-#     from the file (see home/bun/oxfmtrc.json, deployed to ~ — sets
-#     proseWrap: never). Easy to spot when oxfmt's defaults diverge from
-#     project style — that's the cue to add `format:file`.
+#     vault .md, etc.). oxfmt's own config discovery walks up from the cwd and
+#     stops at .git, so the hook resolves config itself: nearest .oxfmtrc.json
+#     between the file and its repo root, else -c ~/.oxfmtrc.json (see
+#     home/bun/oxfmtrc.json, deployed to ~ — sets proseWrap: never). Easy to
+#     spot when oxfmt's defaults diverge from project style — that's the cue
+#     to add `format:file`.
 #
 # Never blocks: failures go to stderr so Claude can see and decide.
 # Exit 0 always.
@@ -117,7 +119,22 @@ case "$ext" in
         ;;
       oxfmt)
         command -v oxfmt >/dev/null 2>&1 || exit 0
-        oxfmt "$FILE" >&2 || true
+        # oxfmt discovers .oxfmtrc.json by walking up from the cwd and stops at
+        # a .git boundary, so inside a repo without its own config the global
+        # ~/.oxfmtrc.json is never found and oxfmt falls back to its defaults
+        # (proseWrap: preserve). Walk up from the file ourselves; when no config
+        # exists between the file and the repo root, pass the global one.
+        cfg_dir=$(dirname "$FILE")
+        cfg_args=()
+        while :; do
+          [ -f "$cfg_dir/.oxfmtrc.json" ] && break
+          if [ -e "$cfg_dir/.git" ] || [ "$cfg_dir" = "${HOME:-/nonexistent}" ] || [ "$cfg_dir" = "/" ]; then
+            [ -f "${HOME:-/nonexistent}/.oxfmtrc.json" ] && cfg_args=(-c "$HOME/.oxfmtrc.json")
+            break
+          fi
+          cfg_dir=$(dirname "$cfg_dir")
+        done
+        oxfmt ${cfg_args[@]+"${cfg_args[@]}"} "$FILE" >&2 || true
         ;;
     esac
     ;;
