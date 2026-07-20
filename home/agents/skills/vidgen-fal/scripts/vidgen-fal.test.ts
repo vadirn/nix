@@ -10,8 +10,9 @@
  * and exit at its first statement. Neither reaches the network. FAL_KEY is stubbed
  * for the validation cases because the key check precedes option validation.
  *
- * Not covered: the render path past the --dry-run exit (fal.subscribe, the MP4
- * download, the ffmpeg WebM encode) still needs a live fal call.
+ * The render path past the --dry-run exit is covered in render.test.ts, which
+ * exercises the orchestration against injected fakes. What still needs a live
+ * call is only the real fal response shape and the real ffmpeg invocation.
  */
 
 import { describe, it, expect } from "bun:test";
