@@ -8,14 +8,14 @@
 // section passes through verbatim. No fidelity gate: the canonical note is the
 // certified artifact, and the prose is its readable derivative, always regenerable and
 // checkable against it.
-import { detectLang, glossList, langRule, segment, wordCount } from "@/core/text.ts";
-import { parseDescription, parseFrontmatter } from "@/core/frontmatter.ts";
+import { detectLang, glossList, langRule, segment, wordCount } from "textkit/core/text.ts";
+import { parseDescription, parseFrontmatter } from "textkit/core/frontmatter.ts";
 import { askJson } from "@skills/llm/llm.ts";
-import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { DISTILL_EXTRACT, DISTILL_EXTRACT_TOKENS } from "@/core/models.ts";
-import { PASS_EN, PASS_RU, revise } from "@/distill/prompt/prompts.ts";
-import { parseCanonicalNote, splitSections } from "@/distill/graph/parse-projection.ts";
-import { unwrapResult } from "@/distill/app/envelope.ts";
+import { distillDegrade as rethrowIfBug } from "textkit/core/degrade.ts";
+import { DISTILL_EXTRACT, DISTILL_EXTRACT_TOKENS } from "textkit/core/models.ts";
+import { PASS_EN, PASS_RU, revise } from "textkit/distill/prompt/prompts.ts";
+import { parseCanonicalNote, splitSections } from "textkit/distill/graph/parse-projection.ts";
+import { unwrapResult } from "textkit/distill/app/envelope.ts";
 
 // Parse a distilled body into its parts: the tie-together prose (the `## Abstract`
 // orientation), the concept entries (each `### headword` under `## Concepts`, its

@@ -4,7 +4,7 @@
 // functions with no I/O. This suite pins those helpers directly now that they are
 // importable: the text utilities (text.ts) and the distilled-body parser that prose
 // mode inverts the compress pipeline through (prose-mode.ts::parseDistilled). The
-// balanced-JSON extractor moved with the transport to _shared/llm/llm.test.ts. It also
+// balanced-JSON extractor moved with the transport to libs/llm/llm.test.ts. It also
 // pins the one hardening this step adds — parseDistilled drops a term row with no
 // definition, malformed glossary output the model produced by splitting a row.
 import { expect, test } from "bun:test";
@@ -20,7 +20,7 @@ import {
   segment,
   slugSegment,
   wordCount,
-} from "@/core/text.ts";
+} from "textkit/core/text.ts";
 import {
   harvestBlockquotes,
   harvestCitations,
@@ -35,7 +35,7 @@ import {
   harvestVaultEdges,
   harvestWikilinks,
   normalizeForContainment,
-} from "@/distill/extract/harvest.ts";
+} from "textkit/distill/extract/harvest.ts";
 import {
   formatDryRun,
   compactSection,
@@ -44,13 +44,13 @@ import {
   routeNote,
   routeSection,
   sections,
-} from "@/distill/extract/route.ts";
-import { assembleRoutedNote } from "@/distill/app/distill-core.ts";
-import { payloadResidueForProjection, wikilinkResidue } from "@/distill/review/residue.ts";
-import { parseDistilled } from "@/distill/app/prose-mode.ts";
-import { computeSource, type Unit } from "@/distill/graph/graph.ts";
-import { locate } from "@/distill/extract/locate.ts";
-import type { Projection } from "@/distill/graph/project.ts";
+} from "textkit/distill/extract/route.ts";
+import { assembleRoutedNote } from "textkit/distill/app/distill-core.ts";
+import { payloadResidueForProjection, wikilinkResidue } from "textkit/distill/review/residue.ts";
+import { parseDistilled } from "textkit/distill/app/prose-mode.ts";
+import { computeSource, type Unit } from "textkit/distill/graph/graph.ts";
+import { locate } from "textkit/distill/extract/locate.ts";
+import type { Projection } from "textkit/distill/graph/project.ts";
 
 // ---- text.ts: segmentation ----
 test("segment: splits on blank lines into B-indexed blocks", () => {

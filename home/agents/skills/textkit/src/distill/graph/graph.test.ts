@@ -3,9 +3,9 @@
 // from this directory. No mdstruct binary needed — graph.ts is a pure leaf.
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { computeSource, formatSpan, parseSpan, stampSha } from "@/distill/graph/graph.ts";
-import { stampHash } from "@/distill/app/apply-mode.ts";
-import type { Span } from "@/distill/mdstruct.ts";
+import { computeSource, formatSpan, parseSpan, stampSha } from "textkit/distill/graph/graph.ts";
+import { stampHash } from "textkit/distill/review/execute.ts";
+import type { Span } from "textkit/distill/mdstruct.ts";
 
 test("formatSpan emits the bare start..end notation", () => {
   expect(formatSpan([289, 442])).toBe("289..442");

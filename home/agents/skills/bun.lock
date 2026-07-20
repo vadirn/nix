@@ -5,24 +5,32 @@
     "": {
       "name": "skills",
       "devDependencies": {
-        "@types/bun": "1.3.4",
+        "@types/bun": "1.3.14",
         "oxlint": "1.73.0",
         "typescript": "7.0.2",
       },
-    },
-    "_shared/llm": {
-      "name": "@skills/llm",
-      "version": "1.0.0",
     },
     "imagen-fal/scripts": {
       "name": "imagen-fal-scripts",
       "version": "1.0.0",
       "dependencies": {
         "@fal-ai/client": "1.10.1",
+        "@skills/media": "workspace:*",
       },
     },
     "imagen-nanobanana/scripts": {
       "name": "imagen-nanobanana-scripts",
+      "version": "1.0.0",
+      "dependencies": {
+        "@skills/media": "workspace:*",
+      },
+    },
+    "libs/llm": {
+      "name": "@skills/llm",
+      "version": "1.0.0",
+    },
+    "libs/media": {
+      "name": "@skills/media",
       "version": "1.0.0",
     },
     "textkit": {
@@ -37,6 +45,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@fal-ai/client": "1.10.1",
+        "@skills/media": "workspace:*",
       },
     },
   },
@@ -83,9 +92,11 @@
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.73.0", "", { "os": "win32", "cpu": "x64" }, "sha512-WaNRvh4f6zY9CvUQk2YoA1O90ieWrIklI84+HXFr9Isjz9CSESrdqo/RtIYt4Dll/cAchqGDMehfaZd0vqEFZw=="],
 
-    "@skills/llm": ["@skills/llm@workspace:_shared/llm"],
+    "@skills/llm": ["@skills/llm@workspace:libs/llm"],
 
-    "@types/bun": ["@types/bun@1.3.4", "", { "dependencies": { "bun-types": "1.3.4" } }, "sha512-EEPTKXHP+zKGPkhRLv+HI0UEX8/o+65hqARxLy8Ov5rIxMBPNTjeZww00CIihrIQGEQBYg+0roO5qOnS/7boGA=="],
+    "@skills/media": ["@skills/media@workspace:libs/media"],
+
+    "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
     "@types/node": ["@types/node@26.1.1", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw=="],
 
@@ -129,7 +140,7 @@
 
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
 
-    "bun-types": ["bun-types@1.3.4", "", { "dependencies": { "@types/node": "*" } }, "sha512-5ua817+BZPZOlNaRgGBpZJOSAQ9RQ17pkwPD0yR7CfJg+r8DgIILByFifDTa+IPDDxzf5VNhtNlcKqFzDgJvlQ=="],
+    "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
     "eventsource-parser": ["eventsource-parser@1.1.2", "", {}, "sha512-v0eOBUbiaFojBu2s2NPBfYUoRR9GjcDNvCXVaqEf5vVfpIAh9f8RCo4vXTP8c63QRKCFwoLpMpTdPwwhEKVgzA=="],
 

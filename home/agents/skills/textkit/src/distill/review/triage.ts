@@ -13,9 +13,9 @@ import {
   sanitizeNote,
   sanitizePayload,
   targetIsRenderable,
-} from "@/distill/review/interact.ts";
-import { parseFrontmatter } from "@/core/frontmatter.ts";
-import type { Residue } from "@/distill/review/residue.ts";
+} from "textkit/distill/review/interact.ts";
+import { parseFrontmatter } from "textkit/core/frontmatter.ts";
+import type { Residue } from "textkit/distill/review/residue.ts";
 
 /// The triage vocabulary: `recover` — failed items; checked = re-render from the fenced
 /// source at apply (verbatim splice on a second grade failure). `keep` — gate-inconclusive

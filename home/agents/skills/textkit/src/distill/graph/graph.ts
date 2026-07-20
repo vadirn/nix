@@ -9,7 +9,7 @@
 // `GlossEntry`/`Relation` two-channel shape it replaced is gone, so consumers read a note's
 // term/def straight off the projection rather than through a second channel.
 import { createHash } from "node:crypto";
-import type { Span } from "@/distill/mdstruct.ts";
+import type { Span } from "textkit/distill/mdstruct.ts";
 
 // The five knowledge-element types a distillation unit can take. A unit's `type` is carried by
 // WHICH SECTION it renders under in the markdown projection, never by a `type::` field. A payload

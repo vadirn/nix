@@ -20,7 +20,7 @@ import {
   type DistillationResult,
   type Edge,
   type Unit,
-} from "@/distill/graph/graph.ts";
+} from "textkit/distill/graph/graph.ts";
 
 // The projection format version emitted in `schema:`. Distinct from mdstruct's document
 // schemaVersion — this versions the markdown PROJECTION shape, not the parser.

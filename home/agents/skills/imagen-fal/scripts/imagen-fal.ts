@@ -15,7 +15,8 @@ import { parseArgs } from "util";
 import { mkdirSync, writeFileSync, renameSync, appendFileSync } from "fs";
 import { join, basename } from "path";
 import os from "node:os";
-import { expandTilde, sniffSourceMimes, dryRunExit } from "../../_shared/scripts/media-utils.ts";
+import { expandTilde, sniffSourceMimes, dryRunExit } from "@skills/media/media-utils.ts";
+import { uploadSources } from "./upload.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -240,35 +241,6 @@ const TIMESTAMP =
 const LOG_FILE = join(OUT_DIR, "log.jsonl");
 
 // ---------------------------------------------------------------------------
-// Source images: upload to fal storage
-// ---------------------------------------------------------------------------
-async function uploadSources(resolvedPaths: string[], mimes: string[]): Promise<string[]> {
-  const urls: string[] = [];
-  for (let i = 0; i < resolvedPaths.length; i++) {
-    const r = resolvedPaths[i]!;
-    const mime = mimes[i]!;
-    const meta = await Bun.file(r).image().metadata();
-    console.log(`Uploading ${basename(r)} to fal storage…`);
-    let blob: Blob;
-    if (meta.width <= 2048 && meta.height <= 2048) {
-      const file = Bun.file(r);
-      blob = new Blob([await file.arrayBuffer()], { type: mime });
-    } else {
-      const bytes = await Bun.file(r)
-        .image()
-        .resize(2048, 2048, { fit: "inside" })
-        .webp({ quality: 85 })
-        .bytes();
-      console.log(`  (shrunk ${meta.width}x${meta.height} -> 2048-box webp)`);
-      blob = new Blob([bytes], { type: "image/webp" });
-    }
-    const url = await fal.storage.upload(blob);
-    urls.push(url);
-  }
-  return urls;
-}
-
-// ---------------------------------------------------------------------------
 // Download a URL to disk; sniff extension from content-type.
 // ---------------------------------------------------------------------------
 async function downloadImage(url: string, destBase: string): Promise<string> {
@@ -358,7 +330,9 @@ async function main(): Promise<void> {
 
   // Upload reference images if provided.
   const referenceUrls: string[] =
-    resolvedSources.length > 0 ? await uploadSources(resolvedSources, sourceMimes) : [];
+    resolvedSources.length > 0
+      ? await uploadSources(resolvedSources, sourceMimes, (blob) => fal.storage.upload(blob))
+      : [];
 
   const savedPaths: string[] = [];
   let masterCount = 0;

@@ -13,20 +13,20 @@
 // ships the ORIGINAL input with a "polish skipped" footer instead of aborting; a
 // non-transient throw (a code bug) propagates.
 import { readFileSync, writeFileSync } from "node:fs";
-import { takeValue } from "@/core/args.ts";
-import { parseFrontmatter } from "@/core/frontmatter.ts";
+import { takeValue } from "textkit/core/args.ts";
+import { parseFrontmatter } from "textkit/core/frontmatter.ts";
 import { askJson, ensureKeys, isTransient, TruncationError } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
-import { POLISH_MODEL, POLISH_TOKENS } from "@/core/models.ts";
-import { detectLang, segment, wordCount } from "@/core/text.ts";
-import { tempMdPath } from "@/core/tmp.ts";
+import { POLISH_MODEL, POLISH_TOKENS } from "textkit/core/models.ts";
+import { detectLang, segment, wordCount } from "textkit/core/text.ts";
+import { tempMdPath } from "textkit/core/tmp.ts";
 import {
   type NameLintResult,
   formatNameLint,
   nameLintSelfConsistency,
-} from "@/core/writing/name-lint.ts";
-import { PASS_EN, PASS_RU, revise } from "@/core/writing/passes.ts";
-import { spellPass } from "@/polish/spell.ts";
+} from "textkit/core/writing/name-lint.ts";
+import { PASS_EN, PASS_RU, revise } from "textkit/core/writing/passes.ts";
+import { spellPass } from "textkit/polish/spell.ts";
 
 // USAGE is the full `--help` text printed to stdout on `-h`/`--help`: the invocation forms,
 // every option, the output contract, and the exit codes — the human-facing counterpart to
@@ -61,7 +61,7 @@ Env: OPENAI_API_KEY, resolved from Doppler (claude-code/std) via keys.ts
 // The validated options bag parseArgs hands to main(): the language override, which of the
 // two writing passes to skip, whether to write to a fresh temp file instead of stdout, and
 // the input path (undefined or "-" means stdin).
-export type PolishOpts = {
+type PolishOpts = {
   lang: "en" | "ru" | "auto";
   noRevise: boolean;
   noSpell: boolean;
@@ -165,7 +165,7 @@ export function buildPolishFooter(m: {
 // The seam runPolish takes to reach the model, injected so a unit test drives the
 // pass pipeline without a process-global module mock (default: the real askJson).
 // `progress` is the optional per-pass tick main wires to a TTY-gated stderr line.
-export type PolishDeps = {
+type PolishDeps = {
   ask?: typeof askJson;
   progress?: (line: string) => void;
 };
@@ -175,7 +175,7 @@ export type PolishDeps = {
 // newline preserved), and build the stderr report footer. It touches no process/fs state —
 // the model transport arrives via deps — so it is unit-testable in isolation. main() owns the
 // arg gate, stdin/file I/O, emit target, and the failsafe catch around this call.
-export async function runPolish(
+async function runPolish(
   input: string,
   opts: PolishOpts,
   deps: PolishDeps = {},
@@ -228,7 +228,7 @@ export async function runPolish(
 // API-key gate or any network call, reads the input (file or stdin), then delegates the
 // revise/spell passes to runPolish and emits the polished content. It returns no value; it
 // sets the process exit code (0 polished, 1 missing key, 2 usage error, 3 passthrough).
-export async function main(): Promise<void> {
+async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.kind === "help") {
     process.stdout.write(USAGE);

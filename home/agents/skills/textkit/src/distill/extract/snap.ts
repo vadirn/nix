@@ -16,7 +16,7 @@ import {
   type MdNode,
   type ParsedDoc,
   type Span,
-} from "@/distill/mdstruct.ts";
+} from "textkit/distill/mdstruct.ts";
 
 // The mdstruct node types that carry a snappable prose block. A distilled quote lives inside
 // exactly one paragraph-grade block; `listItem`, `table`, `codeBlock`, and `blockQuote` are kept

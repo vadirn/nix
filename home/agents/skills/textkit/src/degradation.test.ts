@@ -10,11 +10,11 @@
 // still degrades gracefully.
 import { expect, test } from "bun:test";
 import { askJson, fireworks, TransientError, TruncationError } from "@skills/llm/llm.ts";
-import { fidelityGate, proseGate, revise, workflowGate } from "@/distill/prompt/prompts.ts";
+import { fidelityGate, proseGate, revise, workflowGate } from "textkit/distill/prompt/prompts.ts";
 
 // The transport primitives these gates lean on (isTransient / rethrowIfBug / the
 // finish_reason→TruncationError signal, in isolation) are tested in the shared lib
-// at _shared/llm/llm.test.ts. This suite pins the PIPELINE wiring: an actual distill
+// at libs/llm/llm.test.ts. This suite pins the PIPELINE wiring: an actual distill
 // stage degrades on a transient/truncation flake and propagates a real code bug.
 
 // ---- the wiring: an actual stage degrades on transient, propagates on a bug ----

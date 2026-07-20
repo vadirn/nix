@@ -3,14 +3,14 @@
 // candidate fails verification ships as its input, so the pass can only lose a
 // correction, never meaning. Consumed only by polish.ts — distill's pipeline does
 // not gain a spell stage.
-import { type Block, render } from "@/core/text.ts";
+import { type Block, render } from "textkit/core/text.ts";
 import { askJson } from "@skills/llm/llm.ts";
-import { polishDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { POLISH_MODEL, POLISH_TOKENS } from "@/core/models.ts";
-import { MASK_TOKEN_RE, createMasker } from "@/core/writing/mask.ts";
-import { levenshtein, levenshteinBounded } from "@/core/writing/levenshtein.ts";
-import { makeIdMarkerStripper } from "@/core/writing/passes.ts";
-import { normalizeTypography } from "@/core/typography.ts";
+import { polishDegrade as rethrowIfBug } from "textkit/core/degrade.ts";
+import { POLISH_MODEL, POLISH_TOKENS } from "textkit/core/models.ts";
+import { MASK_TOKEN_RE, createMasker } from "textkit/core/writing/mask.ts";
+import { levenshtein, levenshteinBounded } from "textkit/core/writing/levenshtein.ts";
+import { makeIdMarkerStripper } from "textkit/core/writing/passes.ts";
+import { normalizeTypography } from "textkit/core/typography.ts";
 
 // spellPassPrompt builds the proofreader prompt for one spellPass call: fix only spelling,
 // typo, and grammatical-agreement errors, changing nothing else. No langRule() here: that

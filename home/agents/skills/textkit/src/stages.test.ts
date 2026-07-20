@@ -6,17 +6,17 @@
 // and buildFooter (the success-footer renderer). The async stages route through
 // the network and are covered by the end-to-end + degradation suites.
 import { expect, test } from "bun:test";
-import type { ProseUnit } from "@/distill/extract/harvest.ts";
-import { normalizeForContainment } from "@/distill/extract/harvest.ts";
-import type { ProseVerdict } from "@/distill/prompt/prompts.ts";
-import { buildFooter, expandGuardCap, withHeartbeat } from "@/distill/app/distill-core.ts";
-import { parseArgs, USAGE } from "@/distill/app/cli.ts";
+import type { ProseUnit } from "textkit/distill/extract/harvest.ts";
+import { normalizeForContainment } from "textkit/distill/extract/harvest.ts";
+import type { ProseVerdict } from "textkit/distill/prompt/prompts.ts";
+import { buildFooter, expandGuardCap, withHeartbeat } from "textkit/distill/app/distill-core.ts";
+import { parseArgs, USAGE } from "textkit/distill/app/cli.ts";
 import {
   anchored,
   payloadResidue,
   proseResidue,
   wikilinkResidue,
-} from "@/distill/review/residue.ts";
+} from "textkit/distill/review/residue.ts";
 
 // ---- expandGuardCap: the passthrough guard's threshold, customizable via --max-words ----
 test("expandGuardCap: unset maxWords means no guard (dropped default — structured output may match source length)", () => {

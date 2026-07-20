@@ -1,8 +1,9 @@
 // cards/prompts — pure prompt builders for the card-extraction LLM stages.
 // No LLM call and no transport import lives here: each builder maps typed input
 // to a prompt string; the stage wiring feeds it to the transport's askJson and validates the
-// reply against types.ts (BandJudgeReply / DraftReply / AtomicityReply). This
-// module never imports distill-core.ts.
+// reply against types.ts (BandJudgeReply / DraftReply). This module never imports
+// distill-core.ts. atomicityJudgePrompt has no stage wiring yet — it is built and
+// calibrated but uncalled, so no reply type exists for it until it is wired.
 //
 // The instruction text carries the whole lexicographer discipline (the vault note
 // "The lexicographer" is the source): the runtime models are small and obedient,
@@ -17,8 +18,8 @@
 //
 // Band discipline: the verdict these prompts elicit is an ANNOTATION a candidate
 // carries into staging, never a filter — nothing here gates.
-import { langRule, relText } from "@/core/text.ts";
-import type { Candidate, NeighbourHit } from "@/cards/types.ts";
+import { langRule, relText } from "textkit/core/text.ts";
+import type { Candidate, NeighbourHit } from "textkit/cards/types.ts";
 
 // One neighbour's own definition as text: the frontmatter description, falling back
 // to the BM25 snippet when the card has none. Shared by the prompt builders here and

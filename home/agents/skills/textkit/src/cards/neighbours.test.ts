@@ -7,8 +7,8 @@
 // file (empty description, ok still true), a superseded hit excluded, and topK
 // forwarded into the spawned command.
 import { expect, test } from "bun:test";
-import { fetchNeighbours, type ReadFn, type RunFn } from "@/cards/neighbours.ts";
-import type { Candidate } from "@/cards/types.ts";
+import { fetchNeighbours, type ReadFn, type RunFn } from "textkit/cards/neighbours.ts";
+import type { Candidate } from "textkit/cards/types.ts";
 
 const CANDIDATE: Candidate = {
   arm: "concept",

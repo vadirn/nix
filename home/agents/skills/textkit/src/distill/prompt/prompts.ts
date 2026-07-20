@@ -12,8 +12,8 @@ import {
   langRule,
   normalizeRelation,
   render,
-} from "@/core/text.ts";
-import { type ProseUnit } from "@/distill/extract/harvest.ts";
+} from "textkit/core/text.ts";
+import { type ProseUnit } from "textkit/distill/extract/harvest.ts";
 
 // The block-grading verdict from the fidelity gate: "drop" the block, "distill"
 // it (compress into the projection), or "retain" it verbatim. Lives here, not in
@@ -23,7 +23,7 @@ import { type ProseUnit } from "@/distill/extract/harvest.ts";
 const GRADES = ["drop", "distill", "retain"] as const;
 export type Grade = (typeof GRADES)[number];
 import { askJson } from "@skills/llm/llm.ts";
-import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
+import { distillDegrade as rethrowIfBug } from "textkit/core/degrade.ts";
 import {
   DISTILL_EXTRACT,
   DISTILL_EXTRACT_TIMEOUT_MS,
@@ -31,15 +31,15 @@ import {
   DISTILL_FIDELITY,
   DISTILL_FIDELITY_TIMEOUT_MS,
   DISTILL_FIDELITY_TOKENS,
-} from "@/core/models.ts";
+} from "textkit/core/models.ts";
 import {
   MARKED_MODALITIES,
   type Modality,
   type PreEdge,
   type PreGraph,
   type PreUnit,
-} from "@/distill/graph/graph.ts";
-export { PASS_EN, PASS_RU, revise } from "@/core/writing/passes.ts";
+} from "textkit/distill/graph/graph.ts";
+export { PASS_EN, PASS_RU, revise } from "textkit/core/writing/passes.ts";
 
 // Glossary-def scope. A def's contract is definition-only: the connective prose
 // carries the RELATIONS (subsumes/contrasts/precondition) and the rationale, while

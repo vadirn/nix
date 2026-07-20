@@ -1,7 +1,7 @@
 // writing/mask — the ⟦N⟧ masking engine shared by revise() and spellPass(): freeze
 // reference spans (and caller-supplied literal spans) to opaque tokens the writing
 // model cannot reword or drop, then restore them verbatim after the rewrite.
-import { MASK_RE } from "@/core/text.ts";
+import { MASK_RE } from "textkit/core/text.ts";
 
 // Matches a single ⟦N⟧ mask token (the numbered placeholder createMasker mints), e.g. "⟦3⟧".
 // Exported so spell.ts's verify step can multiset-compare mask tokens between input and

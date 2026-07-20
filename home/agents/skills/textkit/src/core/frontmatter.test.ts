@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "bun:test";
-import { parseDescription, parseFrontmatter, parseType } from "@/core/frontmatter.ts";
+import { parseDescription, parseFrontmatter, parseType } from "textkit/core/frontmatter.ts";
 
 const FIX = (name: string): string =>
   readFileSync(resolve(import.meta.dir, "..", "fixtures", name), "utf8");

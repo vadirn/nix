@@ -2,7 +2,7 @@
 // spec's two worked examples ("Reference render 1/2"). Pure formatting; no
 // mdstruct binary needed. Run with `bun test project.test.ts` from this directory.
 import { expect, test } from "bun:test";
-import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
+import { projectMarkdown, type Projection } from "textkit/distill/graph/project.ts";
 
 // Reference render 1 — "Record dates, not booleans": Abstract, two concept subsections, one
 // (assertoric) judgement, one inference using ⇐, a procedure subsection with numbered steps,

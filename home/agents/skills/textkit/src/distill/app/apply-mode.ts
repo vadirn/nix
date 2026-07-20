@@ -3,25 +3,14 @@
 // decisions against the real note seams, and write the scaffold-free note back to
 // `<dest>.md`. The grammar core (parse/resolve/strip) lives in interact.ts; the
 // triage instance (verb vocabulary, the emit that produced this file) lives in
-// triage.ts; this module owns the verb ACTIONS and the write-back discipline.
+// triage.ts; this module owns distill's verb ACTIONS. The write-back DISCIPLINE —
+// the stamp preflight, the mid-run re-verification, the atomic write — is generic
+// and lives in execute.ts, which this module binds via `distillApplyHook`.
 // `distill-text apply <path>` (distill-core.ts's runApply) is the production
 // caller; apply.test.ts is its contract suite.
 //
-// ── Check order — the sequence every refusal in runApply is measured against, in order:
-//   1. path exists            ENOENT → exit 2 "no intermediary at <path> — already
-//                             applied, or re-run distill" (the fat-finger's first error)
-//   2. suffix                 non-`.tmp.md` → exit 2 (destinationFor returns null)
-//   3. parse                  parseInteract structural errors → exit 2, nothing executed
-//   4. gate present           the confirm-all gate is MANDATORY (triage policy): zero
-//                             confirm-all blocks — including a blockless file — is
-//                             malformed, exit 2 with the same teaching message
-//   5. resolve                resolveInteract against TRIAGE_VERBS — unknown verb,
-//                             unresolved pick-one, or an UNCHECKED confirm-all gate →
-//                             exit 2, nothing executed
-//   6. stamp                  dest= basename must equal basename(destinationFor(tmp))
-//                             (a renamed tmp refuses); src=sha256 must equal the
-//                             destination's current hash (an edited dest refuses);
-//                             src=new requires the destination ABSENT (no-clobber)
+// ── Check order — execute.ts documents the full 14-step sequence. This module owns
+//    steps 7–9 and 12, run inside distillApplyHook:
 //   7. classify               classifyItems turns every item into deterministic ops,
 //                             pure and I/O-free; a checked recover with no applicable
 //                             action (an unrecoverable target) → exit 2, nothing written
@@ -45,24 +34,22 @@
 //                             (No re-projection step: on a canonical note the ## Abstract is
 //                             authored at extract time, not re-derived from concept defs, so a
 //                             def recover leaves it as-authored.)
-//  10. re-hash tmp            re-read the tmp and compare to the hash taken at step 1;
-//                             a mismatch (Obsidian Sync rewrote it during the LLM window)
-//                             → exit 2 "intermediary changed during apply", nothing written
-//  11. re-verify dest         overwrite case only: re-read the destination's hash and
-//                             compare to step 6's src= value again, since that check ran
-//                             before the (seconds-long) LLM window → a mismatch exits 2
 //  12. promote epistemic      set `epistemic_status: distilled` (the emit forced
 //                             `in-review`; write-back is the promotion)
-//  13. atomic dest write      overwrite case → rename a same-dir temp onto dest (atomic
-//                             replace); new case → link no-clobber
-//  14. unlink tmp             ENOENT tolerated (a racing applier may have removed it)
 //
 // ── Success output (standalone apply): path on stdout, footer on stderr, exit 0.
 //   stdout  the destination path (absolute) — the only stdout line
-//   stderr  `— applied: N recovered · M kept · K removed (V verbatim)`
+//   stderr  `— applied: N recovered · M kept · K removed (V verbatim)`, plus
+//           ` (D degraded)` appended ONLY when D > 0
 //           N = checked recover items · M = checked keep items · K = removed
 //           (unchecked recover|keep) · V = entries written verbatim (recover defs whose
-//           second grade failed + every recover procedure/thesis).
+//           second grade failed + every recover procedure/thesis) · D = of V, how many
+//           were forced verbatim by a caught LLM transport flake (rethrowIfBug let it
+//           through) rather than a legitimate residue-grade verdict — a total transport
+//           outage would otherwise exit 0 looking identical to a clean run. Each caught
+//           flake also gets its own stderr diagnostic line (recoverDefs), so an operator
+//           gets the per-entry cause, not just the count. A run with zero degradations
+//           produces the exact byte-identical footer as before this suffix existed.
 //
 // ── Exit codes: 0 applied · 1 key missing AND a checked recover def needed it
 //   (nothing written) · 2 everything else refused (missing/malformed/gate/stamp/
@@ -71,89 +58,88 @@
 //   code would be dead surface.
 //
 // PURE by contract for the exported helpers below (no fs, no LLM) so they unit-test
-// offline; runApply is the only impure export.
+// offline. distillApplyHook is the one partial exception: it reaches an LLM, but only
+// through the injected `ask` seam and NEVER the filesystem, which is what lets
+// apply.test.ts drive the whole apply middle (classify → gates → mutate → footer) with
+// no temp files. runApply is the only export that touches disk.
 
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import type { Item } from "textkit/distill/review/interact.ts";
 import {
-  type Item,
-  parseInteract,
-  resolveInteract,
-  stripInteract,
-} from "@/distill/review/interact.ts";
-import { TRIAGE_VERBS, safeHandle } from "@/distill/review/triage.ts";
+  type InteractApplyHook,
+  type InteractApplyOpts,
+  type InteractApplyResult,
+  runInteractApply,
+} from "textkit/distill/review/execute.ts";
+import { TRIAGE_VERBS, safeHandle } from "textkit/distill/review/triage.ts";
 import { askJson, ensureKeys } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
-import { distillDegrade as rethrowIfBug } from "@/core/degrade.ts";
-import { DISTILL_EXTRACT } from "@/core/models.ts";
-import { linkNoClobber } from "@/core/fs.ts";
+import { distillDegrade as rethrowIfBug } from "textkit/core/degrade.ts";
+import { DISTILL_EXTRACT } from "textkit/core/models.ts";
 import {
   fidelityGate,
   renderEntryPrompt,
   verbatimDef,
   verbatimDirectives,
-} from "@/distill/prompt/prompts.ts";
-import { parseCanonicalNote, splitSections } from "@/distill/graph/parse-projection.ts";
-import { parseFrontmatter } from "@/core/frontmatter.ts";
-import { detectLang } from "@/core/text.ts";
-import { stampSha, TRAILING_ANCHOR_RE } from "@/distill/graph/graph.ts";
+} from "textkit/distill/prompt/prompts.ts";
+import {
+  parseCanonicalNote,
+  splitSections,
+  subsectionRanges,
+} from "textkit/distill/graph/parse-projection.ts";
+import { parseFrontmatter } from "textkit/core/frontmatter.ts";
+import { detectLang } from "textkit/core/text.ts";
+import { TRAILING_ANCHOR_RE } from "textkit/distill/graph/graph.ts";
 
 // ---- runApply: the orchestrator ----
 
-// Options threading through runApply.
-export type ApplyOpts = {
-  // Overrides body-language detection for the re-render/re-projection prompts;
-  // "auto" detects from the stripped note body (parity with compress mode).
-  lang: "en" | "ru" | "auto";
-  // The model call, injected so tests drive the recover-def LLM window (re-render +
-  // re-grade) without a process-global fetch/module mock (see fidelityGate in
-  // prompts.ts). Production callers (main/tty) omit it → the real transport.
-  ask?: typeof askJson;
-};
+// Options threading through runApply — the executor's InteractApplyOpts, unchanged: distill
+// has no options of its own beyond what every binding needs (lang, ask). Kept as a named
+// export so distill-core.ts's call site reads `ApplyOpts` rather than reaching into execute.ts.
+export type ApplyOpts = InteractApplyOpts;
 
-// The stamp hash form the emit and the compress preflight both use: the shared 12-hex
-// stampSha (graph.ts) under a `sha256:` label. Compared against the gate's src= value
-// (step 6) and used to re-hash the tmp across the LLM window (step 10). Exported so the
-// emit preflight (distill-core.ts) stamps through this ONE prefixed form, not a copy.
-export function stampHash(bytes: string | Buffer): string {
-  return `sha256:${stampSha(bytes)}`;
-}
+// ---- the residue-target grammar ----
 
-// Classify a residue item's target the way triage's targetFor stamped it:
-// `thesis` → the thesis payload; `procedure:<headword>[:<n,…>]` → numbered steps under a
-// `## Procedures` `### headword` subsection; anything else → a concept def term (the only
-// class that calls an LLM).
-function targetKind(target: string): "thesis" | "steps" | "def" {
-  if (target === "thesis") return "thesis";
-  if (target.startsWith("procedure:")) return "steps";
-  return "def";
-}
+// A residue item's target, parsed. triage's targetFor stamps ONE of three shapes into the
+// intermediary — `thesis`, `procedure:<headword>[:<n,…>]`, or a bare concept term — and this
+// union is that grammar decoded: the string is inspected ONCE, at parseTarget, and every
+// downstream branch reads a field rather than re-testing a prefix. `steps.idxs` is the 0-based
+// step address; empty means the target named the WHOLE procedure (per-step spans deferred, so a
+// whole-procedure recover is not actionable — apply refuses it loud). `def.term` is the only
+// class that calls an LLM.
+type StepsTarget = { kind: "steps"; headword: string; idxs: number[] };
+type ResidueTarget = { kind: "thesis" } | StepsTarget | { kind: "def"; term: string };
 
-// Decode a `procedure:<headword>[:<n,…>]` steps target into its (headword, 0-based step
-// indices). The trailing `:<n,…>` (1-based, comma-joined) is the step address; when absent
-// the target names the WHOLE procedure and `idxs` is empty (per-step spans deferred, so a
-// whole-procedure recover is not actionable — apply refuses it loud). A trailing numeric
-// segment is parsed as the step list; everything before it is the headword (which may itself
-// carry `:` — the parse anchors on a numeric tail, matching triage's stamp).
-function procedureTarget(target: string): { headword: string; idxs: number[] } {
+// Parse a stamped target into the union. The `procedure:` case takes a TRAILING numeric segment
+// as the 1-based comma-joined step list and everything before it as the headword (which may
+// itself carry `:` — the parse anchors on the numeric tail, matching triage's stamp); a
+// 1-based index below 1 is dropped rather than wrapping to a negative slot.
+function parseTarget(target: string): ResidueTarget {
+  if (target === "thesis") return { kind: "thesis" };
+  if (!target.startsWith("procedure:")) return { kind: "def", term: target };
   const rest = target.replace(/^procedure:/, "");
   const m = rest.match(/^(.*):(\d+(?:,\d+)*)$/);
-  if (!m) return { headword: rest, idxs: [] };
+  if (!m) return { kind: "steps", headword: rest, idxs: [] };
   const idxs = m[2]!
     .split(",")
     .map((s) => Number.parseInt(s, 10) - 1)
     .filter((n) => Number.isInteger(n) && n >= 0);
-  return { headword: m[1]!, idxs };
+  return { kind: "steps", headword: m[1]!, idxs };
 }
 
-// The count of numbered steps under the `### headword` subsection of `## Procedures` (0 when
-// the headword or the section is absent) — used to validate a step target's indices before
-// acting, so an out-of-range slot is refused (a checked recover) or ignored (an unchecked
-// remove) rather than silently no-oped, or worse, deleting the wrong step. Mirrors
-// editProcedure's list scan.
-function procedureLen(body: string, headword: string): number {
-  const range = procedureStepRange(body.split("\n"), headword);
-  return range ? range.count : 0;
+// A headword that resolveHeadword has already matched against the note body — the exact
+// `### headword` string, not the possibly-degraded target the reviewer's file carried. The
+// brand is nominal and erases at runtime; its job is to make the resolve-BEFORE-splice
+// invariant a compile error rather than a doc comment, since spliceDef and editProcedure
+// match by exact headword and would silently no-op on an unresolved one. Minted in exactly
+// one place (resolveHeadword) plus asResolvedHeadword for callers holding a headword read
+// straight out of a body.
+type ResolvedHeadword = string & { readonly __resolved: unique symbol };
+
+// Assert that a string IS an exact `### headword` from the body — the escape hatch for a
+// caller that obtained one without going through resolveHeadword (a fixture, a headword read
+// off the note directly). Erases at runtime.
+export function asResolvedHeadword(headword: string): ResolvedHeadword {
+  return headword as ResolvedHeadword;
 }
 
 // Promote the intermediary's forced `epistemic_status: in-review` to `distilled`
@@ -165,259 +151,249 @@ function promoteEpistemic(body: string): string {
   return body.replace(/^epistemic_status:.*$/m, "epistemic_status: distilled");
 }
 
-// Resolve a `procedure:<headword>[:<n,…>]` steps target against the note body into its
-// resolved headword (null when the `### headword` subsection is absent) and the in-range
-// subset of its 0-based step indices (an out-of-range slot is dropped; the list is empty
-// when the headword is gone). Apply's two step lanes — checked recover and unchecked
-// remove — both resolve a step target through this ONE function, so the resolution is
-// stated once and the two lanes can't drift apart.
-export function resolveStepTarget(
-  body: string,
-  target: string,
-): { hw: string | null; idxs: number[] } {
-  const { headword, idxs: raw } = procedureTarget(target);
-  const hw = resolveProcedureHeadword(body, headword);
-  const idxs = hw ? raw.filter((idx) => idx < procedureLen(body, hw)) : [];
+// Resolve a parsed steps target against the note body into its resolved headword and the
+// in-range subset of its 0-based step indices (an out-of-range slot is dropped). Apply's two
+// step lanes — checked recover and unchecked remove — both resolve a step target through this
+// ONE function, so the resolution is stated once and the two lanes can't drift apart. The
+// return type is the invariant: idxs is non-empty only alongside a resolved hw, so callers
+// narrow on `hw === null` rather than asserting past it.
+type StepResolution = { hw: ResolvedHeadword; idxs: number[] } | { hw: null; idxs: [] };
+
+function resolveSteps(body: string, t: StepsTarget): StepResolution {
+  const hw = resolveHeadword(body, "procedures", t.headword);
+  if (hw === null) return { hw: null, idxs: [] };
+  const range = procedureStepRange(body.split("\n"), hw);
+  const idxs = t.idxs.filter((idx) => idx < (range?.count ?? 0));
   return { hw, idxs };
 }
 
-// The classification result runApply fires: the deterministic op set (def re-renders,
-// def removals, procedure edits, a verbatim thesis) plus the effect counters the footer
-// reports. `verbatim` here counts only the pre-LLM verbatim splices (recover steps +
-// thesis); the def-recover lane bumps it again per second-grade failure in runApply.
+// The stamped-string form of resolveSteps: parse the target, then resolve. A target that is not
+// a `procedure:` one names no procedure and resolves to nothing. Exported as apply's
+// step-resolution contract (apply.test.ts drives it with the stamped strings triage writes);
+// the classify lanes call resolveSteps directly on the already-parsed target.
+export function resolveStepTarget(body: string, target: string): StepResolution {
+  const t = parseTarget(target);
+  return t.kind === "steps" ? resolveSteps(body, t) : { hw: null, idxs: [] };
+}
+
+// The classification result distillApplyHook fires: the deterministic op set (def
+// re-renders, def removals, procedure edits, a verbatim thesis) plus the effect counters
+// the footer reports. `verbatim` counts only the pre-LLM verbatim splices this pure pass
+// makes (recover steps + thesis) — applyFooter adds the def-recover lane's own count for
+// the reported total.
 export type ClassifyResult = {
   recovered: number;
   kept: number;
   removed: number;
   verbatim: number;
   // Checked recover defs → (resolved term, source clause) to re-render under the key gate.
-  defRecovers: { term: string; src: string }[];
+  defRecovers: { term: ResolvedHeadword; src: string }[];
   // Unchecked def entries whose `### headword` subsection is spliced out.
-  defRemovals: string[];
+  defRemovals: ResolvedHeadword[];
   // Checked recover steps (replace) and unchecked step removals (replace:null), batched.
   procedureOps: ProcedureOp[];
   // The checked recover thesis payload set verbatim as the ## Abstract body, else null.
   thesisPara: string | null;
-  // Checked recover targets with no applicable action — runApply refuses these LOUD.
+  // Checked recover targets with no applicable action — distillApplyHook refuses these LOUD.
   unrecoverable: string[];
 };
 
-// Classify every residue item against the note body into the op set runApply executes —
-// the PURE core of the apply pass: no LLM, no fs, no stdout, a transform from (items,
-// body) to a ClassifyResult. Kept as a standalone exported function, separate from the
-// impure runApply, so the branch matrix (checked/unchecked × def/steps/thesis/keep, with
-// target-resolution misses) is unit-testable offline, per the module's own
+// Classify every residue item against the note body into the op set distillApplyHook
+// executes — the PURE core of the apply pass: no LLM, no fs, no stdout, a transform from
+// (items, body) to a ClassifyResult. Kept as a standalone exported function, separate from
+// the impure distillApplyHook, so the branch matrix (checked/unchecked × def/steps/thesis/
+// keep, with target-resolution misses) is unit-testable offline, per the module's own
 // helpers-test-offline contract.
 //
 // Counts reflect EFFECTS, not decisions: a checked keep is `kept`; a checked recover that
 // resolves is `recovered`; an unchecked recover|keep that had a real removal is `removed`;
 // a non-recoverable class (edge/payload/prose def with no glossary row, an out-of-range or
 // whole-procedure step target, an empty payload) is collected in `unrecoverable` when
-// CHECKED (runApply aborts) and silently dropped when unchecked (never in the output).
+// CHECKED (distillApplyHook aborts) and silently dropped when unchecked (never in the
+// output).
 export function classifyItems(items: Item[], body: string): ClassifyResult {
-  let recovered = 0;
-  let kept = 0;
-  let removed = 0;
-  let verbatim = 0;
-
-  const defRecovers: { term: string; src: string }[] = [];
-  const defRemovals: string[] = [];
-  const procedureOps: ProcedureOp[] = [];
-  let thesisPara: string | null = null;
-  const unrecoverable: string[] = [];
-
+  const out: ClassifyResult = {
+    recovered: 0,
+    kept: 0,
+    removed: 0,
+    verbatim: 0,
+    defRecovers: [],
+    defRemovals: [],
+    procedureOps: [],
+    thesisPara: null,
+    unrecoverable: [],
+  };
   for (const it of items) {
-    const kind = targetKind(it.target);
-    const payload = it.payload ?? "";
-    if (it.state === "checked") {
-      if (it.verb === "keep") {
-        kept++; // held as shipped — no LLM, no removal
-        continue;
+    const eff = it.state === "checked" ? classifyChecked(it, body) : classifyUnchecked(it, body);
+    if (eff.recovered) out.recovered++;
+    if (eff.kept) out.kept++;
+    if (eff.removed) out.removed++;
+    if (eff.verbatim) out.verbatim++;
+    if (eff.defRecover) out.defRecovers.push(eff.defRecover);
+    if (eff.defRemoval !== undefined) out.defRemovals.push(eff.defRemoval);
+    if (eff.procedureOps) out.procedureOps.push(...eff.procedureOps);
+    if (eff.thesisPara !== undefined) out.thesisPara = eff.thesisPara; // last checked thesis wins
+    if (eff.unrecoverable !== undefined) out.unrecoverable.push(eff.unrecoverable);
+  }
+  return out;
+}
+
+// What ONE item contributes to the accumulating ClassifyResult. Every field is optional and
+// absence means "this lane is untouched", so a branch names only the effect it has; the
+// counters are flags rather than numbers because a single item bumps each counter at most
+// once. classifyItems folds these in document order, which is what keeps procedureOps,
+// defRecovers and unrecoverable in the order the reviewer's file listed them.
+type ItemEffect = {
+  recovered?: true;
+  kept?: true;
+  removed?: true;
+  verbatim?: true;
+  defRecover?: { term: ResolvedHeadword; src: string };
+  defRemoval?: ResolvedHeadword;
+  procedureOps?: ProcedureOp[];
+  thesisPara?: string;
+  unrecoverable?: string;
+};
+
+// A CHECKED item's effect: keep holds the entry as shipped, recover must be executable in its
+// own lane or land in `unrecoverable` — every lane refuses rather than no-ops, because a
+// checked decision that silently does nothing is a LOST reviewer decision.
+function classifyChecked(it: Item, body: string): ItemEffect {
+  if (it.verb === "keep") return { kept: true }; // held as shipped — no LLM, no removal
+  const payload = it.payload ?? "";
+  const t = parseTarget(it.target);
+  switch (t.kind) {
+    case "def": {
+      const term = resolveDefTerm(body, t.term);
+      if (term === null) return { unrecoverable: it.target }; // no concept subsection → no action
+      return { recovered: true, defRecover: { term, src: payload } };
+    }
+    case "steps": {
+      // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
+      // spans deferred) or no source directive (empty payload) cannot execute — and an empty
+      // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
+      // rather than no-op or delete.
+      const stepTarget = resolveSteps(body, t);
+      const clauses = verbatimDirectives(payload);
+      if (stepTarget.hw === null || stepTarget.idxs.length === 0 || clauses.length === 0) {
+        return { unrecoverable: it.target };
       }
-      // recover — every lane must be executable or refuse; counts reflect EFFECTS.
-      if (kind === "def") {
-        const term = resolveDefTerm(body, it.target);
-        if (term === null) {
-          unrecoverable.push(it.target); // no concept subsection → apply has no action
-          continue;
-        }
-        defRecovers.push({ term, src: payload });
-        recovered++;
-      } else if (kind === "steps") {
-        // A recover with no in-range slot (out-of-range or whole-procedure target — per-step
-        // spans deferred) or no source directive (empty payload) cannot execute — and an empty
-        // payload would DELETE the slot (replace:null), the opposite of recover. Refuse all
-        // rather than no-op or delete.
-        const { hw, idxs } = resolveStepTarget(body, it.target);
-        const clauses = verbatimDirectives(payload);
-        if (hw === null || idxs.length === 0 || clauses.length === 0) {
-          unrecoverable.push(it.target);
-          continue;
-        }
-        idxs.forEach((idx, k) => {
-          procedureOps.push({ headword: hw, idx, replace: k === 0 ? clauses : null });
-        });
-        recovered++;
-        verbatim++;
-      } else {
-        // thesis — an empty payload is nothing to recover; refuse rather than insert a blank.
-        if (payload.trim() === "") {
-          unrecoverable.push(it.target);
-          continue;
-        }
-        thesisPara = payload;
-        recovered++;
-        verbatim++;
-      }
-    } else {
-      // unchecked recover|keep → the entry is REMOVED, but only counted when there is a
-      // real removal: a non-recoverable class (or an out-of-range slot) was never in the
-      // output, so it stays dropped with no effect (not a phantom "removed").
-      if (kind === "def") {
-        const term = resolveDefTerm(body, it.target);
-        if (term !== null) {
-          defRemovals.push(term);
-          removed++;
-        }
-      } else if (kind === "steps") {
-        const { hw, idxs } = resolveStepTarget(body, it.target);
-        for (const idx of idxs) procedureOps.push({ headword: hw!, idx, replace: null });
-        if (idxs.length > 0) removed++;
-      }
-      // an unchecked thesis / a non-recoverable unchecked item has nothing to remove
+      const { hw, idxs } = stepTarget;
+      return {
+        recovered: true,
+        verbatim: true,
+        procedureOps: idxs.map((idx, k) => ({
+          headword: hw,
+          idx,
+          replace: k === 0 ? clauses : null,
+        })),
+      };
+    }
+    case "thesis": {
+      // an empty payload is nothing to recover; refuse rather than insert a blank.
+      if (payload.trim() === "") return { unrecoverable: it.target };
+      return { recovered: true, verbatim: true, thesisPara: payload };
     }
   }
+}
 
+// An UNCHECKED recover|keep: the entry is REMOVED, but only COUNTED when there is a real
+// removal — a non-recoverable class (or an out-of-range slot) was never in the output, so it
+// stays dropped with no effect rather than a phantom "removed". An unchecked thesis and an
+// unresolvable target both have nothing to remove and return the empty effect.
+function classifyUnchecked(it: Item, body: string): ItemEffect {
+  const t = parseTarget(it.target);
+  switch (t.kind) {
+    case "def": {
+      const term = resolveDefTerm(body, t.term);
+      return term === null ? {} : { removed: true, defRemoval: term };
+    }
+    case "steps": {
+      const { hw, idxs } = resolveSteps(body, t);
+      if (hw === null || idxs.length === 0) return {};
+      return {
+        removed: true,
+        procedureOps: idxs.map((idx) => ({ headword: hw, idx, replace: null })),
+      };
+    }
+    case "thesis":
+      return {}; // nothing was projected for a thesis residue ⇒ nothing to remove
+  }
+}
+
+// The footer grammar distillApplyHook reports on stderr — the ONE place
+// `— applied: N recovered · M kept · K removed (V verbatim)` is constructed. V sums the
+// pure classification's own verbatim splices (recover steps + thesis, cls.verbatim) with
+// the def-recover lane's own count (a re-render whose second grade failed, or a caught
+// re-render/grade flake floored to the source's own clause) — both are verbatim by the
+// same definition, written unchanged from the source rather than LLM-authored, so they
+// contribute to one total. `degraded` is the of-V subset forced verbatim by a caught
+// transport flake rather than a legitimate residue grade; it is appended as
+// ` (D degraded)` ONLY when D > 0, so a clean run's footer stays byte-identical to
+// before this parameter existed — the design constraint every zero-degradation
+// assertion in apply.test.ts depends on.
+function applyFooter(cls: ClassifyResult, defVerbatim: number, degraded: number): string {
+  const base = `— applied: ${cls.recovered} recovered · ${cls.kept} kept · ${cls.removed} removed (${cls.verbatim + defVerbatim} verbatim)`;
+  return degraded > 0 ? `${base} (${degraded} degraded)` : base;
+}
+
+// A checked recover apply cannot execute is refused LOUD — never silently swallowed; a lost
+// reviewer decision is the format's disaster class (interact.ts fails a mistyped item for the
+// same reason). Returns the refusal, or null when every checked decision is executable. Fires
+// before the key gate and before any write.
+function lostDecisionGate(unrecoverable: string[]): InteractApplyResult | null {
+  if (unrecoverable.length === 0) return null;
   return {
-    recovered,
-    kept,
-    removed,
-    verbatim,
-    defRecovers,
-    defRemovals,
-    procedureOps,
-    thesisPara,
-    unrecoverable,
+    kind: "refuse",
+    code: 2,
+    message: `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
   };
 }
 
-// Apply a single intermediary and return the process exit code (0 | 1 | 2). Writes the
-// destination path to stdout, the applied-summary footer and every refusal to stderr;
-// NEVER prompts, NEVER reads stdin. main() does `process.exit(await runApply(...))`.
-// Before the write-back, the destination and the tmp are BOTH untouched on every refusal
-// path — pinned by hash in apply.test.ts.
-export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number> {
-  const fail = (msg: string, code: number): number => {
-    process.stderr.write(`distill apply: ${msg}\n`);
-    return code;
-  };
-
-  // 1. path exists — a fat-finger at an already-consumed (or never-emitted) path.
-  if (!existsSync(tmpPath)) {
-    return fail(`no intermediary at ${tmpPath} — already applied, or re-run distill`, 2);
-  }
-  // 2. suffix — a non-`.tmp.md` path never derives a destination onto itself.
-  const dest = destinationFor(tmpPath);
-  if (dest === null) {
-    return fail(`${tmpPath} is not a .tmp.md intermediary`, 2);
-  }
-
-  // 3. parse — structural grammar errors abort before any action.
-  const text = readFileSync(tmpPath, "utf8");
-  const hashAtStart = stampHash(text);
-  const { blocks, errors: parseErrors } = parseInteract(text);
-  if (parseErrors.length > 0) {
-    return fail(parseErrors.map((e) => `${e.line}: ${e.message}`).join("; "), 2);
-  }
-  // 4. gate present — the confirm-all gate is mandatory triage policy; a blockless
-  //    or gate-less intermediary is malformed (same teaching message either way).
-  const gate = blocks.find((b) => b.kind === "confirm-all");
-  if (!gate) {
-    return fail("no confirm-all gate — this is not a triage intermediary (re-run distill)", 2);
-  }
-  // 5. resolve — unknown verb, unresolved pick-one, and an UNCHECKED gate abort here.
-  const res = resolveInteract(blocks, { verbs: TRIAGE_VERBS });
-  if (res.errors.length > 0) {
-    return fail(res.errors.map((e) => e.message).join("; "), 2);
-  }
-
-  // 6. stamp — a renamed tmp (dest= basename) or an edited/absent destination
-  //    (src= hash, or src=new no-clobber) refuses before the destination is derived.
-  const destBase = basename(dest);
-  if (gate.dest !== destBase) {
-    return fail(
-      `intermediary dest=${gate.dest ?? "(none)"} does not match ${destBase} — was the tmp renamed?`,
-      2,
-    );
-  }
-  if (gate.src === "new") {
-    if (existsSync(dest)) {
-      return fail(`destination already exists: ${dest} (src=new refuses to clobber)`, 2);
+// 8. key gate — only a checked recover DEF that resolved calls an LLM, so an empty
+// `defRecovers` passes the gate unconditionally. A checked recover of procedure steps / the
+// thesis is verbatim (no LLM); keep is a no-op. Returns the exit-1 refusal when the key the
+// def lane needs is unset, null when the run may proceed; a non-key failure propagates.
+function keyGate(defRecovers: ClassifyResult["defRecovers"]): InteractApplyResult | null {
+  if (defRecovers.length === 0) return null;
+  try {
+    ensureKeys([DISTILL_EXTRACT]);
+    return null;
+  } catch (e) {
+    if (e instanceof MissingKeyError) {
+      return { kind: "refuse", code: 1, message: `${e.message}; nothing written` };
     }
-  } else {
-    const current = existsSync(dest) ? stampHash(readFileSync(dest, "utf8")) : null;
-    if (current !== gate.src) {
-      return fail(`destination changed since distill: ${dest} — re-run distill`, 2);
-    }
+    throw e;
   }
+}
 
-  // The residue items (every non-gate block); the gate itself is skipped.
-  const items = blocks.filter((b) => b.kind !== "confirm-all").flatMap((b) => b.items);
-
-  // 7. classify every item into deterministic ops (no LLM, no write). This precedes
-  //    the key gate on purpose: a checked recover that resolves to no actionable target
-  //    (an edge/payload/prose residue class, or a def whose concept subsection is gone) is a
-  //    LOST reviewer decision if allowed to no-op, so it aborts LOUD below — and only a
-  //    checked recover DEF that actually resolves is what forces the key gate.
-  let body = stripInteract(text);
-  const { body: bodyNoFront } = parseFrontmatter(body);
-  const lang = opts.lang === "auto" ? detectLang(bodyNoFront) : opts.lang;
-  const ask = opts.ask ?? askJson;
-  // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
-  // analogue of the old tie-together line).
-  const tie0 = parseCanonicalNote(bodyNoFront).abstract;
-
-  // The classification is the pure core (classifyItems): a transform from (items, body)
-  // to the op set + counters, with NO I/O. `verbatim` is `let` because the def-recover lane
-  // below bumps it per second-grade failure; every other field is final here.
-  const cls = classifyItems(items, body);
-  const {
-    recovered,
-    kept,
-    removed,
-    defRecovers,
-    defRemovals,
-    procedureOps,
-    thesisPara,
-    unrecoverable,
-  } = cls;
-  let verbatim = cls.verbatim;
-
-  // A checked recover apply cannot execute is refused LOUD — never silently swallowed;
-  // a lost reviewer decision is the format's disaster class (interact.ts fails a mistyped
-  // item for the same reason). Fires before the key gate and before any write.
-  if (unrecoverable.length > 0) {
-    return fail(
-      `checked recover with no applicable action: ${unrecoverable.join(", ")} — this residue is not recoverable via apply; uncheck it (the source is unchanged) and re-add by hand if needed`,
-      2,
-    );
-  }
-
-  // 8. key gate — only a checked recover DEF that resolved calls an LLM. A checked
-  //    recover of procedure steps / the thesis is verbatim (no LLM); keep is a no-op.
-  if (defRecovers.length > 0) {
-    try {
-      ensureKeys([DISTILL_EXTRACT]);
-    } catch (e) {
-      if (e instanceof MissingKeyError) return fail(`${e.message}; nothing written`, 1);
-      throw e;
-    }
-  }
-
-  // 9. fire verbs — the LLM window: re-render each checked recover def, re-grade once, and
-  // splice either the re-render (translated/inconclusive) or the source's own verbatim
-  // clause (a second grade failure) into its `### headword` concept subsection.
-  const defSplices: { term: string; def: string }[] = [];
+// 9. fire verbs, def lane — the whole LLM window. Re-render each checked recover def, re-grade
+// it once against `tie0` (the ## Abstract orientation, the canonical analogue of the old
+// tie-together line), and settle on either the re-render (grade translated/inconclusive) or the
+// source's own verbatim clause (a second grade failure, an empty re-render, or a caught
+// re-render/grade flake — a verbatim splice cannot invert, so flooring beats dropping the
+// entry). Returns the splices in document order plus this lane's own verbatim count, which
+// applyFooter sums with the pure pass's. `degraded` is the of-defVerbatim subset forced
+// verbatim by a CAUGHT flake (the catch branch) rather than a legitimate residue grade — a
+// total transport outage bumps defVerbatim exactly as a real residue grade would, so without
+// this separate count the run would exit 0 looking clean. Each caught flake also gets its own
+// stderr line here, naming the term and the underlying error, so an operator sees the cause
+// per entry rather than a single opaque number.
+async function recoverDefs(args: {
+  defRecovers: ClassifyResult["defRecovers"];
+  body: string;
+  tie0: string;
+  lang: "en" | "ru";
+  ask: typeof askJson;
+}): Promise<{
+  splices: { term: ResolvedHeadword; def: string }[];
+  defVerbatim: number;
+  degraded: number;
+}> {
+  const { defRecovers, body, tie0, lang, ask } = args;
+  const splices: { term: ResolvedHeadword; def: string }[] = [];
+  let defVerbatim = 0;
+  let degraded = 0;
   for (const d of defRecovers) {
     let finalDef: string;
     try {
@@ -436,94 +412,140 @@ export async function runApply(tmpPath: string, opts: ApplyOpts): Promise<number
       const grade = graded.concepts[0]?.grade ?? "translated";
       if (grade === "residue" || !reRendered) {
         finalDef = verbatimDef(d.term, d.src);
-        verbatim++;
+        defVerbatim++;
       } else {
         finalDef = reRendered;
       }
     } catch (e) {
       rethrowIfBug(e, "apply-recover-def");
       // a transient re-render/grade flake floors to the source's own clause rather
-      // than dropping the entry — a verbatim splice cannot invert.
+      // than dropping the entry — a verbatim splice cannot invert. Unlike a legitimate
+      // residue grade, this fallback is a DEGRADATION: the operator gets one stderr
+      // line per flake here (process.stderr.write, matching execute.ts's own footer
+      // write rather than console.error, so apply.test.ts's stdout/stderr capture sees
+      // it), and the footer's `(D degraded)` suffix below.
+      process.stderr.write(
+        `distill apply: recover def "${d.term}" degraded to verbatim after a caught LLM flake: ${e instanceof Error ? e.message : String(e)}\n`,
+      );
       finalDef = verbatimDef(d.term, d.src);
-      verbatim++;
+      defVerbatim++;
+      degraded++;
     }
-    defSplices.push({ term: d.term, def: finalDef });
+    splices.push({ term: d.term, def: finalDef });
   }
-
-  for (const s of defSplices) body = spliceDef(body, s.term, s.def);
-  for (const term of defRemovals) body = spliceDef(body, term, null);
-  if (procedureOps.length) body = editProcedure(body, procedureOps);
-
-  // A checked recover thesis sets the ## Abstract body verbatim. There is NO re-projection
-  // step on a canonical note: the abstract is authored at extract time, not re-derived from
-  // concept defs, so a def recover leaves it as-authored — the old renderProse/
-  // replaceHeadProse head-prose chain has no canonical analogue.
-  if (thesisPara !== null) body = insertThesis(body, thesisPara);
-
-  // 10. re-hash the tmp — an Obsidian Sync rewrite during the LLM window invalidates
-  //     the decision set we acted on; refuse rather than write a stale apply.
-  if (stampHash(readFileSync(tmpPath, "utf8")) !== hashAtStart) {
-    return fail("intermediary changed during apply — nothing written; re-run apply", 2);
-  }
-  // 11. re-verify the destination stamp for the overwrite case. Step 6's src=sha256 check
-  //     read dest BEFORE the (seconds-long) LLM window; an edit landing during that window
-  //     (a cross-device Sync push, a hand edit) would otherwise be clobbered by the atomic
-  //     replace below — the same class of loss the start-of-run stamp exists to refuse, just
-  //     inside the apply's own window. The src=new case needs no re-check: its linkSync is
-  //     no-clobber, so a destination that appeared meanwhile fails EEXIST (handled below).
-  if (gate.src !== "new") {
-    const current = existsSync(dest) ? stampHash(readFileSync(dest, "utf8")) : null;
-    if (current !== gate.src) {
-      return fail(`destination changed during apply: ${dest} — nothing written; re-run distill`, 2);
-    }
-  }
-
-  // 12. promote the epistemic status, then 13. write atomically and 14. consume.
-  const finalBody = promoteEpistemic(body);
-  const partial = `${dest}.apply.partial`;
-  writeFileSync(partial, finalBody);
-  if (gate.src === "new") {
-    // no-clobber link: EEXIST maps to the src=new refusal (exit 2); the helper
-    // cleans the partial itself on any failure, so only the success unlink remains here.
-    const link = linkNoClobber(partial, dest);
-    if (!link.ok) {
-      return fail(`destination already exists: ${dest} (src=new refuses to clobber)`, 2);
-    }
-    unlinkSync(partial);
-  } else {
-    renameSync(partial, dest); // atomic replace of the verified destination
-  }
-  unlinkIfPresent(tmpPath);
-
-  process.stdout.write(`${dest}\n`);
-  process.stderr.write(
-    `— applied: ${recovered} recovered · ${kept} kept · ${removed} removed (${verbatim} verbatim)\n`,
-  );
-  return 0;
+  return { splices, defVerbatim, degraded };
 }
 
-// ---- pure seams (exported for offline unit tests) ----
+// 9. fire verbs, body lane — every deterministic edit, in the one order that makes the splices
+// address the body they were classified against: settled def re-renders, then unchecked def
+// removals, then the batched procedure edits, then the checked recover thesis (verbatim, as the
+// ## Abstract body). There is NO re-projection step on a canonical note: the abstract is
+// authored at extract time, not re-derived from concept defs, so a def recover leaves it
+// as-authored — the old renderProse/replaceHeadProse head-prose chain has no canonical analogue.
+function mutateBody(
+  body: string,
+  cls: ClassifyResult,
+  splices: { term: ResolvedHeadword; def: string }[],
+): string {
+  let out = body;
+  for (const s of splices) out = spliceDef(out, s.term, s.def);
+  for (const term of cls.defRemovals) out = spliceDef(out, term, null);
+  if (cls.procedureOps.length) out = editProcedure(out, cls.procedureOps);
+  if (cls.thesisPara !== null) out = insertThesis(out, cls.thesisPara);
+  return out;
+}
 
-// The write-back destination for an intermediary path: `<x>.tmp.md` → the sibling
-// `<x>.md`, resolved absolute (stdout line 1 must reopen from any later cwd).
-// Returns null when the path does not end `.tmp.md` — the suffix check (step 2)
-// that keeps a fat-fingered `apply note.md` from ever deriving a destination onto
-// the note it was told to read. basename(destinationFor(tmp)) is also the value
-// the gate's `dest=` stamp is verified against (step 6), so a hand-renamed tmp
-// refuses instead of silently creating `<other>.md`.
-export function destinationFor(tmpPath: string): string | null {
-  if (!tmpPath.endsWith(".tmp.md")) return null;
-  return resolve(`${tmpPath.slice(0, -".tmp.md".length)}.md`);
+// Distill's action binding: steps 7–9 and 12 of the interact check order, read as that
+// sequence — classify, refuse a lost decision, gate on the key, run the def lane's LLM window,
+// mutate the body, promote the epistemic status. Its run options (lang, ask) arrive through ctx
+// — runInteractApply forwards its own opts argument into every ctx it builds — so this hook is
+// a plain constant, not a factory closing over them. The generic half of the run — the stamp
+// preflight (1–6), the mid-run re-verification (10–11), and the atomic write-back (13–14) —
+// belongs to the executor (execute.ts) and calls this hook for the middle. A refusal here
+// carries its own exit code (a lost reviewer decision → 2, a missing key → 1); the success case
+// hands back the final body and the stderr footer. Exported for apply.test.ts, which drives
+// this middle offline with an injected `ask` and no filesystem; runApply below is the
+// production caller.
+export const distillApplyHook: InteractApplyHook = async ({
+  items,
+  strippedBody,
+  lang: rawLang,
+  ask: rawAsk,
+}): Promise<InteractApplyResult> => {
+  const body = strippedBody;
+  const { body: bodyNoFront } = parseFrontmatter(body);
+  const lang = rawLang === "auto" ? detectLang(bodyNoFront) : rawLang;
+  const ask = rawAsk ?? askJson;
+  // The ## Abstract orientation seeds the fidelity re-grade's thesis arg (the canonical
+  // analogue of the old tie-together line).
+  const tie0 = parseCanonicalNote(bodyNoFront).abstract;
+
+  // 7. classify every item into deterministic ops (no LLM, no write) — the pure core
+  //    (classifyItems): a transform from (items, body) to the op set + counters, with NO I/O,
+  //    so every field of `cls` is final. This precedes the key gate on purpose: a checked
+  //    recover that resolves to no actionable target (an edge/payload/prose residue class, or a
+  //    def whose concept subsection is gone) is a LOST reviewer decision if allowed to no-op,
+  //    so it aborts LOUD below — and only a checked recover DEF that actually resolves is what
+  //    forces the key gate.
+  const cls = classifyItems(items, body);
+
+  const lost = lostDecisionGate(cls.unrecoverable);
+  if (lost) return lost;
+
+  const keyless = keyGate(cls.defRecovers);
+  if (keyless) return keyless;
+
+  const { splices, defVerbatim, degraded } = await recoverDefs({
+    defRecovers: cls.defRecovers,
+    body,
+    tie0,
+    lang,
+    ask,
+  });
+
+  // 12. promote the epistemic status. Pure over the mutated body — the executor's steps 10–11
+  // read the tmp and the destination off disk, never this string, so promoting here rather than
+  // after them changes nothing that reaches the write.
+  return {
+    kind: "write",
+    body: promoteEpistemic(mutateBody(body, cls, splices)),
+    footer: applyFooter(cls, defVerbatim, degraded),
+  };
+};
+
+// Apply a single intermediary and return the process exit code (0 | 1 | 2). Writes the
+// destination path to stdout, the applied-summary footer and every refusal to stderr;
+// NEVER prompts, NEVER reads stdin. main() does `process.exit(await runApply(...))`.
+// Before the write-back, the destination and the tmp are BOTH untouched on every refusal
+// path — pinned by hash in apply.test.ts. Distill's binding of the generic interact
+// executor: the label every refusal is prefixed with, the triage verb vocabulary step 5
+// resolves against, and the action hook above. `opts` reaches distillApplyHook through this
+// one call's third argument — runInteractApply forwards it into every ctx it builds, so the
+// hook never closes over it. `opts.lang: "auto"` detects from the stripped note body, parity
+// with compress mode's own auto-detection; `opts.ask` is the injected-transport seam
+// apply.test.ts drives.
+export function runApply(tmpPath: string, opts: ApplyOpts): Promise<number> {
+  return runInteractApply(
+    tmpPath,
+    {
+      label: "distill apply",
+      verbs: TRIAGE_VERBS,
+      apply: distillApplyHook,
+    },
+    opts,
+  );
 }
 
 // ---- canonical section/subsection locators (shared by the body-editing primitives) ----
 
-const SUB_HEAD_RE = /^###\s+(.+?)\s*$/; // a `### headword` subsection heading
 const STEP_RE = /^\s*\d+\.\s(.*)$/; // a numbered `N. step` line, capturing the step text
 
 // The line range of a `### headword` subsection under `## <section>`: [subStart, subEnd) where
-// subStart is the `### headword` line and subEnd is the next `### ` (or the section's end).
-// Fence-aware via splitSections. null when the section or the headword is absent.
+// subStart is the `### headword` line and subEnd is the next `### ` (or the section's end),
+// in WHOLE-NOTE line numbers. Fence-aware at both levels — splitSections finds the section,
+// subsectionRanges finds the subsections within it, so a `### ` inside a ``` block is literal
+// content rather than a heading (a hand-rolled scan here treated it as a boundary and cut the
+// range short at the fake heading). null when the section or the headword is absent.
 function subsectionRange(
   lines: string[],
   section: string,
@@ -531,28 +553,19 @@ function subsectionRange(
 ): { subStart: number; subEnd: number } | null {
   const sec = splitSections(lines.join("\n")).find((s) => s.name === section);
   if (!sec) return null;
-  let subStart = -1;
-  for (let i = sec.start + 1; i < sec.end; i++) {
-    const m = SUB_HEAD_RE.exec(lines[i]!);
-    if (m && m[1] === headword) {
-      subStart = i;
-      break;
-    }
-  }
-  if (subStart < 0) return null;
-  let subEnd = sec.end;
-  for (let i = subStart + 1; i < sec.end; i++) {
-    if (/^###\s/.test(lines[i]!)) {
-      subEnd = i;
-      break;
-    }
-  }
-  return { subStart, subEnd };
+  const hit = subsectionRanges(sec.bodyLines).find((r) => r.headword === headword);
+  if (!hit) return null;
+  const base = sec.start + 1; // subsectionRanges indexes bodyLines; rebase to whole-note lines
+  return { subStart: base + hit.start, subEnd: base + hit.end };
 }
 
 // The inclusive line range and count of the numbered step list under a `## Procedures`
 // `### headword` subsection (null when absent) — used to validate a step target's indices
-// and to locate the list for editing.
+// and to locate the list for editing. The subsection boundary is fence-aware (subsectionRange),
+// so a fenced markdown sample quoting `N. ` lines below the real list is outside it: the scan
+// stops at the first non-step, non-blank line, which the opening fence is. A fence placed
+// BEFORE the list likewise stops the scan and reads as "no list" — canonical projections put
+// the numbered list first, and a hand edit that does not is unaddressable rather than miscounted.
 function procedureStepRange(
   lines: string[],
   headword: string,
@@ -577,17 +590,12 @@ function procedureStepRange(
   return { start, end, count: end - start + 1 };
 }
 
-// The `### headword`s under a `## <section>` block, in document order.
+// The `### headword`s under a `## <section>` block, in document order. Same fence-aware walk
+// subsectionRange uses, so a fenced `### ` look-alike never surfaces as a resolvable headword.
 function headwordsUnder(body: string, section: string): string[] {
-  const lines = body.split("\n");
   const sec = splitSections(body).find((s) => s.name === section);
   if (!sec) return [];
-  const out: string[] = [];
-  for (let i = sec.start + 1; i < sec.end; i++) {
-    const m = SUB_HEAD_RE.exec(lines[i]!);
-    if (m) out.push(m[1]!);
-  }
-  return out;
+  return subsectionRanges(sec.bodyLines).map((r) => r.headword);
 }
 
 // Edit the `## Concepts` note body: replace the DEFINITION LINE (the first non-blank,
@@ -595,9 +603,10 @@ function headwordsUnder(body: string, section: string): string[] {
 // `def` is a string, or DELETE the whole subsection (with its preceding blank separator) when
 // `def` is null. A headword with no matching subsection leaves the body unchanged (a
 // removed-then-recovered race is a no-op, not a crash). Every other subsection, its bullets,
-// and the anchors are byte-preserved. The caller resolves a possibly-degraded target to the
-// real headword via resolveDefTerm BEFORE calling this (spliceDef matches by exact headword).
-export function spliceDef(body: string, term: string, def: string | null): string {
+// and the anchors are byte-preserved. `term` is a ResolvedHeadword because spliceDef matches by
+// EXACT headword: the resolve-before-splice step is the brand, so a possibly-degraded target
+// fails to compile here rather than no-opping at runtime.
+export function spliceDef(body: string, term: ResolvedHeadword, def: string | null): string {
   const lines = body.split("\n");
   const sub = subsectionRange(lines, "concepts", term);
   if (!sub) return body; // absent headword ⇒ byte-identical no-op
@@ -627,8 +636,10 @@ export function spliceDef(body: string, term: string, def: string | null): strin
 // headword and the 0-based step index within THAT headword's list (the (headword, stepIdx)
 // addressing the canonical grouping forces). `replace` is the new step text(s) for the slot
 // (a verbatimDirectives splice may yield several); `replace: null` DELETES the slot. A group
-// target like `procedure:<hw>:2,3` expands to one op per index (all sharing the headword).
-export type ProcedureOp = { headword: string; idx: number; replace: string[] | null };
+// target like `procedure:<hw>:2,3` expands to one op per index (all sharing the headword). The
+// headword is branded for the same reason spliceDef's term is: editProcedure locates the list by
+// exact heading and skips what it cannot find.
+export type ProcedureOp = { headword: ResolvedHeadword; idx: number; replace: string[] | null };
 
 // Apply every ProcedureOp in one rewrite, PER HEADWORD: ops are grouped by headword, and each
 // headword's numbered list is rebuilt against its ORIGINAL indices (deletions drop,
@@ -638,7 +649,7 @@ export type ProcedureOp = { headword: string; idx: number; replace: string[] | n
 // in-range targets; a stale one is a no-op, not a crash).
 export function editProcedure(body: string, ops: ProcedureOp[]): string {
   let lines = body.split("\n");
-  const byHead = new Map<string, ProcedureOp[]>();
+  const byHead = new Map<ResolvedHeadword, ProcedureOp[]>();
   for (const op of ops) {
     const g = byHead.get(op.headword);
     if (g) g.push(op);
@@ -689,34 +700,25 @@ export function insertThesis(body: string, para: string): string {
   return [...head, ...block, ...after.slice(k)].join("\n");
 }
 
+// Resolve a target back to the actual `### headword` under `## <section>`. Exact match first
+// (the common case: target === headword); then the degraded case — the emit shipped
+// `safeHandle(headword)` because the headword carried a backtick or newline, so match the
+// headword whose `safeHandle` equals the target. Returns the real headword, or null when none
+// matches (the caller counts it removed/skipped rather than crashing) — the emit transform run
+// backward, no handle→headword channel in the file. Holds the resolution fact once for both
+// the concepts side (resolveDefTerm) and the procedures side (resolveStepTarget).
+// The ONE place a ResolvedHeadword is minted from a raw target.
+function resolveHeadword(body: string, section: string, target: string): ResolvedHeadword | null {
+  const heads = headwordsUnder(body, section);
+  const hit = heads.includes(target)
+    ? target // exact (the common case)
+    : (heads.find((h) => safeHandle(h) === target) ?? null); // the emit run backward
+  return hit === null ? null : asResolvedHeadword(hit);
+}
+
 // Resolve a residue item's (possibly degraded) def target back to the actual `### headword`
-// under `## Concepts`. Exact match first (the common case: target === headword); then the
-// degraded case — the emit shipped `safeHandle(headword)` because the headword carried a
-// backtick or newline, so match the headword whose `safeHandle` equals the target. Returns the
-// real headword, or null when none matches (the caller counts it removed/skipped rather than
-// crashing) — the emit transform run backward, no handle→headword channel in the file.
-export function resolveDefTerm(body: string, target: string): string | null {
-  const heads = headwordsUnder(body, "concepts");
-  if (heads.includes(target)) return target; // exact (the common case)
-  return heads.find((h) => safeHandle(h) === target) ?? null; // the emit run backward
-}
-
-// Resolve a `procedure:<headword>` target back to the actual `### headword` under
-// `## Procedures` — exact then safeHandle-degraded, the procedure-side twin of resolveDefTerm.
-function resolveProcedureHeadword(body: string, target: string): string | null {
-  const heads = headwordsUnder(body, "procedures");
-  if (heads.includes(target)) return target;
-  return heads.find((h) => safeHandle(h) === target) ?? null;
-}
-
-// Unlink a path, tolerating ENOENT — the final consume step (step 14). A crash
-// between the dest write and this unlink, or a racing second applier, may have
-// already removed the tmp; its absence is success, not an error. Any other errno
-// (EPERM, EISDIR) still throws.
-export function unlinkIfPresent(path: string): void {
-  try {
-    unlinkSync(path);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
+// under `## Concepts`. See resolveHeadword for the resolution fact; this is a one-line binding
+// of section "concepts".
+export function resolveDefTerm(body: string, target: string): ResolvedHeadword | null {
+  return resolveHeadword(body, "concepts", target);
 }

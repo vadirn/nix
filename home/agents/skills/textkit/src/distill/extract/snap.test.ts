@@ -18,8 +18,8 @@ import {
   buildSnapTargets,
   normalizeForSnap,
   snapQuote,
-} from "@/distill/extract/snap.ts";
-import { parseDoc, sliceBytes } from "@/distill/mdstruct.ts";
+} from "textkit/distill/extract/snap.ts";
+import { parseDoc, sliceBytes } from "textkit/distill/mdstruct.ts";
 
 // The five source paragraphs the assertions need, copied verbatim from c22c91afaff5.md (lines 12,
 // 14, 18, 22, 24), plus one blockquote so the corrected `"blockQuote"` KEEP literal has regression

@@ -23,24 +23,25 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { type Item, parseInteract, stripInteract } from "@/distill/review/interact.ts";
-import { buildIntermediary, safeHandle } from "@/distill/review/triage.ts";
-import { verbatimDef, verbatimDirectives } from "@/distill/prompt/prompts.ts";
-import { askJson } from "@skills/llm/llm.ts";
-import type { Residue } from "@/distill/review/residue.ts";
+import { type Item, parseInteract, stripInteract } from "textkit/distill/review/interact.ts";
+import { buildIntermediary, safeHandle } from "textkit/distill/review/triage.ts";
+import { verbatimDef, verbatimDirectives } from "textkit/distill/prompt/prompts.ts";
+import { askJson, TransientError } from "@skills/llm/llm.ts";
+import type { Residue } from "textkit/distill/review/residue.ts";
 import {
   type ProcedureOp,
+  asResolvedHeadword as rhw,
   classifyItems,
-  destinationFor,
+  distillApplyHook,
   editProcedure,
   insertThesis,
   resolveDefTerm,
   resolveStepTarget,
   runApply,
   spliceDef,
-  unlinkIfPresent,
-} from "@/distill/app/apply-mode.ts";
-import { parseArgs } from "@/distill/app/cli.ts";
+} from "textkit/distill/app/apply-mode.ts";
+import { destinationFor, unlinkIfPresent } from "textkit/distill/review/execute.ts";
+import { parseArgs } from "textkit/distill/app/cli.ts";
 
 // ---------------------------------------------------------------------------
 // CLI wiring (parseArgs) — GREEN: the `apply` subcommand surface is implemented,
@@ -103,6 +104,56 @@ The shifting subject in front of the painter. 71..90
 
 1. Fix the anchor image before opening paints 100..140
 2. Re-check values against the anchor, not the scene
+`;
+
+// A distilled note whose Concepts and Procedures bodies each carry a FENCED markdown sample
+// containing `### ` and `N. ` look-alike lines. Inside a ``` block those are literal content,
+// never a subsection heading and never a numbered step — the locators must read them that way.
+const NOTE_FENCED = `---
+type: distillation
+epistemic_status: distilled
+---
+
+# Fenced
+
+## Abstract
+
+A note whose bodies quote canonical markdown back at the reader.
+
+## Concepts
+
+### Anchor image
+
+The first felt impression, fixed as the reference. 10..40
+
+- Rendered as:
+
+\`\`\`md
+### Not a headword
+
+Not a definition.
+\`\`\`
+
+### Scene
+
+The shifting subject in front of the painter. 71..90
+
+## Procedures
+
+### Block from the impression
+
+1. Fix the anchor image before opening paints 100..140
+2. Re-check values against the anchor, not the scene
+
+\`\`\`md
+### Not a step heading
+
+1. Not a step
+\`\`\`
+
+### Close the block
+
+1. Wipe the palette 200..220
 `;
 
 // A distilled note whose concept headword is BACKTICKED — the Phase-3 emit seam: its
@@ -645,6 +696,37 @@ test("apply: a non-transient error in the recover-def LLM window propagates (reg
   expect(existsSync(tmpPath)).toBe(true);
 });
 
+test("apply: a caught transport flake in the recover-def LLM window degrades to verbatim, visibly", async () => {
+  process.env.FIREWORKS_API_KEY = "test-dummy";
+  const dir = tmpdirFor("recover-def-degraded");
+  const { destPath, tmpPath, tmp } = emit(dir, "note.md", NOTE, [R_DEF]);
+  writeTmp(tmpPath, checkGate(check(tmp, "recover: `Impression distance`")));
+  // A TransientError is exactly what rethrowIfBug LETS THROUGH (isTransient(e) → return,
+  // no rethrow) — the transport-outage case, not the regression test's code-bug case above.
+  // Before this test's fix, the catch branch's fallback to verbatimDef was reported
+  // identically to a legitimate residue-grade verbatim (the "second grade fails" test
+  // below), so a total transport outage exited 0 looking like a clean run.
+  const r = await applyWith(tmpPath, (prompt) => {
+    if (prompt.includes(RENDER_ENTRY_MARKER)) {
+      throw new TransientError("fw network/timeout: ECONNRESET");
+    }
+    return {};
+  });
+  expect(r.code).toBe(0);
+  const out = readFileSync(destPath, "utf8");
+  // floored to the source's own verbatim clause, same splice as a legitimate residue grade
+  expect(out).toContain(`${verbatimDef("Impression distance", DEF_SRC)} 41..70`);
+  // the footer's verbatim total counts it same as always, but the `(1 degraded)` suffix
+  // distinguishes this caught flake from an intended verbatim (compare the byte-identical
+  // "1 verbatim" prefix on the residue-grade test below, which carries no such suffix)
+  expect(r.stderr).toContain(
+    "— applied: 1 recovered · 0 kept · 0 removed (1 verbatim) (1 degraded)",
+  );
+  // one stderr diagnostic line names the flake per caught entry, not just a bare count
+  expect(r.stderr).toContain('recover def "Impression distance" degraded to verbatim');
+  expect(r.stderr).toContain("ECONNRESET");
+});
+
 test("apply: checked recover THESIS sets the ## Abstract body verbatim (no LLM)", async () => {
   process.env.FIREWORKS_API_KEY = "test-dummy";
   const dir = tmpdirFor("recover-thesis");
@@ -764,20 +846,25 @@ test("destinationFor: .tmp.md → the absolute sibling .md; any other suffix →
   expect(destinationFor("note.tmp.md")).toBe(resolve("note.md")); // resolved absolute
 });
 
+// `rhw` (asResolvedHeadword) is the brand constructor spliceDef/editProcedure/ProcedureOp
+// require: these headwords are exact `### ` headings in NOTE, so it asserts what resolveDefTerm
+// would have returned. It erases at runtime — every value below is the same string as before.
 test("spliceDef: replaces the def line (anchor preserved), deletes the subsection on null, no-ops an absent headword", () => {
   const body = NOTE;
-  const replaced = spliceDef(body, "Impression distance", "a newly dense def");
+  const replaced = spliceDef(body, rhw("Impression distance"), "a newly dense def");
   expect(replaced).toContain("a newly dense def 41..70"); // def line rewritten, anchor kept
   expect(replaced).toContain("### Anchor image"); // siblings untouched
-  const removed = spliceDef(body, "Impression distance", null);
+  const removed = spliceDef(body, rhw("Impression distance"), null);
   expect(removed).not.toContain("### Impression distance");
   expect(removed).toContain("### Anchor image");
   expect(removed).toContain("### Scene");
-  expect(spliceDef(body, "Nonexistent", null)).toBe(body); // absent headword ⇒ unchanged
+  // absent headword ⇒ unchanged (the brand asserts resolution; this case pins the stale-target
+  // no-op the brand cannot rule out — a headword resolved against an EARLIER body)
+  expect(spliceDef(body, rhw("Nonexistent"), null)).toBe(body);
 });
 
 test("editProcedure: deletes / replaces a headword's steps by 0-based index, batched against original indices, renumbered", () => {
-  const HW = "Block from the impression";
+  const HW = rhw("Block from the impression");
   const del = editProcedure(NOTE, [{ headword: HW, idx: 1, replace: null }]);
   expect(del).toContain("1. Fix the anchor image before opening paints");
   expect(del).not.toContain("Re-check values against the anchor");
@@ -798,11 +885,53 @@ test("editProcedure: deletes / replaces a headword's steps by 0-based index, bat
 });
 
 test("resolveDefTerm: exact match, degraded safeHandle match, and no-match null", () => {
-  expect(resolveDefTerm(NOTE, "Impression distance")).toBe("Impression distance");
+  expect(resolveDefTerm(NOTE, "Impression distance")).toBe(rhw("Impression distance"));
   // the degraded target keys off safeHandle(headword), not the raw backticked headword
   expect(safeHandle("`tau` threshold")).toBe("tau threshold");
-  expect(resolveDefTerm(NOTE_TAU, "tau threshold")).toBe("`tau` threshold");
+  expect(resolveDefTerm(NOTE_TAU, "tau threshold")).toBe(rhw("`tau` threshold"));
   expect(resolveDefTerm(NOTE, "nonexistent")).toBeNull();
+});
+
+// The locators walk a note the way splitSections does — fence-tracked. A `### ` or `N. ` line
+// inside a ``` block is quoted markdown, so it opens no subsection and fills no step slot. Two
+// consequences are pinned here: a fenced look-alike never resolves as a target, and a real
+// subsection's range spans its whole body (fence included) rather than stopping at the fake
+// heading — which is what makes a delete remove the fence instead of orphaning its tail.
+test("the subsection/step locators are fence-aware: a fenced `### ` / `N. ` is literal content", () => {
+  // fenced look-alikes are not addressable targets
+  expect(resolveDefTerm(NOTE_FENCED, "Not a headword")).toBeNull();
+  expect(resolveStepTarget(NOTE_FENCED, "procedure:Not a step heading:1")).toEqual({
+    hw: null,
+    idxs: [],
+  });
+  // the real headwords on either side of the fence still resolve
+  expect(resolveDefTerm(NOTE_FENCED, "Anchor image")).toBe(rhw("Anchor image"));
+  expect(resolveDefTerm(NOTE_FENCED, "Scene")).toBe(rhw("Scene"));
+  expect(resolveStepTarget(NOTE_FENCED, "procedure:Close the block:1")).toEqual({
+    hw: rhw("Close the block"),
+    idxs: [0],
+  });
+  // deleting the fence-carrying subsection takes the whole fenced sample with it, and leaves
+  // the following sibling intact — no orphaned ``` or fake heading survives
+  const removed = spliceDef(NOTE_FENCED, rhw("Anchor image"), null);
+  expect(removed).not.toContain("### Anchor image");
+  expect(removed).not.toContain("Not a headword");
+  expect(removed).toContain("### Scene");
+  // four fence lines went in (one pair per section); only the Procedures pair is left
+  expect(removed.match(/^```/gm)?.length).toBe(2);
+  expect(removed).toContain("### Not a step heading");
+  // the fenced sample sits after the real steps, so it is outside the numbered list: editing
+  // step 2 renumbers only the real list and leaves the fence byte-identical
+  const edited = editProcedure(NOTE_FENCED, [
+    {
+      headword: rhw("Block from the impression"),
+      idx: 1,
+      replace: ["Re-check against the anchor"],
+    },
+  ]);
+  expect(edited).toContain("2. Re-check against the anchor");
+  expect(edited).toContain("1. Not a step");
+  expect(edited).toContain("1. Wipe the palette 200..220");
 });
 
 // ---------------------------------------------------------------------------
@@ -814,7 +943,7 @@ test("resolveDefTerm: exact match, degraded safeHandle match, and no-match null"
 // ---------------------------------------------------------------------------
 
 // The NOTE procedure "Block from the impression" carries 2 steps (idx 0,1). A steps
-// target is `procedure:<headword>:<1-based idxs>`; procedureTarget re-bases to 0.
+// target is `procedure:<headword>:<1-based idxs>`; parseTarget re-bases to 0.
 function mkItem(over: Partial<Item> & Pick<Item, "state" | "verb" | "target">): Item {
   return { targetRaw: over.target, line: 1, ...over };
 }
@@ -822,17 +951,17 @@ function mkItem(over: Partial<Item> & Pick<Item, "state" | "verb" | "target">): 
 test("resolveStepTarget: resolves headword + in-range idxs, drops out-of-range, nulls a missing headword", () => {
   // 1-based 1,2 → 0-based 0,1; both in range (2 steps)
   expect(resolveStepTarget(NOTE, "procedure:Block from the impression:1,2")).toEqual({
-    hw: "Block from the impression",
+    hw: rhw("Block from the impression"),
     idxs: [0, 1],
   });
   // 1-based 2,99 → 0-based 1,98; 98 is beyond the 2-step list and is dropped
   expect(resolveStepTarget(NOTE, "procedure:Block from the impression:2,99")).toEqual({
-    hw: "Block from the impression",
+    hw: rhw("Block from the impression"),
     idxs: [1],
   });
   // a whole-procedure target (no `:<idxs>`) resolves the headword but yields no slots
   expect(resolveStepTarget(NOTE, "procedure:Block from the impression")).toEqual({
-    hw: "Block from the impression",
+    hw: rhw("Block from the impression"),
     idxs: [],
   });
   // an absent headword → null headword, empty idxs (never a phantom slot)
@@ -857,7 +986,7 @@ test("classifyItems: checked keep is counted, never executed; checked recover de
   );
   expect(r.kept).toBe(1);
   expect(r.recovered).toBe(1);
-  expect(r.defRecovers).toEqual([{ term: "Impression distance", src: DEF_SRC }]);
+  expect(r.defRecovers).toEqual([{ term: rhw("Impression distance"), src: DEF_SRC }]);
   expect(r.defRemovals).toEqual([]);
   expect(r.unrecoverable).toEqual([]);
   expect(r.verbatim).toBe(0); // def recovers do NOT bump verbatim in the pure pass
@@ -879,8 +1008,8 @@ test("classifyItems: checked recover steps splices verbatim; the first slot carr
   expect(r.recovered).toBe(1);
   expect(r.verbatim).toBe(1);
   expect(r.procedureOps).toEqual([
-    { headword: "Block from the impression", idx: 0, replace: clauses },
-    { headword: "Block from the impression", idx: 1, replace: null },
+    { headword: rhw("Block from the impression"), idx: 0, replace: clauses },
+    { headword: rhw("Block from the impression"), idx: 1, replace: null },
   ]);
 });
 
@@ -956,10 +1085,93 @@ test("classifyItems: unchecked entries remove by EFFECT — a resolving def/step
     NOTE,
   );
   expect(r.removed).toBe(2);
-  expect(r.defRemovals).toEqual(["Impression distance"]);
+  expect(r.defRemovals).toEqual([rhw("Impression distance")]);
   expect(r.procedureOps).toEqual([
-    { headword: "Block from the impression", idx: 1, replace: null },
+    { headword: rhw("Block from the impression"), idx: 1, replace: null },
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// distillApplyHook: the apply MIDDLE (steps 7–9 and 12) driven directly, with an
+// injected `ask` and NO filesystem — no tmp dir, no intermediary, no write-back. The
+// executor (execute.ts) owns the impure halves (stamp preflight, re-verify, atomic
+// write) and every runApply test above exercises them through real files; these two
+// pin the middle's own sequence — classify → lost-decision gate → key gate → the def
+// lane's LLM window → body mutations → footer — as the module's helpers-test-offline
+// contract asks.
+// ---------------------------------------------------------------------------
+
+// Drive the hook with a recording transport, the same marker dispatch applyWith uses.
+async function hook(
+  items: Item[],
+  body: string,
+  handler: (prompt: string) => unknown,
+  lang: "en" | "ru" | "auto" = "en",
+): Promise<{ result: Awaited<ReturnType<typeof distillApplyHook>>; prompts: string[] }> {
+  const prompts: string[] = [];
+  const ask = (async (_model: unknown, prompt: string) => {
+    prompts.push(prompt);
+    return handler(prompt);
+  }) as typeof askJson;
+  const result = await distillApplyHook({ items, strippedBody: body, lang, ask });
+  return { result, prompts };
+}
+
+test("distillApplyHook: classify → key gate → def re-render → body mutations, offline", async () => {
+  const { result, prompts } = await hook(
+    [
+      mkItem({
+        state: "checked",
+        verb: "recover",
+        target: "Impression distance",
+        payload: DEF_SRC,
+      }),
+      mkItem({ state: "checked", verb: "keep", target: "Anchor image" }),
+      mkItem({ state: "unchecked", verb: "recover", target: "Scene", payload: "x" }),
+      mkItem({ state: "checked", verb: "recover", target: "thesis", payload: THESIS_SRC }),
+    ],
+    NOTE,
+    defRecover("translated"),
+  );
+  expect(result.kind).toBe("write");
+  if (result.kind !== "write") throw new Error("expected write");
+  // the re-render + one re-grade, and nothing else, reached the transport
+  expect(prompts.length).toBe(2);
+  expect(prompts.some((p) => p.includes(RENDER_ENTRY_MARKER))).toBe(true);
+  // the graded-translated re-render is spliced in, byte-anchor preserved
+  expect(result.body).toContain("MOCKDEF 41..70");
+  // the unchecked def's whole subsection is gone
+  expect(result.body).not.toContain("### Scene");
+  // the checked recover thesis lands verbatim as the ## Abstract body
+  expect(result.body).toContain(THESIS_SRC);
+  expect(result.body).not.toContain("Blocking from the felt sense rather than the scene");
+  // step 12 — the write-back is the promotion
+  expect(result.body).toContain("epistemic_status: distilled");
+  // 2 checked recovers (def + thesis) · 1 checked keep · 1 unchecked removal; the thesis is
+  // the only verbatim splice (the def graded translated, so its lane adds none)
+  expect(result.footer).toBe("— applied: 2 recovered · 1 kept · 1 removed (1 verbatim)");
+});
+
+test("distillApplyHook: a lost decision refuses (exit 2) before the key gate and before any LLM call", async () => {
+  const { result, prompts } = await hook(
+    [
+      mkItem({ state: "checked", verb: "recover", target: "nonexistent", payload: "x" }),
+      // a resolving def recover in the same batch would otherwise force the key gate + LLM
+      mkItem({
+        state: "checked",
+        verb: "recover",
+        target: "Impression distance",
+        payload: DEF_SRC,
+      }),
+    ],
+    NOTE,
+    NO_LLM,
+  );
+  expect(result.kind).toBe("refuse");
+  if (result.kind !== "refuse") throw new Error("expected refuse");
+  expect(result.code).toBe(2);
+  expect(result.message).toContain("nonexistent");
+  expect(prompts).toEqual([]);
 });
 
 test("insertThesis: replaces the ## Abstract body with the paragraph", () => {

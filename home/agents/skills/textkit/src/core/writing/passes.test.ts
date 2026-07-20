@@ -2,7 +2,7 @@
 // marker-free candidate returns byte-identical (nested-list and code-block
 // indentation preserved); a stripped marker still trims the slack it leaves.
 import { expect, test } from "bun:test";
-import { makeIdMarkerStripper } from "@/core/writing/passes.ts";
+import { makeIdMarkerStripper } from "textkit/core/writing/passes.ts";
 
 test("makeIdMarkerStripper: a marker-free candidate returns byte-identical (keeps indentation)", () => {
   const strip = makeIdMarkerStripper([{ id: "B1" }]);

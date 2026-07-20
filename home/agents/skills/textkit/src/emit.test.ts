@@ -18,10 +18,13 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
-import { parseInteract, stripInteract } from "@/distill/review/interact.ts";
+import { parseInteract, stripInteract } from "textkit/distill/review/interact.ts";
 import { askJson } from "@skills/llm/llm.ts";
 
-const DISTILL = join(import.meta.dir, "distill", "app", "distill.ts");
+// The bin/ wrapper, not the entrypoint module: spawning what PATH actually resolves
+// keeps the deploy seam itself under test, so a wrapper that stops exec'ing the right
+// entrypoint fails here rather than only in a vault.
+const DISTILL = join(import.meta.dir, "..", "bin", "distill-text");
 const DUMMY_KEY = {
   ...process.env,
   LLM_KEYS_ENV_ONLY: "1",
@@ -54,7 +57,7 @@ test("emit preflight: a pending sibling intermediary refuses with exit 4 BEFORE 
   writeFileSync(notePath, NOTE);
   writeFileSync(tmpPath, "pending intermediary bytes\n");
   // NO_KEY env: exit 4 (not 1) proves the preflight beats the API-key gate
-  const proc = Bun.spawnSync(["bun", DISTILL, notePath], { env: NO_KEY });
+  const proc = Bun.spawnSync([DISTILL, notePath], { env: NO_KEY });
   expect(proc.exitCode).toBe(4);
   expect(proc.stdout.toString()).toBe("");
   const err = proc.stderr.toString();
@@ -69,7 +72,7 @@ test("emit preflight: --out redirects the destination, so the pending check watc
   const outTmp = join(dir, "elsewhere.tmp.md");
   writeFileSync(notePath, NOTE);
   writeFileSync(outTmp, "pending intermediary bytes\n");
-  const proc = Bun.spawnSync(["bun", DISTILL, "--out", outPath, notePath], { env: NO_KEY });
+  const proc = Bun.spawnSync([DISTILL, "--out", outPath, notePath], { env: NO_KEY });
   expect(proc.exitCode).toBe(4);
   expect(proc.stdout.toString()).toBe("");
   expect(proc.stderr.toString()).toContain(outTmp);
@@ -81,7 +84,7 @@ test("emit preflight: stdin with --out derives the pending path from --out, pre-
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const outTmp = join(dir, "dest.tmp.md");
   writeFileSync(outTmp, "pending intermediary bytes\n");
-  const proc = Bun.spawnSync(["bun", DISTILL, "--out", join(dir, "dest.md"), "-"], {
+  const proc = Bun.spawnSync([DISTILL, "--out", join(dir, "dest.md"), "-"], {
     env: NO_KEY,
     stdin: Buffer.from(NOTE),
   });
@@ -94,7 +97,7 @@ test("emit: stdin without --out is a usage refusal (exit 2) once the run reaches
   // a REAL body: the empty-input and no-body stdin paths keep exit 3 (the c4e0339
   // recipe at stages.test.ts:656 pins that and stays unmodified), so the refusal
   // fires exactly where a destination becomes necessary
-  const proc = Bun.spawnSync(["bun", DISTILL, "-"], {
+  const proc = Bun.spawnSync([DISTILL, "-"], {
     env: DUMMY_KEY,
     stdin: Buffer.from(NOTE),
   });
@@ -107,7 +110,7 @@ test("emit hygiene: the no-body exit-3 path writes NO sibling intermediary (mkte
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.md");
   writeFileSync(notePath, "---\ntype: note\n---\n");
-  const proc = Bun.spawnSync(["bun", DISTILL, notePath], { env: DUMMY_KEY });
+  const proc = Bun.spawnSync([DISTILL, notePath], { env: DUMMY_KEY });
   expect(proc.exitCode).toBe(3);
   const lines = proc.stdout.toString().split("\n");
   expect(proc.stderr.toString()).toContain("— no body to distill");
@@ -279,7 +282,7 @@ async function runMain(
     throw new Error(`main() called process.exit(${code}) on a success path`);
   }) as typeof process.exit;
   try {
-    const { main } = await import("@/distill/app/distill-core.ts");
+    const { main } = await import("textkit/distill/app/distill-core.ts");
     await main(ask);
   } finally {
     process.stdout.write = realWrite;
@@ -402,7 +405,7 @@ async function runMainExpectExit(
     throw Object.assign(new Error(`process.exit(${code})`), { sentinelExit: code ?? 0 });
   }) as typeof process.exit;
   try {
-    const { main } = await import("@/distill/app/distill-core.ts");
+    const { main } = await import("textkit/distill/app/distill-core.ts");
     await main(ask);
   } catch (e) {
     const s = (e as { sentinelExit?: number }).sentinelExit;
@@ -481,7 +484,7 @@ test("emit: a non-.md compress input without --out is rejected at parse time (ex
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   const notePath = join(dir, "note.txt");
   writeFileSync(notePath, NOTE);
-  const proc = Bun.spawnSync(["bun", DISTILL, notePath], { env: NO_KEY });
+  const proc = Bun.spawnSync([DISTILL, notePath], { env: NO_KEY });
   expect(proc.exitCode).toBe(2);
   expect(proc.stdout.toString()).toBe("");
   expect(proc.stderr.toString()).toContain(".md");
@@ -510,7 +513,7 @@ test("emit: --out into a missing directory is a usage refusal (exit 2) BEFORE th
   writeFileSync(notePath, NOTE);
   // NO_KEY: exit 2 (not 1) proves the check beats the key gate — otherwise the run
   // would burn the whole LLM budget and die on the final write
-  const proc = Bun.spawnSync(["bun", DISTILL, "--out", join(dir, "missing", "x.md"), notePath], {
+  const proc = Bun.spawnSync([DISTILL, "--out", join(dir, "missing", "x.md"), notePath], {
     env: NO_KEY,
   });
   expect(proc.exitCode).toBe(2);
@@ -525,7 +528,7 @@ test("emit preflight: a cwd-relative input names the pending intermediary by ABS
   const dir = mkdtempSync(join(tmpdir(), "distill-emit-"));
   writeFileSync(join(dir, "note.md"), NOTE);
   writeFileSync(join(dir, "note.tmp.md"), "pending intermediary bytes\n");
-  const proc = Bun.spawnSync(["bun", DISTILL, "note.md"], { env: NO_KEY, cwd: dir });
+  const proc = Bun.spawnSync([DISTILL, "note.md"], { env: NO_KEY, cwd: dir });
   expect(proc.exitCode).toBe(4);
   const err = proc.stderr.toString();
   expect(err).toMatch(/pending intermediary exists: \//);

@@ -3,8 +3,8 @@
 // multi-line `## Payload` fence whose anchor renders as a BARE `start..end` line after the closing
 // fence (renderPayload). Pure; no mdstruct binary. Run: `bun test parse-projection.test.ts`.
 import { expect, test } from "bun:test";
-import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
-import { parseCanonicalNote } from "@/distill/graph/parse-projection.ts";
+import { projectMarkdown, type Projection } from "textkit/distill/graph/project.ts";
+import { parseCanonicalNote } from "textkit/distill/graph/parse-projection.ts";
 
 // ---- hardening: hand-built (not round-tripped) malformed/hand-edited bodies ----
 // The projector never emits any of the shapes below; these pin the reader's degrade-gracefully

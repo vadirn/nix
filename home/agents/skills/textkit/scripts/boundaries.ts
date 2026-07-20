@@ -2,15 +2,14 @@
 // Boundary lint: enforces the slice contract across src/.
 //
 // Slices are the four first path segments under src/: core | distill | polish | cards.
-// Everything else — files directly under src/ (e.g. *.test.ts), src/experiment/**,
-// src/fixtures/** — is UNCLASSIFIED and exempt as an importer (tests and experiments
-// may reach into anything).
+// Everything else — files directly under src/ (e.g. *.test.ts), src/fixtures/** — is
+// UNCLASSIFIED and exempt as an importer (tests may reach into anything).
 //
-// Rules on a classified importer's `@/<seg>/...` specifiers:
+// Rules on a classified importer's `textkit/<seg>/...` specifiers:
 //   1. A cross-slice import (importer slice != imported slice) is allowed only when the
 //      imported slice is "core".
-//   2. One exception: a file under cards/** may import "@/distill/emit" (and no other
-//      "@/distill/..." path).
+//   2. One exception: a file under cards/** may import "textkit/distill/emit" (and no other
+//      "textkit/distill/..." path).
 //
 // Import specifiers are read with Bun.Transpiler().scanImports(), which parses each file
 // and returns only real import/require/dynamic-import specifiers — so `import`/`from`
@@ -26,7 +25,7 @@ const ROOT = join(import.meta.dir, "..");
 
 /**
  * Derive the alias prefix and src directory from tsconfig compilerOptions.paths.
- * Expects a single `@/* -> ./src/*` style entry: the key without its `*` is the
+ * Expects a single `textkit/* -> ./src/*` style entry: the key without its `*` is the
  * specifier prefix, the target without `./` and `*` is the src dir.
  */
 function resolveAlias(): { prefix: string; srcRel: string } {
@@ -35,7 +34,7 @@ function resolveAlias(): { prefix: string; srcRel: string } {
   const entry = Object.entries(paths)[0] as [string, string[]] | undefined;
   if (!entry) throw new Error("tsconfig compilerOptions.paths has no alias entry");
   const [key, targets] = entry;
-  const prefix = key.replace(/\*$/, ""); // "@/*" -> "@/"
+  const prefix = key.replace(/\*$/, ""); // "textkit/*" -> "textkit/"
   const srcRel = targets[0]!.replace(/^\.\//, "").replace(/\*$/, "").replace(/\/$/, ""); // "./src/*" -> "src"
   return { prefix, srcRel };
 }
@@ -92,15 +91,15 @@ for (const abs of walk(SRC)) {
   const src = raw.startsWith("#!") ? raw.replace(/^[^\n]*/, "") : raw;
   const lines = src.split("\n");
   for (const imp of transpilerFor(abs).scanImports(src)) {
-    const spec = imp.path; // e.g. "@/distill/emit.ts"
+    const spec = imp.path; // e.g. "textkit/distill/emit.ts"
     if (!spec.startsWith(ALIAS)) continue; // not an aliased internal import
-    const rest = spec.slice(ALIAS.length); // drop the alias prefix, e.g. "@/"
+    const rest = spec.slice(ALIAS.length); // drop the alias prefix, e.g. "textkit/"
     const importedSlice = rest.split("/")[0]!;
     if (!SLICES.has(importedSlice)) continue; // not a slice-classified import
     if (importedSlice === importerSlice) continue; // same slice: always fine
     if (importedSlice === "core") continue; // rule 1: core is the shared floor
 
-    // rule 2: the single cards/** -> @/distill/emit exception.
+    // rule 2: the single cards/** -> textkit/distill/emit exception.
     const isEmitException =
       importerSlice === "cards" &&
       importedSlice === "distill" &&

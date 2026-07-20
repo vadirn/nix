@@ -4,7 +4,7 @@
 // negation distortion still FAILS to substring-match, because the fold keeps the punctuation
 // snap's aggressive fold would erase). Run with `bun test normalize-citation.test.ts`.
 import { expect, test } from "bun:test";
-import { normalizeCitation } from "@/distill/review/normalize-citation.ts";
+import { normalizeCitation } from "textkit/distill/review/normalize-citation.ts";
 
 // the substring relation the Step-3 gate will apply: normalize both sides, ask CONTAINS.
 const contains = (evidence: string, source: string): boolean =>

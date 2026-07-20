@@ -1,5 +1,13 @@
 {
   "name": "imagen-nanobanana-scripts",
   "version": "1.0.0",
-  "private": true
+  "private": true,
+  "scripts": {
+    "test": "bun test",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@skills/media": "workspace:*"
+  }
 }

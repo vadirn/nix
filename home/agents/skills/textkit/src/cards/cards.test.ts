@@ -7,14 +7,14 @@ import {
   buildStagingRecord,
   decideCard,
   enumerateCandidates,
-} from "@/cards/cards.ts";
+} from "textkit/cards/cards.ts";
 import type {
   BandVerdict,
   Candidate,
   CardEdge,
   HarvestedConcept,
   NeighbourHit,
-} from "@/cards/types.ts";
+} from "textkit/cards/types.ts";
 
 // ---- enumerateCandidates ----
 

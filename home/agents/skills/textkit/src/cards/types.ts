@@ -9,7 +9,7 @@
 //   - The only path from a staging file into `20 cards/` is a human commit; a staging
 //     file's draft exists to be rewritten by that human, never to be accepted as-is.
 
-import type { NameLintResult } from "@/core/writing/name-lint.ts";
+import type { NameLintResult } from "textkit/core/writing/name-lint.ts";
 
 // One structural edge harvested from an emitted note's `## Relations` block and attached
 // to its owning concept (the from-label's slug), stripped of the from-field. `rel` an open
@@ -94,4 +94,3 @@ export type StagingRecord = {
 // pure layer before anything trusts them).
 export type BandJudgeReply = { band: string; rationale: string };
 export type DraftReply = { draft: string };
-export type AtomicityReply = { atomic: boolean; reason: string };

@@ -3,9 +3,9 @@
 // polish's main() encodes, driven offline through a mocked llm.ts (spell.test.ts /
 // degradation.test.ts pattern).
 import { expect, test } from "bun:test";
-import { USAGE, buildPolishFooter, parseArgs } from "@/polish/polish.ts";
-import { PASS_EN, revise } from "@/core/writing/passes.ts";
-import { spellPass } from "@/polish/spell.ts";
+import { USAGE, buildPolishFooter, parseArgs } from "textkit/polish/polish.ts";
+import { PASS_EN, revise } from "textkit/core/writing/passes.ts";
+import { spellPass } from "textkit/polish/spell.ts";
 import { askJson, fireworks } from "@skills/llm/llm.ts";
 
 function ok(argv: string[]) {

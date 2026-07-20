@@ -12,12 +12,12 @@
 // which must be on PATH.
 import { expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
-import { computeSource, type PreGraph } from "@/distill/graph/graph.ts";
-import { locateGraph } from "@/distill/extract/locate-graph.ts";
-import { SnapError } from "@/distill/extract/snap.ts";
-import { sliceBytes } from "@/distill/mdstruct.ts";
-import { projectMarkdown } from "@/distill/graph/project.ts";
-import type { Block } from "@/core/text.ts";
+import { computeSource, type PreGraph } from "textkit/distill/graph/graph.ts";
+import { locateGraph } from "textkit/distill/extract/locate-graph.ts";
+import { SnapError } from "textkit/distill/extract/snap.ts";
+import { sliceBytes } from "textkit/distill/mdstruct.ts";
+import { projectMarkdown } from "textkit/distill/graph/project.ts";
+import type { Block } from "textkit/core/text.ts";
 
 const PATH = "widgets.md";
 const BODY = [

@@ -3,7 +3,7 @@
 // every token in masked text is minted by this factory and unmask can never rewrite
 // a literal the source spelled out into another span's content.
 import { expect, test } from "bun:test";
-import { createMasker } from "@/core/writing/mask.ts";
+import { createMasker } from "textkit/core/writing/mask.ts";
 
 test("createMasker: a literal ⟦0⟧ in the text survives the round-trip beside a masked span", () => {
   const m = createMasker();

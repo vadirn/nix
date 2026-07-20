@@ -14,7 +14,7 @@ import { parseArgs } from "util";
 import { mkdirSync, writeFileSync, appendFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import os from "os";
-import { expandTilde, sniffSourceMimes, dryRunExit } from "../../_shared/scripts/media-utils.ts";
+import { expandTilde, sniffSourceMimes, dryRunExit } from "@skills/media/media-utils.ts";
 
 // ---------------------------------------------------------------------------
 // Usage
@@ -406,7 +406,7 @@ async function runWithConcurrency<T>(
   concurrency: number,
   fn: (i: number) => Promise<T>,
 ): Promise<T[]> {
-  const results: T[] = new Array(count);
+  const results: T[] = Array.from({ length: count });
   let next = 0;
 
   async function worker(): Promise<void> {

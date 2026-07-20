@@ -7,7 +7,7 @@
 // rebuild parser, the section splitter, and the interact strip plus its format-error. Widen this
 // deliberately; a new cross-import from cards/ into graph/ · extract/ · review/ is a contract
 // leak, not a shortcut.
-export { parseCanonicalNote } from "@/distill/graph/parse-projection.ts";
-export { parseRelationsBlock } from "@/distill/graph/rel-parse.ts";
-export { sections } from "@/distill/extract/route.ts";
-export { InteractFormatError, stripInteract } from "@/distill/review/interact.ts";
+export { parseCanonicalNote } from "textkit/distill/graph/parse-projection.ts";
+export { parseRelationsBlock } from "textkit/distill/graph/rel-parse.ts";
+export { sections } from "textkit/distill/extract/route.ts";
+export { InteractFormatError, stripInteract } from "textkit/distill/review/interact.ts";

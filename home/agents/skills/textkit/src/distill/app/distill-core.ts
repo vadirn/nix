@@ -5,7 +5,7 @@
 // gates into gates.ts, the CLI surface + path helpers into cli.ts. The default run emits a review
 // intermediary and exits; review + apply are a separate step (a review subagent, or `distill-text
 // apply`), so no interactive terminal half remains here. main() is invoked by the entrypoint.
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import {
   type Block,
@@ -14,12 +14,12 @@ import {
   segment,
   slugSegment,
   wordCount,
-} from "@/core/text.ts";
+} from "textkit/core/text.ts";
 import {
   harvestExternalLinks,
   harvestProseListItems,
   harvestVaultEdges,
-} from "@/distill/extract/harvest.ts";
+} from "textkit/distill/extract/harvest.ts";
 import {
   type Route,
   type RoutedSection,
@@ -27,41 +27,42 @@ import {
   formatDryRun,
   partition,
   routeNote,
-} from "@/distill/extract/route.ts";
+} from "textkit/distill/extract/route.ts";
 import {
   parseDescription,
   parseFrontmatter,
   parseSuperseded,
   parseType,
-} from "@/core/frontmatter.ts";
+} from "textkit/core/frontmatter.ts";
 import { askJson, ensureKeys, isTransient, TruncationError } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
-import { DISTILL_EXTRACT, DISTILL_FIDELITY } from "@/core/models.ts";
-import { linkNoClobber } from "@/core/fs.ts";
-import { tempMdPath } from "@/core/tmp.ts";
-import { extractGraph, gradeBlocks } from "@/distill/prompt/prompts.ts";
+import { DISTILL_EXTRACT, DISTILL_FIDELITY } from "textkit/core/models.ts";
+import { atomicNoClobberWrite } from "textkit/core/fs.ts";
+import { tempMdPath } from "textkit/core/tmp.ts";
+import { extractGraph, gradeBlocks } from "textkit/distill/prompt/prompts.ts";
 import {
   formatNameLint,
   nameLintAgainstSource,
   type NameLintResult,
-} from "@/core/writing/name-lint.ts";
-import { locateGraph, payloadKey } from "@/distill/extract/locate-graph.ts";
-import { projectMarkdown, type Projection } from "@/distill/graph/project.ts";
-import { computeSource, type Unit, type UnitType } from "@/distill/graph/graph.ts";
-import { locate } from "@/distill/extract/locate.ts";
-import { type Residue, payloadResidueForProjection } from "@/distill/review/residue.ts";
-import { runProse } from "@/distill/app/prose-mode.ts";
-import { buildIntermediary } from "@/distill/review/triage.ts";
-import { runApply, stampHash } from "@/distill/app/apply-mode.ts";
-import { runFidelityBackstop, runProseGate } from "@/distill/review/gates.ts";
+} from "textkit/core/writing/name-lint.ts";
+import { locateGraph, payloadKey } from "textkit/distill/extract/locate-graph.ts";
+import { projectMarkdown, type Projection } from "textkit/distill/graph/project.ts";
+import { computeSource, type Unit, type UnitType } from "textkit/distill/graph/graph.ts";
+import { locate } from "textkit/distill/extract/locate.ts";
+import { type Residue, payloadResidueForProjection } from "textkit/distill/review/residue.ts";
+import { runProse } from "textkit/distill/app/prose-mode.ts";
+import { buildIntermediary } from "textkit/distill/review/triage.ts";
+import { runApply } from "textkit/distill/app/apply-mode.ts";
+import { stampHash } from "textkit/distill/review/execute.ts";
+import { runFidelityBackstop, runProseGate } from "textkit/distill/review/gates.ts";
 import {
   type CliOpts,
   USAGE,
   parseArgs,
   refusePendingIntermediary,
   tmpPathFor,
-} from "@/distill/app/cli.ts";
-import { buildPassthroughEnvelope } from "@/distill/app/envelope.ts";
+} from "textkit/distill/app/cli.ts";
+import { buildPassthroughEnvelope } from "textkit/distill/app/envelope.ts";
 
 // ---- pipeline ----
 // The Residue type and the deterministic loss-surface primitives (wikilinkResidue,
@@ -508,18 +509,14 @@ export function assembleRoutedNote(a: {
   return { out, footer, residue };
 }
 
-// Atomic no-clobber write: write a sibling .partial, then linkNoClobber it onto the
-// final name — link fails EEXIST instead of overwriting, so a racing emit that passed the
-// preflight minutes ago (LLM run) loses LOUD with the same exit-4 refusal, and a crash mid-write
-// never leaves a truncated intermediary visible at the .tmp.md path. {exists:true} maps to the
-// exit-4 refusal (never returns); any other link error cleans the .partial and rethrows inside
-// the helper. On success the helper leaves the .partial in place for this final unlink.
+// Atomic no-clobber write (core/fs.ts's atomicNoClobberWrite): write a sibling .partial, then
+// link it onto the final name — link fails EEXIST instead of overwriting, so a racing emit
+// that passed the preflight minutes ago (LLM run) loses LOUD with the same exit-4 refusal, and
+// a crash mid-write never leaves a truncated intermediary visible at the .tmp.md path.
+// {ok:false} maps to the exit-4 refusal (never returns); any other write/link error propagates.
 function writeIntermediaryAtomically(tmpPath: string, intermediary: string): void {
-  const partial = `${tmpPath}.partial`;
-  writeFileSync(partial, intermediary);
-  const link = linkNoClobber(partial, tmpPath);
-  if (!link.ok) refusePendingIntermediary(tmpPath);
-  unlinkSync(partial);
+  const write = atomicNoClobberWrite(tmpPath, intermediary);
+  if (!write.ok) refusePendingIntermediary(tmpPath);
 }
 
 // Phase 3 success: write the review intermediary sibling to `destPath` (never the source — the

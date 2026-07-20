@@ -8,10 +8,10 @@
 // procedures — procedures are half the sole-floor surface. The judge call is stubbed by dependency
 // injection (the `ask` seam), never a process-global module mock (see degradation.test.ts).
 import { expect, test } from "bun:test";
-import { type Span } from "@/distill/mdstruct.ts";
-import { type Projection } from "@/distill/graph/project.ts";
-import { type ConceptVerdict, type StepVerdict } from "@/distill/prompt/prompts.ts";
-import { runFidelityBackstop } from "@/distill/review/gates.ts";
+import { type Span } from "textkit/distill/mdstruct.ts";
+import { type Projection } from "textkit/distill/graph/project.ts";
+import { type ConceptVerdict, type StepVerdict } from "textkit/distill/prompt/prompts.ts";
+import { runFidelityBackstop } from "textkit/distill/review/gates.ts";
 import { askJson } from "@skills/llm/llm.ts";
 
 // One source note carrying one concept sentence and one procedure sentence. ASCII, so byte offsets

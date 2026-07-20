@@ -46,6 +46,7 @@ find "$AGENTS_SKILLS" "$CLAUDE_SKILLS" -maxdepth 1 -type l -delete
 
 for src in "$ROOT/home/agents/skills/"*/; do
   [ -d "$src" ] || continue
+  [ -f "$src/SKILL.md" ] || continue
   name=$(basename "$src")
   ln -sfn "$src" "$AGENTS_SKILLS/$name"
   ln -sfn "$src" "$CLAUDE_SKILLS/$name"

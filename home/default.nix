@@ -1,6 +1,8 @@
 {
   username,
   homeDirectory,
+  vault-query,
+  mdstruct,
   ...
 }: {
   users.users.vadim.home = homeDirectory;
@@ -16,18 +18,23 @@
       home = {
         inherit username;
         stateVersion = "24.11";
-        packages = with pkgs; [
-          ripgrep
-          fd
-          pass
-          jq
-          tree
-          btop
-          delta
-          ngrok
-          ruby
-          ast-grep
-        ];
+        packages =
+          (with pkgs; [
+            ripgrep
+            fd
+            pass
+            jq
+            tree
+            btop
+            delta
+            ngrok
+            ruby
+            ast-grep
+          ])
+          ++ [
+            vault-query
+            mdstruct
+          ];
       };
       programs = {
         home-manager = {

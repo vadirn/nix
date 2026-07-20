@@ -20,9 +20,9 @@ import {
   RELATIONS_HEADING,
   SECTION_HEADING,
   stripTrailingAnchor,
-} from "@/distill/graph/graph.ts";
-import { fenceScan, type FenceState } from "@/core/text.ts";
-import type { Span } from "@/distill/mdstruct.ts";
+} from "textkit/distill/graph/graph.ts";
+import { fenceScan, type FenceState } from "textkit/core/text.ts";
+import type { Span } from "textkit/distill/mdstruct.ts";
 
 // One `## ` section: its heading text (verbatim, e.g. "Concepts"), the body lines between the
 // heading and the next `## ` (or EOF), and the half-open line range [start, end). Fence-aware:
@@ -136,36 +136,52 @@ function stripAnchor(line: string): { text: string; span: Span | null } {
   return stripTrailingAnchor(line);
 }
 
-// Group a section's body lines into `### headword` subsections: the lines under each `### ` up to
-// the next `### ` (or the section end). Lines before the first `### ` are ignored (a well-formed
-// projection has none). Fence-aware, mirroring splitSections: a `### `-look-alike line inside a
-// ``` code block (e.g. a comment in a fenced Payload snippet) is literal content, not a subsection
-// boundary — without this, a fenced Payload containing a "### " comment line split into garbage
-// entries (the fence content lost its close, the fake header's line became a bogus second entry).
-function subsections(bodyLines: string[]): { headword: string; lines: string[] }[] {
-  const out: { headword: string; lines: string[] }[] = [];
-  let cur: { headword: string; lines: string[] } | null = null;
+// One `### headword` subsection's line range within the body lines it was scanned from:
+// [start, end) where `start` is the `### headword` line and `end` is the next `### ` (or the
+// end of those lines). Indices are RELATIVE to the array passed in — a caller holding whole-note
+// line numbers adds the section's `start + 1`.
+export interface SubsectionRange {
+  headword: string;
+  start: number;
+  end: number; // exclusive
+}
+
+// Locate the `### headword` subsections of a section's body lines. THE one subsection walk:
+// parse-projection's own readers below and apply-mode's body-editing locators
+// (subsectionRange / procedureStepRange / headwordsUnder) both come through here, so the two
+// cannot drift on what counts as a heading. Lines before the first `### ` belong to no
+// subsection and are unreachable from the result (a well-formed projection has none).
+// Fence-aware, mirroring splitSections: a `### `-look-alike line inside a ``` code block (a
+// comment in a fenced Payload snippet, a markdown sample quoted under a concept) is literal
+// content, not a subsection boundary — without this, a fenced Payload containing a "### "
+// comment line split into garbage entries (the fence content lost its close, the fake header's
+// line became a bogus second entry), and an editing caller truncated the real subsection's
+// range at the fake heading.
+export function subsectionRanges(bodyLines: string[]): SubsectionRange[] {
+  const heads: { headword: string; start: number }[] = [];
   let fence: FenceState = null;
-  for (const line of bodyLines) {
-    const scan = fenceScan(line, fence);
+  for (let i = 0; i < bodyLines.length; i++) {
+    const scan = fenceScan(bodyLines[i]!, fence);
     fence = scan.fence;
-    if (scan.isMarker) {
-      if (cur) cur.lines.push(line);
-      continue;
-    }
-    if (fence) {
-      if (cur) cur.lines.push(line);
-      continue;
-    }
-    const h = SUB_RE.exec(line);
-    if (h) {
-      cur = { headword: h[1]!, lines: [] };
-      out.push(cur);
-    } else if (cur) {
-      cur.lines.push(line);
-    }
+    if (scan.isMarker) continue;
+    if (fence) continue;
+    const h = SUB_RE.exec(bodyLines[i]!);
+    if (h) heads.push({ headword: h[1]!, start: i });
   }
-  return out;
+  return heads.map((h, k) => ({
+    headword: h.headword,
+    start: h.start,
+    end: k + 1 < heads.length ? heads[k + 1]!.start : bodyLines.length,
+  }));
+}
+
+// Group a section's body lines into `### headword` subsections: the lines under each `### ` up
+// to the next `### ` (or the section end), read off subsectionRanges.
+function subsections(bodyLines: string[]): { headword: string; lines: string[] }[] {
+  return subsectionRanges(bodyLines).map((r) => ({
+    headword: r.headword,
+    lines: bodyLines.slice(r.start + 1, r.end),
+  }));
 }
 
 // Parse a canonical note body into its structured sections — the lossy READ view documented on
