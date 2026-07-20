@@ -11,7 +11,7 @@
       RUSTUP_HOME = "$HOME/.rustup";
       CARGO_HOME = "$HOME/.cargo";
       XDG_CONFIG_HOME = "$HOME/.config";
-      EDITOR = "zed --wait";
+      EDITOR = "code --wait";
       DOCKER_HOST = "unix://$HOME/.orbstack/run/docker.sock";
       AGENT_BROWSER_AUTO_CONNECT = "1";
       USE_BUILTIN_RIPGREP = "0";

@@ -71,7 +71,6 @@
         ./bat.nix
         ./claude.nix
         ./ghostty.nix
-        ./zed/zed.nix
         ./lazygit.nix
         ./micro.nix
       ];

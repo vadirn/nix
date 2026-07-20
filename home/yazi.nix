@@ -17,7 +17,7 @@
     settings.plugin.prepend_previewers = [
       {
         mime = "application/json";
-        run = "zed";
+        run = "code";
       }
     ];
     settings.opener.edit = [
