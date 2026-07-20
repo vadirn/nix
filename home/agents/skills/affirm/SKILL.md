@@ -1,16 +1,12 @@
 ---
 name: affirm
 description: >
-  Rewrite negative instructions as positive directives and remove hedging language.
-  Use when user invokes /affirm or asks to make instructions direct, remove hedging,
-  flip negatives to positives, or strengthen language in skill files, docs, or prompts.
-  Works on inline text, files, or conversation context.
-  Target instruction and directive text only; route general prose editing to /distill.
+  Rewrite negative instructions as positive directives and remove hedging language. Use when user invokes /affirm or asks to make instructions direct, remove hedging, flip negatives to positives, or strengthen language in skill files, docs, or prompts. Works on inline text, files, or conversation context. Target instruction and directive text only; route general prose editing to /distill.
 ---
 
 # Affirm
 
-Rewrite instructions as direct positive statements. Remove hedging.
+Thin wrapper: the doctrine lives in the vault note `Affirm`. Load it at invocation — never run from memory of it.
 
 ## Parameters
 
@@ -19,102 +15,36 @@ Rewrite instructions as direct positive statements. Remove hedging.
 ```
 text = <args> or conversation context
 if no text provided: AskUserQuestion("What text should I rewrite?")
+
+// Load doctrine
+note_path = Bash(vault-query get "Affirm")
+if note_path missing or ambiguous: do("report the error to the user"); stop
+
+// (parallel)
+rules = Bash(vault-query read <note_path> 0)
+transforms = Bash(vault-query read <note_path> "Transforms")
+negatives = Bash(vault-query read <note_path> "Negative to positive")
+hedging = Bash(vault-query read <note_path> "Hedging to direct")
+doubles = Bash(vault-query read <note_path> "Double negatives")
+permission = Bash(vault-query read <note_path> "Permission framing")
+conditionals = Bash(vault-query read <note_path> "Vacuous conditionals")
+if any read errors: do("report the exact error and note_path to the user"); stop
+
+// Apply
 if text looks like a file path (starts with / or ./, ends with a known extension, or matches an existing file):
   read the file at that path  // Read file content
-  apply all transforms to the file content
+  do("apply transforms to the file content, calibrating each pass against its specimen section")
   write the result back to the same path  // Write result back
   show a summary of changes made
-
-// Flip negatives
-do("find sentences with 'do not', 'don't', 'never', 'avoid', 'no', 'not'")
-do("rewrite each to state the desired behavior directly")
-
-// Collapse double negatives
-do("find double negatives: 'not uncommon', 'not unlikely', 'not insignificant', 'not without'")
-do("replace with the direct positive: 'common', 'likely', 'significant', 'with'")
-
-// Remove hedging
-do("find hedging words: 'might', 'perhaps', 'consider', 'try to', 'should probably', 'it seems', 'be careful to', 'make sure to', 'ensure that'")
-do("replace each with direct instructions")
-
-// Strip permission framing
-do("find permission patterns: 'you can', 'you may', 'feel free to', 'you are allowed to'")
-do("replace with imperative: 'use X' instead of 'you can use X'")
-
-// Remove vacuous conditionals
-do("find 'if applicable', 'when appropriate', 'as needed', 'where possible'")
-do("if the condition is always true in context, remove it")
-do("if the condition is genuinely conditional, leave it")
-
-// Verify
-do("check that meaning is preserved — positive framing changes phrasing, not intent")
-do("check that scale descriptions and genuine uncertainty markers are left intact")
-
-// Output
-do("show before/after for each changed sentence")
+else:
+  do("apply rules + transforms with <text> bound, calibrating each pass against its specimen section")
+  do("emit the result per the verify and output steps in transforms")
 ```
 
 ## Reference
 
-### Negative to positive
+### Doctrine loading
 
-The model reads "do X" in one inference step. "Do not do Y" requires two: parse Y, then invert. Positive framing resolves in one step and leaves less room for misinterpretation.
-
-| Before                                | After                                              |
-| ------------------------------------- | -------------------------------------------------- |
-| Do not use mocks in integration tests | Use real database connections in integration tests |
-| Never commit secrets                  | Keep secrets out of version control                |
-| Avoid long functions                  | Split functions at natural boundaries              |
-| Don't repeat yourself                 | Extract shared logic into a single location        |
-
-Keep negatives when the positive form loses precision. "This function returns null on failure" says more than "This function returns a value on success."
-
-### Hedging to direct
-
-Hedging signals optionality. The model reads "consider X" as "X is one possibility among many" and may skip it. Direct instructions close that gap.
-
-| Before                           | After                                       |
-| -------------------------------- | ------------------------------------------- |
-| You might want to check the logs | Check the logs                              |
-| Consider using a cache here      | Use a cache here                            |
-| Try to keep functions short      | Keep functions short                        |
-| Make sure to validate input      | Validate input                              |
-| Be careful not to break the API  | Preserve the API contract                   |
-| Be honest about uncertainty      | Calibrate grades to match actual confidence |
-
-Preserve hedging in scale descriptions and genuine conditional uncertainty ("if the data is unavailable, the result may be incomplete"). These describe reality, not instructions.
-
-### Double negatives
-
-Two negations require two inversions to reach the meaning. Replace with the direct positive.
-
-| Before               | After          |
-| -------------------- | -------------- |
-| not uncommon         | common         |
-| not unlikely to fail | likely to fail |
-| not without risk     | risky          |
-| not insignificant    | significant    |
-
-### Permission framing to imperative
-
-In instruction context, "you can" signals optionality. The model treats optional steps as skippable. Use imperative form.
-
-| Before                               | After                        |
-| ------------------------------------ | ---------------------------- |
-| You can use SQLite for local caching | Use SQLite for local caching |
-| Feel free to split the function      | Split the function           |
-| You may want to add a timeout        | Add a timeout                |
-
-Preserve permission framing in user-facing text where the user genuinely has a choice ("You can override this with --force").
-
-### Vacuous conditionals
-
-"If applicable" and "when appropriate" create an escape hatch. When the condition is always true in context, the qualifier adds nothing. Remove it.
-
-| Before                        | After              |
-| ----------------------------- | ------------------ |
-| Validate input, if applicable | Validate input     |
-| Use caching where possible    | Use caching        |
-| Add error handling as needed  | Add error handling |
-
-Preserve genuinely conditional qualifiers where the condition is sometimes false ("if the user provides a file path, read it").
+- `vault-query get "Affirm"` resolves the note; the exact basename match `Affirm.md` is the intended target.
+- Structured reads (`vault-query read` with addresses) load only the intro rules (address `0`), the transform passes, and the five specimen sections, keeping the note's frontmatter out of context.
+- Fail loud, never improvise: on any resolution or address error the doctrine has moved or its headings were renamed — a workflow reconstructed from memory looks like success while silently degrading the contract. The section headings `Transforms` / `Negative to positive` / `Hedging to direct` / `Double negatives` / `Permission framing` / `Vacuous conditionals` are part of this wrapper's contract with the note.
