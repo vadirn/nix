@@ -12,11 +12,10 @@
 
 import { fal } from "@fal-ai/client";
 import { parseArgs } from "util";
-import { appendFileSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
-import { spawnSync } from "child_process";
 import { homedir } from "os";
 import { expandTilde, dryRunExit } from "@skills/media/media-utils.ts";
+import { renderVideo, type KlingInput } from "./render.ts";
 
 // ---------------------------------------------------------------------------
 // Endpoints
@@ -210,40 +209,15 @@ const TIMESTAMP =
 
 const LOG_FILE = join(OUT_DIR, "log.jsonl");
 
-// ---------------------------------------------------------------------------
-// ffmpeg helper — run synchronously, throw on non-zero exit
-// ---------------------------------------------------------------------------
-function ffmpeg(args: string[]): void {
-  const result = spawnSync("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
-  if (result.error) {
-    throw new Error(
-      `ffmpeg could not be spawned: ${result.error.message} (is ffmpeg installed and on PATH?)`,
-    );
-  }
-  if (result.signal) {
-    const stderr = result.stderr?.toString() ?? "";
-    throw new Error(`ffmpeg killed by signal ${result.signal}:\n${stderr}`);
-  }
-  if (result.status !== 0) {
-    const stderr = result.stderr?.toString() ?? "";
-    throw new Error(`ffmpeg failed (exit ${result.status}):\n${stderr}`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Timeout helper
-// ---------------------------------------------------------------------------
-async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
+// The exact Kling input, shared by the --dry-run payload and the live call so the
+// two cannot drift — printing it is what makes the dry run assertable.
+const INPUT: KlingInput = {
+  prompt: PROMPT,
+  duration: DURATION,
+  aspect_ratio: ASPECT_RATIO,
+  negative_prompt: NEGATIVE_PROMPT,
+  cfg_scale: CFG_SCALE,
+};
 
 // ---------------------------------------------------------------------------
 // Main
@@ -255,13 +229,7 @@ async function main(): Promise<void> {
   if (DRY_RUN) {
     dryRunExit({
       endpoint: ENDPOINT,
-      input: {
-        prompt: PROMPT,
-        duration: DURATION,
-        aspect_ratio: ASPECT_RATIO,
-        negative_prompt: NEGATIVE_PROMPT,
-        cfg_scale: CFG_SCALE,
-      },
+      input: INPUT,
       out_dir: OUT_DIR,
       webm: DO_WEBM,
       scale: SCALE,
@@ -269,130 +237,19 @@ async function main(): Promise<void> {
     });
   }
 
-  mkdirSync(OUT_DIR, { recursive: true });
-
-  const startMs = Date.now();
-
-  // Call fal Kling endpoint.
-  // Kling v1.6 params: prompt, duration (str enum), aspect_ratio (str enum),
-  // negative_prompt, cfg_scale (float 0–1).
-  console.log(`Generating video via ${ENDPOINT}…`);
-  const result = (await withTimeout(
-    fal.subscribe(ENDPOINT, {
-      input: {
-        prompt: PROMPT,
-        duration: DURATION,
-        aspect_ratio: ASPECT_RATIO,
-        negative_prompt: NEGATIVE_PROMPT,
-        cfg_scale: CFG_SCALE,
-      },
-      logs: false,
-    }),
-    300_000,
-    "fal.subscribe(Kling video)",
-  )) as { data?: { video?: { url?: string } } };
-
-  const videoUrl = result.data?.video?.url;
-  if (!videoUrl) {
-    throw new Error(`No video URL in response: ${JSON.stringify(result).slice(0, 500)}`);
-  }
-
-  // Download MP4 — always kept as the master output.
-  const mp4Path = join(OUT_DIR, `vidgen-${TIMESTAMP}.mp4`);
-  console.log(`Downloading MP4…`);
-  const resp = await fetch(videoUrl, { signal: AbortSignal.timeout(120_000) });
-  if (!resp.ok)
-    throw new Error(`Failed to download ${videoUrl}: ${resp.status} ${resp.statusText}`);
-  try {
-    await Bun.write(mp4Path, resp);
-  } catch (err) {
-    try {
-      unlinkSync(mp4Path);
-    } catch {} // best-effort cleanup; ignore if file never existed
-    throw err;
-  }
-  console.log(`video: ${mp4Path}`);
-
-  const outputPaths: string[] = [mp4Path];
-  let webmPath: string | undefined;
-
-  if (DO_WEBM) {
-    // Encode WebM (VP9) at target width, preserving aspect ratio.
-    // -b:v 0 puts libvpx-vp9 into true CRF mode.
-    // -row-mt 1 enables multi-threaded row encoding.
-    // -an strips audio (Kling MP4 has none, but explicit insurance).
-    // -pix_fmt yuv420p ensures browser (Safari) compatibility.
-    // -g 1 -keyint_min 1: every frame is a keyframe so the loop boundary is clean.
-    webmPath = join(OUT_DIR, `vidgen-${TIMESTAMP}.webm`);
-    console.log(`Encoding WebM…`);
-    ffmpeg([
-      "-y",
-      "-i",
-      mp4Path,
-      "-vf",
-      `scale=${SCALE}:-2`,
-      "-c:v",
-      "libvpx-vp9",
-      "-crf",
-      String(WEBM_CRF),
-      "-b:v",
-      "0",
-      "-row-mt",
-      "1",
-      "-pix_fmt",
-      "yuv420p",
-      "-g",
-      "1",
-      "-keyint_min",
-      "1",
-      "-an",
-      webmPath,
-    ]);
-
-    outputPaths.push(webmPath);
-    console.log(`webm: ${webmPath}`);
-  }
-
-  const elapsedMs = Date.now() - startMs;
-
-  // Append to log file.
-  const logRecord = {
-    ts: new Date().toISOString(),
-    prompt: PROMPT,
-    endpoint: ENDPOINT,
-    duration: DURATION,
-    aspect_ratio: ASPECT_RATIO,
-    cfg_scale: CFG_SCALE,
-    negative_prompt: NEGATIVE_PROMPT,
-    webm: DO_WEBM,
-    outputs: outputPaths,
-    elapsed_ms: elapsedMs,
-  };
-  const logLine = JSON.stringify(logRecord) + "\n";
-  try {
-    appendFileSync(LOG_FILE, logLine);
-  } catch {
-    console.warn(`WARNING: could not write to log file: ${LOG_FILE}`);
-  }
-
-  console.log(`log: ${LOG_FILE}`);
-  console.log(`elapsed: ${elapsedMs}ms`);
-
-  // Emit one JSON-lines record per output file.
-  for (const p of outputPaths) {
-    const ext = p.endsWith(".webm") ? "webm" : "video";
-    process.stdout.write(
-      JSON.stringify({
-        type: ext,
-        path: p,
-        endpoint: ENDPOINT,
-        prompt: PROMPT,
-        duration: DURATION,
-        aspect_ratio: ASPECT_RATIO,
-        cfg_scale: CFG_SCALE,
-      }) + "\n",
-    );
-  }
+  await renderVideo(
+    {
+      endpoint: ENDPOINT,
+      input: INPUT,
+      outDir: OUT_DIR,
+      timestamp: TIMESTAMP,
+      logFile: LOG_FILE,
+      webm: DO_WEBM,
+      scale: SCALE,
+      webmCrf: WEBM_CRF,
+    },
+    { subscribe: (endpoint, options) => fal.subscribe(endpoint, options) },
+  );
 }
 
 main().catch((err) => {
