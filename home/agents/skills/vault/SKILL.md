@@ -142,7 +142,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `notes` | List all notes with metadata | No |
 | `experiments` | List all experiments with metadata | No |
 | `log [DATE\|WEEK\|last\|next]` | Open or create weekly log | No |
-| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card (superseded entries exempt), dangling-reference, reference-not-wikilink, reference-wrong-type, broken-wikilink, untagged-card, singleton-tag, oversized-entry (superseded entries exempt), untyped-entry | Yes |
+| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card (superseded entries exempt), dangling-reference, reference-not-wikilink, reference-wrong-type, reference-vault-link, broken-wikilink, untagged-card, singleton-tag, oversized-entry (superseded entries exempt), untyped-entry | Yes |
 | `xp [YEAR]` | XP report: calendar, streak, level | No |
 
 ### Project commands

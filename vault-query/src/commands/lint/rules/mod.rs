@@ -7,6 +7,7 @@ pub mod missing_required_field;
 pub mod orphan_card;
 pub mod oversized_entry;
 pub mod reference_not_wikilink;
+pub mod reference_vault_link;
 pub mod reference_wrong_type;
 pub mod singleton_tag;
 pub mod unknown_rel;
