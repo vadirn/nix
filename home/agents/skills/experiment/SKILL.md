@@ -122,7 +122,7 @@ project: "[[<project wikilink>]]" # omit line if no project resolved
 
 ## Glossary
 
-Rows whose **Term** is bolded are pinned: text, position, and presence are fixed. Pinned rows describe load-bearing anchors a cold reader must resolve before reading the Claim. Append un-pinned rows for working vocabulary; refine an existing un-pinned term by appending a new row with the sharpened wording rather than rewording in place.
+Rows whose **Term** is bolded are pinned: text, position, and presence are fixed, and update passes must not edit them. Append un-pinned rows for working vocabulary; refine an existing un-pinned term by appending a new row with the sharpened wording rather than rewording in place.
 
 | Term          | Definition                                                            |
 | ------------- | --------------------------------------------------------------------- |
