@@ -5,7 +5,10 @@ __pycache__/
 .claude/skills/nix
 .vault.config.json
 vault-query/target/
+mdread/target/
+mdstruct/target/
 .overnight/
 .overnight-*/
 home/claude/evals/debate/outputs/
 _spikes/
+result

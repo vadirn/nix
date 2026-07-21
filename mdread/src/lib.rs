@@ -1,83 +1,230 @@
-//! `read FILE [ADDRESS]`: render a Markdown file's heading tree (overview) or
-//! smart-unfold one addressed section.
+//! `mdread` — a progressive-unfolding structured Markdown reader.
 //!
-//! The command is split across four private submodules — [`model`] (the heading
-//! tree and its parser), [`resolve`] (address → node), [`unfold`] (the
-//! inline/fold walker), and [`render`] (overview JSON shapes and tree lines) —
-//! with [`run`] the only public item. Errors propagate as `Result`; `main` owns
-//! the process exit code, so a read failure or unresolvable address exits 1
-//! there rather than calling `process::exit` mid-stack.
+//! Renders a Markdown file's heading tree folded to one line per section (with
+//! line and estimated-token stats), or smart-unfolds one addressed section.
+//! Structure comes from the shared [`mdstruct`] core; everything here is the
+//! reader's own policy — the fold thresholds, the token estimate, the address
+//! scheme, and the rendered shapes.
+//!
+//! Every rendered slice is cut from the original bytes: the reader never
+//! restringifies the source.
 
+mod facet;
+mod format;
+mod frontmatter;
 mod model;
 mod render;
 mod resolve;
+mod slug;
+mod tokens;
 mod unfold;
+mod wikilink;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Result;
 
-use crate::output::TextJson;
-use crate::{tokens, wikilink};
+pub use facet::HeadingRule;
+pub use format::TextJson;
 
-use model::{node_tokens, parse_document, range_lines, range_slice, Document};
-use render::{node_to_json, print_tree_line, OverviewJson, TextNodeJson};
+use model::{Document, node_tokens, parse_document_with, range_lines, range_slice};
+use render::{OverviewJson, TextNodeJson, node_to_json, print_tree_line};
 use resolve::resolve_address;
-use unfold::{own_prose, unfold_child_json, unfold_content_string, UnfoldJson};
+use unfold::{UnfoldJson, own_prose, unfold_child_json, unfold_content_string};
 
-/// Resolve the path to read. A literal/absolute path that exists wins; if it
-/// does not exist and a `vault_root` is configured, fall back to
-/// `vault_root.join(file)`. When neither resolves, return the original so the
-/// read error names what the caller asked for.
-fn resolve_read_path(file: &Path, vault_root: Option<&Path>) -> PathBuf {
-    if file.exists() {
-        return file.to_path_buf();
-    }
-    if let Some(root) = vault_root {
-        let joined = root.join(file);
-        if joined.exists() {
-            return joined;
-        }
-    }
-    file.to_path_buf()
-}
+/// Default inline cutoff in estimated tokens for the unfold heuristic.
+pub const DEFAULT_THRESHOLD: usize = 2000;
 
+/// Read `file` and render it: a folded overview when `address` is `None`, or the
+/// smart-unfolded addressed section otherwise.
 pub fn run(
     file: &Path,
-    vault_root: Option<&Path>,
     address: Option<&str>,
     depth: Option<usize>,
     full: bool,
     threshold: Option<usize>,
     format: TextJson,
+    heading_rule: HeadingRule,
 ) -> Result<()> {
-    // Honor any literal/absolute path that exists (track Decision 2: operate on
-    // any `.md` path); fall back to vault-relative resolution so the bare
-    // pointers consult emits (`read "20 cards/Foo.md"`) run from any cwd.
-    let resolved = resolve_read_path(file, vault_root);
-    let file = resolved.as_path();
     let content = std::fs::read_to_string(file)
         .map_err(|e| anyhow::anyhow!("Cannot read {}: {}", file.display(), e))?;
+    run_content(
+        &file.display().to_string(),
+        &content,
+        address,
+        depth,
+        full,
+        threshold,
+        format,
+        heading_rule,
+    )
+}
 
-    let doc = parse_document(&content);
-
-    // Default inline cutoff in estimated tokens. This is a tuning knob: the
-    // track targets ~4k-token chunks, so revisit after first real use.
-    let threshold = threshold.unwrap_or(2000);
+/// Render already-loaded `content`, labelled `display_path` in the output. Lets a
+/// caller read from stdin or an in-memory buffer.
+#[allow(clippy::too_many_arguments)]
+pub fn run_content(
+    display_path: &str,
+    content: &str,
+    address: Option<&str>,
+    depth: Option<usize>,
+    full: bool,
+    threshold: Option<usize>,
+    format: TextJson,
+    heading_rule: HeadingRule,
+) -> Result<()> {
+    let doc = parse_document_with(content, heading_rule);
+    let threshold = threshold.unwrap_or(DEFAULT_THRESHOLD);
 
     match address {
-        None => emit_overview(file, &content, &doc, format),
-        Some(addr) => emit_section(file, &doc, addr, depth, full, threshold, format),
+        None => emit_overview(display_path, content, &doc, format),
+        // Frontmatter is addressed before the heading tree: it sits above
+        // `body_start`, so it is not a node the tree can resolve.
+        Some(addr) if frontmatter_address(addr).is_some() => {
+            let which = frontmatter_address(addr).expect("checked by the guard");
+            emit_frontmatter(display_path, content, addr, which, format)
+        }
+        Some(addr) => emit_section(display_path, &doc, addr, depth, full, threshold, format),
     }
 }
 
-/// Overview path (bare `read FILE`).
-fn emit_overview(file: &Path, content: &str, doc: &Document, format: TextJson) -> Result<()> {
-    // `frontmatter::parse` returns a BTreeMap (alphabetized), which would
-    // misrepresent the file's on-disk field order. Scan the raw frontmatter
-    // block for top-level keys in source order instead.
-    let fields: Vec<String> = crate::frontmatter::field_order(content);
-    let link_count = wikilink::extract(content).len();
+/// Which part of the frontmatter an address names.
+enum FmAddress<'a> {
+    /// The whole block (`frontmatter`, `fm`).
+    Block,
+    /// One entry by key (`fm.tags`, `frontmatter.tags`).
+    Field(&'a str),
+}
+
+/// Recognize a frontmatter address, case-insensitively. Returns `None` for any
+/// address that is not frontmatter, leaving it to the heading-tree resolver.
+///
+/// The prefixes are ASCII, so lowercasing preserves their byte length and the
+/// key can be sliced out of the original (case-preserving) address.
+fn frontmatter_address(addr: &str) -> Option<FmAddress<'_>> {
+    let lower = addr.to_lowercase();
+    if lower == "frontmatter" || lower == "fm" {
+        return Some(FmAddress::Block);
+    }
+    for prefix in ["frontmatter.", "fm."] {
+        if lower.starts_with(prefix) {
+            let key = &addr[prefix.len()..];
+            if !key.is_empty() {
+                return Some(FmAddress::Field(key));
+            }
+        }
+    }
+    None
+}
+
+#[derive(serde::Serialize)]
+struct FieldJson {
+    key: String,
+    value: String,
+    line: usize,
+}
+
+#[derive(serde::Serialize)]
+struct FrontmatterJson {
+    path: String,
+    address: String,
+    line: usize,
+    lines: usize,
+    fields: Vec<FieldJson>,
+}
+
+#[derive(serde::Serialize)]
+struct FrontmatterFieldJson {
+    path: String,
+    address: String,
+    key: String,
+    value: String,
+    line: usize,
+}
+
+/// Frontmatter path: print the raw block, or one entry's value.
+fn emit_frontmatter(
+    display_path: &str,
+    content: &str,
+    address: &str,
+    which: FmAddress<'_>,
+    format: TextJson,
+) -> Result<()> {
+    let Some(text) = frontmatter::block_text(content) else {
+        return Err(anyhow::anyhow!(
+            "No frontmatter block in this file (address '{}')",
+            address
+        ));
+    };
+
+    match which {
+        FmAddress::Field(key) => {
+            let Some(f) = frontmatter::field(content, key) else {
+                let known: Vec<String> = frontmatter::field_order(content);
+                return Err(anyhow::anyhow!(
+                    "No frontmatter field '{}'; present: {}",
+                    key,
+                    known.join(", ")
+                ));
+            };
+            if format == TextJson::Json {
+                let out = FrontmatterFieldJson {
+                    path: display_path.to_string(),
+                    address: address.to_string(),
+                    key: f.key,
+                    value: f.value,
+                    line: f.line,
+                };
+                println!("{}", serde_json::to_string_pretty(&out)?);
+            } else {
+                println!("{}", f.value);
+            }
+        }
+        FmAddress::Block => {
+            let (start, end) = frontmatter::block_line_range(content).unwrap_or((1, 0));
+            if format == TextJson::Json {
+                let fields = frontmatter::fields_with_values(content)
+                    .into_iter()
+                    .map(|f| FieldJson {
+                        key: f.key,
+                        value: f.value,
+                        line: f.line,
+                    })
+                    .collect();
+                let out = FrontmatterJson {
+                    path: display_path.to_string(),
+                    address: address.to_string(),
+                    line: start,
+                    lines: range_lines(start, end),
+                    fields,
+                };
+                println!("{}", serde_json::to_string_pretty(&out)?);
+            } else {
+                println!(
+                    "{}  (frontmatter)   L{}   {} lines",
+                    address,
+                    start,
+                    range_lines(start, end)
+                );
+                println!();
+                println!("{}", text);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Overview path (no address).
+fn emit_overview(
+    display_path: &str,
+    content: &str,
+    doc: &Document,
+    format: TextJson,
+) -> Result<()> {
+    // Scan the raw frontmatter block for top-level keys in source order, so the
+    // listing reflects the file rather than an alphabetization.
+    let fields: Vec<String> = frontmatter::field_order(content);
+    let link_count = facet::link_count(content);
 
     if format == TextJson::Json {
         let text = doc.text.as_ref().map(|t| TextNodeJson {
@@ -89,9 +236,13 @@ fn emit_overview(file: &Path, content: &str, doc: &Document, format: TextJson) -
                 &range_slice(&doc.lines, t.start, t.end).unwrap_or_default(),
             ),
         });
-        let tree = doc.tree.iter().map(|n| node_to_json(n, &doc.lines)).collect();
+        let tree = doc
+            .tree
+            .iter()
+            .map(|n| node_to_json(n, &doc.lines))
+            .collect();
         let out = OverviewJson {
-            path: file.display().to_string(),
+            path: display_path.to_string(),
             fields,
             links: link_count,
             text,
@@ -102,7 +253,7 @@ fn emit_overview(file: &Path, content: &str, doc: &Document, format: TextJson) -
     }
 
     // Text overview.
-    println!("{}", file.display());
+    println!("{}", display_path);
     if !fields.is_empty() {
         println!("fields: {}", fields.join(", "));
     }
@@ -125,21 +276,19 @@ fn emit_overview(file: &Path, content: &str, doc: &Document, format: TextJson) -
     }
 
     println!();
-    println!("next: read FILE <addr> | properties FILE <path> | links FILE");
+    // Tool-agnostic: names addresses, not a command, so both the `mdread` CLI and
+    // the `vault-query read` wrapper print something true of themselves.
+    println!("next: <addr> unfolds a section · fm the frontmatter · fm.<key> one field");
     Ok(())
 }
 
-/// With-address path: smart-unfold the addressed node (Backlog 5, Decision 8).
+/// With-address path: smart-unfold the addressed node.
 ///
-/// Text: print the node header, then its own prose, then for each direct child
-/// either the inlined (recursively unfolded) text or a folded placeholder line
-/// identical to the overview tree line. The text node (`[0]`) has no children,
-/// so it prints its own prose uniformly.
-///
-/// JSON: `{ path, address, heading, slug, line, lines, tokens, content,
-/// children:[{address, heading, line, lines, tokens, folded, content?}] }`.
+/// Text: the node header, then its own prose, then for each direct child either
+/// the inlined (recursively unfolded) text or a folded placeholder line
+/// identical to the overview tree line.
 fn emit_section(
-    file: &Path,
+    display_path: &str,
     doc: &Document,
     address: &str,
     depth: Option<usize>,
@@ -157,7 +306,7 @@ fn emit_section(
             .map(|c| unfold_child_json(c, &doc.lines, 1, depth, threshold, full))
             .collect();
         let out = UnfoldJson {
-            path: file.display().to_string(),
+            path: display_path.to_string(),
             address: n.address.clone(),
             heading: n.heading.clone(),
             slug: n.slug.clone(),
@@ -175,18 +324,21 @@ fn emit_section(
             n.address, n.heading, n.line, lines, toks
         );
         println!();
-        print!("{}", unfold_content_string(n, &doc.lines, 0, depth, threshold, full));
+        print!(
+            "{}",
+            unfold_content_string(n, &doc.lines, 0, depth, threshold, full)
+        );
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::model::*;
-    use super::render::tree_line_string;
-    use super::resolve::{resolve, resolve_address, ResolveError};
-    use super::unfold::*;
-    use crate::output::TextJson;
+    use crate::format::TextJson;
+    use crate::model::*;
+    use crate::render::tree_line_string;
+    use crate::resolve::{ResolveError, resolve, resolve_address};
+    use crate::unfold::*;
     use std::str::FromStr;
 
     const SAMPLE: &str = "---\ntype: note\nslug: x\n---\n\nLede prose before any heading.\nSecond line of lede.\n\n# Direction\n\nDir body.\n\n## Sub one\n\nsub one body\n\n## Sub two\n\nsub two body\n\n# Glossary\n\ngloss body\n\n# Log & Notes\n\nfirst.\n\n# Log Notes\n\nsecond.\n";
@@ -199,18 +351,6 @@ mod tests {
         assert!(TextJson::from_str("yaml").is_err());
         assert_eq!(TextJson::Text.to_string(), "text");
         assert_eq!(TextJson::Json.to_string(), "json");
-    }
-
-    #[test]
-    fn slug_basic() {
-        use crate::slug::segment as heading_slug;
-        assert_eq!(heading_slug("Direction"), "direction");
-        assert_eq!(heading_slug("Sub one"), "sub-one");
-        assert_eq!(heading_slug("Log & Notes"), "log-notes");
-        assert_eq!(heading_slug("Log Notes"), "log-notes");
-        assert_eq!(heading_slug("`code` *bold*"), "code-bold");
-        assert_eq!(heading_slug("See [[A Note|Display]]"), "see-display");
-        assert_eq!(heading_slug("1. Numbered"), "1-numbered");
     }
 
     #[test]
@@ -317,8 +457,7 @@ mod tests {
 
     #[test]
     fn numeric_overflow_is_out_of_range_not_panic() {
-        // An all-digit address that overflows usize must report out-of-range,
-        // not panic on the parse.
+        // An all-digit address that overflows usize must report out-of-range.
         let doc = parse_document(SAMPLE);
         match resolve(&doc, "99999999999999999999") {
             Err(ResolveError::OutOfRange(addr)) => assert_eq!(addr, "99999999999999999999"),
@@ -329,13 +468,19 @@ mod tests {
     #[test]
     fn numeric_past_end_is_out_of_range() {
         let doc = parse_document(SAMPLE);
-        assert!(matches!(resolve(&doc, "99"), Err(ResolveError::OutOfRange(_))));
+        assert!(matches!(
+            resolve(&doc, "99"),
+            Err(ResolveError::OutOfRange(_))
+        ));
     }
 
     #[test]
     fn no_slug_match_errors() {
         let doc = parse_document(SAMPLE);
-        assert!(matches!(resolve(&doc, "nope"), Err(ResolveError::NoSlugMatch(_))));
+        assert!(matches!(
+            resolve(&doc, "nope"),
+            Err(ResolveError::NoSlugMatch(_))
+        ));
     }
 
     #[test]
@@ -352,16 +497,19 @@ mod tests {
 
     #[test]
     fn resolve_address_errors_instead_of_exiting() {
-        // resolve_address now returns a Result the caller propagates with `?`
-        // (no process::exit), so the error path is unit-testable. The message
-        // preserves the wording the command prints to stderr.
+        // resolve_address returns a Result the caller propagates with `?` (no
+        // process::exit), so the error path is unit-testable.
         let doc = parse_document(SAMPLE);
         let oob = resolve_address(&doc, "99").unwrap_err();
         assert!(oob.to_string().contains("out of range"), "got: {}", oob);
         let ambig = resolve_address(&doc, "log-notes").unwrap_err();
         let msg = ambig.to_string();
         assert!(msg.contains("Ambiguous"), "got: {}", msg);
-        assert!(msg.contains("Log & Notes") && msg.contains("Log Notes"), "got: {}", msg);
+        assert!(
+            msg.contains("Log & Notes") && msg.contains("Log Notes"),
+            "got: {}",
+            msg
+        );
         // A valid address still resolves to the node.
         assert_eq!(resolve_address(&doc, "2").unwrap().heading, "Glossary");
     }
@@ -378,8 +526,8 @@ mod tests {
     }
 
     // A parent section with one small child (below threshold) and one large
-    // child (above threshold), the large child carrying a grandchild. Used to
-    // exercise the inline-vs-fold heuristic and the depth budget.
+    // child (above threshold), the large child carrying a grandchild. Exercises
+    // the inline-vs-fold heuristic and the depth budget.
     const UNFOLD: &str = "# Sec\n\nsec prose.\n\n## Small\n\ntiny.\n\n## Large\n\nLLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL LLLL.\n\n### Grand\n\ngrand prose.\n";
 
     #[test]
@@ -405,8 +553,7 @@ mod tests {
         let large = &doc.tree[0].children[1];
         let grand = &large.children[0];
         let big = usize::MAX; // threshold never binds
-        // depth=1 admits level_depth 0 (the addressed node's direct children at
-        // level_depth 1 fail since 1 < 1 is false)…
+        // depth=1 admits level_depth 0 (direct children at level_depth 1 fail)…
         assert!(!should_inline(grand, &doc.lines, 1, Some(1), big, false));
         // …depth=2 admits level_depth 1.
         assert!(should_inline(grand, &doc.lines, 1, Some(2), big, false));
@@ -420,7 +567,11 @@ mod tests {
         let sec = &doc.tree[0];
         let prose = own_prose(sec, &doc.lines);
         assert!(prose.contains("sec prose."), "own prose: {}", prose);
-        assert!(!prose.contains("tiny."), "own prose must stop before first child: {}", prose);
+        assert!(
+            !prose.contains("tiny."),
+            "own prose must stop before first child: {}",
+            prose
+        );
     }
 
     #[test]
@@ -428,11 +579,15 @@ mod tests {
         let doc = parse_document(UNFOLD);
         let large = &doc.tree[0].children[1];
         // The folded placeholder for a child equals that child's overview tree
-        // line (the single-line form), so a reader can drill with the same address.
+        // line, so a reader can drill with the same address.
         let placeholder = tree_line_string(large, &doc.lines);
         assert!(placeholder.contains("1.2"), "placeholder: {}", placeholder);
         assert!(placeholder.contains("Large"), "placeholder: {}", placeholder);
-        assert!(placeholder.trim_start().starts_with('+'), "Large has a child, marker '+': {}", placeholder);
+        assert!(
+            placeholder.trim_start().starts_with('+'),
+            "Large has a child, marker '+': {}",
+            placeholder
+        );
     }
 
     #[test]
@@ -450,6 +605,48 @@ mod tests {
         assert!(s.contains("1.2"), "large child placeholder present: {}", s);
     }
 
+    // --- frontmatter addressing ---
+
+    #[test]
+    fn frontmatter_addresses_recognized_case_insensitively() {
+        use crate::{FmAddress, frontmatter_address};
+        for a in ["fm", "FM", "frontmatter", "Frontmatter"] {
+            assert!(
+                matches!(frontmatter_address(a), Some(FmAddress::Block)),
+                "{a} should name the whole block"
+            );
+        }
+        for a in ["fm.tags", "FM.tags", "frontmatter.tags"] {
+            match frontmatter_address(a) {
+                Some(FmAddress::Field(k)) => assert_eq!(k, "tags"),
+                _ => panic!("{a} should name a field"),
+            }
+        }
+        // A key keeps its own dots and its original case.
+        match frontmatter_address("fm.My.Key") {
+            Some(FmAddress::Field(k)) => assert_eq!(k, "My.Key"),
+            _ => panic!("dotted key should survive"),
+        }
+    }
+
+    #[test]
+    fn non_frontmatter_addresses_fall_through_to_the_tree() {
+        use crate::frontmatter_address;
+        // Heading addresses, the text node, and a bare trailing dot are not
+        // frontmatter, so the heading-tree resolver still owns them.
+        for a in ["1", "1.2", "text", "0", "glossary", "fm.", "format"] {
+            assert!(frontmatter_address(a).is_none(), "{a} must not be frontmatter");
+        }
+    }
+
+    #[test]
+    fn frontmatter_address_does_not_shadow_a_heading_tree_lookup() {
+        // `fm` is intercepted before resolution, so a document whose heading
+        // slugs to `fm` still resolves every other address normally.
+        let doc = parse_document(SAMPLE);
+        assert_eq!(resolve_address(&doc, "2").unwrap().heading, "Glossary");
+    }
+
     #[test]
     fn numeric_address_predicate() {
         assert!(is_numeric_address("1"));
@@ -463,19 +660,19 @@ mod tests {
 
     #[test]
     fn bom_prefixed_frontmatter_is_skipped() {
-        // A BOM before the opening `---` must not shift heading line numbers:
-        // parsing with and without the BOM yields the same tree lines.
+        // A BOM before the opening `---` must not shift heading line numbers.
         let body = "---\ntype: note\n---\n\nlede\n\n# Heading\n\nbody\n";
         let with_bom = format!("\u{feff}{}", body);
         let plain = parse_document(body);
         let bommed = parse_document(&with_bom);
         assert_eq!(plain.tree.len(), 1);
         assert_eq!(bommed.tree.len(), 1);
-        // Frontmatter skipped in both: heading on the same line, body starts
-        // after the closing `---`.
         assert_eq!(bommed.tree[0].line, plain.tree[0].line);
         assert_eq!(bommed.tree[0].heading, "Heading");
         // Field order still recovered through the BOM.
-        assert_eq!(crate::frontmatter::field_order(&with_bom), vec!["type".to_string()]);
+        assert_eq!(
+            crate::frontmatter::field_order(&with_bom),
+            vec!["type".to_string()]
+        );
     }
 }

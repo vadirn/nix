@@ -817,6 +817,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
 
 [[package]]
+name = "mdread"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "mdstruct",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mdstruct"
 version = "0.1.0"
 dependencies = [
@@ -1715,6 +1727,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "mdread",
  "mdstruct",
  "regex",
  "serde",

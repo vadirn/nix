@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+mdread = { path = "../mdread" }
 mdstruct = { path = "../mdstruct" }
 regex = "1"
 serde = { version = "1", features = ["derive"] }

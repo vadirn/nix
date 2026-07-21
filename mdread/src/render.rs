@@ -1,42 +1,42 @@
-//! Overview rendering for `read`: the JSON shapes for the bare `read FILE`
-//! overview and the text tree-line helpers shared with the unfold walker.
+//! Overview rendering: the JSON shapes for the bare overview and the text
+//! tree-line helpers shared with the unfold walker.
 
 use serde::Serialize;
 
-use super::model::{range_lines, range_slice, Node};
+use crate::model::{Node, range_lines, range_slice};
 use crate::tokens;
 
 #[derive(Serialize)]
-pub(super) struct TextNodeJson {
-    pub(super) address: String,
-    pub(super) label: String,
-    pub(super) line: usize,
-    pub(super) lines: usize,
-    pub(super) tokens: usize,
+pub(crate) struct TextNodeJson {
+    pub(crate) address: String,
+    pub(crate) label: String,
+    pub(crate) line: usize,
+    pub(crate) lines: usize,
+    pub(crate) tokens: usize,
 }
 
 #[derive(Serialize)]
-pub(super) struct NodeJson {
-    pub(super) address: String,
-    pub(super) heading: String,
-    pub(super) level: usize,
-    pub(super) line: usize,
-    pub(super) lines: usize,
-    pub(super) tokens: usize,
-    pub(super) slug: String,
-    pub(super) children: Vec<NodeJson>,
+pub(crate) struct NodeJson {
+    pub(crate) address: String,
+    pub(crate) heading: String,
+    pub(crate) level: usize,
+    pub(crate) line: usize,
+    pub(crate) lines: usize,
+    pub(crate) tokens: usize,
+    pub(crate) slug: String,
+    pub(crate) children: Vec<NodeJson>,
 }
 
 #[derive(Serialize)]
-pub(super) struct OverviewJson {
-    pub(super) path: String,
-    pub(super) fields: Vec<String>,
-    pub(super) links: usize,
-    pub(super) text: Option<TextNodeJson>,
-    pub(super) tree: Vec<NodeJson>,
+pub(crate) struct OverviewJson {
+    pub(crate) path: String,
+    pub(crate) fields: Vec<String>,
+    pub(crate) links: usize,
+    pub(crate) text: Option<TextNodeJson>,
+    pub(crate) tree: Vec<NodeJson>,
 }
 
-pub(super) fn node_to_json(n: &Node, lines: &[&str]) -> NodeJson {
+pub(crate) fn node_to_json(n: &Node, lines: &[&str]) -> NodeJson {
     NodeJson {
         address: n.address.clone(),
         heading: n.heading.clone(),
@@ -50,9 +50,9 @@ pub(super) fn node_to_json(n: &Node, lines: &[&str]) -> NodeJson {
 }
 
 /// Format a single overview tree line (no trailing newline, no descendants).
-/// Shared by the overview renderer and the unfold folded-placeholder so that a
-/// folded child reads identically to its overview line.
-pub(super) fn tree_line_string(n: &Node, lines: &[&str]) -> String {
+/// Shared by the overview renderer and the unfold folded-placeholder so a folded
+/// child reads identically to its overview line.
+pub(crate) fn tree_line_string(n: &Node, lines: &[&str]) -> String {
     let marker = if n.children.is_empty() { ' ' } else { '+' };
     // Indent the heading column by depth (number of `.` segments).
     let depth = n.address.matches('.').count();
@@ -61,7 +61,13 @@ pub(super) fn tree_line_string(n: &Node, lines: &[&str]) -> String {
     let toks = tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default());
     format!(
         "{} {}{:<6} {:<14} L{}   {} lines · ~{} tok",
-        marker, indent, n.address, truncate_heading(&n.heading), n.line, lc, toks
+        marker,
+        indent,
+        n.address,
+        truncate_heading(&n.heading),
+        n.line,
+        lc,
+        toks
     )
 }
 
@@ -71,7 +77,7 @@ fn print_tree_line_single(n: &Node, lines: &[&str]) {
 }
 
 /// Recursively print one overview tree line and its descendants.
-pub(super) fn print_tree_line(n: &Node, lines: &[&str]) {
+pub(crate) fn print_tree_line(n: &Node, lines: &[&str]) {
     print_tree_line_single(n, lines);
     for c in &n.children {
         print_tree_line(c, lines);

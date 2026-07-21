@@ -1,54 +1,49 @@
-//! Document model for `read`: the heading tree, its parser, and the per-line
-//! range arithmetic the renderers and resolver share.
+//! Document model: the heading tree, its parser, and the per-line range
+//! arithmetic the renderers and resolver share.
 //!
 //! The pre-heading / heading-less text region is modelled as a synthetic node
-//! (address `"0"`, slug `"text"`, heading `"(text)"`, `level` 0, empty
-//! children) so resolver, overview, section, and JSON paths treat it like any
-//! other node (Decision 4).
+//! (address `"0"`, slug `"text"`, heading `"(text)"`, `level` 0, empty children)
+//! so resolver, overview, section, and JSON paths treat it like any other node.
 
+use crate::facet::HeadingRule;
 use crate::tokens;
 
 /// A heading node in the document tree.
 #[derive(Debug, Clone)]
-pub(super) struct Node {
-    pub(super) address: String,
-    pub(super) heading: String,
-    pub(super) slug: String,
-    pub(super) level: usize,
+pub(crate) struct Node {
+    pub(crate) address: String,
+    pub(crate) heading: String,
+    pub(crate) slug: String,
+    pub(crate) level: usize,
     /// 1-based line number of the heading line.
-    pub(super) line: usize,
-    /// Inclusive 1-based line range [start, end] of the node's content,
-    /// from the heading line through the line before the next heading with
+    pub(crate) line: usize,
+    /// Inclusive 1-based line range [start, end] of the node's content, from the
+    /// heading line through the line before the next heading with
     /// `level <= self.level` (or EOF). Includes descendants.
-    pub(super) start: usize,
-    pub(super) end: usize,
-    pub(super) children: Vec<Node>,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) children: Vec<Node>,
 }
 
 /// Parsed document: synthetic text node (if any) + heading tree, plus per-line
 /// slice access for counting lines and tokens.
-pub(super) struct Document<'a> {
-    pub(super) lines: Vec<&'a str>,
-    pub(super) text: Option<Node>,
-    pub(super) tree: Vec<Node>,
+pub(crate) struct Document<'a> {
+    pub(crate) lines: Vec<&'a str>,
+    pub(crate) text: Option<Node>,
+    pub(crate) tree: Vec<Node>,
 }
 
 /// Number of body lines covered by an inclusive 1-based range.
-pub(super) fn range_lines(start: usize, end: usize) -> usize {
-    if end >= start {
-        end - start + 1
-    } else {
-        0
-    }
+pub(crate) fn range_lines(start: usize, end: usize) -> usize {
+    if end >= start { end - start + 1 } else { 0 }
 }
 
 /// Concatenate the inclusive 1-based line range back into a string slice for
-/// token estimation. Lines were split by [`crate::mdfacet::lines`] (line
-/// endings dropped), so rejoin with '\n'. Returns
-/// `None` for a range that does not name real body lines (start before line 1,
-/// start past EOF, or an inverted end < start), so callers turn an out-of-range
-/// request into an explicit empty/zero rather than indexing past the slice.
-pub(super) fn range_slice(lines: &[&str], start: usize, end: usize) -> Option<String> {
+/// token estimation. Lines were split by [`crate::facet::lines`] (line endings
+/// dropped), so rejoin with '\n'. Returns `None` for a range that does not name
+/// real body lines (start before line 1, start past EOF, or an inverted
+/// end < start).
+pub(crate) fn range_slice(lines: &[&str], start: usize, end: usize) -> Option<String> {
     if start == 0 || start > lines.len() || end < start {
         return None;
     }
@@ -58,35 +53,35 @@ pub(super) fn range_slice(lines: &[&str], start: usize, end: usize) -> Option<St
 }
 
 /// Estimated tokens covered by a node's full range (heading through descendants).
-pub(super) fn node_tokens(n: &Node, lines: &[&str]) -> usize {
+pub(crate) fn node_tokens(n: &Node, lines: &[&str]) -> usize {
     tokens::estimate_tokens(&range_slice(lines, n.start, n.end).unwrap_or_default())
 }
 
-/// Detect ATX headings and the text/heading structure of the body.
+/// Parse with the general CommonMark heading rule (used by tests).
+#[cfg(test)]
+pub(crate) fn parse_document(content: &str) -> Document<'_> {
+    parse_document_with(content, HeadingRule::CommonMark)
+}
+
+/// Detect headings and the text/heading structure of the body under `rule`.
 ///
-/// Scans the full file by 1-based line, skipping the leading frontmatter block
-/// and fenced code blocks (``` and ~~~) so that `#` inside code is not a
-/// heading. Returns the parsed document.
-pub(super) fn parse_document(content: &str) -> Document<'_> {
-    let lines: Vec<&str> = crate::mdfacet::lines(content);
+/// Heading detection comes from the mdstruct locator facet — comrak excludes a
+/// `#` inside a code fence or the frontmatter block — with the `body_start`
+/// guard dropping any heading before the body.
+pub(crate) fn parse_document_with(content: &str, rule: HeadingRule) -> Document<'_> {
+    let lines: Vec<&str> = crate::facet::lines(content);
     let total = lines.len();
 
-    // Determine the 1-based line index at which the body begins, i.e. the line
-    // after the closing frontmatter `---`. If there is no frontmatter, the body
-    // begins at line 1.
+    // 1-based line at which the body begins (the line after the closing
+    // frontmatter `---`, or line 1 when there is no frontmatter).
     let body_start = crate::frontmatter::body_start_line(content);
 
-    // First pass: the body's ATX headings (level, text, line) from the mdstruct
-    // locator facet. comrak excludes a `#` inside a code fence or the frontmatter
-    // block, so the fence-toggling scan is gone; the `body_start` guard still drops
-    // any heading before the body. `text` is comrak's canonical post-`#` slice — a
-    // `## x ##` closing-hash run is stripped where the old scanner kept it.
-    let raw: Vec<crate::mdfacet::BodyHeading> = crate::mdfacet::body_headings(content)
+    let raw: Vec<crate::facet::BodyHeading> = crate::facet::body_headings(content, rule)
         .into_iter()
         .filter(|h| h.line >= body_start)
         .collect();
 
-    // Text region: body content before the first heading (or whole body when
+    // Text region: body content before the first heading (or the whole body when
     // heading-less). Emit only when it holds non-whitespace.
     let text = {
         let region_start = body_start.max(1);
@@ -96,11 +91,9 @@ pub(super) fn parse_document(content: &str) -> Document<'_> {
             total
         };
         if region_end >= region_start
-            && range_slice(&lines, region_start, region_end)
-                .is_some_and(|s| !s.trim().is_empty())
+            && range_slice(&lines, region_start, region_end).is_some_and(|s| !s.trim().is_empty())
         {
-            // Trim leading blank lines so the reported `line` points at the first
-            // non-blank line, matching how a reader locates the lede.
+            // Trim leading blank lines so `line` points at the first non-blank.
             let mut first_line = region_start;
             while first_line <= region_end
                 && lines.get(first_line - 1).is_none_or(|l| l.trim().is_empty())
@@ -122,12 +115,9 @@ pub(super) fn parse_document(content: &str) -> Document<'_> {
         }
     };
 
-    // Build the tree with a level-stack. Compute each node's content range as a
-    // second step once all heading lines are known.
-    // Flat nodes first (without ranges/children), then assemble.
-    let flats: Vec<FlatHeadingImpl> = raw
+    let flats: Vec<FlatHeading> = raw
         .iter()
-        .map(|h| FlatHeadingImpl {
+        .map(|h| FlatHeading {
             level: h.level,
             text: h.text.clone(),
             slug: crate::slug::segment(&h.text),
@@ -135,8 +125,7 @@ pub(super) fn parse_document(content: &str) -> Document<'_> {
         })
         .collect();
 
-    // Content end for heading i = (line of next heading with level <= flats[i].level) - 1,
-    // else `total`.
+    // Content end for heading i = (line of next heading with level <= flats[i].level) - 1, else total.
     let ends: Vec<usize> = (0..flats.len())
         .map(|i| {
             let mut end = total;
@@ -150,8 +139,6 @@ pub(super) fn parse_document(content: &str) -> Document<'_> {
         })
         .collect();
 
-    // Assemble the tree. We use an index-stack into a flat Vec<Node> kept in a
-    // recursive structure via a manual builder.
     let tree = build_tree(&flats, &ends);
 
     Document { lines, text, tree }
@@ -159,19 +146,14 @@ pub(super) fn parse_document(content: &str) -> Document<'_> {
 
 /// Build the heading tree from flat headings and their precomputed content ends.
 /// Addresses: top-level children `1..N`; child = `parent + "." + (idx+1)`.
-fn build_tree(flats: &[FlatHeadingImpl], ends: &[usize]) -> Vec<Node> {
-    // Stack of (level, address-prefix, child-count, index-path).
-    // We construct nodes bottom-up is awkward; instead build with a pointer stack
-    // into an arena of nodes addressed by path.
+fn build_tree(flats: &[FlatHeading], ends: &[usize]) -> Vec<Node> {
     let mut roots: Vec<Node> = Vec::new();
-    // Stack holds the path of indices into the nested `children` vectors that
-    // leads to the currently-open node at each level.
-    let mut stack: Vec<usize> = Vec::new(); // indices; resolved against roots each push
-    // We also track the level of each stacked node.
+    // Path of indices into the nested `children` vectors to the open node at each
+    // level, and the level of each stacked node.
+    let mut stack: Vec<usize> = Vec::new();
     let mut levels: Vec<usize> = Vec::new();
 
     for (i, h) in flats.iter().enumerate() {
-        // Pop while top.level >= current level.
         while let Some(&top_level) = levels.last() {
             if top_level >= h.level {
                 levels.pop();
@@ -182,7 +164,6 @@ fn build_tree(flats: &[FlatHeadingImpl], ends: &[usize]) -> Vec<Node> {
         }
 
         let address = if stack.is_empty() {
-            // Top-level: 1-based index among current roots.
             (roots.len() + 1).to_string()
         } else {
             let parent = node_at_path(&roots, &stack);
@@ -200,7 +181,6 @@ fn build_tree(flats: &[FlatHeadingImpl], ends: &[usize]) -> Vec<Node> {
             children: Vec::new(),
         };
 
-        // Insert into the tree at the current parent.
         let new_index = if stack.is_empty() {
             roots.push(node);
             roots.len() - 1
@@ -218,9 +198,8 @@ fn build_tree(flats: &[FlatHeadingImpl], ends: &[usize]) -> Vec<Node> {
 }
 
 /// Flattened heading the tree builder consumes: the heading's level, raw text,
-/// precomputed slug, and 1-based heading line. Lifted to module scope so
-/// `build_tree` can take a slice of it.
-struct FlatHeadingImpl {
+/// precomputed slug, and 1-based heading line.
+struct FlatHeading {
     level: usize,
     text: String,
     slug: String,
@@ -248,7 +227,7 @@ fn node_at_path_mut<'a>(roots: &'a mut [Node], path: &[usize]) -> &'a mut Node {
 }
 
 /// Flatten the tree into a depth-first list of node references.
-pub(super) fn flatten<'a>(tree: &'a [Node], out: &mut Vec<&'a Node>) {
+pub(crate) fn flatten<'a>(tree: &'a [Node], out: &mut Vec<&'a Node>) {
     for n in tree {
         out.push(n);
         flatten(&n.children, out);
@@ -256,7 +235,7 @@ pub(super) fn flatten<'a>(tree: &'a [Node], out: &mut Vec<&'a Node>) {
 }
 
 /// True for `^\d+(\.\d+)*$`.
-pub(super) fn is_numeric_address(s: &str) -> bool {
+pub(crate) fn is_numeric_address(s: &str) -> bool {
     !s.is_empty()
         && s.split('.').all(|seg| !seg.is_empty() && seg.bytes().all(|b| b.is_ascii_digit()))
 }

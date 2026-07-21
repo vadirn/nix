@@ -46,15 +46,19 @@
     system = "aarch64-darwin";
     pkgs = nixpkgs.legacyPackages.${system};
     inherit (pkgs) lib;
-    # vault-query links mdstruct as a path dependency (`../mdstruct`), so its build
-    # source must carry BOTH crate trees at their relative layout. Pin the source to
-    # the manifests, sources, and tests only (no `target/`) so the input is stable.
+    # The three crates link by path dependency — vault-query → mdread → mdstruct —
+    # so every build source must carry ALL the trees at their relative layout. Pin
+    # the source to the manifests, sources, and tests only (no `target/`) so the
+    # input is stable.
     crateSrc = lib.fileset.toSource {
       root = ./.;
       fileset = lib.fileset.unions [
         ./mdstruct/Cargo.toml
         ./mdstruct/Cargo.lock
         ./mdstruct/src
+        ./mdread/Cargo.toml
+        ./mdread/Cargo.lock
+        ./mdread/src
         ./vault-query/Cargo.toml
         ./vault-query/Cargo.lock
         ./vault-query/src
@@ -74,7 +78,17 @@
       # `../mdstruct` path dep resolves to the sibling crate tree in `crateSrc`.
       cargoRoot = "vault-query";
       buildAndTestSubdir = "vault-query";
-      cargoHash = "sha256-psvRl9CSC5muEccQM38D7c/M78/VWmdnGx3NMBqlflQ=";
+      cargoHash = "sha256-jTE2nRcWbqqwxmOdj8nks/P+Xiv8aQ804dqRgnB69Ts=";
+    };
+    # The standalone structured-Markdown reader. Path-deps `../mdstruct`, so it
+    # builds from `crateSrc` (the shared tree) rather than `./mdread` alone.
+    mdread = pkgs.rustPlatform.buildRustPackage {
+      pname = "mdread";
+      version = "0.1.0";
+      src = crateSrc;
+      cargoRoot = "mdread";
+      buildAndTestSubdir = "mdread";
+      cargoHash = "sha256-jD9udfG2WGHfosL4ywHDXdCigdw6U9XzYEyDvTy/840=";
     };
     mdstruct = pkgs.rustPlatform.buildRustPackage {
       pname = "mdstruct";
@@ -86,7 +100,7 @@
     mkDarwinConfig = hostname:
       nix-darwin.lib.darwinSystem {
         inherit system;
-        specialArgs = {inherit inputs self vault-query mdstruct hostname;};
+        specialArgs = {inherit inputs self vault-query mdread mdstruct hostname;};
         modules = [
           ./hosts/darwin.nix
           nix-homebrew.darwinModules.nix-homebrew
@@ -94,7 +108,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
-            inherit vault-query mdstruct;
+            inherit vault-query mdread mdstruct;
           })
         ];
       };
@@ -107,7 +121,7 @@
     };
 
     darwinPackages = self.darwinConfigurations.default.pkgs;
-    packages.${system} = {inherit vault-query mdstruct;};
+    packages.${system} = {inherit vault-query mdread mdstruct;};
     formatter.${system} = pkgs.alejandra;
   };
 }
