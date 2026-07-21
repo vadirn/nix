@@ -13,6 +13,7 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::orphan_card::OrphanCard),
         Box::new(super::rules::oversized_entry::OversizedEntry { per_doc_token_cap }),
         Box::new(super::rules::reference_not_wikilink::ReferenceNotWikilink),
+        Box::new(super::rules::reference_wrong_type::ReferenceWrongType),
         Box::new(super::rules::singleton_tag::SingletonTag),
         Box::new(super::rules::unknown_rel::UnknownRel),
         Box::new(super::rules::untagged_card::UntaggedCard),

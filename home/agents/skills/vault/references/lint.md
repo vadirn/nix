@@ -23,6 +23,7 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `orphan-card`            | warn    | Card with zero inbound wikilinks (excludes folder-index cards: `<X>/~<X>.md`)     |
 | `dangling-reference`     | warn    | Reference not cited by any card's `reference:` frontmatter                        |
 | `reference-not-wikilink` | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL)                 |
+| `reference-wrong-type` | warn    | Card's `reference:` wikilink resolves to an entry whose `type:` is not `reference` |
 | `broken-wikilink`        | error   | `[[target]]` does not resolve to any vault file                                   |
 | `duplicate-h1`           | warn    | First non-blank body line is `# <basename>`, duplicating the implicit page title. |
 | `invalid-frontmatter`    | error   | YAML frontmatter fails to parse                                                   |
@@ -64,7 +65,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 
 - **`singleton-tag` defaults to `warn`.** It fires on tags used in exactly one file. Promote to `error` or demote to `off` via `--rule singleton-tag=<severity>` or via `lint.rules` in the root config.
 
-- **`dangling-reference` does not check the wikilink target's `type:`.** A card with `reference: [[20 cards/Foo]]` (pointing at another card, not a `type: reference` file) suppresses the dangling check. The companion `reference-not-wikilink` rule covers the related miss where the `reference:` value is a non-wikilink string.
+- **`dangling-reference` does not check the wikilink target's `type:`.** A card with `reference: [[20 cards/Foo]]` (pointing at another card, not a `type: reference` file) suppresses the dangling check. The companion rules cover the misses: `reference-not-wikilink` when the `reference:` value is a non-wikilink string, `reference-wrong-type` when the wikilink resolves to a non-`reference` entry.
 
 - **Act on findings interactively.** Use `/vault card <name>`, `/vault reference <name>`, or open the file directly to fix issues; lint is read-only and never edits.
 
@@ -98,6 +99,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `orphan-card`            | `null`                                     |
 | `dangling-reference`     | `null`                                     |
 | `reference-not-wikilink` | `{ "value": <string> }`                    |
+| `reference-wrong-type` | `{ "target": <string>, "target_type": <string> }` |
 | `broken-wikilink`        | `{ "target": <string>, "line": <number> }` |
 | `duplicate-h1`           | `null`                                     |
 | `invalid-frontmatter`    | `{ "error": <string> }`                    |
