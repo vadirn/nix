@@ -41,11 +41,9 @@ fn distinct_labels_interleave_not_nest() {
     let close_b = "<!-- /highlight_b -->";
 
     let open_a_start = src.find(open_a).unwrap();
-    let open_a_end = open_a_start + open_a.len();
     let close_a_start = src.find(close_a).unwrap();
     let close_a_end = close_a_start + close_a.len();
     let open_b_start = src.find(open_b).unwrap();
-    let open_b_end = open_b_start + open_b.len();
     let close_b_start = src.find(close_b).unwrap();
     let close_b_end = close_b_start + close_b.len();
 
@@ -93,7 +91,6 @@ fn reused_label_nests_lifo() {
     let open1_start = src.find(open).unwrap();
     let open1_end = open1_start + open.len();
     let open2_start = open1_end + src[open1_end..].find(open).unwrap();
-    let open2_end = open2_start + open.len();
     let close1_start = src.find(close).unwrap();
     let close1_end = close1_start + close.len();
     let close2_start = close1_end + src[close1_end..].find(close).unwrap();

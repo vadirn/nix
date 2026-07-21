@@ -33,6 +33,7 @@
 //!   - inline endpoint (an anchor embedded in a text run): byte-offset spans —
 //!     span.start = open.start_byte, body start = open.end_byte;
 //!     span.end = close.end_byte, body end = close.start_byte.
+//!
 //! `start_line`/`end_line` are the lines the open/close anchor offsets fall on.
 
 use super::model::{Region, Span};

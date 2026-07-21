@@ -8,7 +8,7 @@
          aarch64-darwin
 ```
 
-Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and Rust tooling for an Obsidian vault — a shared markdown-parsing core (`mdstruct`) and a query CLI (`vault-query`) built on it.
+Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and Rust tooling for an Obsidian vault — a shared markdown-parsing core (`mdstruct`), a general markdown reader (`mdread`), and a query CLI (`vault-query`) built on both.
 
 ## Machines
 
@@ -25,6 +25,12 @@ Personal macOS system config. Three areas: a Nix flake that declaratively manage
 `home/claude/` contains `settings.json` with sandbox permissions and environment variables. `home/claude/hooks/` has PreToolUse safety hooks: dangerous command blocking, sensitive file guards, `/commit` and `/pr` nonce enforcement, firecrawl routing, and sound notifications.
 
 `agents/AGENTS.md` is the shared reasoning and communication ruleset (dialectical method, formal logic, prose style). `agents/skills/` holds ~30 skills (`commit`, `pr`, `vault`, `firecrawl-*`, `debate`, `probe`, `work`, `tdd`, `writing-*`, `design`, etc.). `agents/agents/` holds subagent definitions. `agents/scripts/sync-agents.sh` re-creates agent symlinks without a full rebuild.
+
+## Rust workspace
+
+The three crates form one cargo workspace rooted at `Cargo.toml`, chained by path dependency: `vault-query → mdread → mdstruct`. One lockfile, one `target/`, one `cargo test --workspace`, and — because a single lockfile vendors a single dependency set — one `cargoHash` in `flake.nix`, shared by all three `buildRustPackage` derivations and recomputed once when a dependency changes. Dependencies used by more than one member are declared in `[workspace.dependencies]` and inherited with `.workspace = true`, so two members cannot drift onto different versions of the same crate. `shell.nix` at the root provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
+
+Each package still builds on its own — `nix build .#mdread` selects its member with `buildAndTestSubdir`, and cargo finds the root manifest above it.
 
 ## mdstruct
 
