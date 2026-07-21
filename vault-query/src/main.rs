@@ -46,11 +46,11 @@ enum Commands {
         #[arg(long, default_value = "table")]
         format: output::Format,
     },
-    /// Read a .md file: folded overview, or unfold an addressed section
+    /// Read a .md file or vault entry: folded overview, or unfold a section
     Read {
-        /// Path to the .md file
+        /// Path to the .md file, or a vault entry name fragment
         file: PathBuf,
-        /// Section address: numeric (e.g. 2.1), heading slug, or 0/text
+        /// Address: numeric (2.1), heading slug, 0/text, or fm[.key] for frontmatter
         address: Option<String>,
         /// Max levels to expand under the addressed node (Step 2)
         #[arg(long)]
@@ -287,14 +287,15 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             threshold,
             format,
         } => {
-            // Resolve config so vault-relative pointer paths work from any cwd;
-            // fall back to None (cwd-only) when no vault config is present so a
-            // bare `read FILE` still works outside a vault. A present-but-broken
+            // The whole config, not just the root: vault-relative pointers need
+            // the root, and name-fragment resolution needs the ignore set too.
+            // `None` (cwd-only) when no vault config is present, so a bare
+            // `read FILE` still works outside a vault; a present-but-broken
             // config surfaces as an error rather than silently degrading.
-            let vault_root = resolve_config_optional(cli)?.map(|c| c.vault_root);
+            let cfg = resolve_config_optional(cli)?;
             commands::read::run(
                 file,
-                vault_root.as_deref(),
+                cfg.as_ref(),
                 address.as_deref(),
                 *depth,
                 *full,
