@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
-use mdread::{HeadingRule, TextJson};
+use mdread::{Dialect, HeadingRule, LinkRule, TextJson};
 
 #[derive(Parser)]
 #[command(
@@ -17,13 +17,14 @@ use mdread::{HeadingRule, TextJson};
     long_about = "Print a Markdown file with its structure folded to one line per section \
 (with line and estimated-token counts), then unfold just the part you want by address.\n\n\
 An address is a dotted-numeric path into the heading tree (`2.1.3`), a heading slug \
-(`installation`), `0`/`text` for the pre-heading lede, or `fm`/`frontmatter` for the \
-frontmatter block (`fm.<key>` for one field)."
+(`installation`), `0`/`text` for the pre-heading lede, `fm`/`frontmatter` for the \
+frontmatter block (`fm.<path>` for one value, e.g. `fm.references[0].target`), or \
+`links` for the outgoing links."
 )]
 struct Cli {
     /// Path to the Markdown file ("-" reads stdin)
     file: PathBuf,
-    /// Address: numeric (2.1), heading slug, 0/text, or fm[.key] for frontmatter
+    /// Address: numeric (2.1), heading slug, 0/text, fm[.path], or links
     address: Option<String>,
     /// Max levels to expand under the addressed node
     #[arg(long)]
@@ -41,6 +42,10 @@ struct Cli {
     /// the default follows CommonMark, which allows 0-3 spaces of indent
     #[arg(long)]
     strict_headings: bool,
+    /// Count only [[wikilinks]] as outgoing links; the default also counts
+    /// [text](url) links and <autolinks>
+    #[arg(long)]
+    wikilinks_only: bool,
 }
 
 fn main() {
@@ -52,10 +57,17 @@ fn main() {
 }
 
 fn run(cli: &Cli) -> Result<()> {
-    let rule = if cli.strict_headings {
-        HeadingRule::StrictColumn1
-    } else {
-        HeadingRule::CommonMark
+    let dialect = Dialect {
+        headings: if cli.strict_headings {
+            HeadingRule::StrictColumn1
+        } else {
+            HeadingRule::CommonMark
+        },
+        links: if cli.wikilinks_only {
+            LinkRule::Wikilinks
+        } else {
+            LinkRule::All
+        },
     };
 
     if cli.file.as_os_str() == "-" {
@@ -69,7 +81,7 @@ fn run(cli: &Cli) -> Result<()> {
             cli.full,
             cli.threshold,
             cli.format,
-            rule,
+            dialect,
         );
     }
 
@@ -80,6 +92,6 @@ fn run(cli: &Cli) -> Result<()> {
         cli.full,
         cli.threshold,
         cli.format,
-        rule,
+        dialect,
     )
 }

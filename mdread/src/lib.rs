@@ -24,7 +24,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-pub use facet::HeadingRule;
+pub use facet::{HeadingRule, LinkRule};
 pub use format::TextJson;
 
 use model::{Document, node_tokens, parse_document_with, range_lines, range_slice};
@@ -35,6 +35,15 @@ use unfold::{UnfoldJson, own_prose, unfold_child_json, unfold_content_string};
 /// Default inline cutoff in estimated tokens for the unfold heuristic.
 pub const DEFAULT_THRESHOLD: usize = 2000;
 
+/// The Markdown flavour a caller reads in: the two places where a defensible
+/// reading of the same bytes differs. [`Default`] is plain CommonMark; a caller
+/// with a stricter corpus (vault-query's `read`) overrides both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Dialect {
+    pub headings: HeadingRule,
+    pub links: LinkRule,
+}
+
 /// Read `file` and render it: a folded overview when `address` is `None`, or the
 /// smart-unfolded addressed section otherwise.
 pub fn run(
@@ -44,7 +53,7 @@ pub fn run(
     full: bool,
     threshold: Option<usize>,
     format: TextJson,
-    heading_rule: HeadingRule,
+    dialect: Dialect,
 ) -> Result<()> {
     let content = std::fs::read_to_string(file)
         .map_err(|e| anyhow::anyhow!("Cannot read {}: {}", file.display(), e))?;
@@ -56,7 +65,7 @@ pub fn run(
         full,
         threshold,
         format,
-        heading_rule,
+        dialect,
     )
 }
 
@@ -71,18 +80,23 @@ pub fn run_content(
     full: bool,
     threshold: Option<usize>,
     format: TextJson,
-    heading_rule: HeadingRule,
+    dialect: Dialect,
 ) -> Result<()> {
-    let doc = parse_document_with(content, heading_rule);
+    let doc = parse_document_with(content, dialect.headings);
     let threshold = threshold.unwrap_or(DEFAULT_THRESHOLD);
 
     match address {
-        None => emit_overview(display_path, content, &doc, format),
-        // Frontmatter is addressed before the heading tree: it sits above
-        // `body_start`, so it is not a node the tree can resolve.
+        None => emit_overview(display_path, content, &doc, dialect.links, format),
+        // Reserved addresses are matched before the heading tree: they name parts
+        // of the file the tree cannot reach — frontmatter sits above the body,
+        // and the link list is an index over it, not a region of it. A heading
+        // that slugs to one of these names stays reachable by its numeric address.
         Some(addr) if frontmatter_address(addr).is_some() => {
             let which = frontmatter_address(addr).expect("checked by the guard");
             emit_frontmatter(display_path, content, addr, which, format)
+        }
+        Some(addr) if addr.eq_ignore_ascii_case("links") => {
+            emit_links(display_path, content, addr, dialect.links, format)
         }
         Some(addr) => emit_section(display_path, &doc, addr, depth, full, threshold, format),
     }
@@ -92,15 +106,16 @@ pub fn run_content(
 enum FmAddress<'a> {
     /// The whole block (`frontmatter`, `fm`).
     Block,
-    /// One entry by key (`fm.tags`, `frontmatter.tags`).
-    Field(&'a str),
+    /// One value by path (`fm.tags`, `fm.references[0].target`).
+    Path(&'a str),
 }
 
 /// Recognize a frontmatter address, case-insensitively. Returns `None` for any
 /// address that is not frontmatter, leaving it to the heading-tree resolver.
 ///
 /// The prefixes are ASCII, so lowercasing preserves their byte length and the
-/// key can be sliced out of the original (case-preserving) address.
+/// path can be sliced out of the original (case-preserving) address — YAML keys
+/// are case-sensitive, so the path must not be lowercased with the prefix.
 fn frontmatter_address(addr: &str) -> Option<FmAddress<'_>> {
     let lower = addr.to_lowercase();
     if lower == "frontmatter" || lower == "fm" {
@@ -108,9 +123,9 @@ fn frontmatter_address(addr: &str) -> Option<FmAddress<'_>> {
     }
     for prefix in ["frontmatter.", "fm."] {
         if lower.starts_with(prefix) {
-            let key = &addr[prefix.len()..];
-            if !key.is_empty() {
-                return Some(FmAddress::Field(key));
+            let path = &addr[prefix.len()..];
+            if !path.is_empty() {
+                return Some(FmAddress::Path(path));
             }
         }
     }
@@ -134,15 +149,15 @@ struct FrontmatterJson {
 }
 
 #[derive(serde::Serialize)]
-struct FrontmatterFieldJson {
+struct FrontmatterValueJson {
     path: String,
     address: String,
-    key: String,
-    value: String,
-    line: usize,
+    /// The resolved value with its YAML type preserved, so a list arrives as a
+    /// JSON array and a number as a number.
+    value: serde_json::Value,
 }
 
-/// Frontmatter path: print the raw block, or one entry's value.
+/// Frontmatter path: print the raw block, or one addressed value.
 fn emit_frontmatter(
     display_path: &str,
     content: &str,
@@ -158,26 +173,25 @@ fn emit_frontmatter(
     };
 
     match which {
-        FmAddress::Field(key) => {
-            let Some(f) = frontmatter::field(content, key) else {
-                let known: Vec<String> = frontmatter::field_order(content);
-                return Err(anyhow::anyhow!(
-                    "No frontmatter field '{}'; present: {}",
-                    key,
-                    known.join(", ")
-                ));
-            };
+        // A value is navigated over the parsed YAML rather than the line scan, so
+        // `references[0].target` reaches inside a nested list the same way a bare
+        // `type` reaches a top-level key.
+        FmAddress::Path(path) => {
+            let root = frontmatter::parsed(content)
+                .expect("block_text present implies a complete block")
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let value = frontmatter::value_at(&root, path).map_err(|e| {
+                anyhow::anyhow!("{}; top-level fields: {}", e, frontmatter::field_order(content).join(", "))
+            })?;
             if format == TextJson::Json {
-                let out = FrontmatterFieldJson {
+                let out = FrontmatterValueJson {
                     path: display_path.to_string(),
                     address: address.to_string(),
-                    key: f.key,
-                    value: f.value,
-                    line: f.line,
+                    value: serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
                 };
                 println!("{}", serde_json::to_string_pretty(&out)?);
             } else {
-                println!("{}", f.value);
+                println!("{}", frontmatter::value_to_text(value));
             }
         }
         FmAddress::Block => {
@@ -214,17 +228,73 @@ fn emit_frontmatter(
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+struct LinkJson {
+    kind: &'static str,
+    target: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    alias: Option<String>,
+    line: usize,
+}
+
+#[derive(serde::Serialize)]
+struct LinksJson {
+    path: String,
+    address: String,
+    links: Vec<LinkJson>,
+}
+
+/// `links` address: list the outgoing links the overview only counted.
+fn emit_links(
+    display_path: &str,
+    content: &str,
+    address: &str,
+    rule: LinkRule,
+    format: TextJson,
+) -> Result<()> {
+    let links = facet::links(content, rule);
+    if format == TextJson::Json {
+        let out = LinksJson {
+            path: display_path.to_string(),
+            address: address.to_string(),
+            links: links
+                .into_iter()
+                .map(|l| LinkJson {
+                    kind: l.kind,
+                    target: l.target,
+                    alias: l.alias,
+                    line: l.line,
+                })
+                .collect(),
+        };
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
+
+    println!("{}  (outgoing)   {} links", address, links.len());
+    println!();
+    for l in &links {
+        let display = match &l.alias {
+            Some(alias) => format!("{} -> {}", l.target, alias),
+            None => l.target.clone(),
+        };
+        println!("  L{:<5} {:<9}  {}", l.line, l.kind, display);
+    }
+    Ok(())
+}
+
 /// Overview path (no address).
 fn emit_overview(
     display_path: &str,
     content: &str,
     doc: &Document,
+    link_rule: LinkRule,
     format: TextJson,
 ) -> Result<()> {
     // Scan the raw frontmatter block for top-level keys in source order, so the
     // listing reflects the file rather than an alphabetization.
     let fields: Vec<String> = frontmatter::field_order(content);
-    let link_count = facet::link_count(content);
+    let link_count = facet::link_count(content, link_rule);
 
     if format == TextJson::Json {
         let text = doc.text.as_ref().map(|t| TextNodeJson {
@@ -278,7 +348,7 @@ fn emit_overview(
     println!();
     // Tool-agnostic: names addresses, not a command, so both the `mdread` CLI and
     // the `vault-query read` wrapper print something true of themselves.
-    println!("next: <addr> unfolds a section · fm the frontmatter · fm.<key> one field");
+    println!("next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links");
     Ok(())
 }
 
@@ -618,14 +688,15 @@ mod tests {
         }
         for a in ["fm.tags", "FM.tags", "frontmatter.tags"] {
             match frontmatter_address(a) {
-                Some(FmAddress::Field(k)) => assert_eq!(k, "tags"),
-                _ => panic!("{a} should name a field"),
+                Some(FmAddress::Path(p)) => assert_eq!(p, "tags"),
+                _ => panic!("{a} should name a value"),
             }
         }
-        // A key keeps its own dots and its original case.
-        match frontmatter_address("fm.My.Key") {
-            Some(FmAddress::Field(k)) => assert_eq!(k, "My.Key"),
-            _ => panic!("dotted key should survive"),
+        // The path keeps its own dots, brackets, and original case: YAML keys are
+        // case-sensitive, so only the prefix may be lowercased.
+        match frontmatter_address("fm.References[0].Target") {
+            Some(FmAddress::Path(p)) => assert_eq!(p, "References[0].Target"),
+            _ => panic!("deep path should survive intact"),
         }
     }
 
@@ -634,7 +705,7 @@ mod tests {
         use crate::frontmatter_address;
         // Heading addresses, the text node, and a bare trailing dot are not
         // frontmatter, so the heading-tree resolver still owns them.
-        for a in ["1", "1.2", "text", "0", "glossary", "fm.", "format"] {
+        for a in ["1", "1.2", "text", "0", "glossary", "fm.", "format", "links"] {
             assert!(frontmatter_address(a).is_none(), "{a} must not be frontmatter");
         }
     }

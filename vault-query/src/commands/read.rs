@@ -9,10 +9,11 @@
 //!    vault root; then the argument is treated as a *name fragment* and resolved
 //!    through the same [`crate::slug::resolve_paths`] index `get` uses, so
 //!    `read "Skill vs note"` works without a `get` round-trip first.
-//! 2. **The stricter heading rule.** Vault content never indents headings, and
-//!    the historical scanner rejected any leading whitespace, so the vault reads
-//!    with [`mdread::HeadingRule::StrictColumn1`] rather than CommonMark's
-//!    0–3-space allowance.
+//! 2. **The vault dialect.** Vault content never indents headings, and the
+//!    historical scanner rejected any leading whitespace, so headings read with
+//!    [`mdread::HeadingRule::StrictColumn1`] rather than CommonMark's 0–3-space
+//!    allowance. Links count as [`mdread::LinkRule::Wikilinks`]: the vault's
+//!    `links:` figure measures its own note graph, which URLs are not part of.
 
 use std::path::{Path, PathBuf};
 
@@ -72,6 +73,12 @@ fn reader_format(format: TextJson) -> mdread::TextJson {
     }
 }
 
+/// How the vault reads Markdown, as against the reader's CommonMark default.
+const VAULT_DIALECT: mdread::Dialect = mdread::Dialect {
+    headings: mdread::HeadingRule::StrictColumn1,
+    links: mdread::LinkRule::Wikilinks,
+};
+
 pub fn run(
     file: &Path,
     cfg: Option<&ResolvedConfig>,
@@ -89,7 +96,7 @@ pub fn run(
         full,
         threshold,
         reader_format(format),
-        mdread::HeadingRule::StrictColumn1,
+        VAULT_DIALECT,
     )
 }
 

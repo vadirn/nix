@@ -78,7 +78,7 @@
       # `../mdstruct` path dep resolves to the sibling crate tree in `crateSrc`.
       cargoRoot = "vault-query";
       buildAndTestSubdir = "vault-query";
-      cargoHash = "sha256-jTE2nRcWbqqwxmOdj8nks/P+Xiv8aQ804dqRgnB69Ts=";
+      cargoHash = "sha256-nVLL50N5iWCP89n1VL1uqXOak9LkYSsNTFopjDYT7MY=";
     };
     # The standalone structured-Markdown reader. Path-deps `../mdstruct`, so it
     # builds from `crateSrc` (the shared tree) rather than `./mdread` alone.
@@ -88,7 +88,7 @@
       src = crateSrc;
       cargoRoot = "mdread";
       buildAndTestSubdir = "mdread";
-      cargoHash = "sha256-jD9udfG2WGHfosL4ywHDXdCigdw6U9XzYEyDvTy/840=";
+      cargoHash = "sha256-nv12FamRRKbsneRwn+gl48HL5PUmimV0v292ayhOnhU=";
     };
     mdstruct = pkgs.rustPlatform.buildRustPackage {
       pname = "mdstruct";

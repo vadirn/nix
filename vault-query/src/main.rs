@@ -50,7 +50,8 @@ enum Commands {
     Read {
         /// Path to the .md file, or a vault entry name fragment
         file: PathBuf,
-        /// Address: numeric (2.1), heading slug, 0/text, or fm[.key] for frontmatter
+        /// Address: numeric (2.1), heading slug, 0/text, fm[.path] (e.g.
+        /// fm.reference[0]) for frontmatter, or links for the outgoing links
         address: Option<String>,
         /// Max levels to expand under the addressed node (Step 2)
         #[arg(long)]

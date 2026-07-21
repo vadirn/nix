@@ -1,10 +1,17 @@
-//! Frontmatter surface the overview needs: the top-level field names in source
-//! order (the `fields:` line) and the 1-based line at which the body begins.
+//! Frontmatter surface: the top-level field names in source order (the `fields:`
+//! line), the 1-based line at which the body begins, the block's raw text, and
+//! addressed lookup along a dotted path.
 //!
 //! mdstruct reports the frontmatter *block* span but leaves the YAML unparsed
-//! (its scope is structure, not field decomposition), so the field-order scan
-//! lives here. A leading BOM is stripped so a BOM-prefixed `---` still opens the
-//! block without shifting line numbers.
+//! (its scope is structure, not field decomposition), so both readings live here.
+//! They are deliberately separate: the line scanner ([`block`]) reports what the
+//! file says, in source order and with source text, and is what the overview and
+//! the whole-block address print; the YAML parse ([`parsed`]) reports what the
+//! file *means*, and is what a path like `references[0].target` navigates. A
+//! leading BOM is stripped so a BOM-prefixed `---` still opens the block without
+//! shifting line numbers.
+
+use serde_yaml::Value;
 
 struct Block<'a> {
     /// Top-level key names between the delimiters, in source order. Empty when
@@ -218,9 +225,129 @@ pub fn fields_with_values(content: &str) -> Vec<Field> {
     out
 }
 
-/// One entry by key (exact match), or `None`.
-pub fn field(content: &str, key: &str) -> Option<Field> {
-    fields_with_values(content).into_iter().find(|f| f.key == key)
+/// The frontmatter block parsed as YAML: `None` when the file has no complete
+/// block, `Some(Err)` when the block is not valid YAML.
+pub fn parsed(content: &str) -> Option<Result<Value, String>> {
+    let text = block_text(content)?;
+    Some(serde_yaml::from_str(&text).map_err(|e| format!("frontmatter is not valid YAML: {}", e)))
+}
+
+/// A parsed path segment: a key plus zero or more sequence indices applied in order.
+struct Segment {
+    key: String,
+    indices: Vec<usize>,
+}
+
+/// Parse a dotted field path into segments. Each segment is `key` optionally
+/// followed by one or more `[digits]` indices, e.g. `references[0].target`.
+/// Returns an error message on malformed syntax (empty key, unclosed/empty/non-numeric `[...]`).
+fn parse_path(path: &str) -> Result<Vec<Segment>, String> {
+    let mut segments = Vec::new();
+    for raw in path.split('.') {
+        let (key, rest) = match raw.find('[') {
+            Some(i) => (&raw[..i], &raw[i..]),
+            None => (raw, ""),
+        };
+        if key.is_empty() {
+            return Err(format!("malformed path segment in '{}': empty key", path));
+        }
+        let indices = parse_indices(rest, path)?;
+        segments.push(Segment {
+            key: key.to_string(),
+            indices,
+        });
+    }
+    if segments.is_empty() {
+        return Err(format!("empty path '{}'", path));
+    }
+    Ok(segments)
+}
+
+/// Parse a run of `[digits]` index suffixes from the tail of a segment.
+fn parse_indices(mut rest: &str, path: &str) -> Result<Vec<usize>, String> {
+    let mut indices = Vec::new();
+    while !rest.is_empty() {
+        if !rest.starts_with('[') {
+            return Err(format!("malformed index in '{}': expected '['", path));
+        }
+        let close = rest
+            .find(']')
+            .ok_or_else(|| format!("malformed index in '{}': unclosed '['", path))?;
+        let digits = &rest[1..close];
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(format!(
+                "malformed index in '{}': '[{}]' is not a number",
+                path, digits
+            ));
+        }
+        let idx: usize = digits.parse().map_err(|_| {
+            format!("malformed index in '{}': '[{}]' is not a number", path, digits)
+        })?;
+        indices.push(idx);
+        rest = &rest[close + 1..];
+    }
+    Ok(indices)
+}
+
+/// Navigate a YAML value along a dotted field path, returning the resolved value
+/// or a human-readable miss message.
+pub fn value_at<'a>(root: &'a Value, path: &str) -> Result<&'a Value, String> {
+    let segments = parse_path(path)?;
+    let mut current = root;
+    for seg in &segments {
+        // Key lookup requires a mapping.
+        let map = match current {
+            Value::Mapping(m) => m,
+            _ => {
+                return Err(format!(
+                    "'{}': cannot read key '{}' on a non-mapping value",
+                    path, seg.key
+                ));
+            }
+        };
+        current = map
+            .get(Value::String(seg.key.clone()))
+            .ok_or_else(|| format!("'{}': key '{}' not found", path, seg.key))?;
+        // Apply each trailing index as a sequence access.
+        for &idx in &seg.indices {
+            let seq = match current {
+                Value::Sequence(s) => s,
+                _ => {
+                    return Err(format!(
+                        "'{}': cannot index '{}[{}]' into a non-sequence value",
+                        path, seg.key, idx
+                    ));
+                }
+            };
+            current = seq.get(idx).ok_or_else(|| {
+                format!(
+                    "'{}': index {} out of range for '{}' (len {})",
+                    path,
+                    idx,
+                    seg.key,
+                    seq.len()
+                )
+            })?;
+        }
+    }
+    Ok(current)
+}
+
+/// Render a resolved value for text output. A scalar prints bare; a sequence or
+/// mapping prints as YAML, so a compound value round-trips instead of flattening
+/// to one comma-joined line.
+pub fn value_to_text(v: &Value) -> String {
+    match v {
+        Value::Null => String::new(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => s.clone(),
+        Value::Tagged(t) => value_to_text(&t.value),
+        Value::Sequence(_) | Value::Mapping(_) => serde_yaml::to_string(v)
+            .unwrap_or_default()
+            .trim_end()
+            .to_string(),
+    }
 }
 
 /// Strip the common leading indentation from a set of lines and join with '\n'.
@@ -324,17 +451,67 @@ mod tests {
     }
 
     #[test]
-    fn field_lookup_by_key() {
-        let c = "---\ntype: note\ntags:\n  - a\n---\nbody\n";
-        assert_eq!(field(c, "type").unwrap().value, "note");
-        assert_eq!(field(c, "tags").unwrap().value, "- a");
-        assert!(field(c, "missing").is_none());
-    }
-
-    #[test]
     fn values_agree_with_field_order() {
         let c = "---\ntype: note\ntags:\n  - a\n# comment\nname: x\n---\nbody\n";
         let keys: Vec<String> = fields_with_values(c).into_iter().map(|f| f.key).collect();
         assert_eq!(keys, field_order(c));
+    }
+
+    // --- addressed lookup ---
+
+    const NESTED: &str = "---\ntype: card\nreferences:\n  - target: one\n    kind: book\n  - target: two\nmeta:\n  depth:\n    n: 3\n---\n\nbody\n";
+
+    fn root(content: &str) -> Value {
+        parsed(content).expect("has a block").expect("valid YAML")
+    }
+
+    #[test]
+    fn parsed_reports_absence_and_invalidity_apart() {
+        // No block at all versus a block that is not YAML: distinct outcomes, so
+        // a malformed block never reads as a missing one.
+        assert!(parsed("just body\n").is_none());
+        assert!(parsed("---\ntype: note\n---\n").unwrap().is_ok());
+        assert!(parsed("---\na: [unclosed\n---\n").unwrap().is_err());
+    }
+
+    #[test]
+    fn navigates_nested_keys_and_indices() {
+        let r = root(NESTED);
+        assert_eq!(value_at(&r, "type").unwrap(), &Value::String("card".into()));
+        assert_eq!(
+            value_at(&r, "references[1].target").unwrap(),
+            &Value::String("two".into())
+        );
+        assert_eq!(value_to_text(value_at(&r, "meta.depth.n").unwrap()), "3");
+    }
+
+    #[test]
+    fn path_misses_name_what_failed() {
+        let r = root(NESTED);
+        for (path, needle) in [
+            ("nope", "not found"),
+            ("references[9]", "out of range"),
+            ("type[0]", "non-sequence"),
+            ("type.sub", "non-mapping"),
+            ("a[0", "unclosed"),
+            ("a[]", "not a number"),
+            ("a[x]", "not a number"),
+            ("a..b", "empty key"),
+        ] {
+            let err = value_at(&r, path).unwrap_err();
+            assert!(err.contains(needle), "path {path}: got {err}");
+        }
+    }
+
+    #[test]
+    fn compound_values_render_as_yaml_scalars_render_bare() {
+        let r = root(NESTED);
+        // A scalar prints as itself, with no YAML quoting or trailing newline.
+        assert_eq!(value_to_text(value_at(&r, "type").unwrap()), "card");
+        // A sequence keeps its shape rather than collapsing to "one, two".
+        let seq = value_to_text(value_at(&r, "references").unwrap());
+        assert!(seq.starts_with("- target: one"), "got: {seq}");
+        assert!(seq.contains("- target: two"), "got: {seq}");
+        assert!(!seq.ends_with('\n'), "no trailing newline: {seq:?}");
     }
 }
