@@ -1,12 +1,14 @@
 ---
 name: design
 description: >
-  Generate multiple radically different designs for a module, interface, or system using parallel subagents. Triggers: /design, "design it twice", "what are my options for", "compare architectures". Skip when comparing existing options (use /debate) or stress-testing one plan (use /probe).
+  Generate multiple radically different designs for a module, interface, or system using parallel
+  subagents. Triggers: /design, "design it twice", "what are my options for", "compare architectures".
+  Skip when comparing existing options (use /debate) or stress-testing one plan (use /probe).
 ---
 
 # Design
 
-Thin wrapper: the doctrine lives in the vault note `Design`. Load it at invocation — never run from memory of it.
+Generate radically different designs, then compare. Based on Ousterhout's "Design It Twice": your first idea is unlikely to be the best.
 
 ## Parameters
 
@@ -17,42 +19,100 @@ Thin wrapper: the doctrine lives in the vault note `Design`. Load it at invocati
 ```
 topic = <topic> from arguments or conversation context
 if no topic: AskUserQuestion("What should I design?")
+
+domain = <domain> parameter, or do("auto-detect from topic")
 count = <count> parameter, default 4
 
-// Load doctrine
-note_path = Bash(vault-query get "Design")
-if note_path missing or ambiguous: do("report the error to the user"); stop
-
-// (parallel)
-rules = Bash(vault-query read <note_path> 0)
-constraint_rules = Bash(vault-query read <note_path> "Constraints")
-per_design = Bash(vault-query read <note_path> "Per-design output")
-comparison = Bash(vault-query read <note_path> "Comparison")
-synthesis = Bash(vault-query read <note_path> "Synthesis")
-antipatterns = Bash(vault-query read <note_path> "Anti-patterns")
-if any read errors: do("report the exact error and note_path to the user"); stop
-
 // Determine constraints
-domain = <domain> parameter, or do("auto-detect from topic against the keyword mapping in constraint_rules")
+// auto-detect: match topic against keywords — cli: flag/command/argv; api: function/method/interface; data: schema/table/model; config: settings/env; pipeline: workflow/job/step; no match → general
 if domain == "general" or auto-detect fails:
-    constraints = do("derive a constraint set by probing the user per constraint_rules")
+    do("probe user: what problem does this solve? who are the callers?")
+    do("probe user: what are the key operations? any constraints?")
+    do("probe user: what should be hidden inside vs exposed?")
+    constraints = do("derive constraint set from answers")
 else:
-    sets = Bash(vault-query read <note_path> "Predefined constraint sets")
-    constraints = do("take the <domain> set from sets")
+    constraints = do("load predefined set for domain — see Reference §Predefined constraint sets")
 
 // Generate designs (parallel sub-agents)
 count = min(count, len(constraints))   // cap so a user-supplied count never exhausts the set silently
 (parallel) for each constraint in constraints[:count]:
-    spawn_subagent("design <topic> under constraint: <constraint>", payload = per-design contract from per_design)
+    spawn_subagent("design <topic> under constraint: <constraint>")
+    do("output: signature, usage example, what it hides, tradeoffs")
 
-// Present, compare, synthesize
-do("present each design per per_design, compare per comparison, close per synthesis; rules and antipatterns bind throughout")
+// Present designs
+for each design:
+    do("show interface signature or schema")
+    do("show usage example from caller's perspective")
+    do("explain what complexity this design hides internally")
+    do("name the tradeoffs explicitly")
+
+// Compare
+do("compare designs on: simplicity, generality, depth, ease of correct use")
+do("highlight where designs diverge most")
+
+// Synthesize
+do("recommend which design fits best, or how to combine insights")
+do("suggest /probe to stress-test the chosen design")
 ```
 
 ## Reference
 
-### Doctrine loading
+### Predefined constraint sets
 
-- `vault-query get "Design"` resolves the note; the exact basename match `Design.md` is the intended target.
-- Structured reads (`vault-query read` with addresses) load only the intro (address `0`), the constraint rules, the per-design contract, the comparison criteria, the synthesis step, and the anti-patterns, keeping the note's frontmatter out of context. `Predefined constraint sets` is read only when a domain matches, so unused sets stay out of context.
-- Fail loud, never improvise: on any resolution or address error the doctrine has moved or its headings were renamed — a workflow reconstructed from memory looks like success while silently degrading the contract. The section headings `Constraints` / `Predefined constraint sets` / `Per-design output` / `Comparison` / `Synthesis` / `Anti-patterns` are part of this wrapper's contract with the note.
+**api** (module/library interfaces):
+
+1. Minimize method count: aim for 1-3 methods max
+2. Maximize flexibility: support many use cases via composition
+3. Optimize for the most common case: make the easy thing easy
+4. Builder pattern: separate construction from use via a fluent builder or factory; callers never touch partially-constructed state
+
+**data** (data models, schemas, storage):
+
+1. Fully normalized: no redundancy, strict referential integrity
+2. Denormalized for reads: optimize query patterns, accept write complexity
+3. Event-sourced: store events, derive state
+4. Document-oriented: self-contained documents, embed related data
+
+**cli** (command-line interfaces):
+
+1. Minimal flags: fewest possible options, sensible defaults
+2. Subcommand-heavy: git-style verb hierarchy
+3. Pipeline-composable: stdin/stdout, unix philosophy
+4. Interactive-first: prompts, wizards, progressive disclosure
+
+**config** (configuration formats):
+
+1. Flat key-value: simple, greppable, env-var compatible
+2. Nested hierarchy: YAML/TOML-style structured config
+3. Convention-over-configuration: minimal config, derive from structure
+4. Schema-driven: JSON Schema validated, self-documenting
+
+**pipeline** (workflow/orchestration):
+
+1. Sequential steps: simple ordered list
+2. DAG: directed acyclic graph with explicit dependencies
+3. Event-driven: steps trigger on events/conditions
+4. Actor-based: independent agents communicating via messages
+
+### Evaluation criteria (Ousterhout)
+
+**Interface simplicity**: fewer methods, simpler params = easier to learn and use correctly.
+
+**Depth**: small interface hiding significant complexity = deep module (good). Large interface with thin implementation = shallow module (avoid).
+
+**Ease of correct use vs ease of misuse**: can the caller use it wrong? How hard is it to get right?
+
+**General-purpose vs specialized**: can it handle future use cases? Stay grounded in actual use cases.
+
+### Anti-patterns
+
+- Designs that are superficially different but structurally identical
+- Skipping the comparison: the value is in contrast
+- Evaluating based on implementation effort rather than interface quality
+- Implementing during design: this skill is about shape, not code
+
+### Boundary with other skills
+
+- `/debate`: argues both sides of an open question ("is X better than Y?")
+- `/design`: generates multiple concrete solutions before you commit
+- `/probe`: stress-tests a chosen design after you pick one

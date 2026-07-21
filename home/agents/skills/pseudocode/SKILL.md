@@ -1,37 +1,108 @@
 ---
 name: pseudocode
 description: >
-  Convert freeform workflow text into structured pseudocode for SKILL.md files. Triggers: /pseudocode, "write pseudocode", "convert to pseudocode", "make this a skill", or converting a SKILL.md prose procedure into a pseudocode block. Skip when the goal is to create or iterate on a skill holistically (use skill-creator).
+  Convert freeform workflow text into structured pseudocode for SKILL.md files. Triggers: /pseudocode,
+  "write pseudocode", "convert to pseudocode", "make this a skill", or converting a SKILL.md prose
+  procedure into a pseudocode block. Skip when the goal is to create or iterate on a skill
+  holistically (use skill-creator).
 ---
 
 # Pseudocode
 
-Thin wrapper: the doctrine lives in the vault note `Pseudocode`. Load it at invocation — never run from memory of it.
+Convert freeform workflow text into structured pseudocode block + Reference section.
+
+## Syntax
+
+There are three types of lines in pseudocode:
+
+**Calls** execute tools or delegate freeform work:
 
 ```
-input = freeform workflow text from the invocation, a named file, or conversation context
+result = Bash(git status)
+Skill(commit)
+AskUserQuestion("Update or stop?")
+do("summarize errors, categorize mechanical vs semantic")
+title, body = do("generate from diff and log")
+```
 
-// Load doctrine
-note_path = Bash(vault-query get "Pseudocode")
-if note_path missing or ambiguous: do("report the error to the user"); stop
+**Logic** encodes decisions and flow:
 
-// (parallel)
-intro = Bash(vault-query read <note_path> 0)
-syntax = Bash(vault-query read <note_path> "Syntax")
-conventions = Bash(vault-query read <note_path> "Conventions")
-process = Bash(vault-query read <note_path> "Process")
-example = Bash(vault-query read <note_path> "Example")
-if any read errors: do("report the exact error and note_path to the user"); stop
+```
+if branch == default_branch: stop
+if no upstream: Bash(git push -u origin <branch>)
+else if ahead: Bash(git push)
+```
 
-// Convert
-do("follow process as internal instructions, with <input> bound")
-do("write every line per syntax and conventions; shape the result like example")
+**Comments** label sections only:
+
+```
+// Guards
+// Push if needed
+```
+
+## Conventions
+
+- **Guard clauses early.** Stop conditions before the happy path. Reduces nesting.
+- **Parallelism is explicit.** Mark `(parallel)` when calls are independent and should run together.
+- **Tool calls are literal.** `Bash(...)`, `Skill(...)`, `AskUserQuestion(...)` are real instructions — each agent maps them to its own tool surface (e.g. `Skill(commit)` means "invoke the commit skill").
+- **`do()` for freeform directives.** When the step is "use your judgment", wrap it in `do()`. This distinguishes LLM-directed work from mechanical tool calls.
+- **Variable names carry intent.** `default_branch` not `db`. The model reads these as semantic hints.
+- **Sequence from order.** Omit step numbers; line position encodes sequence.
+- **Comments label sections only.** Every line is a call, assignment, or logic. A comment stands alone only as a section label; otherwise rewrite it as a call, assignment, or logic.
+- **Details live in Reference.** The pseudocode block shows WHAT happens and WHEN. The Reference section explains HOW and WHY.
+
+## Process
+
+```
+input = freeform workflow text
+
+// Identify structure
+steps = do("extract discrete steps from input")
+decisions = do("find branching points, stop conditions, error cases")
+tools = do("identify which steps are tool calls vs freeform directives")
+
+// Write pseudocode
+do("order steps: gather state, guards, happy path, output")
+do("use `do()` for freeform directives, literal calls for tools")
+do("mark parallel groups")
+
+// Write Reference section
+do("move format specs, examples, and explanations out of pseudocode into Reference")
+```
+
+## Example
+
+**Input:**
+
+> First check git status and what branch we're on. If we're on main, stop.
+> If there are uncommitted changes, run the commit skill.
+> Then push the branch and create a PR with a good title and description.
+
+**Output:**
+
+````
+## Create flow
+
+```
+// Gather state (parallel)
+status = Bash(git status)
+branch = Bash(git rev-parse --abbrev-ref HEAD)
+
+// Guards
+if branch == "main": stop
+if uncommitted changes in status:
+  Skill(commit)
+  stop
+
+Bash(git push -u origin <branch>)
+title, body = do("generate title and body from branch commits")
+Bash(gh pr create --title "<title>" --body "<body>" --draft)
 ```
 
 ## Reference
 
-### Doctrine loading
+### PR title and body
 
-- `vault-query get "Pseudocode"` resolves the note; the exact basename match `Pseudocode.md` is the intended target.
-- Structured reads (`vault-query read` with addresses) load only the intro gloss (address `0`), the syntax, the conventions, the process, and the worked example, keeping the note's frontmatter out of context.
-- Fail loud, never improvise: on any resolution or address error the doctrine has moved or its headings were renamed — a conversion reconstructed from memory looks like success while silently degrading the contract. The section headings `Syntax` / `Conventions` / `Process` / `Example` are part of this wrapper's contract with the note.
+- Title: <70 chars, conventional commit style
+- Body: `## Summary` bullets + `## Test plan` checklist
+````

@@ -1,6 +1,6 @@
 # Concepts (operational recap)
 
-This is the working vocabulary the two procedures rely on. It compresses two vault notes; read the originals for the full argument (resolve the path with `vault-query get "Impression distance"` or `vault-query get "Target distance"`, then `vault-query read` it — folded first, unfold only the needed section). Do not duplicate their prose into output — point to them.
+This is the working vocabulary the two procedures rely on. Hold it as internal framing; do not duplicate it into output.
 
 ## Two distances
 

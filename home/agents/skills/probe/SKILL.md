@@ -1,12 +1,15 @@
 ---
 name: probe
 description: >
-  Systematically interrogate a plan or design until every decision branch is resolved. Use when user invokes /probe or wants to stress-test a plan, poke holes in a design, find weaknesses in a proposal, get grilled on their approach, or asks "what am I missing". For open-ended comparisons, use debate instead. Probe requires a concrete plan as input.
+  Systematically interrogate a plan or design until every decision branch is resolved.
+  Use when user invokes /probe or wants to stress-test a plan, poke holes in a design,
+  find weaknesses in a proposal, get grilled on their approach, or asks "what am I missing".
+  For open-ended comparisons, use debate instead. Probe requires a concrete plan as input.
 ---
 
 # Probe
 
-Thin wrapper: the doctrine lives in the vault note `Probe`. Load it at invocation — never run from memory of it.
+Systematic interrogation of a plan or design. Walk every decision branch, pose hard questions, provide recommended answers.
 
 ## Parameters
 
@@ -14,29 +17,84 @@ Thin wrapper: the doctrine lives in the vault note `Probe`. Load it at invocatio
 - `depth=shallow|deep`: How many branches to explore (default: deep)
 
 ```
-plan = <plan> parameter, or conversation context
+plan = <args> or conversation context
 if no plan provided: AskUserQuestion("What plan or design should I probe?")
-depth = <depth> parameter, default "deep"
 
-// Load doctrine
-note_path = Bash(vault-query get "Probe")
-if note_path missing or ambiguous: do("report the error to the user"); stop
+if plan references files or codebase:
+    do("read referenced files to ground questions in actual code")
 
-// (parallel)
-rules = Bash(vault-query read <note_path> 0)
-workflow = Bash(vault-query read <note_path> "Workflow")
-output = Bash(vault-query read <note_path> "Output")
-if any read errors: do("report the exact error and note_path to the user"); stop
+if ./GLOSSARY.md exists:
+    do("read ./GLOSSARY.md for terms and their definitions")
 
-// Probe
-do("follow rules + workflow as internal instructions, with <plan> and <depth> bound")
-do("structure the final answer per the fenced specimen in output")
+// Phase 1: Map the decision tree
+do("identify all decision branches in the plan")
+if ./GLOSSARY.md exists:
+    do("flag plan terms whose usage contradicts the glossary definition; add each as a terminology branch")
+do("order branches by dependency: resolve prerequisites first")
+do("probe terminology branches before design branches that use the disputed term")
+
+// Phase 2: Walk each branch
+if depth == "shallow":
+    do("select the 5 branches with highest criticality; drop lower-stakes branches")
+for each branch:
+    do("pose a specific, pointed question about this branch")
+    do("provide a recommended answer grounded in the plan and codebase")
+    if answer can be verified from code:
+        do("explore codebase to verify or challenge the assumption")
+    do("note whether the branch is resolved or needs user input")
+
+// Phase 3: Summarize
+do("list resolved decisions with their answers")
+do("list unresolved items that need user input")
+do("flag any contradictions between branches")
 ```
 
 ## Reference
 
-### Doctrine loading
+### What makes a good probe question
 
-- `vault-query get "Probe"` resolves the note; the exact basename match `Probe.md` is the intended target.
-- Structured reads (`vault-query read` with addresses) load only the intro rules (address `0`), the workflow, and the output contract, keeping the note's frontmatter and unresolved questions out of context.
-- Fail loud, never improvise: on any resolution or address error the doctrine has moved or its headings were renamed — a workflow reconstructed from memory looks like success while silently degrading the contract. The section headings `Workflow` / `Output` are part of this wrapper's contract with the note.
+A probe question targets a specific decision point, not a vague concern. It names the tradeoff and its consequences.
+
+Weak: "Have you thought about error handling?"
+Strong: "When Redis is unreachable, do you fall back to the database (adding latency) or return a cache miss error (breaking clients that expect data)?"
+
+### Challenging against the glossary
+
+When `GLOSSARY.md` is present at CWD, treat it as shared vocabulary. If the plan uses a term in a way that contradicts its glossary definition, make that contradiction its own branch.
+
+Weak: "Your plan mentions orders."
+Strong: "`GLOSSARY.md` defines `Order` as a confirmed purchase with fixed line items, but the plan uses `order` to mean a draft cart. Which meaning stands in this plan: extend the glossary, or pick a different term for the draft state?"
+
+### Recommended answer format
+
+Each question includes a recommended answer. The answer:
+
+1. States the recommended choice
+2. Explains why (one sentence)
+3. Names the tradeoff accepted
+
+### Output structure
+
+```
+## 1. [Question text]
+
+**Recommended:** [Choice]. [Why]. This accepts [tradeoff].
+
+## 2. [Question text]
+...
+
+## Summary
+
+### Resolved
+- [Decision]: [Choice made]
+
+### Unresolved
+- [Decision]: [Why it needs user input]
+```
+
+### Boundary with debate
+
+Debate explores open questions from opposing sides ("is X better than Y?").
+Probe interrogates a specific plan the user has committed to ("here's my plan, find the holes").
+
+When the user wants to compare options rather than interrogate a chosen plan, suggest /debate instead.

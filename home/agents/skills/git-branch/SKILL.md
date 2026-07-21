@@ -54,7 +54,7 @@ Branch names use `<prefix>/<slug>` — the same `feat | fix | chore` prefixes as
 2. Will the branch change the contract — add, alter, or remove what the code promises its callers? → `feat`
 3. Otherwise → `chore`
 
-`chore` is the default; most branches (refactor, perf, deps, config, tests, docs) sit below the contract line. See the /commit skill for the full definition of "contract" and the worked example bank.
+`chore` is the default; most branches (refactor, perf, deps, config, tests, docs) sit below the contract line. **Contract** = what the code promises its outermost audience (end-users for a product, callers for a library): inputs, outputs, errors, externally-visible side effects, type signatures, documented behavior, and implicit safety promises. Speed, memory, internal structure, and log format sit outside it.
 
 ### Slug style
 

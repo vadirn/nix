@@ -1,31 +1,23 @@
 ---
 name: experiment
 description: >
-  Test an existing thing's behavior against a falsifiable claim and capture the result as a structured record in the vault. Triggers: /experiment, "run an experiment", "test this claim", "verify whether", "does X actually", "check if X works", "is X true", "falsifiable claim". Skip when building a new artifact (use /prototype), interrogating plan logic (use /probe), or rating confidence in a recommendation (use /grade).
+  Test an existing thing's behavior against a falsifiable claim and capture the result as a
+  structured record in the vault. Triggers: /experiment, "run an experiment", "test this claim",
+  "verify whether", "does X actually", "check if X works", "is X true", "falsifiable claim".
+  Skip when building a new artifact (use /prototype), interrogating plan logic (use /probe),
+  or rating confidence in a recommendation (use /grade).
 ---
 
 # Experiment
-
-Capture harness; the falsifiability and sandbox doctrine lives in the vault note `Experiment`, loaded at invocation — never run from memory of it.
 
 ## Parameters
 
 - `claim` (required): one falsifiable sentence naming the behavior under test.
 
 ```
-// Load doctrine
-note_path = Bash(vault-query get "Experiment")
-if note_path missing or ambiguous: do("report the error to the user"); stop
-
-// (parallel)
-doctrine_intro = Bash(vault-query read <note_path> 0)
-falsifiability = Bash(vault-query read <note_path> "Falsifiability")
-sandbox = Bash(vault-query read <note_path> "Sandbox choice")
-if any read errors: do("report the exact error and note_path to the user"); stop
-
 // Claim gate
 claim = <args> or AskUserQuestion("State the claim to test. One sentence, falsifiable.")
-falsifiable = do("apply the <falsifiability> test to <claim>")
+falsifiable = do("apply Falsifiability test — see Reference")
 if not falsifiable: do("explain why and stop; suggest a sharpened restatement if possible")
 
 // Method
@@ -35,7 +27,7 @@ do("restate claim, method, and expected verdict shape (exit code, output text, d
     ask user to confirm or correct")
 
 // Execute
-do("run the method in the smallest reproducible sandbox, chosen per the <sandbox> cascade;
+do("run the method in the smallest reproducible sandbox — see Reference §Sandbox choice;
     record raw output verbatim")
 
 // Verdict
@@ -101,12 +93,6 @@ if project_wikilink is not null:
 
 ## Reference
 
-### Doctrine loading
-
-- `vault-query get "Experiment"` resolves the doctrine note; the exact basename match `00 inbox/Experiment.md` is the intended target — experiment records under `35 experiments/` are dated slugs and do not match the bare name. If resolution is ambiguous, retry with `vault-query get "00 inbox/Experiment"`.
-- Structured reads load only the intro definition (address `0`), the falsifiability test, and the sandbox cascade, keeping the note's frontmatter out of context.
-- Fail loud, never improvise: on any resolution or address error the doctrine has moved or its headings were renamed — a gate reconstructed from memory looks like success while silently degrading the contract. The section headings `Falsifiability` / `Sandbox choice` are part of this wrapper's contract with the note.
-
 ### Record template
 
 The authoritative template lives in the vault at `<vault_root>/templates/Experiment.md` (read by Step 5 via `vault-query config`). The shape below mirrors that file; update both if either changes.
@@ -154,6 +140,33 @@ The Glossary ships with five pinned rows — Claim, Method, Execution, Verdict, 
 | `verdict`     | yes      | `confirmed`, `refuted`, or `inconclusive` |
 | `date`        | yes      | ISO date `YYYY-MM-DD`                     |
 | `project`     | no       | wikilink from `<project_path>/context.md` |
+
+### Falsifiability test
+
+A claim is falsifiable if and only if: running the same method on twin systems (identical setup, identical inputs) could produce the opposite verdict. The test fails — and the skill stops — when the claim is decided by its wording alone (tautology), too vague for any single method to decide it, or asks "is X good" without a measurable criterion.
+
+Examples:
+
+- Fails: "does oxfmt work" — no method can decide this; restate as a specific predicate.
+- Passes: "oxfmt 0.52.0 reformats `.md` files in place producing valid GFM" — a specific version, a specific file type, a specific output criterion; a second run on a twin system with `.md` files lacking valid GFM could refute it.
+
+### Sandbox choice
+
+Use the smallest sandbox that still answers the question without contaminating the host (or being contaminated by it). Reproducibility from the record alone — months later, possibly on a different machine — is the criterion that promotes Docker; without that need, lighter runners are usually right.
+
+**Cascade, first match wins:**
+
+1. **Host itself under test?** (Claude Code, hooks, nix config, macOS APIs, the editor) → **host execution**. Record the host runtime version (commit SHA, nix-darwin generation, settings.json state) in the Method field — a re-run after an update silently tests a different thing otherwise.
+2. **Writes that persist outside `$TMPDIR` and are shared across sessions?** (`~/.config`, `~/.cache`, `~/.npm`, `~/Library/`, Keychain, `launchctl`, OS packages) → **Docker**. Containment is the point. If the claim is platform-specific, Docker on macOS gives a Linux verdict — note the scope in the Verdict field.
+3. **Will the record be re-run from cold storage later?** (months out, different machine, future Claude session) → **Docker** with a pinned image tag (`node:22.11.0`; pin to an exact version). Reproducibility is the real reason.
+4. **Otherwise — single-process, user-level, contained to `$TMPDIR`, one-shot verdict** → lightest available runner:
+   - npm-native binary → `bunx --bun <pkg>@<version>` (the `bunfig.toml` 7-day minimum-release-age guard applies; pass `--minimum-release-age=0` and document it in the Method field if the pin is fresher).
+   - nixpkgs derivation → `nix run nixpkgs#<pkg>`.
+   - Neither registry has the tool → host execution, Method field notes the experiment is not portable to a clean machine.
+
+Experiments needing network access, GPU, privileged syscalls, multi-process orchestration, or persistent volumes across runs sit outside this cascade — Docker with capability-specific flags, documented in the Method field.
+
+Whichever runner is chosen, the Execution field captures the exact invocation verbatim so the experiment is reproducible from the record alone.
 
 ### Auto-link rule
 
