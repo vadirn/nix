@@ -67,7 +67,7 @@ Use these CLI tools through the Bash tool. Prefer them over manual code reading 
 - **gh**: all GitHub operations. Create issues, open PRs, read comments. Saves API rate limits.
 - **jq**: any JSON parsing in pipelines.
 
-For any refactor that touches more than 20 files, write a codemod first. ast-grep handles most cases. Test the codemod against three sample files before running it over the whole tree.
+For any refactor that touches more than 20 files, use the /codemod skill (codemod-first doctrine lives in the vault note `Codemod`).
 
 ## Commits
 
