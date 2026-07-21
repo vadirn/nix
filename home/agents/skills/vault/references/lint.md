@@ -23,7 +23,7 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `orphan-card`            | warn    | Card with zero inbound wikilinks (excludes folder-index cards: `<X>/~<X>.md`)     |
 | `dangling-reference`     | warn    | Reference not cited by any card's `reference:` frontmatter                        |
 | `reference-not-wikilink` | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL)                 |
-| `reference-wrong-type` | warn    | Card's `reference:` wikilink resolves to an entry whose `type:` is not `reference` |
+| `reference-wrong-type` | warn    | Card's `reference:` wikilink resolves to a non-`reference` entry, or to no entry at all (frontmatter links are outside `broken-wikilink`'s body-only scan) |
 | `broken-wikilink`        | error   | `[[target]]` does not resolve to any vault file                                   |
 | `duplicate-h1`           | warn    | First non-blank body line is `# <basename>`, duplicating the implicit page title. |
 | `invalid-frontmatter`    | error   | YAML frontmatter fails to parse                                                   |
@@ -99,7 +99,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `orphan-card`            | `null`                                     |
 | `dangling-reference`     | `null`                                     |
 | `reference-not-wikilink` | `{ "value": <string> }`                    |
-| `reference-wrong-type` | `{ "target": <string>, "target_type": <string> }` |
+| `reference-wrong-type` | `{ "target": <string>, "target_type": <string or null> }` |
 | `broken-wikilink`        | `{ "target": <string>, "line": <number> }` |
 | `duplicate-h1`           | `null`                                     |
 | `invalid-frontmatter`    | `{ "error": <string> }`                    |

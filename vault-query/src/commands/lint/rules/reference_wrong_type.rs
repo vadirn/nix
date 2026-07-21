@@ -27,8 +27,8 @@ impl Rule for ReferenceWrongType {
             if let Some(value) = card.frontmatter.get("reference") {
                 wikilink::walk_frontmatter_links(value, &mut |link| {
                     let target = wikilink::resolve_name(&link.target);
-                    if let Some(target_type) = type_by_name.get(&normalize(target)) {
-                        if target_type != "reference" {
+                    match type_by_name.get(&normalize(target)) {
+                        Some(target_type) if target_type != "reference" => {
                             findings.push(Finding {
                                 rule: self.name(),
                                 severity: self.default_severity(),
@@ -43,6 +43,24 @@ impl Rule for ReferenceWrongType {
                                 })),
                             });
                         }
+                        // broken-wikilink only scans body links, so an
+                        // unresolved frontmatter target is this rule's to report.
+                        None => {
+                            findings.push(Finding {
+                                rule: self.name(),
+                                severity: self.default_severity(),
+                                file: card.path.clone(),
+                                message: format!(
+                                    "card '{}' cites '{}' in its reference field, but no such entry exists",
+                                    card.name, target
+                                ),
+                                data: Some(serde_json::json!({
+                                    "target": target,
+                                    "target_type": serde_json::Value::Null,
+                                })),
+                            });
+                        }
+                        Some(_) => {}
                     }
                 });
             }
@@ -114,13 +132,17 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_target_emits_nothing() {
-        // Missing targets are broken-wikilink territory, not this rule's.
+    fn unresolved_target_emits_finding() {
+        // broken-wikilink only scans body links; a reference field pointing at
+        // a nonexistent entry would otherwise pass every rule.
         let files = vec![card_citing(
             "Card",
             Value::String("[[Nowhere]]".to_string()),
         )];
-        assert_eq!(run(files).len(), 0);
+        let findings = run(files);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].message.contains("no such entry exists"));
+        assert!(findings[0].data.as_ref().unwrap()["target_type"].is_null());
     }
 
     #[test]
