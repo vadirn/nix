@@ -55,33 +55,3 @@ impl std::fmt::Display for TextJson {
         }
     }
 }
-
-/// Render a simple key-value list for properties command.
-pub fn render_properties(
-    properties: &[(String, String)],
-    format: &Format,
-) -> String {
-    match format {
-        Format::Table => {
-            let mut out = String::from("| Property | Value |\n| --- | --- |\n");
-            for (k, v) in properties {
-                out.push_str(&format!("| {} | {} |\n", k, v.replace('|', "\\|")));
-            }
-            out
-        }
-        Format::Json => {
-            let map: serde_json::Map<String, serde_json::Value> = properties
-                .iter()
-                .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-                .collect();
-            serde_json::to_string_pretty(&serde_json::Value::Object(map)).unwrap_or_default()
-        }
-        Format::Tsv => {
-            let mut output = String::new();
-            for (k, v) in properties {
-                output.push_str(&format!("{}\t{}\n", k, v));
-            }
-            output
-        }
-    }
-}

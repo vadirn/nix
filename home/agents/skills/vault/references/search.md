@@ -13,7 +13,7 @@ vault-query search <query> --context 3        # context lines (regex mode)
 
 Use `vault-query search` for content discovery: keyword search, finding files by content.
 
-Use other vault-query commands for structured queries: tags, properties, bases, backlinks, vault-query lint, file listing.
+Use other vault-query commands for structured queries: tags, bases, backlinks, vault-query lint, file listing. Frontmatter and outgoing links are addresses on `read`: `vault-query read <entry> fm` (or `fm.<path>` for one value) and `vault-query read <entry> links`.
 
 Rule of thumb: finding content by keywords = `vault-query search`. Structured vault queries = other vault-query subcommands. Simple reads/writes = file tools.
 
