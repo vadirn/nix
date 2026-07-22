@@ -67,18 +67,27 @@ def sentences(text):
 # carries no finite auxiliary or copula. Sentences containing a newline are
 # markdown structure — list markers, headings — rather than prose rhythm, and
 # would otherwise count "Three coordinated edits:\n\n**1." as a fragment.
+# The negated contractions need the (?:n't|'t) tail, or "It isn't one." and
+# "A reader won't conflate them." read as verbless and score as fragments.
 _AUX = re.compile(
     r"\b(?:is|are|was|were|be|been|being|am|has|have|had|does|do|did"
-    r"|will|would|can|could|should|must|may|might|'s|'re|'ve)\b",
+    r"|will|would|can|could|should|must|may|might|won|cannot|ain)(?:n't|'t)?\b"
+    r"|'(?:s|re|ve|ll|d|m)\b",
     re.IGNORECASE,
 )
 
 
 def staccato(text):
     n = 0
-    for i, sentence in enumerate(sentences(text)):
+    parts = sentences(text)
+    for i, sentence in enumerate(parts):
         s = sentence.strip()
         if not i or "\n" in s or not s[:1].isalpha():
+            continue
+        # A newline surviving inside the previous sentence means the split fell
+        # on a list marker rather than a sentence end, as in "edits:\n\n**1."
+        # followed by "First one." The clip is then typography, not rhythm.
+        if "\n" in parts[i - 1]:
             continue
         if len(s.split()) <= 6 and not _AUX.search(s):
             n += 1
@@ -100,7 +109,7 @@ def measure(text):
 def verify(corpus):
     """Re-measure a scored corpus and diff against what score.sh wrote."""
     data = os.environ.get("AGENTS_EVAL_DATA") or os.path.expanduser(
-        "~/Documents/vault/35 experiments/2026-07-22-agentsmd-archetype-arms.files"
+        "~/Documents/agent-calibration"
     )
     tsv = os.path.join(data, "results", f"{corpus}.tsv")
     outdir = os.path.join(data, "corpus", corpus)

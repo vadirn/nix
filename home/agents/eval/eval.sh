@@ -25,8 +25,13 @@ for dir in "$AGENTS_EVAL_DATA"/corpus/*/; do
   echo
 done
 
-# The detector must agree across both implementations, or the two halves below
-# are in different units and the comparison is meaningless.
+# Two gates before any number is quoted. Calibration holds each detector to its
+# labelled cases; parity holds the Python implementation to the ripgrep one, or
+# the two halves of this report are in different units.
+printf '=== calibration ===\n'
+python3 "$here/calibrate.py"
+echo
+
 printf '=== detector parity ===\n'
 python3 "$here/detector.py" --verify
 echo

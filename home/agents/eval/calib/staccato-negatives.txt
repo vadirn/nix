@@ -1,0 +1,23 @@
+# Each line must score 0. Near-misses, one per guard, so a loosened detector
+# fails here rather than silently inflating the transcript rate.
+#
+# Over the six-word line, no auxiliary.
+This is independent of the merge. Want it folded into #90, or as a follow-up?
+Under a workspace all three would share one lock. Modest cost, and you rebuild the whole system anyway.
+An index gives the planner a cheap way in. Slug addressing shows up in design transcripts, never in shipped files.
+# Short, but carrying a finite auxiliary or copula.
+Yes, with one gate: PR #90 is still a draft. Everything else is green.
+The split was tried once and reversed. They're not.
+That is how the auditor read the YAML. It isn't one.
+They differ by pairing and by number. A reader won't conflate them.
+The harness has been rerun since. It has held.
+# The newline-spanning markdown case cannot live in a line-oriented file; it is
+# an inline case in calibrate.py.
+# The opening sentence of a turn is never a fragment, having nothing to clip against.
+Cut. The rest of the section stands as written and needs no further edits.
+# Filenames must survive sentence splitting. Shredding these was what made the
+# staccato rate read 86x low on 2026-07-22.
+I checked AGENTS.md and score.sh in one pass. Nothing else is affected.
+The scorer reads every answer under corpus/claude and writes results/claude.tsv. That is the whole contract.
+# Ordinary connected prose, the specificity floor.
+An index helps only when it lets the database skip most of the table, which it cannot do on a low-cardinality column.

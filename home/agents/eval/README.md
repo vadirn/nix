@@ -12,7 +12,9 @@ Re-scores every stored corpus and prints the t-test report. It touches no API, s
 
 ## Where the data lives
 
-`config.sh` resolves `AGENTS_EVAL_DATA`, defaulting to the vault sidecar `35 experiments/2026-07-22-agentsmd-archetype-arms.files/`. It holds `corpus/<model>/` (one answer per cell, named `<arm>__<case>__<rep>.txt`) and `results/<model>.tsv` (per-cell measurements). Set `AGENTS_EVAL_DATA` to point a run at a different corpus.
+`config.sh` resolves `AGENTS_EVAL_DATA`, defaulting to `~/Documents/agent-calibration`. It holds `corpus/<model>/` (one answer per cell, named `<arm>__<case>__<rep>.txt`) and `results/<model>.tsv` (per-cell measurements). Set `AGENTS_EVAL_DATA` to point a run at a different corpus.
+
+It sits outside the vault deliberately: 280 files of raw model prose are data for an instrument, and the note tooling has no business walking them.
 
 The answers are kept because they cost quota to produce, and a new detector can be run against them without paying again.
 
@@ -79,9 +81,21 @@ Power comes free here. About 37k words per side — one active week — resolves
 
 The clipped register: a sentence after the first running six words or fewer with no finite auxiliary or copula. `Not yet built.` and `Auto-commits enabled.` both count; the boundary is the rhythm, not the negation. Sentences spanning a newline are markdown structure and are excluded, or `Three coordinated edits:` followed by a list marker would score as a fragment.
 
-It runs at **1.72 per 1k** over 121k words, against 5.43 for `contrast`. Because it is the rarer event it needs more exposure to move: ~256k words per side, about six active weeks, to resolve an 11% change.
+It runs at **1.22 per 1k** over 122k words, against 5.44 for `contrast`. Because it is the rarer event it needs more exposure to move: roughly six active weeks per side to resolve a change of a tenth.
 
-An earlier version of this file reported 0.02 per 1k and called the form absent. That was wrong three times over — the sentence splitter broke on every `AGENTS.md`-shaped filename, the pattern matched only a bare `not` opener, and the conclusion drawn from it was that the detector needed no further work. The true rate is 86 times higher. `sentences()` now survives paths and extensions, which is the precondition for measuring anything sentence-shaped in this corpus, and `calib/` should grow labelled staccato cases the way it holds them for `contrast`.
+An earlier version of this file reported 0.02 per 1k and called the form absent. That was wrong three times over — the sentence splitter broke on every `AGENTS.md`-shaped filename, the pattern matched only a bare `not` opener, and the conclusion drawn was that the detector needed no further work. The true rate is 61 times higher.
+
+## Calibration
+
+```bash
+python3 home/agents/eval/calibrate.py
+```
+
+`calib/` holds labelled cases for both detectors, and `calibrate.py` asserts every positive scores and every negative scores zero. This is the guard that was missing: the staccato detector had data but no runner, so nothing failed when the splitter shredded filenames.
+
+It works. Adding the structural cases immediately exposed a fragment guard that checked the wrong sentence, and fixing it moved the transcript rate from 1.64 to 1.22 — a quarter of the prior hits were markdown list markers rather than prose.
+
+The negatives are the load-bearing half, one per guard: over the six-word line, short but carrying an auxiliary, negated contractions (`isn't`, `won't`), markdown structure spanning a newline, a turn-opening fragment with nothing to clip against, and filenames that must survive splitting. Add a case here before changing a pattern.
 
 ## Running an arm
 
