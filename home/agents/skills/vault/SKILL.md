@@ -86,17 +86,16 @@ elif "validate":
     do("report validation results")
 
 elif user names an entry by name:   // entry = note/card/reference/checkpoint/track/experiment
-    paths = Bash(vault-query get <fragment>)   // resolves to absolute path(s), one per line
-    if single match:
-        path = paths[0]
-        if outline wanted or large/structured entry:
-            Bash(vault-query read <path>)            // folded overview
-            Bash(vault-query read <path> <address>)  // unfold the relevant section
-        else:
-            Read(path)                               // full content
+    target = <name>                                // read resolves a name itself — no get round-trip
+    shape = Bash(vault-query read <target>)        // folded overview
+    if error names the name unresolvable: do("offer to search")
+    else:
+        if error names it ambiguous:
+            target = AskUserQuestion("which one?") // the error lists the candidate paths
+            shape = Bash(vault-query read <target>)
+        Bash(vault-query read <target> <address>)  // unfold the sections the request needs
+                                                   // --full instead when the overview shows a short entry
         do("summarize content")
-    elif multiple matches: AskUserQuestion("which one?")
-    else: do("offer to search")
 
 else:
     Bash(vault-query config)
@@ -122,7 +121,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | Project context | Stable per-project framing (purpose, conventions, links) read by `vault-query --project <name> context`. Distinct from a track: context is durable framing, a track is rolling state. | `41 projects/<project>/context.md` |
 | Track | Rolling per-project work artifact (sections: Direction, Decisions, Backlog, Log). One file per multi-session effort, appended across the sessions it spans. Owned by the `/track` skill. Distinct from a checkpoint: a track accumulates state in place; a checkpoint was a one-shot snapshot. | `41 projects/<project>/track-<slug>.md` |
 | Experiment | Captured behavior test of an existing thing against a falsifiable claim. Frontmatter `type: experiment`, `verdict` (confirmed/refuted/inconclusive), `date`, optional `project` wikilink. Owned by the `/experiment` skill. Distinct from a track: an experiment is one decided question, a track is a multi-session effort. | `35 experiments/` |
-| Checkpoint _(legacy — replaced by track)_ | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain reachable via `vault-query get` (resolves the path; Read it). Programmatically treated as superseded: `consult` excludes all checkpoints by default. | `41 projects/<project>/` |
+| Checkpoint _(legacy — replaced by track)_ | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain reachable via `vault-query read <name>`. Programmatically treated as superseded: `consult` excludes all checkpoints by default. | `41 projects/<project>/` |
 | Weekly log | ISO-week file with Focus, Tasks, Backlog, Activity sections. Tasks wikilink to projects; Activity is auto-appended by a git post-commit hook. Distinct from a track: a weekly log spans all projects for one week, a track spans one project across all weeks. | `41 projects/block-buster/YYYY-wWW.md` |
 | Base | Obsidian Base file — a saved cross-vault query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query. | `90 bases/` |
 
@@ -134,8 +133,8 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `context` | Print project context.md | Yes |
 | `tracks [--view <view>]` | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC | Yes |
 | `tracks-init` | Create Tracks.base in the current project | Yes |
-| `get <fragment>` | Resolve an entry name to its absolute path (one per line); Read the path for content | No |
-| `read <FILE> [ADDRESS]` | Structured read of a .md file: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, or `0`/text). `--depth`, `--full`, `--threshold`, `--format json`. Pairs with `get` (path in) | No |
+| `get <fragment>` | Resolve an entry name to its absolute path (one per line). For handing a path to another tool; to read an entry, name it to `read` directly | No |
+| `read <FILE\|NAME> [ADDRESS]` | Structured read: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, `0`/text, `fm[.path]`, `links`). Takes a path or an entry name — an unresolvable name errors, an ambiguous one errors listing candidates. `--depth`, `--full`, `--threshold`, `--format json` | No |
 | `search <query>` | BM25 full-text search (--regex for grep mode) | No |
 | `projects [--view <view>]` | List active projects | No |
 | `cards` | List all cards with metadata | No |

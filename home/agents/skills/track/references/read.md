@@ -55,25 +55,15 @@ When no rows match, vault-query exits 0 and prints `[]`. Parse the JSON and bran
 
 ### Resolving the project
 
-vault-query resolves the project from the current working directory by walking up to find `<repo>/.vault.config.json`.
-If cwd isn't inside a project, vault-query errors with `no project resolved (use --project <name> or add .vault.config.json)`.
-Surface that error verbatim — report it as-is without synthesizing a project name.
+vault-query resolves the project from the current working directory by walking up to find `<repo>/.vault.config.json`. If cwd isn't inside a project, vault-query errors with `no project resolved (use --project <name> or add .vault.config.json)`. Surface that error verbatim — report it as-is without synthesizing a project name.
 
 `vault-query config` prints JSON with `vault_root` and `project_path`. Use `project_path` to build absolute file paths.
 
 ### Presenting a track
 
-Get the shape first, unfold on demand — a mature track runs hundreds of lines / tens of thousands of tokens, so
-reading the whole body every resume is wasteful. `vault-query read <track_path>` (no address) prints a folded
-overview: the frontmatter fields, every top-level section with its line and estimated-token counts, and each Log
-entry addressed individually as `6.N`. From that map:
+Get the shape first, unfold on demand — a mature track runs hundreds of lines / tens of thousands of tokens, so reading the whole body every resume is wasteful. `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its line and estimated-token counts, and each Log entry addressed individually as `6.N`. From that map:
 
-- **Snapshot** = Direction (address `1`) + the highest-numbered Log entry (`vault-query read <track_path> <6.N>`).
-  The latest Log entry is the current state; Direction is the stable framing. Present these two.
-- **On demand** — unfold Decisions (`4`), Backlog (`5`), an older Log entry, or any section by its address
-  (`vault-query read <track_path> <addr>`), or Read an exact line range from the overview's line numbers. Decisions
-  and Backlog are append-only: when the user goes deeper into either, unfold the whole section and treat every item
-  as current. Glossary and Files of interest are stable — reach for them only when a term or path needs resolving.
+- **Snapshot** = Direction (address `1`) + the highest-numbered Log entry (`vault-query read <track_path> <6.N>`). The latest Log entry is the current state; Direction is the stable framing. Present these two.
+- **On demand** — unfold Decisions (`4`), Backlog (`5`), an older Log entry, or any section by its address (`vault-query read <track_path> <addr>`), or Read an exact line range from the overview's line numbers. Decisions and Backlog are append-only: when the user goes deeper into either, unfold the whole section and treat every item as current. Glossary and Files of interest are stable — reach for them only when a term or path needs resolving.
 
-`vault-query read` is mdstruct-backed (the same progressive-unfolding reader the `read` command exposes), so the
-address scheme (`0`/`text`, `1`, `6.N`, heading slugs) and the `--depth`/`--threshold`/`--full` controls all apply here.
+`vault-query read` is the vault-facing wrapper over `mdread`, so the address scheme (`0`/`text`, `1`, `6.N`, heading slugs, `fm[.path]`, `links`) and the `--depth`/`--threshold`/`--full` controls are the same ones `mdread` applies to any markdown file outside the vault.
