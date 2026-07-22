@@ -18,17 +18,19 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 
 ## Rules
 
-| Rule                     | Default | What it flags                                                                     |
-| ------------------------ | ------- | --------------------------------------------------------------------------------- |
-| `orphan-card`            | warn    | Card with zero inbound wikilinks (excludes folder-index cards: `<X>/~<X>.md`)     |
-| `dangling-reference`     | warn    | Reference not cited by any card's `reference:` frontmatter                        |
-| `reference-not-wikilink` | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL)                 |
-| `broken-wikilink`        | error   | `[[target]]` does not resolve to any vault file                                   |
-| `duplicate-h1`           | warn    | First non-blank body line is `# <basename>`, duplicating the implicit page title. |
-| `invalid-frontmatter`    | error   | YAML frontmatter fails to parse                                                   |
-| `untagged-card`          | warn    | Card with missing or empty `tags:` array                                          |
-| `missing-required-field` | warn    | File missing a required frontmatter field for its `type:` (one finding per field) |
-| `singleton-tag`          | warn    | Tag appearing in exactly one file (typo heuristic)                                |
+| Rule | Default | What it flags |
+| --- | --- | --- |
+| `orphan-card` | warn | Card with zero inbound wikilinks (excludes folder-index cards: `<X>/~<X>.md`) |
+| `dangling-reference` | warn | Reference not cited by any card's `reference:` frontmatter |
+| `reference-not-wikilink` | warn | Card's `reference:` value is a non-wikilink string (e.g. raw URL) |
+| `reference-wrong-type` | warn | Card's `reference:` wikilink resolves to a non-`reference` entry, or to no entry at all (frontmatter links are outside `broken-wikilink`'s body-only scan) |
+| `reference-vault-link` | warn | `type: reference` entry whose body wikilinks resolve to another vault entry — a reference points outward only; analysis belongs in a card or note (asset embeds and unresolved targets exempt) |
+| `broken-wikilink` | error | `[[target]]` does not resolve to any vault file |
+| `duplicate-h1` | warn | First non-blank body line is `# <basename>`, duplicating the implicit page title. |
+| `invalid-frontmatter` | error | YAML frontmatter fails to parse |
+| `untagged-card` | warn | Card with missing or empty `tags:` array |
+| `missing-required-field` | warn | File missing a required frontmatter field for its `type:` (one finding per field) |
+| `singleton-tag` | warn | Tag appearing in exactly one file (typo heuristic) |
 
 ## Excluding files
 
@@ -64,7 +66,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 
 - **`singleton-tag` defaults to `warn`.** It fires on tags used in exactly one file. Promote to `error` or demote to `off` via `--rule singleton-tag=<severity>` or via `lint.rules` in the root config.
 
-- **`dangling-reference` does not check the wikilink target's `type:`.** A card with `reference: [[20 cards/Foo]]` (pointing at another card, not a `type: reference` file) suppresses the dangling check. The companion `reference-not-wikilink` rule covers the related miss where the `reference:` value is a non-wikilink string.
+- **`dangling-reference` does not check the wikilink target's `type:`.** A card with `reference: [[20 cards/Foo]]` (pointing at another card, not a `type: reference` file) suppresses the dangling check. The companion rules cover the misses: `reference-not-wikilink` when the `reference:` value is a non-wikilink string, `reference-wrong-type` when the wikilink resolves to a non-`reference` entry.
 
 - **Act on findings interactively.** Use `/vault card <name>`, `/vault reference <name>`, or open the file directly to fix issues; lint is read-only and never edits.
 
@@ -93,17 +95,19 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 
 ### `data` per rule
 
-| Rule                     | `data` shape                               |
-| ------------------------ | ------------------------------------------ |
-| `orphan-card`            | `null`                                     |
-| `dangling-reference`     | `null`                                     |
-| `reference-not-wikilink` | `{ "value": <string> }`                    |
-| `broken-wikilink`        | `{ "target": <string>, "line": <number> }` |
-| `duplicate-h1`           | `null`                                     |
-| `invalid-frontmatter`    | `{ "error": <string> }`                    |
-| `untagged-card`          | `null`                                     |
-| `missing-required-field` | `null`                                     |
-| `singleton-tag`          | `{ "tag": <string> }`                      |
+| Rule                     | `data` shape                                              |
+| ------------------------ | --------------------------------------------------------- |
+| `orphan-card`            | `null`                                                    |
+| `dangling-reference`     | `null`                                                    |
+| `reference-not-wikilink` | `{ "value": <string> }`                                   |
+| `reference-wrong-type`   | `{ "target": <string>, "target_type": <string or null> }` |
+| `reference-vault-link`   | `{ "target": <string>, "line": <number> }`                |
+| `broken-wikilink`        | `{ "target": <string>, "line": <number> }`                |
+| `duplicate-h1`           | `null`                                                    |
+| `invalid-frontmatter`    | `{ "error": <string> }`                                   |
+| `untagged-card`          | `null`                                                    |
+| `missing-required-field` | `null`                                                    |
+| `singleton-tag`          | `{ "tag": <string> }`                                     |
 
 - `reference-not-wikilink.data.value` is the raw `reference:` frontmatter value that failed to parse as a wikilink (e.g. a bare URL).
 - `broken-wikilink.data.target` is the **raw** wikilink target verbatim (including any path prefix); call `wikilink::resolve_name` yourself if you want the bare note name. `broken-wikilink.data.line` is the 1-based source line of the offending `[[...]]`.

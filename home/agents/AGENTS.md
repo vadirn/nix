@@ -63,15 +63,16 @@ Use these CLI tools through the Bash tool. Prefer them over manual code reading 
 - **rg** (ripgrep): all text search. Faster than grep and find. Honors `.gitignore`.
 - **ast-grep** (sg): structural search and rewrite by AST pattern. Use for any rename, signature change, or call-site rewrite that crosses files. Pattern syntax: `sg -l ts -p 'console.log($A)' -r 'logger.debug($A)'`.
 - **fd**: file finding by name. Use instead of `find`.
-- **vault-query**: all vault (`~/Documents/vault`) file access. `get <name-fragment>` resolves a note/card/track/reference to its absolute path; `search <query>` is BM25-ranked full-text (`--regex` for grep); `read <file>` reads it folded. Use these for vault content: `fd`/`rg`/`ls` honor `.gitignore`, which excludes the vault, so they silently miss it.
+- **mdread**: structured read of any markdown file. `mdread <file>` folds it to one line per section with line and token counts; `mdread <file> <address>` unfolds one part, addressed by dotted number (`2.1`), heading slug, `0`/`text` for the lede, `fm[.path]` for frontmatter, or `links`. Reach for it before Read whenever the file is long or you want one section: fold first, then unfold what the task needs. Read the whole file when it is short or you are about to edit it and need line numbers.
+- **vault-query**: all vault (`~/Documents/vault`) file access. `read <name-or-path> [address]` is the vault-facing `mdread` — it resolves an entry by name, so `vault-query read "Codemod"` needs no path lookup first; `get <name-fragment>` resolves a name to its absolute path, for when another tool needs the path; `search <query>` is BM25-ranked full-text (`--regex` for grep). Use these for vault content: `fd`/`rg`/`ls` honor `.gitignore`, which excludes the vault, so they silently miss it.
 - **gh**: all GitHub operations. Create issues, open PRs, read comments. Saves API rate limits.
 - **jq**: any JSON parsing in pipelines.
 
-For any refactor that touches more than 20 files, write a codemod first. ast-grep handles most cases. Test the codemod against three sample files before running it over the whole tree.
+For any refactor that touches more than 20 files, write a codemod first; the codemod-first doctrine (decision rule, tool choice, procedure, anti-patterns) lives in the vault note `Codemod` — read it with `vault-query read "Codemod"`.
 
 ## Commits
 
-Use the `/commit` skill to create commits.
+Use the `git` skill to put work into git: `/git commit` to commit, `/git branch` to cut a branch, `/git pr` to open a pull request. All three name their work with the same `feat | fix | chore` contract test, which the skill defines once.
 
 Push is manual. The user runs `git push` themselves, usually via lazygit. A hook blocks the agent from running it. When work needs publishing, ask the user to push.
 
@@ -87,7 +88,7 @@ Use the `firecrawl-cli` skill for web search and fetching (it routes to `firecra
 
 ## GitHub
 
-Use `gh` CLI for GitHub interactions. Use the `/pr` skill to create pull requests.
+Use `gh` CLI for GitHub interactions. Use `/git pr` to create pull requests.
 
 ## Plans
 

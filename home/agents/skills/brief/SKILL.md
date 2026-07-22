@@ -15,7 +15,7 @@ Two acts that close two different gaps between your work and a stakeholder's hea
 - **draft** — compose a status update that closes **impression distance**: the gap between the actual state of the work and the stakeholder's model of that state.
 - **diagnose** — classify a complaint as a state-gap (report it) or a **target distance** gap (renegotiate it, never report it), so you do not answer a scope objection with a status report.
 
-Read `references/concepts.md` once per session if the impression/target/axis vocabulary is not already loaded; it is the operational recap of the two vault notes (`vault-query get "Impression distance"`, `vault-query get "Target distance"`).
+Read `references/concepts.md` once per session if the impression/target/axis vocabulary is not already loaded.
 
 The skill **drafts but never sends**. The relational axis — the stakeholder's sense that someone is attending to them — is produced only by the human act of communicating. A draft auto-sent is proof-of-work without proof-of-care, the exact collapse the concept warns against. So every path ends at text in your terminal that you read, edit, and send yourself.
 

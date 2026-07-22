@@ -19,7 +19,7 @@ There are three types of lines in pseudocode:
 
 ```
 result = Bash(git status)
-Skill(commit)
+Skill(git)
 AskUserQuestion("Update or stop?")
 do("summarize errors, categorize mechanical vs semantic")
 title, body = do("generate from diff and log")
@@ -44,7 +44,7 @@ else if ahead: Bash(git push)
 
 - **Guard clauses early.** Stop conditions before the happy path. Reduces nesting.
 - **Parallelism is explicit.** Mark `(parallel)` when calls are independent and should run together.
-- **Tool calls are literal.** `Bash(...)`, `Skill(...)`, `AskUserQuestion(...)` are real instructions — each agent maps them to its own tool surface (e.g. `Skill(commit)` means "invoke the commit skill").
+- **Tool calls are literal.** `Bash(...)`, `Skill(...)`, `AskUserQuestion(...)` are real instructions — each agent maps them to its own tool surface (e.g. `Skill(git)` means "invoke the git skill").
 - **`do()` for freeform directives.** When the step is "use your judgment", wrap it in `do()`. This distinguishes LLM-directed work from mechanical tool calls.
 - **Variable names carry intent.** `default_branch` not `db`. The model reads these as semantic hints.
 - **Sequence from order.** Omit step numbers; line position encodes sequence.
@@ -91,7 +91,7 @@ branch = Bash(git rev-parse --abbrev-ref HEAD)
 // Guards
 if branch == "main": stop
 if uncommitted changes in status:
-  Skill(commit)
+  Skill(git)
   stop
 
 Bash(git push -u origin <branch>)
