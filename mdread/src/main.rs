@@ -19,7 +19,10 @@ use mdread::{Dialect, HeadingRule, LinkRule, TextJson};
 An address is a dotted-numeric path into the heading tree (`2.1.3`), a heading slug \
 (`installation`), `0`/`text` for the pre-heading lede, `fm`/`frontmatter` for the \
 frontmatter block (`fm.<path>` for one value, e.g. `fm.references[0].target`), or \
-`links` for the outgoing links."
+`links` for the outgoing links.\n\n\
+The reserved names win over a heading that slugs to the same word, so a `## Links` \
+section is served by its numeric address (`1.1`) instead, and the reader says so \
+when the two collide."
 )]
 struct Cli {
     /// Path to the Markdown file ("-" reads stdin)

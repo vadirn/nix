@@ -22,9 +22,18 @@ pub(crate) enum ResolveError {
 /// Pure address resolution: all the descent/match logic, no IO.
 /// `resolve_address` wraps this to format the error; tests call it directly so
 /// there is no parallel test mirror to drift.
+/// True for the reserved text address (`0` / `text`, case-insensitively). Shared
+/// with the caller that announces a live shadow, so the two cannot drift over
+/// which addresses the text interception owns.
+pub(crate) fn is_text_address(address: &str) -> bool {
+    address == "0" || address.eq_ignore_ascii_case("text")
+}
+
 pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, ResolveError> {
-    // `[0]` / `text` → the synthetic text node.
-    if address == "0" || address.eq_ignore_ascii_case("text") {
+    // `[0]` / `text` → the synthetic text node. Reserved, like `fm` and `links`:
+    // matched before the heading tree, so a heading slugging to `text` is
+    // reachable only by its number. `resolve_address` says so on the miss.
+    if is_text_address(address) {
         return doc
             .text
             .as_ref()
@@ -81,10 +90,15 @@ pub(crate) fn resolve<'a>(doc: &'a Document, address: &str) -> Result<&'a Node, 
 pub(crate) fn resolve_address<'a>(doc: &'a Document, address: &str) -> Result<&'a Node> {
     match resolve(doc, address) {
         Ok(n) => Ok(n),
-        Err(ResolveError::NoTextRegion(addr)) => Err(anyhow::anyhow!(
-            "No text region in this file (address '{}')",
-            addr
-        )),
+        Err(ResolveError::NoTextRegion(addr)) => {
+            // As with `fm`: a reserved address that resolved to nothing names the
+            // heading that answers to the same word, and how to reach it.
+            let mut msg = format!("No text region in this file (address '{}')", addr);
+            if let Some(p) = crate::shadow::phrase(doc, &addr) {
+                msg.push_str(&format!("; {}", p));
+            }
+            Err(anyhow::anyhow!(msg))
+        }
         Err(ResolveError::OutOfRange(addr)) => {
             Err(anyhow::anyhow!("Address '{}' out of range", addr))
         }

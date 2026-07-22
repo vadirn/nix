@@ -15,6 +15,7 @@ mod frontmatter;
 mod model;
 mod render;
 mod resolve;
+mod shadow;
 mod slug;
 mod tokens;
 mod unfold;
@@ -29,7 +30,7 @@ pub use format::TextJson;
 
 use model::{Document, node_tokens, parse_document_with, range_lines, range_slice};
 use render::{OverviewJson, TextNodeJson, node_to_json, print_tree_line};
-use resolve::resolve_address;
+use resolve::{is_text_address, resolve_address};
 use unfold::{UnfoldJson, own_prose, unfold_child_json, unfold_content_string};
 
 /// Default inline cutoff in estimated tokens for the unfold heuristic.
@@ -91,15 +92,44 @@ pub fn run_content(
         // of the file the tree cannot reach — frontmatter sits above the body,
         // and the link list is an index over it, not a region of it. A heading
         // that slugs to one of these names stays reachable by its numeric address.
+        // The precedence is absolute (`fm` must not change meaning the day
+        // someone adds a frontmatter block), so a live collision is announced
+        // rather than resolved: see [`announce_shadow`] and [`shadow`]. `0`/`text`
+        // is the third reserved name and is intercepted one layer down, in
+        // [`resolve::resolve`], so it is announced on the `emit_section` arm.
         Some(addr) if frontmatter_address(addr).is_some() => {
             let which = frontmatter_address(addr).expect("checked by the guard");
-            emit_frontmatter(display_path, content, addr, which, format)
+            let out = emit_frontmatter(display_path, content, &doc, addr, which, format);
+            announce_shadow(&doc, addr, out)
         }
         Some(addr) if addr.eq_ignore_ascii_case("links") => {
-            emit_links(display_path, content, addr, dialect.links, format)
+            let out = emit_links(display_path, content, addr, dialect.links, format);
+            announce_shadow(&doc, addr, out)
         }
-        Some(addr) => emit_section(display_path, &doc, addr, depth, full, threshold, format),
+        Some(addr) => {
+            let out = emit_section(display_path, &doc, addr, depth, full, threshold, format);
+            if is_text_address(addr) {
+                announce_shadow(&doc, addr, out)
+            } else {
+                out
+            }
+        }
     }
+}
+
+/// Report on stderr that the reserved reading just served on stdout has a live
+/// shadow — a heading that slugs to the same address. Only on success: a failed
+/// reading says it in its own error instead.
+///
+/// stderr, never stdout: the unfold output is a payload a caller consumes, so it
+/// stays byte-identical in both text and JSON mode, and a note cannot corrupt it.
+fn announce_shadow(doc: &Document, address: &str, out: Result<()>) -> Result<()> {
+    if out.is_ok()
+        && let Some(p) = shadow::phrase(doc, address)
+    {
+        eprintln!("note: {}", p);
+    }
+    out
 }
 
 /// Which part of the frontmatter an address names.
@@ -161,15 +191,20 @@ struct FrontmatterValueJson {
 fn emit_frontmatter(
     display_path: &str,
     content: &str,
+    doc: &Document,
     address: &str,
     which: FmAddress<'_>,
     format: TextJson,
 ) -> Result<()> {
     let Some(text) = frontmatter::block_text(content) else {
-        return Err(anyhow::anyhow!(
-            "No frontmatter block in this file (address '{}')",
-            address
-        ));
+        // The address resolved to nothing, and a heading may be the thing the
+        // caller meant. Name it and its numeric address rather than letting the
+        // reserved name look like the file's last word.
+        let mut msg = format!("No frontmatter block in this file (address '{}')", address);
+        if let Some(p) = shadow::phrase(doc, address) {
+            msg.push_str(&format!("; {}", p));
+        }
+        return Err(anyhow::anyhow!(msg));
     };
 
     match which {
@@ -349,6 +384,12 @@ fn emit_overview(
     // Tool-agnostic: names addresses, not a command, so both the `mdread` CLI and
     // the `vault-query read` wrapper print something true of themselves.
     println!("next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links");
+    // Only when the document actually collides, so the common overview is
+    // unchanged. The line is a report about the tree above it, which is why it
+    // may join stdout where the unfold notes may not.
+    for line in shadow::overview_notes(doc) {
+        println!("{}", line);
+    }
     Ok(())
 }
 
@@ -727,6 +768,147 @@ mod tests {
         assert!(!is_numeric_address("1.a"));
         assert!(!is_numeric_address("text"));
         assert!(!is_numeric_address(""));
+    }
+
+    // --- reserved-address shadowing ---
+
+    // A heading that slugs to `links`, in a file whose link list is non-empty:
+    // the reserved reading succeeds and is still not what `## Links` holds.
+    const SHADOW_LINKS: &str =
+        "---\ntype: note\n---\n\nLede with [[Elsewhere]].\n\n# Direction\n\ndir body.\n\n## Links\n\n- [[A Note]]\n";
+    // A heading that slugs to `fm`, in a file with no frontmatter block.
+    const SHADOW_FM: &str = "# Direction\n\n## FM\n\nnot the frontmatter.\n";
+    // A heading that slugs to `text`, in a file whose first line is a heading, so
+    // there is no lede for `0`/`text` to name.
+    const SHADOW_TEXT: &str = "# Direction\n\n## Text\n\nnot the lede.\n";
+
+    fn read(content: &str, address: Option<&str>) -> anyhow::Result<()> {
+        crate::run_content(
+            "x.md",
+            content,
+            address,
+            None,
+            false,
+            None,
+            TextJson::Text,
+            crate::Dialect::default(),
+        )
+    }
+
+    #[test]
+    fn served_links_over_a_shadow_is_announced() {
+        // The reserved reading succeeds and is non-empty, so nothing errors — the
+        // whole point is that the caller would otherwise never learn about 1.1.
+        assert!(!crate::facet::links(SHADOW_LINKS, crate::LinkRule::All).is_empty());
+        assert!(read(SHADOW_LINKS, Some("links")).is_ok());
+
+        let doc = parse_document(SHADOW_LINKS);
+        assert_eq!(
+            crate::shadow::phrase(&doc, "links").as_deref(),
+            Some("heading 'Links' (1.1) also answers to 'links'")
+        );
+        // Case of the typed address does not change the answer.
+        assert!(crate::shadow::phrase(&doc, "LINKS").is_some());
+    }
+
+    #[test]
+    fn overview_footer_names_the_shadowing_heading() {
+        let doc = parse_document(SHADOW_LINKS);
+        assert_eq!(
+            crate::shadow::overview_notes(&doc),
+            vec![
+                "note: 'Links' (1.1) also answers to a reserved address; reach it by number"
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_frontmatter_error_names_the_shadowing_heading() {
+        let err = read(SHADOW_FM, Some("fm")).unwrap_err().to_string();
+        assert_eq!(
+            err,
+            "No frontmatter block in this file (address 'fm'); heading 'FM' (1.1) also answers to 'fm'"
+        );
+    }
+
+    #[test]
+    fn missing_text_region_error_names_the_shadowing_heading() {
+        let err = read(SHADOW_TEXT, Some("text")).unwrap_err().to_string();
+        assert_eq!(
+            err,
+            "No text region in this file (address 'text'); heading 'Text' (1.1) also answers to 'text'"
+        );
+    }
+
+    #[test]
+    fn reserved_errors_keep_their_message_without_a_shadow() {
+        let plain = "# Direction\n\nbody.\n";
+        assert_eq!(
+            read(plain, Some("fm")).unwrap_err().to_string(),
+            "No frontmatter block in this file (address 'fm')"
+        );
+        assert_eq!(
+            read(plain, Some("text")).unwrap_err().to_string(),
+            "No text region in this file (address 'text')"
+        );
+    }
+
+    #[test]
+    fn a_document_without_collisions_says_nothing() {
+        let doc = parse_document(SAMPLE);
+        assert!(crate::shadow::overview_notes(&doc).is_empty());
+        for name in crate::shadow::reserved_names() {
+            assert!(
+                crate::shadow::phrase(&doc, name).is_none(),
+                "{name} must not report a shadow"
+            );
+        }
+        assert!(read(SAMPLE, None).is_ok());
+    }
+
+    #[test]
+    fn an_alias_of_the_same_reading_is_announced_too() {
+        // `fm` and `frontmatter` serve one reading, so a `## Frontmatter` section
+        // is shadowed whichever spelling the caller typed. The clause names the
+        // word the heading actually slugs to.
+        let content = "---\ntype: note\n---\n\n# Direction\n\n## Frontmatter\n\nabout the fields.\n";
+        let doc = parse_document(content);
+        let expected = Some("heading 'Frontmatter' (1.1) also answers to 'frontmatter'");
+        assert_eq!(crate::shadow::phrase(&doc, "frontmatter").as_deref(), expected);
+        assert_eq!(crate::shadow::phrase(&doc, "fm").as_deref(), expected);
+        // Same for the lede's two spellings.
+        let lede = "# Direction\n\n## Text\n\nnot the lede.\n";
+        let doc = parse_document(lede);
+        let expected = Some("heading 'Text' (1.1) also answers to 'text'");
+        assert_eq!(crate::shadow::phrase(&doc, "0").as_deref(), expected);
+        assert_eq!(crate::shadow::phrase(&doc, "text").as_deref(), expected);
+    }
+
+    #[test]
+    fn a_value_address_has_no_shadow() {
+        // `fm.tags` is not a slug any heading can carry, so a heading slugging to
+        // `fm` shadows the block address alone — announcing it under `fm.tags`
+        // would name a heading that answers to nothing of the sort.
+        let doc = parse_document(SHADOW_FM);
+        assert!(crate::shadow::phrase(&doc, "fm").is_some());
+        assert!(crate::shadow::phrase(&doc, "fm.tags").is_none());
+        assert!(crate::shadow::phrase(&doc, "glossary").is_none());
+    }
+
+    #[test]
+    fn several_shadows_are_all_named() {
+        // Two headings slug to `links`: one clause each, joined, and one overview
+        // line each.
+        let content = "# One\n\n## Links\n\na\n\n# Two\n\n## Links\n\nb\n";
+        let doc = parse_document(content);
+        assert_eq!(
+            crate::shadow::phrase(&doc, "links").as_deref(),
+            Some(
+                "heading 'Links' (1.1) also answers to 'links'; heading 'Links' (2.1) also answers to 'links'"
+            )
+        );
+        assert_eq!(crate::shadow::overview_notes(&doc).len(), 2);
     }
 
     #[test]
