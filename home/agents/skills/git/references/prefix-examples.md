@@ -1,6 +1,6 @@
 # Prefix example bank
 
-Worked calls for the three-question contract test in `SKILL.md`. These illustrate which prefix to choose, not message style.
+Worked calls for the three-question contract test in `prefix.md`. These illustrate which prefix to choose, not message style.
 
 _Contract changes (`feat`):_
 

@@ -9,7 +9,7 @@ branch  = Bash(git rev-parse --abbrev-ref HEAD)
 default = Bash(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
 
 // Name
-prefix = do("pick feat | fix | chore by the contract test in SKILL.md, applied to the branch's planned work as a whole")
+prefix = do("pick feat | fix | chore by the contract test in prefix.md, applied to the branch's planned work as a whole")
 slug   = do("kebab-case the intended work in 2-4 words; name the work, not the files")
 name   = "<prefix>/<slug>"
 
@@ -23,7 +23,7 @@ else if branch != default:
     base = current HEAD, or origin/<default> per the answer
 else:                                  // on default with uncommitted changes
     AskUserQuestion("uncommitted changes — commit them on <branch> first, or carry them onto the new branch?")
-    if commit first: follow references/commit.md, base = "origin/<default>"
+    if commit first: follow commit.md, base = "origin/<default>"
     else:            base = current HEAD   // checkout -b carries the working tree along
 
 // Confirm

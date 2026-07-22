@@ -14,8 +14,8 @@ diff = Bash(git diff <default_branch>...HEAD)
 log = Bash(git log <default_branch>..HEAD --oneline)
 
 // Guards
-if branch == default_branch: stop, ask user to create a feature branch (references/branch.md)
-if uncommitted changes in status: follow references/commit.md
+if branch == default_branch: stop, ask user to create a feature branch (branch.md)
+if uncommitted changes in status: follow commit.md
 
 // Push
 if no upstream: Bash(git push -u origin <branch>)
@@ -48,7 +48,7 @@ if existing:
     Bash(rm -f /tmp/claude/pr.md)
     show PR URL, stop
 
-title = do("generate conventional commit-style title: '<prefix>: <message>' — prefix by the contract test in SKILL.md, message style per references/commit.md")
+title = do("generate conventional commit-style title: '<prefix>: <message>' — prefix by the contract test in prefix.md, message style per commit.md")
 body = do("fill template_content placeholders from diff and log; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim")
 
 AskUserQuestion("confirm title, body, base branch, draft status")
@@ -75,18 +75,6 @@ show PR URL
   ```
   The body file also serves as proof of skill use: the `require-pr-body-file.sh` PreToolUse hook refuses `gh pr create` unless it points `--body-file` at `/tmp/claude/pr.md` and that file exists. Because gh reads the body straight from the file, the artifact IS the body — no separate nonce or time window. The skill deletes the file after the gh call, so the same artifact gates exactly one PR. Use `gh pr edit --body-file` for updates to an existing PR.
 - **Confirm before creating.** Show title and body. Omit confirmation when the user supplied an explicit title and body.
-
-## Inspecting an existing PR
-
-Checking a PR's state, comments, or CI sits outside this workflow — run `gh` directly. `<pr>` is a number, URL, or branch; omit it to act on the PR for the current branch.
-
-- **State and metadata:** `gh pr view <pr>` — title, body, state, labels, reviewers. Add `--json state,mergeable,reviewDecision,statusCheckRollup` for a machine-readable summary.
-- **CI checks:** `gh pr checks <pr>` — one line per check with pass/fail/pending. `gh pr checks <pr> --watch` blocks until checks settle.
-- **A failing run's logs:** `gh run view <run-id> --log-failed` — only the failed steps. Get `<run-id>` from the `gh pr checks` output.
-- **Review comments and threads:** `gh pr view <pr> --comments` — issue comments plus review threads in one stream.
-- **The diff:** `gh pr diff <pr>`.
-
-When CI fails: classify each failure as mechanical (lint, format, types — fixable by editing and re-pushing) or semantic (tests, infrastructure — needs diagnosis). Fix mechanical failures with a `fix:` commit via `references/commit.md`, then `git push`.
 
 ## Rules
 
