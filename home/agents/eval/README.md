@@ -37,7 +37,28 @@ Read the verdict column, never the means. Arm means have misled this project rep
 
 `n80` is the per-arm n giving 80% power at the observed effect size. It is what licenses adopting a change, and it is why an arm that merely looks fine is not yet a result.
 
-## Standing result (2026-07-22)
+## Standing result (2026-07-23): de-rhetoric wins
+
+`g-derhetoric` is the first arm to beat the deployed file, and it is now applied to `AGENTS.md`.
+
+| metric               | `a-current` | `g-derhetoric` |     t | verdict |
+| -------------------- | ----------: | -------------: | ----: | ------- |
+| contrast /1k         |        6.07 |           4.78 | -2.23 | better  |
+| em-dashes per answer |        3.57 |           2.97 |       |         |
+| answer words         |         305 |            279 |       |         |
+| grade, recommendation cases |    33/33 |          33/33 |       | intact  |
+
+n=77 per arm on `cases-agentic.jsonl`, blocked by case. It changes four antithesis constructions in the file's own prose and adds no prohibition, keeping every doctrine claim — the diff is checkable and every element survives.
+
+Two lessons sit behind that number. The first is that the file was demonstrating what it asked against: `charges for problems solved rather than lines written`, `Lazy about the answer, thorough about the reasoning`, `pragmatic and silent … is slop; pragmatic and explicit … is ordinary engineering`. Five earlier arms all *added* text describing the construction and all lost; this one only removes the demonstration.
+
+The second is that the unblocked test read `t=-1.76` and called it unresolved. Cases differ enormously in base rate — `improve-rule` at 11.7 per 1k against `merge-vs-rebase` at 0.6 — and carrying that spread as error variance was hiding a real effect. Blocking is not optional here; the arms run identical cases by construction, so the unpaired analysis was simply the wrong one.
+
+The grade guard needs reading per case. Aggregate emission falls from 92% to 74%, but all three cases that request a recommendation score 33/33 in both arms. The drop is `a-current` grading pure explanation, where the doctrine says grade recommendations — so the arm follows the instruction more closely, not less.
+
+`h-destaccato` is built and unrun: it converts the `Archetype (the ponytail).` inline labels to headings, taking the file's own staccato from 4 to 1.
+
+## Earlier result (2026-07-22)
 
 On Claude, n=18 per arm, metric `contrast_per_1k`:
 
