@@ -30,7 +30,8 @@ pub use format::TextJson;
 
 use model::{Document, node_tokens, parse_document_with, range_lines, range_slice};
 use render::{OverviewJson, TextNodeJson, node_to_json, print_tree_line};
-use resolve::{is_text_address, resolve_address};
+use resolve::resolve_address;
+use shadow::{FmAddress, Reading, reserved_reading};
 use unfold::{UnfoldJson, own_prose, unfold_child_json, unfold_content_string};
 
 /// Default inline cutoff in estimated tokens for the unfold heuristic.
@@ -86,34 +87,34 @@ pub fn run_content(
     let doc = parse_document_with(content, dialect.headings);
     let threshold = threshold.unwrap_or(DEFAULT_THRESHOLD);
 
-    match address {
-        None => emit_overview(display_path, content, &doc, dialect.links, format),
-        // Reserved addresses are matched before the heading tree: they name parts
-        // of the file the tree cannot reach — frontmatter sits above the body,
-        // and the link list is an index over it, not a region of it. A heading
-        // that slugs to one of these names stays reachable by its numeric address.
-        // The precedence is absolute (`fm` must not change meaning the day
-        // someone adds a frontmatter block), so a live collision is announced
-        // rather than resolved: see [`announce_shadow`] and [`shadow`]. `0`/`text`
-        // is the third reserved name and is intercepted one layer down, in
-        // [`resolve::resolve`], so it is announced on the `emit_section` arm.
-        Some(addr) if frontmatter_address(addr).is_some() => {
-            let which = frontmatter_address(addr).expect("checked by the guard");
+    let Some(addr) = address else {
+        return emit_overview(display_path, content, &doc, dialect.links, format);
+    };
+
+    // Reserved addresses are matched before the heading tree: they name parts of
+    // the file the tree cannot reach — frontmatter sits above the body, and the
+    // link list is an index over it, not a region of it. A heading that slugs to
+    // one of these names stays reachable by its numeric address. The precedence
+    // is absolute (`fm` must not change meaning the day someone adds a
+    // frontmatter block), so a live collision is announced rather than resolved:
+    // see [`announce_shadow`] and [`shadow`]. [`reserved_reading`] is the one
+    // place that says which addresses these are; `Reading::Text` still reaches
+    // its node through [`emit_section`], because the lede is a node of the
+    // document even though its address is reserved.
+    match reserved_reading(addr) {
+        Some(Reading::Fm(which)) => {
             let out = emit_frontmatter(display_path, content, &doc, addr, which, format);
             announce_shadow(&doc, addr, out)
         }
-        Some(addr) if addr.eq_ignore_ascii_case("links") => {
+        Some(Reading::Links) => {
             let out = emit_links(display_path, content, addr, dialect.links, format);
             announce_shadow(&doc, addr, out)
         }
-        Some(addr) => {
+        Some(Reading::Text) => {
             let out = emit_section(display_path, &doc, addr, depth, full, threshold, format);
-            if is_text_address(addr) {
-                announce_shadow(&doc, addr, out)
-            } else {
-                out
-            }
+            announce_shadow(&doc, addr, out)
         }
+        None => emit_section(display_path, &doc, addr, depth, full, threshold, format),
     }
 }
 
@@ -130,36 +131,6 @@ fn announce_shadow(doc: &Document, address: &str, out: Result<()>) -> Result<()>
         eprintln!("note: {}", p);
     }
     out
-}
-
-/// Which part of the frontmatter an address names.
-enum FmAddress<'a> {
-    /// The whole block (`frontmatter`, `fm`).
-    Block,
-    /// One value by path (`fm.tags`, `fm.references[0].target`).
-    Path(&'a str),
-}
-
-/// Recognize a frontmatter address, case-insensitively. Returns `None` for any
-/// address that is not frontmatter, leaving it to the heading-tree resolver.
-///
-/// The prefixes are ASCII, so lowercasing preserves their byte length and the
-/// path can be sliced out of the original (case-preserving) address — YAML keys
-/// are case-sensitive, so the path must not be lowercased with the prefix.
-fn frontmatter_address(addr: &str) -> Option<FmAddress<'_>> {
-    let lower = addr.to_lowercase();
-    if lower == "frontmatter" || lower == "fm" {
-        return Some(FmAddress::Block);
-    }
-    for prefix in ["frontmatter.", "fm."] {
-        if lower.starts_with(prefix) {
-            let path = &addr[prefix.len()..];
-            if !path.is_empty() {
-                return Some(FmAddress::Path(path));
-            }
-        }
-    }
-    None
 }
 
 #[derive(serde::Serialize)]
@@ -716,38 +687,49 @@ mod tests {
         assert!(s.contains("1.2"), "large child placeholder present: {}", s);
     }
 
-    // --- frontmatter addressing ---
+    // --- reserved addressing ---
 
     #[test]
     fn frontmatter_addresses_recognized_case_insensitively() {
-        use crate::{FmAddress, frontmatter_address};
+        use crate::{FmAddress, Reading, reserved_reading};
         for a in ["fm", "FM", "frontmatter", "Frontmatter"] {
             assert!(
-                matches!(frontmatter_address(a), Some(FmAddress::Block)),
+                matches!(reserved_reading(a), Some(Reading::Fm(FmAddress::Block))),
                 "{a} should name the whole block"
             );
         }
         for a in ["fm.tags", "FM.tags", "frontmatter.tags"] {
-            match frontmatter_address(a) {
-                Some(FmAddress::Path(p)) => assert_eq!(p, "tags"),
+            match reserved_reading(a) {
+                Some(Reading::Fm(FmAddress::Path(p))) => assert_eq!(p, "tags"),
                 _ => panic!("{a} should name a value"),
             }
         }
         // The path keeps its own dots, brackets, and original case: YAML keys are
         // case-sensitive, so only the prefix may be lowercased.
-        match frontmatter_address("fm.References[0].Target") {
-            Some(FmAddress::Path(p)) => assert_eq!(p, "References[0].Target"),
+        match reserved_reading("fm.References[0].Target") {
+            Some(Reading::Fm(FmAddress::Path(p))) => assert_eq!(p, "References[0].Target"),
             _ => panic!("deep path should survive intact"),
         }
     }
 
     #[test]
-    fn non_frontmatter_addresses_fall_through_to_the_tree() {
-        use crate::frontmatter_address;
-        // Heading addresses, the text node, and a bare trailing dot are not
-        // frontmatter, so the heading-tree resolver still owns them.
-        for a in ["1", "1.2", "text", "0", "glossary", "fm.", "format", "links"] {
-            assert!(frontmatter_address(a).is_none(), "{a} must not be frontmatter");
+    fn the_other_reserved_spellings_name_their_own_readings() {
+        use crate::{Reading, reserved_reading};
+        for a in ["0", "text", "TEXT"] {
+            assert_eq!(reserved_reading(a), Some(Reading::Text), "{a} is the lede");
+        }
+        for a in ["links", "LINKS"] {
+            assert_eq!(reserved_reading(a), Some(Reading::Links), "{a} is the index");
+        }
+    }
+
+    #[test]
+    fn non_reserved_addresses_fall_through_to_the_tree() {
+        use crate::reserved_reading;
+        // Heading addresses and a bare trailing dot are reserved by nothing, so
+        // the heading-tree resolver still owns them.
+        for a in ["1", "1.2", "glossary", "fm.", "format", "0.1", "textual"] {
+            assert!(reserved_reading(a).is_none(), "{a} must not be reserved");
         }
     }
 
@@ -858,7 +840,7 @@ mod tests {
     fn a_document_without_collisions_says_nothing() {
         let doc = parse_document(SAMPLE);
         assert!(crate::shadow::overview_notes(&doc).is_empty());
-        for name in crate::shadow::reserved_names() {
+        for name in ["0", "text", "fm", "frontmatter", "links"] {
             assert!(
                 crate::shadow::phrase(&doc, name).is_none(),
                 "{name} must not report a shadow"
@@ -909,6 +891,23 @@ mod tests {
             )
         );
         assert_eq!(crate::shadow::overview_notes(&doc).len(), 2);
+    }
+
+    #[test]
+    fn the_footer_groups_shadows_by_reading_not_by_document_order() {
+        // The tree meets the readings in the order links, fm, text; the footer
+        // reports them in `Reading`'s declaration order, so the variant order is
+        // load-bearing and a reordering of the enum is a change to the output.
+        let content = "# One\n\n## Links\n\na\n\n## Frontmatter\n\nb\n\n## Text\n\nc\n";
+        let doc = parse_document(content);
+        assert_eq!(
+            crate::shadow::overview_notes(&doc),
+            vec![
+                "note: 'Text' (1.3) also answers to a reserved address; reach it by number",
+                "note: 'Frontmatter' (1.2) also answers to a reserved address; reach it by number",
+                "note: 'Links' (1.1) also answers to a reserved address; reach it by number",
+            ]
+        );
     }
 
     #[test]
