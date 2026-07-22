@@ -75,7 +75,13 @@ The six prompts put Claude in a regime where the construction is five times rare
 
 Power comes free here. About 37k words per side — one active week — resolves an 18% change at `|z| >= 2`, against 52 billed calls to resolve one synthetic arm. Read the `n80`-equivalent line the split test prints before believing any move.
 
-Staccato (`A. Not B. Not C.`) is measured and is absent: 3 hits in 121k words, 0.02 per 1k. Separating it from a rate that shape would need 1.9M words per side. The detector exists and needs no further work.
+### Staccato
+
+The clipped register: a sentence after the first running six words or fewer with no finite auxiliary or copula. `Not yet built.` and `Auto-commits enabled.` both count; the boundary is the rhythm, not the negation. Sentences spanning a newline are markdown structure and are excluded, or `Three coordinated edits:` followed by a list marker would score as a fragment.
+
+It runs at **1.72 per 1k** over 121k words, against 5.43 for `contrast`. Because it is the rarer event it needs more exposure to move: ~256k words per side, about six active weeks, to resolve an 11% change.
+
+An earlier version of this file reported 0.02 per 1k and called the form absent. That was wrong three times over — the sentence splitter broke on every `AGENTS.md`-shaped filename, the pattern matched only a bare `not` opener, and the conclusion drawn from it was that the detector needed no further work. The true rate is 86 times higher. `sentences()` now survives paths and extensions, which is the precondition for measuring anything sentence-shaped in this corpus, and `calib/` should grow labelled staccato cases the way it holds them for `contrast`.
 
 ## Running an arm
 

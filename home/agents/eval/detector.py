@@ -28,13 +28,61 @@ CONTRAST = re.compile(
     re.IGNORECASE,
 )
 
-# The staccato form the regex above misses: a fragment sentence opening with a
-# bare negation, as in "A. Not B. Not C." Counted separately, never folded into
-# CONTRAST, so the existing series stays comparable across the change.
-STACCATO = re.compile(
-    r"(?:^|(?<=[.!?]))\s+not\s+[^.!?\n]{2,60}[.!?]",
+# Sentence splitting, which the staccato form needs and a bare [.!?] cannot do
+# here: this corpus is full of `AGENTS.md`, `~/.claude`, and `refactor-state.md`,
+# and splitting on the period inside those shreds every sentence that mentions a
+# file. Code spans and wikilinks are masked first, since their punctuation is
+# never prose punctuation.
+_BOUNDARY = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+_TAIL = re.compile(r"\S+$")
+_EXT = re.compile(r"\.(md|py|sh|ts|tsx|js|json|jsonl|rs|toml|nix|yml|yaml|txt|lock)$", re.IGNORECASE)
+
+
+def sentences(text):
+    text = re.sub(r"`[^`]*`", "CODE", text)
+    text = re.sub(r"\[\[[^\]]*\]\]", "LINK", text)
+    out, buf = [], ""
+    for chunk in _BOUNDARY.split(text):
+        buf = f"{buf} {chunk}".strip() if buf else chunk
+        tail = _TAIL.search(buf)
+        if tail and (_EXT.search(tail.group(0)) or "/" in tail.group(0)):
+            continue  # the boundary fell inside a path; keep accumulating
+        out.append(buf)
+        buf = ""
+    if buf:
+        out.append(buf)
+    return out
+
+
+# The staccato form CONTRAST misses: the clipped register, as in "A. Not B. Not
+# C." Counted separately and never folded into CONTRAST, so the existing series
+# stays comparable.
+#
+# Wide by choice — the whole clipped rhythm, negation or otherwise. Narrowing to
+# negation openers ("Not yet built.") drops it eightfold and leaves out most of
+# what the register consists of: "Committing step 2.", "Auto-commits enabled.",
+# "It arrived as drift."
+#
+# A fragment is a sentence after the first that runs six words or fewer and
+# carries no finite auxiliary or copula. Sentences containing a newline are
+# markdown structure — list markers, headings — rather than prose rhythm, and
+# would otherwise count "Three coordinated edits:\n\n**1." as a fragment.
+_AUX = re.compile(
+    r"\b(?:is|are|was|were|be|been|being|am|has|have|had|does|do|did"
+    r"|will|would|can|could|should|must|may|might|'s|'re|'ve)\b",
     re.IGNORECASE,
 )
+
+
+def staccato(text):
+    n = 0
+    for i, sentence in enumerate(sentences(text)):
+        s = sentence.strip()
+        if not i or "\n" in s or not s[:1].isalpha():
+            continue
+        if len(s.split()) <= 6 and not _AUX.search(s):
+            n += 1
+    return n
 
 GRADE = re.compile(r"\b(?:10|[0-9])/10\b|\bconfidence[: ]", re.IGNORECASE)
 
@@ -43,7 +91,7 @@ def measure(text):
     return {
         "words": len(text.split()),
         "contrast": len(CONTRAST.findall(text)),
-        "staccato": len(STACCATO.findall(text)),
+        "staccato": staccato(text),
         "emdash": text.count("—"),
         "has_grade": 1 if GRADE.search(text) else 0,
     }
