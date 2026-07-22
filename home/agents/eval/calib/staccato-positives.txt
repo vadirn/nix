@@ -9,7 +9,10 @@ Verify-by-running is already Implementation's green-trunk gate; claim-testing is
 It also found a fourth reserved name I'd missed. Want another lens?
 Both are covered, so the help text is redundant. Agreed, leaving it.
 Worth doing now, while the code is warm and unpushed. Want me to?
-The doctrine says do neither, and it says my last two answers were both wrong. Let me run the test properly.
+# Carries a finite lexical verb and still counts: the rule turns on the
+# auxiliary, so "decides" does not rescue it. This is where a future edit is
+# most likely to loosen the detector by accident.
+It succeeds in two conditions, one of which is tasks with reliable external feedback. That distinction decides the design.
 Step 3 lands green or reverts to nothing, by construction. Each of 1-3 commits on completion.
 The failure is carrying it into running prose, where nothing adjacent needs distinguishing. Save that?
 That catches the same failure without the standing token cost. Want the audit instead?
