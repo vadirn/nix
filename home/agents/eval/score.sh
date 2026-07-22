@@ -27,7 +27,11 @@ GRADE='\b(10|[0-9])/10\b|\bconfidence[: ]'
 # rg exits 1 on no match; under pipefail that would abort the run, so swallow it.
 count() { { rg -oi --no-filename --multiline "$2" "$1" 2>/dev/null || true; } | wc -l | tr -d ' '; }
 
-printf 'cond\tcase\trep\twords\tcontrast\tcontrast_per_1k\temdash\thas_grade\n' >"$tsv"
+# Staccato comes from the Python detector, which owns sentence splitting.
+stac="$(mktemp)"; trap 'rm -f "$stac"' EXIT
+python3 "$here/detector.py" --staccato-column "$outdir" >"$stac"
+
+printf 'cond\tcase\trep\twords\tcontrast\tcontrast_per_1k\temdash\thas_grade\tstaccato\tstaccato_per_1k\n' >"$tsv"
 
 for f in "$outdir"/*.txt; do
   [ -e "$f" ] || continue
@@ -40,19 +44,21 @@ for f in "$outdir"/*.txt; do
   grade=$(count "$f" "$GRADE")
   [ "$grade" -gt 0 ] && grade=1 || grade=0
 
+  stacn=$(awk -F'\t' -v b="$base" '$1==b{print $2; found=1} END{if(!found) print 0}' "$stac")
   per1k=$(awk -v c="$contrast" -v w="$words" 'BEGIN{ printf (w>0 ? "%.2f" : "0.00"), (w>0 ? c*1000/w : 0) }')
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$cond" "$case_id" "$rep" "$words" "$contrast" "$per1k" "$emdash" "$grade" >>"$tsv"
+  sper1k=$(awk -v c="$stacn" -v w="$words" 'BEGIN{ printf (w>0 ? "%.2f" : "0.00"), (w>0 ? c*1000/w : 0) }')
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$cond" "$case_id" "$rep" "$words" "$contrast" "$per1k" "$emdash" "$grade" "$stacn" "$sper1k" >>"$tsv"
 done
 
 echo "wrote $tsv ($(($(wc -l <"$tsv") - 1)) rows)"
 echo
 awk -F'\t' 'NR>1 {
-    n[$1]++; w[$1]+=$4; c[$1]+=$5; e[$1]+=$7; g[$1]+=$8
+    n[$1]++; w[$1]+=$4; c[$1]+=$5; e[$1]+=$7; g[$1]+=$8; s[$1]+=$9
   }
   END {
-    printf "%-16s %5s %10s %9s %11s %8s %7s\n", "cond","n","mean_words","mean_ctr","ctr_per_1k","emdash","grade";
+    printf "%-16s %5s %10s %11s %11s %8s %7s\n", "cond","n","mean_words","ctr_per_1k","stac_per_1k","emdash","grade";
     for (k in n)
-      printf "%-16s %5d %10.1f %9.2f %11.2f %8.2f %6d%%\n",
-        k, n[k], w[k]/n[k], c[k]/n[k], c[k]*1000/w[k], e[k]/n[k], 100*g[k]/n[k];
-  }' "$tsv" | sort -k5 -n
+      printf "%-16s %5d %10.1f %11.2f %11.2f %8.2f %6d%%\n",
+        k, n[k], w[k]/n[k], c[k]*1000/w[k], s[k]*1000/w[k], e[k]/n[k], 100*g[k]/n[k];
+  }' "$tsv" | sort -k4 -n

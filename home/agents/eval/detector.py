@@ -135,10 +135,27 @@ def verify(corpus):
     return 1 if mismatched else 0
 
 
+def staccato_column(outdir):
+    """basename<TAB>staccato for every answer, for score.sh to join.
+
+    Staccato has no ripgrep implementation — the sentence splitting is what the
+    form needs and what a line-oriented regex cannot do — so this column has a
+    single source and is exempt from the parity check.
+    """
+    for name in sorted(os.listdir(outdir)):
+        if not name.endswith(".txt"):
+            continue
+        with open(os.path.join(outdir, name)) as f:
+            print(f"{name[:-4]}\t{staccato(f.read())}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--verify":
         corpora = sys.argv[2:] or ["claude", "glm"]
         sys.exit(max(verify(c) for c in corpora))
+    if len(sys.argv) > 2 and sys.argv[1] == "--staccato-column":
+        staccato_column(sys.argv[2])
+        sys.exit(0)
     for path in sys.argv[1:]:
         with open(path) as f:
             m = measure(f.read())

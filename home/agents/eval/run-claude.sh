@@ -15,7 +15,8 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/config.sh"
-outdir="$AGENTS_EVAL_DATA/corpus/claude"
+cases="$here/${CASES:-cases.jsonl}"
+outdir="$AGENTS_EVAL_DATA/corpus/${CORPUS:-claude}"
 reps="${1:-3}"
 par="${PAR:-4}"
 model_args=()
@@ -26,7 +27,7 @@ if [ "${1:-}" = "--one" ]; then
   out="$outdir/${cond}__${id}__${rep}.txt"
   [ -s "$out" ] && exit 0
 
-  usr="$(jq -r --arg id "$id" 'select(.id==$id) | .prompt' "$here/cases.jsonl")
+  usr="$(jq -r --arg id "$id" 'select(.id==$id) | .prompt' "$cases")
 Put your final answer between <answer> and </answer> tags."
 
   # cwd is a scratch dir with no CLAUDE.md, belt-and-braces alongside --safe-mode.
@@ -58,7 +59,7 @@ for cond in ${CONDS:-a-current b-proposed c-slot}; do
     [ -z "$line" ] && continue
     id="$(jq -r '.id' <<<"$line")"
     for r in $(seq 1 "$reps"); do printf '%s %s %s\n' "$cond" "$id" "$r"; done
-  done <"$here/cases.jsonl"
+  done <"$cases"
 done >"$jobs"
 
 echo "arms: ${CONDS:-a-current b-proposed c-slot} | cells: $(wc -l <"$jobs") | concurrency $par"
