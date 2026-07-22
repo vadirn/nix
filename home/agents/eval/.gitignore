@@ -1,0 +1,8 @@
+# Belt and braces. Model answers belong under AGENTS_EVAL_DATA (see config.sh),
+# outside this public repo; these entries catch a run that writes here anyway.
+corpus/
+results/
+raw/
+sandbox/
+.jobs*
+.stats.*

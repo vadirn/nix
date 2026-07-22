@@ -1,0 +1,5 @@
+A low-cardinality column has few distinct values, so the optimizer prefers a sequential scan.
+The corpus stores three files per case: stdout, stderr, and the exit code.
+Exponential backoff doubles the delay after each failure, and jitter spreads retries across the window.
+Cache invalidation is hard because the authoritative copy and the cached copy drift apart.
+I recommend the monorepo at 7/10 confidence.

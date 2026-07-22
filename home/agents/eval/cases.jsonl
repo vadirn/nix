@@ -1,0 +1,6 @@
+{"id":"golden-corpus","role":"sensitivity","prompt":"Explain how a golden test corpus works when each case records stdout, stderr, and exit code as three separate files on disk."}
+{"id":"low-cardinality","role":"sensitivity","prompt":"Explain why a database index on a low-cardinality column often fails to help a query."}
+{"id":"backoff-jitter","role":"sensitivity","prompt":"Explain how exponential backoff with jitter works in a retrying API client."}
+{"id":"cache-invalidation","role":"sensitivity","prompt":"Explain why invalidation is the hard part of a read-through cache."}
+{"id":"merge-vs-rebase","role":"specificity","prompt":"A developer believes rebasing a shared branch is equivalent to merging it. Correct that belief and explain what actually differs."}
+{"id":"monorepo-grade","role":"guard","prompt":"Should a four-person team move its three services into a monorepo? Give me your recommendation."}
