@@ -1,10 +1,4 @@
----
-name: pr
-description: >
-  Create pull requests. Triggers: /pr, "create pr", "open pr", "draft pr", "сделай PR", "оформи PR", "пулл реквест". Skip for inspecting an existing PR's state, comments, or CI; those are plain `gh` commands (see Reference).
----
-
-# PR
+# /git pr
 
 Create a pull request from the current branch.
 
@@ -20,8 +14,8 @@ diff = Bash(git diff <default_branch>...HEAD)
 log = Bash(git log <default_branch>..HEAD --oneline)
 
 // Guards
-if branch == default_branch: stop, ask user to create a feature branch (see /git-branch)
-if uncommitted changes in status: Skill(commit)
+if branch == default_branch: stop, ask user to create a feature branch (references/branch.md)
+if uncommitted changes in status: follow references/commit.md
 
 // Push
 if no upstream: Bash(git push -u origin <branch>)
@@ -32,7 +26,7 @@ existing = Bash(gh pr view --json url,state -q '.url' 2>/dev/null)
 
 // Template (deterministic resolution via pr-template) — shared by create and update paths
 out = Bash(pr-template)
-mode = first line of out, stripped of "MODE: " prefix    // single | multi | default — see Reference §PR creation details
+mode = first line of out, stripped of "MODE: " prefix    // single | multi | default — see §PR creation details
 rest = lines after the first
 
 if mode == "multi":
@@ -54,7 +48,7 @@ if existing:
     Bash(rm -f /tmp/claude/pr.md)
     show PR URL, stop
 
-title = do("generate conventional commit-style title: '<prefix>: <message>' (see /commit skill for prefix and message rules)")
+title = do("generate conventional commit-style title: '<prefix>: <message>' — prefix by the contract test in SKILL.md, message style per references/commit.md")
 body = do("fill template_content placeholders from diff and log; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim")
 
 AskUserQuestion("confirm title, body, base branch, draft status")
@@ -65,12 +59,10 @@ Bash(rm -f /tmp/claude/pr.md)
 show PR URL
 ```
 
-## Reference
-
-### PR creation details
+## PR creation details
 
 - **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready".
-- **Title:** matches the /commit skill's conventions — `<prefix>: <message>`, lowercase after prefix, <70 chars, focus on WHY. The PR title becomes the commit message on squash-and-merge, so the same prefix selection (feat/fix/chore) and message style apply.
+- **Title:** `<prefix>: <message>`, lowercase after prefix, <70 chars, focus on WHY — the same form a commit takes. The PR title becomes the commit message on squash-and-merge, so the prefix comes from the contract test applied to the branch's net change, not to any one commit.
 - **Body:** Always start from a template. The `pr-template` script (at `home/agents/scripts/pr-template.sh`) resolves which template to use and prints one of three modes on its first line: `MODE: single` (full template content follows), `MODE: multi` (one repo-relative `.md` path per line — ask the user which), or `MODE: default` (the colocated `pr-template.md` default follows; used when the repo ships no template). In every mode the resulting body MUST keep the template's headings, emoji, and section count verbatim; only the placeholder content gets filled in from the diff and log.
 - **Self-contained body.** The reader has the repo and nothing else. Derive the body from the diff and log — never from session-only context. Name only artifacts a reader can resolve from the repo (files, commits, symbols); strip references to private planning notes (vault tracks, note slugs like `track-*`), local paths outside the repo, ticket IDs, and prior-conversation shorthand. If a why comes from such a source, restate the reasoning inline rather than pointing at the source.
 - **State what the diff cannot.** The body carries rationale, scope, and traps a reader would otherwise misread — never a restatement of what GitHub already renders. Skip commit counts, SHA ranges, and file lists: the branch view is always current and these are not, since a rebase invalidates every SHA and a force-push every count. Claims about behaviour survive a history rewrite; claims about history do not.
@@ -84,9 +76,9 @@ show PR URL
   The body file also serves as proof of skill use: the `require-pr-body-file.sh` PreToolUse hook refuses `gh pr create` unless it points `--body-file` at `/tmp/claude/pr.md` and that file exists. Because gh reads the body straight from the file, the artifact IS the body — no separate nonce or time window. The skill deletes the file after the gh call, so the same artifact gates exactly one PR. Use `gh pr edit --body-file` for updates to an existing PR.
 - **Confirm before creating.** Show title and body. Omit confirmation when the user supplied an explicit title and body.
 
-### Inspecting an existing PR
+## Inspecting an existing PR
 
-Checking a PR's state, comments, or CI sits outside this skill's workflow — run `gh` directly. `<pr>` is a number, URL, or branch; omit it to act on the PR for the current branch.
+Checking a PR's state, comments, or CI sits outside this workflow — run `gh` directly. `<pr>` is a number, URL, or branch; omit it to act on the PR for the current branch.
 
 - **State and metadata:** `gh pr view <pr>` — title, body, state, labels, reviewers. Add `--json state,mergeable,reviewDecision,statusCheckRollup` for a machine-readable summary.
 - **CI checks:** `gh pr checks <pr>` — one line per check with pass/fail/pending. `gh pr checks <pr> --watch` blocks until checks settle.
@@ -94,10 +86,8 @@ Checking a PR's state, comments, or CI sits outside this skill's workflow — ru
 - **Review comments and threads:** `gh pr view <pr> --comments` — issue comments plus review threads in one stream.
 - **The diff:** `gh pr diff <pr>`.
 
-When CI fails: classify each failure as mechanical (lint, format, types — fixable by editing and re-pushing) or semantic (tests, infrastructure — needs diagnosis). Fix mechanical failures with a `fix:` commit via the /commit skill, then `git push`.
+When CI fails: classify each failure as mechanical (lint, format, types — fixable by editing and re-pushing) or semantic (tests, infrastructure — needs diagnosis). Fix mechanical failures with a `fix:` commit via `references/commit.md`, then `git push`.
 
 ## Rules
 
-- **Run git commands separately.** Chained commands (`&&`, `;`) bypass the permissions allowlist.
-- **Auto-detect base branch.** Use `gh repo view`. Ask the user only when detection fails.
-- **Commit first when the tree is dirty.** Route uncommitted changes through the /commit skill first.
+- **Commit first when the tree is dirty.** Route uncommitted changes through the commit workflow first.

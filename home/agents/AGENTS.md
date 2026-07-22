@@ -72,7 +72,7 @@ For any refactor that touches more than 20 files, write a codemod first; the cod
 
 ## Commits
 
-Use the `/commit` skill to create commits.
+Use the `git` skill to put work into git: `/git commit` to commit, `/git branch` to cut a branch, `/git pr` to open a pull request. All three name their work with the same `feat | fix | chore` contract test, which the skill defines once.
 
 Push is manual. The user runs `git push` themselves, usually via lazygit. A hook blocks the agent from running it. When work needs publishing, ask the user to push.
 
@@ -88,7 +88,7 @@ Use the `firecrawl-cli` skill for web search and fetching (it routes to `firecra
 
 ## GitHub
 
-Use `gh` CLI for GitHub interactions. Use the `/pr` skill to create pull requests.
+Use `gh` CLI for GitHub interactions. Use `/git pr` to create pull requests.
 
 ## Plans
 

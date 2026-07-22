@@ -51,7 +51,7 @@ else:
 
 graduation:
     do("review session for CLAUDE.md / skills / vault candidates; present as suggestions, let user decide")
-    do("skip /commit suggestion — the track is vault content propagated by Obsidian Sync; suggest commit only if changes landed inside `.claude/` or `.scripts/`, or the user explicitly asked")
+    do("skip /git commit suggestion — the track is vault content propagated by Obsidian Sync; suggest commit only if changes landed inside `.claude/` or `.scripts/`, or the user explicitly asked")
     do("suggest /clear")
 ```
 
@@ -126,9 +126,9 @@ Surface every Glossary change in the `proposed_edits` confirmation step. Silent 
 - find `<project_path>/track-<slug>.md`
 - read `<project_path>/context.md` for the project wikilink (`Project note: [[...]]` line)
 
-### Skip /commit after save
+### Skip /git commit after save
 
-Tracks live in `<vault_root>/41 projects/<project>/track-<slug>.md` — vault content propagated by Obsidian Sync, not git. After a track save, skip the `/commit` suggestion. Exceptions: changes that landed inside `.claude/` or `.scripts/` (confirm with `git status`), or the user explicitly asked. A `/commit` prompt after every track save adds friction the user has to dismiss and risks staging files `.gitignore` would refuse anyway. Mirrors the rule in `home/agents/skills/vault/references/post-edit.md`.
+Tracks live in `<vault_root>/41 projects/<project>/track-<slug>.md` — vault content propagated by Obsidian Sync, not git. After a track save, skip the `/git commit` suggestion. Exceptions: changes that landed inside `.claude/` or `.scripts/` (confirm with `git status`), or the user explicitly asked. A `/git commit` prompt after every track save adds friction the user has to dismiss and risks staging files `.gitignore` would refuse anyway. Mirrors the rule in `home/agents/skills/vault/references/post-edit.md`.
 
 ### Importance filter for the Log narrative
 

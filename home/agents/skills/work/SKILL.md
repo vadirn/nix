@@ -1,9 +1,7 @@
 ---
 name: work
 description: >
-  Orchestrate a multi-step task by delegating to fresh subagents, keeping the orchestrator session small.
-  Triggers: /work <task>, "orchestrate this", "delegate this work". Skip one-shot questions, single-file
-  edits, and the ambient "let's work on X" / "start working on X" phrasing.
+  Orchestrate a multi-step task by delegating to fresh subagents, keeping the orchestrator session small. Triggers: /work <task>, "orchestrate this", "delegate this work". Skip one-shot questions, single-file edits, and the ambient "let's work on X" / "start working on X" phrasing.
 ---
 
 # Work
@@ -44,7 +42,7 @@ while plan has unresolved steps:
         do("ingest response semantically: append Decisions to plan; collect Backlog items as end-of-orchestration questions (promote to a plan step only when the orchestrator explicitly chooses); surface Recap to user")
 
         if auto_commits_enabled and step is tagged 'write' and do("response reports any modified files"):
-            commit_brief = do("write a one-line ## Task ('Run /commit on the just-completed step's changes'); ## Context inlines the step's Recap and Modified files; ## Return restates the four-section response contract")
+            commit_brief = do("write a one-line ## Task ('Run /git commit on the just-completed step's changes'); ## Context inlines the step's Recap and Modified files; ## Return restates the four-section response contract")
             commit_response = spawn_subagent(commit_brief)  // sequential, subagent_type commit-runner
             if commit_response is error:
                 choice = AskUserQuestion("commit subagent failed; retry, skip this step's commit, or stop orchestration?")
@@ -114,7 +112,7 @@ Choose `subagent_type` by the step's tag and (for write steps) effort tier:
 
 - **`read` step → `Explore` agent type.** Tool-restricted: Edit, Write, NotebookEdit are absent. Enforcement is at the tool layer, not via brief instruction. Explore reads excerpts rather than whole files — fits parallel discovery (find X / where Y / which files reference Z); whole-module review still happens as a single sequential write step. Effort inherits the session — there is no read effort tier — while the assigned model is still passed per call.
 - **`write` step → the effort tier's agent type.** light → `work-write-light` (effort low), standard → `general-purpose` (effort inherits), deep → `work-write-deep` (effort high). All three have full read/write/edit/bash access and always run sequentially. The per-call `model` overrides whatever the agent type would inherit, so model and effort are chosen independently.
-- **Commit subagent → `commit-runner` agent type.** Sequential. Narrow toolset (`Bash`, `Read`, `Skill`) and a static system prompt that forces invocation of the `/commit` skill — keeps message style consistent across orchestrations. Runs at its default model and effort; commits are mechanical. The brief can be one line because the agent's prompt carries the rest.
+- **Commit subagent → `commit-runner` agent type.** Sequential. Narrow toolset (`Bash`, `Read`, `Skill`) and a static system prompt that forces invocation of the `/git commit` skill — keeps message style consistent across orchestrations. Runs at its default model and effort; commits are mechanical. The brief can be one line because the agent's prompt carries the rest.
 
 `spawn_subagents` is used only for batches of independent `read` steps. Write steps stay sequential. If an `Explore` subagent fails because it tried to use a missing write tool, the failure handler offers "rerun as general-purpose" as the modify option.
 
@@ -154,13 +152,13 @@ At orchestration start, the orchestrator spawns a setup subagent to report git p
 - Outside a git working tree → auto-commits disabled. No commits during orchestration.
 - Inside git, clean tree, off the default branch → auto-commits enabled. The current branch is the working branch; multiple `/work` invocations may share it (one track can spin off several tasks on the same branch).
 - Inside git, clean tree, on the default branch → spawn a subagent to create and switch to a non-default branch (any reasonable name, collision-safe; a short slug from `<task>` is a fine default). Then enable auto-commits. Orchestration commits never land on main/master.
-- Inside git, dirty tree → ask the user: commit existing changes first (delegated to the `commit` skill in a subagent), proceed with auto-commits disabled, or abort. After committing existing changes, re-check posture; if clean and on the default branch, create a non-default branch; then enable auto-commits.
+- Inside git, dirty tree → ask the user: commit existing changes first (delegated to the `git` skill's commit workflow in a subagent), proceed with auto-commits disabled, or abort. After committing existing changes, re-check posture; if clean and on the default branch, create a non-default branch; then enable auto-commits.
 
-The commit subagent runs as the `commit-runner` agent type, whose static system prompt forces invocation of the `/commit` skill on the just-completed step's changes. The orchestrator's brief is one line; the agent's narrow toolset (`Bash`, `Read`, `Skill`) and procedural prompt carry the rest. The `commit` skill handles staging, conventional-prefix message generation (short, no body), and pre-commit hook failures. The orchestrator gets back the SHA and message in the subagent's Recap; nothing else enters orchestrator context.
+The commit subagent runs as the `commit-runner` agent type, whose static system prompt forces invocation of the `/git commit` skill on the just-completed step's changes. The orchestrator's brief is one line; the agent's narrow toolset (`Bash`, `Read`, `Skill`) and procedural prompt carry the rest. That workflow handles staging, conventional-prefix message generation (short, no body), and pre-commit hook failures. The orchestrator gets back the SHA and message in the subagent's Recap; nothing else enters orchestrator context.
 
-If a commit subagent fails (e.g. a pre-commit hook failure the `commit` skill can't auto-fix), surface the failure and ask retry / skip this step's commit / stop orchestration. Skipping leaves the working tree dirty into the next step; subsequent commits will include the skipped step's changes.
+If a commit subagent fails (e.g. a pre-commit hook failure the `git` skill's commit workflow can't auto-fix), surface the failure and ask retry / skip this step's commit / stop orchestration. Skipping leaves the working tree dirty into the next step; subsequent commits will include the skipped step's changes.
 
-The clean-tree precondition lets the commit subagent rely on the `commit` skill's default staging behavior. Selective staging from the prior step's `## Modified files` would require teaching either the brief or the skill new staging logic — plumbing for marginal benefit.
+The clean-tree precondition lets the commit subagent rely on the commit workflow's default staging behavior. Selective staging from the prior step's `## Modified files` would require teaching either the brief or the skill new staging logic — plumbing for marginal benefit.
 
 ### Plan steps vs backlog items
 
