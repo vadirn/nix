@@ -121,6 +121,14 @@ const CASES: &[Case] = &[
     ("collide_err_fm", &["fixtures/collisions.md", "fm"]),
     ("collide_err_text", &["fixtures/collisions.md", "text"]),
     ("collide_err_0", &["fixtures/collisions.md", "0"]),
+    // --- collisions-order.md: `## Frontmatter` sits BEFORE `## FM`, so the two
+    //     spellings of one reading appear in the opposite document order from
+    //     collisions.md. Pins which of them the overview footer lists first, and
+    //     which the shadow clause names first, when the reading is the same ---
+    ("order_overview", &["fixtures/collisions-order.md"]),
+    ("order_fm", &["fixtures/collisions-order.md", "fm"]),
+    ("order_frontmatter", &["fixtures/collisions-order.md", "frontmatter"]),
+    ("order_links", &["fixtures/collisions-order.md", "links"]),
     // --- collisions-live.md: the same collisions over readings that succeed,
     //     so the note lands on stderr and stdout carries the payload ---
     ("live_overview", &["fixtures/collisions-live.md"]),
