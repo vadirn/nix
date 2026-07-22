@@ -1,0 +1,75 @@
+rich_overview	mdread fixtures/rich.md
+rich_overview_json	mdread fixtures/rich.md --format json
+rich_overview_wikilinks_only	mdread fixtures/rich.md --wikilinks-only
+rich_overview_strict_headings	mdread fixtures/rich.md --strict-headings
+rich_num_1	mdread fixtures/rich.md 1
+rich_num_1_1	mdread fixtures/rich.md 1.1
+rich_num_1_1_1	mdread fixtures/rich.md 1.1.1
+rich_num_2	mdread fixtures/rich.md 2
+rich_slug_background	mdread fixtures/rich.md background
+rich_text_0	mdread fixtures/rich.md 0
+rich_text_word	mdread fixtures/rich.md text
+rich_fm	mdread fixtures/rich.md fm
+rich_frontmatter	mdread fixtures/rich.md frontmatter
+rich_fm_uppercase	mdread fixtures/rich.md FM
+rich_links	mdread fixtures/rich.md links
+rich_links_json	mdread fixtures/rich.md links --format json
+rich_links_wikilinks_only	mdread fixtures/rich.md links --wikilinks-only
+rich_num_1_full	mdread fixtures/rich.md 1 --full
+rich_num_1_depth_1	mdread fixtures/rich.md 1 --depth 1
+rich_num_1_threshold_10	mdread fixtures/rich.md 1 --threshold 10
+rich_num_1_json	mdread fixtures/rich.md 1 --format json
+rich_num_1_full_json	mdread fixtures/rich.md 1 --full --format json
+rich_err_no_slug	mdread fixtures/rich.md nope
+rich_err_out_of_range	mdread fixtures/rich.md 99
+fmdoc_overview	mdread fixtures/nested-fm.md
+fmdoc_fm	mdread fixtures/nested-fm.md fm
+fmdoc_fm_json	mdread fixtures/nested-fm.md fm --format json
+fmdoc_fm_scalar	mdread fixtures/nested-fm.md fm.title
+fmdoc_fm_number	mdread fixtures/nested-fm.md fm.count
+fmdoc_fm_sequence	mdread fixtures/nested-fm.md fm.tags
+fmdoc_fm_sequence_json	mdread fixtures/nested-fm.md fm.tags --format json
+fmdoc_fm_mapping	mdread fixtures/nested-fm.md fm.meta
+fmdoc_fm_seq_of_maps	mdread fixtures/nested-fm.md fm.references
+fmdoc_fm_indexed	mdread fixtures/nested-fm.md fm.references[0].target
+fmdoc_frontmatter_dot_path	mdread fixtures/nested-fm.md frontmatter.meta.author
+fmdoc_err_missing_key	mdread fixtures/nested-fm.md fm.nope
+fmdoc_err_index_out_of_range	mdread fixtures/nested-fm.md fm.tags[9]
+plain_overview	mdread fixtures/no-frontmatter.md
+plain_text	mdread fixtures/no-frontmatter.md text
+plain_links	mdread fixtures/no-frontmatter.md links
+plain_err_fm	mdread fixtures/no-frontmatter.md fm
+nolede_overview	mdread fixtures/no-lede.md
+nolede_fm	mdread fixtures/no-lede.md fm
+nolede_links	mdread fixtures/no-lede.md links
+nolede_err_text	mdread fixtures/no-lede.md text
+nolede_err_0	mdread fixtures/no-lede.md 0
+collide_overview	mdread fixtures/collisions.md
+collide_overview_json	mdread fixtures/collisions.md --format json
+collide_links	mdread fixtures/collisions.md links
+collide_links_json	mdread fixtures/collisions.md links --format json
+collide_num_1_1	mdread fixtures/collisions.md 1.1
+collide_err_fm	mdread fixtures/collisions.md fm
+collide_err_text	mdread fixtures/collisions.md text
+collide_err_0	mdread fixtures/collisions.md 0
+order_overview	mdread fixtures/collisions-order.md
+order_fm	mdread fixtures/collisions-order.md fm
+order_frontmatter	mdread fixtures/collisions-order.md frontmatter
+order_links	mdread fixtures/collisions-order.md links
+live_overview	mdread fixtures/collisions-live.md
+live_fm	mdread fixtures/collisions-live.md fm
+live_fm_json	mdread fixtures/collisions-live.md fm --format json
+live_text	mdread fixtures/collisions-live.md text
+live_0	mdread fixtures/collisions-live.md 0
+live_links	mdread fixtures/collisions-live.md links
+dialect_overview	mdread fixtures/dialects.md
+dialect_overview_strict	mdread fixtures/dialects.md --strict-headings
+dialect_num_1	mdread fixtures/dialects.md 1
+dialect_num_1_strict	mdread fixtures/dialects.md 1 --strict-headings
+dialect_text_strict	mdread fixtures/dialects.md text --strict-headings
+dialect_err_text	mdread fixtures/dialects.md text
+cli_err_missing_file	mdread fixtures/does-not-exist.md
+cli_err_bad_format	mdread fixtures/rich.md --format yaml
+cli_err_bad_depth	mdread fixtures/rich.md 1 --depth abc
+cli_err_unknown_flag	mdread fixtures/rich.md --nope
+cli_err_no_args	mdread 

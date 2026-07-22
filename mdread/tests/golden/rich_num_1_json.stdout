@@ -1,0 +1,33 @@
+{
+  "path": "fixtures/rich.md",
+  "address": "1",
+  "heading": "Overview",
+  "slug": "overview",
+  "level": 1,
+  "line": 13,
+  "lines": 21,
+  "tokens": 171,
+  "content": "# Overview\n\nOverview prose, one line.\n",
+  "children": [
+    {
+      "address": "1.1",
+      "heading": "Background",
+      "level": 2,
+      "line": 17,
+      "lines": 13,
+      "tokens": 137,
+      "folded": false,
+      "content": "## Background\n\nBackground prose with a reference-style link: [the label][ref]. It runs long enough that a small `--threshold` folds it while `--full` inlines it anyway. Filler sentence one. Filler sentence two. Filler sentence three. Filler sentence four. Filler sentence five. Filler sentence six. Filler sentence seven. Filler sentence eight. Filler sentence nine. Filler sentence ten.\n### Deep Detail\n\nDeep prose. The two links in the fence below point nowhere the reader counts:\n\n```text\n[not a link](https://never.example)\n[[Not A Note]]\n```\n"
+    },
+    {
+      "address": "1.2",
+      "heading": "Method",
+      "level": 2,
+      "line": 30,
+      "lines": 4,
+      "tokens": 24,
+      "folded": false,
+      "content": "## Method\n\nMethod prose with an image, which is not an outgoing link: ![a picture](assets/pic.png)\n"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "path": "fixtures/rich.md",
+  "fields": [
+    "title",
+    "type",
+    "tags"
+  ],
+  "links": 5,
+  "text": {
+    "address": "0",
+    "label": "(text)",
+    "line": 9,
+    "lines": 4,
+    "tokens": 45
+  },
+  "tree": [
+    {
+      "address": "1",
+      "heading": "Overview",
+      "level": 1,
+      "line": 13,
+      "lines": 21,
+      "tokens": 171,
+      "slug": "overview",
+      "children": [
+        {
+          "address": "1.1",
+          "heading": "Background",
+          "level": 2,
+          "line": 17,
+          "lines": 13,
+          "tokens": 137,
+          "slug": "background",
+          "children": [
+            {
+              "address": "1.1.1",
+              "heading": "Deep Detail",
+              "level": 3,
+              "line": 21,
+              "lines": 9,
+              "tokens": 39,
+              "slug": "deep-detail",
+              "children": []
+            }
+          ]
+        },
+        {
+          "address": "1.2",
+          "heading": "Method",
+          "level": 2,
+          "line": 30,
+          "lines": 4,
+          "tokens": 24,
+          "slug": "method",
+          "children": []
+        }
+      ]
+    },
+    {
+      "address": "2",
+      "heading": "Results",
+      "level": 1,
+      "line": 34,
+      "lines": 5,
+      "tokens": 13,
+      "slug": "results",
+      "children": []
+    }
+  ]
+}

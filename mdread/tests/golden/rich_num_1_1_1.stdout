@@ -1,0 +1,10 @@
+1.1.1  Deep Detail   L21   9 lines · ~39 tok
+
+### Deep Detail
+
+Deep prose. The two links in the fence below point nowhere the reader counts:
+
+```text
+[not a link](https://never.example)
+[[Not A Note]]
+```

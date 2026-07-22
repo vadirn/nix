@@ -5,16 +5,13 @@ use std::collections::BTreeMap;
 /// The leading frontmatter block of a document, scanned once.
 ///
 /// `frontmatter` is the sole owner of delimiter/BOM scanning: `parse`, `body`,
-/// `field_order`, and `body_start_line` all derive from one [`block`] pass
-/// rather than re-implementing the open/close `---` scan. A block opens when the
-/// first line (BOM-stripped, trimmed) is exactly `---` and closes at the first
-/// later line whose trim is `---`.
+/// and `body_start_line` all derive from one [`block`] pass rather than
+/// re-implementing the open/close `---` scan. A block opens when the first line
+/// (BOM-stripped, trimmed) is exactly `---` and closes at the first later line
+/// whose trim is `---`.
 struct Block<'a> {
     /// BOM-stripped view of the original content. `body` slices against this.
     stripped: &'a str,
-    /// Top-level key names between the delimiters in source order (or to EOF when
-    /// the block is unclosed). Empty when there is no opening delimiter.
-    fields: Vec<String>,
     /// Inner YAML text (lines between the delimiters joined with `\n`), present
     /// only when a closing delimiter was found.
     yaml: Option<String>,
@@ -46,29 +43,6 @@ fn line_content_end(bytes: &[u8], start: usize, nl: usize) -> usize {
     }
 }
 
-/// Top-level key names from the inner block lines, in source order. A key starts
-/// in column 0 (no leading whitespace), is non-empty, and precedes a `:`; blank
-/// and `#`-comment lines are skipped, as are indented (nested) lines.
-fn collect_fields(inner: &[&str]) -> Vec<String> {
-    let mut fields = Vec::new();
-    for line in inner {
-        if line.starts_with(|c: char| c.is_whitespace()) {
-            continue;
-        }
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some(colon) = trimmed.find(':') {
-            let key = &trimmed[..colon];
-            if !key.is_empty() {
-                fields.push(key.to_string());
-            }
-        }
-    }
-    fields
-}
-
 /// Scan the leading frontmatter block once. BOM is stripped up front; the open
 /// and close `---` delimiters are matched by trimmed line equality, the same
 /// rule `parse` and the former `read` scanners used.
@@ -78,7 +52,6 @@ fn block(content: &str) -> Block<'_> {
 
     let none = |stripped| Block {
         stripped,
-        fields: Vec::new(),
         yaml: None,
         body_offset: None,
         body_line: 1,
@@ -108,7 +81,6 @@ fn block(content: &str) -> Block<'_> {
             // Closing delimiter: body begins at this line's terminating newline.
             return Block {
                 stripped,
-                fields: collect_fields(&inner),
                 yaml: Some(inner.join("\n")),
                 body_offset: Some(nl),
                 body_line: line_no + 1,
@@ -121,12 +93,8 @@ fn block(content: &str) -> Block<'_> {
         i = nl + 1;
     }
 
-    // No closing delimiter: `field_order` still reports the keys it scanned, but
-    // `parse`/`body`/`body_start_line` see no complete block.
-    Block {
-        fields: collect_fields(&inner),
-        ..none(stripped)
-    }
+    // No closing delimiter: `parse`/`body`/`body_start_line` see no complete block.
+    none(stripped)
 }
 
 /// Extract YAML frontmatter from markdown content.
@@ -148,17 +116,6 @@ pub fn body(content: &str) -> &str {
         Some(off) => &b.stripped[off..],
         None => content,
     }
-}
-
-/// Top-level frontmatter key names in their on-disk order.
-///
-/// `parse` returns a BTreeMap, losing source order; this scans the raw block for
-/// top-level keys so a caller (e.g. `read`'s overview `fields:` line) reflects
-/// the file rather than an alphabetization. Empty when there is no frontmatter
-/// block. Indented lines (nested map entries, list items), blank lines, and
-/// `#`-comment lines are skipped.
-pub fn field_order(content: &str) -> Vec<String> {
-    block(content).fields
 }
 
 /// 1-based line number where the body begins (the line after the closing `---`).
@@ -356,29 +313,6 @@ mod tests {
         // would have falsely matched it.
         let content = "---\nfoo: 1\n---bar\nreal body\n---\nafter\n";
         assert_eq!(body(content), "\nafter\n");
-    }
-
-    #[test]
-    fn field_order_follows_source() {
-        // Source order differs from alphabetical (type, created, aliases). Moved
-        // from read.rs when block scanning consolidated here.
-        let content = "---\ntype: note\ncreated: 2026-01-01\naliases:\n  - alt\n---\n\nbody\n";
-        assert_eq!(
-            field_order(content),
-            vec!["type".to_string(), "created".to_string(), "aliases".to_string()]
-        );
-    }
-
-    #[test]
-    fn field_order_empty_without_block() {
-        assert!(field_order("# Heading\n\nbody\n").is_empty());
-    }
-
-    #[test]
-    fn field_order_collects_through_missing_close() {
-        // Without a closing delimiter there is no complete block, yet the field
-        // scan still reports the top-level keys it saw (preserved behavior).
-        assert_eq!(field_order("---\nfoo: 1\nbar: 2\n"), vec!["foo".to_string(), "bar".to_string()]);
     }
 
     #[test]

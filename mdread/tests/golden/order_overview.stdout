@@ -1,0 +1,13 @@
+fixtures/collisions-order.md
+fields: title
+links: 0
+
+  [0]  (text)        L5   2 lines · ~8 tok
+  1      Frontmatter    L7   4 lines · ~47 tok
+  2      FM             L11   4 lines · ~21 tok
+  3      Links          L15   3 lines · ~17 tok
+
+next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links
+note: 'Frontmatter' (1) also answers to a reserved address; reach it by number
+note: 'FM' (2) also answers to a reserved address; reach it by number
+note: 'Links' (3) also answers to a reserved address; reach it by number

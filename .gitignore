@@ -4,8 +4,9 @@ __pycache__/
 .firecrawl/
 .claude/skills/nix
 .vault.config.json
-vault-query/target/
+target/
 .overnight/
 .overnight-*/
 home/claude/evals/debate/outputs/
 _spikes/
+result

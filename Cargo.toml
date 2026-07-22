@@ -1,0 +1,26 @@
+# Workspace root for the three Rust crates in this repo. They form a chain —
+# vault-query → mdread → mdstruct — and each was previously its own crate with
+# its own lockfile. That meant one dependency change rippled into several
+# lockfiles and, through them, several nix `cargoHash` values that had to be
+# recomputed by hand. One workspace, one lockfile, one hash.
+#
+# Shared dependencies are declared here and inherited with `.workspace = true`,
+# so two members cannot drift onto different versions of the same crate.
+[workspace]
+resolver = "3"
+members = ["mdstruct", "mdread", "vault-query"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+mdstruct = { path = "mdstruct" }
+mdread = { path = "mdread" }
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"

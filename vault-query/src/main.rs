@@ -46,11 +46,12 @@ enum Commands {
         #[arg(long, default_value = "table")]
         format: output::Format,
     },
-    /// Read a .md file: folded overview, or unfold an addressed section
+    /// Read a .md file or vault entry: folded overview, or unfold a section
     Read {
-        /// Path to the .md file
+        /// Path to the .md file, or a vault entry name fragment
         file: PathBuf,
-        /// Section address: numeric (e.g. 2.1), heading slug, or 0/text
+        /// Address: numeric (2.1), heading slug, 0/text, fm[.path] (e.g.
+        /// fm.reference[0]) for frontmatter, or links for the outgoing links
         address: Option<String>,
         /// Max levels to expand under the addressed node (Step 2)
         #[arg(long)]
@@ -65,26 +66,11 @@ enum Commands {
         #[arg(long, default_value = "text")]
         format: output::TextJson,
     },
-    /// Show frontmatter properties of a file, or read one field by path
-    Properties {
-        /// Path to the .md file
-        file: PathBuf,
-        /// Optional field path: dotted keys with [i] indices (e.g. references[0].target)
-        path: Option<String>,
-        /// Output format
-        #[arg(long, default_value = "table")]
-        format: output::Format,
-    },
     /// List tags across the vault
     Tags {
         /// Sort by: name or count
         #[arg(long, default_value = "name")]
         sort: String,
-    },
-    /// Show outgoing links from a file
-    Links {
-        /// Path to the .md file
-        file: PathBuf,
     },
     /// Show incoming links to a file
     Backlinks {
@@ -269,41 +255,33 @@ fn dirs_home() -> Result<PathBuf> {
 /// with `?` and yields a code, so error and non-zero branches stay testable and
 /// Drop-based cleanup runs before the process tears down.
 fn dispatch(cli: &Cli) -> Result<i32> {
-    // Commands whose config resolution differs (or that need no config) stay
-    // explicit; everything else shares the one `resolve_config(cli)?` below.
-    match &cli.command {
-        Commands::Properties { file, path, format } => {
-            return commands::properties::run(file, path.as_deref(), *format);
-        }
-        Commands::Links { file } => {
-            commands::links::run(file)?;
-            return Ok(0);
-        }
-        Commands::Read {
+    // `read` resolves config differently — optionally — so it dispatches ahead of
+    // the shared `resolve_config(cli)?` below; every other command shares that.
+    if let Commands::Read {
+        file,
+        address,
+        depth,
+        full,
+        threshold,
+        format,
+    } = &cli.command
+    {
+        // The whole config, not just the root: vault-relative pointers need
+        // the root, and name-fragment resolution needs the ignore set too.
+        // `None` (cwd-only) when no vault config is present, so a bare
+        // `read FILE` still works outside a vault; a present-but-broken
+        // config surfaces as an error rather than silently degrading.
+        let cfg = resolve_config_optional(cli)?;
+        commands::read::run(
             file,
-            address,
-            depth,
-            full,
-            threshold,
-            format,
-        } => {
-            // Resolve config so vault-relative pointer paths work from any cwd;
-            // fall back to None (cwd-only) when no vault config is present so a
-            // bare `read FILE` still works outside a vault. A present-but-broken
-            // config surfaces as an error rather than silently degrading.
-            let vault_root = resolve_config_optional(cli)?.map(|c| c.vault_root);
-            commands::read::run(
-                file,
-                vault_root.as_deref(),
-                address.as_deref(),
-                *depth,
-                *full,
-                *threshold,
-                *format,
-            )?;
-            return Ok(0);
-        }
-        _ => {}
+            cfg.as_ref(),
+            address.as_deref(),
+            *depth,
+            *full,
+            *threshold,
+            *format,
+        )?;
+        return Ok(0);
     }
 
     // All remaining commands share identical vault-config resolution.
@@ -416,7 +394,7 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             *include_superseded,
         )?,
         // Handled by the early-return match above.
-        Commands::Properties { .. } | Commands::Links { .. } | Commands::Read { .. } => {
+        Commands::Read { .. } => {
             unreachable!("config-free commands are dispatched before config resolution")
         }
     };

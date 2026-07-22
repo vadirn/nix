@@ -1,0 +1,6 @@
+error: the following required arguments were not provided:
+  <FILE>
+
+Usage: mdread <FILE> [ADDRESS]
+
+For more information, try '--help'.

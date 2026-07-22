@@ -1,0 +1,34 @@
+{
+  "path": "fixtures/rich.md",
+  "address": "links",
+  "links": [
+    {
+      "kind": "link",
+      "target": "https://a.example",
+      "alias": "the text",
+      "line": 9
+    },
+    {
+      "kind": "autolink",
+      "target": "https://b.example",
+      "line": 9
+    },
+    {
+      "kind": "wikilink",
+      "target": "Some Note",
+      "line": 11
+    },
+    {
+      "kind": "wikilink",
+      "target": "Other Note",
+      "alias": "an alias",
+      "line": 11
+    },
+    {
+      "kind": "link",
+      "target": "https://ref.example",
+      "alias": "the label",
+      "line": 19
+    }
+  ]
+}

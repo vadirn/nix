@@ -1,0 +1,4 @@
+- target: https://first.example
+  note: first source
+- target: https://second.example
+  note: second source

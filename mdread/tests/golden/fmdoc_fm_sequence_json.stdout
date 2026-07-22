@@ -1,0 +1,9 @@
+{
+  "path": "fixtures/nested-fm.md",
+  "address": "fm.tags",
+  "value": [
+    "one",
+    "two",
+    "three"
+  ]
+}

@@ -2,6 +2,7 @@
   username,
   homeDirectory,
   vault-query,
+  mdread,
   mdstruct,
   ...
 }: {
@@ -33,6 +34,7 @@
           ])
           ++ [
             vault-query
+            mdread
             mdstruct
           ];
       };

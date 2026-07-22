@@ -1,0 +1,12 @@
+1  Overview   L13   21 lines · ~171 tok
+
+# Overview
+
+Overview prose, one line.
+## Background
+
+Background prose with a reference-style link: [the label][ref]. It runs long enough that a small `--threshold` folds it while `--full` inlines it anyway. Filler sentence one. Filler sentence two. Filler sentence three. Filler sentence four. Filler sentence five. Filler sentence six. Filler sentence seven. Filler sentence eight. Filler sentence nine. Filler sentence ten.
+      1.1.1  Deep Detail    L21   9 lines · ~39 tok
+## Method
+
+Method prose with an image, which is not an outgoing link: ![a picture](assets/pic.png)

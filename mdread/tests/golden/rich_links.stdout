@@ -1,0 +1,7 @@
+links  (outgoing)   5 links
+
+  L9     link       https://a.example -> the text
+  L9     autolink   https://b.example
+  L11    wikilink   Some Note
+  L11    wikilink   Other Note -> an alias
+  L19    link       https://ref.example -> the label

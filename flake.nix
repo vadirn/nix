@@ -46,47 +46,53 @@
     system = "aarch64-darwin";
     pkgs = nixpkgs.legacyPackages.${system};
     inherit (pkgs) lib;
-    # vault-query links mdstruct as a path dependency (`../mdstruct`), so its build
-    # source must carry BOTH crate trees at their relative layout. Pin the source to
-    # the manifests, sources, and tests only (no `target/`) so the input is stable.
+    # The three crates form one cargo workspace (root `Cargo.toml`), chained by
+    # path dependency: vault-query → mdread → mdstruct. Every build source must
+    # therefore carry the workspace manifest, the single lockfile, and ALL the
+    # member trees at their relative layout. Pin the source to manifests, sources,
+    # and tests only (no `target/`) so the input is stable.
     crateSrc = lib.fileset.toSource {
       root = ./.;
       fileset = lib.fileset.unions [
+        ./Cargo.toml
+        ./Cargo.lock
         ./mdstruct/Cargo.toml
-        ./mdstruct/Cargo.lock
         ./mdstruct/src
+        ./mdread/Cargo.toml
+        ./mdread/src
         ./vault-query/Cargo.toml
-        ./vault-query/Cargo.lock
         ./vault-query/src
         ./vault-query/tests
       ];
     };
+    # One lockfile vendors one dependency set, so all three packages share a
+    # single hash — recompute it here, once, whenever a dependency changes.
+    #
     # Use cargoHash (fetchCargoVendor) instead of cargoLock.lockFile
     # (importCargoLock). The latter fetches each crate via raw curl, and
     # crates.io's legacy /api/v1 endpoint 403s on curl's default User-Agent.
     # fetchCargoVendor runs `cargo vendor` inside the FOD; cargo's own UA is
     # accepted.
-    vault-query = pkgs.rustPlatform.buildRustPackage {
-      pname = "vault-query";
-      version = "0.1.0";
-      src = crateSrc;
-      # Cargo.lock/manifest live in vault-query/; build and test from there. The
-      # `../mdstruct` path dep resolves to the sibling crate tree in `crateSrc`.
-      cargoRoot = "vault-query";
-      buildAndTestSubdir = "vault-query";
-      cargoHash = "sha256-psvRl9CSC5muEccQM38D7c/M78/VWmdnGx3NMBqlflQ=";
-    };
-    mdstruct = pkgs.rustPlatform.buildRustPackage {
-      pname = "mdstruct";
-      version = "0.1.0";
-      src = ./mdstruct;
-      cargoHash = "sha256-tVsDf7y3MQD8BEiWNg8NQtWnjxVgyiE5wCwYiBAZlYA=";
-    };
+    workspaceCargoHash = "sha256-fp2iiM18TVXnQPMNp5/JZqDJGrEQPNOcPUPwthitzBM=";
+    # Each member builds from the whole workspace tree and is selected by
+    # `buildAndTestSubdir`; cargo finds the root manifest above it and builds
+    # just that package. The subdirectory is the package name for all three.
+    mkCrate = pname:
+      pkgs.rustPlatform.buildRustPackage {
+        inherit pname;
+        version = "0.1.0";
+        src = crateSrc;
+        buildAndTestSubdir = pname;
+        cargoHash = workspaceCargoHash;
+      };
+    vault-query = mkCrate "vault-query";
+    mdread = mkCrate "mdread";
+    mdstruct = mkCrate "mdstruct";
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:
       nix-darwin.lib.darwinSystem {
         inherit system;
-        specialArgs = {inherit inputs self vault-query mdstruct hostname;};
+        specialArgs = {inherit inputs self vault-query mdread mdstruct hostname;};
         modules = [
           ./hosts/darwin.nix
           nix-homebrew.darwinModules.nix-homebrew
@@ -94,7 +100,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
-            inherit vault-query mdstruct;
+            inherit vault-query mdread mdstruct;
           })
         ];
       };
@@ -107,7 +113,7 @@
     };
 
     darwinPackages = self.darwinConfigurations.default.pkgs;
-    packages.${system} = {inherit vault-query mdstruct;};
+    packages.${system} = {inherit vault-query mdread mdstruct;};
     formatter.${system} = pkgs.alejandra;
   };
 }

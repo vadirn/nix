@@ -1,0 +1,5 @@
+0  (text)   L9   4 lines · ~45 tok
+
+Lede prose before any heading, carrying an inline [the text](https://a.example) and an autolink <https://b.example>.
+
+The lede also names [[Some Note]] and [[Other Note|an alias]].
