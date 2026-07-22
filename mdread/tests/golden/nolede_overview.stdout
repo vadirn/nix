@@ -1,0 +1,8 @@
+fixtures/no-lede.md
+fields: title, type
+links: 0
+
++ 1      Straight To Headings L6   7 lines · ~37 tok
+    1.1    A Child        L10   3 lines · ~12 tok
+
+next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links

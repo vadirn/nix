@@ -1,0 +1,9 @@
+fixtures/dialects.md
+links: 0
+
++ 1      Setext Title   L1   9 lines · ~31 tok
+    1.1    Indented Two   L6   4 lines · ~16 tok
++ 2      Column One     L10   7 lines · ~31 tok
+    2.1    Indented Three L14   3 lines · ~18 tok
+
+next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links

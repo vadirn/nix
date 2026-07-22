@@ -1,0 +1,17 @@
+{
+  "path": "fixtures/collisions.md",
+  "address": "links",
+  "links": [
+    {
+      "kind": "wikilink",
+      "target": "A Note",
+      "line": 7
+    },
+    {
+      "kind": "link",
+      "target": "https://out.example",
+      "alias": "an outside link",
+      "line": 8
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+fixtures/collisions-live.md
+fields: title, tags
+links: 1
+
+  [0]  (text)        L7   2 lines · ~25 tok
++ 1      Direction      L9   15 lines · ~31 tok
+    1.1    Links          L13   4 lines · ~7 tok
+    1.2    FM             L17   4 lines · ~8 tok
+    1.3    Text           L21   3 lines · ~7 tok
+
+next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links
+note: 'Text' (1.3) also answers to a reserved address; reach it by number
+note: 'FM' (1.2) also answers to a reserved address; reach it by number
+note: 'Links' (1.1) also answers to a reserved address; reach it by number

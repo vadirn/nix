@@ -1,0 +1,12 @@
+fixtures/rich.md
+fields: title, type, tags
+links: 5
+
+  [0]  (text)        L9   4 lines · ~45 tok
++ 1      Overview       L13   21 lines · ~171 tok
++   1.1    Background     L17   13 lines · ~137 tok
+      1.1.1  Deep Detail    L21   9 lines · ~39 tok
+    1.2    Method         L30   4 lines · ~24 tok
+  2      Results        L34   5 lines · ~13 tok
+
+next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links

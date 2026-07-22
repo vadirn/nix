@@ -1,0 +1,18 @@
+{
+  "path": "fixtures/collisions-live.md",
+  "address": "fm",
+  "line": 2,
+  "lines": 3,
+  "fields": [
+    {
+      "key": "title",
+      "value": "Live Shadows",
+      "line": 2
+    },
+    {
+      "key": "tags",
+      "value": "- shadow",
+      "line": 3
+    }
+  ]
+}

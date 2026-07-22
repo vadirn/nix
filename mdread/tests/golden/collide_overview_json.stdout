@@ -1,0 +1,59 @@
+{
+  "path": "fixtures/collisions.md",
+  "fields": [],
+  "links": 2,
+  "text": null,
+  "tree": [
+    {
+      "address": "1",
+      "heading": "Direction",
+      "level": 1,
+      "line": 1,
+      "lines": 20,
+      "tokens": 93,
+      "slug": "direction",
+      "children": [
+        {
+          "address": "1.1",
+          "heading": "Links",
+          "level": 2,
+          "line": 5,
+          "lines": 5,
+          "tokens": 16,
+          "slug": "links",
+          "children": []
+        },
+        {
+          "address": "1.2",
+          "heading": "FM",
+          "level": 2,
+          "line": 10,
+          "lines": 4,
+          "tokens": 8,
+          "slug": "fm",
+          "children": []
+        },
+        {
+          "address": "1.3",
+          "heading": "Frontmatter",
+          "level": 2,
+          "line": 14,
+          "lines": 4,
+          "tokens": 12,
+          "slug": "frontmatter",
+          "children": []
+        },
+        {
+          "address": "1.4",
+          "heading": "Text",
+          "level": 2,
+          "line": 18,
+          "lines": 3,
+          "tokens": 7,
+          "slug": "text",
+          "children": []
+        }
+      ]
+    }
+  ]
+}

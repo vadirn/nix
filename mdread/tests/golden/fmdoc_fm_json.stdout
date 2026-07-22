@@ -1,0 +1,38 @@
+{
+  "path": "fixtures/nested-fm.md",
+  "address": "fm",
+  "line": 2,
+  "lines": 15,
+  "fields": [
+    {
+      "key": "title",
+      "value": "Nested Frontmatter",
+      "line": 2
+    },
+    {
+      "key": "count",
+      "value": "42",
+      "line": 3
+    },
+    {
+      "key": "draft",
+      "value": "false",
+      "line": 4
+    },
+    {
+      "key": "tags",
+      "value": "- one\n- two\n- three",
+      "line": 5
+    },
+    {
+      "key": "meta",
+      "value": "author: A Person\nstatus: draft",
+      "line": 9
+    },
+    {
+      "key": "references",
+      "value": "- target: https://first.example\n  note: first source\n- target: https://second.example\n  note: second source",
+      "line": 12
+    }
+  ]
+}
