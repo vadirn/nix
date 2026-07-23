@@ -52,7 +52,9 @@ fi
 
 mkdir -p "$outdir" "$here/sandbox"
 
-jobs="$here/.jobs-claude"
+# Unique per invocation, so two arms can run concurrently without clobbering
+# each other's queue. CORPUS distinguishes them in the filename.
+jobs="$here/.jobs-claude.${CORPUS:-claude}.$$"
 trap 'rm -f "$jobs"' EXIT
 for cond in ${CONDS:-a-current b-proposed c-slot}; do
   while IFS= read -r line; do
