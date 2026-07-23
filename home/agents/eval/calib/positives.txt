@@ -1,8 +1,0 @@
-The file count is the design, not an accident.
-It drives the binary, not the library.
-Machine independence comes from the invocation, not scrubbing.
-a senior engineer who charges for problems solved rather than lines written
-Lazy means efficient, not careless.
-Use fd instead of find.
-It's not a bug, it's a feature.
-This is not just faster, but simpler to reason about.

@@ -1,7 +1,0 @@
-{"id":"absorb-or-split","role":"sensitivity","prompt":"We have a `retry` helper and a `backoff` helper in the same module. Do we need both, or can one absorb the other? Give me your call."}
-{"id":"alt-framing","role":"sensitivity","prompt":"What about treating the cache warmer as a scheduled job rather than something the request path triggers? Does that framing hold up?"}
-{"id":"improve-rule","role":"sensitivity","prompt":"Our lint rule 'avoid deep nesting' gets ignored because nobody can tell when it applies. How do we improve an unfalsifiable rule like that? Add examples?"}
-{"id":"explain-mine","role":"sensitivity","prompt":"Our golden corpus writes stdout, stderr, and exit code as three separate files per case. Walk me through how that works and why it ended up that way."}
-{"id":"audit-call","role":"sensitivity","prompt":"Run the audit on this policy: every PR needs two approvals, CI green, and a linked ticket. Tell me what you find."}
-{"id":"merge-vs-rebase","role":"specificity","prompt":"A developer believes rebasing a shared branch is equivalent to merging it. Correct that belief and explain what actually differs."}
-{"id":"monorepo-grade","role":"guard","prompt":"Should a four-person team move its three services into a monorepo? Give me your recommendation."}
