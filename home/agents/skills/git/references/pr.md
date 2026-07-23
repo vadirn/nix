@@ -79,3 +79,4 @@ show PR URL
 ## Rules
 
 - **Commit first when the tree is dirty.** Route uncommitted changes through the commit workflow first.
+- **A revert is its own PR.** Never bundle a revert with unrelated work: squash-and-merge collapses the branch to one line, so a revert riding inside a multi-concern PR hides under the roll-up title and can silently clobber a sibling change. Ship the undo alone. (Unit rule in `prefix.md`.)

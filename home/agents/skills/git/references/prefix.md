@@ -27,6 +27,6 @@ Read `prefix-examples.md` when a call is unclear; it holds the worked example ba
 
 The three subcommands apply the same test to different units, so a branch prefix is never inherited from a commit.
 
-- **Commit** — the one change being recorded. **One concern per commit**: if a change crosses the contract line in multiple ways, split it.
+- **Commit** — the one change being recorded. **One concern per commit**: split unrelated concerns even when they share a prefix — three `chore`s touching different subsystems are three commits, not one — and split a change that crosses the contract line in multiple ways. A revert is always its own concern: never fold it into another commit, or the undo hides inside an unrelated subject.
 - **Branch** — the net change the branch delivers when merged, taken as a whole. A branch holds many commits and they need not share a prefix: a `feat` branch routinely contains `chore` refactors and a stray `fix`.
-- **PR** — the same unit as its branch. The PR title becomes the commit message on squash-and-merge, so it carries the branch's prefix.
+- **PR** — the same unit as its branch. The PR title becomes the commit message on squash-and-merge, so it carries the branch's prefix. Squash flattens the whole branch into that one line on `main`, which makes the PR the atomic unit that actually lands: keep a PR to one concern (a feature and its enabling refactors are one concern; three unrelated chores are three), and keep a revert in its own PR. A revert folded into a multi-concern PR hides under the roll-up title and can silently clobber a sibling change — the failure this rule exists to prevent.
