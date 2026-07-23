@@ -41,22 +41,39 @@ Read the verdict column, never the means. Arm means have misled this project rep
 
 `g-derhetoric` is the first arm to beat the deployed file, and it is now applied to `AGENTS.md`.
 
-| metric               | `a-current` | `g-derhetoric` |     t | verdict |
-| -------------------- | ----------: | -------------: | ----: | ------- |
-| contrast /1k         |        6.07 |           4.78 | -2.23 | better  |
-| em-dashes per answer |        3.57 |           2.97 |       |         |
-| answer words         |         305 |            279 |       |         |
-| grade, recommendation cases |    33/33 |          33/33 |       | intact  |
+| metric                      | `a-current` | `g-derhetoric` |     t | verdict |
+| --------------------------- | ----------: | -------------: | ----: | ------- |
+| contrast /1k                |        6.07 |           4.78 | -2.23 | better  |
+| em-dashes per answer        |        3.57 |           2.97 |       |         |
+| answer words                |         305 |            279 |       |         |
+| grade, recommendation cases |       33/33 |          33/33 |       | intact  |
 
 n=77 per arm on `cases-agentic.jsonl`, blocked by case. It changes four antithesis constructions in the file's own prose and adds no prohibition, keeping every doctrine claim — the diff is checkable and every element survives.
 
-Two lessons sit behind that number. The first is that the file was demonstrating what it asked against: `charges for problems solved rather than lines written`, `Lazy about the answer, thorough about the reasoning`, `pragmatic and silent … is slop; pragmatic and explicit … is ordinary engineering`. Five earlier arms all *added* text describing the construction and all lost; this one only removes the demonstration.
+Two lessons sit behind that number. The first is that the file was demonstrating what it asked against: `charges for problems solved rather than lines written`, `Lazy about the answer, thorough about the reasoning`, `pragmatic and silent … is slop; pragmatic and explicit … is ordinary engineering`. Five earlier arms all _added_ text describing the construction and all lost; this one only removes the demonstration.
 
 The second is that the unblocked test read `t=-1.76` and called it unresolved. Cases differ enormously in base rate — `improve-rule` at 11.7 per 1k against `merge-vs-rebase` at 0.6 — and carrying that spread as error variance was hiding a real effect. Blocking is not optional here; the arms run identical cases by construction, so the unpaired analysis was simply the wrong one.
 
 The grade guard needs reading per case. Aggregate emission falls from 92% to 74%, but all three cases that request a recommendation score 33/33 in both arms. The drop is `a-current` grading pure explanation, where the doctrine says grade recommendations — so the arm follows the instruction more closely, not less.
 
-`h-destaccato` is built and unrun: it converts the `Archetype (the ponytail).` inline labels to headings, taking the file's own staccato from 4 to 1.
+### Pushing past `g` — the floor (2026-07-23)
+
+Six distinct levers were run against `g` at n=77, blocked by case, to see whether any metric moves further. None does. `g` is the floor for in-file editing.
+
+| attempt | arm | lever | vs `g` |
+| ------- | ------------- | ---------------------------------- | -------------------------------------- |
+| 1 | `h-destaccato` | inline labels → `###` headings | staccato **worse** (+0.94, t=+3.26) |
+| 2 | `i-nodash` | drop the definition em-dashes | em-dash flat (+0.20, t=0.30) |
+| 3 | `j-flowlabels` | labels → flowing sentences | staccato worse (+0.38, t=+2.38) |
+| 4 | `k-lean` | tighten wording, every claim kept | staccato worse (+0.52), contrast +0.36 |
+| 5 | `l-positive` | add `Write in flowing prose.` | contrast worse (+0.75, t=+1.72) |
+| 6 | `m-reorder` | style directive first (primacy) | both worse |
+
+Three findings hold the floor in place. Contrast moves only by removing demonstrations, and `g` already removed them all — its prose scans clean, so nothing is left to cut, and adding text (`l`) offsets the gain. Staccato rises under every edit tried: `a-current` at 0.25 is the true floor, `g` already cost +0.18 reaching it, and no edit recovers that without losing the contrast win — restructuring the opening labels (`h`, `j`) makes it markedly worse, so headings and fragments in the file prime clipped output. Em-dash sits at ~11.3 per 1k in every arm including `a-current`; the "avoid em-dash asides" instruction all arms carry sets that floor, and no file-prose edit reaches below it.
+
+Two candidates promised at low n and collapsed at power, each the same lesson the project keeps relearning: `l-positive` read contrast 4.05 at n=14 (−0.73) and reversed to 5.53 at n=77; `k-lean` read staccato 0.00 at n=14 and rose to 0.95. Direction at n≤14 is noise here.
+
+The lever that remains is not another edit. Every in-file intervention is bounded by the same ceiling, so the standard that cannot be lowered at generation time needs a home outside the always-loaded file — a post-generation pass or review-time correction, which is what the project's Needed list already calls for and what arXiv:2406.01297 endorses (self-correction works with reliable external feedback). That is a different lever class, not an arm.
 
 ## Earlier result (2026-07-22)
 
