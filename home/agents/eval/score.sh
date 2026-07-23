@@ -31,7 +31,7 @@ count() { { rg -oi --no-filename --multiline "$2" "$1" 2>/dev/null || true; } | 
 stac="$(mktemp)"; trap 'rm -f "$stac"' EXIT
 python3 "$here/detector.py" --staccato-column "$outdir" >"$stac"
 
-printf 'cond\tcase\trep\twords\tcontrast\tcontrast_per_1k\temdash\thas_grade\tstaccato\tstaccato_per_1k\n' >"$tsv"
+printf 'cond\tcase\trep\twords\tcontrast\tcontrast_per_1k\temdash\thas_grade\tstaccato\tstaccato_per_1k\temdash_per_1k\n' >"$tsv"
 
 for f in "$outdir"/*.txt; do
   [ -e "$f" ] || continue
@@ -47,8 +47,9 @@ for f in "$outdir"/*.txt; do
   stacn=$(awk -F'\t' -v b="$base" '$1==b{print $2; found=1} END{if(!found) print 0}' "$stac")
   per1k=$(awk -v c="$contrast" -v w="$words" 'BEGIN{ printf (w>0 ? "%.2f" : "0.00"), (w>0 ? c*1000/w : 0) }')
   sper1k=$(awk -v c="$stacn" -v w="$words" 'BEGIN{ printf (w>0 ? "%.2f" : "0.00"), (w>0 ? c*1000/w : 0) }')
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$cond" "$case_id" "$rep" "$words" "$contrast" "$per1k" "$emdash" "$grade" "$stacn" "$sper1k" >>"$tsv"
+  eper1k=$(awk -v c="$emdash" -v w="$words" 'BEGIN{ printf (w>0 ? "%.2f" : "0.00"), (w>0 ? c*1000/w : 0) }')
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$cond" "$case_id" "$rep" "$words" "$contrast" "$per1k" "$emdash" "$grade" "$stacn" "$sper1k" "$eper1k" >>"$tsv"
 done
 
 echo "wrote $tsv ($(($(wc -l <"$tsv") - 1)) rows)"
