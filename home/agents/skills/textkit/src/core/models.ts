@@ -25,7 +25,10 @@ export const DISTILL_EXTRACT_TIMEOUT_MS = 150_000;
 // prepaid credit; it thinks hard on the full-projection gate input (~90-150s/call), the price of
 // its judgment (~90-180s/call — observed ~179s in the wild, above the estimate). Swap to a faster
 // fidelity model, or cap thinking_budget, here if that latency bites.
-export const DISTILL_FIDELITY = dashscope("glm-5.2");
+// thinking_budget caps the inlined reasoning so it cannot exhaust DISTILL_FIDELITY_TOKENS before
+// the JSON verdict lands. Without it glm-5.2 runs thinking-on by default, and every gate call
+// degraded to "no verdict" — the reasoning ate the whole budget / the 320s ceiling.
+export const DISTILL_FIDELITY = dashscope("glm-5.2", { thinking: { budget: 12_000 } });
 // Token budget for the FIDELITY thinking model. Its reasoning is inlined in the content, so the
 // cap must cover BOTH the thinking and the trailing JSON — too low and it exhausts mid-thought,
 // returning prose with no `{`, which fails extractJson and drops the run to the passthrough
@@ -36,7 +39,7 @@ export const DISTILL_FIDELITY_TOKENS = 16_384;
 // (observed ~179s), so a genuinely-slow-but-working judge was landing a hair under the cliff.
 // Give the single attempt real headroom so it LANDS a verdict instead of degrading to
 // gate-skipped; attempts=1 bounds the total wait at this value, with no retry behind it.
-export const DISTILL_FIDELITY_TIMEOUT_MS = 320_000;
+export const DISTILL_FIDELITY_TIMEOUT_MS = 480_000;
 
 // ---- polish ----
 // The spell/grammar rewrite model. Defaults to luna like distill; a rewrite pass is lighter than
