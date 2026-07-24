@@ -14,5 +14,6 @@ pub mod read;
 pub mod resolve;
 pub mod search;
 pub mod tags;
+pub mod tickets;
 pub mod tracks;
 pub mod xp;

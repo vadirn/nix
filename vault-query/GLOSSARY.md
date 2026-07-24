@@ -96,6 +96,12 @@ A markdown file with `type: project` in its frontmatter, located inside a Projec
 
 Example: `41 projects/nix/Nix.md` carries `type: project` and is the Project note for the nix Project.
 
+## Scratchpad
+
+A markdown file with `type: scratchpad` in its frontmatter — a per-project holding place for deferred ideas that could seed a future effort's thesis but are not yet actionable tickets. One per project by convention (`41 projects/<name>/`); classification is by frontmatter alone. Distinct from a Ticket (an actionable unit carrying a `status`) and from a Track (a rolling work log): a Scratchpad entry carries neither a status nor XP semantics, so no dedicated listing subcommand selects it — it is read directly.
+
+Example: a deferred idea triaged out of a Track's former `## Backlog` section lands as an entry in the project's scratchpad rather than becoming a ticket.
+
 ## Slug
 
 A normalised identifier computed by `slugify(s) = s.to_lowercase().replace(' ', "-")`. The same `slugify()` is applied to both sides of the comparison: the file's relative path (minus `.md`) and the user-supplied query string. A slug matches a file if the two slugified strings are equal, or if the file's slugified path ends with `/<slugified-query>` (folder-aware suffix match).
@@ -131,6 +137,12 @@ Example: `- [x] (2026-04-28) ship glossary [[Nix]]` under `## Tasks` adds +1 XP 
 A VaultFile marked `template: true` in its frontmatter. Carries the same `type:` value as its target instance (e.g., a card template has `type: card`) so that instantiation copies the frontmatter into a properly-classified new file. Excluded from type-based listings (`cards`, `notes`) so the template is not itself reported as an instance.
 
 Example: `templates/Card.md` has `template: true` and `type: card` — when used as a template, the new file inherits `type: card`; the template itself is omitted from `vault-query cards` output.
+
+## Ticket
+
+A markdown file with `type: ticket` in its frontmatter, representing one actionable unit of project work. Conventionally placed inside a Project directory (`41 projects/<name>/`) as `ticket-<slug>.md`, but classification is by frontmatter alone. Carries `slug`, `description`, `status` (`open`, `done`, `abandoned`), a `track:` backref wikilink (empty when unclaimed), a `requires:` sequence of blocking-ticket wikilinks, and a `project:` wikilink. The `vault-query tickets` subcommand lists tickets and filters them by `--track <slug>` (matched against the `track-<slug>` backref stem, resolved query-side without opening the track file), `--backlog` (unclaimed tickets with `status == open`), `--status`, and the global `--project` (which scopes to one project folder).
+
+Example: `41 projects/nix/ticket-remove-track-backlog.md` carries `type: ticket` and is claimed by `[[41 projects/nix/track-work-tracking-model]]`; `vault-query tickets --track work-tracking-model` lists it.
 
 ## Track
 

@@ -158,6 +158,21 @@ enum Commands {
     },
     /// Initialize Tracks.base in the current project
     TracksInit,
+    /// List tickets, filtered by track, backlog, project, or status
+    Tickets {
+        /// Tickets claimed by this track slug (matched against the `track-<slug>` backref)
+        #[arg(long)]
+        track: Option<String>,
+        /// Only unclaimed, open tickets — the project backlog
+        #[arg(long)]
+        backlog: bool,
+        /// Filter by status (open, done, abandoned)
+        #[arg(long)]
+        status: Option<String>,
+        /// Output format: text (default), markdown, or json
+        #[arg(long, default_value = "text")]
+        format: commands::tickets::TicketFormat,
+    },
     /// Resolve a note/card/reference/checkpoint name to its absolute path (one per line)
     Get {
         /// Name fragment to resolve
@@ -344,6 +359,17 @@ fn dispatch(cli: &Cli) -> Result<i32> {
         }
         Commands::TracksInit => {
             commands::tracks::init(&cfg)?;
+            0
+        }
+        // `--project` is the global project flag (resolved into `cfg.project_path`),
+        // so tickets share the project-scoping convention of `tracks`.
+        Commands::Tickets {
+            track,
+            backlog,
+            status,
+            format,
+        } => {
+            commands::tickets::run(&cfg, track.as_deref(), *backlog, status.as_deref(), *format)?;
             0
         }
         Commands::Get { fragment, no_superseded } => {
