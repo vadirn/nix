@@ -102,6 +102,7 @@ impl Default for ConsultConfig {
                 "note".to_string(),
                 "reference".to_string(),
                 "experiment".to_string(),
+                "ticket".to_string(),
             ],
             token_budget: 8000,
             per_doc_token_cap: DEFAULT_PER_DOC_TOKEN_CAP,
@@ -635,7 +636,7 @@ mod tests {
         // When no [consult] block is present, the Default impl must yield the calibrated defaults
         // from the 29-pair eval set (consult-materials/consult-eval.jsonl, Step F).
         let defaults = ConsultConfig::default();
-        assert_eq!(defaults.types, vec!["card", "note", "reference", "experiment"]);
+        assert_eq!(defaults.types, vec!["card", "note", "reference", "experiment", "ticket"]);
         assert_eq!(defaults.token_budget, 8000);
         assert_eq!(defaults.per_doc_token_cap, 4000);
         assert!((defaults.title_boost - 1.0).abs() < f32::EPSILON);
@@ -671,7 +672,7 @@ mod tests {
         // The overridden field:
         assert_eq!(consult.token_budget, 4000);
         // Everything else stays at calibrated defaults (Step F, 29-pair eval):
-        assert_eq!(consult.types, vec!["card", "note", "reference", "experiment"]);
+        assert_eq!(consult.types, vec!["card", "note", "reference", "experiment", "ticket"]);
         assert_eq!(consult.per_doc_token_cap, 4000);
         assert!((consult.title_boost - 1.0).abs() < f32::EPSILON);
         assert!((consult.description_boost - 1.5).abs() < f32::EPSILON);

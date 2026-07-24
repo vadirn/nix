@@ -9,14 +9,14 @@ use crate::frontmatter;
 /// `ConsultConfig.per_doc_token_cap` — the same value the packer enforces —
 /// plumbed in through `built_in_rules(cap)` so lint and consult cannot drift.
 ///
-/// Scope: the knowledge types consult inlines (card, note, experiment).
-/// References are bookmarks, tracks/checkpoints are append-mostly project
-/// memory — all exempt, as are templates.
+/// Scope: the knowledge types consult inlines (card, note, experiment, ticket).
+/// References are bookmarks, tracks/checkpoints and scratchpads are append-mostly
+/// capture — all exempt, as are templates.
 pub struct OversizedEntry {
     pub per_doc_token_cap: usize,
 }
 
-const CHECKED_TYPES: [&str; 3] = ["card", "note", "experiment"];
+const CHECKED_TYPES: [&str; 4] = ["card", "note", "experiment", "ticket"];
 
 impl Rule for OversizedEntry {
     fn name(&self) -> &'static str {
@@ -133,6 +133,38 @@ mod tests {
             "/vault/20 cards/SmallCard.md",
             "card",
             "a short body",
+            false,
+        )];
+        assert!(check_with_cap(files, 100).is_empty());
+    }
+
+    #[test]
+    fn oversized_ticket_fires() {
+        // consult inlines tickets, so an oversized ticket body must be flagged.
+        let files = vec![make_file(
+            "BigTicket",
+            "/vault/41 projects/p/ticket-big.md",
+            "ticket",
+            &big_body(),
+            false,
+        )];
+        let findings = check_with_cap(files, 100);
+        assert_eq!(findings.len(), 1);
+        assert!(
+            findings[0].message.contains("ticket 'BigTicket'"),
+            "unexpected message: {}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn oversized_scratchpad_is_exempt() {
+        // Scratchpads are append-mostly capture; consult never inlines them.
+        let files = vec![make_file(
+            "BigScratchpad",
+            "/vault/41 projects/p/scratchpad-big.md",
+            "scratchpad",
+            &big_body(),
             false,
         )];
         assert!(check_with_cap(files, 100).is_empty());
