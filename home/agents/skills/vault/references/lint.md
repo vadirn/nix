@@ -25,12 +25,14 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `reference-not-wikilink` | warn | Card's `reference:` value is a non-wikilink string (e.g. raw URL) |
 | `reference-wrong-type` | warn | Card's `reference:` wikilink resolves to a non-`reference` entry, or to no entry at all (frontmatter links are outside `broken-wikilink`'s body-only scan) |
 | `reference-vault-link` | warn | `type: reference` entry whose body wikilinks resolve to another vault entry — a reference points outward only; analysis belongs in a card or note (asset embeds and unresolved targets exempt) |
+| `ticket-outward-only` | warn | `type: ticket` entry with a body `[[...]]` wikilink — a ticket body must be repo-self-sufficient; restate the material inline or name a repo artifact (file, commit, symbol) instead (frontmatter `track:`/`requires:`/`project:` wikilinks exempt) |
 | `broken-wikilink` | error | `[[target]]` does not resolve to any vault file |
 | `duplicate-h1` | warn | First non-blank body line is `# <basename>`, duplicating the implicit page title. |
 | `invalid-frontmatter` | error | YAML frontmatter fails to parse |
 | `untagged-card` | warn | Card with missing or empty `tags:` array |
 | `missing-required-field` | warn | File missing a required frontmatter field for its `type:` (one finding per field) |
 | `singleton-tag` | warn | Tag appearing in exactly one file (typo heuristic) |
+| `unknown-rel` | warn | `<rel>` relation token outside the known registry (typo heuristic; can be promoted into the registry) |
 
 ## Excluding files
 
@@ -102,6 +104,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `reference-not-wikilink` | `{ "value": <string> }`                                   |
 | `reference-wrong-type`   | `{ "target": <string>, "target_type": <string or null> }` |
 | `reference-vault-link`   | `{ "target": <string>, "line": <number> }`                |
+| `ticket-outward-only`    | `{ "target": <string>, "line": <number> }`                |
 | `broken-wikilink`        | `{ "target": <string>, "line": <number> }`                |
 | `duplicate-h1`           | `null`                                                    |
 | `invalid-frontmatter`    | `{ "error": <string> }`                                   |
