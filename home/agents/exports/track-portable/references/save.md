@@ -44,7 +44,6 @@ else:
 
     proposed_edits = {
       decisions:  do("session decisions to append as numbered items, or [] if none"),
-      backlog:    do("new backlog items to append as `- [ ] (N). ...`; resolved items to mark `[x]` in place — NEVER delete or renumber"),
       glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; NEVER modify or remove existing rows, especially pinned (`†`) rows"),
       log_entry:  "### " + new_entry_number + ". " + today + " — " + title + "\n\n" + narrative,
       updated:    today,
@@ -52,7 +51,7 @@ else:
 
     AskUserQuestion("apply these edits to <track_path>?", show=proposed_edits)
     if approved:
-        do("compose updated body: append decisions to ## Decisions, apply backlog edits to ## Backlog, append glossary rows to ## Glossary table, append log_entry to ## Log, set frontmatter updated:")
+        do("compose updated body: append decisions to ## Decisions, append glossary rows to ## Glossary table, append log_entry to ## Log, set frontmatter updated:")
         Bash("write atomically: write new body to <track_path>.tmp, then mv <track_path>.tmp <track_path>")
 
 graduation:
@@ -97,14 +96,6 @@ add one.
 `<title>` is a short noun phrase summarizing the session's outcome (e.g. `entry-binding decision`,
 `format refinement`).
 
-### Backlog conventions
-
-- Numbered, append-only.
-- Resolved items get `[x]` marked in place — never delete, never renumber.
-- New items get appended as `- [ ] (N). <text>` where N is the next available integer (length of list + 1).
-  The parentheses prevent Markdown renderers (notably Obsidian) from re-numbering the line as an
-  ordered-list item.
-
 ### Decisions conventions
 
 Numbered, append-only. Each decision: a short title, then the rationale. Never delete; if reversed,
@@ -115,7 +106,7 @@ append a new decision that supersedes the prior one and reference it by number.
 The Glossary is a 2-column markdown table: `| Term | Definition |`. Two row classes:
 
 - **Pinned rows** — Term ends with `†` (e.g. `Track†`, `Decisions†`). Never edit, never remove, never
-  re-order. The template seeds five pinned rows describing the track's own conventions; they document
+  re-order. The template seeds four pinned rows describing the track's own conventions; they document
   the format inside every track so a cold reader doesn't have to consult the skill.
 - **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default; refine a
   definition by appending a new row with the sharpened wording. The old row stays so the history of a
@@ -137,7 +128,7 @@ Include in the Log entry:
 
 - Outcomes a fresh agent would need to continue the work.
 - Decisions made (also written to ## Decisions, but the Log captures _why now_).
-- Frictions encountered that aren't yet resolved (route to ## Backlog if actionable).
+- Frictions encountered that aren't yet resolved, stated plainly enough that a fresh agent can pick them up.
 
 Exclude:
 

@@ -18,10 +18,11 @@ else:
         track_path = <cfg.project_path>/<selected.Track>.md
 
     // Shape first, then unfold — tracks grow large; do NOT Read the whole body (see Reference: Presenting a track)
-    shape = Bash(vault-query read <track_path>)                    // folded overview: sections + line/token counts; each Log entry addressed 6.N
-    snapshot = Bash(vault-query read <track_path> 1)               // Direction — the stable framing
-    latest = Bash(vault-query read <track_path> <highest 6.N>)     // the newest Log entry — the current snapshot
-    do("present Direction + latest Log entry as the resume snapshot; offer to unfold Decisions / Backlog / older Log entries by address on demand")
+    shape = Bash(vault-query read <track_path>)                    // folded overview: sections + line/token counts; each Log entry gets its own sub-address under Log
+    snapshot = Bash(vault-query read <track_path> Direction)       // Direction — the stable framing
+    latest = Bash(vault-query read <track_path> <highest Log sub-address read off the shape>)   // the newest Log entry — the current snapshot
+    open_tickets = Bash(vault-query tickets --track <slug> --status open --format text)   // what this track still owes; empty stdout = none
+    do("present Direction + latest Log entry + open tickets as the resume snapshot; offer to unfold Decisions / older Log entries by address on demand")
 
     query = do("derive a short phrase from the track's Direction and description — the topic the user is working on")
     grounding = Bash(vault-query consult "<query>" --format markdown)
@@ -61,9 +62,23 @@ vault-query resolves the project from the current working directory by walking u
 
 ### Presenting a track
 
-Get the shape first, unfold on demand — a mature track runs hundreds of lines / tens of thousands of tokens, so reading the whole body every resume is wasteful. `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its line and estimated-token counts, and each Log entry addressed individually as `6.N`. From that map:
+Get the shape first, unfold on demand — a mature track runs hundreds of lines / tens of thousands of tokens, so reading the whole body every resume is wasteful. `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its line and estimated-token counts, and each Log entry addressed individually as a sub-address under Log (`<Log's own number>.N`). From that map:
 
-- **Snapshot** = Direction (address `1`) + the highest-numbered Log entry (`vault-query read <track_path> <6.N>`). The latest Log entry is the current state; Direction is the stable framing. Present these two.
-- **On demand** — unfold Decisions (`4`), Backlog (`5`), an older Log entry, or any section by its address (`vault-query read <track_path> <addr>`), or Read an exact line range from the overview's line numbers. Decisions and Backlog are append-only: when the user goes deeper into either, unfold the whole section and treat every item as current. Glossary and Files of interest are stable — reach for them only when a term or path needs resolving.
+- **Snapshot** = Direction (address `Direction`) + the highest-numbered Log entry (`vault-query read <track_path> <its sub-address>`). The latest Log entry is the current state; Direction is the stable framing. Present these two.
+- **On demand** — unfold Decisions (address `Decisions`), an older Log entry, or any section by its address (`vault-query read <track_path> <addr>`), or Read an exact line range from the overview's line numbers. Decisions is append-only: when the user goes deeper into it, unfold the whole section and treat every item as current. Glossary and Files of interest are stable — reach for them only when a term or path needs resolving.
 
-`vault-query read` is the vault-facing wrapper over `mdread`, so the address scheme (`0`/`text`, `1`, `6.N`, heading slugs, `fm[.path]`, `links`) and the `--depth`/`--threshold`/`--full` controls are the same ones `mdread` applies to any markdown file outside the vault.
+Address sections by heading slug (`Direction`, `Decisions`, `Log`), not by position: a slug survives sections being added or removed, a positional number does not. Only Log entries need a positional sub-address, and the overview prints each one, so read it off the map rather than assuming a fixed section number.
+
+`vault-query read` is the vault-facing wrapper over `mdread`, so the address scheme (`0`/`text`, section numbers, sub-addresses, heading slugs, `fm[.path]`, `links`) and the `--depth`/`--threshold`/`--full` controls are the same ones `mdread` applies to any markdown file outside the vault.
+
+### Open tickets for the track
+
+The work a track still owes lives in tickets, not in the track file. On resume, run `vault-query tickets --track <slug> --status open --format text` — `<slug>` is the track's slug (file name minus the `track-` prefix). It exits 0 and prints one line per open ticket, no header:
+
+```
+ticket-slug — One-sentence description copied from the ticket's frontmatter. (status: open) (track: work-tracking-model) (41 projects/nix/ticket-ticket-slug.md)
+```
+
+Line shape: `<slug> — <description> (status: <status>) [(track: <slug>)] [(requires: <slug>)] (<vault-relative path>)`. The `(track: …)` and `(requires: …)` fields appear only when set; `requires:` names a ticket that must land first, so a ticket carrying one is blocked.
+
+Exit 0 with empty stdout means the track claims no open tickets — say so rather than inventing one. Present the list with the snapshot, and unfold a ticket's own body with `vault-query read <ticket path>` when the user picks one to work on.

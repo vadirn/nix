@@ -6,7 +6,7 @@ description: >
   "wrapping up", "save what we did", "log what we accomplished", "save our progress", "end of session",
   "save session", "we finished X and still need to do Y". Triggers on resume phrases: "what was I working on",
   "where did we leave off", "continue where I left off", "pick up the track". Track creation, status changes,
-  Decisions/Backlog/Log edits, atomic write to disk all live here. Self-contained: no vault, no external
+  Decisions/Log edits, atomic write to disk all live here. Self-contained: no vault, no external
   config, no extra tools — just the repo working tree.
 ---
 

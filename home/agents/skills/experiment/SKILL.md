@@ -170,7 +170,7 @@ Whichever runner is chosen, the Execution field captures the exact invocation ve
 
 ### Auto-link rule
 
-The auto-link step appends one line to an active track's `## Experiments` section. The section is inserted after `## Decisions` and before `## Backlog` if it does not already exist. The link format is:
+The auto-link step appends one line to an active track's `## Experiments` section. The section is inserted after `## Decisions` and before `## Log` if it does not already exist. The link format is:
 
 ```
 - [[35 experiments/YYYY-MM-DD-<slug>|<claim summary>]] — <verdict>

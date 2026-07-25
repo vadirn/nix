@@ -30,7 +30,7 @@ period     = resolve_period(recipients, args)   // see Reference: Period; always
 
 // Gather, merged by date
 commits = Bash(git -C <repo> log --since=<period> --stat)
-track   = do("read the project's track-*.md: Decisions, Backlog, Log")
+track   = do("read the project's track-*.md: Direction, Decisions, Log")
 weekly  = do("read current + prior ISO-week weekly-log Activity, if present")
 
 // ONE stakeholder-agnostic pass, then confirm
@@ -73,7 +73,7 @@ framing (what the project is for, who counts in what).
 | blocked_why      | [artifact] if a track note says so; else [inferred] from a stall; else blank → [elicited] |
 | at_risk          | almost always [inferred] or [elicited] — no artifact states risk                          |
 | revised_estimate | [elicited] unless a track note revised it                                                 |
-| next             | [artifact] from Backlog/Direction; else [inferred]                                        |
+| next             | [artifact] from Direction/Log; else [inferred]                                            |
 | counterfactual   | for non-feature work; render as "[claim — verify before sending]"                         |
 
 ### Projection

@@ -67,5 +67,5 @@ to create the first one. Leave directory creation to the save path.
 ### Presenting a track
 
 Read the whole body. The latest Log entry (highest `### N.` heading) is the current snapshot. Direction,
-Glossary, and Files of interest are stable across sessions. Decisions and Backlog are append-only — read
-all entries; treat older items as still in force.
+Glossary, and Files of interest are stable across sessions. Decisions is append-only — read all entries;
+treat older ones as still in force.
