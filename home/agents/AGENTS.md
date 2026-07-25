@@ -64,7 +64,7 @@ Push is manual: the user runs `git push` themselves, usually via lazygit, and a 
 
 ## Web
 
-Use the `firecrawl-cli` skill for web search and fetching; it routes to `firecrawl-search`, `firecrawl-scrape`, and siblings, and outputs markdown only. WebSearch and WebFetch are blocked. Download a file with `curl -L -o "$TMPDIR/<name>" <url>`.
+Use the Firecrawl MCP server, which returns markdown: `firecrawl_search` for a query, `firecrawl_scrape` for a known URL, `firecrawl_map` then `firecrawl_scrape` to reach a subpage, `firecrawl_crawl` for a whole section, `firecrawl_parse` for a local PDF or DOCX. WebSearch and WebFetch are blocked. Download a file with `curl -L -o "$TMPDIR/<name>" <url>`.
 
 ## Plans
 
