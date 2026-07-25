@@ -18,14 +18,6 @@
   "permissions": {
     "allow": [
       "Skill(cut)",
-      "Skill(firecrawl-cli)",
-      "Skill(firecrawl-search)",
-      "Skill(firecrawl-scrape)",
-      "Skill(firecrawl-crawl)",
-      "Skill(firecrawl-map)",
-      "Skill(firecrawl-download)",
-      "Skill(firecrawl-agent)",
-      "Skill(firecrawl-instruct)",
       "Skill(playground)",
       "Skill(reflect)",
       "Skill(tdd)",
@@ -54,7 +46,6 @@
       "Bash(gh run view *)",
       "Bash(gh run list *)",
       "Bash(gh pr create *)",
-      "Bash(firecrawl *)",
       "Skill(vault)",
       "Skill(pr)",
       "Bash(bunx @tobilu/qmd *)",
@@ -79,7 +70,6 @@
     "deny": [],
     "defaultMode": "auto"
   },
-  "model": "fable",
   "enableAllProjectMcpServers": true,
   "hooks": {
     "Notification": [
@@ -288,12 +278,8 @@
         "~/Pictures/vidgen",
         "$TMPDIR"
       ],
-      "denyRead": [
-        "~/.ssh"
-      ],
-      "allowRead": [
-        "~/.ssh/*.pub"
-      ]
+      "denyRead": ["~/.ssh"],
+      "allowRead": ["~/.ssh/*.pub"]
     },
     "credentials": {
       "files": [
@@ -315,7 +301,7 @@
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "effortLevel": "low",
+  "effortLevel": "xhigh",
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,

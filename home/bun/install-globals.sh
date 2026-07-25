@@ -15,7 +15,6 @@ set -euo pipefail
 
 bun install -g --minimum-release-age=0 \
   modern-web-guidance@0.0.169 \
-  firecrawl-cli@1.18.0 \
   vercel@53.3.2 \
   @playwright/cli@0.1.1 \
   @playwright/mcp@0.0.76 \

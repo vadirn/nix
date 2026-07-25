@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Block WebSearch/WebFetch and route to the firecrawl-cli skill.
+# Block WebSearch/WebFetch and route to the Firecrawl MCP server.
 set -euo pipefail
 
-REASON="WebSearch and WebFetch are blocked. Use the firecrawl-cli skill instead (firecrawl-search for queries, firecrawl-scrape for URLs)."
+REASON="WebSearch and WebFetch are blocked. Use the Firecrawl MCP server instead (firecrawl_search for queries, firecrawl_scrape for URLs)."
 
 jq -n --arg reason "$REASON" '{
   "hookSpecificOutput": {

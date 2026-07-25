@@ -18,8 +18,7 @@ References are raw captures. They contain the source link and metadata, not your
 
 ## Frontmatter
 
-vault_root = Bash(vault-query config).vault_root
-Read(<vault_root>/templates/<chosen>.md) — Web.md, Book.md, Conversation.md, or Reference.md.
+vault_root = Bash(vault-query config).vault_root Read(<vault_root>/templates/<chosen>.md) — Web.md, Book.md, Conversation.md, or Reference.md.
 
 - `type` — always `reference`
 - `description` — 1 sentence describing what this source is about
@@ -67,4 +66,4 @@ When asked to edit or enrich an existing reference:
 
 - Follow obsidian-markdown skill for Obsidian syntax
 - Leave source summarization to cards; references are raw captures only
-- When writing `description`, read the source first (use firecrawl, fallback to WebFetch). Base the description on the actual content, not the title.
+- When writing `description`, read the source first with `firecrawl_scrape` (WebFetch is blocked). Base the description on the actual content, not the title.

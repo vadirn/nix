@@ -12,7 +12,6 @@ in {
       "**/.claude/settings.local.json"
       "**/.vault.config.json"
       "**/.claude-plans/"
-      "**/.firecrawl/"
       "**/.playwright-mcp/"
     ];
     settings = {
