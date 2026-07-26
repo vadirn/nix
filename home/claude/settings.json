@@ -86,21 +86,11 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^Write$",
+        "matcher": "^(Write|Edit)$",
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/post-tool-format.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "^Edit$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/queue-format.sh",
+            "command": "bash ~/.claude/hooks/hint-autoformat.sh",
             "timeout": 5
           }
         ]
@@ -192,11 +182,6 @@
             "command": "bash ~/.claude/hooks/sound.sh Stop",
             "timeout": 5,
             "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/flush-format-queue.sh",
-            "timeout": 60
           },
           {
             "type": "command",
