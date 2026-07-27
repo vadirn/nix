@@ -9,6 +9,11 @@ pub struct ViewResult {
     pub headers: Vec<String>,
     pub groups: Vec<Group>,
     pub summaries: Option<Vec<String>>,
+    /// Display name of the `groupBy` property, when the view groups. TSV renders
+    /// it as a leading column rather than a `## label` heading, which would break
+    /// the one-record-per-line contract its readers parse. `None` when the view
+    /// does not group, and the TSV then has no extra column.
+    pub group_header: Option<String>,
 }
 
 impl ViewResult {
@@ -98,17 +103,31 @@ fn render_json(result: &ViewResult) -> String {
     serde_json::to_string_pretty(&records).unwrap_or_default()
 }
 
+/// Sanitize tab/newline/CR so a multiline cell can't shift columns, matching
+/// `render_table`'s collapse of in-cell newlines.
+fn tsv_cell(value: &str) -> String {
+    value.replace(['\t', '\n', '\r'], " ")
+}
+
 fn render_tsv(result: &ViewResult) -> String {
     let mut output = String::new();
+    if let Some(ref header) = result.group_header {
+        output.push_str(&tsv_cell(header));
+        output.push('\t');
+    }
     output.push_str(&result.headers.join("\t"));
     output.push('\n');
     for group in &result.groups {
         for row in &group.rows {
-            // Sanitize tab/newline/CR so a multiline cell can't shift columns,
-            // matching render_table's collapse of in-cell newlines.
-            let cells: Vec<String> = row
-                .iter()
-                .map(|c| c.replace(['\t', '\n', '\r'], " "))
+            // The label repeats on every row of its group: TSV carries no
+            // heading, so a row has to name its own group to stay self-describing.
+            let label = result
+                .group_header
+                .is_some()
+                .then(|| tsv_cell(group.label.as_deref().unwrap_or_default()));
+            let cells: Vec<String> = label
+                .into_iter()
+                .chain(row.iter().map(|c| tsv_cell(c)))
                 .collect();
             output.push_str(&cells.join("\t"));
             output.push('\n');
@@ -189,6 +208,10 @@ pub fn apply(
         headers,
         groups,
         summaries,
+        group_header: view
+            .group_by
+            .as_ref()
+            .map(|gb| resolve_display_name(&gb.property, base)),
     }
 }
 
@@ -371,6 +394,7 @@ mod tests {
                 rows: vec![vec!["test".into(), "done".into()]],
             }],
             summaries: None,
+            group_header: None,
         };
         let json = render_json(&result);
         assert!(json.contains("\"Name\": \"test\""));
@@ -389,6 +413,7 @@ mod tests {
                 ],
             }],
             summaries: None,
+            group_header: None,
         };
         let tsv = render_tsv(&result);
         assert_eq!(tsv, "Name\tStatus\na\tdone\nb\tpending\n");
@@ -405,8 +430,42 @@ mod tests {
                 rows: vec![vec!["a".into(), "line1\nline2\tcol\rend".into()]],
             }],
             summaries: None,
+            group_header: None,
         };
         let tsv = render_tsv(&result);
         assert_eq!(tsv, "Name\tNote\na\tline1 line2 col end\n");
+    }
+
+    #[test]
+    fn test_render_tsv_carries_the_group_label_as_a_column() {
+        // A grouped view renders its labels as `## heading` lines in table form,
+        // which TSV cannot do without breaking one-record-per-line. Each row
+        // names its own group instead, so no grouping is lost.
+        let result = ViewResult {
+            headers: vec!["Ticket".into(), "Status".into()],
+            groups: vec![
+                Group {
+                    label: Some("41 projects/nix".into()),
+                    rows: vec![vec!["ticket-a".into(), "open".into()]],
+                },
+                Group {
+                    label: Some("41 projects/vault".into()),
+                    rows: vec![
+                        vec!["ticket-b".into(), "open".into()],
+                        vec!["ticket-c".into(), "done".into()],
+                    ],
+                },
+            ],
+            summaries: None,
+            group_header: Some("file.folder".into()),
+        };
+        let tsv = render_tsv(&result);
+        assert_eq!(
+            tsv,
+            "file.folder\tTicket\tStatus\n\
+             41 projects/nix\tticket-a\topen\n\
+             41 projects/vault\tticket-b\topen\n\
+             41 projects/vault\tticket-c\tdone\n"
+        );
     }
 }
