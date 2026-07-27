@@ -215,14 +215,23 @@ pub fn apply(
     }
 }
 
-fn resolve_display_name(col: &str, base: &BaseFile) -> String {
-    // Try note.X, then file.X, then formula.X, then raw col name
-    let candidates = [
+/// Candidate keys under which `col` might be recorded in a `.base` file's
+/// namespaced maps — [`BaseFile::properties`] and a view's `summaries` — tried
+/// in priority order: `note.<col>`, `file.<col>`, then `col` verbatim (an
+/// already-namespaced column like `file.name` or `formula.cost` matches only
+/// here, since its own string already equals the key it was declared under).
+/// One function for both lookups, so they cannot drift into resolving the
+/// same column two different ways.
+fn namespaced_candidates(col: &str) -> [String; 3] {
+    [
         format!("note.{}", col),
         format!("file.{}", col),
         col.to_string(),
-    ];
-    for key in &candidates {
+    ]
+}
+
+fn resolve_display_name(col: &str, base: &BaseFile) -> String {
+    for key in &namespaced_candidates(col) {
         if let Some(prop) = base.properties.get(key)
             && !prop.display_name.is_empty()
         {
@@ -337,10 +346,9 @@ fn compute_summaries(
     order
         .iter()
         .map(|col| {
-            let summary_op = summary_defs
-                .get(col)
-                .or_else(|| summary_defs.get(&format!("note.{}", col)))
-                .or_else(|| summary_defs.get(&format!("formula.{}", col)));
+            let summary_op = namespaced_candidates(col)
+                .iter()
+                .find_map(|key| summary_defs.get(key));
 
             match summary_op {
                 Some(op) => {
@@ -568,5 +576,46 @@ views:
             resolve_display_name("formula.cost_per_line", &base),
             "$/line"
         );
+    }
+
+    #[test]
+    fn compute_summaries_and_resolve_display_name_share_the_file_prefixed_candidate() {
+        // Before unification, `compute_summaries` tried only `col`, `note.col`,
+        // then `formula.col` — never `file.col` — even though
+        // `resolve_display_name` already tried `file.col` for the same column.
+        // A summary declared under `file.<col>` would resolve a display name
+        // but silently vanish from the summary row. Now both lookups share
+        // `namespaced_candidates`, so `file.<col>` works for summaries too.
+        let mut fm_a = BTreeMap::new();
+        fm_a.insert("score".to_string(), serde_yaml::Value::Number(4.into()));
+        let mut fm_b = BTreeMap::new();
+        fm_b.insert("score".to_string(), serde_yaml::Value::Number(6.into()));
+        let files = vec![
+            VaultFile {
+                path: std::path::PathBuf::from("/vault/a.md"),
+                name: "a".into(),
+                frontmatter: fm_a,
+                ..Default::default()
+            },
+            VaultFile {
+                path: std::path::PathBuf::from("/vault/b.md"),
+                name: "b".into(),
+                frontmatter: fm_b,
+                ..Default::default()
+            },
+        ];
+        let formula_results = vec![BTreeMap::new(), BTreeMap::new()];
+        let mut summary_defs = BTreeMap::new();
+        summary_defs.insert("file.score".to_string(), "Sum".to_string());
+        let order = vec!["score".to_string()];
+
+        let summaries = compute_summaries(
+            &summary_defs,
+            &order,
+            &files,
+            &formula_results,
+            Path::new("/vault"),
+        );
+        assert_eq!(summaries, vec!["10".to_string()]);
     }
 }
