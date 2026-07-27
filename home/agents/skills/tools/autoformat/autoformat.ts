@@ -19,6 +19,7 @@
  *         workspace-root scripts are inherited.
  *   py    ruff check --fix, then ruff format
  *   nix   alejandra
+ *   rs    rustfmt
  *   *     ignored
  *
  * oxfmt's config is always passed explicitly with -c: its own discovery walks
@@ -326,6 +327,7 @@ type Routes = {
   formatFile: { root: string; file: string }[];
   py: string[];
   nix: string[];
+  rs: string[];
 };
 
 /**
@@ -339,6 +341,7 @@ function routeFiles(files: Set<string>): Routes {
     formatFile: [],
     py: [],
     nix: [],
+    rs: [],
   };
   for (const file of [...files].sort()) {
     const e = ext(file);
@@ -349,6 +352,7 @@ function routeFiles(files: Set<string>): Routes {
       else push(routes.oxfmtByConfig, target.config, file);
     } else if (e === "py") routes.py.push(file);
     else if (e === "nix") routes.nix.push(file);
+    else if (e === "rs") routes.rs.push(file);
   }
   return routes;
 }
@@ -404,7 +408,7 @@ function planJobs(routes: Routes): Plan {
       pm === "npm" ? ["npm", "run", "format:file", "--", file] : [pm, "run", "format:file", file];
     jobs.push({ tool: "format:file", files: [file], credit: true, cwd: root, cmd });
   }
-  const { py, nix } = routes;
+  const { py, nix, rs } = routes;
   if (py.length && need("ruff", py.length)) {
     jobs.push({
       tool: "ruff",
@@ -428,6 +432,18 @@ function planJobs(routes: Routes): Plan {
       credit: true,
       cwd: "/",
       cmd: ["alejandra", "--quiet", ...nix],
+    });
+  }
+  if (rs.length && need("rustfmt", rs.length)) {
+    jobs.push({
+      tool: "rustfmt",
+      files: rs,
+      credit: true,
+      cwd: "/",
+      // Standalone rustfmt defaults to edition 2015; this workspace is
+      // edition = "2024" (Cargo.toml), so the flag is required or modern
+      // syntax misparses.
+      cmd: ["rustfmt", "--edition", "2024", ...rs],
     });
   }
 

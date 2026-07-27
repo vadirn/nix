@@ -251,17 +251,17 @@ test("a workspace-root format:file is inherited by a sub-package", () => {
 // throws a named error if that anchor goes missing, rather than silently
 // reporting an empty list as if the two sides agreed.
 
-/** Extensions autoformat.ts routes: WEB_EXTS plus the py and nix branches in routeFiles. */
+/** Extensions autoformat.ts routes: WEB_EXTS plus the py, nix, and rs branches in routeFiles. */
 function routerExtensions(src: string): string[] {
   const webExts = src.match(/const WEB_EXTS = new Set\(\[([\s\S]*?)\]\)/);
   if (!webExts) {
     throw new Error("parity test: WEB_EXTS literal not found in autoformat.ts — update the parser");
   }
   const web = [...webExts[1].matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]);
-  const branches = [...src.matchAll(/e === "(py|nix)"/g)].map((m) => m[1]);
-  if (branches.length < 2) {
+  const branches = [...src.matchAll(/e === "(py|nix|rs)"/g)].map((m) => m[1]);
+  if (branches.length < 3) {
     throw new Error(
-      "parity test: py/nix routing branches not found in autoformat.ts — update the parser",
+      "parity test: py/nix/rs routing branches not found in autoformat.ts — update the parser",
     );
   }
   return [...web, ...branches];

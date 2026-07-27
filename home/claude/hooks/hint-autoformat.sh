@@ -14,8 +14,8 @@
 #
 # Silent unless the path carries an extension autoformat routes — the list is
 # kept in sync with the WEB_EXTS set in
-# home/agents/skills/tools/autoformat/autoformat.ts, plus that file's py and
-# nix routing branches. Never blocks: exit 0 always.
+# home/agents/skills/tools/autoformat/autoformat.ts, plus that file's py,
+# nix, and rs routing branches. Never blocks: exit 0 always.
 
 set -uo pipefail
 
@@ -34,7 +34,7 @@ case "$FILE" in
 esac
 
 case "${FILE##*.}" in
-  ts | tsx | js | jsx | mjs | cjs | json | jsonc | md | html | css | py | nix) ;;
+  ts | tsx | js | jsx | mjs | cjs | json | jsonc | md | html | css | py | nix | rs) ;;
   *) exit 0 ;;
 esac
 
