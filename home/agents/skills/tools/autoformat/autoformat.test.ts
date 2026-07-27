@@ -266,21 +266,27 @@ test("rustfmt formats the named file without following mod into its siblings", (
 // paying bun's ~113ms startup on every Write/Edit. Parsing source text this
 // way is inherently a little brittle, so each extractor anchors on a literal
 // that would only change alongside the fact it reads (the WEB_EXTS set, the
-// py/nix routing branches, the FROZEN join, the hook's case patterns) and
-// throws a named error if that anchor goes missing, rather than silently
-// reporting an empty list as if the two sides agreed.
+// single-extension e === "..." branches in routeFiles, the FROZEN join, the
+// hook's case patterns) and throws a named error if that anchor goes
+// missing, rather than silently reporting an empty list as if the two sides
+// agreed.
 
-/** Extensions autoformat.ts routes: WEB_EXTS plus the py, nix, and rs branches in routeFiles. */
+/**
+ * Extensions autoformat.ts routes: WEB_EXTS plus every single-extension
+ * `e === "..."` branch in routeFiles. Generic on purpose — a whitelist of
+ * today's branches (py, nix, rs) would go blind the moment a fourth one is
+ * added, which is exactly the drift this test exists to catch.
+ */
 function routerExtensions(src: string): string[] {
   const webExts = src.match(/const WEB_EXTS = new Set\(\[([\s\S]*?)\]\)/);
   if (!webExts) {
     throw new Error("parity test: WEB_EXTS literal not found in autoformat.ts — update the parser");
   }
   const web = [...webExts[1].matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]);
-  const branches = [...src.matchAll(/e === "(py|nix|rs)"/g)].map((m) => m[1]);
-  if (branches.length < 3) {
+  const branches = [...src.matchAll(/e === "([a-z0-9]+)"/g)].map((m) => m[1]);
+  if (branches.length === 0) {
     throw new Error(
-      "parity test: py/nix/rs routing branches not found in autoformat.ts — update the parser",
+      'parity test: no e === "..." routing branches found in autoformat.ts — update the parser',
     );
   }
   return [...web, ...branches];
