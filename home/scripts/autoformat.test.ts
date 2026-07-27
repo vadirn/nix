@@ -23,7 +23,7 @@ function work(): string {
 function af(args: string[], opts: { cwd: string; env?: Record<string, string> } = { cwd: "/" }) {
   const proc = Bun.spawnSync(["bun", CLI, ...args], {
     cwd: opts.cwd,
-    env: { ...process.env, ...(opts.env ?? {}) },
+    env: { ...process.env, ...opts.env },
   });
   return {
     code: proc.exitCode,
