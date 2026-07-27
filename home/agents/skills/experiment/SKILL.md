@@ -1,11 +1,7 @@
 ---
 name: experiment
 description: >
-  Test an existing thing's behavior against a falsifiable claim and capture the result as a
-  structured record in the vault. Triggers: /experiment, "run an experiment", "test this claim",
-  "verify whether", "does X actually", "check if X works", "is X true", "falsifiable claim".
-  Skip when building a new artifact (use /prototype), interrogating plan logic (use /probe),
-  or rating confidence in a recommendation (use /grade).
+  Test an existing thing's behavior against a falsifiable claim and capture the result as a structured record in the vault. Triggers: /experiment, "run an experiment", "test this claim", "verify whether", "does X actually", "check if X works", "is X true", "falsifiable claim". Skip when building a new artifact (use /prototype), interrogating plan logic (use /probe), or rating confidence in a recommendation (use /grade).
 ---
 
 # Experiment

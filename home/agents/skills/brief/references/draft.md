@@ -1,23 +1,16 @@
 # draft — compose a per-stakeholder update
 
-Goal: produce a status update that closes impression distance for one stakeholder, in their
-currency, carrying the communication-only content no artifact holds — without fabricating any
-of it. End at a draft in the terminal; never send.
+Goal: produce a status update that closes impression distance for one stakeholder, in their currency, carrying the communication-only content no artifact holds — without fabricating any of it. End at a draft in the terminal; never send.
 
 ## Why the seam exists
 
-The six communication-only fields (in progress · blocked + why · at risk · revised estimate ·
-next · counterfactual) are, by definition, the part **no artifact carries**. So you cannot
-read them out of git. You can only do three things with each field, and you must be honest
-about which:
+The six communication-only fields (in progress · blocked + why · at risk · revised estimate · next · counterfactual) are, by definition, the part **no artifact carries**. So you cannot read them out of git. You can only do three things with each field, and you must be honest about which:
 
 - **artifact** — genuinely read from git/track (mostly the _shipped_ line and _in progress_).
 - **inferred** — your guess from commit cadence or a track note. Pre-fill it, but **mark it** so the user knows to check it. Never assert an inferred field as fact.
 - **elicited** — the user supplies or confirms it in the one review pass below.
 
-This provenance is the laundering guard. Without it the model writes plausible relational prose
-over thin work — proof-of-care with no proof-of-work, the failure the concept names. Marked
-provenance means an unverified field stays visibly unverified instead of hardening into prose.
+This provenance is the laundering guard. Without it the model writes plausible relational prose over thin work — proof-of-care with no proof-of-work, the failure the concept names. Marked provenance means an unverified field stays visibly unverified instead of hardening into prose.
 
 ## Procedure
 
@@ -56,32 +49,25 @@ if user accepts a draft:
 
 ### Period
 
-Default = since the chosen stakeholder's `last_drafted`. `--all` → the earliest `last_drafted`
-among the chosen (the widest window). No `last_drafted` (or no roster) → last 7 days. `--since
-<ref>` overrides (git rev, date, "last monday"). Always print the resolved range, e.g.
-"Period: Jun 9–18", so a wrong default is visible and correctable.
+Default = since the chosen stakeholder's `last_drafted`. `--all` → the earliest `last_drafted` among the chosen (the widest window). No `last_drafted` (or no roster) → last 7 days. `--since <ref>` overrides (git rev, date, "last monday"). Always print the resolved range, e.g. "Period: Jun 9–18", so a wrong default is visible and correctable.
 
 ### Digest
 
-ONE stakeholder-agnostic pass; attach provenance to each field. `context.md` gives durable
-framing (what the project is for, who counts in what).
+ONE stakeholder-agnostic pass; attach provenance to each field. `context.md` gives durable framing (what the project is for, who counts in what).
 
-| field            | provenance                                                                                |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| shipped          | inspection-closeable, ONE line, [artifact]                                                |
-| in_progress      | [artifact] from open work / WIP commits                                                   |
-| blocked_why      | [artifact] if a track note says so; else [inferred] from a stall; else blank → [elicited] |
-| at_risk          | almost always [inferred] or [elicited] — no artifact states risk                          |
-| revised_estimate | [elicited] unless a track note revised it                                                 |
-| next             | [artifact] from Direction/Log; else [inferred]                                            |
-| counterfactual   | for non-feature work; render as "[claim — verify before sending]"                         |
+| field | provenance |
+| --- | --- |
+| shipped | inspection-closeable, ONE line, [artifact] |
+| in_progress | [artifact] from open work / WIP commits |
+| blocked_why | [artifact] if a track note says so; else [inferred] from a stall; else blank → [elicited] |
+| at_risk | almost always [inferred] or [elicited] — no artifact states risk |
+| revised_estimate | [elicited] unless a track note revised it |
+| next | [artifact] from Direction/Log; else [inferred] |
+| counterfactual | for non-feature work; render as "[claim — verify before sending]" |
 
 ### Projection
 
-For each recipient, surface their stored assumption first so staleness is visible:
-"Drafting for Sarah: counts in features+dates, waits to be told. Stale? edit context.md".
-When `--all` gathered a wider window, trim each draft to that stakeholder's own `last_drafted`.
-Then translate the digest into their currency:
+For each recipient, surface their stored assumption first so staleness is visible: "Drafting for Sarah: counts in features+dates, waits to be told. Stale? edit context.md". When `--all` gathered a wider window, trim each draft to that stakeholder's own `last_drafted`. Then translate the digest into their currency:
 
 - drop inspection-closeable detail they already watch (if they inspect PRs, don't recap merges)
 - render infra/exploration as its counterfactual in their currency, not in infra terms
@@ -90,10 +76,7 @@ Then translate the digest into their currency:
 
 ### Watermark
 
-On the user accepting a draft in-session ("good", "send it", "done"), advance that stakeholder's
-`last_drafted` to today — a surgical edit to that entry in context.md frontmatter. This is brief's
-ONLY write. It tracks "last accepted draft" (observable), not "last sent" (which the skill cannot
-see). On heavy edits, advance only when done.
+On the user accepting a draft in-session ("good", "send it", "done"), advance that stakeholder's `last_drafted` to today — a surgical edit to that entry in context.md frontmatter. This is brief's ONLY write. It tracks "last accepted draft" (observable), not "last sent" (which the skill cannot see). On heavy edits, advance only when done.
 
 ## Draft template
 
