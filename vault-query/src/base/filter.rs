@@ -95,7 +95,17 @@ pub fn evaluate(expr: &str, file: &VaultFile, vault_root: &Path) -> Result<bool>
     // field.length > N
     if let Some(caps) = LENGTH_RE.captures(expr) {
         let field = &caps[1];
-        let threshold: usize = caps[2].parse().unwrap_or(0);
+        let threshold: usize = match caps[2].parse() {
+            Ok(n) => n,
+            // The regex only admits digits, so this is an overflow, not a
+            // format error — but silently treating it as `0` would turn
+            // `length > <huge N>` into `length > 0`, a wildly different query
+            // that matches almost every file instead of none.
+            Err(_) => bail!(
+                "length threshold out of range in filter expression: {}",
+                expr
+            ),
+        };
         return Ok(frontmatter::get_seq_len(&file.frontmatter, field) > threshold);
     }
 
@@ -264,6 +274,22 @@ mod tests {
 
         let f2 = make_file("cp2", vec![], "cp2.md");
         assert!(!evaluate("decisions.length > 0", &f2, Path::new("/vault")).unwrap());
+    }
+
+    #[test]
+    fn test_length_threshold_overflow_errors_loudly() {
+        // The regex only admits digits, so a threshold too large for `usize`
+        // is the one way `caps[2].parse()` can fail. Silently falling back to
+        // `unwrap_or(0)` would turn this into `decisions.length > 0` — almost
+        // the opposite query — so it must bail like an unrecognised expression.
+        let f = make_file("cp1", vec![], "cp1.md");
+        let huge = "9".repeat(40); // far beyond u64::MAX (20 digits)
+        let expr = format!("decisions.length > {huge}");
+        let err = evaluate(&expr, &f, Path::new("/vault")).unwrap_err();
+        assert!(
+            err.to_string().contains("length threshold out of range"),
+            "{err}"
+        );
     }
 
     #[test]
