@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "libs/*",
+    "tools/*",
     "textkit",
     "imagen-fal/scripts",
     "vidgen-fal/scripts",

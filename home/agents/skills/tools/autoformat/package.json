@@ -1,0 +1,11 @@
+{
+  "name": "autoformat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The autoformat CLI: one file routing each path to the formatter its extension calls for. A workspace member only to inherit the pinned typecheck, lint, and test — ~/.local/bin/autoformat (home/default.nix) symlinks autoformat.ts itself and runs it under its shebang. Declare no dependencies here: a runtime dependency would make the CLI need an installed node_modules, so it would stop working wherever bun install has not been run. See the header of autoformat.ts.",
+  "scripts": {
+    "test": "bun test",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
+  }
+}
