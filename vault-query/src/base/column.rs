@@ -60,6 +60,11 @@ impl<'a> ColumnRef<'a> {
     ) -> String {
         match self {
             Self::FileName => file.name.clone(),
+            // No separator rewriting here, matching `project_base::init`'s
+            // removal of the same call: this tool runs on macOS only, where
+            // `to_string_lossy` on a `strip_prefix` result already yields `/`
+            // separators, so there is no backslash for the call to fix — only
+            // a literal backslash in a real folder name to corrupt.
             Self::FileFolder => file
                 .path
                 .parent()
@@ -67,7 +72,7 @@ impl<'a> ColumnRef<'a> {
                     p.strip_prefix(vault_root)
                         .unwrap_or(p)
                         .to_string_lossy()
-                        .replace('\\', "/")
+                        .into_owned()
                 })
                 .unwrap_or_default(),
             Self::FileCtime => {
@@ -151,6 +156,24 @@ mod tests {
                 Path::new("/vault")
             ),
             ""
+        );
+    }
+
+    #[test]
+    fn value_preserves_a_literal_backslash_in_a_folder_name() {
+        // Same defect as `project_base::init`'s removed `.replace('\\', "/")`:
+        // this tool is macOS-only, so `to_string_lossy` on a `strip_prefix`
+        // result already yields `/` separators — the call had no separator
+        // left to fix, only a literal backslash in a real folder name (an
+        // ordinary character on macOS) to corrupt. Unlike `init`, this is
+        // display-only, so it never desynchronized a filter — but it is the
+        // same bug, so it goes too.
+        let mut f = make_file("note", vec![]);
+        f.path = PathBuf::from("/vault/41 projects/od\\d/note.md");
+        let formulas = BTreeMap::new();
+        assert_eq!(
+            ColumnRef::parse("file.folder").value(&f, &formulas, Path::new("/vault")),
+            "41 projects/od\\d"
         );
     }
 
