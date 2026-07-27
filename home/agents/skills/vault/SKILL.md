@@ -1,7 +1,7 @@
 ---
 name: vault
 description: >
-  Personal knowledge management in an Obsidian vault. Use whenever the user wants to save, find, review, or organize knowledge, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into cards, writing original notes, searching or quizzing saved content, listing active projects ("what am I working on"), explicit /vault commands, weekly-log operations (backlog/бэклог, planning, completing tasks, sleep). Excludes direct file edits not routed through /vault (editing a .md file in a code repo that is not a vault artifact), Obsidian app features (kanban, canvas, plugins, .base), web search. Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
+  Personal knowledge management in an Obsidian vault. Use whenever the user wants to save, find, review, or organize knowledge or project work, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into cards, writing original notes, filing a decided piece of work as a ticket ("file that", "make a ticket"), parking an idea with no done-condition as a scratchpad seed, listing a project's tickets or its unowned backlog, searching or quizzing saved content, listing active projects ("what am I working on"), explicit /vault commands, weekly-log operations (the daily бэклог, planning, completing tasks, sleep — not the ticket backlog). Excludes direct file edits not routed through /vault (editing a .md file in a code repo that is not a vault artifact), Obsidian app features (kanban, canvas, plugins, .base), web search. Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
 ---
 
 # Vault
@@ -144,7 +144,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `context` | Print project context.md | Yes |
 | `tracks [--view <view>]` | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC | Yes |
 | `tracks-init` | Create Tracks.base in the current project | Yes |
-| `tickets [--backlog] [--track <slug>] [--status <s>] [--project <name>]` | List tickets. `--backlog` = open and unclaimed. `--format text\|markdown\|json` | Yes |
+| `tickets [--backlog] [--track <slug>] [--status <s>] [--project <name>]` | List tickets. `--backlog` = open and owned by no track. `--format text\|markdown\|json` | Yes |
 | `get <fragment>` | Resolve an entry name to its absolute path (one per line). For handing a path to another tool; to read an entry, name it to `read` directly | No |
 | `read <FILE\|NAME> [ADDRESS]` | Structured read: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, `0`/text, `fm[.path]`, `links`). Takes a path or an entry name — an unresolvable name errors, an ambiguous one errors listing candidates. `--depth`, `--full`, `--threshold`, `--format json` | No |
 | `search <query>` | BM25 full-text search (--regex for grep mode) | No |

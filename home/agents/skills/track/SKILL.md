@@ -1,10 +1,7 @@
 ---
 name: track
 description: >
-  Read or save a per-project rolling work log at `41 projects/<project>/track-<slug>.md`.
-  Triggers: `/track`, save phrases ("wrapping up", "save session", "end of session"), resume phrases
-  ("what was I working on", "where did we leave off"). Non-track artifacts (cards/notes/references)
-  route to /vault.
+  Read or save a per-project rolling work log at `41 projects/<project>/track-<slug>.md`. Triggers: `/track`, save phrases ("wrapping up", "save session", "end of session"), resume phrases ("what was I working on", "where did we leave off"). Non-track artifacts route to /vault: cards, notes, references, tickets (one unit of decided work, sized to one PR), and scratchpad seeds (an idea with no done-condition yet).
 ---
 
 # Track
@@ -29,5 +26,4 @@ else:
 | `references/read.md` | Resume a track. Lists Active tracks, picks one, presents the body. |
 | `references/save.md` | Save session work into an existing track or create a new one.      |
 
-Tracks live in the vault at `<vault_root>/41 projects/<project>/track-<slug>.md`. The vault skill handles discovery
-(`/vault track <fragment>`); this skill handles the read/save loop.
+Tracks live in the vault at `<vault_root>/41 projects/<project>/track-<slug>.md`. The vault skill handles discovery (`/vault track <fragment>`); this skill handles the read/save loop.
