@@ -290,8 +290,7 @@ pub fn resolve_optional(
         vault_root,
         projects_path,
         project_path,
-        log_project_path: log_project_path
-            .unwrap_or_else(|| DEFAULT_LOG_PROJECT_PATH.to_string()),
+        log_project_path: log_project_path.unwrap_or_else(|| DEFAULT_LOG_PROJECT_PATH.to_string()),
         lint: lint_config,
         consult: consult_config,
         ignore,
@@ -359,7 +358,14 @@ mod tests {
     fn test_project_config_walk_up() {
         let project_dir = fixtures_dir().join("project");
         // Walk up from project dir should find .vault.config.json
-        let config = resolve(&project_dir, Path::new("/nonexistent-home"), None, None, true).unwrap();
+        let config = resolve(
+            &project_dir,
+            Path::new("/nonexistent-home"),
+            None,
+            None,
+            true,
+        )
+        .unwrap();
         assert_eq!(config.vault_root, PathBuf::from("/tmp/test-vault"));
         assert_eq!(
             config.project_path,
@@ -378,7 +384,14 @@ mod tests {
         )
         .unwrap();
 
-        let config = resolve(Path::new("/nonexistent"), tmp.path(), Some("nix"), None, true).unwrap();
+        let config = resolve(
+            Path::new("/nonexistent"),
+            tmp.path(),
+            Some("nix"),
+            None,
+            true,
+        )
+        .unwrap();
         assert_eq!(
             config.project_path,
             Some(PathBuf::from("/tmp/test-vault/41 projects/nix"))
@@ -395,10 +408,12 @@ mod tests {
             true,
         );
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("no vault config found"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("no vault config found")
+        );
     }
 
     #[test]
@@ -636,7 +651,10 @@ mod tests {
         // When no [consult] block is present, the Default impl must yield the calibrated defaults
         // from the 29-pair eval set (consult-materials/consult-eval.jsonl, Step F).
         let defaults = ConsultConfig::default();
-        assert_eq!(defaults.types, vec!["card", "note", "reference", "experiment", "ticket"]);
+        assert_eq!(
+            defaults.types,
+            vec!["card", "note", "reference", "experiment", "ticket"]
+        );
         assert_eq!(defaults.token_budget, 8000);
         assert_eq!(defaults.per_doc_token_cap, 4000);
         assert!((defaults.title_boost - 1.0).abs() < f32::EPSILON);
@@ -672,7 +690,10 @@ mod tests {
         // The overridden field:
         assert_eq!(consult.token_budget, 4000);
         // Everything else stays at calibrated defaults (Step F, 29-pair eval):
-        assert_eq!(consult.types, vec!["card", "note", "reference", "experiment", "ticket"]);
+        assert_eq!(
+            consult.types,
+            vec!["card", "note", "reference", "experiment", "ticket"]
+        );
         assert_eq!(consult.per_doc_token_cap, 4000);
         assert!((consult.title_boost - 1.0).abs() < f32::EPSILON);
         assert!((consult.description_boost - 1.5).abs() < f32::EPSILON);

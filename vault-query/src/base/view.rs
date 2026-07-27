@@ -57,7 +57,13 @@ fn render_table(result: &ViewResult) -> String {
         if let Some(ref summaries) = result.summaries {
             let cells: Vec<String> = summaries
                 .iter()
-                .map(|c| if c.is_empty() { String::new() } else { format!("**{}**", c) })
+                .map(|c| {
+                    if c.is_empty() {
+                        String::new()
+                    } else {
+                        format!("**{}**", c)
+                    }
+                })
                 .collect();
             output.push_str("| ");
             output.push_str(&cells.join(" | "));
@@ -80,7 +86,10 @@ fn render_json(result: &ViewResult) -> String {
                 map.insert(header.clone(), serde_json::Value::String(value));
             }
             if let Some(ref label) = group.label {
-                map.insert("_group".to_string(), serde_json::Value::String(label.clone()));
+                map.insert(
+                    "_group".to_string(),
+                    serde_json::Value::String(label.clone()),
+                );
             }
             records.push(serde_json::Value::Object(map));
         }
@@ -96,7 +105,10 @@ fn render_tsv(result: &ViewResult) -> String {
         for row in &group.rows {
             // Sanitize tab/newline/CR so a multiline cell can't shift columns,
             // matching render_table's collapse of in-cell newlines.
-            let cells: Vec<String> = row.iter().map(|c| c.replace(['\t', '\n', '\r'], " ")).collect();
+            let cells: Vec<String> = row
+                .iter()
+                .map(|c| c.replace(['\t', '\n', '\r'], " "))
+                .collect();
             output.push_str(&cells.join("\t"));
             output.push('\n');
         }
@@ -110,11 +122,7 @@ pub struct Group {
 }
 
 /// Apply a view to filtered files, producing renderable rows.
-pub fn apply(
-    view: &ViewDef,
-    base: &BaseFile,
-    files: &mut Vec<VaultFile>,
-) -> ViewResult {
+pub fn apply(view: &ViewDef, base: &BaseFile, files: &mut Vec<VaultFile>) -> ViewResult {
     // Compute formulas for each file, then sort files and formulas together
     let mut formula_results: Vec<BTreeMap<String, String>> = files
         .iter()
@@ -197,11 +205,7 @@ fn resolve_display_name(col: &str, base: &BaseFile) -> String {
     col.to_string()
 }
 
-fn resolve_value(
-    col: &str,
-    file: &VaultFile,
-    formulas: &BTreeMap<String, String>,
-) -> String {
+fn resolve_value(col: &str, file: &VaultFile, formulas: &BTreeMap<String, String>) -> String {
     crate::base::column::ColumnRef::parse(col).value(file, formulas)
 }
 
@@ -243,10 +247,8 @@ fn sort_files(
     });
 
     // Apply permutation: zip into pairs, reorder, unzip
-    let mut pairs: Vec<(VaultFile, BTreeMap<String, String>)> = files
-        .drain(..)
-        .zip(formula_results.drain(..))
-        .collect();
+    let mut pairs: Vec<(VaultFile, BTreeMap<String, String>)> =
+        files.drain(..).zip(formula_results.drain(..)).collect();
     let reordered: Vec<(VaultFile, BTreeMap<String, String>)> = indices
         .iter()
         .map(|&i| std::mem::take(&mut pairs[i]))
@@ -269,7 +271,10 @@ fn build_groups(
         if seen_set.insert(label.clone()) {
             seen.push(label.clone());
         }
-        groups_map.entry(label.clone()).or_default().push(rows[i].clone());
+        groups_map
+            .entry(label.clone())
+            .or_default()
+            .push(rows[i].clone());
     }
 
     // Sort groups
@@ -298,7 +303,8 @@ fn compute_summaries(
     order
         .iter()
         .map(|col| {
-            let summary_op = summary_defs.get(col)
+            let summary_op = summary_defs
+                .get(col)
                 .or_else(|| summary_defs.get(&format!("note.{}", col)))
                 .or_else(|| summary_defs.get(&format!("formula.{}", col)));
 

@@ -3,7 +3,12 @@ use std::path::Path;
 
 use crate::{frontmatter, vault};
 
-pub fn run(cfg: &crate::config::ResolvedConfig, folder: Option<&Path>, count: bool, tag: Option<&str>) -> Result<()> {
+pub fn run(
+    cfg: &crate::config::ResolvedConfig,
+    folder: Option<&Path>,
+    count: bool,
+    tag: Option<&str>,
+) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let root = vault::resolve_root(vault_root, folder);
 
@@ -21,10 +26,7 @@ pub fn run(cfg: &crate::config::ResolvedConfig, folder: Option<&Path>, count: bo
     if count {
         println!("{}", files.len());
     } else {
-        let mut names: Vec<String> = files
-            .iter()
-            .map(|f| f.relative_path(vault_root))
-            .collect();
+        let mut names: Vec<String> = files.iter().map(|f| f.relative_path(vault_root)).collect();
         names.sort();
         for name in names {
             println!("{}", name);

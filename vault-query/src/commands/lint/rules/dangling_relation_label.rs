@@ -22,12 +22,7 @@ impl Rule for DanglingRelationLabel {
 
     fn check(&self, ctx: &LintContext) -> Vec<Finding> {
         let mut findings = Vec::new();
-        for ((file, edges), nodes) in ctx
-            .files
-            .iter()
-            .zip(&ctx.relations)
-            .zip(&ctx.local_nodes)
-        {
+        for ((file, edges), nodes) in ctx.files.iter().zip(&ctx.relations).zip(&ctx.local_nodes) {
             for edge in edges {
                 // A from-label, when present (multi-node note, D26), is itself a
                 // local node label.

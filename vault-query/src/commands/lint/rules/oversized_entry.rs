@@ -97,7 +97,10 @@ mod tests {
     fn check_with_cap(files: Vec<crate::vault::VaultFile>, cap: usize) -> Vec<Finding> {
         let root = PathBuf::from("/vault");
         let ctx = LintContext::build(&root, &files, &[]);
-        OversizedEntry { per_doc_token_cap: cap }.check(&ctx)
+        OversizedEntry {
+            per_doc_token_cap: cap,
+        }
+        .check(&ctx)
     }
 
     // 50 reps × 10 chars = 500 chars → ~125 est tokens.
@@ -120,7 +123,9 @@ mod tests {
         assert_eq!(findings[0].severity, Severity::Warn);
         assert!(
             findings[0].message.contains("card 'BigCard'")
-                && findings[0].message.contains("exceeds consult per-doc cap (100)"),
+                && findings[0]
+                    .message
+                    .contains("exceeds consult per-doc cap (100)"),
             "unexpected message: {}",
             findings[0].message
         );
@@ -220,7 +225,12 @@ mod tests {
         assert!(check_with_cap(files, 200).is_empty());
     }
 
-    fn make_superseded_file(name: &str, path: &str, type_val: &str, body: &str) -> crate::vault::VaultFile {
+    fn make_superseded_file(
+        name: &str,
+        path: &str,
+        type_val: &str,
+        body: &str,
+    ) -> crate::vault::VaultFile {
         let content = format!("---\ntype: {type_val}\nsuperseded: true\n---\n{body}");
         let mut fm = BTreeMap::new();
         fm.insert("type".to_string(), Value::String(type_val.to_string()));
@@ -242,7 +252,10 @@ mod tests {
             "card",
             &big_body(),
         )];
-        assert!(check_with_cap(files, 100).is_empty(), "superseded card must not fire oversized-entry");
+        assert!(
+            check_with_cap(files, 100).is_empty(),
+            "superseded card must not fire oversized-entry"
+        );
     }
 
     #[test]
@@ -257,6 +270,9 @@ mod tests {
             content,
             ..Default::default()
         };
-        assert!(check_with_cap(vec![file], 1).is_empty(), "checkpoint must not fire oversized-entry");
+        assert!(
+            check_with_cap(vec![file], 1).is_empty(),
+            "checkpoint must not fire oversized-entry"
+        );
     }
 }

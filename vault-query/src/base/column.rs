@@ -95,7 +95,10 @@ mod tests {
         assert_eq!(ColumnRef::parse("note.status"), ColumnRef::Note("status"));
         assert_eq!(ColumnRef::parse("status"), ColumnRef::Bare("status"));
         // A bare name that merely contains a dot is not a known prefix.
-        assert_eq!(ColumnRef::parse("file.other"), ColumnRef::Bare("file.other"));
+        assert_eq!(
+            ColumnRef::parse("file.other"),
+            ColumnRef::Bare("file.other")
+        );
     }
 
     #[test]
@@ -110,7 +113,10 @@ mod tests {
         let f = make_file("cp1", vec![]);
         let mut formulas = BTreeMap::new();
         formulas.insert("cost".to_string(), "0.025".to_string());
-        assert_eq!(ColumnRef::parse("formula.cost").value(&f, &formulas), "0.025");
+        assert_eq!(
+            ColumnRef::parse("formula.cost").value(&f, &formulas),
+            "0.025"
+        );
         // Unknown formula resolves to empty rather than panicking.
         assert_eq!(ColumnRef::parse("formula.missing").value(&f, &formulas), "");
     }

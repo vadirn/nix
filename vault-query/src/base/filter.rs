@@ -1,6 +1,6 @@
 use crate::frontmatter;
 use crate::vault::VaultFile;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use regex::Regex;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -24,12 +24,12 @@ static CONTAINS_ANY_RE: LazyLock<Regex> =
 static LENGTH_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^(\w+)\.length\s*>\s*(\d+)$"#).unwrap());
 
-static QUOTED_STR_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#""([^"]*)""#).unwrap());
+static QUOTED_STR_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#""([^"]*)""#).unwrap());
 
 /// Parse quoted strings from a containsAny argument list.
 fn parse_contains_any_args(args: &str) -> Vec<String> {
-    QUOTED_STR_RE.captures_iter(args)
+    QUOTED_STR_RE
+        .captures_iter(args)
         .map(|c| c[1].to_string())
         .collect()
 }
@@ -175,7 +175,14 @@ mod tests {
     #[test]
     fn test_in_folder() {
         let f = make_file("cp1", vec![], "41 projects/nix/cp1.md");
-        assert!(evaluate(r#"file.inFolder("41 projects/nix")"#, &f, Path::new("/vault")).unwrap());
+        assert!(
+            evaluate(
+                r#"file.inFolder("41 projects/nix")"#,
+                &f,
+                Path::new("/vault")
+            )
+            .unwrap()
+        );
         assert!(!evaluate(r#"file.inFolder("20 cards")"#, &f, Path::new("/vault")).unwrap());
     }
 
@@ -183,7 +190,14 @@ mod tests {
     fn test_not_in_folder() {
         let f = make_file("cp1", vec![], "41 projects/nix/cp1.md");
         assert!(evaluate(r#"!file.inFolder("templates")"#, &f, Path::new("/vault")).unwrap());
-        assert!(!evaluate(r#"!file.inFolder("41 projects/nix")"#, &f, Path::new("/vault")).unwrap());
+        assert!(
+            !evaluate(
+                r#"!file.inFolder("41 projects/nix")"#,
+                &f,
+                Path::new("/vault")
+            )
+            .unwrap()
+        );
     }
 
     #[test]

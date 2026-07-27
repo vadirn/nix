@@ -215,7 +215,7 @@ pub fn is_superseded(fm: &BTreeMap<String, Value>) -> bool {
 /// Trust policy lives in [`crate::epistemic`]. Re-exported here so existing
 /// `frontmatter::EpistemicTier` / `frontmatter::epistemic_tier` call sites keep
 /// compiling after the relocation.
-pub use crate::epistemic::{epistemic_tier, EpistemicTier};
+pub use crate::epistemic::{EpistemicTier, epistemic_tier};
 
 /// Return `true` if `doc_type` matches any entry in `allowed`, or if `allowed` is empty.
 /// An empty `allowed` slice means "no filter — accept everything".
@@ -336,15 +336,30 @@ mod tests {
 
     #[test]
     fn matches_type_empty_allowed_matches_anything() {
-        assert!(matches_type("card", &[]), "non-empty type with empty allowed should match");
-        assert!(matches_type("", &[]), "empty type with empty allowed should match");
+        assert!(
+            matches_type("card", &[]),
+            "non-empty type with empty allowed should match"
+        );
+        assert!(
+            matches_type("", &[]),
+            "empty type with empty allowed should match"
+        );
     }
 
     #[test]
     fn matches_type_non_empty_requires_exact() {
         let allowed = vec!["card".to_string()];
-        assert!(matches_type("card", &allowed), "exact match should return true");
-        assert!(!matches_type("note", &allowed), "non-matching type should return false");
-        assert!(!matches_type("", &allowed), "empty type with non-empty allowed should return false");
+        assert!(
+            matches_type("card", &allowed),
+            "exact match should return true"
+        );
+        assert!(
+            !matches_type("note", &allowed),
+            "non-matching type should return false"
+        );
+        assert!(
+            !matches_type("", &allowed),
+            "empty type with non-empty allowed should return false"
+        );
     }
 }

@@ -91,11 +91,17 @@ mod tests {
 
     #[test]
     fn epistemic_tier_reads_explicit_status() {
-        let prov = parse("---\nepistemic_status: provisional\n---\n").unwrap().unwrap();
+        let prov = parse("---\nepistemic_status: provisional\n---\n")
+            .unwrap()
+            .unwrap();
         assert_eq!(epistemic_tier(&prov), EpistemicTier::Provisional);
-        let cert = parse("---\nepistemic_status: certified\n---\n").unwrap().unwrap();
+        let cert = parse("---\nepistemic_status: certified\n---\n")
+            .unwrap()
+            .unwrap();
         assert_eq!(epistemic_tier(&cert), EpistemicTier::Certified);
-        let sup = parse("---\nepistemic_status: superseded\n---\n").unwrap().unwrap();
+        let sup = parse("---\nepistemic_status: superseded\n---\n")
+            .unwrap()
+            .unwrap();
         assert_eq!(epistemic_tier(&sup), EpistemicTier::Superseded);
     }
 
@@ -117,12 +123,8 @@ mod tests {
     #[test]
     fn epistemic_tier_multiplier_ordering() {
         // certified > provisional > superseded — the load-bearing rank order.
-        assert!(
-            EpistemicTier::Certified.multiplier() > EpistemicTier::Provisional.multiplier()
-        );
-        assert!(
-            EpistemicTier::Provisional.multiplier() > EpistemicTier::Superseded.multiplier()
-        );
+        assert!(EpistemicTier::Certified.multiplier() > EpistemicTier::Provisional.multiplier());
+        assert!(EpistemicTier::Provisional.multiplier() > EpistemicTier::Superseded.multiplier());
     }
 
     #[test]
@@ -133,7 +135,9 @@ mod tests {
         assert!(is_lint_exempt(&sup));
         let chk = parse("---\ntype: checkpoint\n---\n").unwrap().unwrap();
         assert!(is_lint_exempt(&chk));
-        let tmpl = parse("---\ntype: card\ntemplate: true\n---\n").unwrap().unwrap();
+        let tmpl = parse("---\ntype: card\ntemplate: true\n---\n")
+            .unwrap()
+            .unwrap();
         assert!(is_lint_exempt(&tmpl));
         let plain = parse("---\ntype: card\n---\n").unwrap().unwrap();
         assert!(!is_lint_exempt(&plain));

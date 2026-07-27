@@ -1,11 +1,11 @@
 pub mod backlinks;
+pub mod config_cmd;
 pub mod consult;
 pub mod consult_cmd;
-pub mod lint;
-pub mod config_cmd;
 pub mod context;
 pub mod files;
 pub mod get;
+pub mod lint;
 pub mod list;
 pub mod log;
 pub mod projects;

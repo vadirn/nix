@@ -75,7 +75,8 @@ impl LineIndex {
     /// Both are clamped to `[0, len]`; a clamp that actually fires is a signal
     /// the tiling gate will surface.
     pub fn span_of(&self, sp: Sourcepos) -> Span {
-        let start = (self.line_start(sp.start.line) + sp.start.column.saturating_sub(1)).min(self.len);
+        let start =
+            (self.line_start(sp.start.line) + sp.start.column.saturating_sub(1)).min(self.len);
         let end = (self.line_start(sp.end.line) + sp.end.column).min(self.len);
         Span::new(start, end.max(start))
     }

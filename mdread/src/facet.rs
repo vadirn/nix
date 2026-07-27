@@ -108,7 +108,9 @@ pub fn links(content: &str, rule: LinkRule) -> Vec<OutLink> {
                     line: *start_line as usize,
                 });
             }
-            Inline::Autolink { url, start_line, .. } => out.push(OutLink {
+            Inline::Autolink {
+                url, start_line, ..
+            } => out.push(OutLink {
                 kind: "autolink",
                 target: url.clone(),
                 alias: None,
@@ -262,7 +264,11 @@ mod tests {
     #[test]
     fn images_are_not_outgoing_links() {
         // `![pic](img.png)` renders an asset; it is not a document to read.
-        assert!(!links(LINKY, LinkRule::All).iter().any(|l| l.target == "img.png"));
+        assert!(
+            !links(LINKY, LinkRule::All)
+                .iter()
+                .any(|l| l.target == "img.png")
+        );
     }
 
     #[test]

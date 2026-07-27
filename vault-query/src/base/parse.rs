@@ -6,10 +6,8 @@
 //! raw key/value text before the rest is handed to `serde_yaml`, then the `Raw*`
 //! shapes here are lowered into the domain structs in [`super`].
 
-use super::{
-    BaseFile, FilterSet, GroupByDef, PropertyDef, SortDef, SortDirection, ViewDef,
-};
-use anyhow::{bail, Result};
+use super::{BaseFile, FilterSet, GroupByDef, PropertyDef, SortDef, SortDirection, ViewDef};
+use anyhow::{Result, bail};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::fs;

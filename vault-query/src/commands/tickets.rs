@@ -31,7 +31,10 @@ impl FromStr for TicketFormat {
             "text" => Ok(TicketFormat::Text),
             "markdown" | "md" => Ok(TicketFormat::Markdown),
             "json" => Ok(TicketFormat::Json),
-            _ => Err(format!("unknown format: {} (expected text, markdown, or json)", s)),
+            _ => Err(format!(
+                "unknown format: {} (expected text, markdown, or json)",
+                s
+            )),
         }
     }
 }
@@ -189,7 +192,10 @@ pub fn run(
 ) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
-    let projects_path = cfg.projects_path.as_deref().unwrap_or(DEFAULT_PROJECTS_PATH);
+    let projects_path = cfg
+        .projects_path
+        .as_deref()
+        .unwrap_or(DEFAULT_PROJECTS_PATH);
 
     let tickets = select(
         &files,
@@ -234,7 +240,10 @@ fn print_text(tickets: &[Ticket]) {
 /// A `## <slug> [<status>]` section per ticket, echoing the shape of the
 /// `consult` markdown output so a resuming skill can read it directly.
 fn print_markdown(tickets: &[Ticket]) {
-    println!("<!-- vault-query tickets: {} ticket(s) -->\n", tickets.len());
+    println!(
+        "<!-- vault-query tickets: {} ticket(s) -->\n",
+        tickets.len()
+    );
     for t in tickets {
         let ident = if t.slug.is_empty() { &t.path } else { &t.slug };
         println!("## {ident} [{}]", t.status);
@@ -246,7 +255,10 @@ fn print_markdown(tickets: &[Ticket]) {
         if !t.project.is_empty() {
             println!("- project: {}", t.project);
         }
-        println!("- track: {}", if t.track.is_empty() { "—" } else { &t.track });
+        println!(
+            "- track: {}",
+            if t.track.is_empty() { "—" } else { &t.track }
+        );
         let requires = if t.requires.is_empty() {
             "—".to_string()
         } else {
@@ -327,7 +339,15 @@ mod tests {
     fn no_filter_lists_all_tickets_excluding_template_and_note() {
         let tmp = build_ticket_vault();
         let files = scan_vault(tmp.path());
-        let tickets = select(&files, tmp.path(), DEFAULT_PROJECTS_PATH, None, None, false, None);
+        let tickets = select(
+            &files,
+            tmp.path(),
+            DEFAULT_PROJECTS_PATH,
+            None,
+            None,
+            false,
+            None,
+        );
         // ordered by path: ticket-backlog, ticket-claimed, ticket-done
         assert_eq!(slugs(&tickets), vec!["backlog", "claimed", "done"]);
     }
@@ -370,7 +390,15 @@ mod tests {
     fn backlog_filter_is_unclaimed_and_open() {
         let tmp = build_ticket_vault();
         let files = scan_vault(tmp.path());
-        let tickets = select(&files, tmp.path(), DEFAULT_PROJECTS_PATH, None, None, true, None);
+        let tickets = select(
+            &files,
+            tmp.path(),
+            DEFAULT_PROJECTS_PATH,
+            None,
+            None,
+            true,
+            None,
+        );
         // claimed excluded (has a track); done excluded (status != open).
         assert_eq!(slugs(&tickets), vec!["backlog"]);
         assert!(tickets[0].track.is_empty());
@@ -454,7 +482,10 @@ mod tests {
 
     #[test]
     fn project_helper_derives_folder_not_bare_file() {
-        assert_eq!(ticket_project("41 projects/nix/ticket-x.md", "41 projects"), "nix");
+        assert_eq!(
+            ticket_project("41 projects/nix/ticket-x.md", "41 projects"),
+            "nix"
+        );
         // A ticket directly under projects_path has no project folder.
         assert_eq!(ticket_project("41 projects/ticket-x.md", "41 projects"), "");
         assert_eq!(ticket_project("20 cards/foo.md", "41 projects"), "");

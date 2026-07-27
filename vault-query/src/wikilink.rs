@@ -9,9 +9,9 @@ static WIKILINK_RE: LazyLock<Regex> =
 /// A parsed wikilink.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Wikilink {
-    pub target: String, // the link target (path or name)
+    pub target: String,        // the link target (path or name)
     pub alias: Option<String>, // display alias if present
-    pub line: u32, // 1-based line number where the link appears
+    pub line: u32,             // 1-based line number where the link appears
 }
 
 /// Extract all wikilinks from content.
@@ -37,10 +37,7 @@ pub struct Wikilink {
 /// won't begin with `---\n`, so mdstruct parses it as body and emits its
 /// wikilink normally.
 pub fn extract(content: &str) -> Vec<Wikilink> {
-    let doc = mdstruct::parse(
-        content,
-        &mdstruct::Options { wikilinks: true },
-    );
+    let doc = mdstruct::parse(content, &mdstruct::Options { wikilinks: true });
 
     doc.inlines()
         .iter()
@@ -114,9 +111,7 @@ pub fn strip(text: &str) -> String {
 
 /// Build an index mapping note names to their incoming links.
 /// Key: note name (lowercase), Value: list of source file names that link to it.
-pub fn build_backlink_index(
-    files: &[crate::vault::VaultFile],
-) -> HashMap<String, Vec<String>> {
+pub fn build_backlink_index(files: &[crate::vault::VaultFile]) -> HashMap<String, Vec<String>> {
     let body_links: Vec<Vec<Wikilink>> = files.iter().map(|f| extract(&f.content)).collect();
     build_backlink_index_with(files, &body_links)
 }
@@ -408,7 +403,10 @@ mod tests {
         let file_a = make_file("A", "no links here", fm);
         let index = build_backlink_index(&[file_a]);
         let entry = index.get("b").expect("expected \"b\" in backlink index");
-        assert!(entry.contains(&"A".to_string()), "expected A in index[\"b\"]");
+        assert!(
+            entry.contains(&"A".to_string()),
+            "expected A in index[\"b\"]"
+        );
     }
 
     #[test]
@@ -480,10 +478,7 @@ mod tests {
             serde_yaml::Value::String("[[B]]".to_string()),
         );
         let mut fm = std::collections::BTreeMap::new();
-        fm.insert(
-            "meta".to_string(),
-            serde_yaml::Value::Mapping(inner),
-        );
+        fm.insert("meta".to_string(), serde_yaml::Value::Mapping(inner));
         let file_a = make_file("A", "", fm);
         let index = build_backlink_index(&[file_a]);
         assert!(

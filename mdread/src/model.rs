@@ -96,7 +96,9 @@ pub(crate) fn parse_document_with(content: &str, rule: HeadingRule) -> Document<
             // Trim leading blank lines so `line` points at the first non-blank.
             let mut first_line = region_start;
             while first_line <= region_end
-                && lines.get(first_line - 1).is_none_or(|l| l.trim().is_empty())
+                && lines
+                    .get(first_line - 1)
+                    .is_none_or(|l| l.trim().is_empty())
             {
                 first_line += 1;
             }
@@ -237,5 +239,6 @@ pub(crate) fn flatten<'a>(tree: &'a [Node], out: &mut Vec<&'a Node>) {
 /// True for `^\d+(\.\d+)*$`.
 pub(crate) fn is_numeric_address(s: &str) -> bool {
     !s.is_empty()
-        && s.split('.').all(|seg| !seg.is_empty() && seg.bytes().all(|b| b.is_ascii_digit()))
+        && s.split('.')
+            .all(|seg| !seg.is_empty() && seg.bytes().all(|b| b.is_ascii_digit()))
 }

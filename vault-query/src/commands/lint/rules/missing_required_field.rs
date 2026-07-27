@@ -14,11 +14,25 @@ fn required_fields(type_val: &str) -> Option<&'static [&'static str]> {
         "note" => Some(&["description", "tags"]),
         "reference" => Some(&["description", "tags"]),
         "project" => Some(&["result", "status", "goal"]),
-        "track" => Some(&["slug", "description", "status", "project", "created", "updated"]),
+        "track" => Some(&[
+            "slug",
+            "description",
+            "status",
+            "project",
+            "created",
+            "updated",
+        ]),
         // A ticket mirrors track's required set. `track` (the backref that claims
         // it) and `requires` (its edge list) stay optional: a ticket is valid while
         // unclaimed and with no dependencies.
-        "ticket" => Some(&["slug", "description", "status", "project", "created", "updated"]),
+        "ticket" => Some(&[
+            "slug",
+            "description",
+            "status",
+            "project",
+            "created",
+            "updated",
+        ]),
         // A scratchpad is a raw pre-triage seed; only provenance is required.
         // `description` stays optional.
         "scratchpad" => Some(&["project", "created", "updated"]),
@@ -63,10 +77,7 @@ impl Rule for MissingRequiredField {
                         rule: self.name(),
                         severity: self.default_severity(),
                         file: file.path.clone(),
-                        message: format!(
-                            "{} file is missing required field '{}'",
-                            type_val, field
-                        ),
+                        message: format!("{} file is missing required field '{}'", type_val, field),
                         data: None,
                     });
                 }
@@ -85,11 +96,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
-    fn make_file(
-        name: &str,
-        path: &str,
-        fields: &[(&str, Value)],
-    ) -> crate::vault::VaultFile {
+    fn make_file(name: &str, path: &str, fields: &[(&str, Value)]) -> crate::vault::VaultFile {
         let mut fm = BTreeMap::new();
         for (k, v) in fields {
             fm.insert(k.to_string(), v.clone());

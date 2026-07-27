@@ -48,7 +48,13 @@ fn example_interior_spans() {
         .iter()
         .find(|n| matches!(n, Node::CodeBlock { .. }))
         .unwrap();
-    if let Node::CodeBlock { info_span, body_span, info, .. } = cb {
+    if let Node::CodeBlock {
+        info_span,
+        body_span,
+        info,
+        ..
+    } = cb
+    {
         assert_eq!(info, "rust");
         assert_eq!(slice(src, info_span.unwrap()), "rust");
         assert_eq!(slice(src, *body_span), "let x = 1;");
@@ -60,7 +66,17 @@ fn example_interior_spans() {
         .iter()
         .find(|i| matches!(i, mdstruct::Inline::Wikilink { .. }))
         .unwrap();
-    if let mdstruct::Inline::Wikilink { target, page, heading, block, embed, alias, alias_span, .. } = wl {
+    if let mdstruct::Inline::Wikilink {
+        target,
+        page,
+        heading,
+        block,
+        embed,
+        alias,
+        alias_span,
+        ..
+    } = wl
+    {
         assert_eq!(target, "Note#Sec");
         assert_eq!(page, "Note");
         assert_eq!(heading.as_deref(), Some("Sec"));
@@ -77,13 +93,17 @@ fn example_interior_spans() {
 /// reads decoded `target`/`alias` rather than the imprecise span.
 #[test]
 fn table_cell_wikilink_and_embed() {
-    let src = "| Ref | Note |\n| --- | --- |\n| [[Alpha]] | ![[Beta]] |\n| [[Gamma\\|display]] | x |\n";
+    let src =
+        "| Ref | Note |\n| --- | --- |\n| [[Alpha]] | ![[Beta]] |\n| [[Gamma\\|display]] | x |\n";
     let d = doc(src);
     let wl = |target: &str| {
         d.inlines.iter().find_map(|i| match i {
-            mdstruct::Inline::Wikilink { target: t, alias, embed, .. } if t == target => {
-                Some((alias.clone(), *embed))
-            }
+            mdstruct::Inline::Wikilink {
+                target: t,
+                alias,
+                embed,
+                ..
+            } if t == target => Some((alias.clone(), *embed)),
             _ => None,
         })
     };
@@ -219,7 +239,10 @@ fn link_reference_definition_recovered() {
 fn bom_only_file_passes_gate() {
     for src in ["\u{feff}", "\u{feff}\n\n  \n", "\u{feff}   \n"] {
         let d = parse(src, &Options::default());
-        assert!(verify_spans(&d, src).is_ok(), "BOM-only src {src:?} must pass the gate");
+        assert!(
+            verify_spans(&d, src).is_ok(),
+            "BOM-only src {src:?} must pass the gate"
+        );
         assert!(
             !d.nodes.iter().any(|n| matches!(n, Node::Unknown { .. })),
             "BOM-only src {src:?} must not emit an unknown node"
@@ -234,13 +257,22 @@ fn bom_only_file_passes_gate() {
 fn embed_escape_backslash_parity() {
     use mdstruct::Inline;
     let wikilink = |src: &str| {
-        parse(src, &Options::default()).inlines.iter().find_map(|i| match i {
-            Inline::Wikilink { page, embed, .. } => Some((page.clone(), *embed)),
-            _ => None,
-        })
+        parse(src, &Options::default())
+            .inlines
+            .iter()
+            .find_map(|i| match i {
+                Inline::Wikilink { page, embed, .. } => Some((page.clone(), *embed)),
+                _ => None,
+            })
     };
     // one backslash: `!` escaped → plain wikilink, not an embed.
-    assert_eq!(wikilink("x \\![[Note]] y"), Some(("Note".to_string(), false)));
+    assert_eq!(
+        wikilink("x \\![[Note]] y"),
+        Some(("Note".to_string(), false))
+    );
     // two backslashes: literal `\` + live `!` → genuine embed.
-    assert_eq!(wikilink("x \\\\![[Note]] y"), Some(("Note".to_string(), true)));
+    assert_eq!(
+        wikilink("x \\\\![[Note]] y"),
+        Some(("Note".to_string(), true))
+    );
 }

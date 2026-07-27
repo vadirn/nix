@@ -20,7 +20,11 @@ fn path_is_bottom_tier(full_path: &std::path::Path) -> Result<bool> {
 /// Resolve `fragment` to absolute path(s) and print them. Returns the process
 /// exit code (0 on a hit, 1 on no match) instead of exiting mid-stack, so `main`
 /// owns the single exit boundary and the no-match branch stays testable.
-pub fn run(fragment: &str, cfg: &crate::config::ResolvedConfig, no_superseded: bool) -> Result<i32> {
+pub fn run(
+    fragment: &str,
+    cfg: &crate::config::ResolvedConfig,
+    no_superseded: bool,
+) -> Result<i32> {
     let vault_root = &cfg.vault_root;
     let mut paths = crate::slug::resolve_paths(fragment, cfg)?;
 

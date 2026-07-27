@@ -314,7 +314,10 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             commands::tags::run(&cfg, sort)?;
             0
         }
-        Commands::Backlinks { file, no_superseded } => {
+        Commands::Backlinks {
+            file,
+            no_superseded,
+        } => {
             commands::backlinks::run(file, &cfg, *no_superseded)?;
             0
         }
@@ -329,19 +332,29 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             types,
             no_superseded,
         } => {
-            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format, types, *no_superseded)?;
+            commands::search::run(
+                query,
+                &cfg,
+                *context,
+                path.as_deref(),
+                *regex,
+                *limit,
+                *format,
+                types,
+                *no_superseded,
+            )?;
             0
         }
         Commands::Resolve { slug } => commands::resolve::run(slug, &cfg)?,
-        Commands::List { folder, fields, no_superseded } => {
+        Commands::List {
+            folder,
+            fields,
+            no_superseded,
+        } => {
             commands::list::run(&cfg, folder, fields, *no_superseded)?;
             0
         }
-        Commands::Files {
-            folder,
-            count,
-            tag,
-        } => {
+        Commands::Files { folder, count, tag } => {
             commands::files::run(&cfg, folder.as_deref(), *count, tag.as_deref())?;
             0
         }
@@ -372,9 +385,10 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             commands::tickets::run(&cfg, track.as_deref(), *backlog, status.as_deref(), *format)?;
             0
         }
-        Commands::Get { fragment, no_superseded } => {
-            commands::get::run(fragment, &cfg, *no_superseded)?
-        }
+        Commands::Get {
+            fragment,
+            no_superseded,
+        } => commands::get::run(fragment, &cfg, *no_superseded)?,
         Commands::Cards => {
             commands::list::run_by_type(&cfg, "card", &["reference".to_string()], false)?;
             0

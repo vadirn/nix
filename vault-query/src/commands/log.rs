@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::{Datelike, IsoWeek, NaiveDate, Weekday};
 
 use crate::config::ResolvedConfig;
@@ -19,11 +19,7 @@ pub fn run(cfg: &ResolvedConfig, date_input: Option<&str>) -> Result<()> {
 
     // Don't create files for past weeks
     if week_end < today {
-        bail!(
-            "no log for past week {} (ended {})",
-            week_str,
-            week_end
-        );
+        bail!("no log for past week {} (ended {})", week_str, week_end);
     }
 
     let template_path = cfg.vault_root.join("templates/Weekly Log.md");
@@ -40,12 +36,7 @@ pub fn run(cfg: &ResolvedConfig, date_input: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-fn fill_template(
-    template: &str,
-    week: &str,
-    start: &NaiveDate,
-    end: &NaiveDate,
-) -> String {
+fn fill_template(template: &str, week: &str, start: &NaiveDate, end: &NaiveDate) -> String {
     let mut result = String::new();
     for line in template.lines() {
         if line.starts_with("week:") && line.trim() == "week:" {
@@ -142,10 +133,8 @@ fn week_from_year_week(year: i32, week: u32) -> Option<IsoWeek> {
 }
 
 pub fn week_start_end(week: IsoWeek) -> (NaiveDate, NaiveDate) {
-    let monday =
-        NaiveDate::from_isoywd_opt(week.year(), week.week(), Weekday::Mon).unwrap();
-    let sunday =
-        NaiveDate::from_isoywd_opt(week.year(), week.week(), Weekday::Sun).unwrap();
+    let monday = NaiveDate::from_isoywd_opt(week.year(), week.week(), Weekday::Mon).unwrap();
+    let sunday = NaiveDate::from_isoywd_opt(week.year(), week.week(), Weekday::Sun).unwrap();
     (monday, sunday)
 }
 
@@ -237,12 +226,7 @@ mod tests {
     #[test]
     fn test_fill_template() {
         let template = "---\nweek:\nstart:\nend:\nsleep: []\n---\n# Weekly Log\n";
-        let result = fill_template(
-            template,
-            "2026-W12",
-            &date(2026, 3, 16),
-            &date(2026, 3, 22),
-        );
+        let result = fill_template(template, "2026-W12", &date(2026, 3, 16), &date(2026, 3, 22));
         assert!(result.contains("week: 2026-W12"));
         assert!(result.contains("start: 2026-03-16"));
         assert!(result.contains("end: 2026-03-22"));

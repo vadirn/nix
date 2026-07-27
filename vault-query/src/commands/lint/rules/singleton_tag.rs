@@ -68,11 +68,7 @@ mod tests {
         let mut fm = BTreeMap::new();
         fm.insert(
             "tags".to_string(),
-            Value::Sequence(
-                tags.iter()
-                    .map(|t| Value::String(t.to_string()))
-                    .collect(),
-            ),
+            Value::Sequence(tags.iter().map(|t| Value::String(t.to_string())).collect()),
         );
         crate::vault::VaultFile {
             name: name.to_string(),
@@ -92,11 +88,7 @@ mod tests {
         fm.insert("type".to_string(), Value::String(type_val.to_string()));
         fm.insert(
             "tags".to_string(),
-            Value::Sequence(
-                tags.iter()
-                    .map(|t| Value::String(t.to_string()))
-                    .collect(),
-            ),
+            Value::Sequence(tags.iter().map(|t| Value::String(t.to_string())).collect()),
         );
         crate::vault::VaultFile {
             name: name.to_string(),

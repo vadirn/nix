@@ -7,7 +7,12 @@ use crate::base::view;
 use crate::output::Format;
 use crate::vault;
 
-pub fn run(base_path: &Path, view_name: &str, cfg: &crate::config::ResolvedConfig, format: Format) -> Result<()> {
+pub fn run(
+    base_path: &Path,
+    view_name: &str,
+    cfg: &crate::config::ResolvedConfig,
+    format: Format,
+) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let base_file = base::parse(base_path)?;
 

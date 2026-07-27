@@ -59,24 +59,15 @@ fn make_vault_file(name: &str, doc_type: &str, body: &str) -> VaultFile {
 }
 
 fn make_vault_file_ext(name: &str, doc_type: &str, body: &str, is_template: bool) -> VaultFile {
-    let template_line = if is_template {
-        "template: true\n"
-    } else {
-        ""
-    };
-    let content = format!(
-        "---\ntype: {doc_type}\n{template_line}---\n\n{body}"
-    );
+    let template_line = if is_template { "template: true\n" } else { "" };
+    let content = format!("---\ntype: {doc_type}\n{template_line}---\n\n{body}");
     let mut frontmatter = BTreeMap::new();
     frontmatter.insert(
         "type".to_string(),
         serde_yaml::Value::String(doc_type.to_string()),
     );
     if is_template {
-        frontmatter.insert(
-            "template".to_string(),
-            serde_yaml::Value::Bool(true),
-        );
+        frontmatter.insert("template".to_string(), serde_yaml::Value::Bool(true));
     }
     VaultFile {
         name: name.to_string(),
@@ -123,9 +114,21 @@ fn vault_root() -> std::path::PathBuf {
 #[test]
 fn scope_filter_excludes_out_of_type() {
     // Build a file set with a mix of types; only "card" is in scope.
-    let card = make_vault_file("CardDoc", "card", "This card has relevant content about filtering algorithms.");
-    let checkpoint = make_vault_file("CheckpointDoc", "checkpoint", "This checkpoint has relevant content about filtering algorithms.");
-    let track = make_vault_file("TrackDoc", "track", "This track has relevant content about filtering algorithms.");
+    let card = make_vault_file(
+        "CardDoc",
+        "card",
+        "This card has relevant content about filtering algorithms.",
+    );
+    let checkpoint = make_vault_file(
+        "CheckpointDoc",
+        "checkpoint",
+        "This checkpoint has relevant content about filtering algorithms.",
+    );
+    let track = make_vault_file(
+        "TrackDoc",
+        "track",
+        "This track has relevant content about filtering algorithms.",
+    );
 
     let files = vec![card, checkpoint, track];
     let scope = vec!["card".to_string()];
@@ -166,8 +169,17 @@ fn scope_filter_excludes_out_of_type() {
 
 #[test]
 fn scope_filter_excludes_template_docs() {
-    let template = make_vault_file_ext("CardTemplate", "card", "template content about important concepts retrieval", true);
-    let real = make_vault_file("RealCard", "card", "real content about important concepts retrieval that is searchable");
+    let template = make_vault_file_ext(
+        "CardTemplate",
+        "card",
+        "template content about important concepts retrieval",
+        true,
+    );
+    let real = make_vault_file(
+        "RealCard",
+        "card",
+        "real content about important concepts retrieval that is searchable",
+    );
 
     let files = vec![template, real];
     let scope = vec!["card".to_string()];
@@ -232,15 +244,23 @@ fn relevant_query_selects_and_packs() {
     .unwrap();
 
     match result {
-        ConsultOutcome::Selected { docs, total_tokens, .. } => {
+        ConsultOutcome::Selected {
+            docs, total_tokens, ..
+        } => {
             assert!(!docs.is_empty(), "expected at least one selected doc");
-            assert_eq!(docs[0].title, "Retry Patterns", "highest-scored doc should be first");
+            assert_eq!(
+                docs[0].title, "Retry Patterns",
+                "highest-scored doc should be first"
+            );
             assert!(total_tokens > 0);
             // Body should not start with a newline.
             assert!(!docs[0].body.starts_with('\n'));
         }
         ConsultOutcome::Abstain { reason, .. } => {
-            panic!("expected ANSWER for relevant query, got ABSTAIN: {}", reason);
+            panic!(
+                "expected ANSWER for relevant query, got ABSTAIN: {}",
+                reason
+            );
         }
     }
 }
@@ -338,7 +358,11 @@ fn irrelevant_query_abstains_with_near_misses() {
     .unwrap();
 
     match result {
-        ConsultOutcome::Abstain { near_misses, reason, .. } => {
+        ConsultOutcome::Abstain {
+            near_misses,
+            reason,
+            ..
+        } => {
             // near_misses populated; reason is non-empty
             assert!(!reason.is_empty());
             // near_misses may be empty if no hits were returned at all
@@ -397,7 +421,10 @@ fn packing_skips_oversized_doc() {
                     doc.tokens,
                     per_doc_cap
                 );
-                assert_ne!(doc.title, "BigDoc", "BigDoc should have been skipped (over cap)");
+                assert_ne!(
+                    doc.title, "BigDoc",
+                    "BigDoc should have been skipped (over cap)"
+                );
             }
             assert!(
                 docs.iter().any(|d| d.title == "SmallDoc"),
@@ -407,7 +434,10 @@ fn packing_skips_oversized_doc() {
             assert!(
                 pointers.iter().any(|p| p.title == "BigDoc"),
                 "the cap-dropped BigDoc must appear in pointers, got: {:?}",
-                pointers.iter().map(|p| p.title.as_str()).collect::<Vec<_>>()
+                pointers
+                    .iter()
+                    .map(|p| p.title.as_str())
+                    .collect::<Vec<_>>()
             );
         }
         ConsultOutcome::Abstain { reason, .. } => {
@@ -517,8 +547,8 @@ fn packing_greedy_later_small_doc_fits() {
     // Each doc has the same high-relevance terms so they score similarly.
     let base_terms = "retry backoff failure resilience distributed";
     let medium_body = format!("{} {}", base_terms, "a ".repeat(190 / 2)); // ~200 chars
-    let large_body = format!("{} {}", base_terms, "b ".repeat(310 / 2));  // ~320 chars
-    let tiny_body = format!("{} small hint", base_terms);                  // short
+    let large_body = format!("{} {}", base_terms, "b ".repeat(310 / 2)); // ~320 chars
+    let tiny_body = format!("{} small hint", base_terms); // short
 
     let med_doc = make_vault_file("MedDoc", "card", &medium_body);
     let large_doc = make_vault_file("LargeDoc", "card", &large_body);
@@ -542,7 +572,9 @@ fn packing_greedy_later_small_doc_fits() {
     .unwrap();
 
     match result {
-        ConsultOutcome::Selected { docs, total_tokens, .. } => {
+        ConsultOutcome::Selected {
+            docs, total_tokens, ..
+        } => {
             assert!(
                 total_tokens <= budget,
                 "total_tokens {} exceeds budget {}",
@@ -744,7 +776,10 @@ fn colon_query_retrieves_matching_doc() {
 
     match result {
         ConsultOutcome::Selected { docs, .. } => {
-            assert!(!docs.is_empty(), "expected at least one doc for colon query");
+            assert!(
+                !docs.is_empty(),
+                "expected at least one doc for colon query"
+            );
             assert_eq!(
                 docs[0].title, "Workflow Planning",
                 "expected Workflow Planning to be top result"
@@ -793,7 +828,10 @@ fn russian_stemming_matches_morphological_variant() {
 
     match result {
         ConsultOutcome::Selected { docs, .. } => {
-            assert!(!docs.is_empty(), "expected at least one doc for Russian query");
+            assert!(
+                !docs.is_empty(),
+                "expected at least one doc for Russian query"
+            );
             assert_eq!(
                 docs[0].title, "RuCard",
                 "expected RuCard as top result for Russian query"
@@ -859,15 +897,26 @@ fn near_misses_contain_matched_terms() {
     .unwrap();
 
     match result {
-        ConsultOutcome::Abstain { near_misses, reason, .. } => {
+        ConsultOutcome::Abstain {
+            near_misses,
+            reason,
+            ..
+        } => {
             assert_eq!(reason, "below threshold");
             // near_misses should be populated since there are hits
-            assert!(!near_misses.is_empty(), "expected near_misses to be populated");
+            assert!(
+                !near_misses.is_empty(),
+                "expected near_misses to be populated"
+            );
             // At least one stemmed query term should appear
-            let all_matched: Vec<_> = near_misses.iter()
+            let all_matched: Vec<_> = near_misses
+                .iter()
                 .flat_map(|nm| nm.matched_terms.iter())
                 .collect();
-            assert!(!all_matched.is_empty(), "expected at least one matched_term in near_misses");
+            assert!(
+                !all_matched.is_empty(),
+                "expected at least one matched_term in near_misses"
+            );
         }
         ConsultOutcome::Selected { .. } => {
             panic!("expected ABSTAIN due to threshold backstop");
@@ -897,24 +946,22 @@ fn near_misses_contain_matched_terms() {
 #[test]
 fn top3_coverage_gate_recovers_rank2_relevant_doc() {
     // Displacer: all 4 query tokens in title (2× boost → rank 1), body has only "cycle".
-    let displacer_body =
-        "cycle cycle cycle cycle cycle cycle cycle cycle cycle cycle \
+    let displacer_body = "cycle cycle cycle cycle cycle cycle cycle cycle cycle cycle \
          The seasonal cycle repeats. Each annual cycle drives change. \
          Temperature variation marks the cycle. The cycle of seasons is predictable.";
     let displacer = make_vault_file(
         "compound loop learn cycle", // title has all 4 query terms → rank 1 via title boost
         "card",
-        displacer_body,              // body: only "cycle" → rank-1 coverage = 1/4 = 0.25
+        displacer_body, // body: only "cycle" → rank-1 coverage = 1/4 = 0.25
     );
 
     // Relevant: title unrelated, body saturated with all 4 query terms → coverage = 1.0.
-    let relevant_body =
-        "compound loop learn cycle ".repeat(20)
+    let relevant_body = "compound loop learn cycle ".repeat(20)
         + "Compounding small improvements over each cycle is how you learn. \
            The feedback loop drives compound learning. Every cycle teaches something. \
            Learn from each loop to compound your gains across cycles.";
     let relevant = make_vault_file(
-        "Engineering Feedback",   // title: no query terms
+        "Engineering Feedback", // title: no query terms
         "card",
         &relevant_body,
     );
@@ -975,7 +1022,9 @@ fn top3_coverage_gate_recovers_rank2_relevant_doc() {
             // The displacer never enters `coverage_filtered`, so it must not leak
             // into pointers either (Decision 30 holds for the pointer set).
             assert!(
-                !pointers.iter().any(|p| p.title == "compound loop learn cycle"),
+                !pointers
+                    .iter()
+                    .any(|p| p.title == "compound loop learn cycle"),
                 "the coverage-rejected displacer must not appear in pointers"
             );
         }
@@ -983,8 +1032,7 @@ fn top3_coverage_gate_recovers_rank2_relevant_doc() {
             panic!(
                 "top-3 coverage gate must pass when rank-2 coverage = 1.0 ≥ 0.45, \
                  but abstained: {}. Rank-1 coverage: {:?}",
-                reason,
-                diag.coverage,
+                reason, diag.coverage,
             );
         }
     }
@@ -1016,8 +1064,14 @@ fn description_field_is_indexed_and_surfaces_a_doc() {
 
     let files: Vec<&VaultFile> = vec![&matching, &other];
     let config = default_config();
-    let (hits, _) = bm25_rank(&files, &vault_root(), "photosynthesis chloroplast", 10, &config)
-        .unwrap();
+    let (hits, _) = bm25_rank(
+        &files,
+        &vault_root(),
+        "photosynthesis chloroplast",
+        10,
+        &config,
+    )
+    .unwrap();
 
     assert!(
         !hits.is_empty(),
@@ -1025,9 +1079,12 @@ fn description_field_is_indexed_and_surfaces_a_doc() {
          description is no longer discarded from the index"
     );
     assert_eq!(
-        hits[0].title, "Untitled fragment",
+        hits[0].title,
+        "Untitled fragment",
         "the doc whose description matches the query must rank first, got: {:?}",
-        hits.iter().map(|h| (h.title.as_str(), h.score)).collect::<Vec<_>>()
+        hits.iter()
+            .map(|h| (h.title.as_str(), h.score))
+            .collect::<Vec<_>>()
     );
 }
 
@@ -1060,23 +1117,29 @@ fn demoted_title_boost_lets_description_outrank_filename() {
     // Historical behavior: title boosted 2.0 → filename-only match dominates.
     let mut old = default_config();
     old.title_boost = 2.0;
-    let (hits_old, _) =
-        bm25_rank(&files, &vault_root(), "alpha beta gamma", 10, &old).unwrap();
+    let (hits_old, _) = bm25_rank(&files, &vault_root(), "alpha beta gamma", 10, &old).unwrap();
     assert_eq!(
-        hits_old[0].title, "alpha beta gamma",
+        hits_old[0].title,
+        "alpha beta gamma",
         "under the historical 2.0 title boost the filename-only doc should dominate, got: {:?}",
-        hits_old.iter().map(|h| (h.title.as_str(), h.score)).collect::<Vec<_>>()
+        hits_old
+            .iter()
+            .map(|h| (h.title.as_str(), h.score))
+            .collect::<Vec<_>>()
     );
 
     // New defaults: title 1.0, description 1.5 → the description match wins.
     let new = default_config();
-    let (hits_new, _) =
-        bm25_rank(&files, &vault_root(), "alpha beta gamma", 10, &new).unwrap();
+    let (hits_new, _) = bm25_rank(&files, &vault_root(), "alpha beta gamma", 10, &new).unwrap();
     assert_eq!(
-        hits_new[0].title, "Curated note",
+        hits_new[0].title,
+        "Curated note",
         "with the default demoted title boost (1.0) and description boost (1.5), the \
          description match must outrank the filename-only match, got: {:?}",
-        hits_new.iter().map(|h| (h.title.as_str(), h.score)).collect::<Vec<_>>()
+        hits_new
+            .iter()
+            .map(|h| (h.title.as_str(), h.score))
+            .collect::<Vec<_>>()
     );
 }
 
@@ -1089,26 +1152,16 @@ fn demoted_title_boost_lets_description_outrank_filename() {
 
 #[test]
 fn max_top3_coverage_diagnostics_field_is_populated() {
-    let displacer_body =
-        "cycle cycle cycle cycle cycle cycle cycle cycle cycle cycle \
+    let displacer_body = "cycle cycle cycle cycle cycle cycle cycle cycle cycle cycle \
          The seasonal cycle repeats. Each annual cycle drives change. \
          Temperature variation marks the cycle. The cycle of seasons is predictable.";
-    let displacer = make_vault_file(
-        "compound loop learn cycle",
-        "card",
-        displacer_body,
-    );
+    let displacer = make_vault_file("compound loop learn cycle", "card", displacer_body);
 
-    let relevant_body =
-        "compound loop learn cycle ".repeat(20)
+    let relevant_body = "compound loop learn cycle ".repeat(20)
         + "Compounding small improvements over each cycle is how you learn. \
            The feedback loop drives compound learning. Every cycle teaches something. \
            Learn from each loop to compound your gains across cycles.";
-    let relevant = make_vault_file(
-        "Engineering Feedback",
-        "card",
-        &relevant_body,
-    );
+    let relevant = make_vault_file("Engineering Feedback", "card", &relevant_body);
 
     let files = vec![displacer, relevant];
     let scope = vec!["card".to_string()];
@@ -1131,12 +1184,12 @@ fn max_top3_coverage_diagnostics_field_is_populated() {
     .unwrap();
 
     // max_top3_coverage must be Some when query is non-empty and hits exist.
-    let max_cov = diag.max_top3_coverage.expect(
-        "max_top3_coverage should be Some when query is non-empty and hits exist"
-    );
-    let rank1_cov = diag.coverage.expect(
-        "rank-1 coverage should be Some in the same conditions"
-    );
+    let max_cov = diag
+        .max_top3_coverage
+        .expect("max_top3_coverage should be Some when query is non-empty and hits exist");
+    let rank1_cov = diag
+        .coverage
+        .expect("rank-1 coverage should be Some in the same conditions");
 
     // The relevant doc (rank 2, full coverage) lifts max above rank-1.
     assert!(
@@ -1245,7 +1298,11 @@ fn gate_opens_on_high_coverage_and_clear_elbow() {
 
     let g = evaluate_gate(&hits, &toks, &q, 0.45, 1.5, None);
 
-    assert!(g.abstain_reason.is_none(), "gate should open: {:?}", g.abstain_reason);
+    assert!(
+        g.abstain_reason.is_none(),
+        "gate should open: {:?}",
+        g.abstain_reason
+    );
     assert_eq!(g.median, 5.5, "median of [10, 1] is 5.5");
     assert_eq!(g.coverage, Some(1.0));
     assert_eq!(g.max_top3_coverage, Some(1.0));
@@ -1298,7 +1355,10 @@ fn gate_single_hit_treats_elbow_as_vacuous() {
     let q = terms("alpha beta");
 
     let g = evaluate_gate(&hits, &toks, &q, 0.45, 99.0, None);
-    assert!(g.abstain_reason.is_none(), "single-hit elbow must be vacuously true");
+    assert!(
+        g.abstain_reason.is_none(),
+        "single-hit elbow must be vacuously true"
+    );
     assert_eq!(g.elbow_ratio, None);
 }
 
@@ -1328,8 +1388,15 @@ fn gate_uses_max_coverage_over_top3_not_rank1() {
     let q = terms("alpha beta");
 
     let g = evaluate_gate(&hits, &toks, &q, 0.45, 1.0, None);
-    assert!(g.abstain_reason.is_none(), "top-3 max coverage should open the gate");
-    assert_eq!(g.coverage, Some(0.0), "rank-1 coverage stays at the displacer's 0.0");
+    assert!(
+        g.abstain_reason.is_none(),
+        "top-3 max coverage should open the gate"
+    );
+    assert_eq!(
+        g.coverage,
+        Some(0.0),
+        "rank-1 coverage stays at the displacer's 0.0"
+    );
     assert_eq!(g.max_top3_coverage, Some(1.0));
 }
 
@@ -1356,7 +1423,10 @@ fn parse_failure_sets_query_error_diagnostic() {
     )
     .unwrap();
 
-    assert!(matches!(result, ConsultOutcome::Abstain { .. }), "parse failure must abstain");
+    assert!(
+        matches!(result, ConsultOutcome::Abstain { .. }),
+        "parse failure must abstain"
+    );
     assert!(
         diag.query_error.is_some(),
         "a parse-failure abstain must populate query_error"
@@ -1419,7 +1489,10 @@ fn selected_with_all_docs_packed_has_empty_pointers() {
 
     match result {
         ConsultOutcome::Selected { docs, pointers, .. } => {
-            assert!(!docs.is_empty(), "the doc fits the cap and budget; expected it packed");
+            assert!(
+                !docs.is_empty(),
+                "the doc fits the cap and budget; expected it packed"
+            );
             assert!(
                 pointers.is_empty(),
                 "every coverage-cleared candidate was packed; pointers must be empty, got: {:?}",
@@ -1427,7 +1500,10 @@ fn selected_with_all_docs_packed_has_empty_pointers() {
             );
         }
         ConsultOutcome::Abstain { reason, .. } => {
-            panic!("expected Selected for a fully-packed relevant doc, got Abstain: {}", reason);
+            panic!(
+                "expected Selected for a fully-packed relevant doc, got Abstain: {}",
+                reason
+            );
         }
     }
 }

@@ -13,10 +13,8 @@ pub fn run(file: &Path, cfg: &crate::config::ResolvedConfig, no_superseded: bool
     let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
 
     // Build a name → VaultFile lookup so we can check each source's superseded state.
-    let file_by_name: std::collections::HashMap<String, &vault::VaultFile> = files
-        .iter()
-        .map(|f| (f.name.clone(), f))
-        .collect();
+    let file_by_name: std::collections::HashMap<String, &vault::VaultFile> =
+        files.iter().map(|f| (f.name.clone(), f)).collect();
 
     let index = wikilink::build_backlink_index(&files);
 

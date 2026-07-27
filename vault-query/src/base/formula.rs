@@ -215,7 +215,11 @@ fn split_if_args(s: &str) -> Option<(&str, &str, &str)> {
     }
 
     if commas.len() >= 2 {
-        Some((&s[..commas[0]], &s[commas[0] + 1..commas[1]], &s[commas[1] + 1..]))
+        Some((
+            &s[..commas[0]],
+            &s[commas[0] + 1..commas[1]],
+            &s[commas[1] + 1..],
+        ))
     } else {
         None
     }
@@ -341,10 +345,7 @@ mod tests {
 
     #[test]
     fn test_nested_if_status_order() {
-        let f = make_file(vec![(
-            "status",
-            Value::String("in progress".into()),
-        )]);
+        let f = make_file(vec![("status", Value::String("in progress".into()))]);
         let result = evaluate(
             r#"if(status == "planned", "1 planned", if(status == "in progress", "2 in progress", if(status == "done", "3 done", "4 archived")))"#,
             &f,

@@ -27,10 +27,7 @@ impl Rule for UnknownRel {
                     rule: self.name(),
                     severity: self.default_severity(),
                     file: file.path.clone(),
-                    message: format!(
-                        "relation '{}' is not in the known registry",
-                        edge.rel
-                    ),
+                    message: format!("relation '{}' is not in the known registry", edge.rel),
                     data: Some(serde_json::json!({ "rel": edge.rel, "line": edge.line })),
                 });
             }
@@ -56,7 +53,9 @@ mod tests {
 
     #[test]
     fn known_rels_emit_nothing() {
-        let files = vec![file_with("## Relations\n\n- a subsumes:: b\n- c refines:: d\n")];
+        let files = vec![file_with(
+            "## Relations\n\n- a subsumes:: b\n- c refines:: d\n",
+        )];
         let root = PathBuf::from("/vault");
         let ctx = LintContext::build(&root, &files, &[]);
         assert!(UnknownRel.check(&ctx).is_empty());

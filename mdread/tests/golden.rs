@@ -62,9 +62,18 @@ type Case = (&'static str, &'static [&'static str]);
 const CASES: &[Case] = &[
     // --- rich.md: nested headings, every link kind, frontmatter, a lede ---
     ("rich_overview", &["fixtures/rich.md"]),
-    ("rich_overview_json", &["fixtures/rich.md", "--format", "json"]),
-    ("rich_overview_wikilinks_only", &["fixtures/rich.md", "--wikilinks-only"]),
-    ("rich_overview_strict_headings", &["fixtures/rich.md", "--strict-headings"]),
+    (
+        "rich_overview_json",
+        &["fixtures/rich.md", "--format", "json"],
+    ),
+    (
+        "rich_overview_wikilinks_only",
+        &["fixtures/rich.md", "--wikilinks-only"],
+    ),
+    (
+        "rich_overview_strict_headings",
+        &["fixtures/rich.md", "--strict-headings"],
+    ),
     ("rich_num_1", &["fixtures/rich.md", "1"]),
     ("rich_num_1_1", &["fixtures/rich.md", "1.1"]),
     ("rich_num_1_1_1", &["fixtures/rich.md", "1.1.1"]),
@@ -76,29 +85,68 @@ const CASES: &[Case] = &[
     ("rich_frontmatter", &["fixtures/rich.md", "frontmatter"]),
     ("rich_fm_uppercase", &["fixtures/rich.md", "FM"]),
     ("rich_links", &["fixtures/rich.md", "links"]),
-    ("rich_links_json", &["fixtures/rich.md", "links", "--format", "json"]),
-    ("rich_links_wikilinks_only", &["fixtures/rich.md", "links", "--wikilinks-only"]),
+    (
+        "rich_links_json",
+        &["fixtures/rich.md", "links", "--format", "json"],
+    ),
+    (
+        "rich_links_wikilinks_only",
+        &["fixtures/rich.md", "links", "--wikilinks-only"],
+    ),
     ("rich_num_1_full", &["fixtures/rich.md", "1", "--full"]),
-    ("rich_num_1_depth_1", &["fixtures/rich.md", "1", "--depth", "1"]),
-    ("rich_num_1_threshold_10", &["fixtures/rich.md", "1", "--threshold", "10"]),
-    ("rich_num_1_json", &["fixtures/rich.md", "1", "--format", "json"]),
-    ("rich_num_1_full_json", &["fixtures/rich.md", "1", "--full", "--format", "json"]),
+    (
+        "rich_num_1_depth_1",
+        &["fixtures/rich.md", "1", "--depth", "1"],
+    ),
+    (
+        "rich_num_1_threshold_10",
+        &["fixtures/rich.md", "1", "--threshold", "10"],
+    ),
+    (
+        "rich_num_1_json",
+        &["fixtures/rich.md", "1", "--format", "json"],
+    ),
+    (
+        "rich_num_1_full_json",
+        &["fixtures/rich.md", "1", "--full", "--format", "json"],
+    ),
     ("rich_err_no_slug", &["fixtures/rich.md", "nope"]),
     ("rich_err_out_of_range", &["fixtures/rich.md", "99"]),
     // --- nested-fm.md: sequences, mappings, a sequence of mappings ---
     ("fmdoc_overview", &["fixtures/nested-fm.md"]),
     ("fmdoc_fm", &["fixtures/nested-fm.md", "fm"]),
-    ("fmdoc_fm_json", &["fixtures/nested-fm.md", "fm", "--format", "json"]),
+    (
+        "fmdoc_fm_json",
+        &["fixtures/nested-fm.md", "fm", "--format", "json"],
+    ),
     ("fmdoc_fm_scalar", &["fixtures/nested-fm.md", "fm.title"]),
     ("fmdoc_fm_number", &["fixtures/nested-fm.md", "fm.count"]),
     ("fmdoc_fm_sequence", &["fixtures/nested-fm.md", "fm.tags"]),
-    ("fmdoc_fm_sequence_json", &["fixtures/nested-fm.md", "fm.tags", "--format", "json"]),
+    (
+        "fmdoc_fm_sequence_json",
+        &["fixtures/nested-fm.md", "fm.tags", "--format", "json"],
+    ),
     ("fmdoc_fm_mapping", &["fixtures/nested-fm.md", "fm.meta"]),
-    ("fmdoc_fm_seq_of_maps", &["fixtures/nested-fm.md", "fm.references"]),
-    ("fmdoc_fm_indexed", &["fixtures/nested-fm.md", "fm.references[0].target"]),
-    ("fmdoc_frontmatter_dot_path", &["fixtures/nested-fm.md", "frontmatter.meta.author"]),
-    ("fmdoc_err_missing_key", &["fixtures/nested-fm.md", "fm.nope"]),
-    ("fmdoc_err_index_out_of_range", &["fixtures/nested-fm.md", "fm.tags[9]"]),
+    (
+        "fmdoc_fm_seq_of_maps",
+        &["fixtures/nested-fm.md", "fm.references"],
+    ),
+    (
+        "fmdoc_fm_indexed",
+        &["fixtures/nested-fm.md", "fm.references[0].target"],
+    ),
+    (
+        "fmdoc_frontmatter_dot_path",
+        &["fixtures/nested-fm.md", "frontmatter.meta.author"],
+    ),
+    (
+        "fmdoc_err_missing_key",
+        &["fixtures/nested-fm.md", "fm.nope"],
+    ),
+    (
+        "fmdoc_err_index_out_of_range",
+        &["fixtures/nested-fm.md", "fm.tags[9]"],
+    ),
     // --- no-frontmatter.md ---
     ("plain_overview", &["fixtures/no-frontmatter.md"]),
     ("plain_text", &["fixtures/no-frontmatter.md", "text"]),
@@ -114,9 +162,15 @@ const CASES: &[Case] = &[
     //     in a file with neither a frontmatter block nor a lede, so the
     //     reserved addresses fail with a shadow clause ---
     ("collide_overview", &["fixtures/collisions.md"]),
-    ("collide_overview_json", &["fixtures/collisions.md", "--format", "json"]),
+    (
+        "collide_overview_json",
+        &["fixtures/collisions.md", "--format", "json"],
+    ),
     ("collide_links", &["fixtures/collisions.md", "links"]),
-    ("collide_links_json", &["fixtures/collisions.md", "links", "--format", "json"]),
+    (
+        "collide_links_json",
+        &["fixtures/collisions.md", "links", "--format", "json"],
+    ),
     ("collide_num_1_1", &["fixtures/collisions.md", "1.1"]),
     ("collide_err_fm", &["fixtures/collisions.md", "fm"]),
     ("collide_err_text", &["fixtures/collisions.md", "text"]),
@@ -127,28 +181,49 @@ const CASES: &[Case] = &[
     //     which the shadow clause names first, when the reading is the same ---
     ("order_overview", &["fixtures/collisions-order.md"]),
     ("order_fm", &["fixtures/collisions-order.md", "fm"]),
-    ("order_frontmatter", &["fixtures/collisions-order.md", "frontmatter"]),
+    (
+        "order_frontmatter",
+        &["fixtures/collisions-order.md", "frontmatter"],
+    ),
     ("order_links", &["fixtures/collisions-order.md", "links"]),
     // --- collisions-live.md: the same collisions over readings that succeed,
     //     so the note lands on stderr and stdout carries the payload ---
     ("live_overview", &["fixtures/collisions-live.md"]),
     ("live_fm", &["fixtures/collisions-live.md", "fm"]),
-    ("live_fm_json", &["fixtures/collisions-live.md", "fm", "--format", "json"]),
+    (
+        "live_fm_json",
+        &["fixtures/collisions-live.md", "fm", "--format", "json"],
+    ),
     ("live_text", &["fixtures/collisions-live.md", "text"]),
     ("live_0", &["fixtures/collisions-live.md", "0"]),
     ("live_links", &["fixtures/collisions-live.md", "links"]),
     // --- dialects.md: setext and indented ATX headings, which the two
     //     heading rules disagree about ---
     ("dialect_overview", &["fixtures/dialects.md"]),
-    ("dialect_overview_strict", &["fixtures/dialects.md", "--strict-headings"]),
+    (
+        "dialect_overview_strict",
+        &["fixtures/dialects.md", "--strict-headings"],
+    ),
     ("dialect_num_1", &["fixtures/dialects.md", "1"]),
-    ("dialect_num_1_strict", &["fixtures/dialects.md", "1", "--strict-headings"]),
-    ("dialect_text_strict", &["fixtures/dialects.md", "text", "--strict-headings"]),
+    (
+        "dialect_num_1_strict",
+        &["fixtures/dialects.md", "1", "--strict-headings"],
+    ),
+    (
+        "dialect_text_strict",
+        &["fixtures/dialects.md", "text", "--strict-headings"],
+    ),
     ("dialect_err_text", &["fixtures/dialects.md", "text"]),
     // --- the CLI surface itself, clap's parse errors included ---
     ("cli_err_missing_file", &["fixtures/does-not-exist.md"]),
-    ("cli_err_bad_format", &["fixtures/rich.md", "--format", "yaml"]),
-    ("cli_err_bad_depth", &["fixtures/rich.md", "1", "--depth", "abc"]),
+    (
+        "cli_err_bad_format",
+        &["fixtures/rich.md", "--format", "yaml"],
+    ),
+    (
+        "cli_err_bad_depth",
+        &["fixtures/rich.md", "1", "--depth", "abc"],
+    ),
     ("cli_err_unknown_flag", &["fixtures/rich.md", "--nope"]),
     ("cli_err_no_args", &[]),
 ];
@@ -235,7 +310,10 @@ fn diff(expected: &str, actual: &str) -> String {
             out.push_str(&format!("     {mark} {:>4} {line}\n", from + i + 1));
         }
         if lines.len() > MAX {
-            out.push_str(&format!("     {mark} .... ({} more lines)\n", lines.len() - MAX));
+            out.push_str(&format!(
+                "     {mark} .... ({} more lines)\n",
+                lines.len() - MAX
+            ));
         }
     };
     side('-', &e[head..e.len() - tail], head);

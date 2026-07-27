@@ -40,7 +40,6 @@ impl VaultFile {
         let rel = self.relative_path(vault_root);
         rel.starts_with(folder)
     }
-
 }
 
 /// Resolve an optional subfolder relative to vault root.
@@ -115,7 +114,6 @@ pub fn scan(
     Ok(files)
 }
 
-
 /// Asset file extensions recognized by the vault (no leading dots, lowercased).
 pub const ASSET_EXTENSIONS: &[&str] = &[
     "png", "jpeg", "jpg", "gif", "svg", "pdf", "canvas", "base", "tldraw",
@@ -188,8 +186,17 @@ mod tests {
         let dir = tmp.path();
         let ignore = VaultIgnore::from_patterns(vec![PathBuf::from("excluded")]);
         let files = scan(dir, dir, Some(&ignore)).unwrap();
-        assert_eq!(files.len(), 1, "expected only keep.md, got: {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
-        assert!(files[0].name == "keep", "expected keep.md, got: {}", files[0].name);
+        assert_eq!(
+            files.len(),
+            1,
+            "expected only keep.md, got: {:?}",
+            files.iter().map(|f| &f.path).collect::<Vec<_>>()
+        );
+        assert!(
+            files[0].name == "keep",
+            "expected keep.md, got: {}",
+            files[0].name
+        );
     }
 
     #[test]
@@ -197,7 +204,12 @@ mod tests {
         let tmp = build_simple_vault();
         let dir = tmp.path();
         let files = scan(dir, dir, None).unwrap();
-        assert_eq!(files.len(), 2, "expected both files, got: {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
+        assert_eq!(
+            files.len(),
+            2,
+            "expected both files, got: {:?}",
+            files.iter().map(|f| &f.path).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -236,12 +248,23 @@ mod tests {
         let mut assets = scan_assets(root, root, None).unwrap();
         assets.sort_by(|a, b| a.name.cmp(&b.name));
 
-        assert_eq!(assets.len(), 2, "expected 2 assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert_eq!(
+            assets.len(),
+            2,
+            "expected 2 assets, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
 
-        let foo = assets.iter().find(|a| a.name == "Foo.png").expect("Foo.png not found");
+        let foo = assets
+            .iter()
+            .find(|a| a.name == "Foo.png")
+            .expect("Foo.png not found");
         assert_eq!(foo.path, root.join("assets/Foo.png"));
 
-        let base = assets.iter().find(|a| a.name == "Checkpoints.base").expect("Checkpoints.base not found");
+        let base = assets
+            .iter()
+            .find(|a| a.name == "Checkpoints.base")
+            .expect("Checkpoints.base not found");
         assert_eq!(base.path, root.join("41 projects/nix/Checkpoints.base"));
     }
 
@@ -252,7 +275,11 @@ mod tests {
         std::fs::write(root.join("note.md"), "# note\n").unwrap();
 
         let assets = scan_assets(root, root, None).unwrap();
-        assert!(assets.is_empty(), "expected no assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert!(
+            assets.is_empty(),
+            "expected no assets, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -262,7 +289,11 @@ mod tests {
         std::fs::write(root.join("file.xyz"), b"").unwrap();
 
         let assets = scan_assets(root, root, None).unwrap();
-        assert!(assets.is_empty(), "expected no assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert!(
+            assets.is_empty(),
+            "expected no assets, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -274,7 +305,11 @@ mod tests {
 
         let ignore = VaultIgnore::from_patterns(vec![PathBuf::from("ignored")]);
         let assets = scan_assets(root, root, Some(&ignore)).unwrap();
-        assert!(assets.is_empty(), "expected Bar.png to be ignored, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert!(
+            assets.is_empty(),
+            "expected Bar.png to be ignored, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -285,7 +320,12 @@ mod tests {
         std::fs::write(root.join("note.md"), "# note\n").unwrap();
 
         let assets = scan_assets(root, root, None).unwrap();
-        assert_eq!(assets.len(), 1, "expected only image.jpg, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert_eq!(
+            assets.len(),
+            1,
+            "expected only image.jpg, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
         assert_eq!(assets[0].name, "image.jpg");
     }
 }

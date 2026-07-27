@@ -10,8 +10,10 @@ use std::path::Path;
 
 use anyhow::Result;
 use tantivy::schema::*;
-use tantivy::tokenizer::{Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, TextAnalyzer};
-use tantivy::{doc, Index, IndexWriter};
+use tantivy::tokenizer::{
+    Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, TextAnalyzer,
+};
+use tantivy::{Index, IndexWriter, doc};
 
 use crate::frontmatter;
 use crate::vault::VaultFile;
@@ -32,8 +34,8 @@ pub(crate) fn sanitize_query(query: &str) -> String {
     query
         .chars()
         .map(|c| match c {
-            ':' | '+' | '-' | '(' | ')' | '^' | '~' | '"' | '*' | '?' | '[' | ']' | '{'
-            | '}' | '\\' | '!' => ' ',
+            ':' | '+' | '-' | '(' | ')' | '^' | '~' | '"' | '*' | '?' | '[' | ']' | '{' | '}'
+            | '\\' | '!' => ' ',
             other => other,
         })
         .collect()
@@ -154,7 +156,10 @@ mod tests {
 
     #[test]
     fn sanitize_query_replaces_metacharacters() {
-        assert_eq!(sanitize_query("structure the workflow: plan first"), "structure the workflow  plan first");
+        assert_eq!(
+            sanitize_query("structure the workflow: plan first"),
+            "structure the workflow  plan first"
+        );
         assert_eq!(sanitize_query("retry - backoff"), "retry   backoff");
         assert_eq!(sanitize_query("title:value"), "title value");
         assert_eq!(sanitize_query("no specials here"), "no specials here");

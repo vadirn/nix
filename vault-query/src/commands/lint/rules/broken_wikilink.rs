@@ -95,11 +95,7 @@ mod tests {
 
     fn make_asset(vault_root: &str, rel_path: &str) -> VaultAsset {
         let abs = PathBuf::from(vault_root).join(rel_path);
-        let name = abs
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
+        let name = abs.file_name().unwrap().to_string_lossy().to_string();
         VaultAsset { path: abs, name }
     }
 
@@ -302,11 +298,7 @@ mod tests {
 
     #[test]
     fn broken_wikilink_asset_line_unaffected() {
-        let src = plain_file(
-            "Src",
-            "/vault/Src.md",
-            "line 1\nline 2\n[[Missing.png]]\n",
-        );
+        let src = plain_file("Src", "/vault/Src.md", "line 1\nline 2\n[[Missing.png]]\n");
         let files = vec![src];
         let root = PathBuf::from("/vault");
         let ctx = LintContext::build(&root, &files, &[]);
@@ -326,11 +318,7 @@ mod tests {
         // the wikilink uses a curly apostrophe (U+2019).  normalize() folds the
         // typographic variant so the link resolves and produces zero findings.
         let target = plain_file("Karpathy's gist", "/vault/Karpathy's gist.md", "");
-        let src = plain_file(
-            "Src",
-            "/vault/Src.md",
-            "[[Karpathy\u{2019}s gist]]",
-        );
+        let src = plain_file("Src", "/vault/Src.md", "[[Karpathy\u{2019}s gist]]");
         let files = vec![target, src];
         let root = PathBuf::from("/vault");
         let ctx = LintContext::build(&root, &files, &[]);
@@ -345,11 +333,7 @@ mod tests {
         // uses a no-break space (U+00A0).  NFKC folds NBSP into a plain space
         // so the link resolves and produces zero findings.
         let target = plain_file("Two words", "/vault/Two words.md", "");
-        let src = plain_file(
-            "Src",
-            "/vault/Src.md",
-            "[[Two\u{00A0}words]]",
-        );
+        let src = plain_file("Src", "/vault/Src.md", "[[Two\u{00A0}words]]");
         let files = vec![target, src];
         let root = PathBuf::from("/vault");
         let ctx = LintContext::build(&root, &files, &[]);

@@ -4,10 +4,10 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::Path;
+use tantivy::SnippetGenerator;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
-use tantivy::SnippetGenerator;
 
 use crate::{
     config::{DEFAULT_DESCRIPTION_BOOST, DEFAULT_TITLE_BOOST},
@@ -273,7 +273,9 @@ fn rank_hits(
         };
         let links = wikilink::collect_all_link_targets(vf);
         // body: frontmatter::body with leading newline stripped.
-        let body = frontmatter::body(&vf.content).trim_start_matches('\n').to_string();
+        let body = frontmatter::body(&vf.content)
+            .trim_start_matches('\n')
+            .to_string();
 
         ranked.push(RankedHit {
             path: path_val,
@@ -289,7 +291,11 @@ fn rank_hits(
 
     // Re-sort after score adjustment (Tantivy returns pre-downrank order), then
     // truncate to the caller's requested limit.
-    ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    ranked.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     ranked.truncate(limit);
     Ok(ranked)
 }
@@ -360,7 +366,8 @@ fn run_bm25(
     // Both arms delegate to collect_bm25_results_filtered so downranking and
     // [superseded] labeling are applied uniformly; only snippet rendering differs.
     if format == TextJson::Json {
-        let results = collect_bm25_results_filtered(query, cfg, subfolder, limit, types, no_superseded)?;
+        let results =
+            collect_bm25_results_filtered(query, cfg, subfolder, limit, types, no_superseded)?;
         let output = SearchOutput {
             query: query.to_string(),
             count: results.len(),
@@ -532,14 +539,23 @@ mod tests {
 
         assert!(parsed_json.get("query").is_some(), "missing field: query");
         assert!(parsed_json.get("count").is_some(), "missing field: count");
-        assert!(parsed_json.get("results").is_some(), "missing field: results");
+        assert!(
+            parsed_json.get("results").is_some(),
+            "missing field: results"
+        );
 
         let results_arr = parsed_json["results"].as_array().unwrap();
         assert!(!results_arr.is_empty(), "results array is empty");
 
         let first = &results_arr[0];
-        for field in &["path", "title", "type", "score", "snippet", "body", "tokens", "links"] {
-            assert!(first.get(field).is_some(), "missing field in result: {}", field);
+        for field in &[
+            "path", "title", "type", "score", "snippet", "body", "tokens", "links",
+        ] {
+            assert!(
+                first.get(field).is_some(),
+                "missing field in result: {}",
+                field
+            );
         }
     }
 
@@ -572,8 +588,22 @@ mod tests {
         // run() with a colon query must not error and must find the doc.
         // We verify by calling run_bm25 indirectly through run() with text format;
         // redirect stdout is not available in unit tests, so we check it does not panic/error.
-        let result = run("workflow: plan first", &cfg, 0, None, false, 10, TextJson::Text, &[], false);
-        assert!(result.is_ok(), "colon query must not return an error: {:?}", result.err());
+        let result = run(
+            "workflow: plan first",
+            &cfg,
+            0,
+            None,
+            false,
+            10,
+            TextJson::Text,
+            &[],
+            false,
+        );
+        assert!(
+            result.is_ok(),
+            "colon query must not return an error: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -621,9 +651,13 @@ mod tests {
         let cfg = make_cfg(vault_root.clone());
         let types_filter = vec!["card".to_string()];
         let results =
-            collect_bm25_results_filtered("luminary", &cfg, None, 10, &types_filter, false).unwrap();
+            collect_bm25_results_filtered("luminary", &cfg, None, 10, &types_filter, false)
+                .unwrap();
 
-        assert!(!results.is_empty(), "expected at least one result for the card doc");
+        assert!(
+            !results.is_empty(),
+            "expected at least one result for the card doc"
+        );
         for r in &results {
             assert_eq!(
                 r.doc_type.as_deref(),
@@ -656,7 +690,8 @@ mod tests {
         .unwrap();
 
         let cfg = make_cfg(vault_root.clone());
-        let results = collect_bm25_results_filtered("luminary", &cfg, None, 10, &[], false).unwrap();
+        let results =
+            collect_bm25_results_filtered("luminary", &cfg, None, 10, &[], false).unwrap();
 
         let types_found: std::collections::HashSet<Option<&str>> =
             results.iter().map(|r| r.doc_type.as_deref()).collect();
@@ -704,11 +739,15 @@ mod tests {
         // scan_and_filter is the pre-match gating step used by run_regex.
         let files = scan_and_filter(&root, &cfg.vault_root, &cfg.ignore, &types_filter).unwrap();
 
-        assert!(!files.is_empty(), "expected at least one file after filtering");
+        assert!(
+            !files.is_empty(),
+            "expected at least one file after filtering"
+        );
         for f in &files {
             let file_type = frontmatter::get_display(&f.frontmatter, "type");
             assert_eq!(
-                file_type, "card",
+                file_type,
+                "card",
                 "regex pre-filter must exclude non-card files; got type={:?} for {}",
                 file_type,
                 f.relative_path(&cfg.vault_root)
@@ -716,8 +755,22 @@ mod tests {
         }
 
         // Also confirm the full run() path succeeds (output goes to stdout, not captured).
-        let result = run("quasar", &cfg, 0, None, true, 10, TextJson::Text, &types_filter, false);
-        assert!(result.is_ok(), "run() with --regex --types must not error: {:?}", result.err());
+        let result = run(
+            "quasar",
+            &cfg,
+            0,
+            None,
+            true,
+            10,
+            TextJson::Text,
+            &types_filter,
+            false,
+        );
+        assert!(
+            result.is_ok(),
+            "run() with --regex --types must not error: {:?}",
+            result.err()
+        );
     }
 
     use frontmatter::EpistemicTier;

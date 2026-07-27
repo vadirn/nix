@@ -113,7 +113,10 @@ fn reused_label_nests_lifo() {
         "outer <!-- highlight_x -->inner<!-- /highlight_x --> after"
     );
 
-    assert!(nests(outer.span, inner.span), "inner must nest inside outer");
+    assert!(
+        nests(outer.span, inner.span),
+        "inner must nest inside outer"
+    );
 
     assert_eq!(outer.start_line, 1);
     assert_eq!(outer.end_line, 1);
@@ -143,11 +146,11 @@ fn highlight_pair_crosses_blocks() {
     let r = &d.regions[0];
     assert_eq!(r.label, "highlight_y");
     assert_eq!(r.span, Span::new(open_start, close_end));
-    assert_eq!(
-        slice(src, r.body_span),
-        "start of span.\n\n- item with "
-    );
+    assert_eq!(slice(src, r.body_span), "start of span.\n\n- item with ");
     assert_eq!(r.start_line, 1, "open sits in the leading paragraph");
-    assert_eq!(r.end_line, 3, "close sits in the list item after a blank line");
+    assert_eq!(
+        r.end_line, 3,
+        "close sits in the list item after a blank line"
+    );
     let _ = open_end; // documents the open's own end offset used for body_span
 }

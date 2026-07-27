@@ -67,7 +67,8 @@ impl<'a> LintContext<'a> {
         // relations edge scan and the local-node scan each need the same fenced-line
         // set and heading→slug map, so computing the facet once here avoids two
         // identical whole-document parses per file across the vault.
-        let mut relations: Vec<Vec<super::relations::RelationEdge>> = Vec::with_capacity(files.len());
+        let mut relations: Vec<Vec<super::relations::RelationEdge>> =
+            Vec::with_capacity(files.len());
         let mut local_nodes: Vec<super::nodes::LocalNodes> = Vec::with_capacity(files.len());
         for f in files {
             let facet = crate::mdfacet::facet(&f.content);

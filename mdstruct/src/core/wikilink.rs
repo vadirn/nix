@@ -45,7 +45,11 @@ mod tests {
     fn plain_page() {
         assert_eq!(
             decompose("Note"),
-            WikiTarget { page: "Note".into(), heading: None, block: None }
+            WikiTarget {
+                page: "Note".into(),
+                heading: None,
+                block: None
+            }
         );
     }
 
@@ -53,7 +57,11 @@ mod tests {
     fn heading_fragment() {
         assert_eq!(
             decompose("Note#Section"),
-            WikiTarget { page: "Note".into(), heading: Some("Section".into()), block: None }
+            WikiTarget {
+                page: "Note".into(),
+                heading: Some("Section".into()),
+                block: None
+            }
         );
     }
 
@@ -61,7 +69,11 @@ mod tests {
     fn block_fragment() {
         assert_eq!(
             decompose("Note#^block-id"),
-            WikiTarget { page: "Note".into(), heading: None, block: Some("block-id".into()) }
+            WikiTarget {
+                page: "Note".into(),
+                heading: None,
+                block: Some("block-id".into())
+            }
         );
     }
 
@@ -69,7 +81,11 @@ mod tests {
     fn same_page_heading() {
         assert_eq!(
             decompose("#Heading"),
-            WikiTarget { page: "".into(), heading: Some("Heading".into()), block: None }
+            WikiTarget {
+                page: "".into(),
+                heading: Some("Heading".into()),
+                block: None
+            }
         );
     }
 

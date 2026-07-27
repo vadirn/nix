@@ -90,8 +90,7 @@ mod tests {
 
     fn card_citing(name: &str, reference: Value) -> crate::vault::VaultFile {
         let mut file = vault_file(name, "card", "20 cards");
-        file.frontmatter
-            .insert("reference".to_string(), reference);
+        file.frontmatter.insert("reference".to_string(), reference);
         file
     }
 

@@ -11,13 +11,25 @@ fn test_read_overview_header_and_tree() {
         .args(["read", read_fixture("sample.md").to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8(output.stdout).unwrap();
 
     // Frontmatter field names (no count), in on-disk source order.
-    let fields_line = stdout.lines().find(|l| l.starts_with("fields:")).expect("fields line");
+    let fields_line = stdout
+        .lines()
+        .find(|l| l.starts_with("fields:"))
+        .expect("fields line");
     for f in ["type", "slug", "description", "status"] {
-        assert!(fields_line.contains(f), "missing field {} in: {}", f, fields_line);
+        assert!(
+            fields_line.contains(f),
+            "missing field {} in: {}",
+            f,
+            fields_line
+        );
     }
     // Source order is type, slug, description, status (not alphabetical).
     assert_eq!(
@@ -26,25 +38,59 @@ fn test_read_overview_header_and_tree() {
         "fields must follow source order, not BTreeMap alphabetization"
     );
     // Link count: 3 wikilinks in the fixture body.
-    assert!(stdout.lines().any(|l| l.trim() == "links: 3"), "expected 'links: 3'; got:\n{}", stdout);
+    assert!(
+        stdout.lines().any(|l| l.trim() == "links: 3"),
+        "expected 'links: 3'; got:\n{}",
+        stdout
+    );
 
     // Text region line present with its label.
-    assert!(stdout.contains("[0]") && stdout.contains("(text)"), "missing text region: {}", stdout);
+    assert!(
+        stdout.contains("[0]") && stdout.contains("(text)"),
+        "missing text region: {}",
+        stdout
+    );
 
     // Tree: Direction is a parent (marked '+'), Glossary is a leaf, addresses numbered.
-    let dir_line = stdout.lines().find(|l| l.contains("Direction")).expect("Direction line");
-    assert!(dir_line.trim_start().starts_with('+'), "Direction should be a parent (+): {}", dir_line);
-    assert!(stdout.lines().any(|l| l.contains("1.1") && l.contains("Background")), "missing 1.1 Background");
-    assert!(stdout.lines().any(|l| l.contains("1.2") && l.contains("Goals")), "missing 1.2 Goals");
+    let dir_line = stdout
+        .lines()
+        .find(|l| l.contains("Direction"))
+        .expect("Direction line");
+    assert!(
+        dir_line.trim_start().starts_with('+'),
+        "Direction should be a parent (+): {}",
+        dir_line
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.contains("1.1") && l.contains("Background")),
+        "missing 1.1 Background"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.contains("1.2") && l.contains("Goals")),
+        "missing 1.2 Goals"
+    );
 
     // Illustrative next: footer.
-    assert!(stdout.lines().any(|l| l.starts_with("next:")), "missing next: footer: {}", stdout);
+    assert!(
+        stdout.lines().any(|l| l.starts_with("next:")),
+        "missing next: footer: {}",
+        stdout
+    );
 }
 
 #[test]
 fn test_read_overview_json_shape() {
     let output = Command::new(cargo_bin())
-        .args(["read", read_fixture("sample.md").to_str().unwrap(), "--format", "json"])
+        .args([
+            "read",
+            read_fixture("sample.md").to_str().unwrap(),
+            "--format",
+            "json",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -79,24 +125,48 @@ fn test_read_numeric_section() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     // Header line carries address + heading + line; body carries the heading text.
-    assert!(stdout.contains("1.1") && stdout.contains("Background"), "missing 1.1 header: {}", stdout);
-    assert!(stdout.contains("Background body line one."), "missing section body: {}", stdout);
+    assert!(
+        stdout.contains("1.1") && stdout.contains("Background"),
+        "missing 1.1 header: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("Background body line one."),
+        "missing section body: {}",
+        stdout
+    );
     // Should NOT include the sibling Goals body.
-    assert!(!stdout.contains("Goal body."), "1.1 must not leak sibling body: {}", stdout);
+    assert!(
+        !stdout.contains("Goal body."),
+        "1.1 must not leak sibling body: {}",
+        stdout
+    );
 }
 
 #[test]
 fn test_read_slug_section_json() {
     let output = Command::new(cargo_bin())
-        .args(["read", read_fixture("sample.md").to_str().unwrap(), "glossary", "--format", "json"])
+        .args([
+            "read",
+            read_fixture("sample.md").to_str().unwrap(),
+            "glossary",
+            "--format",
+            "json",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());
-    let v: serde_json::Value = serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).unwrap();
     assert_eq!(v["address"], "2");
     assert_eq!(v["heading"], "Glossary");
     assert_eq!(v["slug"], "glossary");
-    assert!(v["content"].as_str().unwrap().contains("| Term | Definition |"));
+    assert!(
+        v["content"]
+            .as_str()
+            .unwrap()
+            .contains("| Term | Definition |")
+    );
 }
 
 #[test]
@@ -108,25 +178,43 @@ fn test_read_text_address() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("(text)"), "missing text label: {}", stdout);
-    assert!(stdout.contains("Lede prose before any heading."), "missing lede body: {}", stdout);
+    assert!(
+        stdout.contains("Lede prose before any heading."),
+        "missing lede body: {}",
+        stdout
+    );
     // The `text` keyword resolves identically.
     let output2 = Command::new(cargo_bin())
         .args(["read", read_fixture("sample.md").to_str().unwrap(), "text"])
         .output()
         .unwrap();
     assert!(output2.status.success());
-    assert!(String::from_utf8(output2.stdout).unwrap().contains("Lede prose before any heading."));
+    assert!(
+        String::from_utf8(output2.stdout)
+            .unwrap()
+            .contains("Lede prose before any heading.")
+    );
 }
 
 #[test]
 fn test_read_headingless_whole_body_is_text() {
     let output = Command::new(cargo_bin())
-        .args(["read", read_fixture("headingless.md").to_str().unwrap(), "--format", "json"])
+        .args([
+            "read",
+            read_fixture("headingless.md").to_str().unwrap(),
+            "--format",
+            "json",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());
-    let v: serde_json::Value = serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).unwrap();
-    assert_eq!(v["tree"].as_array().unwrap().len(), 0, "heading-less file has no tree");
+    let v: serde_json::Value =
+        serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).unwrap();
+    assert_eq!(
+        v["tree"].as_array().unwrap().len(),
+        0,
+        "heading-less file has no tree"
+    );
     assert_eq!(v["text"]["address"], "0");
     assert!(v["text"]["lines"].as_u64().unwrap() > 0);
 }
@@ -134,22 +222,41 @@ fn test_read_headingless_whole_body_is_text() {
 #[test]
 fn test_read_ambiguous_slug_exits_1() {
     let output = Command::new(cargo_bin())
-        .args(["read", read_fixture("sample.md").to_str().unwrap(), "log-notes"])
+        .args([
+            "read",
+            read_fixture("sample.md").to_str().unwrap(),
+            "log-notes",
+        ])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(1), "ambiguous slug must exit 1");
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("Ambiguous"), "expected ambiguity message on stderr: {}", stderr);
+    assert!(
+        stderr.contains("Ambiguous"),
+        "expected ambiguity message on stderr: {}",
+        stderr
+    );
     // Both colliding candidates listed.
-    assert!(stderr.contains("Log & Notes") && stderr.contains("Log Notes"), "candidates: {}", stderr);
+    assert!(
+        stderr.contains("Log & Notes") && stderr.contains("Log Notes"),
+        "candidates: {}",
+        stderr
+    );
     // Candidates go to stderr, not stdout.
-    assert!(String::from_utf8(output.stdout).unwrap().is_empty(), "stdout must be empty on error");
+    assert!(
+        String::from_utf8(output.stdout).unwrap().is_empty(),
+        "stdout must be empty on error"
+    );
 }
 
 #[test]
 fn test_read_unknown_address_exits_1() {
     let output = Command::new(cargo_bin())
-        .args(["read", read_fixture("sample.md").to_str().unwrap(), "nonexistent-slug"])
+        .args([
+            "read",
+            read_fixture("sample.md").to_str().unwrap(),
+            "nonexistent-slug",
+        ])
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(1));
@@ -158,17 +265,33 @@ fn test_read_unknown_address_exits_1() {
         .args(["read", read_fixture("sample.md").to_str().unwrap(), "99"])
         .output()
         .unwrap();
-    assert_eq!(oob.status.code(), Some(1), "out-of-range numeric must exit 1");
+    assert_eq!(
+        oob.status.code(),
+        Some(1),
+        "out-of-range numeric must exit 1"
+    );
 
     // An all-digit address that overflows usize must exit 1 gracefully, not
     // panic. A panic would surface as a non-1 abort code and a backtrace.
     let overflow = Command::new(cargo_bin())
-        .args(["read", read_fixture("sample.md").to_str().unwrap(), "99999999999999999999"])
+        .args([
+            "read",
+            read_fixture("sample.md").to_str().unwrap(),
+            "99999999999999999999",
+        ])
         .output()
         .unwrap();
-    assert_eq!(overflow.status.code(), Some(1), "oversized numeric must exit 1, not panic");
+    assert_eq!(
+        overflow.status.code(),
+        Some(1),
+        "oversized numeric must exit 1, not panic"
+    );
     let stderr = String::from_utf8(overflow.stderr).unwrap();
-    assert!(stderr.contains("out of range"), "expected out-of-range message: {}", stderr);
+    assert!(
+        stderr.contains("out of range"),
+        "expected out-of-range message: {}",
+        stderr
+    );
     assert!(!stderr.contains("panicked"), "must not panic: {}", stderr);
 }
 
@@ -227,20 +350,40 @@ fn test_unfold_threshold_inlines_small_folds_large() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8(output.stdout).unwrap();
 
     // Section own prose printed.
-    assert!(stdout.contains("Section own prose"), "missing own prose: {}", stdout);
+    assert!(
+        stdout.contains("Section own prose"),
+        "missing own prose: {}",
+        stdout
+    );
     // Small child inlined (its body appears).
-    assert!(stdout.contains("Small child body"), "small child should inline: {}", stdout);
+    assert!(
+        stdout.contains("Small child body"),
+        "small child should inline: {}",
+        stdout
+    );
     // Large child folded: body absent, placeholder line present with its address.
-    assert!(!stdout.contains("LARGEMARK"), "large child body must be folded out: {}", stdout);
+    assert!(
+        !stdout.contains("LARGEMARK"),
+        "large child body must be folded out: {}",
+        stdout
+    );
     let placeholder = stdout
         .lines()
         .find(|l| l.contains("1.2") && l.contains("Large Child"))
         .expect("folded placeholder for 1.2");
-    assert!(placeholder.contains("tok"), "placeholder carries token stat: {}", placeholder);
+    assert!(
+        placeholder.contains("tok"),
+        "placeholder carries token stat: {}",
+        placeholder
+    );
 }
 
 #[test]
@@ -270,7 +413,10 @@ fn test_unfold_placeholder_matches_overview_line() {
         .expect("unfold 1.2 placeholder")
         .to_string();
 
-    assert_eq!(placeholder, overview_line, "folded placeholder must match the overview tree line");
+    assert_eq!(
+        placeholder, overview_line,
+        "folded placeholder must match the overview tree line"
+    );
 }
 
 #[test]
@@ -292,12 +438,23 @@ fn test_unfold_depth_cap_folds_grandchild() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     // Large child inlined (depth 1 admits direct children, threshold no longer binds).
-    assert!(stdout.contains("LARGEMARK"), "large child should inline at depth 1: {}", stdout);
-    // Grandchild folded: its prose absent, placeholder for 1.2.1 present.
-    assert!(!stdout.contains("GRANDMARK"), "grandchild must fold at depth 1: {}", stdout);
     assert!(
-        stdout.lines().any(|l| l.contains("1.2.1") && l.contains("Grandchild")),
-        "missing grandchild placeholder: {}", stdout
+        stdout.contains("LARGEMARK"),
+        "large child should inline at depth 1: {}",
+        stdout
+    );
+    // Grandchild folded: its prose absent, placeholder for 1.2.1 present.
+    assert!(
+        !stdout.contains("GRANDMARK"),
+        "grandchild must fold at depth 1: {}",
+        stdout
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.contains("1.2.1") && l.contains("Grandchild")),
+        "missing grandchild placeholder: {}",
+        stdout
     );
 }
 
@@ -317,12 +474,23 @@ fn test_unfold_full_expands_everything() {
         .unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("LARGEMARK"), "large child must inline under --full: {}", stdout);
-    assert!(stdout.contains("GRANDMARK"), "grandchild must inline under --full: {}", stdout);
+    assert!(
+        stdout.contains("LARGEMARK"),
+        "large child must inline under --full: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("GRANDMARK"),
+        "grandchild must inline under --full: {}",
+        stdout
+    );
     // Nothing folded: no placeholder line carrying the address/heading pair.
     assert!(
-        !stdout.lines().any(|l| l.contains("1.2.1") && l.contains("Grandchild") && l.contains("tok")),
-        "--full must leave no folded placeholders: {}", stdout
+        !stdout
+            .lines()
+            .any(|l| l.contains("1.2.1") && l.contains("Grandchild") && l.contains("tok")),
+        "--full must leave no folded placeholders: {}",
+        stdout
     );
 }
 
@@ -351,7 +519,10 @@ fn test_unfold_json_shape_with_folded_flags() {
     // `level` exposed on the addressed node (# Section = level 1).
     assert_eq!(v["level"].as_u64().unwrap(), 1);
     assert!(v["content"].as_str().unwrap().contains("Section own prose"));
-    assert!(!v["content"].as_str().unwrap().contains("Small child body"), "children carried separately");
+    assert!(
+        !v["content"].as_str().unwrap().contains("Small child body"),
+        "children carried separately"
+    );
 
     let children = v["children"].as_array().unwrap();
     assert_eq!(children.len(), 2);
@@ -362,14 +533,26 @@ fn test_unfold_json_shape_with_folded_flags() {
     assert_eq!(small["folded"], false);
     // `level` exposed on children too (## Small Child = level 2).
     assert_eq!(small["level"].as_u64().unwrap(), 2);
-    assert!(small["content"].as_str().unwrap().contains("Small child body"));
+    assert!(
+        small["content"]
+            .as_str()
+            .unwrap()
+            .contains("Small child body")
+    );
 
     // Large child folded: folded=true, content absent.
     let large = &children[1];
     assert_eq!(large["address"], "1.2");
     assert_eq!(large["folded"], true);
-    assert!(large.get("content").is_none(), "folded child must omit content: {}", large);
-    assert!(large["tokens"].as_u64().unwrap() > 100, "folded because over threshold");
+    assert!(
+        large.get("content").is_none(),
+        "folded child must omit content: {}",
+        large
+    );
+    assert!(
+        large["tokens"].as_u64().unwrap() > 100,
+        "folded because over threshold"
+    );
 }
 
 #[test]
@@ -390,5 +573,10 @@ fn test_unfold_text_node_has_no_children() {
         serde_json::from_str(&String::from_utf8(output.stdout).unwrap()).unwrap();
     assert_eq!(v["address"], "0");
     assert_eq!(v["children"].as_array().unwrap().len(), 0);
-    assert!(v["content"].as_str().unwrap().contains("Lede prose before any heading."));
+    assert!(
+        v["content"]
+            .as_str()
+            .unwrap()
+            .contains("Lede prose before any heading.")
+    );
 }

@@ -281,7 +281,10 @@ fn parse_indices(mut rest: &str, path: &str) -> Result<Vec<usize>, String> {
             ));
         }
         let idx: usize = digits.parse().map_err(|_| {
-            format!("malformed index in '{}': '[{}]' is not a number", path, digits)
+            format!(
+                "malformed index in '{}': '[{}]' is not a number",
+                path, digits
+            )
         })?;
         indices.push(idx);
         rest = &rest[close + 1..];
@@ -433,7 +436,14 @@ mod tests {
         let c = "---\ntype: note\ncreated: 2026-01-01\n---\nbody\n";
         let fs = fields_with_values(c);
         assert_eq!(fs.len(), 2);
-        assert_eq!(fs[0], Field { key: "type".into(), value: "note".into(), line: 2 });
+        assert_eq!(
+            fs[0],
+            Field {
+                key: "type".into(),
+                value: "note".into(),
+                line: 2
+            }
+        );
         assert_eq!(fs[1].key, "created");
         assert_eq!(fs[1].value, "2026-01-01");
     }
