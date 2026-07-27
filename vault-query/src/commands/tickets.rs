@@ -10,6 +10,7 @@ use anyhow::Result;
 use serde_yaml::Value;
 use std::collections::BTreeMap;
 
+use crate::base;
 use crate::commands::project_base::ProjectBase;
 use crate::config::ResolvedConfig;
 use crate::frontmatter;
@@ -23,17 +24,37 @@ const BASE: ProjectBase = ProjectBase::new("Tickets.base", "tickets-init", rende
 ///
 /// The ticket's `track:` frontmatter is a backref wikilink whose target stem is
 /// `track-<slug>` (e.g. `[[41 projects/nix/track-work-tracking-model]]`). We
-/// resolve query-side by taking the wikilink target's basename
-/// ([`wikilink::strip`]) and stripping the `track-` prefix, rather than opening
-/// the linked track file to read its `slug:`. The stem is self-contained, so
-/// resolution never depends on the target track file being present or scannable
-/// — the robust choice for a filter. A bare (non-wikilink) value is accepted
-/// too, since `strip` passes it through unchanged. Returns `None` when the field
-/// is empty or missing.
+/// resolve query-side from the wikilink's **target**, stripping the folder
+/// prefix ([`wikilink::resolve_name`]) and then the `track-` prefix, rather than
+/// opening the linked track file to read its `slug:`. The stem is
+/// self-contained, so resolution never depends on the target track file being
+/// present or scannable — the robust choice for a filter.
+///
+/// The target, never the alias: `[[…/track-foo|Work tracking model]]` owns
+/// `foo`, and reading the alias instead would name a slug no user can type. A
+/// bare (non-wikilink) value passes through trimmed, since
+/// [`wikilink::extract`] yields nothing for it. When the field holds a sequence,
+/// the first wikilink wins — [`frontmatter::get_display`] would otherwise join
+/// the members with `, ` into a stem matching nothing.
+///
+/// Returns `None` for every value the shared [`crate::base::is_truthy`] calls
+/// falsy — absent, `null`, empty, `false`, `0` — so an unowned ticket reads the
+/// same way here as under the Backlog view's `!track.isTruthy()`. That gate runs
+/// *before* the parse deliberately: [`crate::base::filter::apply`] evaluates
+/// this predicate ahead of the declared filters, over every file in the vault,
+/// so parsing first would put a full Markdown parse on all of them, mostly on
+/// the empty string.
 fn ticket_track_slug(fm: &BTreeMap<String, Value>) -> Option<String> {
     let raw = frontmatter::get_display(fm, "track");
-    let stem = wikilink::strip(&raw);
-    let stem = stem.trim();
+    if !base::is_truthy(&raw) {
+        return None;
+    }
+    let links = wikilink::extract(&raw);
+    let stem = links
+        .first()
+        .map(|w| wikilink::resolve_name(&w.target))
+        .unwrap_or_else(|| raw.trim())
+        .trim();
     if stem.is_empty() {
         return None;
     }
@@ -328,6 +349,65 @@ mod tests {
             Value::String("[[41 projects/nix/track-foo-bar]]".to_string()),
         );
         assert_eq!(ticket_track_slug(&fm), Some("foo-bar".to_string()));
+    }
+
+    /// One `track` value, resolved.
+    fn slug_of(track: Value) -> Option<String> {
+        let mut fm = BTreeMap::new();
+        fm.insert("track".to_string(), track);
+        ticket_track_slug(&fm)
+    }
+
+    #[test]
+    fn track_slug_resolves_the_wikilink_target_not_its_alias() {
+        // Aliasing the backref for a readable Track column is the natural thing
+        // to do in Obsidian, and `wikilink::strip` would answer with the alias
+        // ("Work tracking model") — a slug no user can type, so the ticket would
+        // drop out of `--track work-tracking-model` with exit 0 and no
+        // diagnostic while the Backlog view still counted it owned.
+        assert_eq!(
+            slug_of(Value::String(
+                "[[41 projects/nix/track-work-tracking-model|Work tracking model]]".to_string()
+            )),
+            Some("work-tracking-model".to_string())
+        );
+    }
+
+    #[test]
+    fn track_slug_takes_the_first_wikilink_of_a_sequence() {
+        // `get_display` joins a sequence with ", ", so resolving the flattened
+        // string would yield the stem "track-a, track-b", matching nothing.
+        assert_eq!(
+            slug_of(Value::Sequence(vec![
+                Value::String("[[41 projects/nix/track-a]]".to_string()),
+                Value::String("[[41 projects/nix/track-b]]".to_string()),
+            ])),
+            Some("a".to_string())
+        );
+    }
+
+    #[test]
+    fn track_slug_passes_a_bare_value_through() {
+        assert_eq!(
+            slug_of(Value::String("track-foo-bar".to_string())),
+            Some("foo-bar".to_string())
+        );
+        assert_eq!(
+            slug_of(Value::String("  foo-bar  ".to_string())),
+            Some("foo-bar".to_string())
+        );
+    }
+
+    #[test]
+    fn track_slug_is_none_for_every_value_the_backlog_view_calls_unowned() {
+        // The shared `base::is_truthy` gate: these are exactly the values
+        // `!track.isTruthy()` puts in the Backlog view, so `--track` must agree
+        // that none of them owns the ticket.
+        assert_eq!(slug_of(Value::String(String::new())), None);
+        assert_eq!(slug_of(Value::String("   ".to_string())), None);
+        assert_eq!(slug_of(Value::Bool(false)), None);
+        assert_eq!(slug_of(Value::Number(0.into())), None);
+        assert_eq!(slug_of(Value::Sequence(vec![])), None);
     }
 
     #[test]
