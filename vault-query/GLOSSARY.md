@@ -196,6 +196,8 @@ A VaultFile marked `template: true` is a template, not an instance: it carries t
 
 A Track has exactly one `status` value drawn from `{open, paused, done, abandoned, superseded}`; the Active view selects exactly `{open, paused}`.
 
+A grouped View keeps its group labels in every output format, each expressing them in its own idiom: `table` writes a `## label` heading above each group, `json` carries a `_group` key on each record, and `tsv` prepends a label column headed by the `groupBy` property's display name — a heading would break the one-record-per-line shape its readers parse (`base/view.rs`, `test_render_tsv_carries_the_group_label_as_a_column`).
+
 A FilterSet evaluates to true only if all `and` clauses pass _and_, when `or` is non-empty, at least one `or` clause passes; an empty `and` or `or` list is treated as "no constraint".
 
 An unrecognised Filter expression is an error, not a silent pass-through: a typo'd predicate would otherwise match every file and return a plausible-but-wrong superset (`filter.rs`, `test_unknown_expression_errors`).
