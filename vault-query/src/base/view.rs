@@ -468,4 +468,84 @@ mod tests {
              41 projects/vault\tticket-c\tdone\n"
         );
     }
+
+    /// A minimal ticket-shaped file for the end-to-end grouped-view test below.
+    fn make_ticket(name: &str, status: &str, rel_path: &str) -> VaultFile {
+        let mut fm = BTreeMap::new();
+        fm.insert(
+            "type".to_string(),
+            serde_yaml::Value::String("ticket".into()),
+        );
+        fm.insert(
+            "status".to_string(),
+            serde_yaml::Value::String(status.into()),
+        );
+        VaultFile {
+            path: std::path::PathBuf::from(format!("/vault/{}", rel_path)),
+            name: name.to_string(),
+            frontmatter: fm,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_grouped_view_end_to_end_through_filter_and_view_apply() {
+        // Closes W4: a fixture `.base` declaring `groupBy: file.folder`, driven
+        // through the real `filter::apply` + `view::apply` pipeline instead of
+        // a hand-built `ViewResult`. This is the only checked-in exercise of
+        // the `view.group_by -> group_header` mapping at view.rs:211-214 — the
+        // hand-built test above never calls `apply`, so deleting that mapping
+        // breaks nothing today — and the only checked-in consumer of the
+        // `file.folder` column; the real consumers are the vault-side
+        // `41 projects/Tracks.base` and `Tickets.base` "By Project" views,
+        // which live outside this repo.
+        let base = crate::base::parse::parse_str(
+            r#"
+filters:
+  and:
+    - type == "ticket"
+views:
+  - type: table
+    name: By Project
+    groupBy:
+      property: file.folder
+      direction: ASC
+    order:
+      - file.name
+      - status
+    sort:
+      - property: file.name
+        direction: ASC
+"#,
+        )
+        .unwrap();
+        let view = base.views.iter().find(|v| v.name == "By Project").unwrap();
+
+        let files = vec![
+            make_ticket("ticket-a", "open", "41 projects/nix/ticket-a.md"),
+            make_ticket("ticket-b", "open", "41 projects/vault/ticket-b.md"),
+            make_ticket("ticket-c", "done", "41 projects/vault/ticket-c.md"),
+        ];
+
+        let vault_root = Path::new("/vault");
+        let mut filtered =
+            crate::base::filter::apply(&files, &base.filters, &view.filters, vault_root, None)
+                .unwrap();
+        let result = apply(view, &base, &mut filtered, vault_root);
+
+        // Header: the group column heading (bare "file.folder" — the fixture
+        // declares no `properties:` block, so `resolve_display_name` falls
+        // through to the raw column name) followed by the view's own columns.
+        // Rows: two different folders, with "41 projects/vault" repeating its
+        // label on both of its rows, pinning the per-row repetition TSV relies
+        // on since it has no `## heading` line to carry the group instead.
+        let tsv = result.render(&Format::Tsv);
+        assert_eq!(
+            tsv,
+            "file.folder\tfile.name\tstatus\n\
+             41 projects/nix\tticket-a\topen\n\
+             41 projects/vault\tticket-b\topen\n\
+             41 projects/vault\tticket-c\tdone\n"
+        );
+    }
 }
