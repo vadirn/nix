@@ -83,7 +83,7 @@ Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically 
 
 `<title>` is a short noun phrase summarizing the session's outcome (e.g. `entry-binding decision`, `format refinement`).
 
-**Cite paths and symbols, plus the PR number when one exists (`#96`); never a bare commit SHA.** A SHA is branch-local: rebase rewrites it, and a squash-merge collapses the branch's commits into one commit titled after the PR, so the hash and its subject line both die on merge — exactly when the entry stops being current and becomes history a stable referent has to reach. A path survives both, and the commit is recoverable from it (`git log --follow <path>`, `git log -S <symbol>`) while nothing recovers a path from a dead hash. The PR number is the one pre-merge referent that survives, because it becomes the squashed commit's own subject; with no PR, paths alone carry the entry.
+**Cite the work by the paths and symbols it touched, plus the PR number once one exists (`#96`).** These referents survive rebase and squash-merge, and the commit stays recoverable from them (`git log --follow <path>`, `git log -S <symbol>`). With no PR yet, paths alone carry the entry.
 
 ### Decisions conventions
 
@@ -115,4 +115,3 @@ Exclude:
 - Process noise ("we discussed", "we tried X then Y") unless the path itself is the lesson.
 - Stylistic exploration that didn't change the outcome.
 - Content with a permanent home elsewhere (link to it instead).
-- Bare commit SHAs — name the files and symbols the work touched, plus the PR number when one exists (see ### Log entry format).

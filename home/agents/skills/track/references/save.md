@@ -61,8 +61,8 @@ graduation:
 A mature track runs hundreds of lines / tens of thousands of tokens. Never read or rewrite the whole body on save — that is the cost this procedure exists to avoid.
 
 - **Shape, not body.** `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its start line and estimated tokens, and each Log entry addressed as a sub-address under Log. The last Log number is the highest of those sub-addresses — read it off the overview instead of grepping the body, and take Log's own section number from the overview too rather than assuming a fixed position. The overview's line numbers are the map for the next step.
-- **Targeted reads.** For each section an edit touches (Decisions, Glossary, Log, the frontmatter block), Read only that section's line range (or unfold it with `vault-query read <track_path> <addr>`, addressing by heading slug) to get the exact anchor text an Edit needs. A save touches three or four sections, so a handful of small reads replaces one 30k-token Read.
-- **Localized Edits.** Apply the entry as in-place Edits at those anchors — append the log entry under `## Log`, append decisions under `## Decisions`, append Glossary rows, bump `updated:`. Each Edit's write window is a single hunk, smaller than the old full-body rewrite, so the partial-write exposure is lower, not higher.
+- **Targeted reads.** For each section an edit touches (Decisions, Glossary, Log, the frontmatter block), Read only that section's line range (or unfold it with `vault-query read <track_path> <addr>`, addressing by heading slug) to get the exact anchor text an Edit needs. A save touches three or four sections.
+- **Localized Edits.** Apply the entry as in-place Edits at those anchors — append the log entry under `## Log`, append decisions under `## Decisions`, append Glossary rows, bump `updated:`.
 
 **Full-file writes stay atomic.** Creating a new track writes a whole file from the template — there is no large body to avoid, and a partial write would leave a corrupt half-track that Obsidian Sync recovers only through a manual UI flow. For that one full-file write, stay crash-safe with a sibling temp file renamed over the target: `printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"` (the Write tool does not do this; use Bash with `mv`). Localized Edits into an existing track do not need the temp-file dance.
 
@@ -90,7 +90,7 @@ Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically 
 
 `<title>` is a short noun phrase summarizing the session's outcome (e.g. `entry-binding decision`, `format refinement`).
 
-**Cite paths and symbols, plus the PR number when one exists (`#96`); never a bare commit SHA.** A SHA is branch-local: rebase rewrites it, and a squash-merge collapses the branch's commits into one commit titled after the PR, so the hash and its subject line both die on merge — exactly when the entry stops being current and becomes history a stable referent has to reach. A path survives both, and the commit is recoverable from it (`git log --follow <path>`, `git log -S <symbol>`) while nothing recovers a path from a dead hash. The PR number is the one pre-merge referent that survives, because it becomes the squashed commit's own subject; with no PR, paths alone carry the entry.
+**Cite the work by the paths and symbols it touched, plus the PR number once one exists (`#96`).** These referents survive rebase and squash-merge, and the commit stays recoverable from them (`git log --follow <path>`, `git log -S <symbol>`). With no PR yet, paths alone carry the entry.
 
 ### Decisions conventions
 
@@ -138,4 +138,3 @@ Exclude:
 - Process noise ("we discussed", "we tried X then Y") unless the path itself is the lesson.
 - Stylistic exploration that didn't change the outcome.
 - Content with a permanent home elsewhere (link to it instead).
-- Bare commit SHAs — name the files and symbols the work touched, plus the PR number when one exists (see ### Log entry format).
