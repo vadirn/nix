@@ -3,8 +3,8 @@
  * --), extension routing, batching, and walk failures.
  * Run: bun test home/scripts/autoformat.test.ts
  * Requires oxfmt and git; the format:file case additionally requires bun. The
- * unreadable-directory case requires a non-root user, since root reads a 000
- * directory anyway.
+ * unreadable-directory case is skipped under root via test.skipIf, since root
+ * reads a 000 directory anyway.
  */
 
 import { expect, test } from "bun:test";
@@ -98,21 +98,26 @@ test("files sharing a formatter are counted in one batch", () => {
   expect(af([dir], { cwd: dir }).out).toContain("oxfmt 2");
 });
 
-test("an unreadable directory is reported, and the rest of the walk still runs", () => {
-  const dir = work();
-  const blocked = join(dir, "blocked");
-  mkdirSync(blocked);
-  ugly(join(blocked, "unreachable.json"));
-  const visible = ugly(join(dir, "visible.json"));
-  chmodSync(blocked, 0o000);
-  const r = af([dir], { cwd: dir });
-  chmodSync(blocked, 0o755);
+// Guarded rather than left to fail: root reads a 000 directory anyway, so
+// chmod 000 denies nothing when this suite runs as root.
+test.skipIf(process.getuid?.() === 0)(
+  "an unreadable directory is reported, and the rest of the walk still runs",
+  () => {
+    const dir = work();
+    const blocked = join(dir, "blocked");
+    mkdirSync(blocked);
+    ugly(join(blocked, "unreachable.json"));
+    const visible = ugly(join(dir, "visible.json"));
+    chmodSync(blocked, 0o000);
+    const r = af([dir], { cwd: dir });
+    chmodSync(blocked, 0o755);
 
-  expect(r.err).toContain(`cannot read ${blocked}`);
-  expect(formatted(visible)).toBe(true);
-  // A hole in the walk is not a formatter failure.
-  expect(r.code).toBe(0);
-});
+    expect(r.err).toContain(`cannot read ${blocked}`);
+    expect(formatted(visible)).toBe(true);
+    // A hole in the walk is not a formatter failure.
+    expect(r.code).toBe(0);
+  },
+);
 
 test("a missing path exits 1, an unknown option exits 2", () => {
   const dir = work();

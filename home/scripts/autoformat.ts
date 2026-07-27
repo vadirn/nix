@@ -34,10 +34,12 @@
  *                        modified or untracked. Elsewhere: walks the cwd.
  *   autoformat -a        walks the cwd whatever git says — the escape hatch
  *                        for a repo that gitignores what you edit.
- *   autoformat . -- -a   -- ends option parsing, so every later argument is a
- *                        path even when it opens with a dash. bun swallows a
- *                        -- sitting directly after the script path, so the
- *                        separator has to follow at least one other argument.
+ *   autoformat ./-a      a leading ./ never starts with a dash, so this is the
+ *                        escape hatch for a path named -a.
+ *   autoformat . -- -a   -- also ends option parsing, but bun swallows a --
+ *                        sitting directly after the script path in every
+ *                        invocation form, so it only works once another
+ *                        argument precedes it.
  *
  * Files sharing a formatter are handed to it in one invocation, so a walk of a
  * large tree spawns a handful of processes rather than one per file. Formatter
@@ -97,7 +99,9 @@ const USAGE = `usage: autoformat [-a] [--] [PATH...]
   (none)   git-modified + untracked files in the current work tree,
            or a walk of the cwd when outside one
   -a       walk the cwd instead of asking git
-  --       end option parsing: every later argument is a path`;
+  ./-a     escape hatch for a path starting with a dash (./ never does)
+  --       also ends option parsing, but only once another argument
+           precedes it — bun swallows a -- right after the script path`;
 
 type Run = { ok: boolean; output: string };
 
