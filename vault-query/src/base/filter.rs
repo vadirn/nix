@@ -29,18 +29,6 @@ static IS_TRUTHY_RE: LazyLock<Regex> =
 
 static QUOTED_STR_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#""([^"]*)""#).unwrap());
 
-/// Whether a frontmatter field holds a value Obsidian counts as truthy.
-///
-/// Falsy is: the key absent, `null`, an empty string or sequence, `false`, and
-/// `0`. Everything else is truthy. Reusing [`frontmatter::get_display`] collapses
-/// all of those to a small set of strings — `Null` and an empty sequence both
-/// render empty — so the check stays one match instead of a per-variant walk.
-fn is_truthy(fm: &std::collections::BTreeMap<String, serde_yaml::Value>, field: &str) -> bool {
-    let raw = frontmatter::get_display(fm, field);
-    let v = raw.trim();
-    !(v.is_empty() || v == "false" || v == "0")
-}
-
 /// Parse quoted strings from a containsAny argument list.
 fn parse_contains_any_args(args: &str) -> Vec<String> {
     QUOTED_STR_RE
@@ -92,10 +80,16 @@ pub fn evaluate(expr: &str, file: &VaultFile, vault_root: &Path) -> Result<bool>
     }
 
     // field.isTruthy() / !field.isTruthy()
+    //
+    // Flattening the field through `get_display` collapses every falsy YAML
+    // shape the shared [`super::is_truthy`] needs to see — `Null` and an empty
+    // sequence both render empty — so the check stays one match instead of a
+    // per-variant walk.
     if let Some(caps) = IS_TRUTHY_RE.captures(expr) {
         let negated = !caps[1].is_empty();
         let field = &caps[2];
-        return Ok(is_truthy(&file.frontmatter, field) != negated);
+        let value = frontmatter::get_display(&file.frontmatter, field);
+        return Ok(super::is_truthy(&value) != negated);
     }
 
     // field.length > N

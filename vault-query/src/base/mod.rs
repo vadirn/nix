@@ -9,6 +9,26 @@ pub use parse::parse;
 
 use std::collections::BTreeMap;
 
+/// Whether a value counts as truthy: trim it, then call the empty string,
+/// `false`, and `0` falsy and everything else truthy.
+///
+/// The one answer for the whole engine — `.base` filters (`field.isTruthy()`),
+/// formula conditions (`if(field, …)`), and `tickets --track` all route here, so
+/// a single `.base` file cannot answer the same question two ways.
+///
+/// Limitation: the input is a flattened display string
+/// ([`crate::frontmatter::get_display`]), which drops the Boolean-vs-string
+/// distinction Obsidian keeps, so the *strings* `"false"` and `"0"` read falsy
+/// here where Obsidian almost certainly reads them truthy. Obsidian publishes no
+/// falsy set — its docs say only that the value is "coerced into a boolean" — so
+/// settling that needs running Obsidian against a fixture vault. Until then this
+/// rule is the CLI's own, picked because the live `41 projects/Tickets.base`
+/// Backlog view depends on it through `!track.isTruthy()`.
+pub fn is_truthy(value: &str) -> bool {
+    let v = value.trim();
+    !(v.is_empty() || v == "false" || v == "0")
+}
+
 /// A parsed .base file.
 #[derive(Debug, Clone)]
 pub struct BaseFile {
