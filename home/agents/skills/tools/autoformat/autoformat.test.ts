@@ -1,19 +1,44 @@
 /**
  * Tests for autoformat.ts — selection modes (paths, directory walk, git, -a,
  * --), extension routing, batching, and walk failures.
- * Run: bun test home/scripts/autoformat.test.ts
+ * Run: `bun test` from this directory, or `bun run --filter autoformat test`
+ * from the workspace root (home/agents/skills).
  * Requires oxfmt and git; the format:file case additionally requires bun. The
  * unreadable-directory case is skipped under root via test.skipIf, since root
  * reads a 000 directory anyway.
  */
 
 import { expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const CLI = new URL("./autoformat.ts", import.meta.url).pathname;
-const HOOK = new URL("../claude/hooks/hint-autoformat.sh", import.meta.url).pathname;
+
+/**
+ * The repo root: the nearest ancestor holding a .git entry — a directory in a
+ * clone, a file in a worktree, and existsSync accepts either. The parity tests
+ * read a hook that lives in this repo but outside this workspace; addressing it
+ * from the root keeps them correct wherever this member sits.
+ */
+function repoRoot(): string {
+  let dir = dirname(CLI);
+  for (;;) {
+    if (existsSync(join(dir, ".git"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) throw new Error(`parity test: no .git above ${dirname(CLI)}`);
+    dir = parent;
+  }
+}
+
+const HOOK = join(repoRoot(), "home", "claude", "hooks", "hint-autoformat.sh");
 const UGLY = '{   "a":1,"b":   [2,3]}';
 
 function work(): string {

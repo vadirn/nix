@@ -24,9 +24,9 @@ Personal macOS system config. Three areas: a Nix flake that declaratively manage
 
 `home/claude/` contains `settings.json` with sandbox permissions and environment variables. `home/claude/hooks/` has PreToolUse safety hooks: dangerous command blocking, sensitive file guards, `/commit` and `/pr` nonce enforcement, Firecrawl MCP routing, and sound notifications.
 
-Formatting is agent-driven, not automatic: `home/scripts/autoformat.ts` (a bun CLI, on PATH as `autoformat`) routes each file to its formatter — the project's `format:file` script, else deno fmt, else oxfmt, or ruff, or alejandra — and `home/claude/hooks/hint-autoformat.sh` names it in the PostToolUse context after every Write and Edit. Nothing rewrites a file behind the agent, so a reflow can never land between two Edits and break the second one.
+Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/autoformat.ts` (a bun CLI, on PATH as `autoformat`) routes each file to its formatter — the project's `format:file` script, else deno fmt, else oxfmt, or ruff, or alejandra — and `home/claude/hooks/hint-autoformat.sh` names it in the PostToolUse context after every Write and Edit. Nothing rewrites a file behind the agent, so a reflow can never land between two Edits and break the second one.
 
-`agents/AGENTS.md` is the shared reasoning and communication ruleset (dialectical method, formal logic, prose style). `agents/skills/` holds ~30 skills (`commit`, `pr`, `vault`, `debate`, `probe`, `work`, `tdd`, `writing-*`, `design`, etc.). `agents/agents/` holds subagent definitions. `agents/scripts/sync-agents.sh` re-creates agent symlinks without a full rebuild.
+`agents/AGENTS.md` is the shared reasoning and communication ruleset (dialectical method, formal logic, prose style). `agents/skills/` holds ~30 skills (`commit`, `pr`, `vault`, `debate`, `probe`, `work`, `tdd`, `writing-*`, `design`, etc.); it is also a bun workspace with pinned TypeScript and oxlint, whose `tools/` member holds the `autoformat` CLI. `agents/agents/` holds subagent definitions. `agents/scripts/sync-agents.sh` re-creates agent symlinks without a full rebuild.
 
 ## Rust workspace
 

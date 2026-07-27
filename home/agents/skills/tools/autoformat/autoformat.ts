@@ -53,8 +53,13 @@
  * walk could not read are both reported on stderr and neither is an error:
  * coverage was incomplete, but nothing that ran went wrong.
  *
- * Standalone by design: no imports beyond node builtins, no package.json, no
- * build step. Deployed as a ~/.local/bin symlink (see home/default.nix).
+ * Standalone by design: no imports beyond node builtins, no runtime
+ * dependencies, no build step. It is a member of the home/agents/skills bun
+ * workspace only to inherit that workspace's pinned typecheck, lint, and test;
+ * its package.json declares no dependencies, because ~/.local/bin/autoformat
+ * (see home/default.nix) symlinks this file itself and runs it under the
+ * shebang above — a dependency would make the CLI need an installed
+ * node_modules to start.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";

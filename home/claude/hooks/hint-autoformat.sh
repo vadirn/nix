@@ -13,7 +13,8 @@
 # edited twice; that is what holding no state costs.
 #
 # Silent unless the path carries an extension autoformat routes — the list is
-# kept in sync with home/scripts/autoformat.ts's WEB_EXTS set plus its py and
+# kept in sync with the WEB_EXTS set in
+# home/agents/skills/tools/autoformat/autoformat.ts, plus that file's py and
 # nix routing branches. Never blocks: exit 0 always.
 
 set -uo pipefail

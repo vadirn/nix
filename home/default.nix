@@ -76,7 +76,11 @@
       # Symlinked out of the store like the scripts in home/claude.nix, so
       # edits take effect without a rebuild. Claude Code reaches it through the
       # same PATH the terminal uses; hooks/hint-autoformat.sh only names it.
-      home.file.".local/bin/autoformat".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/scripts/autoformat.ts";
+      # It sits in the home/agents/skills bun workspace to inherit that
+      # workspace's pinned typecheck, lint, and test, and stays a single file
+      # with no dependencies so this symlink can point straight at the source —
+      # no install step, and no node_modules for the CLI to start.
+      home.file.".local/bin/autoformat".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/tools/autoformat/autoformat.ts";
 
       imports = [
         ./zsh.nix
