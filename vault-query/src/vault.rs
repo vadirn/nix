@@ -36,9 +36,21 @@ impl VaultFile {
     }
 
     /// Check if this file is in the given folder (relative to vault root).
+    ///
+    /// Matches on a path-segment boundary, not a bare string prefix: `folder`
+    /// must be the whole leading path, so `"41 projects/nix"` matches
+    /// `"41 projects/nix/ticket-a.md"` (direct child) and
+    /// `"41 projects/nix/sub/deep.md"` (nested), but not
+    /// `"41 projects/nixon/ticket.md"` — a plain `starts_with` would treat
+    /// `folder` as a substring and let a sibling folder whose name happens to
+    /// extend it (`nix` vs. `nixon`) slip through. `*-init` writes
+    /// `file.inFolder("<project folder>")` into every generated `.base`, so an
+    /// over-inclusive match here pulls a sibling project's files into the
+    /// wrong base.
     pub fn in_folder(&self, folder: &str, vault_root: &Path) -> bool {
         let rel = self.relative_path(vault_root);
-        rel.starts_with(folder)
+        rel.strip_prefix(folder)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
     }
 }
 
@@ -232,6 +244,37 @@ mod tests {
         let f = files.iter().find(|f| f.name == "checkpoint-001").unwrap();
         assert!(f.in_folder("41 projects/nix", &dir));
         assert!(!f.in_folder("20 cards", &dir));
+    }
+
+    #[test]
+    fn in_folder_rejects_a_sibling_whose_name_extends_the_folder() {
+        // A bare string prefix would treat "41 projects/nix" as a substring
+        // of "41 projects/nixon", pulling a sibling project's files into the
+        // wrong base — exactly what `*-init` writes into every generated
+        // `.base` via `file.inFolder("<project folder>")`.
+        let f = VaultFile {
+            path: PathBuf::from("/vault/41 projects/nixon/ticket.md"),
+            ..Default::default()
+        };
+        assert!(!f.in_folder("41 projects/nix", Path::new("/vault")));
+    }
+
+    #[test]
+    fn in_folder_matches_a_file_directly_in_the_folder() {
+        let f = VaultFile {
+            path: PathBuf::from("/vault/41 projects/nix/ticket-a.md"),
+            ..Default::default()
+        };
+        assert!(f.in_folder("41 projects/nix", Path::new("/vault")));
+    }
+
+    #[test]
+    fn in_folder_matches_a_file_nested_deeper() {
+        let f = VaultFile {
+            path: PathBuf::from("/vault/41 projects/nix/sub/deep/ticket.md"),
+            ..Default::default()
+        };
+        assert!(f.in_folder("41 projects/nix", Path::new("/vault")));
     }
 
     // --- scan_assets tests ---
