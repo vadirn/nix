@@ -33,6 +33,15 @@ elif "reference" or "reference <topic>":
     Read(dir/references/post-edit.md)
     do("follow reference creation/editing process; apply post-edit etiquette before wrapping")
 
+elif "ticket" or "ticket <topic>" or an action item needs filing:
+    Read(dir/references/ticket.md)
+    Read(dir/references/post-edit.md)
+    do("follow ticket creation/editing process; apply post-edit etiquette before wrapping")
+
+elif "tickets" or "backlog <project>":
+    results = Bash(vault-query tickets [--backlog] [--track <slug>] [--status <status>] [--project <name>])
+    do("present tickets; unfold one with vault-query read <path> when the user picks it")
+
 elif "review":
     Read(dir/references/review.md)
     do("follow review process")
@@ -120,6 +129,8 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | Project | Concrete deliverable linked to a goal. Has `result`, `status`, optional `deadline`. Single file, or a subfolder when work fans out. Distinct from a track: the project is the unit of intent, the track is the unit of working memory across sessions. | `41 projects/<project>/` |
 | Project context | Stable per-project framing (purpose, conventions, links) read by `vault-query --project <name> context`. Distinct from a track: context is durable framing, a track is rolling state. | `41 projects/<project>/context.md` |
 | Track | Rolling per-project work artifact (sections: Direction, Decisions, Log). One file per multi-session effort, appended across the sessions it spans. Owned by the `/track` skill. Distinct from a checkpoint: a track accumulates state in place; a checkpoint was a one-shot snapshot. | `41 projects/<project>/track-<slug>.md` |
+| Ticket | One unit of decided work, sized to one PR. Frontmatter `status` (`open`/`done`/`abandoned`), `track` backref, `requires` dependency edges; body stays repo-self-sufficient. Created per `references/ticket.md`. Distinct from a track: a track is one effort's rolling memory, a ticket is one deliverable inside it. | `41 projects/<project>/ticket-<slug>.md` |
+| Scratchpad | Per-project pre-triage capture and seed bank for ideas with no done-condition yet. Plain markdown list, appended freely. Distinct from the inbox: the inbox holds captures with no project known, a scratchpad entry already has one. | `41 projects/<project>/scratchpad.md` |
 | Experiment | Captured behavior test of an existing thing against a falsifiable claim. Frontmatter `type: experiment`, `verdict` (confirmed/refuted/inconclusive), `date`, optional `project` wikilink. Owned by the `/experiment` skill. Distinct from a track: an experiment is one decided question, a track is a multi-session effort. | `35 experiments/` |
 | Checkpoint _(legacy — replaced by track)_ | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain reachable via `vault-query read <name>`. Programmatically treated as superseded: `consult` excludes all checkpoints by default. | `41 projects/<project>/` |
 | Weekly log | ISO-week file with Focus, Tasks, Backlog, Activity sections. Tasks wikilink to projects; Activity is auto-appended by a git post-commit hook. Distinct from a track: a weekly log spans all projects for one week, a track spans one project across all weeks. | `41 projects/block-buster/YYYY-wWW.md` |
@@ -133,6 +144,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `context` | Print project context.md | Yes |
 | `tracks [--view <view>]` | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC | Yes |
 | `tracks-init` | Create Tracks.base in the current project | Yes |
+| `tickets [--backlog] [--track <slug>] [--status <s>] [--project <name>]` | List tickets. `--backlog` = open and unclaimed. `--format text\|markdown\|json` | Yes |
 | `get <fragment>` | Resolve an entry name to its absolute path (one per line). For handing a path to another tool; to read an entry, name it to `read` directly | No |
 | `read <FILE\|NAME> [ADDRESS]` | Structured read: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, `0`/text, `fm[.path]`, `links`). Takes a path or an entry name — an unresolvable name errors, an ambiguous one errors listing candidates. `--depth`, `--full`, `--threshold`, `--format json` | No |
 | `search <query>` | BM25 full-text search (--regex for grep mode) | No |

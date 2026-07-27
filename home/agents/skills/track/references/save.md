@@ -130,7 +130,7 @@ Include in the Log entry:
 
 - Outcomes a fresh agent would need to continue the work.
 - Decisions made (also written to ## Decisions, but the Log captures _why now_).
-- Frictions encountered that aren't yet resolved. Durable open work does not stay in the Log — an action item becomes a ticket (`type: ticket`, `41 projects/<project>/ticket-<slug>.md`), a blocker becomes that ticket's `requires:` edge, and a deferred seed goes to the project scratchpad (`type: scratchpad`). Mention the friction in the narrative and offer to file it.
+- Frictions encountered that aren't yet resolved. Durable open work leaves the Log for a ticket, a ticket's `requires:` edge, or the project scratchpad; `/vault ticket` routes between the three and holds the ticket contract (`home/agents/skills/vault/references/ticket.md`). Mention the friction in the narrative and offer to file it.
 - Transient session state: unpushed commits, dirty branches, branch composition, pending pushes. The Log entry is a snapshot the next entry supersedes, so state that expires belongs here and nowhere else.
 
 Exclude:
