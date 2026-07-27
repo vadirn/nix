@@ -18,8 +18,11 @@ Route the item before creating anything.
 config = Bash(vault-query config)   // vault_root, project_path
 
 // Duplicate check — an open ticket may already cover this
-open = Bash(vault-query tickets --project <project> --status open --format text)
-if a line covers the same work:
+open = Bash(vault-query tickets --project <project> --view Open --format tsv)
+if it errors with "no Tickets.base":            // this project's first ticket
+  Bash(vault-query --project <project> tickets-init)
+  open = ""                                     // a project with no base has no tickets
+if a row covers the same work:
   present it, ask: extend that ticket / file a new one?
 
 // Build the ticket
@@ -116,5 +119,5 @@ Out of scope: migrating the Backlog content that already exists in tracks on dis
 
 ## Notes
 
-- `vault-query tickets` queries them: `--backlog` (open and unowned — the project backlog), `--track <slug>`, `--status <open|done|abandoned>`, `--project <name>`, `--format <text|markdown|json>`.
+- `vault-query tickets --view <name>` queries them through the project's `Tickets.base`, the way `tracks` reads `Tracks.base`. Views: `Backlog` (open and unowned — the project backlog), `Open`, `Done`, `Abandoned`, `By Track`, `By Status`, `All`. `--track <slug>` narrows any view to one track's tickets; `--project <name>` picks which project's base to read; `--format <table|tsv|json>`. A project with no `Tickets.base` yet gets one from `vault-query tickets-init`.
 - Tickets reach other devices through Obsidian Sync, so apply `references/post-edit.md` and skip the `/git commit` suggestion.

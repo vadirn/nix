@@ -24,7 +24,22 @@ static CONTAINS_ANY_RE: LazyLock<Regex> =
 static LENGTH_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"^(\w+)\.length\s*>\s*(\d+)$"#).unwrap());
 
+static IS_TRUTHY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^(!?)(\w+)\.isTruthy\(\)$"#).unwrap());
+
 static QUOTED_STR_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#""([^"]*)""#).unwrap());
+
+/// Whether a frontmatter field holds a value Obsidian counts as truthy.
+///
+/// Falsy is: the key absent, `null`, an empty string or sequence, `false`, and
+/// `0`. Everything else is truthy. Reusing [`frontmatter::get_display`] collapses
+/// all of those to a small set of strings — `Null` and an empty sequence both
+/// render empty — so the check stays one match instead of a per-variant walk.
+fn is_truthy(fm: &std::collections::BTreeMap<String, serde_yaml::Value>, field: &str) -> bool {
+    let raw = frontmatter::get_display(fm, field);
+    let v = raw.trim();
+    !(v.is_empty() || v == "false" || v == "0")
+}
 
 /// Parse quoted strings from a containsAny argument list.
 fn parse_contains_any_args(args: &str) -> Vec<String> {
@@ -76,6 +91,13 @@ pub fn evaluate(expr: &str, file: &VaultFile, vault_root: &Path) -> Result<bool>
         return Ok(frontmatter::contains_any(&file.frontmatter, field, &refs));
     }
 
+    // field.isTruthy() / !field.isTruthy()
+    if let Some(caps) = IS_TRUTHY_RE.captures(expr) {
+        let negated = !caps[1].is_empty();
+        let field = &caps[2];
+        return Ok(is_truthy(&file.frontmatter, field) != negated);
+    }
+
     // field.length > N
     if let Some(caps) = LENGTH_RE.captures(expr) {
         let field = &caps[1];
@@ -115,16 +137,25 @@ pub fn evaluate_filter_set(
     Ok(true)
 }
 
-/// Apply both base-level and view-level filters.
+/// Apply both base-level and view-level filters, plus an optional caller
+/// predicate ANDed onto them.
+///
+/// `extra` is the slot for a filter a `.base` cannot declare because its
+/// argument is only known at call time — `tickets --track <slug>` is the one
+/// caller. It stays a Rust closure rather than a synthesized expression so the
+/// expression vocabulary here keeps matching Obsidian's: an operator only this
+/// engine understands would render in the CLI and silently fail in Obsidian.
 pub fn apply(
     files: &[VaultFile],
     base_filters: &super::FilterSet,
     view_filters: &super::FilterSet,
     vault_root: &Path,
+    extra: Option<&dyn Fn(&VaultFile) -> bool>,
 ) -> Result<Vec<VaultFile>> {
     let mut out = Vec::new();
     for f in files {
-        if evaluate_filter_set(base_filters, f, vault_root)?
+        if extra.is_none_or(|p| p(f))
+            && evaluate_filter_set(base_filters, f, vault_root)?
             && evaluate_filter_set(view_filters, f, vault_root)?
         {
             out.push(f.clone());
@@ -259,6 +290,84 @@ mod tests {
         };
         let f = make_file("cp1", vec![], "cp1.md");
         assert!(evaluate_filter_set(&fs, &f, Path::new("/vault")).is_err());
+    }
+
+    #[test]
+    fn test_is_truthy() {
+        // The Backlog view of Tickets.base selects on `!track.isTruthy()`, so an
+        // absent, null, or empty `track` must read as falsy and a wikilink as truthy.
+        let set = make_file(
+            "t1",
+            vec![(
+                "track",
+                Value::String("[[41 projects/nix/track-foo]]".into()),
+            )],
+            "41 projects/nix/ticket-a.md",
+        );
+        assert!(evaluate("track.isTruthy()", &set, Path::new("/vault")).unwrap());
+        assert!(!evaluate("!track.isTruthy()", &set, Path::new("/vault")).unwrap());
+
+        let null = make_file("t2", vec![("track", Value::Null)], "41 projects/nix/b.md");
+        let empty = make_file(
+            "t3",
+            vec![("track", Value::String(String::new()))],
+            "41 projects/nix/c.md",
+        );
+        let absent = make_file("t4", vec![], "41 projects/nix/d.md");
+        for f in [&null, &empty, &absent] {
+            assert!(!evaluate("track.isTruthy()", f, Path::new("/vault")).unwrap());
+            assert!(evaluate("!track.isTruthy()", f, Path::new("/vault")).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_is_truthy_false_and_zero_are_falsy() {
+        let f = make_file(
+            "t1",
+            vec![
+                ("draft", Value::Bool(false)),
+                ("count", Value::Number(0.into())),
+            ],
+            "x.md",
+        );
+        assert!(!evaluate("draft.isTruthy()", &f, Path::new("/vault")).unwrap());
+        assert!(!evaluate("count.isTruthy()", &f, Path::new("/vault")).unwrap());
+    }
+
+    #[test]
+    fn test_apply_extra_predicate_ands_with_filters() {
+        // The `--track` slot: a caller predicate narrows the view's result set
+        // without touching the declared filters.
+        let a = make_file(
+            "a",
+            vec![("type", Value::String("ticket".into()))],
+            "41 projects/nix/ticket-a.md",
+        );
+        let b = make_file(
+            "b",
+            vec![("type", Value::String("ticket".into()))],
+            "41 projects/nix/ticket-b.md",
+        );
+        let base = super::super::FilterSet {
+            and: vec![r#"type == "ticket""#.to_string()],
+            or: vec![],
+        };
+        let empty = super::super::FilterSet::default();
+        let files = vec![a, b];
+
+        let all = apply(&files, &base, &empty, Path::new("/vault"), None).unwrap();
+        assert_eq!(all.len(), 2);
+
+        let only_a = apply(
+            &files,
+            &base,
+            &empty,
+            Path::new("/vault"),
+            Some(&|f: &VaultFile| f.name == "a"),
+        )
+        .unwrap();
+        assert_eq!(only_a.len(), 1);
+        assert_eq!(only_a[0].name, "a");
     }
 
     #[test]

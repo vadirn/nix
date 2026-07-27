@@ -1,94 +1,32 @@
-use anyhow::Result;
-use serde::Serialize;
+//! `tickets` — a view into the project's `Tickets.base`.
+//!
+//! Structurally the twin of [`super::tracks`]: locate the project's `.base`,
+//! hand it to [`super::query`], render. The one thing tickets need that tracks
+//! do not is `--track <slug>`, whose argument is known only at call time and so
+//! cannot be a declared view; it arrives as the caller predicate slot on
+//! [`crate::base::filter::apply`].
+
+use anyhow::{Context, Result, bail};
 use serde_yaml::Value;
 use std::collections::BTreeMap;
-use std::path::Path;
-use std::str::FromStr;
 
 use crate::config::ResolvedConfig;
 use crate::frontmatter;
-use crate::vault::{self, VaultFile};
+use crate::output::Format;
+use crate::vault::VaultFile;
 use crate::wikilink;
-
-/// Fallback projects folder when the config omits `projects_path`.
-const DEFAULT_PROJECTS_PATH: &str = "41 projects";
-
-/// Output format for the `tickets` listing. Three variants so the same command
-/// serves a human (`text`), a resuming skill (`markdown`), and a machine
-/// (`json`); mirrors the `--format` conventions of the `search` (text/json) and
-/// `consult` (markdown/json) commands.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TicketFormat {
-    Text,
-    Markdown,
-    Json,
-}
-
-impl FromStr for TicketFormat {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "text" => Ok(TicketFormat::Text),
-            "markdown" | "md" => Ok(TicketFormat::Markdown),
-            "json" => Ok(TicketFormat::Json),
-            _ => Err(format!(
-                "unknown format: {} (expected text, markdown, or json)",
-                s
-            )),
-        }
-    }
-}
-
-impl std::fmt::Display for TicketFormat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TicketFormat::Text => write!(f, "text"),
-            TicketFormat::Markdown => write!(f, "markdown"),
-            TicketFormat::Json => write!(f, "json"),
-        }
-    }
-}
-
-/// One ticket projected into its key fields. The `track` and `requires`
-/// wikilinks are resolved to bare slugs/names here so every output format shares
-/// one resolved shape.
-#[derive(Debug, Serialize)]
-pub struct Ticket {
-    /// Vault-relative path (`41 projects/nix/ticket-remove-track-backlog.md`).
-    pub path: String,
-    /// The `slug:` frontmatter value.
-    pub slug: String,
-    /// The `status:` frontmatter value (`open`, `done`, `abandoned`).
-    pub status: String,
-    pub description: String,
-    /// Resolved track slug (the `track-` prefix stripped from the backref
-    /// wikilink target stem), empty when no track owns the ticket.
-    pub track: String,
-    /// Resolved blocking-ticket names from the `requires:` sequence.
-    pub requires: Vec<String>,
-    /// Project name derived from the folder under `projects_path`, empty when the
-    /// ticket lives outside a project directory.
-    pub project: String,
-}
-
-/// JSON envelope for `--format json`, borrowing the selected tickets.
-#[derive(Serialize)]
-struct TicketsOutput<'a> {
-    count: usize,
-    tickets: &'a [Ticket],
-}
 
 /// Resolve the track that owns a ticket to a bare slug.
 ///
 /// The ticket's `track:` frontmatter is a backref wikilink whose target stem is
 /// `track-<slug>` (e.g. `[[41 projects/nix/track-work-tracking-model]]`). We
 /// resolve query-side by taking the wikilink target's basename
-/// ([`wikilink::strip`] → [`wikilink::resolve_name`]) and stripping the `track-`
-/// prefix, rather than opening the linked track file to read its `slug:`. The
-/// stem is self-contained, so resolution never depends on the target track file
-/// being present or scannable — the robust choice for a filter. A bare
-/// (non-wikilink) value is accepted too, since `strip` passes it through
-/// unchanged. Returns `None` when the field is empty or missing.
+/// ([`wikilink::strip`]) and stripping the `track-` prefix, rather than opening
+/// the linked track file to read its `slug:`. The stem is self-contained, so
+/// resolution never depends on the target track file being present or scannable
+/// — the robust choice for a filter. A bare (non-wikilink) value is accepted
+/// too, since `strip` passes it through unchanged. Returns `None` when the field
+/// is empty or missing.
 fn ticket_track_slug(fm: &BTreeMap<String, Value>) -> Option<String> {
     let raw = frontmatter::get_display(fm, "track");
     let stem = wikilink::strip(&raw);
@@ -99,209 +37,211 @@ fn ticket_track_slug(fm: &BTreeMap<String, Value>) -> Option<String> {
     Some(stem.strip_prefix("track-").unwrap_or(stem).to_string())
 }
 
-/// Resolve the `requires:` sequence to bare ticket names (wikilink syntax and
-/// folder prefixes stripped). Empty items are dropped.
-fn ticket_requires(fm: &BTreeMap<String, Value>) -> Vec<String> {
-    frontmatter::get_string_seq(fm, "requires")
-        .iter()
-        .map(|r| wikilink::strip(r).trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
-/// Derive a project name from a vault-relative path: the folder segment directly
-/// under `projects_path`. Returns an empty string for tickets outside a project,
-/// or sitting directly in `projects_path` with no project folder.
-fn ticket_project(rel_path: &str, projects_path: &str) -> String {
-    let prefix = format!("{projects_path}/");
-    let Some(rest) = rel_path.strip_prefix(&prefix) else {
-        return String::new();
-    };
-    match rest.split_once('/') {
-        Some((folder, _file)) => folder.to_string(),
-        None => String::new(),
-    }
-}
-
-/// Filter scanned vault files down to the tickets matching the given criteria,
-/// projecting each into a [`Ticket`]. Pure over its inputs so tests can drive it
-/// with a scanned temp vault and assert on the returned set.
-///
-/// - `project_scope`: when `Some`, keep only tickets whose absolute path is under
-///   this directory (the resolved `--project` folder).
-/// - `track`: keep only tickets whose resolved track slug equals this.
-/// - `backlog`: keep only tickets no track owns (`track` empty) with `status == open`.
-/// - `status`: keep only tickets whose `status` equals this.
-fn select(
-    files: &[VaultFile],
-    vault_root: &Path,
-    projects_path: &str,
-    project_scope: Option<&Path>,
-    track: Option<&str>,
-    backlog: bool,
-    status: Option<&str>,
-) -> Vec<Ticket> {
-    let mut tickets: Vec<Ticket> = files
-        .iter()
-        .filter(|f| frontmatter::get_display(&f.frontmatter, "type") == "ticket")
-        .filter(|f| !frontmatter::is_template(&f.frontmatter))
-        .filter(|f| project_scope.is_none_or(|dir| f.path.starts_with(dir)))
-        .filter_map(|f| {
-            let ticket_status = frontmatter::get_display(&f.frontmatter, "status");
-            let track_slug = ticket_track_slug(&f.frontmatter);
-
-            if let Some(want) = status {
-                if ticket_status != want {
-                    return None;
-                }
-            }
-            if let Some(want) = track {
-                if track_slug.as_deref() != Some(want) {
-                    return None;
-                }
-            }
-            if backlog && (track_slug.is_some() || ticket_status != "open") {
-                return None;
-            }
-
-            let rel = f.relative_path(vault_root);
-            Some(Ticket {
-                slug: frontmatter::get_display(&f.frontmatter, "slug"),
-                status: ticket_status,
-                description: frontmatter::get_display(&f.frontmatter, "description"),
-                track: track_slug.unwrap_or_default(),
-                requires: ticket_requires(&f.frontmatter),
-                project: ticket_project(&rel, projects_path),
-                path: rel,
-            })
-        })
-        .collect();
-
-    tickets.sort_by(|a, b| a.path.cmp(&b.path));
-    tickets
-}
-
-/// List `type: ticket` notes, optionally scoped by `--project` (the global
-/// project flag), `--track`, `--backlog`, and `--status`.
-pub fn run(
-    cfg: &ResolvedConfig,
-    track: Option<&str>,
-    backlog: bool,
-    status: Option<&str>,
-    format: TicketFormat,
-) -> Result<()> {
-    let vault_root = &cfg.vault_root;
-    let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
-    let projects_path = cfg
-        .projects_path
-        .as_deref()
-        .unwrap_or(DEFAULT_PROJECTS_PATH);
-
-    let tickets = select(
-        &files,
-        vault_root,
-        projects_path,
-        cfg.project_path.as_deref(),
-        track,
-        backlog,
-        status,
-    );
-
-    match format {
-        TicketFormat::Text => print_text(&tickets),
-        TicketFormat::Markdown => print_markdown(&tickets),
-        TicketFormat::Json => print_json(&tickets)?,
-    }
-    Ok(())
-}
-
-/// One line per ticket, following the `(field: value)` shape of the `list`
-/// command: `slug — description (status: …) (track: …) (requires: …) (path)`.
-fn print_text(tickets: &[Ticket]) {
-    for t in tickets {
-        let ident = if t.slug.is_empty() { &t.path } else { &t.slug };
-        let mut line = ident.clone();
-        if !t.description.is_empty() {
-            line.push_str(" — ");
-            line.push_str(&t.description);
-        }
-        line.push_str(&format!(" (status: {})", t.status));
-        if !t.track.is_empty() {
-            line.push_str(&format!(" (track: {})", t.track));
-        }
-        if !t.requires.is_empty() {
-            line.push_str(&format!(" (requires: {})", t.requires.join(", ")));
-        }
-        line.push_str(&format!(" ({})", t.path));
-        println!("{line}");
-    }
-}
-
-/// A `## <slug> [<status>]` section per ticket, echoing the shape of the
-/// `consult` markdown output so a resuming skill can read it directly.
-fn print_markdown(tickets: &[Ticket]) {
-    println!(
-        "<!-- vault-query tickets: {} ticket(s) -->\n",
-        tickets.len()
-    );
-    for t in tickets {
-        let ident = if t.slug.is_empty() { &t.path } else { &t.slug };
-        println!("## {ident} [{}]", t.status);
-        println!();
-        if !t.description.is_empty() {
-            println!("{}\n", t.description);
-        }
-        println!("- path: {}", t.path);
-        if !t.project.is_empty() {
-            println!("- project: {}", t.project);
-        }
-        println!(
-            "- track: {}",
-            if t.track.is_empty() { "—" } else { &t.track }
+/// Render one view of the project's `Tickets.base`, optionally narrowed to the
+/// tickets one track owns.
+pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format) -> Result<()> {
+    let base_path = base_path(cfg)?;
+    if !base_path.is_file() {
+        bail!(
+            "no Tickets.base at {} (run `vault-query tickets-init`)",
+            base_path.display()
         );
-        let requires = if t.requires.is_empty() {
-            "—".to_string()
-        } else {
-            t.requires.join(", ")
-        };
-        println!("- requires: {requires}\n");
+    }
+
+    // Exact stem match, not a substring: slug `foo` must not select a ticket
+    // owned by `track-foo-bar`.
+    match track {
+        Some(slug) => {
+            let owned = |f: &VaultFile| ticket_track_slug(&f.frontmatter).as_deref() == Some(slug);
+            super::query::run(&base_path, view, cfg, format, Some(&owned))
+        }
+        None => super::query::run(&base_path, view, cfg, format, None),
     }
 }
 
-fn print_json(tickets: &[Ticket]) -> Result<()> {
-    let envelope = TicketsOutput {
-        count: tickets.len(),
-        tickets,
-    };
-    println!("{}", serde_json::to_string_pretty(&envelope)?);
+/// Write a `Tickets.base` scoped to the resolved project.
+pub fn init(cfg: &ResolvedConfig) -> Result<()> {
+    let base_path = base_path(cfg)?;
+    if base_path.exists() {
+        bail!("Tickets.base already exists at {}", base_path.display());
+    }
+
+    let project_path = base_path.parent().expect("base path has a parent");
+    let folder = project_path
+        .strip_prefix(&cfg.vault_root)
+        .with_context(|| {
+            format!(
+                "project_path {} is not inside vault_root {}",
+                project_path.display(),
+                cfg.vault_root.display()
+            )
+        })?
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    std::fs::write(&base_path, render_template(&folder))
+        .with_context(|| format!("writing {}", base_path.display()))?;
+    println!("created {}", base_path.display());
     Ok(())
+}
+
+fn base_path(cfg: &ResolvedConfig) -> Result<std::path::PathBuf> {
+    let project_path = cfg
+        .project_path
+        .as_ref()
+        .context("no project resolved (use --project <name> or add .vault.config.json)")?;
+    Ok(project_path.join("Tickets.base"))
+}
+
+fn render_template(folder: &str) -> String {
+    format!(
+        r#"filters:
+  and:
+    - type == "ticket"
+    - file.inFolder("{folder}")
+properties:
+  file.name:
+    displayName: Ticket
+  note.slug:
+    displayName: Slug
+  note.status:
+    displayName: Status
+  note.track:
+    displayName: Track
+  note.requires:
+    displayName: Requires
+  note.description:
+    displayName: Description
+  note.created:
+    displayName: Created
+  note.updated:
+    displayName: Updated
+views:
+  - type: table
+    name: Backlog
+    filters:
+      and:
+        - status == "open"
+        - "!track.isTruthy()"
+    order:
+      - file.name
+      - requires
+      - description
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: Open
+    filters:
+      and:
+        - status == "open"
+    order:
+      - file.name
+      - track
+      - requires
+      - description
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: Done
+    filters:
+      and:
+        - status == "done"
+    order:
+      - file.name
+      - track
+      - description
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: Abandoned
+    filters:
+      and:
+        - status == "abandoned"
+    order:
+      - file.name
+      - track
+      - description
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: By Track
+    groupBy:
+      property: track
+      direction: ASC
+    order:
+      - file.name
+      - status
+      - description
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: By Status
+    groupBy:
+      property: status
+      direction: ASC
+    order:
+      - file.name
+      - track
+      - description
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
+    name: All
+    order:
+      - file.name
+      - status
+      - track
+      - requires
+      - description
+      - created
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+"#
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::base;
+    use crate::base::filter;
+    use crate::vault;
     use crate::vault_ignore::VaultIgnore;
+    use std::path::Path;
     use tempfile::TempDir;
 
-    /// Build a temp vault under `41 projects/nix/` with a claimed ticket, an
-    /// unclaimed open ticket (the backlog case), a done ticket, a template
-    /// ticket (excluded), and a plain note (excluded).
+    /// A temp vault under `41 projects/nix/` with an owned ticket, an unowned
+    /// open ticket (the backlog case), a done ticket, and a plain note.
     fn build_ticket_vault() -> TempDir {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("41 projects/nix");
         std::fs::create_dir_all(&dir).unwrap();
 
         std::fs::write(
-            dir.join("ticket-claimed.md"),
-            "---\ntype: ticket\nslug: claimed\ndescription: A claimed ticket\nstatus: open\n\
+            dir.join("ticket-owned.md"),
+            "---\ntype: ticket\nslug: owned\ndescription: An owned ticket\nstatus: open\n\
              track: \"[[41 projects/nix/track-work-tracking-model]]\"\nrequires: []\n---\nbody\n",
         )
         .unwrap();
 
         std::fs::write(
             dir.join("ticket-backlog.md"),
-            "---\ntype: ticket\nslug: backlog\ndescription: An unclaimed open ticket\nstatus: open\n\
-             track:\nrequires:\n  - \"[[41 projects/nix/ticket-claimed]]\"\n---\nbody\n",
+            "---\ntype: ticket\nslug: backlog\ndescription: An unowned open ticket\nstatus: open\n\
+             track:\nrequires:\n  - \"[[41 projects/nix/ticket-owned]]\"\n---\nbody\n",
         )
         .unwrap();
 
@@ -309,12 +249,6 @@ mod tests {
             dir.join("ticket-done.md"),
             "---\ntype: ticket\nslug: done\ndescription: A finished ticket\nstatus: done\n\
              track:\nrequires: []\n---\nbody\n",
-        )
-        .unwrap();
-
-        std::fs::write(
-            dir.join("ticket-template.md"),
-            "---\ntype: ticket\ntemplate: true\nslug: tmpl\nstatus: open\ntrack:\n---\nbody\n",
         )
         .unwrap();
 
@@ -327,144 +261,95 @@ mod tests {
         tmp
     }
 
-    fn scan_vault(root: &Path) -> Vec<VaultFile> {
-        vault::scan(root, root, Some(&VaultIgnore::from_patterns(vec![]))).unwrap()
-    }
+    /// Run one view of the rendered template against a scanned temp vault,
+    /// returning the selected slugs. This is the pipeline `run` delegates to,
+    /// minus rendering.
+    fn select(root: &Path, view_name: &str, track: Option<&str>) -> Vec<String> {
+        let base_path = root.join("41 projects/nix/Tickets.base");
+        std::fs::write(&base_path, render_template("41 projects/nix")).unwrap();
+        let base_file = base::parse(&base_path).unwrap();
+        let view = base_file
+            .views
+            .iter()
+            .find(|v| v.name == view_name)
+            .unwrap_or_else(|| panic!("view {view_name} missing from the template"));
 
-    fn slugs(tickets: &[Ticket]) -> Vec<String> {
-        tickets.iter().map(|t| t.slug.clone()).collect()
-    }
+        let files = vault::scan(root, root, Some(&VaultIgnore::from_patterns(vec![]))).unwrap();
+        let owned = track.map(|slug| {
+            move |f: &VaultFile| ticket_track_slug(&f.frontmatter).as_deref() == Some(slug)
+        });
+        let extra: Option<&dyn Fn(&VaultFile) -> bool> = match owned {
+            Some(ref p) => Some(p),
+            None => None,
+        };
 
-    #[test]
-    fn no_filter_lists_all_tickets_excluding_template_and_note() {
-        let tmp = build_ticket_vault();
-        let files = scan_vault(tmp.path());
-        let tickets = select(
-            &files,
-            tmp.path(),
-            DEFAULT_PROJECTS_PATH,
-            None,
-            None,
-            false,
-            None,
-        );
-        // ordered by path: ticket-backlog, ticket-claimed, ticket-done
-        assert_eq!(slugs(&tickets), vec!["backlog", "claimed", "done"]);
-    }
-
-    #[test]
-    fn track_filter_resolves_backref_stem() {
-        let tmp = build_ticket_vault();
-        let files = scan_vault(tmp.path());
-        let tickets = select(
-            &files,
-            tmp.path(),
-            DEFAULT_PROJECTS_PATH,
-            None,
-            Some("work-tracking-model"),
-            false,
-            None,
-        );
-        assert_eq!(slugs(&tickets), vec!["claimed"]);
-        assert_eq!(tickets[0].track, "work-tracking-model");
-        assert_eq!(tickets[0].requires, Vec::<String>::new());
+        let mut selected =
+            filter::apply(&files, &base_file.filters, &view.filters, root, extra).unwrap();
+        selected.sort_by(|a, b| a.path.cmp(&b.path));
+        selected
+            .iter()
+            .map(|f| f.get_property("slug"))
+            .collect::<Vec<_>>()
     }
 
     #[test]
-    fn track_filter_no_match_is_empty() {
+    fn all_view_excludes_non_tickets() {
         let tmp = build_ticket_vault();
-        let files = scan_vault(tmp.path());
-        let tickets = select(
-            &files,
-            tmp.path(),
-            DEFAULT_PROJECTS_PATH,
-            None,
-            Some("nonexistent-track"),
-            false,
-            None,
+        assert_eq!(
+            select(tmp.path(), "All", None),
+            ["backlog", "done", "owned"]
         );
-        assert!(tickets.is_empty());
     }
 
     #[test]
-    fn backlog_filter_is_unclaimed_and_open() {
+    fn backlog_view_is_open_and_unowned() {
+        // The `!track.isTruthy()` predicate: `owned` has a track, `done` is closed.
         let tmp = build_ticket_vault();
-        let files = scan_vault(tmp.path());
-        let tickets = select(
-            &files,
-            tmp.path(),
-            DEFAULT_PROJECTS_PATH,
-            None,
-            None,
-            true,
-            None,
-        );
-        // claimed excluded (has a track); done excluded (status != open).
-        assert_eq!(slugs(&tickets), vec!["backlog"]);
-        assert!(tickets[0].track.is_empty());
-        assert_eq!(tickets[0].requires, vec!["ticket-claimed"]);
+        assert_eq!(select(tmp.path(), "Backlog", None), ["backlog"]);
     }
 
     #[test]
-    fn status_filter_open() {
+    fn open_view_keeps_both_owned_and_unowned() {
         let tmp = build_ticket_vault();
-        let files = scan_vault(tmp.path());
-        let tickets = select(
-            &files,
-            tmp.path(),
-            DEFAULT_PROJECTS_PATH,
-            None,
-            None,
-            false,
-            Some("open"),
-        );
-        assert_eq!(slugs(&tickets), vec!["backlog", "claimed"]);
+        assert_eq!(select(tmp.path(), "Open", None), ["backlog", "owned"]);
     }
 
     #[test]
-    fn status_filter_done() {
+    fn track_predicate_narrows_a_view_by_backref_stem() {
         let tmp = build_ticket_vault();
-        let files = scan_vault(tmp.path());
-        let tickets = select(
-            &files,
-            tmp.path(),
-            DEFAULT_PROJECTS_PATH,
-            None,
-            None,
-            false,
-            Some("done"),
+        assert_eq!(
+            select(tmp.path(), "Open", Some("work-tracking-model")),
+            ["owned"]
         );
-        assert_eq!(slugs(&tickets), vec!["done"]);
+        assert!(select(tmp.path(), "Open", Some("nonexistent-track")).is_empty());
     }
 
     #[test]
-    fn project_scope_matches_and_excludes() {
+    fn cli_backlog_and_base_backlog_view_select_the_same_set() {
+        // The duplication this command was collapsed to remove: the CLI's notion
+        // of "backlog" and the Backlog view of the vault-wide 41 projects/Tickets.base
+        // must be one predicate, not two hand-synchronized ones.
         let tmp = build_ticket_vault();
-        let files = scan_vault(tmp.path());
-        let in_scope = tmp.path().join("41 projects/nix");
-        let tickets = select(
-            &files,
-            tmp.path(),
-            DEFAULT_PROJECTS_PATH,
-            Some(&in_scope),
-            None,
-            false,
-            None,
-        );
-        assert_eq!(tickets.len(), 3);
-        assert_eq!(tickets[0].project, "nix");
+        let vault_wide = tmp.path().join("41 projects/Tickets.base");
+        std::fs::write(&vault_wide, render_template("41 projects")).unwrap();
+        let base_file = base::parse(&vault_wide).unwrap();
+        let view = base_file
+            .views
+            .iter()
+            .find(|v| v.name == "Backlog")
+            .unwrap();
 
-        let out_scope = tmp.path().join("41 projects/other");
-        let none = select(
-            &files,
+        let files = vault::scan(
             tmp.path(),
-            DEFAULT_PROJECTS_PATH,
-            Some(&out_scope),
-            None,
-            false,
-            None,
-        );
-        assert!(none.is_empty());
+            tmp.path(),
+            Some(&VaultIgnore::from_patterns(vec![])),
+        )
+        .unwrap();
+        let wide =
+            filter::apply(&files, &base_file.filters, &view.filters, tmp.path(), None).unwrap();
+        let wide_slugs: Vec<String> = wide.iter().map(|f| f.get_property("slug")).collect();
+
+        assert_eq!(wide_slugs, select(tmp.path(), "Backlog", None));
     }
 
     #[test]
@@ -481,13 +366,25 @@ mod tests {
     }
 
     #[test]
-    fn project_helper_derives_folder_not_bare_file() {
+    fn template_parses_and_declares_every_documented_view() {
+        let base_file = {
+            let tmp = TempDir::new().unwrap();
+            let p = tmp.path().join("Tickets.base");
+            std::fs::write(&p, render_template("41 projects/nix")).unwrap();
+            base::parse(&p).unwrap()
+        };
+        let names: Vec<&str> = base_file.views.iter().map(|v| v.name.as_str()).collect();
         assert_eq!(
-            ticket_project("41 projects/nix/ticket-x.md", "41 projects"),
-            "nix"
+            names,
+            [
+                "Backlog",
+                "Open",
+                "Done",
+                "Abandoned",
+                "By Track",
+                "By Status",
+                "All"
+            ]
         );
-        // A ticket directly under projects_path has no project folder.
-        assert_eq!(ticket_project("41 projects/ticket-x.md", "41 projects"), "");
-        assert_eq!(ticket_project("20 cards/foo.md", "41 projects"), "");
     }
 }

@@ -1,7 +1,7 @@
 ---
 name: vault
 description: >
-  Personal knowledge management in an Obsidian vault. Use whenever the user wants to save, find, review, or organize knowledge or project work, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into cards, writing original notes, filing a decided piece of work as a ticket ("file that", "make a ticket"), parking an idea with no done-condition as a scratchpad seed, listing a project's tickets or its unowned backlog, searching or quizzing saved content, listing active projects ("what am I working on"), explicit /vault commands, weekly-log operations (the daily бэклог, planning, completing tasks, sleep — not the ticket backlog). Excludes direct file edits not routed through /vault (editing a .md file in a code repo that is not a vault artifact), Obsidian app features (kanban, canvas, plugins, .base), web search. Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
+  Personal knowledge management in an Obsidian vault. Use whenever the user wants to save, find, review, or organize knowledge or project work, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into cards, writing original notes, filing a decided piece of work as a ticket ("file that", "make a ticket"), parking an idea with no done-condition as a scratchpad seed, listing a project's tickets or its unowned backlog, searching or quizzing saved content, listing active projects ("what am I working on"), explicit /vault commands, weekly-log operations (the daily бэклог, planning, completing tasks, sleep — not the ticket backlog). Excludes direct file edits not routed through /vault (editing a .md file in a code repo that is not a vault artifact), Obsidian app features (kanban, canvas, plugins, editing a .base by hand), web search. Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
 ---
 
 # Vault
@@ -39,7 +39,9 @@ elif "ticket" or "ticket <topic>" or an action item needs filing:
     do("follow ticket creation/editing process; apply post-edit etiquette before wrapping")
 
 elif "tickets" or "backlog <project>":
-    results = Bash(vault-query tickets [--backlog] [--track <slug>] [--status <status>] [--project <name>])
+    // Views: Backlog, Open (default), Done, Abandoned, By Track, By Status, All
+    results = Bash(vault-query tickets --view <name> [--track <slug>] [--project <name>] [--format tsv])
+    if it errors with "no Tickets.base": Bash(vault-query tickets-init)   // project's first ticket query
     do("present tickets; unfold one with vault-query read <path> when the user picks it")
 
 elif "review":
@@ -134,7 +136,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | Experiment | Captured behavior test of an existing thing against a falsifiable claim. Frontmatter `type: experiment`, `verdict` (confirmed/refuted/inconclusive), `date`, optional `project` wikilink. Owned by the `/experiment` skill. Distinct from a track: an experiment is one decided question, a track is a multi-session effort. | `35 experiments/` |
 | Checkpoint _(legacy — replaced by track)_ | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain reachable via `vault-query read <name>`. Programmatically treated as superseded: `consult` excludes all checkpoints by default. | `41 projects/<project>/` |
 | Weekly log | ISO-week file with Focus, Tasks, Backlog, Activity sections. Tasks wikilink to projects; Activity is auto-appended by a git post-commit hook. Distinct from a track: a weekly log spans all projects for one week, a track spans one project across all weeks. | `41 projects/block-buster/YYYY-wWW.md` |
-| Base | Obsidian Base file — a saved cross-vault query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query. | `90 bases/` |
+| Base | Obsidian Base file — a saved query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query. Vault-wide bases live in `90 bases/`; a project's `Tracks.base` and `Tickets.base` sit in its own folder and are what `vault-query tracks`/`tickets` read, so the CLI and Obsidian share one definition of each view. | `90 bases/`, `41 projects/<project>/` |
 
 ### vault-query subcommands
 
@@ -144,7 +146,8 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `context` | Print project context.md | Yes |
 | `tracks [--view <view>]` | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC | Yes |
 | `tracks-init` | Create Tracks.base in the current project | Yes |
-| `tickets [--backlog] [--track <slug>] [--status <s>] [--project <name>]` | List tickets. `--backlog` = open and owned by no track. `--format text\|markdown\|json` | Yes |
+| `tickets [--view <view>] [--track <slug>]` | Query project tickets through `Tickets.base` (Backlog/Open/Done/Abandoned/By Track/By Status/All), updated DESC. `Backlog` = open and owned by no track; `--track <slug>` narrows any view to one track's tickets | Yes |
+| `tickets-init` | Create Tickets.base in the current project | Yes |
 | `get <fragment>` | Resolve an entry name to its absolute path (one per line). For handing a path to another tool; to read an entry, name it to `read` directly | No |
 | `read <FILE\|NAME> [ADDRESS]` | Structured read: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, `0`/text, `fm[.path]`, `links`). Takes a path or an entry name — an unresolvable name errors, an ambiguous one errors listing candidates. `--depth`, `--full`, `--threshold`, `--format json` | No |
 | `search <query>` | BM25 full-text search (--regex for grep mode) | No |

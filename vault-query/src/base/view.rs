@@ -2,6 +2,7 @@ use crate::base::{BaseFile, SortDirection, ViewDef};
 use crate::output::Format;
 use crate::vault::VaultFile;
 use std::collections::{BTreeMap, HashSet};
+use std::path::Path;
 
 /// Result of applying a view to filtered files.
 pub struct ViewResult {
@@ -122,14 +123,22 @@ pub struct Group {
 }
 
 /// Apply a view to filtered files, producing renderable rows.
-pub fn apply(view: &ViewDef, base: &BaseFile, files: &mut Vec<VaultFile>) -> ViewResult {
+///
+/// `vault_root` is carried through solely for the `file.folder` column, which
+/// must render vault-relative to match what Obsidian shows.
+pub fn apply(
+    view: &ViewDef,
+    base: &BaseFile,
+    files: &mut Vec<VaultFile>,
+    vault_root: &Path,
+) -> ViewResult {
     // Compute formulas for each file, then sort files and formulas together
     let mut formula_results: Vec<BTreeMap<String, String>> = files
         .iter()
         .map(|f| crate::base::formula::evaluate_all(&base.formulas, f))
         .collect();
 
-    sort_files(files, &mut formula_results, &view.sort);
+    sort_files(files, &mut formula_results, &view.sort, vault_root);
 
     // Build headers from property display names
     let headers: Vec<String> = view
@@ -145,7 +154,7 @@ pub fn apply(view: &ViewDef, base: &BaseFile, files: &mut Vec<VaultFile>) -> Vie
         .map(|(file, formulas)| {
             view.order
                 .iter()
-                .map(|col| resolve_value(col, file, formulas))
+                .map(|col| resolve_value(col, file, formulas, vault_root))
                 .collect()
         })
         .collect();
@@ -155,7 +164,7 @@ pub fn apply(view: &ViewDef, base: &BaseFile, files: &mut Vec<VaultFile>) -> Vie
         let group_values: Vec<String> = files
             .iter()
             .zip(formula_results.iter())
-            .map(|(file, formulas)| resolve_value(&gb.property, file, formulas))
+            .map(|(file, formulas)| resolve_value(&gb.property, file, formulas, vault_root))
             .collect();
 
         build_groups(&group_values, &rows, &gb.direction)
@@ -170,6 +179,7 @@ pub fn apply(view: &ViewDef, base: &BaseFile, files: &mut Vec<VaultFile>) -> Vie
             &view.order,
             files,
             &formula_results,
+            vault_root,
         ))
     } else {
         None
@@ -205,14 +215,20 @@ fn resolve_display_name(col: &str, base: &BaseFile) -> String {
     col.to_string()
 }
 
-fn resolve_value(col: &str, file: &VaultFile, formulas: &BTreeMap<String, String>) -> String {
-    crate::base::column::ColumnRef::parse(col).value(file, formulas)
+fn resolve_value(
+    col: &str,
+    file: &VaultFile,
+    formulas: &BTreeMap<String, String>,
+    vault_root: &Path,
+) -> String {
+    crate::base::column::ColumnRef::parse(col).value(file, formulas, vault_root)
 }
 
 fn sort_files(
     files: &mut Vec<VaultFile>,
     formula_results: &mut Vec<BTreeMap<String, String>>,
     sort_defs: &[super::SortDef],
+    vault_root: &Path,
 ) {
     if sort_defs.is_empty() {
         return;
@@ -225,7 +241,7 @@ fn sort_files(
         .map(|(file, formulas)| {
             sort_defs
                 .iter()
-                .map(|sd| resolve_value(&sd.property, file, formulas))
+                .map(|sd| resolve_value(&sd.property, file, formulas, vault_root))
                 .collect()
         })
         .collect();
@@ -299,6 +315,7 @@ fn compute_summaries(
     order: &[String],
     files: &[VaultFile],
     formula_results: &[BTreeMap<String, String>],
+    vault_root: &Path,
 ) -> Vec<String> {
     order
         .iter()
@@ -314,7 +331,7 @@ fn compute_summaries(
                         .iter()
                         .zip(formula_results.iter())
                         .filter_map(|(file, formulas)| {
-                            let val = resolve_value(col, file, formulas);
+                            let val = resolve_value(col, file, formulas, vault_root);
                             val.parse::<f64>().ok()
                         })
                         .collect();

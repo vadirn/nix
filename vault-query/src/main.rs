@@ -158,21 +158,21 @@ enum Commands {
     },
     /// Initialize Tracks.base in the current project
     TracksInit,
-    /// List tickets, filtered by track, backlog, project, or status
+    /// Query project tickets
     Tickets {
-        /// Tickets owned by this track slug (matched against the `track-<slug>` backref)
+        /// View name (Backlog, Open, Done, Abandoned, By Track, By Status, All)
+        #[arg(long, default_value = "Open")]
+        view: String,
+        /// Narrow the view to tickets owned by this track slug (matched against
+        /// the `track-<slug>` backref)
         #[arg(long)]
         track: Option<String>,
-        /// Only open tickets that no track owns — the project backlog
-        #[arg(long)]
-        backlog: bool,
-        /// Filter by status (open, done, abandoned)
-        #[arg(long)]
-        status: Option<String>,
-        /// Output format: text (default), markdown, or json
-        #[arg(long, default_value = "text")]
-        format: commands::tickets::TicketFormat,
+        /// Output format
+        #[arg(long, default_value = "table")]
+        format: output::Format,
     },
+    /// Initialize Tickets.base in the current project
+    TicketsInit,
     /// Resolve a note/card/reference/checkpoint name to its absolute path (one per line)
     Get {
         /// Name fragment to resolve
@@ -307,7 +307,7 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             view,
             format,
         } => {
-            commands::query::run(base_path, view, &cfg, *format)?;
+            commands::query::run(base_path, view, &cfg, *format, None)?;
             0
         }
         Commands::Tags { sort } => {
@@ -377,12 +377,15 @@ fn dispatch(cli: &Cli) -> Result<i32> {
         // `--project` is the global project flag (resolved into `cfg.project_path`),
         // so tickets share the project-scoping convention of `tracks`.
         Commands::Tickets {
+            view,
             track,
-            backlog,
-            status,
             format,
         } => {
-            commands::tickets::run(&cfg, track.as_deref(), *backlog, status.as_deref(), *format)?;
+            commands::tickets::run(&cfg, view, track.as_deref(), *format)?;
+            0
+        }
+        Commands::TicketsInit => {
+            commands::tickets::init(&cfg)?;
             0
         }
         Commands::Get {

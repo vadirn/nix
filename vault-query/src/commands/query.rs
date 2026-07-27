@@ -5,13 +5,19 @@ use crate::base;
 use crate::base::filter;
 use crate::base::view;
 use crate::output::Format;
-use crate::vault;
+use crate::vault::{self, VaultFile};
 
+/// Render one view of a `.base` file.
+///
+/// `extra` is an optional caller predicate ANDed onto the base's declared
+/// filters — see [`filter::apply`] for why a parameterized filter arrives as a
+/// closure rather than a synthesized expression.
 pub fn run(
     base_path: &Path,
     view_name: &str,
     cfg: &crate::config::ResolvedConfig,
     format: Format,
+    extra: Option<&dyn Fn(&VaultFile) -> bool>,
 ) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let base_file = base::parse(base_path)?;
@@ -37,9 +43,10 @@ pub fn run(
         &base_file.filters,
         &target_view.filters,
         vault_root,
+        extra,
     )?;
 
-    let result = view::apply(&target_view, &base_file, &mut filtered);
+    let result = view::apply(&target_view, &base_file, &mut filtered, vault_root);
     print!("{}", result.render(&format));
 
     Ok(())

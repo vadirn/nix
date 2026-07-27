@@ -67,7 +67,7 @@ fn test_apply_filters() {
 
     // Base filters: type == "checkpoint" AND file.inFolder("41 projects/nix")
     let empty_filters = base::FilterSet::default();
-    let filtered = filter::apply(&files, &base.filters, &empty_filters, &dir).unwrap();
+    let filtered = filter::apply(&files, &base.filters, &empty_filters, &dir, None).unwrap();
     assert_eq!(filtered.len(), 3);
 }
 
@@ -79,7 +79,8 @@ fn test_incomplete_view_filter() {
     let files = vault::scan(&dir, &dir, None).unwrap();
 
     let incomplete_view = base.views.iter().find(|v| v.name == "Incomplete").unwrap();
-    let filtered = filter::apply(&files, &base.filters, &incomplete_view.filters, &dir).unwrap();
+    let filtered =
+        filter::apply(&files, &base.filters, &incomplete_view.filters, &dir, None).unwrap();
     // checkpoint-001 and checkpoint-003 are done: false
     assert_eq!(filtered.len(), 2);
 }
@@ -92,8 +93,8 @@ fn test_view_all_sorted_desc() {
     let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
-    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir).unwrap();
-    let result = view::apply(&all_view, &base, &mut filtered);
+    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir, None).unwrap();
+    let result = view::apply(&all_view, &base, &mut filtered, &dir);
 
     // Sorted DESC by file.name: checkpoint-003, checkpoint-002, checkpoint-001
     assert_eq!(result.groups.len(), 1);
@@ -131,7 +132,7 @@ fn test_graduation_queue_or_filter() {
         .iter()
         .find(|v| v.name == "Graduation queue")
         .unwrap();
-    let filtered = filter::apply(&files, &base.filters, &grad_view.filters, &dir).unwrap();
+    let filtered = filter::apply(&files, &base.filters, &grad_view.filters, &dir, None).unwrap();
     // checkpoint-002 has decisions + frictions, checkpoint-003 has frictions
     assert_eq!(filtered.len(), 2);
 }
@@ -149,8 +150,9 @@ fn test_stats_view_summaries() {
         .unwrap()
         .clone();
 
-    let mut filtered = filter::apply(&files, &base.filters, &stats_view.filters, &dir).unwrap();
-    let result = view::apply(&stats_view, &base, &mut filtered);
+    let mut filtered =
+        filter::apply(&files, &base.filters, &stats_view.filters, &dir, None).unwrap();
+    let result = view::apply(&stats_view, &base, &mut filtered, &dir);
 
     assert!(result.summaries.is_some());
     let summaries = result.summaries.unwrap();
@@ -168,8 +170,8 @@ fn test_json_output() {
     let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
-    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir).unwrap();
-    let result = view::apply(&all_view, &base, &mut filtered);
+    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir, None).unwrap();
+    let result = view::apply(&all_view, &base, &mut filtered, &dir);
     let json = result.render(&vault_query::output::Format::Json);
 
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -185,8 +187,8 @@ fn test_tsv_output() {
     let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
-    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir).unwrap();
-    let result = view::apply(&all_view, &base, &mut filtered);
+    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir, None).unwrap();
+    let result = view::apply(&all_view, &base, &mut filtered, &dir);
     let tsv = result.render(&vault_query::output::Format::Tsv);
 
     let lines: Vec<&str> = tsv.lines().collect();

@@ -21,8 +21,8 @@ else:
     shape = Bash(vault-query read <track_path>)                    // folded overview: sections + line/token counts; each Log entry gets its own sub-address under Log
     snapshot = Bash(vault-query read <track_path> Direction)       // Direction — the stable framing
     latest = Bash(vault-query read <track_path> <highest Log sub-address read off the shape>)   // the newest Log entry — the current snapshot
-    open_tickets = Bash(vault-query tickets --track <slug> --status open --format text)   // what this track owns; empty stdout = none owned
-    backlog_tickets = Bash(vault-query tickets --backlog --format text)                   // open tickets in the project backlog, owned by no track; empty stdout = none unowned
+    open_tickets = Bash(vault-query tickets --view Open --track <slug> --format tsv)   // what this track owns; header row only = none owned
+    backlog_tickets = Bash(vault-query tickets --view Backlog --format tsv)            // open tickets in the project backlog, owned by no track; header row only = none unowned
     do("present Direction + latest Log entry + open tickets (owned) + backlog tickets (unowned) as the resume snapshot, keeping the two lists distinct; offer to unfold Decisions / older Log entries by address on demand")
 
     query = do("derive a short phrase from the track's Direction and description — the topic the user is working on")
@@ -78,15 +78,20 @@ The work a track still owes lives in tickets, not in the track file, and a track
 
 Run both queries on resume:
 
-- `vault-query tickets --track <slug> --status open --format text` — `<slug>` is the track's slug (file name minus the `track-` prefix). Prints one line per ticket this track owns. Exit 0 with empty stdout means the track owns no open tickets — say so rather than inventing one, but check the backlog query below before reporting nothing is left.
-- `vault-query tickets --backlog --format text` — open tickets across the project with no track owning them yet (the filter already implies `--status open`; pairing it with `--status` is redundant). Exit 0 with empty stdout means nothing is left unowned.
+Both are views of the project's `Tickets.base`, the same file Obsidian renders — one predicate, not a CLI copy of one.
 
-Both print the same line shape, no header:
+- `vault-query tickets --view Open --track <slug> --format tsv` — `<slug>` is the track's slug (file name minus the `track-` prefix). One row per open ticket this track owns. Exit 0 with only the header row means the track owns no open tickets — say so rather than inventing one, but check the backlog query below before reporting nothing is left.
+- `vault-query tickets --view Backlog --format tsv` — open tickets across the project with no track owning them yet (the view already carries `status == open`). Exit 0 with only the header row means nothing is left unowned.
+
+Both print a tab-separated table whose first row names the columns:
 
 ```
-ticket-slug — One-sentence description copied from the ticket's frontmatter. (status: open) (track: work-tracking-model) (41 projects/nix/ticket-ticket-slug.md)
+Ticket	Track	Requires	Description	Updated
+ticket-ticket-slug	track-work-tracking-model		One-sentence description copied from the ticket's frontmatter.	2026-07-27
 ```
 
-Line shape: `<slug> — <description> (status: <status>) [(track: <slug>)] [(requires: <slug>)] (<vault-relative path>)`. The `(track: …)` and `(requires: …)` fields appear only when set; `requires:` names a ticket that must land first, so a ticket is blocked while any entry's ticket is still open — nothing computes that, so check the named ticket's status yourself. Backlog lines have no `(track: …)` field, since none is set.
+`Backlog` drops the `Track` column, since none is set on any row it selects. A `Requires` cell names a ticket that must land first, so a ticket is blocked while any entry's ticket is still open — nothing computes that, so check the named ticket's status yourself.
+
+A project whose first ticket has yet to be filed has no `Tickets.base`; both commands then exit non-zero naming `vault-query tickets-init`. Treat that as "no tickets", not as an error to report.
 
 Present the two lists with the snapshot, kept distinct (owned vs. unowned), and unfold a ticket's own body with `vault-query read <ticket path>` when the user picks one to work on.

@@ -38,7 +38,7 @@ Example: a week with three projects, all touched, awards +3 XP on next Monday.
 
 ## Filter expression
 
-A single predicate string inside a `FilterSet.and` or `FilterSet.or` list, evaluated against a `VaultFile`. Recognised forms: `field == "str"`, `field == bool`, `file.inFolder("path")`, `!file.inFolder("path")`, `field.containsAny("a","b")`, `field.length > N`. Any other string is unrecognised and silently evaluates to `true` (see Relations & Invariants).
+A single predicate string inside a `FilterSet.and` or `FilterSet.or` list, evaluated against a `VaultFile`. Recognised forms: `field == "str"`, `field == bool`, `file.inFolder("path")`, `!file.inFolder("path")`, `field.containsAny("a","b")`, `field.length > N`, `field.isTruthy()`, `!field.isTruthy()`. Any other string is unrecognised and errors (see Relations & Invariants). The recognised set is deliberately a subset of Obsidian's own syntax and never a superset: an operator only this engine understood would render in the CLI and silently fail in the app that reads the same `.base`. A predicate whose argument is known only at call time therefore cannot be an expression at all — it arrives as the `extra` caller-predicate closure on `filter::apply`, ANDed onto the declared filters, which is how `tickets --track <slug>` narrows a view.
 
 Example: `type == "checkpoint"` and `done == false` together select incomplete checkpoints.
 
@@ -140,9 +140,9 @@ Example: `templates/Card.md` has `template: true` and `type: card` — when used
 
 ## Ticket
 
-A markdown file with `type: ticket` in its frontmatter, representing one actionable unit of project work. Conventionally placed inside a Project directory (`41 projects/<name>/`) as `ticket-<slug>.md`, but classification is by frontmatter alone. Carries `slug`, `description`, `status` (`open`, `done`, `abandoned`), a `track:` backref wikilink naming the track that owns it (empty when no track owns it), a `requires:` sequence of blocking-ticket wikilinks, and a `project:` wikilink. The `vault-query tickets` subcommand lists tickets and filters them by `--track <slug>` (matched against the `track-<slug>` backref stem, resolved query-side without opening the track file), `--backlog` (tickets with `status == open` that no track owns), `--status`, and the global `--project` (which scopes to one project folder).
+A markdown file with `type: ticket` in its frontmatter, representing one actionable unit of project work. Conventionally placed inside a Project directory (`41 projects/<name>/`) as `ticket-<slug>.md`, but classification is by frontmatter alone. Carries `slug`, `description`, `status` (`open`, `done`, `abandoned`), a `track:` backref wikilink naming the track that owns it (empty when no track owns it), a `requires:` sequence of blocking-ticket wikilinks, and a `project:` wikilink. The `vault-query tickets` subcommand is project-scoped in the same way as `tracks`: it reads `Tickets.base` from the current project and renders one of its views (`Backlog` = `status == "open"` and `!track.isTruthy()`, plus `Open`, `Done`, `Abandoned`, `By Track`, `By Status`, `All`), so the CLI and Obsidian share one definition of each view instead of two hand-synchronized ones. `--track <slug>` is the one filter a `.base` cannot declare, since its argument is known only at call time; it arrives as the caller-predicate slot on `base::filter::apply` and matches the `track-<slug>` backref stem exactly, resolved query-side without opening the track file. `tickets-init` writes the base for a project that has none.
 
-Example: `41 projects/nix/ticket-remove-track-backlog.md` carries `type: ticket` and is owned by `[[41 projects/nix/track-work-tracking-model]]`; `vault-query tickets --track work-tracking-model` lists it.
+Example: `41 projects/nix/ticket-remove-track-backlog.md` carries `type: ticket` and is owned by `[[41 projects/nix/track-work-tracking-model]]`; `vault-query tickets --view All --track work-tracking-model` lists it.
 
 ## Track
 
@@ -198,7 +198,7 @@ A Track has exactly one `status` value drawn from `{open, paused, done, abandone
 
 A FilterSet evaluates to true only if all `and` clauses pass _and_, when `or` is non-empty, at least one `or` clause passes; an empty `and` or `or` list is treated as "no constraint".
 
-An unrecognised Filter expression evaluates to `true` (silent pass-through), not an error.
+An unrecognised Filter expression is an error, not a silent pass-through: a typo'd predicate would otherwise match every file and return a plausible-but-wrong superset (`filter.rs`, `test_unknown_expression_errors`).
 
 A `file.inFolder("X")` predicate is satisfied by any file whose relative path starts with the literal string `X`; folder boundaries are not enforced, so `"41 projects/nix"` matches files under `"41 projects/nixos/"`.
 
