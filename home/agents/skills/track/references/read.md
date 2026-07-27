@@ -83,14 +83,14 @@ Both are views of the project's `Tickets.base`, the same file Obsidian renders �
 - `vault-query tickets --view Open --track <slug> --format tsv` — `<slug>` is the track's slug (file name minus the `track-` prefix). One row per open ticket this track owns. Exit 0 with only the header row means the track owns no open tickets — say so rather than inventing one, but check the backlog query below before reporting nothing is left.
 - `vault-query tickets --view Backlog --format tsv` — open tickets across the project with no track owning them yet (the view already carries `status == open`). Exit 0 with only the header row means nothing is left unowned.
 
-Both print a tab-separated table whose first row names the columns:
+Both print a tab-separated table whose first row names the columns. The `Open --track` query looks like this:
 
 ```
 Ticket	Track	Requires	Description	Updated
 ticket-ticket-slug	track-work-tracking-model		One-sentence description copied from the ticket's frontmatter.	2026-07-27
 ```
 
-`Backlog` drops the `Track` column, since none is set on any row it selects. A `Requires` cell names a ticket that must land first, so a ticket is blocked while any entry's ticket is still open — nothing computes that, so check the named ticket's status yourself.
+`Backlog` drops the `Track` column, since none is set on any row it selects, leaving `Ticket	Requires	Description	Updated`. A `Requires` cell names a ticket that must land first, so a ticket is blocked while any entry's ticket is not yet `done` — nothing computes that, so check the named ticket's status yourself.
 
 A project whose first ticket has yet to be filed has no `Tickets.base`; both commands then exit non-zero naming `vault-query tickets-init`. Treat that as "no tickets", not as an error to report.
 
