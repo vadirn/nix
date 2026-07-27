@@ -8,6 +8,7 @@ pub mod get;
 pub mod lint;
 pub mod list;
 pub mod log;
+pub mod project_base;
 pub mod projects;
 pub mod query;
 pub mod read;

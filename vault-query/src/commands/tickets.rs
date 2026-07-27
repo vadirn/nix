@@ -1,20 +1,23 @@
 //! `tickets` — a view into the project's `Tickets.base`.
 //!
-//! Structurally the twin of [`super::tracks`]: locate the project's `.base`,
-//! hand it to [`super::query`], render. The one thing tickets need that tracks
-//! do not is `--track <slug>`, whose argument is known only at call time and so
-//! cannot be a declared view; it arrives as the caller predicate slot on
+//! Structurally the twin of [`super::tracks`], and shares its plumbing through
+//! [`super::project_base`]. The one thing tickets need that tracks do not is
+//! `--track <slug>`, whose argument is known only at call time and so cannot be
+//! a declared view; it arrives as the caller predicate slot on
 //! [`crate::base::filter::apply`].
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use serde_yaml::Value;
 use std::collections::BTreeMap;
 
+use crate::commands::project_base::ProjectBase;
 use crate::config::ResolvedConfig;
 use crate::frontmatter;
 use crate::output::Format;
 use crate::vault::VaultFile;
 use crate::wikilink;
+
+const BASE: ProjectBase = ProjectBase::new("Tickets.base", "tickets-init", render_template);
 
 /// Resolve the track that owns a ticket to a bare slug.
 ///
@@ -40,57 +43,19 @@ fn ticket_track_slug(fm: &BTreeMap<String, Value>) -> Option<String> {
 /// Render one view of the project's `Tickets.base`, optionally narrowed to the
 /// tickets one track owns.
 pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format) -> Result<()> {
-    let base_path = base_path(cfg)?;
-    if !base_path.is_file() {
-        bail!(
-            "no Tickets.base at {} (run `vault-query tickets-init`)",
-            base_path.display()
-        );
-    }
-
     // Exact stem match, not a substring: slug `foo` must not select a ticket
     // owned by `track-foo-bar`.
     match track {
         Some(slug) => {
             let owned = |f: &VaultFile| ticket_track_slug(&f.frontmatter).as_deref() == Some(slug);
-            super::query::run(&base_path, view, cfg, format, Some(&owned))
+            BASE.run(cfg, view, format, Some(&owned))
         }
-        None => super::query::run(&base_path, view, cfg, format, None),
+        None => BASE.run(cfg, view, format, None),
     }
 }
 
-/// Write a `Tickets.base` scoped to the resolved project.
 pub fn init(cfg: &ResolvedConfig) -> Result<()> {
-    let base_path = base_path(cfg)?;
-    if base_path.exists() {
-        bail!("Tickets.base already exists at {}", base_path.display());
-    }
-
-    let project_path = base_path.parent().expect("base path has a parent");
-    let folder = project_path
-        .strip_prefix(&cfg.vault_root)
-        .with_context(|| {
-            format!(
-                "project_path {} is not inside vault_root {}",
-                project_path.display(),
-                cfg.vault_root.display()
-            )
-        })?
-        .to_string_lossy()
-        .replace('\\', "/");
-
-    std::fs::write(&base_path, render_template(&folder))
-        .with_context(|| format!("writing {}", base_path.display()))?;
-    println!("created {}", base_path.display());
-    Ok(())
-}
-
-fn base_path(cfg: &ResolvedConfig) -> Result<std::path::PathBuf> {
-    let project_path = cfg
-        .project_path
-        .as_ref()
-        .context("no project resolved (use --project <name> or add .vault.config.json)")?;
-    Ok(project_path.join("Tickets.base"))
+    BASE.init(cfg)
 }
 
 fn render_template(folder: &str) -> String {
