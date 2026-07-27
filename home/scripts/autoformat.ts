@@ -34,14 +34,22 @@
  *                        modified or untracked. Elsewhere: walks the cwd.
  *   autoformat -a        walks the cwd whatever git says — the escape hatch
  *                        for a repo that gitignores what you edit.
+ *   autoformat . -- -a   -- ends option parsing, so every later argument is a
+ *                        path even when it opens with a dash. bun swallows a
+ *                        -- sitting directly after the script path, so the
+ *                        separator has to follow at least one other argument.
  *
  * Files sharing a formatter are handed to it in one invocation, so a walk of a
  * large tree spawns a handful of processes rather than one per file. Formatter
  * output surfaces only on failure.
  *
+ * A run is a pipeline, one function per stage: parseArgs, selectFiles,
+ * routeFiles, planJobs, runJobs, report.
+ *
  * Exit 0 when every formatter that ran succeeded, 1 when one failed or a named
- * path is missing, 2 on a usage error. An absent formatter is reported in the
- * summary, not an error.
+ * path is missing, 2 on a usage error. An absent formatter and a directory the
+ * walk could not read are both reported on stderr and neither is an error:
+ * coverage was incomplete, but nothing that ran went wrong.
  *
  * Standalone by design: no imports beyond node builtins, no package.json, no
  * build step. Deployed as a ~/.local/bin symlink (see home/default.nix).
@@ -83,12 +91,13 @@ const WEB_EXTS = new Set([
 // the hash recorded on its reference stub.
 const FROZEN = join(HOME, "Documents", "vault-archive") + "/";
 
-const USAGE = `usage: autoformat [-a] [PATH...]
+const USAGE = `usage: autoformat [-a] [--] [PATH...]
 
   PATH...  files are formatted, directories are walked
   (none)   git-modified + untracked files in the current work tree,
            or a walk of the cwd when outside one
-  -a       walk the cwd instead of asking git`;
+  -a       walk the cwd instead of asking git
+  --       end option parsing: every later argument is a path`;
 
 type Run = { ok: boolean; output: string };
 
@@ -166,17 +175,24 @@ function oxfmtConfig(file: string): string {
   return join(HOME, ".oxfmtrc.json");
 }
 
-function collectDir(dir: string, into: Set<string>): void {
+/**
+ * Walk `dir`, adding every file under it to `into`. A directory that refuses
+ * to be read is a hole in the walk, so its message lands in `walkErrors`
+ * rather than letting the files inside vanish unmentioned.
+ */
+function collectDir(dir: string, into: Set<string>, walkErrors: string[]): void {
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
+  } catch (err) {
+    const why = (err as { code?: string })?.code ?? String(err);
+    walkErrors.push(`autoformat: cannot read ${dir}: ${why}`);
     return;
   }
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (!SKIP_DIRS.has(entry.name)) collectDir(full, into);
+      if (!SKIP_DIRS.has(entry.name)) collectDir(full, into, walkErrors);
     } else if (entry.isFile()) {
       addFile(full, into);
     }
@@ -217,75 +233,130 @@ async function gitDirty(into: Set<string>): Promise<string | null> {
   return root;
 }
 
-/**
- * One formatter invocation. `count` is what the summary credits to `tool`, and
- * is 0 for a follow-up pass over files a previous job already counted (ruff
- * format after ruff check). `cwd` is "/" wherever every path is absolute and
- * every config explicit, so a stale working directory cannot change the
- * outcome.
- */
-type Job = { tool: string; count: number; cwd: string; cmd: string[] };
-
 function ext(file: string): string {
   const base = file.slice(file.lastIndexOf("/") + 1);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(dot + 1) : "";
 }
 
-async function main(): Promise<number> {
+type Args = { all: boolean; named: string[] };
+
+/**
+ * Options and paths, or the exit code of a run that ends in parsing (--help,
+ * an unknown option). Everything after -- is a path, dash or no dash.
+ */
+function parseArgs(argv: string[]): Args | number {
   let all = false;
+  let options = true;
   const named: string[] = [];
-  for (const arg of process.argv.slice(2)) {
-    if (arg === "-a" || arg === "--all") all = true;
-    else if (arg === "-h" || arg === "--help") {
+  for (const arg of argv) {
+    if (!options || !arg.startsWith("-")) {
+      named.push(arg);
+    } else if (arg === "--") {
+      options = false;
+    } else if (arg === "-a" || arg === "--all") {
+      all = true;
+    } else if (arg === "-h" || arg === "--help") {
       console.log(USAGE);
       return 0;
-    } else if (arg.startsWith("-") && arg !== "--") {
+    } else {
       console.error(`autoformat: unknown option: ${arg}`);
       console.error(USAGE);
       return 2;
-    } else if (arg !== "--") named.push(arg);
+    }
   }
+  return { all, named };
+}
 
-  let status = 0;
+type Selection = {
+  files: Set<string>;
+  /** Repo root when git chose the files — the empty summary names it. */
+  gitRoot: string | null;
+  /** Ready-to-print messages for directories the walk could not read. */
+  walkErrors: string[];
+  /** Named paths that do not exist. */
+  notFound: string[];
+};
+
+/** The files to format: the named paths, or git's answer, or a walk of the cwd. */
+async function selectFiles({ all, named }: Args): Promise<Selection> {
   const files = new Set<string>();
+  const walkErrors: string[] = [];
+  const notFound: string[] = [];
   let gitRoot: string | null = null;
 
   if (named.length === 0) {
-    if (all) collectDir(process.cwd(), files);
+    if (all) collectDir(process.cwd(), files, walkErrors);
     else {
       gitRoot = await gitDirty(files);
-      if (gitRoot === null) collectDir(process.cwd(), files);
+      if (gitRoot === null) collectDir(process.cwd(), files, walkErrors);
     }
   } else {
     for (const path of named) {
       if (!existsSync(path)) {
         console.error(`autoformat: no such file or directory: ${path}`);
-        status = 1;
-      } else if (statSync(path).isDirectory()) collectDir(path, files);
+        notFound.push(path);
+      } else if (statSync(path).isDirectory()) collectDir(path, files, walkErrors);
       else addFile(path, files);
     }
   }
 
-  // Group by formatter so each one runs once over many files. format:file is
-  // the exception: the convention is one path per call.
-  const oxfmtByConfig = new Map<string, string[]>();
-  const denoByRoot = new Map<string, string[]>();
-  const formatFile: { root: string; file: string }[] = [];
-  const py: string[] = [];
-  const nix: string[] = [];
+  return { files, gitRoot, walkErrors, notFound };
+}
 
+function push(map: Map<string, string[]>, key: string, value: string): void {
+  const batch = map.get(key);
+  if (batch) batch.push(value);
+  else map.set(key, [value]);
+}
+
+/** Files grouped by the formatter each one calls for. */
+type Routes = {
+  oxfmtByConfig: Map<string, string[]>;
+  denoByRoot: Map<string, string[]>;
+  formatFile: { root: string; file: string }[];
+  py: string[];
+  nix: string[];
+};
+
+/**
+ * Group by formatter so each one runs once over many files. format:file is
+ * the exception: the convention is one path per call.
+ */
+function routeFiles(files: Set<string>): Routes {
+  const routes: Routes = {
+    oxfmtByConfig: new Map(),
+    denoByRoot: new Map(),
+    formatFile: [],
+    py: [],
+    nix: [],
+  };
   for (const file of [...files].sort()) {
     const e = ext(file);
     if (WEB_EXTS.has(e)) {
       const target = resolveWebTool(file);
-      if (target.tool === "format:file") formatFile.push({ root: target.root, file });
-      else if (target.tool === "deno") push(denoByRoot, target.root, file);
-      else push(oxfmtByConfig, target.config, file);
-    } else if (e === "py") py.push(file);
-    else if (e === "nix") nix.push(file);
+      if (target.tool === "format:file") routes.formatFile.push({ root: target.root, file });
+      else if (target.tool === "deno") push(routes.denoByRoot, target.root, file);
+      else push(routes.oxfmtByConfig, target.config, file);
+    } else if (e === "py") routes.py.push(file);
+    else if (e === "nix") routes.nix.push(file);
   }
+  return routes;
+}
 
+/**
+ * One formatter invocation. `files` is the batch it rewrites; `credit` says
+ * whether the summary counts that batch against `tool`, and is false for a
+ * follow-up pass over files a previous job already counted (ruff format after
+ * ruff check). `cwd` is "/" wherever every path is absolute and every config
+ * explicit, so a stale working directory cannot change the outcome.
+ */
+type Job = { tool: string; files: string[]; credit: boolean; cwd: string; cmd: string[] };
+
+/** Jobs to run, plus how many files each absent formatter left untouched. */
+type Plan = { jobs: Job[]; missing: Map<string, number> };
+
+function planJobs(routes: Routes): Plan {
   const jobs: Job[] = [];
   const missing = new Map<string, number>();
   const need = (tool: string, count: number): boolean => {
@@ -294,59 +365,94 @@ async function main(): Promise<number> {
     return false;
   };
 
-  for (const [config, batch] of oxfmtByConfig) {
-    if (need("oxfmt", batch.length)) {
+  for (const [config, files] of routes.oxfmtByConfig) {
+    if (need("oxfmt", files.length)) {
       jobs.push({
         tool: "oxfmt",
-        count: batch.length,
+        files,
+        credit: true,
         cwd: "/",
-        cmd: ["oxfmt", "-c", config, ...batch],
+        cmd: ["oxfmt", "-c", config, ...files],
       });
     }
   }
-  for (const [root, batch] of denoByRoot) {
-    if (need("deno", batch.length)) {
-      jobs.push({ tool: "deno", count: batch.length, cwd: root, cmd: ["deno", "fmt", ...batch] });
+  for (const [root, files] of routes.denoByRoot) {
+    if (need("deno", files.length)) {
+      jobs.push({
+        tool: "deno",
+        files,
+        credit: true,
+        cwd: root,
+        cmd: ["deno", "fmt", ...files],
+      });
     }
   }
-  for (const { root, file } of formatFile) {
+  for (const { root, file } of routes.formatFile) {
     const pm = detectPm(root);
     if (!need(pm, 1)) continue;
     // npm needs `--` to forward args to the script; bun/pnpm/yarn do not.
     const cmd =
       pm === "npm" ? ["npm", "run", "format:file", "--", file] : [pm, "run", "format:file", file];
-    jobs.push({ tool: "format:file", count: 1, cwd: root, cmd });
+    jobs.push({ tool: "format:file", files: [file], credit: true, cwd: root, cmd });
   }
+  const { py, nix } = routes;
   if (py.length && need("ruff", py.length)) {
     jobs.push({
       tool: "ruff",
-      count: py.length,
+      files: py,
+      credit: true,
       cwd: "/",
       cmd: ["ruff", "check", "--fix", "--quiet", ...py],
     });
-    jobs.push({ tool: "ruff", count: 0, cwd: "/", cmd: ["ruff", "format", "--quiet", ...py] });
+    jobs.push({
+      tool: "ruff",
+      files: py,
+      credit: false,
+      cwd: "/",
+      cmd: ["ruff", "format", "--quiet", ...py],
+    });
   }
   if (nix.length && need("alejandra", nix.length)) {
     jobs.push({
       tool: "alejandra",
-      count: nix.length,
+      files: nix,
+      credit: true,
       cwd: "/",
       cmd: ["alejandra", "--quiet", ...nix],
     });
   }
 
+  return { jobs, missing };
+}
+
+type Outcome = { done: Map<string, number>; failed: boolean };
+
+/** Run every job, reporting the output of the ones that fail. */
+async function runJobs(jobs: Job[]): Promise<Outcome> {
   const done = new Map<string, number>();
+  let failed = false;
   for (const job of jobs) {
     const result = await run(job.cmd, job.cwd);
     if (!result.ok) {
       console.error(`autoformat: ${job.tool} failed`);
       if (result.output.trim()) console.error(result.output.trim());
-      status = 1;
+      failed = true;
       continue;
     }
-    if (job.count) done.set(job.tool, (done.get(job.tool) ?? 0) + job.count);
+    if (job.credit) done.set(job.tool, (done.get(job.tool) ?? 0) + job.files.length);
   }
+  return { done, failed };
+}
 
+type Report = {
+  done: Map<string, number>;
+  missing: Map<string, number>;
+  walkErrors: string[];
+  gitRoot: string | null;
+};
+
+/** What was formatted on stdout; what the run could not reach on stderr. */
+function report({ done, missing, walkErrors, gitRoot }: Report): void {
   const summary = [...done]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([tool, count]) => `${tool} ${count}`)
@@ -359,17 +465,22 @@ async function main(): Promise<number> {
     );
   } else console.log("autoformat: nothing to format");
 
+  for (const line of walkErrors) console.error(line);
   for (const [tool, count] of [...missing].sort(([a], [b]) => a.localeCompare(b))) {
     console.error(`autoformat: ${tool} not found, skipped ${count} file(s)`);
   }
-
-  return status;
 }
 
-function push(map: Map<string, string[]>, key: string, value: string): void {
-  const batch = map.get(key);
-  if (batch) batch.push(value);
-  else map.set(key, [value]);
+async function main(): Promise<number> {
+  const args = parseArgs(process.argv.slice(2));
+  if (typeof args === "number") return args;
+
+  const { files, gitRoot, walkErrors, notFound } = await selectFiles(args);
+  const { jobs, missing } = planJobs(routeFiles(files));
+  const { done, failed } = await runJobs(jobs);
+  report({ done, missing, walkErrors, gitRoot });
+
+  return failed || notFound.length > 0 ? 1 : 0;
 }
 
 process.exit(await main());
