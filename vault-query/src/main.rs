@@ -160,10 +160,10 @@ enum Commands {
     TracksInit,
     /// List tickets, filtered by track, backlog, project, or status
     Tickets {
-        /// Tickets claimed by this track slug (matched against the `track-<slug>` backref)
+        /// Tickets owned by this track slug (matched against the `track-<slug>` backref)
         #[arg(long)]
         track: Option<String>,
-        /// Only unclaimed, open tickets — the project backlog
+        /// Only open tickets that no track owns — the project backlog
         #[arg(long)]
         backlog: bool,
         /// Filter by status (open, done, abandoned)

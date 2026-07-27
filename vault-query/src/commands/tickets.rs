@@ -62,7 +62,7 @@ pub struct Ticket {
     pub status: String,
     pub description: String,
     /// Resolved track slug (the `track-` prefix stripped from the backref
-    /// wikilink target stem), empty when the ticket is unclaimed.
+    /// wikilink target stem), empty when no track owns the ticket.
     pub track: String,
     /// Resolved blocking-ticket names from the `requires:` sequence.
     pub requires: Vec<String>,
@@ -78,7 +78,7 @@ struct TicketsOutput<'a> {
     tickets: &'a [Ticket],
 }
 
-/// Resolve the track a ticket is claimed by to a bare slug.
+/// Resolve the track that owns a ticket to a bare slug.
 ///
 /// The ticket's `track:` frontmatter is a backref wikilink whose target stem is
 /// `track-<slug>` (e.g. `[[41 projects/nix/track-work-tracking-model]]`). We
@@ -130,7 +130,7 @@ fn ticket_project(rel_path: &str, projects_path: &str) -> String {
 /// - `project_scope`: when `Some`, keep only tickets whose absolute path is under
 ///   this directory (the resolved `--project` folder).
 /// - `track`: keep only tickets whose resolved track slug equals this.
-/// - `backlog`: keep only unclaimed (`track` empty) tickets with `status == open`.
+/// - `backlog`: keep only tickets no track owns (`track` empty) with `status == open`.
 /// - `status`: keep only tickets whose `status` equals this.
 fn select(
     files: &[VaultFile],

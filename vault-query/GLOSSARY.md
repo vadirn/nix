@@ -140,9 +140,9 @@ Example: `templates/Card.md` has `template: true` and `type: card` — when used
 
 ## Ticket
 
-A markdown file with `type: ticket` in its frontmatter, representing one actionable unit of project work. Conventionally placed inside a Project directory (`41 projects/<name>/`) as `ticket-<slug>.md`, but classification is by frontmatter alone. Carries `slug`, `description`, `status` (`open`, `done`, `abandoned`), a `track:` backref wikilink (empty when unclaimed), a `requires:` sequence of blocking-ticket wikilinks, and a `project:` wikilink. The `vault-query tickets` subcommand lists tickets and filters them by `--track <slug>` (matched against the `track-<slug>` backref stem, resolved query-side without opening the track file), `--backlog` (unclaimed tickets with `status == open`), `--status`, and the global `--project` (which scopes to one project folder).
+A markdown file with `type: ticket` in its frontmatter, representing one actionable unit of project work. Conventionally placed inside a Project directory (`41 projects/<name>/`) as `ticket-<slug>.md`, but classification is by frontmatter alone. Carries `slug`, `description`, `status` (`open`, `done`, `abandoned`), a `track:` backref wikilink naming the track that owns it (empty when no track owns it), a `requires:` sequence of blocking-ticket wikilinks, and a `project:` wikilink. The `vault-query tickets` subcommand lists tickets and filters them by `--track <slug>` (matched against the `track-<slug>` backref stem, resolved query-side without opening the track file), `--backlog` (tickets with `status == open` that no track owns), `--status`, and the global `--project` (which scopes to one project folder).
 
-Example: `41 projects/nix/ticket-remove-track-backlog.md` carries `type: ticket` and is claimed by `[[41 projects/nix/track-work-tracking-model]]`; `vault-query tickets --track work-tracking-model` lists it.
+Example: `41 projects/nix/ticket-remove-track-backlog.md` carries `type: ticket` and is owned by `[[41 projects/nix/track-work-tracking-model]]`; `vault-query tickets --track work-tracking-model` lists it.
 
 ## Track
 

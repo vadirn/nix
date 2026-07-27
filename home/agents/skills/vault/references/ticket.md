@@ -2,14 +2,14 @@
 
 Creates a ticket — one unit of decided work, sized to one PR.
 
-A ticket is where friction graduates into work. Open tickets with no `track:` are the project's backlog; setting `track:` claims one for an effort. Distinct from a track: a track is one effort's rolling memory across sessions, a ticket is one deliverable inside it.
+A ticket is where friction graduates into work. Open tickets with no `track:` are the project's backlog; setting `track:` assigns one to the effort that owns it. Distinct from a track: a track is one effort's rolling memory across sessions, a ticket is one deliverable inside it.
 
 ## Ticket, requires edge, or scratchpad seed
 
 Route the item before creating anything.
 
 - **Ticket** — the work is decided and you can already state the observable condition that closes it. Create `41 projects/<project>/ticket-<slug>.md`.
-- **`requires:` edge** — the item blocks work that already has a ticket. Add the blocking ticket's wikilink to the blocked ticket's `requires:`, giving the blocker its own ticket first when it has none. Blocked is derived from an unmet `requires:` entry, which is why `blocked` is absent from `status`.
+- **`requires:` edge** — the item blocks work that already has a ticket. Add the blocking ticket's wikilink to the blocked ticket's `requires:`, giving the blocker its own ticket first when it has none. Blocked is derived from a `requires:` entry whose ticket is not yet `done`, which is why `blocked` is absent from `status`. Nothing computes that: `vault-query` prints `requires:` verbatim without opening the named ticket, so check its status yourself.
 - **Scratchpad seed** — the item is an idea that may grow into a future effort and has no done-condition yet. Append one line to `41 projects/<project>/scratchpad.md` (`type: scratchpad`, one per project, template `Scratchpad.md`); create that file from the template when the project has none.
 
 ## Process
@@ -44,7 +44,7 @@ vault_root = Bash(vault-query config).vault_root Read(<vault_root>/templates/Tic
 | `status` | `open` at creation; `done` once every `## Done when` box is checked; `abandoned` when the work will not happen — keep the file and record why in the body. |
 | `project` | wikilink to the project note, copied from `context.md`'s `Project note:` line |
 | `created` / `updated` | `YYYY-MM-DD`. `updated` moves on every edit. |
-| `track` | wikilink to the track that claimed this ticket; empty means unclaimed. In-progress is derived from this field being set, which is why `in-progress` is absent from `status`. |
+| `track` | wikilink to the track that owns this ticket; empty means no track owns it, which is what puts the ticket in the project backlog. Ownership says where the work belongs, not that it is underway — a track owns its queued tickets alongside the one it is working on. |
 | `requires` | list of wikilinks to tickets that must land first; `[]` when none |
 
 Quote frontmatter wikilinks: `project: "[[41 projects/nix/Nix]]"`.
@@ -111,10 +111,10 @@ Out of scope: migrating the Backlog content that already exists in tracks on dis
 
 1. `vault-query read <name>` for the folded shape, then unfold the section the request needs.
 2. Tick `## Done when` boxes as the work lands; set `status: done` once they all are.
-3. Set `track:` when an effort claims the ticket; clear it when the effort ends with the ticket still open.
+3. Set `track:` when an effort takes ownership of the ticket; clear it when the effort ends with the ticket still open, returning it to the backlog.
 4. Bump `updated:` on every edit.
 
 ## Notes
 
-- `vault-query tickets` queries them: `--backlog` (open and unclaimed — the project backlog), `--track <slug>`, `--status <open|done|abandoned>`, `--project <name>`, `--format <text|markdown|json>`.
+- `vault-query tickets` queries them: `--backlog` (open and unowned — the project backlog), `--track <slug>`, `--status <open|done|abandoned>`, `--project <name>`, `--format <text|markdown|json>`.
 - Tickets reach other devices through Obsidian Sync, so apply `references/post-edit.md` and skip the `/git commit` suggestion.

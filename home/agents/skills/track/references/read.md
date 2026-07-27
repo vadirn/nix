@@ -21,9 +21,9 @@ else:
     shape = Bash(vault-query read <track_path>)                    // folded overview: sections + line/token counts; each Log entry gets its own sub-address under Log
     snapshot = Bash(vault-query read <track_path> Direction)       // Direction — the stable framing
     latest = Bash(vault-query read <track_path> <highest Log sub-address read off the shape>)   // the newest Log entry — the current snapshot
-    open_tickets = Bash(vault-query tickets --track <slug> --status open --format text)   // what this track claims; empty stdout = none claimed
-    backlog_tickets = Bash(vault-query tickets --backlog --format text)                   // open tickets in the project backlog, unclaimed by any track; empty stdout = none unclaimed
-    do("present Direction + latest Log entry + open tickets (claimed) + backlog tickets (unclaimed) as the resume snapshot, keeping the two lists distinct; offer to unfold Decisions / older Log entries by address on demand")
+    open_tickets = Bash(vault-query tickets --track <slug> --status open --format text)   // what this track owns; empty stdout = none owned
+    backlog_tickets = Bash(vault-query tickets --backlog --format text)                   // open tickets in the project backlog, owned by no track; empty stdout = none unowned
+    do("present Direction + latest Log entry + open tickets (owned) + backlog tickets (unowned) as the resume snapshot, keeping the two lists distinct; offer to unfold Decisions / older Log entries by address on demand")
 
     query = do("derive a short phrase from the track's Direction and description — the topic the user is working on")
     grounding = Bash(vault-query consult "<query>" --format markdown)
@@ -74,12 +74,12 @@ Address sections by heading slug (`Direction`, `Decisions`, `Log`), not by posit
 
 ### Open tickets for the track and the backlog
 
-The work a track still owes lives in tickets, not in the track file, and a track's remaining work can sit in two places: tickets it has claimed, and tickets still unclaimed in the project backlog (a ticket's `track:` field is empty until someone claims it — that emptiness is the design, not a gap).
+The work a track still owes lives in tickets, not in the track file, and a track's remaining work can sit in two places: tickets it owns, and tickets no track owns yet in the project backlog (a ticket's `track:` field is empty until a track takes it — that emptiness is the design, not a gap). Ownership marks where a ticket belongs, not that work on it has started, so a track's list mixes what is underway with what is queued.
 
 Run both queries on resume:
 
-- `vault-query tickets --track <slug> --status open --format text` — `<slug>` is the track's slug (file name minus the `track-` prefix). Prints one line per ticket this track claims. Exit 0 with empty stdout means the track claims no open tickets — say so rather than inventing one, but check the backlog query below before reporting nothing is left.
-- `vault-query tickets --backlog --format text` — open tickets across the project with no track claiming them yet (the filter already implies `--status open`; pairing it with `--status` is redundant). Exit 0 with empty stdout means nothing is left unclaimed.
+- `vault-query tickets --track <slug> --status open --format text` — `<slug>` is the track's slug (file name minus the `track-` prefix). Prints one line per ticket this track owns. Exit 0 with empty stdout means the track owns no open tickets — say so rather than inventing one, but check the backlog query below before reporting nothing is left.
+- `vault-query tickets --backlog --format text` — open tickets across the project with no track owning them yet (the filter already implies `--status open`; pairing it with `--status` is redundant). Exit 0 with empty stdout means nothing is left unowned.
 
 Both print the same line shape, no header:
 
@@ -87,6 +87,6 @@ Both print the same line shape, no header:
 ticket-slug — One-sentence description copied from the ticket's frontmatter. (status: open) (track: work-tracking-model) (41 projects/nix/ticket-ticket-slug.md)
 ```
 
-Line shape: `<slug> — <description> (status: <status>) [(track: <slug>)] [(requires: <slug>)] (<vault-relative path>)`. The `(track: …)` and `(requires: …)` fields appear only when set; `requires:` names a ticket that must land first, so a ticket carrying one is blocked. Backlog lines have no `(track: …)` field, since none is set.
+Line shape: `<slug> — <description> (status: <status>) [(track: <slug>)] [(requires: <slug>)] (<vault-relative path>)`. The `(track: …)` and `(requires: …)` fields appear only when set; `requires:` names a ticket that must land first, so a ticket is blocked while any entry's ticket is still open — nothing computes that, so check the named ticket's status yourself. Backlog lines have no `(track: …)` field, since none is set.
 
-Present the two lists with the snapshot, kept distinct (claimed vs. unclaimed), and unfold a ticket's own body with `vault-query read <ticket path>` when the user picks one to work on.
+Present the two lists with the snapshot, kept distinct (owned vs. unowned), and unfold a ticket's own body with `vault-query read <ticket path>` when the user picks one to work on.
