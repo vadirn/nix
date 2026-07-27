@@ -21,8 +21,9 @@ else:
     shape = Bash(vault-query read <track_path>)                    // folded overview: sections + line/token counts; each Log entry gets its own sub-address under Log
     snapshot = Bash(vault-query read <track_path> Direction)       // Direction — the stable framing
     latest = Bash(vault-query read <track_path> <highest Log sub-address read off the shape>)   // the newest Log entry — the current snapshot
-    open_tickets = Bash(vault-query tickets --track <slug> --status open --format text)   // what this track still owes; empty stdout = none
-    do("present Direction + latest Log entry + open tickets as the resume snapshot; offer to unfold Decisions / older Log entries by address on demand")
+    open_tickets = Bash(vault-query tickets --track <slug> --status open --format text)   // what this track claims; empty stdout = none claimed
+    backlog_tickets = Bash(vault-query tickets --backlog --format text)                   // open tickets in the project backlog, unclaimed by any track; empty stdout = none unclaimed
+    do("present Direction + latest Log entry + open tickets (claimed) + backlog tickets (unclaimed) as the resume snapshot, keeping the two lists distinct; offer to unfold Decisions / older Log entries by address on demand")
 
     query = do("derive a short phrase from the track's Direction and description — the topic the user is working on")
     grounding = Bash(vault-query consult "<query>" --format markdown)
@@ -71,14 +72,21 @@ Address sections by heading slug (`Direction`, `Decisions`, `Log`), not by posit
 
 `vault-query read` is the vault-facing wrapper over `mdread`, so the address scheme (`0`/`text`, section numbers, sub-addresses, heading slugs, `fm[.path]`, `links`) and the `--depth`/`--threshold`/`--full` controls are the same ones `mdread` applies to any markdown file outside the vault.
 
-### Open tickets for the track
+### Open tickets for the track and the backlog
 
-The work a track still owes lives in tickets, not in the track file. On resume, run `vault-query tickets --track <slug> --status open --format text` — `<slug>` is the track's slug (file name minus the `track-` prefix). It exits 0 and prints one line per open ticket, no header:
+The work a track still owes lives in tickets, not in the track file, and a track's remaining work can sit in two places: tickets it has claimed, and tickets still unclaimed in the project backlog (a ticket's `track:` field is empty until someone claims it — that emptiness is the design, not a gap).
+
+Run both queries on resume:
+
+- `vault-query tickets --track <slug> --status open --format text` — `<slug>` is the track's slug (file name minus the `track-` prefix). Prints one line per ticket this track claims. Exit 0 with empty stdout means the track claims no open tickets — say so rather than inventing one, but check the backlog query below before reporting nothing is left.
+- `vault-query tickets --backlog --format text` — open tickets across the project with no track claiming them yet (the filter already implies `--status open`; pairing it with `--status` is redundant). Exit 0 with empty stdout means nothing is left unclaimed.
+
+Both print the same line shape, no header:
 
 ```
 ticket-slug — One-sentence description copied from the ticket's frontmatter. (status: open) (track: work-tracking-model) (41 projects/nix/ticket-ticket-slug.md)
 ```
 
-Line shape: `<slug> — <description> (status: <status>) [(track: <slug>)] [(requires: <slug>)] (<vault-relative path>)`. The `(track: …)` and `(requires: …)` fields appear only when set; `requires:` names a ticket that must land first, so a ticket carrying one is blocked.
+Line shape: `<slug> — <description> (status: <status>) [(track: <slug>)] [(requires: <slug>)] (<vault-relative path>)`. The `(track: …)` and `(requires: …)` fields appear only when set; `requires:` names a ticket that must land first, so a ticket carrying one is blocked. Backlog lines have no `(track: …)` field, since none is set.
 
-Exit 0 with empty stdout means the track claims no open tickets — say so rather than inventing one. Present the list with the snapshot, and unfold a ticket's own body with `vault-query read <ticket path>` when the user picks one to work on.
+Present the two lists with the snapshot, kept distinct (claimed vs. unclaimed), and unfold a ticket's own body with `vault-query read <ticket path>` when the user picks one to work on.
