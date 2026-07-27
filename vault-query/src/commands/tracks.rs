@@ -145,3 +145,26 @@ views:
 "#
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::project_base::assert_template_views;
+
+    #[test]
+    fn template_parses_and_declares_every_documented_view() {
+        assert_template_views(
+            render_template,
+            &[
+                "Active",
+                "Open",
+                "Paused",
+                "Done",
+                "Abandoned",
+                "Superseded",
+                "All",
+                "Stats",
+            ],
+        );
+    }
+}

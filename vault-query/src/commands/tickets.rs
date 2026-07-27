@@ -65,14 +65,22 @@ fn ticket_track_slug(fm: &BTreeMap<String, Value>) -> Option<String> {
     Some(stem.strip_prefix("track-").unwrap_or(stem).to_string())
 }
 
+/// Whether the track named `slug` owns `file`.
+///
+/// This is the predicate `--track` narrows a view by, named so that the tests
+/// exercise the shipped one instead of a second copy that could drift from it.
+/// The match is on the whole stem, not a substring: slug `foo` must not select a
+/// ticket owned by `track-foo-bar`.
+fn owned_by_track(file: &VaultFile, slug: &str) -> bool {
+    ticket_track_slug(&file.frontmatter).as_deref() == Some(slug)
+}
+
 /// Render one view of the project's `Tickets.base`, optionally narrowed to the
 /// tickets one track owns.
 pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format) -> Result<()> {
-    // Exact stem match, not a substring: slug `foo` must not select a ticket
-    // owned by `track-foo-bar`.
     match track {
         Some(slug) => {
-            let owned = |f: &VaultFile| ticket_track_slug(&f.frontmatter).as_deref() == Some(slug);
+            let owned = |f: &VaultFile| owned_by_track(f, slug);
             BASE.run(cfg, view, format, Some(&owned))
         }
         None => BASE.run(cfg, view, format, None),
@@ -209,6 +217,7 @@ mod tests {
     use super::*;
     use crate::base;
     use crate::base::filter;
+    use crate::commands::project_base::assert_template_views;
     use crate::vault;
     use crate::vault_ignore::VaultIgnore;
     use std::path::Path;
@@ -265,9 +274,8 @@ mod tests {
             .unwrap_or_else(|| panic!("view {view_name} missing from the template"));
 
         let files = vault::scan(root, root, Some(&VaultIgnore::from_patterns(vec![]))).unwrap();
-        let owned = track.map(|slug| {
-            move |f: &VaultFile| ticket_track_slug(&f.frontmatter).as_deref() == Some(slug)
-        });
+        // The shipped predicate, not a second copy of it.
+        let owned = track.map(|slug| move |f: &VaultFile| owned_by_track(f, slug));
         let extra: Option<&dyn Fn(&VaultFile) -> bool> = match owned {
             Some(ref p) => Some(p),
             None => None,
@@ -416,24 +424,17 @@ mod tests {
 
     #[test]
     fn template_parses_and_declares_every_documented_view() {
-        let base_file = {
-            let tmp = TempDir::new().unwrap();
-            let p = tmp.path().join("Tickets.base");
-            std::fs::write(&p, render_template("41 projects/nix")).unwrap();
-            base::parse(&p).unwrap()
-        };
-        let names: Vec<&str> = base_file.views.iter().map(|v| v.name.as_str()).collect();
-        assert_eq!(
-            names,
-            [
+        assert_template_views(
+            render_template,
+            &[
                 "Backlog",
                 "Open",
                 "Done",
                 "Abandoned",
                 "By Track",
                 "By Status",
-                "All"
-            ]
+                "All",
+            ],
         );
     }
 }

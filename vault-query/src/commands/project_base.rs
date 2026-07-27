@@ -111,6 +111,42 @@ impl ProjectBase {
     }
 }
 
+/// Assert that `template` renders a `.base` declaring exactly `expected_views`,
+/// in order, and that every filter expression it declares is one
+/// [`crate::base::filter::evaluate`] recognises.
+///
+/// Shared by the [`super::tracks`] and [`super::tickets`] test modules because
+/// their templates are string literals no compiler checks: since `evaluate`
+/// bails on an unrecognised expression rather than passing it through, a typo in
+/// a template is a runtime error on a command with no other guard.
+#[cfg(test)]
+pub fn assert_template_views(template: fn(&str) -> String, expected_views: &[&str]) {
+    use crate::base;
+    use tempfile::TempDir;
+
+    let tmp = TempDir::new().unwrap();
+    let vault_root = tmp.path();
+    let path = vault_root.join("Template.base");
+    std::fs::write(&path, template("41 projects/nix")).unwrap();
+    let base_file = base::parse(&path).unwrap();
+
+    let names: Vec<&str> = base_file.views.iter().map(|v| v.name.as_str()).collect();
+    assert_eq!(names, expected_views);
+
+    // A file the filters can be run against; the verdict is irrelevant, only
+    // that every expression is understood.
+    let probe = VaultFile {
+        path: vault_root.join("41 projects/nix/probe.md"),
+        ..Default::default()
+    };
+    base::filter::evaluate_filter_set(&base_file.filters, &probe, vault_root)
+        .expect("base-level filters");
+    for view in &base_file.views {
+        base::filter::evaluate_filter_set(&view.filters, &probe, vault_root)
+            .unwrap_or_else(|e| panic!("view {}: {e}", view.name));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
