@@ -15,10 +15,12 @@ const BASE: ProjectBase = ProjectBase {
     template: render_template,
 };
 
+/// Render one view of the project's `Tracks.base`.
 pub fn run(cfg: &ResolvedConfig, view: &str, format: Format) -> Result<()> {
     BASE.run(cfg, view, format, None)
 }
 
+/// Write the starter `Tracks.base` into the resolved project.
 pub fn init(cfg: &ResolvedConfig) -> Result<()> {
     BASE.init(cfg)
 }

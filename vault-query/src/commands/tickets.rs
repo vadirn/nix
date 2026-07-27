@@ -87,6 +87,7 @@ pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format
     }
 }
 
+/// Write the starter `Tickets.base` into the resolved project.
 pub fn init(cfg: &ResolvedConfig) -> Result<()> {
     BASE.init(cfg)
 }
