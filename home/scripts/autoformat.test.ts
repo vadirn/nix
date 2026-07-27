@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const CLI = new URL("./autoformat.ts", import.meta.url).pathname;
+const HOOK = new URL("../claude/hooks/hint-autoformat.sh", import.meta.url).pathname;
 const UGLY = '{   "a":1,"b":   [2,3]}';
 
 function work(): string {
@@ -208,4 +209,78 @@ test("a workspace-root format:file is inherited by a sub-package", () => {
   const app = ugly(join(pkg, "app.ts"));
   af([app], { cwd: dir });
   expect(read(app)).toBe("FORMATTED");
+});
+
+// --- Parity with home/claude/hooks/hint-autoformat.sh -----------------------
+//
+// The hook re-encodes two facts this router owns, so it can hint without
+// paying bun's ~113ms startup on every Write/Edit. Parsing source text this
+// way is inherently a little brittle, so each extractor anchors on a literal
+// that would only change alongside the fact it reads (the WEB_EXTS set, the
+// py/nix routing branches, the FROZEN join, the hook's case patterns) and
+// throws a named error if that anchor goes missing, rather than silently
+// reporting an empty list as if the two sides agreed.
+
+/** Extensions autoformat.ts routes: WEB_EXTS plus the py and nix branches in routeFiles. */
+function routerExtensions(src: string): string[] {
+  const webExts = src.match(/const WEB_EXTS = new Set\(\[([\s\S]*?)\]\)/);
+  if (!webExts) {
+    throw new Error("parity test: WEB_EXTS literal not found in autoformat.ts — update the parser");
+  }
+  const web = [...webExts[1].matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]);
+  const branches = [...src.matchAll(/e === "(py|nix)"/g)].map((m) => m[1]);
+  if (branches.length < 2) {
+    throw new Error(
+      "parity test: py/nix routing branches not found in autoformat.ts — update the parser",
+    );
+  }
+  return [...web, ...branches];
+}
+
+/** Extensions hint-autoformat.sh's case pattern lets through. */
+function hookExtensions(src: string): string[] {
+  const m = src.match(/case "\$\{FILE##\*\.\}" in([\s\S]*?)\)/);
+  if (!m) {
+    throw new Error(
+      "parity test: extension case pattern not found in hint-autoformat.sh — update the parser",
+    );
+  }
+  return m[1]
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** The vault-archive path fragment autoformat.ts's FROZEN constant names. */
+function routerFrozenPath(src: string): string {
+  const m = src.match(/const FROZEN = join\(HOME, "([^"]+)", "([^"]+)"\)/);
+  if (!m) {
+    throw new Error("parity test: FROZEN constant not found in autoformat.ts — update the parser");
+  }
+  return `${m[1]}/${m[2]}`;
+}
+
+/** The vault-archive path fragment hint-autoformat.sh's case guard names. */
+function hookFrozenPath(src: string): string {
+  const m = src.match(/\$\{HOME:-\/nonexistent\}\/([^"]+)\/"\*/);
+  if (!m) {
+    throw new Error(
+      "parity test: frozen-root case guard not found in hint-autoformat.sh — update the parser",
+    );
+  }
+  return m[1];
+}
+
+test("hint-autoformat.sh's extension list matches what autoformat.ts routes", () => {
+  const router = new Set(routerExtensions(read(CLI)));
+  const hook = new Set(hookExtensions(read(HOOK)));
+  const onlyInRouter = [...router].filter((e) => !hook.has(e)).sort();
+  const onlyInHook = [...hook].filter((e) => !router.has(e)).sort();
+  // Named on both sides so a failure says plainly which extension is on the
+  // wrong side, instead of just "sets differ".
+  expect({ onlyInRouter, onlyInHook }).toEqual({ onlyInRouter: [], onlyInHook: [] });
+});
+
+test("hint-autoformat.sh's frozen-root guard matches autoformat.ts's FROZEN constant", () => {
+  expect(hookFrozenPath(read(HOOK))).toBe(routerFrozenPath(read(CLI)));
 });
