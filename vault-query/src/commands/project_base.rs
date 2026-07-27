@@ -64,6 +64,15 @@ impl ProjectBase {
     }
 
     /// Write the starter template into the resolved project.
+    ///
+    /// The folder rendered into the template's `file.inFolder(…)` clause is the
+    /// project's vault-relative path exactly as [`VaultFile::in_folder`] will
+    /// later see it, with no separator rewriting: this tool runs on macOS only,
+    /// where `to_string_lossy` already yields `/` separators and a backslash is
+    /// an ordinary character in a file name. Rewriting `\` to `/` here would
+    /// therefore change nothing except a folder whose name contains a backslash,
+    /// which it would name as a folder that does not exist — emitting a filter
+    /// that excludes the very files it was generated for.
     pub fn init(&self, cfg: &ResolvedConfig) -> Result<()> {
         let base_path = self.path(cfg)?;
         if base_path.exists() {
@@ -84,8 +93,7 @@ impl ProjectBase {
                     cfg.vault_root.display()
                 )
             })?
-            .to_string_lossy()
-            .replace('\\', "/");
+            .to_string_lossy();
 
         std::fs::write(&base_path, (self.template)(&folder))
             .with_context(|| format!("writing {}", base_path.display()))?;
@@ -161,6 +169,33 @@ mod tests {
             .to_string();
         assert!(err.contains("no Widgets.base"), "{err}");
         assert!(err.contains("vault-query widgets-init"), "{err}");
+    }
+
+    #[test]
+    fn the_written_filter_selects_the_project_s_own_files() {
+        // A backslash is an ordinary character in a macOS file name, so a folder
+        // named `od\d` is a real folder. Rewriting the separator on the way into
+        // `file.inFolder(...)` would name `od/d` instead — a folder that does not
+        // exist — while `in_folder` still compares against the raw relative path,
+        // so init would emit a filter matching none of its project's files.
+        let tmp = TempDir::new().unwrap();
+        let project_path = tmp.path().join(r"41 projects/od\d");
+        std::fs::create_dir_all(&project_path).unwrap();
+        let cfg = ResolvedConfig {
+            project_path: Some(project_path.clone()),
+            ..cfg_for(&tmp)
+        };
+        BASE.init(&cfg).unwrap();
+
+        let base_file = crate::base::parse(&project_path.join("Widgets.base")).unwrap();
+        let own_file = VaultFile {
+            path: project_path.join("note.md"),
+            ..Default::default()
+        };
+        assert!(
+            crate::base::filter::evaluate_filter_set(&base_file.filters, &own_file, tmp.path())
+                .unwrap()
+        );
     }
 
     #[test]
