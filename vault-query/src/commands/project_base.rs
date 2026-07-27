@@ -8,7 +8,7 @@
 //! changes, and `const` construction keeps both commands' definitions free.
 
 use anyhow::{Context, Result, bail};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config::ResolvedConfig;
 use crate::output::Format;
@@ -16,30 +16,24 @@ use crate::vault::VaultFile;
 
 /// A `.base` file in a project folder, backing one render subcommand and one
 /// init subcommand.
+///
+/// Built by naming every field — `ProjectBase { file_name: …, init_command: …,
+/// template: … }` — and never through a positional constructor: two of the three
+/// fields are `&'static str`, so a positional call would let a transposition
+/// type-check into a wrong path plus a wrong hint. A struct literal is still
+/// `const`, so the two call sites keep their `const BASE`.
 pub struct ProjectBase {
     /// File name inside the project folder, e.g. `Tracks.base`.
-    file_name: &'static str,
+    pub file_name: &'static str,
     /// The subcommand that writes it. Named in the not-found error rather than
     /// derived from `file_name`, so the hint the user is told to run stays
     /// greppable in this source.
-    init_command: &'static str,
+    pub init_command: &'static str,
     /// Starter template, rendered for the project's vault-relative folder.
-    template: fn(&str) -> String,
+    pub template: fn(&str) -> String,
 }
 
 impl ProjectBase {
-    pub const fn new(
-        file_name: &'static str,
-        init_command: &'static str,
-        template: fn(&str) -> String,
-    ) -> Self {
-        Self {
-            file_name,
-            init_command,
-            template,
-        }
-    }
-
     /// Render `view` of this base, ANDing `extra` onto its declared filters.
     ///
     /// See [`crate::base::filter::apply`] for why a filter parameterized at call
@@ -74,7 +68,8 @@ impl ProjectBase {
     /// which it would name as a folder that does not exist — emitting a filter
     /// that excludes the very files it was generated for.
     pub fn init(&self, cfg: &ResolvedConfig) -> Result<()> {
-        let base_path = self.path(cfg)?;
+        let project_path = self.project_path(cfg)?;
+        let base_path = project_path.join(self.file_name);
         if base_path.exists() {
             bail!(
                 "{} already exists at {}",
@@ -83,7 +78,6 @@ impl ProjectBase {
             );
         }
 
-        let project_path = base_path.parent().expect("base path has a parent");
         let folder = project_path
             .strip_prefix(&cfg.vault_root)
             .with_context(|| {
@@ -101,12 +95,19 @@ impl ProjectBase {
         Ok(())
     }
 
+    /// The resolved project folder, or the error naming both ways to resolve one.
+    ///
+    /// Held separate from [`Self::path`] so [`Self::init`] can read the folder it
+    /// needs directly instead of recovering it from the joined path.
+    fn project_path<'a>(&self, cfg: &'a ResolvedConfig) -> Result<&'a Path> {
+        cfg.project_path
+            .as_deref()
+            .context("no project resolved (use --project <name> or add .vault.config.json)")
+    }
+
+    /// Where this base lives, whether or not the file exists yet.
     fn path(&self, cfg: &ResolvedConfig) -> Result<PathBuf> {
-        let project_path = cfg
-            .project_path
-            .as_ref()
-            .context("no project resolved (use --project <name> or add .vault.config.json)")?;
-        Ok(project_path.join(self.file_name))
+        Ok(self.project_path(cfg)?.join(self.file_name))
     }
 }
 
@@ -120,7 +121,11 @@ mod tests {
         format!("filters:\n  and:\n    - file.inFolder(\"{folder}\")\nviews: []\n")
     }
 
-    const BASE: ProjectBase = ProjectBase::new("Widgets.base", "widgets-init", template);
+    const BASE: ProjectBase = ProjectBase {
+        file_name: "Widgets.base",
+        init_command: "widgets-init",
+        template,
+    };
 
     /// A config whose project sits at `<vault>/41 projects/nix`.
     fn cfg_for(tmp: &TempDir) -> ResolvedConfig {

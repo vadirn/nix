@@ -9,7 +9,11 @@ use crate::commands::project_base::ProjectBase;
 use crate::config::ResolvedConfig;
 use crate::output::Format;
 
-const BASE: ProjectBase = ProjectBase::new("Tracks.base", "tracks-init", render_template);
+const BASE: ProjectBase = ProjectBase {
+    file_name: "Tracks.base",
+    init_command: "tracks-init",
+    template: render_template,
+};
 
 pub fn run(cfg: &ResolvedConfig, view: &str, format: Format) -> Result<()> {
     BASE.run(cfg, view, format, None)

@@ -18,7 +18,11 @@ use crate::output::Format;
 use crate::vault::VaultFile;
 use crate::wikilink;
 
-const BASE: ProjectBase = ProjectBase::new("Tickets.base", "tickets-init", render_template);
+const BASE: ProjectBase = ProjectBase {
+    file_name: "Tickets.base",
+    init_command: "tickets-init",
+    template: render_template,
+};
 
 /// Resolve the track that owns a ticket to a bare slug.
 ///
