@@ -443,7 +443,16 @@ function planJobs(routes: Routes): Plan {
       // Standalone rustfmt defaults to edition 2015; this workspace is
       // edition = "2024" (Cargo.toml), so the flag is required or modern
       // syntax misparses.
-      cmd: ["rustfmt", "--edition", "2024", ...rs],
+      //
+      // --config skip_children=true keeps rustfmt from following `mod`
+      // declarations into sibling files it was never given — without it,
+      // formatting one file (e.g. a lib.rs declaring a dozen modules)
+      // silently reflows every one of them, which is exactly the
+      // behind-the-back rewrite this module's header claims can't happen.
+      // It also stops one unresolvable `mod` (a path that doesn't exist on
+      // disk) from failing the whole batch. The bare `--skip-children` flag
+      // is rejected by rustfmt; it must go through `--config`.
+      cmd: ["rustfmt", "--edition", "2024", "--config", "skip_children=true", ...rs],
     });
   }
 

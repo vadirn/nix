@@ -3,9 +3,9 @@
  * --), extension routing, batching, and walk failures.
  * Run: `bun test` from this directory, or `bun run --filter autoformat test`
  * from the workspace root (home/agents/skills).
- * Requires oxfmt and git; the format:file case additionally requires bun. The
- * unreadable-directory case is skipped under root via test.skipIf, since root
- * reads a 000 directory anyway.
+ * Requires oxfmt, git, and rustfmt; the format:file case additionally
+ * requires bun. The unreadable-directory case is skipped under root via
+ * test.skipIf, since root reads a 000 directory anyway.
  */
 
 import { expect, test } from "bun:test";
@@ -239,6 +239,25 @@ test("a workspace-root format:file is inherited by a sub-package", () => {
   const app = ugly(join(pkg, "app.ts"));
   af([app], { cwd: dir });
   expect(read(app)).toBe("FORMATTED");
+});
+
+test("rustfmt formats the named file without following mod into its siblings", () => {
+  const dir = work();
+  const lib = join(dir, "lib.rs");
+  const foo = join(dir, "foo.rs");
+  const libBefore = "mod foo;\n\nfn   main()   {}\n";
+  const fooBefore = "pub fn   bar()   {}\n";
+  writeFileSync(lib, libBefore);
+  writeFileSync(foo, fooBefore);
+
+  expect(af([lib], { cwd: dir }).code).toBe(0);
+
+  expect(read(lib)).not.toBe(libBefore);
+  // foo.rs was never named on the command line. Without --config
+  // skip_children=true, rustfmt follows the `mod foo;` declaration in lib.rs
+  // and reflows foo.rs too — the exact behind-the-back rewrite this module
+  // exists to rule out.
+  expect(read(foo)).toBe(fooBefore);
 });
 
 // --- Parity with home/claude/hooks/hint-autoformat.sh -----------------------
