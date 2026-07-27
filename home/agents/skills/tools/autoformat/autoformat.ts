@@ -61,6 +61,11 @@
  * (see home/default.nix) symlinks this file itself and runs it under the
  * shebang above — a dependency would make the CLI need an installed
  * node_modules to start.
+ *
+ * That symlink is out-of-store (mkOutOfStoreSymlink), pointed straight at
+ * this source file rather than a build artifact — unlike the compiled Rust
+ * CLIs this repo also ships (mdstruct, vault-query), an edit here is live
+ * the moment it is saved. No ./rebuild.sh needed to pick it up.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
