@@ -6,7 +6,7 @@
 //! a declared view; it arrives as the caller predicate slot on
 //! [`crate::base::filter::apply`].
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde_yaml::Value;
 use std::collections::BTreeMap;
 
@@ -77,9 +77,23 @@ fn owned_by_track(file: &VaultFile, slug: &str) -> bool {
 
 /// Render one view of the project's `Tickets.base`, optionally narrowed to the
 /// tickets one track owns.
+///
+/// `--track <slug>` and `--view Backlog` are rejected together: Backlog
+/// selects tickets with no owning track (`!track.isTruthy()`), `--track`
+/// selects tickets a track owns, so their intersection is empty by
+/// construction. This crate treats other impossible-by-construction inputs
+/// (an unresolved `--project`, a missing `Tickets.base`) as hard errors rather
+/// than a silent empty result, so this combination follows the same shape.
 pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format) -> Result<()> {
     match track {
         Some(slug) => {
+            if view == "Backlog" {
+                bail!(
+                    "--track {slug} and --view Backlog can never match anything together: \
+                     Backlog selects only tickets with no owning track, --track narrows to \
+                     tickets owned by \"{slug}\""
+                );
+            }
             let owned = |f: &VaultFile| owned_by_track(f, slug);
             BASE.run(cfg, view, format, Some(&owned))
         }
@@ -321,6 +335,28 @@ mod tests {
             ["owned"]
         );
         assert!(select(tmp.path(), "Open", Some("nonexistent-track")).is_empty());
+    }
+
+    #[test]
+    fn run_rejects_track_combined_with_the_backlog_view() {
+        // Backlog is `!track.isTruthy()`; `--track` selects the opposite. The
+        // combination is empty by construction, so `run` must error rather
+        // than silently print nothing, naming both flags in the message.
+        let tmp = build_ticket_vault();
+        let cfg = ResolvedConfig {
+            vault_root: tmp.path().to_path_buf(),
+            projects_path: None,
+            project_path: Some(tmp.path().join("41 projects/nix")),
+            log_project_path: String::new(),
+            lint: None,
+            consult: None,
+            ignore: VaultIgnore::from_patterns(vec![]),
+        };
+        let err = run(&cfg, "Backlog", Some("work-tracking-model"), Format::Table)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("--track"), "{err}");
+        assert!(err.contains("--view Backlog"), "{err}");
     }
 
     #[test]
