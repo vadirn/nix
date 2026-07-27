@@ -57,8 +57,9 @@ impl Rule for MissingRequiredField {
         let mut findings = Vec::new();
 
         for file in ctx.files {
-            // Skip templates — they legitimately have empty fields.
-            if frontmatter::is_template(&file.frontmatter) {
+            // Skip lint-exempt entries (templates and bottom-tier/superseded
+            // records) — they legitimately have empty fields.
+            if crate::epistemic::is_lint_exempt(&file.frontmatter) {
                 continue;
             }
 
@@ -157,6 +158,24 @@ mod tests {
             &[
                 ("type", Value::String("card".into())),
                 ("template", Value::Bool(true)),
+            ],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn superseded_file_is_skipped() {
+        let file = make_file(
+            "SupersededTicket",
+            "/vault/41 projects/my-project/ticket-old.md",
+            &[
+                ("type", Value::String("ticket".into())),
+                ("superseded", Value::Bool(true)),
             ],
         );
         let files = vec![file];
