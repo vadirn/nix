@@ -229,12 +229,6 @@ fn resolve_display_name(col: &str, base: &BaseFile) -> String {
             return prop.display_name.clone();
         }
     }
-    if col.starts_with("formula.")
-        && let Some(prop) = base.properties.get(col)
-        && !prop.display_name.is_empty()
-    {
-        return prop.display_name.clone();
-    }
     col.to_string()
 }
 
@@ -546,6 +540,33 @@ views:
              41 projects/nix\tticket-a\topen\n\
              41 projects/vault\tticket-b\topen\n\
              41 projects/vault\tticket-c\tdone\n"
+        );
+    }
+
+    #[test]
+    fn resolve_display_name_finds_a_formula_property_via_the_col_as_is_candidate() {
+        // `resolve_display_name` used to carry a second branch after the
+        // candidates loop that re-checked `base.properties.get(col)` whenever
+        // `col` started with "formula." — but the loop's own last candidate is
+        // `col` verbatim, so that second lookup was always redundant and never
+        // returned. This pins the still-working path through the loop alone,
+        // now that the dead branch is gone.
+        let mut properties = BTreeMap::new();
+        properties.insert(
+            "formula.cost_per_line".to_string(),
+            crate::base::PropertyDef {
+                display_name: "$/line".to_string(),
+            },
+        );
+        let base = BaseFile {
+            filters: Default::default(),
+            formulas: Default::default(),
+            properties,
+            views: vec![],
+        };
+        assert_eq!(
+            resolve_display_name("formula.cost_per_line", &base),
+            "$/line"
         );
     }
 }
