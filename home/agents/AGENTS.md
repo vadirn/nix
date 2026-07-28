@@ -36,6 +36,19 @@ Run `vault-query consult "<task framing>" --format markdown`; the `/consult` ski
 
 Consult when grounding needs the user's view: an opinion, stance, definition, framing, design preference, or a decision already reasoned through, whatever the surface subject. Skip consult for mechanical execution: locating or reading code, editing, refactoring, debugging, file operations, running commands. Abstention costs one cheap call, so consult when relevance is uncertain.
 
+## Filing
+
+File a durable fact to its typed home when it surfaces mid-session and has no home yet — a preference, a convention, a correction, a definition, a decision reached in passing. Route it by kind:
+
+- **Durable per-project framing** (purpose, conventions, links): the project's `41 projects/<project>/Context.md`.
+- **A concept distilled from external sources**, worth its own headword: a vault card, via `/vault card`.
+- **An original argued position**, carrying no external source: a vault note, via `/vault note`.
+- **Decided work sized to one PR**, with a statable done-condition: a ticket, via `/vault ticket`.
+- **An idea that may grow into an effort**, with no done-condition yet: the project's `41 projects/<project>/Scratchpad.md`.
+- **A convention specific to one code repository**: that repository's own `CLAUDE.md` or `AGENTS.md`.
+
+Propose the write before making it: state what the candidate is, which destination takes it, and a one-line summary. Wait for the user's answer, and write only what they approve.
+
 ## CLI tools
 
 Use these through the Bash tool. Prefer them to manual code reading or web search.

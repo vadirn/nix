@@ -49,7 +49,7 @@ else:
         do("apply as localized Edits, not a full-body rewrite (see Reference: Editing a large track): for each target section, Read only its line range from the shape to get exact anchors, then Edit in place — append decisions to ## Decisions, append rows to ## Glossary, append log_entry to ## Log, set frontmatter updated:")
 
 graduation:
-    do("review session for CLAUDE.md / skills / vault candidates; present as suggestions, let user decide")
+    do("sweep the session for durable facts left unrouted; route each by `## Filing` in AGENTS.md, present as suggestions, let user decide (see Reference: Filing backstop)")
     do("skip /git commit suggestion — the track is vault content propagated by Obsidian Sync; suggest commit only if changes landed inside `.claude/` or `.scripts/`, or the user explicitly asked")
     do("suggest /clear")
 ```
@@ -119,6 +119,14 @@ Surface every Glossary change in the `proposed_edits` confirmation step. Silent 
 - find `<vault_root>/templates/Track.md`
 - find `<project_path>/track-<slug>.md`
 - read `<project_path>/Context.md` for the project wikilink (`Project note: [[...]]` line)
+
+### Filing backstop
+
+`## Filing` in `home/agents/AGENTS.md` is ambient and always loaded. It catches a durable fact the moment it surfaces mid-session and names the typed destination each kind takes — the project's `Context.md`, a vault card, a vault note, a ticket, the project's `Scratchpad.md`, a repository's own `CLAUDE.md` or `AGENTS.md`. Read the routes there; one copy stays authoritative.
+
+This step is the backstop, not the sole catcher. It sweeps up whatever the session surfaced and left unrouted, so a candidate that went unproposed at the time still reaches its home at the save.
+
+The sweep presents each candidate as a suggestion — what it is, which destination takes it, a one-line summary — and the user decides. The write itself follows the route `## Filing` names, after approval.
 
 ### Skip /git commit after save
 
