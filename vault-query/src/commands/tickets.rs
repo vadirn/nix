@@ -3,12 +3,14 @@
 //! Structurally the twin of [`super::tracks`], and shares its plumbing through
 //! [`super::project_base`]. The one thing tickets need that tracks do not is
 //! `--track <slug>`, whose argument is known only at call time and so cannot be
-//! a declared view; it arrives through the `select` slot on
-//! [`super::query::Narrowing`].
+//! a declared view; it arrives through [`super::query::Narrowing`], which both
+//! validates the slug against the project's tracks and selects the tickets they
+//! own.
 
 use anyhow::{Result, bail};
 use serde_yaml::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use crate::base;
 use crate::commands::project_base::ProjectBase;
@@ -63,7 +65,89 @@ fn ticket_track_slug(fm: &BTreeMap<String, Value>) -> Option<String> {
     if stem.is_empty() {
         return None;
     }
-    Some(stem.strip_prefix("track-").unwrap_or(stem).to_string())
+    Some(slug_from_stem(stem).to_string())
+}
+
+/// The slug a track file's stem names: `track-foo` is the file, `foo` is the slug.
+///
+/// Called from both sides of the `--track` match — from [`ticket_track_slug`]
+/// for the stem a ticket backrefs, and from [`project_track_slugs`] for the
+/// stem a track file has — so the roster the CLI validates against and the
+/// values it compares can only be derived one way.
+fn slug_from_stem(stem: &str) -> &str {
+    stem.strip_prefix("track-").unwrap_or(stem)
+}
+
+/// Every track slug the resolved project declares, as `--track` names them.
+///
+/// The roster is the project's own track *files*, not the tracks its tickets
+/// happen to backref: a track that exists but owns nothing yet is a legitimate
+/// `--track` argument whose answer is an empty table, and deriving the roster
+/// from backrefs would report it as a typo.
+///
+/// Scoped by [`Path::starts_with`], which compares whole components — the base
+/// itself is scoped by `file.inFolder(…)`, so a roster gathered vault-wide
+/// would accept a slug from a project whose tickets this command cannot see.
+fn project_track_slugs(files: &[VaultFile], project_path: &Path) -> BTreeSet<String> {
+    files
+        .iter()
+        .filter(|f| f.path.starts_with(project_path))
+        .filter(|f| frontmatter::get_display(&f.frontmatter, "type") == "track")
+        .filter_map(|f| f.path.file_stem())
+        .map(|stem| slug_from_stem(&stem.to_string_lossy()).to_string())
+        .collect()
+}
+
+/// Accept `slug` only if the project declares a track by that name.
+///
+/// Without this, `--track` answers an unresolvable name with an empty table and
+/// exit 0 — the reader cannot tell a typo from a track whose tickets are all
+/// closed, which is the failure the `precheck` slot exists to separate.
+///
+/// The `track-` branch is the copy-paste path, and it rejects rather than
+/// accepts: the Track column renders the wikilink's file stem (as Obsidian does
+/// for the same base), so `track-foo` is what a user sees and `foo` is what the
+/// track's own `slug:` says it is called. Accepting both would give one track
+/// two names; naming the right one costs a single correction.
+fn check_track_declared(files: &[VaultFile], project_path: &Path, slug: &str) -> Result<()> {
+    let known = project_track_slugs(files, project_path);
+    if known.contains(slug) {
+        return Ok(());
+    }
+    if let Some(bare) = slug.strip_prefix("track-")
+        && known.contains(bare)
+    {
+        bail!(
+            "no track \"{slug}\" — that is the file stem the Track column renders; \
+             the slug is \"{bare}\""
+        );
+    }
+    if known.is_empty() {
+        bail!(
+            "no track \"{slug}\": {} declares no tracks",
+            project_path.display()
+        );
+    }
+    // A project can carry dozens of tracks, so the whole roster is a wall of
+    // text, not a hint. Offer the ones sharing a first segment — a typo usually
+    // keeps it — and leave the full list to the command that renders it.
+    let head = slug.split('-').next().unwrap_or(slug);
+    let near: Vec<&str> = known
+        .iter()
+        .filter(|k| k.split('-').next() == Some(head))
+        .map(String::as_str)
+        .collect();
+    if near.is_empty() {
+        bail!(
+            "no track \"{slug}\"; this project declares {} — `vault-query tracks --view All` lists them",
+            known.len()
+        );
+    }
+    bail!(
+        "no track \"{slug}\"; close matches: {} (of {} — `vault-query tracks --view All` lists them)",
+        near.join(", "),
+        known.len()
+    );
 }
 
 /// Whether the track named `slug` owns `file`.
@@ -84,30 +168,36 @@ fn owned_by_track(file: &VaultFile, slug: &str) -> bool {
 /// selects tickets a track owns, so their intersection is empty by
 /// construction. This crate treats other impossible-by-construction inputs
 /// (an unresolved `--project`, a missing `Tickets.base`) as hard errors rather
-/// than a silent empty result, so this combination follows the same shape.
+/// than a silent empty result, so this combination follows the same shape — as
+/// does a `--track` naming no track the project declares, via
+/// [`check_track_declared`].
 pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format) -> Result<()> {
-    match track {
-        Some(slug) => {
-            if view == "Backlog" {
-                bail!(
-                    "--track {slug} and --view Backlog can never match anything together: \
-                     Backlog selects only tickets with no owning track, --track narrows to \
-                     tickets owned by \"{slug}\""
-                );
-            }
-            let owned = |f: &VaultFile| owned_by_track(f, slug);
-            BASE.run(
-                cfg,
-                view,
-                format,
-                Narrowing {
-                    select: Some(&owned),
-                    ..Narrowing::default()
-                },
-            )
-        }
-        None => BASE.run(cfg, view, format, Narrowing::default()),
+    let Some(slug) = track else {
+        return BASE.run(cfg, view, format, Narrowing::default());
+    };
+    if view == "Backlog" {
+        bail!(
+            "--track {slug} and --view Backlog can never match anything together: \
+             Backlog selects only tickets with no owning track, --track narrows to \
+             tickets owned by \"{slug}\""
+        );
     }
+    // `project_path` is `Some` by the time a precheck runs: `ProjectBase::run`
+    // resolves it before opening the base, and errors when it cannot.
+    let declared = |files: &[VaultFile]| match cfg.project_path.as_deref() {
+        Some(project_path) => check_track_declared(files, project_path, slug),
+        None => Ok(()),
+    };
+    let owned = |f: &VaultFile| owned_by_track(f, slug);
+    BASE.run(
+        cfg,
+        view,
+        format,
+        Narrowing {
+            precheck: Some(&declared),
+            select: Some(&owned),
+        },
+    )
 }
 
 /// Write the starter `Tickets.base` into the resolved project.
@@ -281,7 +371,27 @@ mod tests {
         )
         .unwrap();
 
+        // The track `ticket-owned` backrefs, plus one that owns nothing: a real
+        // project's roster is its track files, not the tracks its tickets name.
+        std::fs::write(
+            dir.join("track-work-tracking-model.md"),
+            "---\ntype: track\nslug: work-tracking-model\nstatus: open\n---\nbody\n",
+        )
+        .unwrap();
+
+        std::fs::write(
+            dir.join("track-lonely.md"),
+            "---\ntype: track\nslug: lonely\nstatus: open\n---\nbody\n",
+        )
+        .unwrap();
+
         tmp
+    }
+
+    /// Scan the fixture and resolve `slug` against it, as the `precheck` slot does.
+    fn declared(root: &Path, slug: &str) -> Result<()> {
+        let files = vault::scan(root, root, Some(&VaultIgnore::from_patterns(vec![]))).unwrap();
+        check_track_declared(&files, &root.join("41 projects/nix"), slug)
     }
 
     /// Run one view of the rendered template against a scanned temp vault,
@@ -482,5 +592,85 @@ mod tests {
                 "All",
             ],
         );
+    }
+
+    #[test]
+    fn a_track_the_project_declares_resolves() {
+        let tmp = build_ticket_vault();
+        declared(tmp.path(), "work-tracking-model").unwrap();
+    }
+
+    /// The discriminator the `precheck` slot exists for: a track that owns
+    /// nothing is a valid argument whose truthful answer is an empty table, and
+    /// must not be reported as a typo.
+    #[test]
+    fn a_track_owning_no_tickets_resolves_and_selects_nothing() {
+        let tmp = build_ticket_vault();
+        declared(tmp.path(), "lonely").unwrap();
+        assert!(select(tmp.path(), "All", Some("lonely")).is_empty());
+    }
+
+    #[test]
+    fn the_rendered_file_stem_is_rejected_and_names_the_slug() {
+        let tmp = build_ticket_vault();
+        let err = declared(tmp.path(), "track-work-tracking-model")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("the slug is \"work-tracking-model\""), "{err}");
+    }
+
+    #[test]
+    fn a_typo_keeping_its_first_segment_gets_the_close_match() {
+        let tmp = build_ticket_vault();
+        let err = declared(tmp.path(), "work-trackign-model")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("close matches: work-tracking-model"), "{err}");
+        // The roster is the hint's ceiling, not its body — a real project has
+        // dozens of tracks and the unrelated ones are noise.
+        assert!(!err.contains("lonely"), "{err}");
+    }
+
+    #[test]
+    fn an_unrecognisable_track_names_the_command_that_lists_them() {
+        let tmp = build_ticket_vault();
+        let err = declared(tmp.path(), "zzz").unwrap_err().to_string();
+        assert!(err.contains("vault-query tracks --view All"), "{err}");
+    }
+
+    /// The roster is scoped by whole path components, so a sibling project whose
+    /// folder name this one prefixes cannot lend it a slug.
+    #[test]
+    fn a_track_in_another_project_is_not_in_the_roster() {
+        let tmp = build_ticket_vault();
+        let sibling = tmp.path().join("41 projects/nixos");
+        std::fs::create_dir_all(&sibling).unwrap();
+        std::fs::write(
+            sibling.join("track-elsewhere.md"),
+            "---\ntype: track\nslug: elsewhere\nstatus: open\n---\nbody\n",
+        )
+        .unwrap();
+
+        let err = declared(tmp.path(), "elsewhere").unwrap_err().to_string();
+        assert!(err.contains("no track \"elsewhere\""), "{err}");
+        // Counted against this project's two, not the sibling's three.
+        assert!(err.contains("declares 2"), "{err}");
+    }
+
+    /// Both sides of the match go through [`slug_from_stem`], so the roster
+    /// cannot name a track by one spelling while a backref resolves to another.
+    #[test]
+    fn the_roster_and_a_backref_agree_on_one_slug() {
+        let tmp = build_ticket_vault();
+        let root = tmp.path();
+        let files = vault::scan(root, root, Some(&VaultIgnore::from_patterns(vec![]))).unwrap();
+        let roster = project_track_slugs(&files, &root.join("41 projects/nix"));
+
+        let owner = files
+            .iter()
+            .find(|f| f.get_property("slug") == "owned")
+            .unwrap();
+        let backref = ticket_track_slug(&owner.frontmatter).unwrap();
+        assert!(roster.contains(&backref), "{roster:?} lacks {backref}");
     }
 }
