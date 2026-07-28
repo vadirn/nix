@@ -10,6 +10,7 @@ pub mod reference_not_wikilink;
 pub mod reference_vault_link;
 pub mod reference_wrong_type;
 pub mod singleton_tag;
+pub mod slug_filename_mismatch;
 pub mod ticket_outward_only;
 pub mod unknown_rel;
 pub mod untagged_card;

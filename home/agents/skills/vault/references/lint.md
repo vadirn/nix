@@ -33,6 +33,7 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `untagged-card` | warn | Card with missing or empty `tags:` array |
 | `missing-required-field` | warn | File missing a required frontmatter field for its `type:` (one finding per field) |
 | `singleton-tag` | warn | Tag appearing in exactly one file (typo heuristic) |
+| `slug-filename-mismatch` | warn | `type: ticket`/`type: track` entry whose filename is not `<type>-<slug>` — queries resolve a track by filename stem, so a disagreement makes it unreachable by the slug it declares (templates, superseded entries, and entries with no `slug:` exempt) |
 | `unknown-rel` | warn | `<rel>` relation token outside the known registry (typo heuristic; can be promoted into the registry) |
 | `oversized-entry` | warn | Card/note/experiment/ticket body exceeds consult's per-doc token cap (templates and superseded entries exempt) |
 | `untyped-entry` | warn | File with no `type:` frontmatter field (templates, superseded entries, and checkpoints exempt) |
@@ -115,6 +116,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `untagged-card` | `null` |
 | `missing-required-field` | `null` |
 | `singleton-tag` | `{ "tag": <string> }` |
+| `slug-filename-mismatch` | `{ "slug": <string>, "expected": <string> }` |
 | `unknown-rel` | `{ "rel": <string>, "line": <number> }` |
 | `oversized-entry` | `null` |
 | `untyped-entry` | `null` |
@@ -122,6 +124,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 - `reference-not-wikilink.data.value` is the raw `reference:` frontmatter value that failed to parse as a wikilink (e.g. a bare URL).
 - `broken-wikilink.data.target` is the **raw** wikilink target verbatim (including any path prefix); call `wikilink::resolve_name` yourself if you want the bare note name. `broken-wikilink.data.line` is the 1-based source line of the offending `[[...]]`.
 - `singleton-tag.data.tag` is the tag string that appears in exactly one file across the corpus.
+- `slug-filename-mismatch.data.slug` is the entry's declared `slug:`; `data.expected` is the basename it implies, without the `.md` extension.
 - `invalid-frontmatter.data.error` is the raw YAML parse error message (e.g. `mapping values are not allowed in this context at line 4 column 28`).
 - `dangling-relation-label.data.label` is the raw local endpoint or from-label string that resolved to no local node; `data.position` distinguishes `endpoint` from `from-label`, and `data.line` is the 1-based source line of the offending `## Relations` bullet.
 - `unknown-rel.data.rel` is the `<rel>` token verbatim; `data.line` is the 1-based source line of the offending `## Relations` bullet.
