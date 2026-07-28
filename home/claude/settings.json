@@ -9,7 +9,8 @@
     "BASECAMP_NO_KEYRING": "1",
     "BASECAMP_HINTS": "false",
     "BASECAMP_STATS": "false",
-    "CLAUDE_CODE_WORKFLOWS": "1"
+    "CLAUDE_CODE_WORKFLOWS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
   },
   "attribution": {
     "commit": "",
@@ -263,12 +264,8 @@
         "~/Pictures/vidgen",
         "$TMPDIR"
       ],
-      "denyRead": [
-        "~/.ssh"
-      ],
-      "allowRead": [
-        "~/.ssh/*.pub"
-      ]
+      "denyRead": ["~/.ssh"],
+      "allowRead": ["~/.ssh/*.pub"]
     },
     "credentials": {
       "files": [
