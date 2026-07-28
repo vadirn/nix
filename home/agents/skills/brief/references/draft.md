@@ -36,7 +36,7 @@ drafts = do("for each recipient, project the digest into their currency — see 
 do("emit the draft(s) using the template below, then stop")
 
 if user accepts a draft:
-    do("set that stakeholder's last_drafted = today in context.md frontmatter — see Reference: Watermark")
+    do("set that stakeholder's last_drafted = today in Context.md frontmatter — see Reference: Watermark")
 ```
 
 ## Reference
@@ -45,7 +45,7 @@ if user accepts a draft:
 
 - roster has 1 stakeholder → draft for that one.
 - roster has >1 → one-line pick (list names + currency), or `--all` to fan out.
-- no roster → draft a single generic update and offer to add a `stakeholders:` list to context.md.
+- no roster → draft a single generic update and offer to add a `stakeholders:` list to Context.md.
 
 ### Period
 
@@ -53,7 +53,7 @@ Default = since the chosen stakeholder's `last_drafted`. `--all` → the earlies
 
 ### Digest
 
-ONE stakeholder-agnostic pass; attach provenance to each field. `context.md` gives durable framing (what the project is for, who counts in what).
+ONE stakeholder-agnostic pass; attach provenance to each field. `Context.md` gives durable framing (what the project is for, who counts in what).
 
 | field | provenance |
 | --- | --- |
@@ -67,7 +67,7 @@ ONE stakeholder-agnostic pass; attach provenance to each field. `context.md` giv
 
 ### Projection
 
-For each recipient, surface their stored assumption first so staleness is visible: "Drafting for Sarah: counts in features+dates, waits to be told. Stale? edit context.md". When `--all` gathered a wider window, trim each draft to that stakeholder's own `last_drafted`. Then translate the digest into their currency:
+For each recipient, surface their stored assumption first so staleness is visible: "Drafting for Sarah: counts in features+dates, waits to be told. Stale? edit Context.md". When `--all` gathered a wider window, trim each draft to that stakeholder's own `last_drafted`. Then translate the digest into their currency:
 
 - drop inspection-closeable detail they already watch (if they inspect PRs, don't recap merges)
 - render infra/exploration as its counterfactual in their currency, not in infra terms
@@ -76,7 +76,7 @@ For each recipient, surface their stored assumption first so staleness is visibl
 
 ### Watermark
 
-On the user accepting a draft in-session ("good", "send it", "done"), advance that stakeholder's `last_drafted` to today — a surgical edit to that entry in context.md frontmatter. This is brief's ONLY write. It tracks "last accepted draft" (observable), not "last sent" (which the skill cannot see). On heavy edits, advance only when done.
+On the user accepting a draft in-session ("good", "send it", "done"), advance that stakeholder's `last_drafted` to today — a surgical edit to that entry in Context.md frontmatter. This is brief's ONLY write. It tracks "last accepted draft" (observable), not "last sent" (which the skill cannot see). On heavy edits, advance only when done.
 
 ## Draft template
 
@@ -104,4 +104,4 @@ DRAFT — not sent. Send it yourself. Sources: <repo/track/weekly seen>
 ## Failure modes to name out loud
 
 - **Thin work → confident prose.** If the period's artifacts are sparse, say so; do not inflate. An honest "quiet week, here is the little there is" beats laundered substance.
-- **Stale roster.** The Projection step surfaces the stored assumption precisely so the user can catch a drifted currency/model. Trust `context.md`, but show what you trusted.
+- **Stale roster.** The Projection step surfaces the stored assumption precisely so the user can catch a drifted currency/model. Trust `Context.md`, but show what you trusted.

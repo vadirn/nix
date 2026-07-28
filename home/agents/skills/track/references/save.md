@@ -14,7 +14,7 @@ if selected == "new":
     slug = AskUserQuestion("slug?", default=suggested_slug)
     description = AskUserQuestion("one-line description?")
     template = Read(<cfg.vault_root>/templates/Track.md)
-    project_wikilink = do("read <cfg.project_path>/context.md and copy 'Project note: [[...]]' wikilink")
+    project_wikilink = do("read <cfg.project_path>/Context.md and copy 'Project note: [[...]]' wikilink")
     track_path = <cfg.project_path>/track-<slug>.md
     do("instantiate template: set frontmatter per ### Frontmatter;
         leave Direction empty for the user to fill, leave Glossary baseline intact,
@@ -78,7 +78,7 @@ Read `templates/Track.md` for structure. Required fields, in order:
 - `slug` — kebab-case, matches the filename suffix (`track-<slug>.md`)
 - `description` — 1-sentence summary, the same value shown by the resume picker
 - `status` — one of `open` / `paused` / `done` / `abandoned` / `superseded`. Set to `open` on creation.
-- `project` — wikilink copied from `<project_path>/context.md` line `Project note: [[...]]`
+- `project` — wikilink copied from `<project_path>/Context.md` line `Project note: [[...]]`
 - `created` — ISO date (`YYYY-MM-DD`). Set on creation; never changed.
 - `updated` — ISO date. Bumped to `<today>` on every save.
 
@@ -118,7 +118,7 @@ Surface every Glossary change in the `proposed_edits` confirmation step. Silent 
 
 - find `<vault_root>/templates/Track.md`
 - find `<project_path>/track-<slug>.md`
-- read `<project_path>/context.md` for the project wikilink (`Project note: [[...]]` line)
+- read `<project_path>/Context.md` for the project wikilink (`Project note: [[...]]` line)
 
 ### Skip /git commit after save
 

@@ -145,7 +145,7 @@ enum Commands {
     },
     /// Print resolved config as JSON
     Config,
-    /// Print project context.md
+    /// Print project Context.md
     Context,
     /// Query project tracks
     Tracks {

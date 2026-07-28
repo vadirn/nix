@@ -42,7 +42,7 @@ date = Bash(date +%Y-%m-%d)
 
 description_line = do("one-line summary of the claim, ≤ 80 chars")
 if cfg contains project_path:
-    project_wikilink = do("read <cfg.project_path>/context.md and copy the '[[...]]'
+    project_wikilink = do("read <cfg.project_path>/Context.md and copy the '[[...]]'
         wikilink from the 'Project note:' line; if file absent or line missing, set to null")
 else:
     project_wikilink = null
@@ -135,7 +135,7 @@ The Glossary ships with five pinned rows — Claim, Method, Execution, Verdict, 
 | `description` | yes      | one-line claim summary, ≤ 80 chars        |
 | `verdict`     | yes      | `confirmed`, `refuted`, or `inconclusive` |
 | `date`        | yes      | ISO date `YYYY-MM-DD`                     |
-| `project`     | no       | wikilink from `<project_path>/context.md` |
+| `project`     | no       | wikilink from `<project_path>/Context.md` |
 
 ### Falsifiability test
 

@@ -10,7 +10,7 @@ Route the item before creating anything.
 
 - **Ticket** — the work is decided and you can already state the observable condition that closes it. Create `41 projects/<project>/ticket-<slug>.md`.
 - **`requires:` edge** — the item blocks work that already has a ticket. Add the blocking ticket's wikilink to the blocked ticket's `requires:`, giving the blocker its own ticket first when it has none. Blocked is derived from a `requires:` entry whose ticket is not yet `done`, which is why `blocked` is absent from `status`. Nothing computes that: `vault-query` prints `requires:` verbatim without opening the named ticket, so check its status yourself.
-- **Scratchpad seed** — the item is an idea that may grow into a future effort and has no done-condition yet. Append one line to `41 projects/<project>/scratchpad.md` (`type: scratchpad`, one per project, template `Scratchpad.md`); create that file from the template when the project has none.
+- **Scratchpad seed** — the item is an idea that may grow into a future effort and has no done-condition yet. Append one line to `41 projects/<project>/Scratchpad.md` (`type: scratchpad`, one per project, template `Scratchpad.md`); create that file from the template when the project has none.
 
 ## Process
 
@@ -28,7 +28,7 @@ if a row covers the same work:
 // Build the ticket
 Read(<vault_root>/templates/Ticket.md)
 slug = kebab-case, naming the outcome
-project_link = the `Project note: [[...]]` line in <project_path>/context.md
+project_link = the `Project note: [[...]]` line in <project_path>/Context.md
 write <project_path>/ticket-<slug>.md
 
 // Confirm the body resolves from the repo alone
@@ -45,7 +45,7 @@ vault_root = Bash(vault-query config).vault_root Read(<vault_root>/templates/Tic
 | `slug` | the filename's slug, minus the `ticket-` prefix |
 | `description` | one sentence. `vault-query tickets` prints it as the ticket's entire summary line, so write it to stand alone. |
 | `status` | `open` at creation; `done` once every `## Done when` box is checked; `abandoned` when the work will not happen — keep the file and record why in the body. |
-| `project` | wikilink to the project note, copied from `context.md`'s `Project note:` line |
+| `project` | wikilink to the project note, copied from `Context.md`'s `Project note:` line |
 | `created` / `updated` | `YYYY-MM-DD`. `updated` moves on every edit. |
 | `track` | wikilink to the track that owns this ticket; empty means no track owns it, which is what puts the ticket in the project backlog. Ownership says where the work belongs, not that it is underway — a track owns its queued tickets alongside the one it is working on. |
 | `requires` | list of wikilinks to tickets that must land first; `[]` when none |

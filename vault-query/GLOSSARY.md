@@ -86,7 +86,7 @@ Example: a freshly created card with no inbound wikilinks is reported by `vault-
 
 ## Project
 
-A subdirectory inside `projects_path` (default `41 projects/`). Contains a Project note (`type: project`) and optionally `context.md`, `Checkpoints.base`, `Tracks.base`, `Tickets.base`, plus checkpoint files, tracks, tickets, and other project-scoped notes. The `vault-query projects` subcommand lists Project notes via `90 bases/Projects.base` (which filters on `type == "project"`); when that base file is absent it falls back to walking project directories at depth 2 and listing their `.md` files (excluding `checkpoint-*`, `context.md`, `SKILL.md`, `start.md`, `save.md`).
+A subdirectory inside `projects_path` (default `41 projects/`). Contains a Project note (`type: project`) and optionally `Context.md`, `Scratchpad.md`, `Checkpoints.base`, `Tracks.base`, `Tickets.base`, plus checkpoint files, tracks, tickets, and other project-scoped notes. A file a project holds exactly one of is named for what it is, capitalized; the many-per-project files are named `<type>-<slug>`. The `vault-query projects` subcommand lists Project notes via `90 bases/Projects.base` (which filters on `type == "project"`); when that base file is absent it falls back to walking project directories at depth 2 and listing their `.md` files (excluding `checkpoint-*`, `Context.md` in either case, `SKILL.md`, `start.md`, `save.md`).
 
 Example: `41 projects/nix/` is the Project directory for the nix repo; the Project note inside it carries `type: project`.
 

@@ -3,7 +3,7 @@ name: brief
 description: >
   Draft a per-stakeholder status update from real work artifacts, or diagnose a stakeholder
   complaint as a state-gap vs a target-gap before you react. Drafts, never sends. Reads
-  git/track/weekly-log; writes only each stakeholder's last_drafted in context.md. Out of scope: sending, scheduling,
+  git/track/weekly-log; writes only each stakeholder's last_drafted in Context.md. Out of scope: sending, scheduling,
   internal session logs (use /track). Invoke explicitly with /brief.
 disable-model-invocation: true
 ---
@@ -38,7 +38,7 @@ The vocabulary both procedures fix to one meaning each. `references/concepts.md`
 | inspects             | what a stakeholder closes on their own (PRs, board); what the draft may omit                                 |
 | counterfactual       | claimed future value of non-feature work; mark for verification, never assert                                |
 | provenance           | per-field tag in draft: artifact (from git) / inferred (marked guess) / elicited (user supplies)             |
-| roster               | the `stakeholders:` list in context.md frontmatter; authored outside brief, which writes only `last_drafted` |
+| roster               | the `stakeholders:` list in Context.md frontmatter; authored outside brief, which writes only `last_drafted` |
 | `last_drafted`       | per-stakeholder date of the last accepted draft; the period default                                          |
 
 ## Dispatch
@@ -68,7 +68,7 @@ Both procedures share this setup. Do it once.
 ```
 cfg     = Bash(vault-query config)        // JSON: { vault_root, project_path }
 if no project resolved: do("surface the error verbatim; do not invent a project name")
-context = Bash(vault-query context)        // prints the project's context.md
+context = Bash(vault-query context)        // prints the project's Context.md
 // project_path = <vault_root>/41 projects/<project>.
 
 roster  = context.frontmatter.stakeholders   // list; may be absent
@@ -79,9 +79,9 @@ repo    = the git repo containing cwd        // single repo; see below
 several repos is out of scope — if you need another repo's commits, the user points brief
 at it explicitly. No repo paths live in the vault: they differ per device.
 
-**Roster.** The `stakeholders:` list in `context.md` frontmatter, one entry per person:
+**Roster.** The `stakeholders:` list in `Context.md` frontmatter, one entry per person:
 `name`, `currency`, `model`, `inspects`, optional `role`, and `last_drafted` (see the
-context.md template in `project-setup`). You author it; brief writes only `last_drafted`
+Context.md template in `project-setup`). You author it; brief writes only `last_drafted`
 (see draft.md). If the list is absent, both procedures degrade gracefully: draft writes a
 single generic update and offers to add the list, diagnose works without it.
 
