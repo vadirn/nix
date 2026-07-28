@@ -15,6 +15,7 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::reference_not_wikilink::ReferenceNotWikilink),
         Box::new(super::rules::reference_vault_link::ReferenceVaultLink),
         Box::new(super::rules::reference_wrong_type::ReferenceWrongType),
+        Box::new(super::rules::singleton_filename_mismatch::SingletonFilenameMismatch),
         Box::new(super::rules::singleton_tag::SingletonTag),
         Box::new(super::rules::slug_filename_mismatch::SlugFilenameMismatch),
         Box::new(super::rules::ticket_outward_only::TicketOutwardOnly),
