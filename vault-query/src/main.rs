@@ -307,7 +307,13 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             view,
             format,
         } => {
-            commands::query::run(base_path, view, &cfg, *format, None)?;
+            commands::query::run(
+                base_path,
+                view,
+                &cfg,
+                *format,
+                commands::query::Narrowing::default(),
+            )?;
             0
         }
         Commands::Tags { sort } => {

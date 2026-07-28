@@ -10,8 +10,12 @@
 use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 
+use crate::commands::query::Narrowing;
 use crate::config::ResolvedConfig;
 use crate::output::Format;
+// Test-only since `run`'s caller predicate moved into `Narrowing`: what remains
+// here builds probe files for `assert_template_views` and the tests below.
+#[cfg(test)]
 use crate::vault::VaultFile;
 
 /// A `.base` file in a project folder, backing one render subcommand and one
@@ -34,16 +38,17 @@ pub struct ProjectBase {
 }
 
 impl ProjectBase {
-    /// Render `view` of this base, ANDing `extra` onto its declared filters.
+    /// Render `view` of this base, narrowed by `narrowing`.
     ///
-    /// See [`crate::base::filter::apply`] for why a filter parameterized at call
-    /// time arrives as a closure rather than a synthesized expression.
+    /// See [`super::query::Narrowing`] for what the two slots do and why a
+    /// filter parameterized at call time arrives as a closure rather than a
+    /// synthesized expression.
     pub fn run(
         &self,
         cfg: &ResolvedConfig,
         view: &str,
         format: Format,
-        extra: Option<&dyn Fn(&VaultFile) -> bool>,
+        narrowing: Narrowing,
     ) -> Result<()> {
         let base_path = self.path(cfg)?;
         if !base_path.is_file() {
@@ -54,7 +59,7 @@ impl ProjectBase {
                 self.init_command
             );
         }
-        super::query::run(&base_path, view, cfg, format, extra)
+        super::query::run(&base_path, view, cfg, format, narrowing)
     }
 
     /// Write the starter template into the resolved project.
@@ -205,7 +210,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let cfg = cfg_for(&tmp);
         let err = BASE
-            .run(&cfg, "All", Format::Table, None)
+            .run(&cfg, "All", Format::Table, Narrowing::default())
             .unwrap_err()
             .to_string();
         assert!(err.contains("no Widgets.base"), "{err}");

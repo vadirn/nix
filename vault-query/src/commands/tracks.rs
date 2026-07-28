@@ -6,6 +6,7 @@
 use anyhow::Result;
 
 use crate::commands::project_base::ProjectBase;
+use crate::commands::query::Narrowing;
 use crate::config::ResolvedConfig;
 use crate::output::Format;
 
@@ -17,7 +18,7 @@ const BASE: ProjectBase = ProjectBase {
 
 /// Render one view of the project's `Tracks.base`.
 pub fn run(cfg: &ResolvedConfig, view: &str, format: Format) -> Result<()> {
-    BASE.run(cfg, view, format, None)
+    BASE.run(cfg, view, format, Narrowing::default())
 }
 
 /// Write the starter `Tracks.base` into the resolved project.

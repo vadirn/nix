@@ -3,8 +3,8 @@
 //! Structurally the twin of [`super::tracks`], and shares its plumbing through
 //! [`super::project_base`]. The one thing tickets need that tracks do not is
 //! `--track <slug>`, whose argument is known only at call time and so cannot be
-//! a declared view; it arrives as the caller predicate slot on
-//! [`crate::base::filter::apply`].
+//! a declared view; it arrives through the `select` slot on
+//! [`super::query::Narrowing`].
 
 use anyhow::{Result, bail};
 use serde_yaml::Value;
@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 
 use crate::base;
 use crate::commands::project_base::ProjectBase;
+use crate::commands::query::Narrowing;
 use crate::config::ResolvedConfig;
 use crate::frontmatter;
 use crate::output::Format;
@@ -95,9 +96,17 @@ pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format
                 );
             }
             let owned = |f: &VaultFile| owned_by_track(f, slug);
-            BASE.run(cfg, view, format, Some(&owned))
+            BASE.run(
+                cfg,
+                view,
+                format,
+                Narrowing {
+                    select: Some(&owned),
+                    ..Narrowing::default()
+                },
+            )
         }
-        None => BASE.run(cfg, view, format, None),
+        None => BASE.run(cfg, view, format, Narrowing::default()),
     }
 }
 
