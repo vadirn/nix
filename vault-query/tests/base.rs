@@ -67,7 +67,7 @@ fn test_apply_filters() {
 
     // Base filters: type == "checkpoint" AND file.inFolder("41 projects/nix")
     let empty_filters = base::FilterSet::default();
-    let filtered = filter::apply(&files, &base.filters, &empty_filters, &dir).unwrap();
+    let filtered = filter::apply(&files, &base.filters, &empty_filters, &dir, None).unwrap();
     assert_eq!(filtered.len(), 3);
 }
 
@@ -79,7 +79,8 @@ fn test_incomplete_view_filter() {
     let files = vault::scan(&dir, &dir, None).unwrap();
 
     let incomplete_view = base.views.iter().find(|v| v.name == "Incomplete").unwrap();
-    let filtered = filter::apply(&files, &base.filters, &incomplete_view.filters, &dir).unwrap();
+    let filtered =
+        filter::apply(&files, &base.filters, &incomplete_view.filters, &dir, None).unwrap();
     // checkpoint-001 and checkpoint-003 are done: false
     assert_eq!(filtered.len(), 2);
 }
@@ -92,8 +93,8 @@ fn test_view_all_sorted_desc() {
     let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
-    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir).unwrap();
-    let result = view::apply(&all_view, &base, &mut filtered);
+    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir, None).unwrap();
+    let result = view::apply(&all_view, &base, &mut filtered, &dir);
 
     // Sorted DESC by file.name: checkpoint-003, checkpoint-002, checkpoint-001
     assert_eq!(result.groups.len(), 1);
@@ -131,7 +132,7 @@ fn test_graduation_queue_or_filter() {
         .iter()
         .find(|v| v.name == "Graduation queue")
         .unwrap();
-    let filtered = filter::apply(&files, &base.filters, &grad_view.filters, &dir).unwrap();
+    let filtered = filter::apply(&files, &base.filters, &grad_view.filters, &dir, None).unwrap();
     // checkpoint-002 has decisions + frictions, checkpoint-003 has frictions
     assert_eq!(filtered.len(), 2);
 }
@@ -142,10 +143,16 @@ fn test_stats_view_summaries() {
     let base_path = dir.join("41 projects/nix/Checkpoints.base");
     let base = base::parse(&base_path).unwrap();
     let files = vault::scan(&dir, &dir, None).unwrap();
-    let stats_view = base.views.iter().find(|v| v.name == "Stats").unwrap().clone();
+    let stats_view = base
+        .views
+        .iter()
+        .find(|v| v.name == "Stats")
+        .unwrap()
+        .clone();
 
-    let mut filtered = filter::apply(&files, &base.filters, &stats_view.filters, &dir).unwrap();
-    let result = view::apply(&stats_view, &base, &mut filtered);
+    let mut filtered =
+        filter::apply(&files, &base.filters, &stats_view.filters, &dir, None).unwrap();
+    let result = view::apply(&stats_view, &base, &mut filtered, &dir);
 
     assert!(result.summaries.is_some());
     let summaries = result.summaries.unwrap();
@@ -163,8 +170,8 @@ fn test_json_output() {
     let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
-    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir).unwrap();
-    let result = view::apply(&all_view, &base, &mut filtered);
+    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir, None).unwrap();
+    let result = view::apply(&all_view, &base, &mut filtered, &dir);
     let json = result.render(&vault_query::output::Format::Json);
 
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -180,8 +187,8 @@ fn test_tsv_output() {
     let files = vault::scan(&dir, &dir, None).unwrap();
     let all_view = base.views.iter().find(|v| v.name == "All").unwrap().clone();
 
-    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir).unwrap();
-    let result = view::apply(&all_view, &base, &mut filtered);
+    let mut filtered = filter::apply(&files, &base.filters, &all_view.filters, &dir, None).unwrap();
+    let result = view::apply(&all_view, &base, &mut filtered, &dir);
     let tsv = result.render(&vault_query::output::Format::Tsv);
 
     let lines: Vec<&str> = tsv.lines().collect();
@@ -251,53 +258,108 @@ fn test_resolve_boundary_safety() {
 #[test]
 fn test_list_titles_sorted() {
     let output = Command::new(cargo_bin())
-        .args(["list", "20 cards", "--vault-root", fixture_dir().to_str().unwrap()])
+        .args([
+            "list",
+            "20 cards",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+        ])
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let lines: Vec<&str> = stdout.lines().collect();
-    assert!(lines.len() >= 2, "expected at least 2 cards, got: {:?}", lines);
+    assert!(
+        lines.len() >= 2,
+        "expected at least 2 cards, got: {:?}",
+        lines
+    );
     // Sorted: "Impureim sandwich" comes before "Test card" (alphabetical)
-    let imp_pos = lines.iter().position(|l| l.starts_with("Impureim sandwich"))
+    let imp_pos = lines
+        .iter()
+        .position(|l| l.starts_with("Impureim sandwich"))
         .expect("Impureim sandwich should be in the list");
-    let test_pos = lines.iter().position(|l| l.starts_with("Test card"))
+    let test_pos = lines
+        .iter()
+        .position(|l| l.starts_with("Test card"))
         .expect("Test card should be in the list");
-    assert!(imp_pos < test_pos, "Impureim sandwich should sort before Test card");
+    assert!(
+        imp_pos < test_pos,
+        "Impureim sandwich should sort before Test card"
+    );
 }
 
 #[test]
 fn test_list_description_and_tags() {
     let output = Command::new(cargo_bin())
-        .args(["list", "20 cards", "--vault-root", fixture_dir().to_str().unwrap()])
+        .args([
+            "list",
+            "20 cards",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+        ])
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let test_line = stdout.lines().find(|l| l.starts_with("Test card")).unwrap();
-    assert!(test_line.contains("A test card for integration tests"), "missing description: {}", test_line);
-    assert!(test_line.contains("[testing, rust]"), "missing tags: {}", test_line);
+    assert!(
+        test_line.contains("A test card for integration tests"),
+        "missing description: {}",
+        test_line
+    );
+    assert!(
+        test_line.contains("[testing, rust]"),
+        "missing tags: {}",
+        test_line
+    );
 }
 
 #[test]
 fn test_list_extra_fields_strip_wikilinks() {
     let output = Command::new(cargo_bin())
-        .args(["list", "20 cards", "--vault-root", fixture_dir().to_str().unwrap(), "--fields", "reference"])
+        .args([
+            "list",
+            "20 cards",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+            "--fields",
+            "reference",
+        ])
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let test_line = stdout.lines().find(|l| l.starts_with("Test card")).unwrap();
-    assert!(test_line.contains("(reference: Some Book)"), "wikilinks not stripped: {}", test_line);
+    assert!(
+        test_line.contains("(reference: Some Book)"),
+        "wikilinks not stripped: {}",
+        test_line
+    );
     // Impureim sandwich has no reference field, so no "(reference:" should appear
-    let imp_line = stdout.lines().find(|l| l.starts_with("Impureim sandwich")).unwrap();
-    assert!(!imp_line.contains("(reference:"), "empty field should be omitted: {}", imp_line);
+    let imp_line = stdout
+        .lines()
+        .find(|l| l.starts_with("Impureim sandwich"))
+        .unwrap();
+    assert!(
+        !imp_line.contains("(reference:"),
+        "empty field should be omitted: {}",
+        imp_line
+    );
 }
 
 #[test]
 fn test_experiments_lists_by_type() {
     let output = Command::new(cargo_bin())
-        .args(["experiments", "--vault-root", fixture_dir().to_str().unwrap()])
+        .args([
+            "experiments",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+        ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8(output.stdout).unwrap();
     let line = stdout
         .lines()
@@ -308,7 +370,11 @@ fn test_experiments_lists_by_type() {
         "missing description: {}",
         line
     );
-    assert!(line.contains("[testing, fixture]"), "missing tags: {}", line);
+    assert!(
+        line.contains("[testing, fixture]"),
+        "missing tags: {}",
+        line
+    );
 }
 
 // --- files --tag tests ---
@@ -316,19 +382,44 @@ fn test_experiments_lists_by_type() {
 #[test]
 fn test_files_tag_filter() {
     let output = Command::new(cargo_bin())
-        .args(["files", "--vault-root", fixture_dir().to_str().unwrap(), "--tag", "rust"])
+        .args([
+            "files",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+            "--tag",
+            "rust",
+        ])
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
-    assert!(stdout.contains("Test card"), "expected Test card in output: {}", stdout);
-    assert!(!stdout.contains("checkpoint"), "should not contain checkpoint files: {}", stdout);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("Test card"),
+        "expected Test card in output: {}",
+        stdout
+    );
+    assert!(
+        !stdout.contains("checkpoint"),
+        "should not contain checkpoint files: {}",
+        stdout
+    );
 }
 
 #[test]
 fn test_files_tag_count() {
     let output = Command::new(cargo_bin())
-        .args(["files", "--vault-root", fixture_dir().to_str().unwrap(), "--tag", "rust", "--count"])
+        .args([
+            "files",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+            "--tag",
+            "rust",
+            "--count",
+        ])
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
@@ -339,7 +430,13 @@ fn test_files_tag_count() {
 #[test]
 fn test_files_tag_no_match() {
     let output = Command::new(cargo_bin())
-        .args(["files", "--vault-root", fixture_dir().to_str().unwrap(), "--tag", "nonexistent"])
+        .args([
+            "files",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+            "--tag",
+            "nonexistent",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -350,7 +447,12 @@ fn test_files_tag_no_match() {
 #[test]
 fn test_list_empty_folder() {
     let output = Command::new(cargo_bin())
-        .args(["list", "99 nonexistent", "--vault-root", fixture_dir().to_str().unwrap()])
+        .args([
+            "list",
+            "99 nonexistent",
+            "--vault-root",
+            fixture_dir().to_str().unwrap(),
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());

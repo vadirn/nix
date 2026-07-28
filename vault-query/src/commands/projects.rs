@@ -7,7 +7,13 @@ pub fn run(cfg: &ResolvedConfig, view: &str) -> Result<()> {
     let base_path = cfg.vault_root.join("90 bases/Projects.base");
 
     if base_path.is_file() {
-        return super::query::run(&base_path, view, cfg, Format::Table);
+        return super::query::run(
+            &base_path,
+            view,
+            cfg,
+            Format::Table,
+            super::query::Narrowing::default(),
+        );
     }
 
     // Fallback: file listing
@@ -27,8 +33,10 @@ pub fn run(cfg: &ResolvedConfig, view: &str) -> Result<()> {
                 return false;
             }
             let name = path.file_name().unwrap_or_default().to_string_lossy();
+            // `context.md` is spelled `Context.md` since project-setup adopted the
+            // singleton-file convention; both spellings are the same exclusion.
             !name.starts_with("checkpoint-")
-                && name != "context.md"
+                && !name.eq_ignore_ascii_case("context.md")
                 && name != "SKILL.md"
                 && name != "start.md"
                 && name != "save.md"

@@ -2,12 +2,18 @@ use crate::base::{BaseFile, SortDirection, ViewDef};
 use crate::output::Format;
 use crate::vault::VaultFile;
 use std::collections::{BTreeMap, HashSet};
+use std::path::Path;
 
 /// Result of applying a view to filtered files.
 pub struct ViewResult {
     pub headers: Vec<String>,
     pub groups: Vec<Group>,
     pub summaries: Option<Vec<String>>,
+    /// Display name of the `groupBy` property, when the view groups. TSV renders
+    /// it as a leading column rather than a `## label` heading, which would break
+    /// the one-record-per-line contract its readers parse. `None` when the view
+    /// does not group, and the TSV then has no extra column.
+    pub group_header: Option<String>,
 }
 
 impl ViewResult {
@@ -57,7 +63,13 @@ fn render_table(result: &ViewResult) -> String {
         if let Some(ref summaries) = result.summaries {
             let cells: Vec<String> = summaries
                 .iter()
-                .map(|c| if c.is_empty() { String::new() } else { format!("**{}**", c) })
+                .map(|c| {
+                    if c.is_empty() {
+                        String::new()
+                    } else {
+                        format!("**{}**", c)
+                    }
+                })
                 .collect();
             output.push_str("| ");
             output.push_str(&cells.join(" | "));
@@ -80,7 +92,10 @@ fn render_json(result: &ViewResult) -> String {
                 map.insert(header.clone(), serde_json::Value::String(value));
             }
             if let Some(ref label) = group.label {
-                map.insert("_group".to_string(), serde_json::Value::String(label.clone()));
+                map.insert(
+                    "_group".to_string(),
+                    serde_json::Value::String(label.clone()),
+                );
             }
             records.push(serde_json::Value::Object(map));
         }
@@ -88,15 +103,32 @@ fn render_json(result: &ViewResult) -> String {
     serde_json::to_string_pretty(&records).unwrap_or_default()
 }
 
+/// Sanitize tab/newline/CR so a multiline cell can't shift columns, matching
+/// `render_table`'s collapse of in-cell newlines.
+fn tsv_cell(value: &str) -> String {
+    value.replace(['\t', '\n', '\r'], " ")
+}
+
 fn render_tsv(result: &ViewResult) -> String {
     let mut output = String::new();
+    if let Some(ref header) = result.group_header {
+        output.push_str(&tsv_cell(header));
+        output.push('\t');
+    }
     output.push_str(&result.headers.join("\t"));
     output.push('\n');
     for group in &result.groups {
         for row in &group.rows {
-            // Sanitize tab/newline/CR so a multiline cell can't shift columns,
-            // matching render_table's collapse of in-cell newlines.
-            let cells: Vec<String> = row.iter().map(|c| c.replace(['\t', '\n', '\r'], " ")).collect();
+            // The label repeats on every row of its group: TSV carries no
+            // heading, so a row has to name its own group to stay self-describing.
+            let label = result
+                .group_header
+                .is_some()
+                .then(|| tsv_cell(group.label.as_deref().unwrap_or_default()));
+            let cells: Vec<String> = label
+                .into_iter()
+                .chain(row.iter().map(|c| tsv_cell(c)))
+                .collect();
             output.push_str(&cells.join("\t"));
             output.push('\n');
         }
@@ -110,10 +142,14 @@ pub struct Group {
 }
 
 /// Apply a view to filtered files, producing renderable rows.
+///
+/// `vault_root` is carried through solely for the `file.folder` column, which
+/// must render vault-relative to match what Obsidian shows.
 pub fn apply(
     view: &ViewDef,
     base: &BaseFile,
     files: &mut Vec<VaultFile>,
+    vault_root: &Path,
 ) -> ViewResult {
     // Compute formulas for each file, then sort files and formulas together
     let mut formula_results: Vec<BTreeMap<String, String>> = files
@@ -121,7 +157,7 @@ pub fn apply(
         .map(|f| crate::base::formula::evaluate_all(&base.formulas, f))
         .collect();
 
-    sort_files(files, &mut formula_results, &view.sort);
+    sort_files(files, &mut formula_results, &view.sort, vault_root);
 
     // Build headers from property display names
     let headers: Vec<String> = view
@@ -137,7 +173,7 @@ pub fn apply(
         .map(|(file, formulas)| {
             view.order
                 .iter()
-                .map(|col| resolve_value(col, file, formulas))
+                .map(|col| resolve_value(col, file, formulas, vault_root))
                 .collect()
         })
         .collect();
@@ -147,7 +183,7 @@ pub fn apply(
         let group_values: Vec<String> = files
             .iter()
             .zip(formula_results.iter())
-            .map(|(file, formulas)| resolve_value(&gb.property, file, formulas))
+            .map(|(file, formulas)| resolve_value(&gb.property, file, formulas, vault_root))
             .collect();
 
         build_groups(&group_values, &rows, &gb.direction)
@@ -162,6 +198,7 @@ pub fn apply(
             &view.order,
             files,
             &formula_results,
+            vault_root,
         ))
     } else {
         None
@@ -171,28 +208,35 @@ pub fn apply(
         headers,
         groups,
         summaries,
+        group_header: view
+            .group_by
+            .as_ref()
+            .map(|gb| resolve_display_name(&gb.property, base)),
     }
 }
 
-fn resolve_display_name(col: &str, base: &BaseFile) -> String {
-    // Try note.X, then file.X, then formula.X, then raw col name
-    let candidates = [
+/// Candidate keys under which `col` might be recorded in a `.base` file's
+/// namespaced maps — [`BaseFile::properties`] and a view's `summaries` — tried
+/// in priority order: `note.<col>`, `file.<col>`, then `col` verbatim (an
+/// already-namespaced column like `file.name` or `formula.cost` matches only
+/// here, since its own string already equals the key it was declared under).
+/// One function for both lookups, so they cannot drift into resolving the
+/// same column two different ways.
+fn namespaced_candidates(col: &str) -> [String; 3] {
+    [
         format!("note.{}", col),
         format!("file.{}", col),
         col.to_string(),
-    ];
-    for key in &candidates {
+    ]
+}
+
+fn resolve_display_name(col: &str, base: &BaseFile) -> String {
+    for key in &namespaced_candidates(col) {
         if let Some(prop) = base.properties.get(key)
             && !prop.display_name.is_empty()
         {
             return prop.display_name.clone();
         }
-    }
-    if col.starts_with("formula.")
-        && let Some(prop) = base.properties.get(col)
-        && !prop.display_name.is_empty()
-    {
-        return prop.display_name.clone();
     }
     col.to_string()
 }
@@ -201,14 +245,16 @@ fn resolve_value(
     col: &str,
     file: &VaultFile,
     formulas: &BTreeMap<String, String>,
+    vault_root: &Path,
 ) -> String {
-    crate::base::column::ColumnRef::parse(col).value(file, formulas)
+    crate::base::column::ColumnRef::parse(col).value(file, formulas, vault_root)
 }
 
 fn sort_files(
     files: &mut Vec<VaultFile>,
     formula_results: &mut Vec<BTreeMap<String, String>>,
     sort_defs: &[super::SortDef],
+    vault_root: &Path,
 ) {
     if sort_defs.is_empty() {
         return;
@@ -221,7 +267,7 @@ fn sort_files(
         .map(|(file, formulas)| {
             sort_defs
                 .iter()
-                .map(|sd| resolve_value(&sd.property, file, formulas))
+                .map(|sd| resolve_value(&sd.property, file, formulas, vault_root))
                 .collect()
         })
         .collect();
@@ -243,10 +289,8 @@ fn sort_files(
     });
 
     // Apply permutation: zip into pairs, reorder, unzip
-    let mut pairs: Vec<(VaultFile, BTreeMap<String, String>)> = files
-        .drain(..)
-        .zip(formula_results.drain(..))
-        .collect();
+    let mut pairs: Vec<(VaultFile, BTreeMap<String, String>)> =
+        files.drain(..).zip(formula_results.drain(..)).collect();
     let reordered: Vec<(VaultFile, BTreeMap<String, String>)> = indices
         .iter()
         .map(|&i| std::mem::take(&mut pairs[i]))
@@ -269,7 +313,10 @@ fn build_groups(
         if seen_set.insert(label.clone()) {
             seen.push(label.clone());
         }
-        groups_map.entry(label.clone()).or_default().push(rows[i].clone());
+        groups_map
+            .entry(label.clone())
+            .or_default()
+            .push(rows[i].clone());
     }
 
     // Sort groups
@@ -294,13 +341,14 @@ fn compute_summaries(
     order: &[String],
     files: &[VaultFile],
     formula_results: &[BTreeMap<String, String>],
+    vault_root: &Path,
 ) -> Vec<String> {
     order
         .iter()
         .map(|col| {
-            let summary_op = summary_defs.get(col)
-                .or_else(|| summary_defs.get(&format!("note.{}", col)))
-                .or_else(|| summary_defs.get(&format!("formula.{}", col)));
+            let summary_op = namespaced_candidates(col)
+                .iter()
+                .find_map(|key| summary_defs.get(key));
 
             match summary_op {
                 Some(op) => {
@@ -308,7 +356,7 @@ fn compute_summaries(
                         .iter()
                         .zip(formula_results.iter())
                         .filter_map(|(file, formulas)| {
-                            let val = resolve_value(col, file, formulas);
+                            let val = resolve_value(col, file, formulas, vault_root);
                             val.parse::<f64>().ok()
                         })
                         .collect();
@@ -348,6 +396,7 @@ mod tests {
                 rows: vec![vec!["test".into(), "done".into()]],
             }],
             summaries: None,
+            group_header: None,
         };
         let json = render_json(&result);
         assert!(json.contains("\"Name\": \"test\""));
@@ -366,6 +415,7 @@ mod tests {
                 ],
             }],
             summaries: None,
+            group_header: None,
         };
         let tsv = render_tsv(&result);
         assert_eq!(tsv, "Name\tStatus\na\tdone\nb\tpending\n");
@@ -382,8 +432,190 @@ mod tests {
                 rows: vec![vec!["a".into(), "line1\nline2\tcol\rend".into()]],
             }],
             summaries: None,
+            group_header: None,
         };
         let tsv = render_tsv(&result);
         assert_eq!(tsv, "Name\tNote\na\tline1 line2 col end\n");
+    }
+
+    #[test]
+    fn test_render_tsv_carries_the_group_label_as_a_column() {
+        // A grouped view renders its labels as `## heading` lines in table form,
+        // which TSV cannot do without breaking one-record-per-line. Each row
+        // names its own group instead, so no grouping is lost.
+        let result = ViewResult {
+            headers: vec!["Ticket".into(), "Status".into()],
+            groups: vec![
+                Group {
+                    label: Some("41 projects/nix".into()),
+                    rows: vec![vec!["ticket-a".into(), "open".into()]],
+                },
+                Group {
+                    label: Some("41 projects/vault".into()),
+                    rows: vec![
+                        vec!["ticket-b".into(), "open".into()],
+                        vec!["ticket-c".into(), "done".into()],
+                    ],
+                },
+            ],
+            summaries: None,
+            group_header: Some("file.folder".into()),
+        };
+        let tsv = render_tsv(&result);
+        assert_eq!(
+            tsv,
+            "file.folder\tTicket\tStatus\n\
+             41 projects/nix\tticket-a\topen\n\
+             41 projects/vault\tticket-b\topen\n\
+             41 projects/vault\tticket-c\tdone\n"
+        );
+    }
+
+    /// A minimal ticket-shaped file for the end-to-end grouped-view test below.
+    fn make_ticket(name: &str, status: &str, rel_path: &str) -> VaultFile {
+        let mut fm = BTreeMap::new();
+        fm.insert(
+            "type".to_string(),
+            serde_yaml::Value::String("ticket".into()),
+        );
+        fm.insert(
+            "status".to_string(),
+            serde_yaml::Value::String(status.into()),
+        );
+        VaultFile {
+            path: std::path::PathBuf::from(format!("/vault/{}", rel_path)),
+            name: name.to_string(),
+            frontmatter: fm,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_grouped_view_end_to_end_through_filter_and_view_apply() {
+        // Closes W4: a fixture `.base` declaring `groupBy: file.folder`, driven
+        // through the real `filter::apply` + `view::apply` pipeline instead of
+        // a hand-built `ViewResult`. This is the only checked-in exercise of
+        // the `view.group_by -> group_header` mapping at view.rs:211-214 — the
+        // hand-built test above never calls `apply`, so deleting that mapping
+        // breaks nothing today — and the only checked-in consumer of the
+        // `file.folder` column; the real consumers are the vault-side
+        // `41 projects/Tracks.base` and `Tickets.base` "By Project" views,
+        // which live outside this repo.
+        let base = crate::base::parse::parse_str(
+            r#"
+filters:
+  and:
+    - type == "ticket"
+views:
+  - type: table
+    name: By Project
+    groupBy:
+      property: file.folder
+      direction: ASC
+    order:
+      - file.name
+      - status
+    sort:
+      - property: file.name
+        direction: ASC
+"#,
+        )
+        .unwrap();
+        let view = base.views.iter().find(|v| v.name == "By Project").unwrap();
+
+        let files = vec![
+            make_ticket("ticket-a", "open", "41 projects/nix/ticket-a.md"),
+            make_ticket("ticket-b", "open", "41 projects/vault/ticket-b.md"),
+            make_ticket("ticket-c", "done", "41 projects/vault/ticket-c.md"),
+        ];
+
+        let vault_root = Path::new("/vault");
+        let mut filtered =
+            crate::base::filter::apply(&files, &base.filters, &view.filters, vault_root, None)
+                .unwrap();
+        let result = apply(view, &base, &mut filtered, vault_root);
+
+        // Header: the group column heading (bare "file.folder" — the fixture
+        // declares no `properties:` block, so `resolve_display_name` falls
+        // through to the raw column name) followed by the view's own columns.
+        // Rows: two different folders, with "41 projects/vault" repeating its
+        // label on both of its rows, pinning the per-row repetition TSV relies
+        // on since it has no `## heading` line to carry the group instead.
+        let tsv = result.render(&Format::Tsv);
+        assert_eq!(
+            tsv,
+            "file.folder\tfile.name\tstatus\n\
+             41 projects/nix\tticket-a\topen\n\
+             41 projects/vault\tticket-b\topen\n\
+             41 projects/vault\tticket-c\tdone\n"
+        );
+    }
+
+    #[test]
+    fn resolve_display_name_finds_a_formula_property_via_the_col_as_is_candidate() {
+        // `resolve_display_name` used to carry a second branch after the
+        // candidates loop that re-checked `base.properties.get(col)` whenever
+        // `col` started with "formula." — but the loop's own last candidate is
+        // `col` verbatim, so that second lookup was always redundant and never
+        // returned. This pins the still-working path through the loop alone,
+        // now that the dead branch is gone.
+        let mut properties = BTreeMap::new();
+        properties.insert(
+            "formula.cost_per_line".to_string(),
+            crate::base::PropertyDef {
+                display_name: "$/line".to_string(),
+            },
+        );
+        let base = BaseFile {
+            filters: Default::default(),
+            formulas: Default::default(),
+            properties,
+            views: vec![],
+        };
+        assert_eq!(
+            resolve_display_name("formula.cost_per_line", &base),
+            "$/line"
+        );
+    }
+
+    #[test]
+    fn compute_summaries_and_resolve_display_name_share_the_file_prefixed_candidate() {
+        // Before unification, `compute_summaries` tried only `col`, `note.col`,
+        // then `formula.col` — never `file.col` — even though
+        // `resolve_display_name` already tried `file.col` for the same column.
+        // A summary declared under `file.<col>` would resolve a display name
+        // but silently vanish from the summary row. Now both lookups share
+        // `namespaced_candidates`, so `file.<col>` works for summaries too.
+        let mut fm_a = BTreeMap::new();
+        fm_a.insert("score".to_string(), serde_yaml::Value::Number(4.into()));
+        let mut fm_b = BTreeMap::new();
+        fm_b.insert("score".to_string(), serde_yaml::Value::Number(6.into()));
+        let files = vec![
+            VaultFile {
+                path: std::path::PathBuf::from("/vault/a.md"),
+                name: "a".into(),
+                frontmatter: fm_a,
+                ..Default::default()
+            },
+            VaultFile {
+                path: std::path::PathBuf::from("/vault/b.md"),
+                name: "b".into(),
+                frontmatter: fm_b,
+                ..Default::default()
+            },
+        ];
+        let formula_results = vec![BTreeMap::new(), BTreeMap::new()];
+        let mut summary_defs = BTreeMap::new();
+        summary_defs.insert("file.score".to_string(), "Sum".to_string());
+        let order = vec!["score".to_string()];
+
+        let summaries = compute_summaries(
+            &summary_defs,
+            &order,
+            &files,
+            &formula_results,
+            Path::new("/vault"),
+        );
+        assert_eq!(summaries, vec!["10".to_string()]);
     }
 }

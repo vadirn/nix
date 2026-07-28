@@ -199,7 +199,9 @@ fn strip_ordered_marker(s: &str) -> Option<&str> {
         return None;
     }
     let after = &s[digits_end..];
-    let after = after.strip_prefix('.').or_else(|| after.strip_prefix(')'))?;
+    let after = after
+        .strip_prefix('.')
+        .or_else(|| after.strip_prefix(')'))?;
     after.strip_prefix(' ')
 }
 
@@ -229,7 +231,8 @@ mod tests {
     #[test]
     fn header_term_is_not_a_node() {
         // The literal header cell "Term" must not slug to a `term` node.
-        let md = "## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| Real concept | def |\n";
+        let md =
+            "## Glossary\n\n| Term | Definition |\n| ---- | ---------- |\n| Real concept | def |\n";
         let nodes = parse_local_nodes(md);
         assert_eq!(nodes.terms, vec!["real-concept"]);
         assert!(!nodes.contains("term"));
@@ -237,7 +240,8 @@ mod tests {
 
     #[test]
     fn ignores_rows_outside_glossary_and_workflow() {
-        let md = "## Other\n\n| Term | Def |\n| ---- | --- |\n| Stray | x |\n\n1. not a workflow step\n";
+        let md =
+            "## Other\n\n| Term | Def |\n| ---- | --- |\n| Stray | x |\n\n1. not a workflow step\n";
         let nodes = parse_local_nodes(md);
         assert!(nodes.terms.is_empty());
         assert!(nodes.steps.is_empty());
@@ -302,7 +306,10 @@ mod tests {
         // against.
         let fixture = include_str!("../../../tests/fixtures/node-roundtrip.md");
         let nodes = parse_local_nodes(fixture);
-        assert_eq!(nodes.terms, vec!["target-distance", "aim-point", "holdover"]);
+        assert_eq!(
+            nodes.terms,
+            vec!["target-distance", "aim-point", "holdover"]
+        );
         assert_eq!(
             nodes.steps,
             vec!["range-the-target", "hold-over-the-aim-point"]

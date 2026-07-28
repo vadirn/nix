@@ -33,7 +33,8 @@ fn err(message: String) -> SpanMismatch {
 }
 
 fn is_ws(s: &str) -> bool {
-    s.chars().all(|c| c == ' ' || c == '\t' || c == '\r' || c == '\n')
+    s.chars()
+        .all(|c| c == ' ' || c == '\t' || c == '\r' || c == '\n')
 }
 
 fn slice(source: &str, span: Span) -> Result<&str, SpanMismatch> {
@@ -103,7 +104,10 @@ fn verify_tiling(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
             )));
         }
         let gap = source.get(cursor..s.start).ok_or_else(|| {
-            err(format!("gap [{}, {}) is not a valid slice", cursor, s.start))
+            err(format!(
+                "gap [{}, {}) is not a valid slice",
+                cursor, s.start
+            ))
         })?;
         // Tolerate a leading UTF-8 BOM (U+FEFF) like a blank line: strip it
         // before the whitespace check.
@@ -124,7 +128,10 @@ fn verify_tiling(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
         cursor = s.end;
     }
     let tail = source.get(cursor..len).ok_or_else(|| {
-        err(format!("trailing region [{}, {}) is not a valid slice", cursor, len))
+        err(format!(
+            "trailing region [{}, {}) is not a valid slice",
+            cursor, len
+        ))
     })?;
     // Same leading-BOM tolerance: with no tiled span (cursor == 0) the BOM
     // still leads the tail, so a BOM-only file passes like its whitespace-only twin.
@@ -188,7 +195,9 @@ fn verify_inlines(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
                 s.starts_with("![") && (s.ends_with(')') || s.ends_with(']')),
                 Some(*alt_span),
             ),
-            Inline::Wikilink { embed, alias_span, .. } => {
+            Inline::Wikilink {
+                embed, alias_span, ..
+            } => {
                 let core = if *embed {
                     s.strip_prefix('!').unwrap_or(s)
                 } else {

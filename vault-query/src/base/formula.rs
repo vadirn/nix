@@ -62,13 +62,12 @@ impl EvalResult {
         }
     }
 
+    /// Truthiness, decided by the shared [`super::is_truthy`] on this result's
+    /// display string rather than per-variant here. Routing through the one
+    /// function is what keeps `if(draft, …)` in a `formulas:` block and
+    /// `draft.isTruthy()` in a filter agreeing within the same `.base` file.
     fn is_truthy(&self) -> bool {
-        match self {
-            EvalResult::Bool(b) => *b,
-            EvalResult::Number(n) => *n != 0.0,
-            EvalResult::Str(s) => !s.is_empty(),
-            EvalResult::Empty => false,
-        }
+        super::is_truthy(&self.as_str())
     }
 }
 
@@ -215,7 +214,11 @@ fn split_if_args(s: &str) -> Option<(&str, &str, &str)> {
     }
 
     if commas.len() >= 2 {
-        Some((&s[..commas[0]], &s[commas[0] + 1..commas[1]], &s[commas[1] + 1..]))
+        Some((
+            &s[..commas[0]],
+            &s[commas[0] + 1..commas[1]],
+            &s[commas[1] + 1..],
+        ))
     } else {
         None
     }
@@ -341,10 +344,7 @@ mod tests {
 
     #[test]
     fn test_nested_if_status_order() {
-        let f = make_file(vec![(
-            "status",
-            Value::String("in progress".into()),
-        )]);
+        let f = make_file(vec![("status", Value::String("in progress".into()))]);
         let result = evaluate(
             r#"if(status == "planned", "1 planned", if(status == "in progress", "2 in progress", if(status == "done", "3 done", "4 archived")))"#,
             &f,
@@ -383,5 +383,23 @@ mod tests {
             &f,
         );
         assert_eq!(result, "10");
+    }
+
+    #[test]
+    fn test_bare_condition_agrees_with_the_filter_engine() {
+        // A property reference used as a bare condition flattens to its display
+        // string, so `draft: false` reached this as `Str("false")` and read
+        // truthy while `draft.isTruthy()` in a filter on the same `.base` file
+        // read it falsy. Both now route through `base::is_truthy`.
+        let f = make_file(vec![
+            ("draft", Value::Bool(false)),
+            ("count", Value::Number(0.into())),
+            ("note", Value::String("   ".into())),
+            ("title", Value::String("Real".into())),
+        ]);
+        assert_eq!(evaluate(r#"if(draft, "y", "n")"#, &f), "n");
+        assert_eq!(evaluate(r#"if(count, "y", "n")"#, &f), "n");
+        assert_eq!(evaluate(r#"if(note, "y", "n")"#, &f), "n");
+        assert_eq!(evaluate(r#"if(title, "y", "n")"#, &f), "y");
     }
 }

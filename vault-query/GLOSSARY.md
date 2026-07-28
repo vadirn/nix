@@ -38,7 +38,7 @@ Example: a week with three projects, all touched, awards +3 XP on next Monday.
 
 ## Filter expression
 
-A single predicate string inside a `FilterSet.and` or `FilterSet.or` list, evaluated against a `VaultFile`. Recognised forms: `field == "str"`, `field == bool`, `file.inFolder("path")`, `!file.inFolder("path")`, `field.containsAny("a","b")`, `field.length > N`. Any other string is unrecognised and silently evaluates to `true` (see Relations & Invariants).
+A single predicate string inside a `FilterSet.and` or `FilterSet.or` list, evaluated against a `VaultFile`. Recognised forms: `field == "str"`, `field == bool`, `file.inFolder("path")`, `!file.inFolder("path")`, `field.containsAny("a","b")`, `field.length > N`, `field.isTruthy()`, `!field.isTruthy()`. Any other string is unrecognised and errors (see Relations & Invariants). The recognised set is deliberately a subset of Obsidian's own syntax and never a superset: an operator only this engine understood would render in the CLI and silently fail in the app that reads the same `.base`. A predicate whose argument is known only at call time therefore cannot be an expression at all — it arrives as the `extra` caller-predicate closure on `filter::apply`, ANDed onto the declared filters, which is how `tickets --track <slug>` narrows a view.
 
 Example: `type == "checkpoint"` and `done == false` together select incomplete checkpoints.
 
@@ -86,7 +86,7 @@ Example: a freshly created card with no inbound wikilinks is reported by `vault-
 
 ## Project
 
-A subdirectory inside `projects_path` (default `41 projects/`). Contains a Project note (`type: project`) and optionally `context.md`, `Checkpoints.base`, `Tracks.base`, plus checkpoint files, tracks, and other project-scoped notes. The `vault-query projects` subcommand lists Project notes via `90 bases/Projects.base` (which filters on `type == "project"`); when that base file is absent it falls back to walking project directories at depth 2 and listing their `.md` files (excluding `checkpoint-*`, `context.md`, `SKILL.md`, `start.md`, `save.md`).
+A subdirectory inside `projects_path` (default `41 projects/`). Contains a Project note (`type: project`) and optionally `Context.md`, `Scratchpad.md`, `Checkpoints.base`, `Tracks.base`, `Tickets.base`, plus checkpoint files, tracks, tickets, and other project-scoped notes. A file a project holds exactly one of is named for what it is, capitalized; the many-per-project files are named `<type>-<slug>`. The `vault-query projects` subcommand lists Project notes via `90 bases/Projects.base` (which filters on `type == "project"`); when that base file is absent it falls back to walking project directories at depth 2 and listing their `.md` files (excluding `checkpoint-*`, `Context.md` in either case, `SKILL.md`, `start.md`, `save.md`).
 
 Example: `41 projects/nix/` is the Project directory for the nix repo; the Project note inside it carries `type: project`.
 
@@ -95,6 +95,12 @@ Example: `41 projects/nix/` is the Project directory for the nix repo; the Proje
 A markdown file with `type: project` in its frontmatter, located inside a Project directory. Typically carries `result`, `status`, `deadline`, and `goal` fields per the project template. Selected by `Projects.base` when present.
 
 Example: `41 projects/nix/Nix.md` carries `type: project` and is the Project note for the nix Project.
+
+## Scratchpad
+
+A markdown file with `type: scratchpad` in its frontmatter — a per-project holding place for deferred ideas that could seed a future effort's thesis but are not yet actionable tickets. One per project by convention (`41 projects/<name>/`); classification is by frontmatter alone. Distinct from a Ticket (an actionable unit carrying a `status`) and from a Track (a rolling work log): a Scratchpad entry carries neither a status nor XP semantics, so no dedicated listing subcommand selects it — it is read directly.
+
+Example: a deferred idea triaged out of a Track's former `## Backlog` section lands as an entry in the project's scratchpad rather than becoming a ticket.
 
 ## Slug
 
@@ -131,6 +137,12 @@ Example: `- [x] (2026-04-28) ship glossary [[Nix]]` under `## Tasks` adds +1 XP 
 A VaultFile marked `template: true` in its frontmatter. Carries the same `type:` value as its target instance (e.g., a card template has `type: card`) so that instantiation copies the frontmatter into a properly-classified new file. Excluded from type-based listings (`cards`, `notes`) so the template is not itself reported as an instance.
 
 Example: `templates/Card.md` has `template: true` and `type: card` — when used as a template, the new file inherits `type: card`; the template itself is omitted from `vault-query cards` output.
+
+## Ticket
+
+A markdown file with `type: ticket` in its frontmatter, representing one actionable unit of project work. Conventionally placed inside a Project directory (`41 projects/<name>/`) as `ticket-<slug>.md`, but classification is by frontmatter alone. Carries `slug`, `description`, `status` (`open`, `done`, `abandoned`), a `track:` backref wikilink naming the track that owns it (empty when no track owns it), a `requires:` sequence of blocking-ticket wikilinks, and a `project:` wikilink. The `vault-query tickets` subcommand is project-scoped in the same way as `tracks`: it reads `Tickets.base` from the current project and renders one of its views (`Backlog` = `status == "open"` and `!track.isTruthy()`, plus `Open`, `Done`, `Abandoned`, `By Track`, `By Status`, `All`), so the CLI and Obsidian share one definition of each view instead of two hand-synchronized ones. `--track <slug>` is the one filter a `.base` cannot declare, since its argument is known only at call time; it arrives as the caller-predicate slot on `base::filter::apply` and matches the `track-<slug>` backref stem exactly, resolved query-side without opening the track file. `tickets-init` writes the base for a project that has none.
+
+Example: `41 projects/nix/ticket-remove-track-backlog.md` carries `type: ticket` and is owned by `[[41 projects/nix/track-work-tracking-model]]`; `vault-query tickets --view All --track work-tracking-model` lists it.
 
 ## Track
 
@@ -178,15 +190,17 @@ The Streak value displayed to the user is uncapped; the per-day position weight 
 
 Level equals integer-divided total XP for the calendar year being viewed by 50; it is computed per year, not lifetime.
 
-Card, Note, Checkpoint, Track, WeeklyLog, and the project note are disjoint subtypes of VaultFile, partitioned on a single basis: the frontmatter `type` value (`card`, `note`, `checkpoint`, `track`, `weekly-log`, `project`). Folder placement (`20 cards/`, `30 notes/`, `41 projects/block-buster/`, project folders) is convention only at the entity level — the type axis alone determines membership. The `vault-query cards` and `vault-query notes` subcommands list by `type` vault-wide; `vault-query tracks` lists by `type` AND `file.inFolder(<current project>)` because `Tracks.base` embeds the folder clause. The folder restriction is a property of that command, not of the entity definition. Checkpoints have no dedicated subcommand: use `vault-query query <project>/Checkpoints.base` to query them via the base file. WeeklyLog has no dedicated listing subcommand: `vault-query xp` is its sole consumer and selects files by `type == "weekly-log"` AND `template != true` (`commands/xp.rs::parse_weekly_logs`).
+Card, Note, Checkpoint, Track, Ticket, Scratchpad, WeeklyLog, and the project note are disjoint subtypes of VaultFile, partitioned on a single basis: the frontmatter `type` value (`card`, `note`, `checkpoint`, `track`, `ticket`, `scratchpad`, `weekly-log`, `project`). Folder placement (`20 cards/`, `30 notes/`, `41 projects/block-buster/`, project folders) is convention only at the entity level — the type axis alone determines membership. The `vault-query cards` and `vault-query notes` subcommands list by `type` vault-wide; `vault-query tracks` lists by `type` AND `file.inFolder(<current project>)` because `Tracks.base` embeds the folder clause. The folder restriction is a property of that command, not of the entity definition. Checkpoints have no dedicated subcommand: use `vault-query query <project>/Checkpoints.base` to query them via the base file. WeeklyLog has no dedicated listing subcommand: `vault-query xp` is its sole consumer and selects files by `type == "weekly-log"` AND `template != true` (`commands/xp.rs::parse_weekly_logs`).
 
 A VaultFile marked `template: true` is a template, not an instance: it carries the `type:` of its target so instantiation produces a properly-typed file, and is excluded from type-based listings.
 
 A Track has exactly one `status` value drawn from `{open, paused, done, abandoned, superseded}`; the Active view selects exactly `{open, paused}`.
 
+A grouped View keeps its group labels in every output format, each expressing them in its own idiom: `table` writes a `## label` heading above each group, `json` carries a `_group` key on each record, and `tsv` prepends a label column headed by the `groupBy` property's display name — a heading would break the one-record-per-line shape its readers parse (`base/view.rs`, `test_render_tsv_carries_the_group_label_as_a_column`).
+
 A FilterSet evaluates to true only if all `and` clauses pass _and_, when `or` is non-empty, at least one `or` clause passes; an empty `and` or `or` list is treated as "no constraint".
 
-An unrecognised Filter expression evaluates to `true` (silent pass-through), not an error.
+An unrecognised Filter expression is an error, not a silent pass-through: a typo'd predicate would otherwise match every file and return a plausible-but-wrong superset (`filter.rs`, `test_unknown_expression_errors`).
 
 A `file.inFolder("X")` predicate is satisfied by any file whose relative path starts with the literal string `X`; folder boundaries are not enforced, so `"41 projects/nix"` matches files under `"41 projects/nixos/"`.
 

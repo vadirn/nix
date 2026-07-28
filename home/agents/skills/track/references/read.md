@@ -18,10 +18,12 @@ else:
         track_path = <cfg.project_path>/<selected.Track>.md
 
     // Shape first, then unfold — tracks grow large; do NOT Read the whole body (see Reference: Presenting a track)
-    shape = Bash(vault-query read <track_path>)                    // folded overview: sections + line/token counts; each Log entry addressed 6.N
-    snapshot = Bash(vault-query read <track_path> 1)               // Direction — the stable framing
-    latest = Bash(vault-query read <track_path> <highest 6.N>)     // the newest Log entry — the current snapshot
-    do("present Direction + latest Log entry as the resume snapshot; offer to unfold Decisions / Backlog / older Log entries by address on demand")
+    shape = Bash(vault-query read <track_path>)                    // folded overview: sections + line/token counts; each Log entry gets its own sub-address under Log
+    snapshot = Bash(vault-query read <track_path> Direction)       // Direction — the stable framing
+    latest = Bash(vault-query read <track_path> <highest Log sub-address read off the shape>)   // the newest Log entry — the current snapshot
+    open_tickets = Bash(vault-query tickets --view Open --track <slug> --format tsv)   // what this track owns; header row only = none owned
+    backlog_tickets = Bash(vault-query tickets --view Backlog --format tsv)            // open tickets in the project backlog, owned by no track; header row only = none unowned
+    do("present Direction + latest Log entry + open tickets (owned) + backlog tickets (unowned) as the resume snapshot, keeping the two lists distinct; offer to unfold Decisions / older Log entries by address on demand")
 
     query = do("derive a short phrase from the track's Direction and description — the topic the user is working on")
     grounding = Bash(vault-query consult "<query>" --format markdown)
@@ -61,9 +63,35 @@ vault-query resolves the project from the current working directory by walking u
 
 ### Presenting a track
 
-Get the shape first, unfold on demand — a mature track runs hundreds of lines / tens of thousands of tokens, so reading the whole body every resume is wasteful. `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its line and estimated-token counts, and each Log entry addressed individually as `6.N`. From that map:
+Get the shape first, unfold on demand — a mature track runs hundreds of lines / tens of thousands of tokens, so reading the whole body every resume is wasteful. `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its line and estimated-token counts, and each Log entry addressed individually as a sub-address under Log (`<Log's own number>.N`). From that map:
 
-- **Snapshot** = Direction (address `1`) + the highest-numbered Log entry (`vault-query read <track_path> <6.N>`). The latest Log entry is the current state; Direction is the stable framing. Present these two.
-- **On demand** — unfold Decisions (`4`), Backlog (`5`), an older Log entry, or any section by its address (`vault-query read <track_path> <addr>`), or Read an exact line range from the overview's line numbers. Decisions and Backlog are append-only: when the user goes deeper into either, unfold the whole section and treat every item as current. Glossary and Files of interest are stable — reach for them only when a term or path needs resolving.
+- **Snapshot** = Direction (address `Direction`) + the highest-numbered Log entry (`vault-query read <track_path> <its sub-address>`). The latest Log entry is the current state; Direction is the stable framing. Present these two.
+- **On demand** — unfold Decisions (address `Decisions`), an older Log entry, or any section by its address (`vault-query read <track_path> <addr>`), or Read an exact line range from the overview's line numbers. Decisions is append-only: when the user goes deeper into it, unfold the whole section and treat every item as current. Glossary and Files of interest are stable — reach for them only when a term or path needs resolving.
 
-`vault-query read` is the vault-facing wrapper over `mdread`, so the address scheme (`0`/`text`, `1`, `6.N`, heading slugs, `fm[.path]`, `links`) and the `--depth`/`--threshold`/`--full` controls are the same ones `mdread` applies to any markdown file outside the vault.
+Address sections by heading slug (`Direction`, `Decisions`, `Log`), not by position: a slug survives sections being added or removed, a positional number does not. Only Log entries need a positional sub-address, and the overview prints each one, so read it off the map rather than assuming a fixed section number.
+
+`vault-query read` is the vault-facing wrapper over `mdread`, so the address scheme (`0`/`text`, section numbers, sub-addresses, heading slugs, `fm[.path]`, `links`) and the `--depth`/`--threshold`/`--full` controls are the same ones `mdread` applies to any markdown file outside the vault.
+
+### Open tickets for the track and the backlog
+
+The work a track still owes lives in tickets, not in the track file, and a track's remaining work can sit in two places: tickets it owns, and tickets no track owns yet in the project backlog (a ticket's `track:` field is empty until a track takes it — that emptiness is the design, not a gap). Ownership marks where a ticket belongs, not that work on it has started, so a track's list mixes what is underway with what is queued.
+
+Run both queries on resume:
+
+Both are views of the project's `Tickets.base`, the same file Obsidian renders — one predicate, not a CLI copy of one.
+
+- `vault-query tickets --view Open --track <slug> --format tsv` — `<slug>` is the track's slug (file name minus the `track-` prefix). One row per open ticket this track owns. Exit 0 with only the header row means the track owns no open tickets — say so rather than inventing one, but check the backlog query below before reporting nothing is left.
+- `vault-query tickets --view Backlog --format tsv` — open tickets across the project with no track owning them yet (the view already carries `status == open`). Exit 0 with only the header row means nothing is left unowned.
+
+Both print a tab-separated table whose first row names the columns. The `Open --track` query looks like this:
+
+```
+Ticket	Track	Requires	Description	Updated
+ticket-ticket-slug	track-work-tracking-model		One-sentence description copied from the ticket's frontmatter.	2026-07-27
+```
+
+`Backlog` drops the `Track` column, since none is set on any row it selects, leaving `Ticket	Requires	Description	Updated`. A `Requires` cell names a ticket that must land first, so a ticket is blocked while any entry's ticket is not yet `done` — nothing computes that, so check the named ticket's status yourself.
+
+A project whose first ticket has yet to be filed has no `Tickets.base`; both commands then exit non-zero naming `vault-query tickets-init`. Treat that as "no tickets", not as an error to report.
+
+Present the two lists with the snapshot, kept distinct (owned vs. unowned), and unfold a ticket's own body with `vault-query read <ticket path>` when the user picks one to work on.

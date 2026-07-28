@@ -14,11 +14,11 @@ if selected == "new":
     slug = AskUserQuestion("slug?", default=suggested_slug)
     description = AskUserQuestion("one-line description?")
     template = Read(<cfg.vault_root>/templates/Track.md)
-    project_wikilink = do("read <cfg.project_path>/context.md and copy 'Project note: [[...]]' wikilink")
+    project_wikilink = do("read <cfg.project_path>/Context.md and copy 'Project note: [[...]]' wikilink")
     track_path = <cfg.project_path>/track-<slug>.md
     do("instantiate template: set frontmatter per ### Frontmatter;
         leave Direction empty for the user to fill, leave Glossary baseline intact,
-        keep Files of interest / Decisions / Backlog / Log empty")
+        keep Files of interest / Decisions / Log empty")
     Bash("write atomically: write content to <track_path>.tmp, then mv <track_path>.tmp <track_path>")
 
     grounding = Bash(vault-query consult "<description>" --format markdown)
@@ -31,15 +31,14 @@ if selected == "new":
 else:
     track_path = <cfg.project_path>/<selected.Track>.md
     // Shape first — a mature track is large; do NOT Read the whole body (see Reference: Editing a large track)
-    shape = Bash(vault-query read <track_path>)   // overview: section line-map + each Log entry addressed 6.N
-    last_n = do("read the highest Log address 6.N from the shape; default 0 if no Log entries")
+    shape = Bash(vault-query read <track_path>)   // overview: section line-map + each Log entry given its own sub-address under Log
+    last_n = do("read the highest Log sub-address off the shape; default 0 if no Log entries")
     new_entry_number = last_n + 1
     title = do("draft a short title for this session's work")
     narrative = do("draft narrative paragraph: outcomes a fresh agent would need; exclude process, exploration noise, content with a permanent home elsewhere")
 
     proposed_edits = {
       decisions:  do("session decisions to append as numbered items, or [] if none; if any existing decision was reversed or overridden this session, also wrap its title and rationale in ~~strike-through~~ in place and reference it from the new superseding decision"),
-      backlog:    do("new backlog items to append as `- [ ] (N). ...`; resolved items to mark `[x]` in place — keep all items; preserve all numbers"),
       glossary:   do("new domain terms surfaced this session, appended as un-pinned table rows; preserve all existing rows, especially pinned (bolded-Term) rows"),
       log_entry:  "### " + new_entry_number + ". " + <today> + " — " + title + "\n\n" + narrative,
       updated:    <today>,
@@ -47,7 +46,7 @@ else:
 
     AskUserQuestion("apply these edits to <track_path>?", show=proposed_edits)
     if approved:
-        do("apply as localized Edits, not a full-body rewrite (see Reference: Editing a large track): for each target section, Read only its line range from the shape to get exact anchors, then Edit in place — append decisions to ## Decisions, apply backlog [x]/append edits to ## Backlog, append rows to ## Glossary, append log_entry to ## Log, set frontmatter updated:")
+        do("apply as localized Edits, not a full-body rewrite (see Reference: Editing a large track): for each target section, Read only its line range from the shape to get exact anchors, then Edit in place — append decisions to ## Decisions, append rows to ## Glossary, append log_entry to ## Log, set frontmatter updated:")
 
 graduation:
     do("review session for CLAUDE.md / skills / vault candidates; present as suggestions, let user decide")
@@ -61,9 +60,9 @@ graduation:
 
 A mature track runs hundreds of lines / tens of thousands of tokens. Never read or rewrite the whole body on save — that is the cost this procedure exists to avoid.
 
-- **Shape, not body.** `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its start line and estimated tokens, and each Log entry addressed as `6.N`. The last Log number is the highest `6.N` — read it off the overview instead of grepping the body. The overview's line numbers are the map for the next step.
-- **Targeted reads.** For each section an edit touches (Decisions, Backlog, Glossary, Log, the frontmatter block), Read only that section's line range (or unfold it with `vault-query read <track_path> <addr>`) to get the exact anchor text an Edit needs. A save touches four or five sections, so a handful of small reads replaces one 30k-token Read.
-- **Localized Edits.** Apply the entry as in-place Edits at those anchors — append the log entry under `## Log`, append/append-`[x]` under `## Backlog`, append decisions under `## Decisions`, append Glossary rows, bump `updated:`. Each Edit's write window is a single hunk, smaller than the old full-body rewrite, so the partial-write exposure is lower, not higher.
+- **Shape, not body.** `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its start line and estimated tokens, and each Log entry addressed as a sub-address under Log. The last Log number is the highest of those sub-addresses — read it off the overview instead of grepping the body, and take Log's own section number from the overview too rather than assuming a fixed position. The overview's line numbers are the map for the next step.
+- **Targeted reads.** For each section an edit touches (Decisions, Glossary, Log, the frontmatter block), Read only that section's line range (or unfold it with `vault-query read <track_path> <addr>`, addressing by heading slug) to get the exact anchor text an Edit needs. A save touches three or four sections.
+- **Localized Edits.** Apply the entry as in-place Edits at those anchors — append the log entry under `## Log`, append decisions under `## Decisions`, append Glossary rows, bump `updated:`.
 
 **Full-file writes stay atomic.** Creating a new track writes a whole file from the template — there is no large body to avoid, and a partial write would leave a corrupt half-track that Obsidian Sync recovers only through a manual UI flow. For that one full-file write, stay crash-safe with a sibling temp file renamed over the target: `printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"` (the Write tool does not do this; use Bash with `mv`). Localized Edits into an existing track do not need the temp-file dance.
 
@@ -79,7 +78,7 @@ Read `templates/Track.md` for structure. Required fields, in order:
 - `slug` — kebab-case, matches the filename suffix (`track-<slug>.md`)
 - `description` — 1-sentence summary, the same value shown by the resume picker
 - `status` — one of `open` / `paused` / `done` / `abandoned` / `superseded`. Set to `open` on creation.
-- `project` — wikilink copied from `<project_path>/context.md` line `Project note: [[...]]`
+- `project` — wikilink copied from `<project_path>/Context.md` line `Project note: [[...]]`
 - `created` — ISO date (`YYYY-MM-DD`). Set on creation; never changed.
 - `updated` — ISO date. Bumped to `<today>` on every save.
 
@@ -87,16 +86,11 @@ No other fields. Drop the template's `template: true` line; replace the `status:
 
 ### Log entry format
 
-Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically across the track's lifetime. Numbers are never reused — even if an entry is later edited or removed, its number stays consumed. The next number is the highest Log address `6.N` in the `vault-query read` overview plus one (that overview enumerates every Log entry without reading the body); default to 1 when the Log is empty.
+Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically across the track's lifetime. Numbers are never reused — even if an entry is later edited or removed, its number stays consumed. The next number is the highest Log sub-address in the `vault-query read` overview plus one (that overview enumerates every Log entry without reading the body); default to 1 when the Log is empty.
 
 `<title>` is a short noun phrase summarizing the session's outcome (e.g. `entry-binding decision`, `format refinement`).
 
-### Backlog conventions
-
-- Backlog entries are deferred work that could seed a future effort's thesis: a durable change with a done-condition, self-contained. Git/session state (unpushed commits, dirty branches, "decide when acting" notes) is not backlog — it belongs in the Log entry, which the next entry supersedes.
-- Numbered, append-only.
-- Resolved items get `[x]` marked in place — keep all items; preserve all numbers.
-- New items get appended as `- [ ] (N). <text>` where N is the next available integer (length of list + 1). The parentheses prevent Obsidian from rendering the leading number as a markdown ordered-list item, which would re-number the line.
+**Cite the work by the paths and symbols it touched, plus the PR number once one exists (`#96`).** These referents survive rebase and squash-merge, and the commit stays recoverable from them (`git log --follow <path>`, `git log -S <symbol>`). With no PR yet, paths alone carry the entry.
 
 ### Decisions conventions
 
@@ -113,7 +107,7 @@ Surface both the new decision and the strike-through edit in the `proposed_edits
 
 The Glossary is a 2-column markdown table: `| Term | Definition |`. Two row classes:
 
-- **Pinned rows** — Term is bolded (e.g. **Track**, **Decision**). Keep pinned rows intact: preserve their order, wording, and presence. The template seeds eight pinned rows describing the track's own conventions; they document the format inside every track so a cold reader can understand it without consulting the skill.
+- **Pinned rows** — Term is bolded (e.g. **Track**, **Decision**). Keep pinned rows intact: preserve their order, wording, and presence. The template seeds seven pinned rows describing the track's own conventions; they document the format inside every track so a cold reader can understand it without consulting the skill.
 - **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default; refining a definition is done by appending a new row with the sharpened wording rather than rewording in place. The old row stays so the history of a term's understanding is recoverable.
 
 Surface every Glossary change in the `proposed_edits` confirmation step. Silent rewrites are the failure mode this section exists to prevent.
@@ -124,7 +118,7 @@ Surface every Glossary change in the `proposed_edits` confirmation step. Silent 
 
 - find `<vault_root>/templates/Track.md`
 - find `<project_path>/track-<slug>.md`
-- read `<project_path>/context.md` for the project wikilink (`Project note: [[...]]` line)
+- read `<project_path>/Context.md` for the project wikilink (`Project note: [[...]]` line)
 
 ### Skip /git commit after save
 
@@ -136,8 +130,8 @@ Include in the Log entry:
 
 - Outcomes a fresh agent would need to continue the work.
 - Decisions made (also written to ## Decisions, but the Log captures _why now_).
-- Frictions encountered that aren't yet resolved (route to ## Backlog only if they qualify per Backlog conventions).
-- Transient session state: unpushed commits, dirty branches, branch composition, pending pushes. The Log entry is a snapshot the next entry supersedes — state that expires belongs here, never in ## Backlog.
+- Frictions encountered that aren't yet resolved. Durable open work leaves the Log for a ticket, a ticket's `requires:` edge, or the project scratchpad; `/vault ticket` routes between the three and holds the ticket contract (`home/agents/skills/vault/references/ticket.md`). Mention the friction in the narrative and offer to file it.
+- Transient session state: unpushed commits, dirty branches, branch composition, pending pushes. The Log entry is a snapshot the next entry supersedes, so state that expires belongs here and nowhere else.
 
 Exclude:
 

@@ -19,6 +19,7 @@
  *         workspace-root scripts are inherited.
  *   py    ruff check --fix, then ruff format
  *   nix   alejandra
+ *   rs    rustfmt
  *   *     ignored
  *
  * oxfmt's config is always passed explicitly with -c: its own discovery walks
@@ -60,6 +61,11 @@
  * (see home/default.nix) symlinks this file itself and runs it under the
  * shebang above — a dependency would make the CLI need an installed
  * node_modules to start.
+ *
+ * That symlink is out-of-store (mkOutOfStoreSymlink), pointed straight at
+ * this source file rather than a build artifact — unlike the compiled Rust
+ * CLIs this repo also ships (mdstruct, vault-query), an edit here is live
+ * the moment it is saved. No ./rebuild.sh needed to pick it up.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -326,6 +332,7 @@ type Routes = {
   formatFile: { root: string; file: string }[];
   py: string[];
   nix: string[];
+  rs: string[];
 };
 
 /**
@@ -339,6 +346,7 @@ function routeFiles(files: Set<string>): Routes {
     formatFile: [],
     py: [],
     nix: [],
+    rs: [],
   };
   for (const file of [...files].sort()) {
     const e = ext(file);
@@ -349,6 +357,7 @@ function routeFiles(files: Set<string>): Routes {
       else push(routes.oxfmtByConfig, target.config, file);
     } else if (e === "py") routes.py.push(file);
     else if (e === "nix") routes.nix.push(file);
+    else if (e === "rs") routes.rs.push(file);
   }
   return routes;
 }
@@ -404,7 +413,7 @@ function planJobs(routes: Routes): Plan {
       pm === "npm" ? ["npm", "run", "format:file", "--", file] : [pm, "run", "format:file", file];
     jobs.push({ tool: "format:file", files: [file], credit: true, cwd: root, cmd });
   }
-  const { py, nix } = routes;
+  const { py, nix, rs } = routes;
   if (py.length && need("ruff", py.length)) {
     jobs.push({
       tool: "ruff",
@@ -428,6 +437,27 @@ function planJobs(routes: Routes): Plan {
       credit: true,
       cwd: "/",
       cmd: ["alejandra", "--quiet", ...nix],
+    });
+  }
+  if (rs.length && need("rustfmt", rs.length)) {
+    jobs.push({
+      tool: "rustfmt",
+      files: rs,
+      credit: true,
+      cwd: "/",
+      // Standalone rustfmt defaults to edition 2015; this workspace is
+      // edition = "2024" (Cargo.toml), so the flag is required or modern
+      // syntax misparses.
+      //
+      // --config skip_children=true keeps rustfmt from following `mod`
+      // declarations into sibling files it was never given — without it,
+      // formatting one file (e.g. a lib.rs declaring a dozen modules)
+      // silently reflows every one of them, which is exactly the
+      // behind-the-back rewrite this module's header claims can't happen.
+      // It also stops one unresolvable `mod` (a path that doesn't exist on
+      // disk) from failing the whole batch. The bare `--skip-children` flag
+      // is rejected by rustfmt; it must go through `--config`.
+      cmd: ["rustfmt", "--edition", "2024", "--config", "skip_children=true", ...rs],
     });
   }
 

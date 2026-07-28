@@ -6,7 +6,12 @@ use crate::wikilink;
 
 /// List markdown files in a folder with frontmatter metadata.
 /// Output format: `title — description [tags] (field: value)`
-pub fn run(cfg: &crate::config::ResolvedConfig, folder: &str, fields: &[String], no_superseded: bool) -> Result<()> {
+pub fn run(
+    cfg: &crate::config::ResolvedConfig,
+    folder: &str,
+    fields: &[String],
+    no_superseded: bool,
+) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     let matching: Vec<&VaultFile> = files
@@ -29,7 +34,12 @@ pub fn run(cfg: &crate::config::ResolvedConfig, folder: &str, fields: &[String],
 /// Folder placement is irrelevant; the `type` key is the authoritative classifier.
 /// Files marked `template: true` are excluded — templates carry the same `type`
 /// as their instances but are not themselves instances.
-pub fn run_by_type(cfg: &crate::config::ResolvedConfig, type_value: &str, fields: &[String], no_superseded: bool) -> Result<()> {
+pub fn run_by_type(
+    cfg: &crate::config::ResolvedConfig,
+    type_value: &str,
+    fields: &[String],
+    no_superseded: bool,
+) -> Result<()> {
     let vault_root = &cfg.vault_root;
     let files = vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     let matching: Vec<&VaultFile> = files
@@ -67,7 +77,11 @@ fn print_listing(mut files: Vec<&VaultFile>, fields: &[String]) {
         let desc = frontmatter::get_display(&file.frontmatter, "description");
         let tags = frontmatter::get_display(&file.frontmatter, "tags");
 
-        let sup_prefix = if is_entry_superseded(file) { "[superseded] " } else { "" };
+        let sup_prefix = if is_entry_superseded(file) {
+            "[superseded] "
+        } else {
+            ""
+        };
         let mut line = format!("{}{}", sup_prefix, file.name);
         if !desc.is_empty() {
             line.push_str(" — ");

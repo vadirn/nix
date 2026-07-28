@@ -1,7 +1,7 @@
 ---
 name: vault
 description: >
-  Personal knowledge management in an Obsidian vault. Use whenever the user wants to save, find, review, or organize knowledge, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into cards, writing original notes, searching or quizzing saved content, listing active projects ("what am I working on"), explicit /vault commands, weekly-log operations (backlog/бэклог, planning, completing tasks, sleep). Excludes direct file edits not routed through /vault (editing a .md file in a code repo that is not a vault artifact), Obsidian app features (kanban, canvas, plugins, .base), web search. Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
+  Personal knowledge management in an Obsidian vault. Use whenever the user wants to save, find, review, or organize knowledge or project work, even without saying "vault". Triggers: saving links/articles as references, distilling concepts into cards, writing original notes, filing a decided piece of work as a ticket ("file that", "make a ticket"), parking an idea with no done-condition as a scratchpad seed, listing a project's tickets or its unowned backlog, searching or quizzing saved content, listing active projects ("what am I working on"), explicit /vault commands, weekly-log operations (the daily бэклог, planning, completing tasks, sleep — not the ticket backlog). Excludes direct file edits not routed through /vault (editing a .md file in a code repo that is not a vault artifact), Obsidian app features (kanban, canvas, plugins, editing a .base by hand), web search. Skip for session save/resume ("wrapping up", "where did we leave off") — use /track.
 ---
 
 # Vault
@@ -32,6 +32,17 @@ elif "reference" or "reference <topic>":
     Read(dir/references/reference.md)
     Read(dir/references/post-edit.md)
     do("follow reference creation/editing process; apply post-edit etiquette before wrapping")
+
+elif "ticket" or "ticket <topic>" or an action item needs filing:
+    Read(dir/references/ticket.md)
+    Read(dir/references/post-edit.md)
+    do("follow ticket creation/editing process; apply post-edit etiquette before wrapping")
+
+elif "tickets" or "backlog <project>":
+    // Views: Backlog, Open (default), Done, Abandoned, By Track, By Status, All
+    results = Bash(vault-query tickets --view <name> [--track <slug>] [--project <name>] [--format tsv])
+    if it errors with "no Tickets.base": Bash(vault-query tickets-init)   // project's first ticket query
+    do("present tickets; unfold one with vault-query read <path> when the user picks it")
 
 elif "review":
     Read(dir/references/review.md)
@@ -118,21 +129,25 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | Note | Original thinking, free-form; carries no `reference:` field. Stands alone or links ideas across cards and references. Distinct from a card: a note is original, a card distils external sources. Work-specific notes use `31 work notes/` (same format). | `00 inbox/` → `30 notes/`, `31 work notes/` |
 | Goal | High-level aspiration with success criteria. Nests via the `goal:` field on a child goal. Distinct from a project: the goal is the _why_, the project is a deliverable that advances it. | `41 projects/` |
 | Project | Concrete deliverable linked to a goal. Has `result`, `status`, optional `deadline`. Single file, or a subfolder when work fans out. Distinct from a track: the project is the unit of intent, the track is the unit of working memory across sessions. | `41 projects/<project>/` |
-| Project context | Stable per-project framing (purpose, conventions, links) read by `vault-query --project <name> context`. Distinct from a track: context is durable framing, a track is rolling state. | `41 projects/<project>/context.md` |
-| Track | Rolling per-project work artifact (sections: Direction, Decisions, Backlog, Log). One file per multi-session effort, appended across the sessions it spans. Owned by the `/track` skill. Distinct from a checkpoint: a track accumulates state in place; a checkpoint was a one-shot snapshot. | `41 projects/<project>/track-<slug>.md` |
+| Project context | Stable per-project framing (purpose, conventions, links) read by `vault-query --project <name> context`. Distinct from a track: context is durable framing, a track is rolling state. | `41 projects/<project>/Context.md` |
+| Track | Rolling per-project work artifact (sections: Direction, Decisions, Log). One file per multi-session effort, appended across the sessions it spans. Owned by the `/track` skill. Distinct from a checkpoint: a track accumulates state in place; a checkpoint was a one-shot snapshot. | `41 projects/<project>/track-<slug>.md` |
+| Ticket | One unit of decided work, sized to one PR. Frontmatter `status` (`open`/`done`/`abandoned`), `track` backref, `requires` dependency edges; body stays repo-self-sufficient. Created per `references/ticket.md`. Distinct from a track: a track is one effort's rolling memory, a ticket is one deliverable inside it. | `41 projects/<project>/ticket-<slug>.md` |
+| Scratchpad | Per-project pre-triage capture and seed bank for ideas with no done-condition yet. Plain markdown list, appended freely. Distinct from the inbox: the inbox holds captures with no project known, a scratchpad entry already has one. | `41 projects/<project>/Scratchpad.md` |
 | Experiment | Captured behavior test of an existing thing against a falsifiable claim. Frontmatter `type: experiment`, `verdict` (confirmed/refuted/inconclusive), `date`, optional `project` wikilink. Owned by the `/experiment` skill. Distinct from a track: an experiment is one decided question, a track is a multi-session effort. | `35 experiments/` |
 | Checkpoint _(legacy — replaced by track)_ | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain reachable via `vault-query read <name>`. Programmatically treated as superseded: `consult` excludes all checkpoints by default. | `41 projects/<project>/` |
 | Weekly log | ISO-week file with Focus, Tasks, Backlog, Activity sections. Tasks wikilink to projects; Activity is auto-appended by a git post-commit hook. Distinct from a track: a weekly log spans all projects for one week, a track spans one project across all weeks. | `41 projects/block-buster/YYYY-wWW.md` |
-| Base | Obsidian Base file — a saved cross-vault query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query. | `90 bases/` |
+| Base | Obsidian Base file — a saved query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query. Vault-wide bases live in `90 bases/`; a project's `Tracks.base` and `Tickets.base` sit in its own folder and are what `vault-query tracks`/`tickets` read, so the CLI and Obsidian share one definition of each view. | `90 bases/`, `41 projects/<project>/` |
 
 ### vault-query subcommands
 
 | Command | Description | Requires config |
 | --- | --- | --- |
 | `config` | Print resolved config JSON | No |
-| `context` | Print project context.md | Yes |
+| `context` | Print project Context.md | Yes |
 | `tracks [--view <view>]` | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC | Yes |
 | `tracks-init` | Create Tracks.base in the current project | Yes |
+| `tickets [--view <view>] [--track <slug>]` | Query project tickets through `Tickets.base` (Backlog/Open/Done/Abandoned/By Track/By Status/All), updated DESC. `Backlog` = open and owned by no track; `--track <slug>` narrows any view to one track's tickets | Yes |
+| `tickets-init` | Create Tickets.base in the current project | Yes |
 | `get <fragment>` | Resolve an entry name to its absolute path (one per line). For handing a path to another tool; to read an entry, name it to `read` directly | No |
 | `read <FILE\|NAME> [ADDRESS]` | Structured read: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, `0`/text, `fm[.path]`, `links`). Takes a path or an entry name — an unresolvable name errors, an ambiguous one errors listing candidates. `--depth`, `--full`, `--threshold`, `--format json` | No |
 | `search <query>` | BM25 full-text search (--regex for grep mode) | No |
@@ -141,7 +156,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `notes` | List all notes with metadata | No |
 | `experiments` | List all experiments with metadata | No |
 | `log [DATE\|WEEK\|last\|next]` | Open or create weekly log | No |
-| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card (superseded entries exempt), dangling-reference, reference-not-wikilink, reference-wrong-type, reference-vault-link, broken-wikilink, untagged-card, singleton-tag, oversized-entry (superseded entries exempt), untyped-entry | Yes |
+| `lint [--format ...] [--rule ...]` | Vault-wide lint: orphan-card (superseded entries exempt), dangling-reference, dangling-relation-label, reference-not-wikilink, reference-wrong-type, reference-vault-link, ticket-outward-only, broken-wikilink, duplicate-h1, invalid-frontmatter, untagged-card, missing-required-field, singleton-tag, singleton-filename-mismatch, slug-filename-mismatch, unknown-rel, oversized-entry (superseded entries exempt), untyped-entry | Yes |
 | `xp [YEAR]` | XP report: calendar, streak, level | No |
 
 ### Project commands

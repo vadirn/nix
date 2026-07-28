@@ -14,7 +14,28 @@ fn required_fields(type_val: &str) -> Option<&'static [&'static str]> {
         "note" => Some(&["description", "tags"]),
         "reference" => Some(&["description", "tags"]),
         "project" => Some(&["result", "status", "goal"]),
-        "track" => Some(&["slug", "description", "status", "project", "created", "updated"]),
+        "track" => Some(&[
+            "slug",
+            "description",
+            "status",
+            "project",
+            "created",
+            "updated",
+        ]),
+        // A ticket mirrors track's required set. `track` (the backref that claims
+        // it) and `requires` (its edge list) stay optional: a ticket is valid while
+        // unclaimed and with no dependencies.
+        "ticket" => Some(&[
+            "slug",
+            "description",
+            "status",
+            "project",
+            "created",
+            "updated",
+        ]),
+        // A scratchpad is a raw pre-triage seed; only provenance is required.
+        // `description` stays optional.
+        "scratchpad" => Some(&["project", "created", "updated"]),
         "experiment" => Some(&["description", "verdict", "date"]),
         "checkpoint" => Some(&[]),
         "weekly-log" => Some(&["week", "start", "end", "sleep"]),
@@ -36,8 +57,9 @@ impl Rule for MissingRequiredField {
         let mut findings = Vec::new();
 
         for file in ctx.files {
-            // Skip templates — they legitimately have empty fields.
-            if frontmatter::is_template(&file.frontmatter) {
+            // Skip lint-exempt entries (templates and bottom-tier/superseded
+            // records) — they legitimately have empty fields.
+            if crate::epistemic::is_lint_exempt(&file.frontmatter) {
                 continue;
             }
 
@@ -56,10 +78,7 @@ impl Rule for MissingRequiredField {
                         rule: self.name(),
                         severity: self.default_severity(),
                         file: file.path.clone(),
-                        message: format!(
-                            "{} file is missing required field '{}'",
-                            type_val, field
-                        ),
+                        message: format!("{} file is missing required field '{}'", type_val, field),
                         data: None,
                     });
                 }
@@ -78,11 +97,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
-    fn make_file(
-        name: &str,
-        path: &str,
-        fields: &[(&str, Value)],
-    ) -> crate::vault::VaultFile {
+    fn make_file(name: &str, path: &str, fields: &[(&str, Value)]) -> crate::vault::VaultFile {
         let mut fm = BTreeMap::new();
         for (k, v) in fields {
             fm.insert(k.to_string(), v.clone());
@@ -143,6 +158,24 @@ mod tests {
             &[
                 ("type", Value::String("card".into())),
                 ("template", Value::Bool(true)),
+            ],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn superseded_file_is_skipped() {
+        let file = make_file(
+            "SupersededTicket",
+            "/vault/41 projects/my-project/ticket-old.md",
+            &[
+                ("type", Value::String("ticket".into())),
+                ("superseded", Value::Bool(true)),
             ],
         );
         let files = vec![file];
@@ -289,5 +322,101 @@ mod tests {
         assert!(messages.contains(&"track file is missing required field 'project'"));
         assert!(messages.contains(&"track file is missing required field 'created'"));
         assert!(messages.contains(&"track file is missing required field 'updated'"));
+    }
+
+    #[test]
+    fn ticket_missing_fields_emits_correct_findings() {
+        let file = make_file(
+            "MyTicket",
+            "/vault/41 projects/my-project/ticket-foo.md",
+            &[
+                ("type", Value::String("ticket".into())),
+                ("slug", Value::String("foo".into())),
+            ],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        // ticket requires: slug, description, status, project, created, updated (6 total)
+        // slug is present, so 5 missing
+        assert_eq!(findings.len(), 5);
+
+        let messages: Vec<&str> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert!(!messages.contains(&"ticket file is missing required field 'slug'"));
+        assert!(messages.contains(&"ticket file is missing required field 'description'"));
+        assert!(messages.contains(&"ticket file is missing required field 'status'"));
+        assert!(messages.contains(&"ticket file is missing required field 'project'"));
+        assert!(messages.contains(&"ticket file is missing required field 'created'"));
+        assert!(messages.contains(&"ticket file is missing required field 'updated'"));
+    }
+
+    #[test]
+    fn ticket_track_and_requires_are_optional() {
+        // An unclaimed ticket with no dependencies (no `track`, no `requires`) is valid.
+        let file = make_file(
+            "ClaimedTicket",
+            "/vault/41 projects/my-project/ticket-bar.md",
+            &[
+                ("type", Value::String("ticket".into())),
+                ("slug", Value::String("bar".into())),
+                ("description", Value::String("do the thing".into())),
+                ("status", Value::String("open".into())),
+                ("project", Value::String("my-project".into())),
+                ("created", Value::String("2026-07-24".into())),
+                ("updated", Value::String("2026-07-24".into())),
+                // track and requires intentionally absent — must not produce a finding
+            ],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn scratchpad_missing_fields_emits_correct_findings() {
+        let file = make_file(
+            "MyScratchpad",
+            "/vault/41 projects/my-project/scratchpad-foo.md",
+            &[("type", Value::String("scratchpad".into()))],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        // scratchpad requires: project, created, updated (3 total); none present.
+        assert_eq!(findings.len(), 3);
+
+        let messages: Vec<&str> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert!(messages.contains(&"scratchpad file is missing required field 'project'"));
+        assert!(messages.contains(&"scratchpad file is missing required field 'created'"));
+        assert!(messages.contains(&"scratchpad file is missing required field 'updated'"));
+    }
+
+    #[test]
+    fn scratchpad_description_is_optional() {
+        // A scratchpad with provenance but no description is valid.
+        let file = make_file(
+            "SeedScratchpad",
+            "/vault/41 projects/my-project/scratchpad-bar.md",
+            &[
+                ("type", Value::String("scratchpad".into())),
+                ("project", Value::String("my-project".into())),
+                ("created", Value::String("2026-07-24".into())),
+                ("updated", Value::String("2026-07-24".into())),
+                // description intentionally absent — must not produce a finding
+            ],
+        );
+        let files = vec![file];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = MissingRequiredField.check(&ctx);
+        assert_eq!(findings.len(), 0);
     }
 }

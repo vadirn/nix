@@ -83,7 +83,11 @@ pub fn first_body_block_h1(content: &str) -> Option<String> {
         return None;
     }
     // First structural block only: reject if any top-level node opens earlier.
-    if doc.nodes().iter().any(|n| n.span().start < first.span.start) {
+    if doc
+        .nodes()
+        .iter()
+        .any(|n| n.span().start < first.span.start)
+    {
         return None;
     }
     // `.get(..).unwrap_or("")` not indexing: degrade a malformed span to empty

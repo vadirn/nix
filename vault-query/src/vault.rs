@@ -36,11 +36,22 @@ impl VaultFile {
     }
 
     /// Check if this file is in the given folder (relative to vault root).
+    ///
+    /// Matches on a path-segment boundary, not a bare string prefix: `folder`
+    /// must be the whole leading path, so `"41 projects/nix"` matches
+    /// `"41 projects/nix/ticket-a.md"` (direct child) and
+    /// `"41 projects/nix/sub/deep.md"` (nested), but not
+    /// `"41 projects/nixon/ticket.md"` — a plain `starts_with` would treat
+    /// `folder` as a substring and let a sibling folder whose name happens to
+    /// extend it (`nix` vs. `nixon`) slip through. `*-init` writes
+    /// `file.inFolder("<project folder>")` into every generated `.base`, so an
+    /// over-inclusive match here pulls a sibling project's files into the
+    /// wrong base.
     pub fn in_folder(&self, folder: &str, vault_root: &Path) -> bool {
         let rel = self.relative_path(vault_root);
-        rel.starts_with(folder)
+        rel.strip_prefix(folder)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
     }
-
 }
 
 /// Resolve an optional subfolder relative to vault root.
@@ -115,7 +126,6 @@ pub fn scan(
     Ok(files)
 }
 
-
 /// Asset file extensions recognized by the vault (no leading dots, lowercased).
 pub const ASSET_EXTENSIONS: &[&str] = &[
     "png", "jpeg", "jpg", "gif", "svg", "pdf", "canvas", "base", "tldraw",
@@ -188,8 +198,17 @@ mod tests {
         let dir = tmp.path();
         let ignore = VaultIgnore::from_patterns(vec![PathBuf::from("excluded")]);
         let files = scan(dir, dir, Some(&ignore)).unwrap();
-        assert_eq!(files.len(), 1, "expected only keep.md, got: {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
-        assert!(files[0].name == "keep", "expected keep.md, got: {}", files[0].name);
+        assert_eq!(
+            files.len(),
+            1,
+            "expected only keep.md, got: {:?}",
+            files.iter().map(|f| &f.path).collect::<Vec<_>>()
+        );
+        assert!(
+            files[0].name == "keep",
+            "expected keep.md, got: {}",
+            files[0].name
+        );
     }
 
     #[test]
@@ -197,7 +216,12 @@ mod tests {
         let tmp = build_simple_vault();
         let dir = tmp.path();
         let files = scan(dir, dir, None).unwrap();
-        assert_eq!(files.len(), 2, "expected both files, got: {:?}", files.iter().map(|f| &f.path).collect::<Vec<_>>());
+        assert_eq!(
+            files.len(),
+            2,
+            "expected both files, got: {:?}",
+            files.iter().map(|f| &f.path).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -222,6 +246,37 @@ mod tests {
         assert!(!f.in_folder("20 cards", &dir));
     }
 
+    #[test]
+    fn in_folder_rejects_a_sibling_whose_name_extends_the_folder() {
+        // A bare string prefix would treat "41 projects/nix" as a substring
+        // of "41 projects/nixon", pulling a sibling project's files into the
+        // wrong base — exactly what `*-init` writes into every generated
+        // `.base` via `file.inFolder("<project folder>")`.
+        let f = VaultFile {
+            path: PathBuf::from("/vault/41 projects/nixon/ticket.md"),
+            ..Default::default()
+        };
+        assert!(!f.in_folder("41 projects/nix", Path::new("/vault")));
+    }
+
+    #[test]
+    fn in_folder_matches_a_file_directly_in_the_folder() {
+        let f = VaultFile {
+            path: PathBuf::from("/vault/41 projects/nix/ticket-a.md"),
+            ..Default::default()
+        };
+        assert!(f.in_folder("41 projects/nix", Path::new("/vault")));
+    }
+
+    #[test]
+    fn in_folder_matches_a_file_nested_deeper() {
+        let f = VaultFile {
+            path: PathBuf::from("/vault/41 projects/nix/sub/deep/ticket.md"),
+            ..Default::default()
+        };
+        assert!(f.in_folder("41 projects/nix", Path::new("/vault")));
+    }
+
     // --- scan_assets tests ---
 
     #[test]
@@ -236,12 +291,23 @@ mod tests {
         let mut assets = scan_assets(root, root, None).unwrap();
         assets.sort_by(|a, b| a.name.cmp(&b.name));
 
-        assert_eq!(assets.len(), 2, "expected 2 assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert_eq!(
+            assets.len(),
+            2,
+            "expected 2 assets, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
 
-        let foo = assets.iter().find(|a| a.name == "Foo.png").expect("Foo.png not found");
+        let foo = assets
+            .iter()
+            .find(|a| a.name == "Foo.png")
+            .expect("Foo.png not found");
         assert_eq!(foo.path, root.join("assets/Foo.png"));
 
-        let base = assets.iter().find(|a| a.name == "Checkpoints.base").expect("Checkpoints.base not found");
+        let base = assets
+            .iter()
+            .find(|a| a.name == "Checkpoints.base")
+            .expect("Checkpoints.base not found");
         assert_eq!(base.path, root.join("41 projects/nix/Checkpoints.base"));
     }
 
@@ -252,7 +318,11 @@ mod tests {
         std::fs::write(root.join("note.md"), "# note\n").unwrap();
 
         let assets = scan_assets(root, root, None).unwrap();
-        assert!(assets.is_empty(), "expected no assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert!(
+            assets.is_empty(),
+            "expected no assets, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -262,7 +332,11 @@ mod tests {
         std::fs::write(root.join("file.xyz"), b"").unwrap();
 
         let assets = scan_assets(root, root, None).unwrap();
-        assert!(assets.is_empty(), "expected no assets, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert!(
+            assets.is_empty(),
+            "expected no assets, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -274,7 +348,11 @@ mod tests {
 
         let ignore = VaultIgnore::from_patterns(vec![PathBuf::from("ignored")]);
         let assets = scan_assets(root, root, Some(&ignore)).unwrap();
-        assert!(assets.is_empty(), "expected Bar.png to be ignored, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert!(
+            assets.is_empty(),
+            "expected Bar.png to be ignored, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -285,7 +363,12 @@ mod tests {
         std::fs::write(root.join("note.md"), "# note\n").unwrap();
 
         let assets = scan_assets(root, root, None).unwrap();
-        assert_eq!(assets.len(), 1, "expected only image.jpg, got: {:?}", assets.iter().map(|a| &a.name).collect::<Vec<_>>());
+        assert_eq!(
+            assets.len(),
+            1,
+            "expected only image.jpg, got: {:?}",
+            assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+        );
         assert_eq!(assets[0].name, "image.jpg");
     }
 }

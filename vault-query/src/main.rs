@@ -145,7 +145,7 @@ enum Commands {
     },
     /// Print resolved config as JSON
     Config,
-    /// Print project context.md
+    /// Print project Context.md
     Context,
     /// Query project tracks
     Tracks {
@@ -158,6 +158,21 @@ enum Commands {
     },
     /// Initialize Tracks.base in the current project
     TracksInit,
+    /// Query project tickets
+    Tickets {
+        /// View name (Backlog, Open, Done, Abandoned, By Track, By Status, All)
+        #[arg(long, default_value = "Open")]
+        view: String,
+        /// Narrow the view to tickets owned by this track slug (matched against
+        /// the `track-<slug>` backref)
+        #[arg(long)]
+        track: Option<String>,
+        /// Output format
+        #[arg(long, default_value = "table")]
+        format: output::Format,
+    },
+    /// Initialize Tickets.base in the current project
+    TicketsInit,
     /// Resolve a note/card/reference/checkpoint name to its absolute path (one per line)
     Get {
         /// Name fragment to resolve
@@ -292,14 +307,23 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             view,
             format,
         } => {
-            commands::query::run(base_path, view, &cfg, *format)?;
+            commands::query::run(
+                base_path,
+                view,
+                &cfg,
+                *format,
+                commands::query::Narrowing::default(),
+            )?;
             0
         }
         Commands::Tags { sort } => {
             commands::tags::run(&cfg, sort)?;
             0
         }
-        Commands::Backlinks { file, no_superseded } => {
+        Commands::Backlinks {
+            file,
+            no_superseded,
+        } => {
             commands::backlinks::run(file, &cfg, *no_superseded)?;
             0
         }
@@ -314,19 +338,29 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             types,
             no_superseded,
         } => {
-            commands::search::run(query, &cfg, *context, path.as_deref(), *regex, *limit, *format, types, *no_superseded)?;
+            commands::search::run(
+                query,
+                &cfg,
+                *context,
+                path.as_deref(),
+                *regex,
+                *limit,
+                *format,
+                types,
+                *no_superseded,
+            )?;
             0
         }
         Commands::Resolve { slug } => commands::resolve::run(slug, &cfg)?,
-        Commands::List { folder, fields, no_superseded } => {
+        Commands::List {
+            folder,
+            fields,
+            no_superseded,
+        } => {
             commands::list::run(&cfg, folder, fields, *no_superseded)?;
             0
         }
-        Commands::Files {
-            folder,
-            count,
-            tag,
-        } => {
+        Commands::Files { folder, count, tag } => {
             commands::files::run(&cfg, folder.as_deref(), *count, tag.as_deref())?;
             0
         }
@@ -346,9 +380,24 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             commands::tracks::init(&cfg)?;
             0
         }
-        Commands::Get { fragment, no_superseded } => {
-            commands::get::run(fragment, &cfg, *no_superseded)?
+        // `--project` is the global project flag (resolved into `cfg.project_path`),
+        // so tickets share the project-scoping convention of `tracks`.
+        Commands::Tickets {
+            view,
+            track,
+            format,
+        } => {
+            commands::tickets::run(&cfg, view, track.as_deref(), *format)?;
+            0
         }
+        Commands::TicketsInit => {
+            commands::tickets::init(&cfg)?;
+            0
+        }
+        Commands::Get {
+            fragment,
+            no_superseded,
+        } => commands::get::run(fragment, &cfg, *no_superseded)?,
         Commands::Cards => {
             commands::list::run_by_type(&cfg, "card", &["reference".to_string()], false)?;
             0

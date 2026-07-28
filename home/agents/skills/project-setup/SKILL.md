@@ -23,8 +23,8 @@ target = "<vault_root>/<path>"
 
 // Wire-only branch: project already exists
 if <target> directory exists:
-    if not Read(<target>/context.md):
-        Write(<target>/context.md, do("fill context.md template — see Reference"))
+    if not Read(<target>/Context.md):
+        Write(<target>/Context.md, do("fill Context.md template — see Reference"))
     Write(<repo>/.vault.config.json, {vault_root, project_path: target})
     gitignore = Read(<repo>/.gitignore)
     if ".vault.config.json" not in gitignore: do("append it")
@@ -42,7 +42,7 @@ if template:
 else:
     Write(<target>/<title>.md, do("write minimal project note: frontmatter with status=in progress; body with description and result fields"))
     do("report that <vault_root>/templates/Project.md was not found; note was created from defaults")
-Write(<target>/context.md, do("fill context.md template — see Reference"))
+Write(<target>/Context.md, do("fill Context.md template — see Reference"))
 
 Write(<repo>/.vault.config.json, {vault_root, project_path: target})
 gitignore = Read(<repo>/.gitignore)
@@ -79,13 +79,17 @@ do("report created files")
 
 Both values are absolute. `project_path` is `vault_root` joined with the vault-relative `path`. Gitignored because it contains absolute paths.
 
+### Naming files in a project folder
+
+A file a project holds exactly one of is named for what it is, capitalized: `<Title>.md`, `Context.md`, `Scratchpad.md`, `Tracks.base`, `Tickets.base`. A file a project holds many of is named `<type>-<slug>` in lowercase: `track-mdstruct.md`, `ticket-tickets-via-base.md`. The case is what separates the two kinds at a glance in a folder listing that mixes them.
+
 ### Project note
 
 Path: `<vault_root>/<path>/<Title>.md`. Template: `<vault_root>/templates/Project.md`.
 
 Substitutions: `<path>` placeholders in body, description comment, `result` and `status: in progress` in frontmatter.
 
-### context.md template
+### Context.md template
 
 Substitute `<path>`, `<title>`, `<description>`, `<result>`.
 

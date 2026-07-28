@@ -199,8 +199,10 @@ impl VaultFileBuilder {
     }
 
     pub fn str_field(mut self, key: &str, value: &str) -> Self {
-        self.frontmatter
-            .insert(key.to_string(), serde_yaml::Value::String(value.to_string()));
+        self.frontmatter.insert(
+            key.to_string(),
+            serde_yaml::Value::String(value.to_string()),
+        );
         self
     }
 

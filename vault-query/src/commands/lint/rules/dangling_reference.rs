@@ -32,10 +32,7 @@ impl Rule for DanglingReference {
                     rule: self.name(),
                     severity: self.default_severity(),
                     file: reference.path.clone(),
-                    message: format!(
-                        "reference '{}' is not cited by any card",
-                        reference.name
-                    ),
+                    message: format!("reference '{}' is not cited by any card", reference.name),
                     data: None,
                 });
             }
@@ -151,9 +148,9 @@ mod tests {
         let ref_foo = reference_file("Foo");
         let card = card_file(
             "Card",
-            Some(Value::Sequence(vec![Value::Sequence(vec![
-                Value::String("[[Foo]]".to_string()),
-            ])])),
+            Some(Value::Sequence(vec![Value::Sequence(vec![Value::String(
+                "[[Foo]]".to_string(),
+            )])])),
         );
         let files = vec![ref_foo, card];
         let root = PathBuf::from("/vault");

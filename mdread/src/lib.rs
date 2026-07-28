@@ -187,7 +187,11 @@ fn emit_frontmatter(
                 .expect("block_text present implies a complete block")
                 .map_err(|e| anyhow::anyhow!(e))?;
             let value = frontmatter::value_at(&root, path).map_err(|e| {
-                anyhow::anyhow!("{}; top-level fields: {}", e, frontmatter::field_order(content).join(", "))
+                anyhow::anyhow!(
+                    "{}; top-level fields: {}",
+                    e,
+                    frontmatter::field_order(content).join(", ")
+                )
             })?;
             if format == TextJson::Json {
                 let out = FrontmatterValueJson {
@@ -354,7 +358,9 @@ fn emit_overview(
     println!();
     // Tool-agnostic: names addresses, not a command, so both the `mdread` CLI and
     // the `vault-query read` wrapper print something true of themselves.
-    println!("next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links");
+    println!(
+        "next: <addr> a section · fm frontmatter (fm.<path> one value) · links outgoing links"
+    );
     // Only when the document actually collides, so the common overview is
     // unchanged. The line is a report about the tree above it, which is why it
     // may join stdout where the unfold notes may not.
@@ -664,7 +670,11 @@ mod tests {
         // line, so a reader can drill with the same address.
         let placeholder = tree_line_string(large, &doc.lines);
         assert!(placeholder.contains("1.2"), "placeholder: {}", placeholder);
-        assert!(placeholder.contains("Large"), "placeholder: {}", placeholder);
+        assert!(
+            placeholder.contains("Large"),
+            "placeholder: {}",
+            placeholder
+        );
         assert!(
             placeholder.trim_start().starts_with('+'),
             "Large has a child, marker '+': {}",
@@ -683,7 +693,11 @@ mod tests {
         assert!(s.contains("sec prose."), "own prose present: {}", s);
         assert!(s.contains("tiny."), "small child inlined: {}", s);
         // Large child folded: its body absent, its placeholder line present.
-        assert!(!s.contains("LLLL LLLL"), "large body must be folded out: {}", s);
+        assert!(
+            !s.contains("LLLL LLLL"),
+            "large body must be folded out: {}",
+            s
+        );
         assert!(s.contains("1.2"), "large child placeholder present: {}", s);
     }
 
@@ -719,7 +733,11 @@ mod tests {
             assert_eq!(reserved_reading(a), Some(Reading::Text), "{a} is the lede");
         }
         for a in ["links", "LINKS"] {
-            assert_eq!(reserved_reading(a), Some(Reading::Links), "{a} is the index");
+            assert_eq!(
+                reserved_reading(a),
+                Some(Reading::Links),
+                "{a} is the index"
+            );
         }
     }
 
@@ -756,8 +774,7 @@ mod tests {
 
     // A heading that slugs to `links`, in a file whose link list is non-empty:
     // the reserved reading succeeds and is still not what `## Links` holds.
-    const SHADOW_LINKS: &str =
-        "---\ntype: note\n---\n\nLede with [[Elsewhere]].\n\n# Direction\n\ndir body.\n\n## Links\n\n- [[A Note]]\n";
+    const SHADOW_LINKS: &str = "---\ntype: note\n---\n\nLede with [[Elsewhere]].\n\n# Direction\n\ndir body.\n\n## Links\n\n- [[A Note]]\n";
     // A heading that slugs to `fm`, in a file with no frontmatter block.
     const SHADOW_FM: &str = "# Direction\n\n## FM\n\nnot the frontmatter.\n";
     // A heading that slugs to `text`, in a file whose first line is a heading, so
@@ -854,10 +871,14 @@ mod tests {
         // `fm` and `frontmatter` serve one reading, so a `## Frontmatter` section
         // is shadowed whichever spelling the caller typed. The clause names the
         // word the heading actually slugs to.
-        let content = "---\ntype: note\n---\n\n# Direction\n\n## Frontmatter\n\nabout the fields.\n";
+        let content =
+            "---\ntype: note\n---\n\n# Direction\n\n## Frontmatter\n\nabout the fields.\n";
         let doc = parse_document(content);
         let expected = Some("heading 'Frontmatter' (1.1) also answers to 'frontmatter'");
-        assert_eq!(crate::shadow::phrase(&doc, "frontmatter").as_deref(), expected);
+        assert_eq!(
+            crate::shadow::phrase(&doc, "frontmatter").as_deref(),
+            expected
+        );
         assert_eq!(crate::shadow::phrase(&doc, "fm").as_deref(), expected);
         // Same for the lede's two spellings.
         let lede = "# Direction\n\n## Text\n\nnot the lede.\n";

@@ -152,7 +152,10 @@ mod tests {
         let rel = Path::new("nope/missing.md");
         // No path, no fragment match: the caller's argument comes back so the
         // read error names what was asked for.
-        assert_eq!(resolve_target(rel, Some(&cfg_for(vault.path()))).unwrap(), rel);
+        assert_eq!(
+            resolve_target(rel, Some(&cfg_for(vault.path()))).unwrap(),
+            rel
+        );
         assert_eq!(resolve_target(rel, None).unwrap(), rel);
     }
 
@@ -164,7 +167,8 @@ mod tests {
         std::fs::write(&abs, "---\ntype: card\n---\n\n# x\n").unwrap();
         // A bare name — no path, no extension — resolves through the same index
         // `get` uses, collapsing the get→read round-trip.
-        let got = resolve_target(Path::new("Impureim sandwich"), Some(&cfg_for(vault.path()))).unwrap();
+        let got =
+            resolve_target(Path::new("Impureim sandwich"), Some(&cfg_for(vault.path()))).unwrap();
         assert_eq!(got, abs);
     }
 

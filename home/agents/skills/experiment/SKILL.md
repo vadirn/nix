@@ -1,11 +1,7 @@
 ---
 name: experiment
 description: >
-  Test an existing thing's behavior against a falsifiable claim and capture the result as a
-  structured record in the vault. Triggers: /experiment, "run an experiment", "test this claim",
-  "verify whether", "does X actually", "check if X works", "is X true", "falsifiable claim".
-  Skip when building a new artifact (use /prototype), interrogating plan logic (use /probe),
-  or rating confidence in a recommendation (use /grade).
+  Test an existing thing's behavior against a falsifiable claim and capture the result as a structured record in the vault. Triggers: /experiment, "run an experiment", "test this claim", "verify whether", "does X actually", "check if X works", "is X true", "falsifiable claim". Skip when building a new artifact (use /prototype), interrogating plan logic (use /probe), or rating confidence in a recommendation (use /grade).
 ---
 
 # Experiment
@@ -46,7 +42,7 @@ date = Bash(date +%Y-%m-%d)
 
 description_line = do("one-line summary of the claim, ≤ 80 chars")
 if cfg contains project_path:
-    project_wikilink = do("read <cfg.project_path>/context.md and copy the '[[...]]'
+    project_wikilink = do("read <cfg.project_path>/Context.md and copy the '[[...]]'
         wikilink from the 'Project note:' line; if file absent or line missing, set to null")
 else:
     project_wikilink = null
@@ -139,7 +135,7 @@ The Glossary ships with five pinned rows — Claim, Method, Execution, Verdict, 
 | `description` | yes      | one-line claim summary, ≤ 80 chars        |
 | `verdict`     | yes      | `confirmed`, `refuted`, or `inconclusive` |
 | `date`        | yes      | ISO date `YYYY-MM-DD`                     |
-| `project`     | no       | wikilink from `<project_path>/context.md` |
+| `project`     | no       | wikilink from `<project_path>/Context.md` |
 
 ### Falsifiability test
 
@@ -170,7 +166,7 @@ Whichever runner is chosen, the Execution field captures the exact invocation ve
 
 ### Auto-link rule
 
-The auto-link step appends one line to an active track's `## Experiments` section. The section is inserted after `## Decisions` and before `## Backlog` if it does not already exist. The link format is:
+The auto-link step appends one line to an active track's `## Experiments` section. The section is inserted after `## Decisions` and before `## Log` if it does not already exist. The link format is:
 
 ```
 - [[35 experiments/YYYY-MM-DD-<slug>|<claim summary>]] — <verdict>

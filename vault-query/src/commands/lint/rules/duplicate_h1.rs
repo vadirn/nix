@@ -22,7 +22,10 @@ impl Rule for DuplicateH1 {
                     rule: self.name(),
                     severity: self.default_severity(),
                     file: file.path.clone(),
-                    message: format!("first body heading `# {}` duplicates the filename", file.name),
+                    message: format!(
+                        "first body heading `# {}` duplicates the filename",
+                        file.name
+                    ),
                     data: None,
                 });
             }

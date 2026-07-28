@@ -199,7 +199,10 @@ mod tests {
         let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = OrphanCard.check(&ctx);
-        assert!(findings.is_empty(), "superseded card must not produce orphan-card finding");
+        assert!(
+            findings.is_empty(),
+            "superseded card must not produce orphan-card finding"
+        );
     }
 
     #[test]
@@ -210,6 +213,9 @@ mod tests {
         let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = OrphanCard.check(&ctx);
-        assert!(findings.is_empty(), "checkpoint must not produce orphan-card finding");
+        assert!(
+            findings.is_empty(),
+            "checkpoint must not produce orphan-card finding"
+        );
     }
 }

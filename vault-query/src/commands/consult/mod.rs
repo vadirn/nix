@@ -339,8 +339,7 @@ fn best_section_address(body: &str, query_terms: &BTreeSet<String>) -> Option<St
             Some((br, bscore)) => {
                 score > bscore
                     || (score == bscore
-                        && (r.level > br.level
-                            || (r.level == br.level && r.start < br.start)))
+                        && (r.level > br.level || (r.level == br.level && r.start < br.start)))
             }
         };
         if better {
@@ -362,7 +361,10 @@ fn coverage_fraction_of(query_terms: &BTreeSet<String>, doc_tokens: &HashSet<Str
     if query_terms.is_empty() {
         return 0.0;
     }
-    let matched = query_terms.iter().filter(|t| doc_tokens.contains(*t)).count();
+    let matched = query_terms
+        .iter()
+        .filter(|t| doc_tokens.contains(*t))
+        .count();
     matched as f32 / query_terms.len() as f32
 }
 
@@ -373,11 +375,7 @@ fn coverage_fraction_of(query_terms: &BTreeSet<String>, doc_tokens: &HashSet<Str
 /// noise in the JSON envelope.
 fn frontmatter_doc_type(file: &VaultFile) -> Option<String> {
     let v = file.get_property("type");
-    if v.is_empty() {
-        None
-    } else {
-        Some(v)
-    }
+    if v.is_empty() { None } else { Some(v) }
 }
 
 fn median_f32(values: &[f32]) -> f32 {
@@ -485,7 +483,11 @@ fn evaluate_gate(
         // Rank-1 coverage retained for diagnostics; the gate uses the top-3 maximum.
         let top1_frac = top3_coverages[0];
         let max_coverage = top3_coverages.iter().copied().fold(0.0f32, f32::max);
-        (max_coverage >= coverage_fraction, Some(top1_frac), Some(max_coverage))
+        (
+            max_coverage >= coverage_fraction,
+            Some(top1_frac),
+            Some(max_coverage),
+        )
     };
 
     let elbow_ok = if hits.len() == 1 {
@@ -603,7 +605,11 @@ fn pack_candidates(
         // Resolve type, links, and superseded flag from the full VaultFile when available.
         let (doc_type, links, is_superseded_doc) = if let Some(vf) = file_map.get(&hit.path) {
             let sup = frontmatter::epistemic_tier(&vf.frontmatter).is_bottom();
-            (frontmatter_doc_type(vf), wikilink::collect_all_link_targets(vf), sup)
+            (
+                frontmatter_doc_type(vf),
+                wikilink::collect_all_link_targets(vf),
+                sup,
+            )
         } else {
             (None, vec![], false)
         };
@@ -648,7 +654,9 @@ fn pack_candidates(
         .map(|(h, cov)| DocPointer {
             path: h.path.clone(),
             title: h.title.clone(),
-            doc_type: file_map.get(&h.path).and_then(|vf| frontmatter_doc_type(vf)),
+            doc_type: file_map
+                .get(&h.path)
+                .and_then(|vf| frontmatter_doc_type(vf)),
             score: h.score,
             coverage: *cov,
             tokens_est: crate::tokens::estimate_tokens(h.stored_body.trim_start_matches('\n')),
@@ -727,7 +735,11 @@ pub fn run_consult(
             h.score *= frontmatter::epistemic_tier(&vf.frontmatter).multiplier();
         }
     }
-    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    hits.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     if hits.is_empty() {
         // `query_error` distinguishes a parse-failure abstain from a genuine
@@ -827,7 +839,6 @@ pub fn run_consult(
 // ---------------------------------------------------------------------------
 // Unit tests
 // ---------------------------------------------------------------------------
-
 
 #[cfg(test)]
 mod tests;

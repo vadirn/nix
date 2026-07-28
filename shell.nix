@@ -5,5 +5,5 @@
 # packages with, so dev and deploy compilers match.
 {pkgs ? import <nixpkgs> {}}:
 pkgs.mkShell {
-  packages = with pkgs; [cargo rustc clippy];
+  packages = with pkgs; [cargo rustc clippy rustfmt];
 }

@@ -43,7 +43,11 @@ fn scoped_ndjson_emits_one_unpaired_open_record() {
     assert_eq!(code, 0, "dangling anchors must not change the exit code");
 
     let lines: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
-    assert_eq!(lines.len(), 1, "exactly one record expected, got: {stdout:?}");
+    assert_eq!(
+        lines.len(),
+        1,
+        "exactly one record expected, got: {stdout:?}"
+    );
 
     let rec: serde_json::Value = serde_json::from_str(lines[0]).expect("record is valid JSON");
     assert_eq!(rec["type"], "unpaired-open");
@@ -93,7 +97,11 @@ fn scoped_ndjson_maps_unpaired_close() {
 
     assert_eq!(code, 0);
     let lines: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
-    assert_eq!(lines.len(), 1, "exactly one record expected, got: {stdout:?}");
+    assert_eq!(
+        lines.len(),
+        1,
+        "exactly one record expected, got: {stdout:?}"
+    );
 
     let rec: serde_json::Value = serde_json::from_str(lines[0]).expect("record is valid JSON");
     assert_eq!(rec["type"], "unpaired-close");

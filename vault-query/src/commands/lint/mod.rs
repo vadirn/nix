@@ -182,7 +182,11 @@ mod tests {
         let out = String::from_utf8(buf).unwrap();
 
         assert!(out.contains("orphan-card"), "missing rule name in: {}", out);
-        assert!(out.contains("20 cards/Foo.md"), "missing rel path in: {}", out);
+        assert!(
+            out.contains("20 cards/Foo.md"),
+            "missing rel path in: {}",
+            out
+        );
         let abs = vault.to_string_lossy().to_string();
         assert!(
             !out.contains(&abs),
@@ -239,7 +243,11 @@ mod tests {
         let mut buf = Vec::new();
         let _ = run_with_writer(&cfg, LintFormat::Text, &cli, &mut buf).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.starts_with("[error]"), "expected [error] prefix, got: {}", out);
+        assert!(
+            out.starts_with("[error]"),
+            "expected [error] prefix, got: {}",
+            out
+        );
         assert_ne!(Sev::Warn, Sev::Error);
     }
 
@@ -419,7 +427,11 @@ mod tests {
         run_with_writer(&cfg, LintFormat::Summary, &[], &mut buf).unwrap();
         let out = String::from_utf8(buf).unwrap();
 
-        assert!(out.is_empty(), "summary must be empty for empty vault, got: {:?}", out);
+        assert!(
+            out.is_empty(),
+            "summary must be empty for empty vault, got: {:?}",
+            out
+        );
     }
 
     #[test]
@@ -439,13 +451,20 @@ mod tests {
         write_card(vault, "excluded", "orphan", "---\ntype: card\n---\n");
 
         // Build VaultIgnore that excludes the `excluded` folder.
-        let ignore = crate::vault_ignore::VaultIgnore::from_patterns(vec![
-            std::path::PathBuf::from("excluded"),
-        ]);
+        let ignore =
+            crate::vault_ignore::VaultIgnore::from_patterns(vec![std::path::PathBuf::from(
+                "excluded",
+            )]);
         let cfg = cfg_for_with_ignore(vault, ignore);
 
         let mut buf = Vec::new();
-        run_with_writer(&cfg, LintFormat::Text, &["broken-wikilink=warn".to_string()], &mut buf).unwrap();
+        run_with_writer(
+            &cfg,
+            LintFormat::Text,
+            &["broken-wikilink=warn".to_string()],
+            &mut buf,
+        )
+        .unwrap();
         let out = String::from_utf8(buf).unwrap();
 
         assert!(

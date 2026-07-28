@@ -12,7 +12,9 @@ pub fn compute_streak(
     let mut streak_dates = Vec::new();
     let mut i = 1u64;
     loop {
-        let check = (today - chrono::Days::new(i)).format("%Y-%m-%d").to_string();
+        let check = (today - chrono::Days::new(i))
+            .format("%Y-%m-%d")
+            .to_string();
         if !sleep_dates.contains(&check) {
             break;
         }

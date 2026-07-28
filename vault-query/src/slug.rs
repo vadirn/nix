@@ -76,7 +76,10 @@ pub fn strip_md(s: &str) -> &str {
 /// makes the suffix test boundary-aware: needle `nix` matches `41-projects/nix`
 /// (strip leaves `41-projects/`, ends in `/`) but not `book-of-phoenix` (strip
 /// leaves `book-of-phoe`, no trailing `/`).
-pub fn resolve_paths(slug: &str, cfg: &crate::config::ResolvedConfig) -> anyhow::Result<Vec<String>> {
+pub fn resolve_paths(
+    slug: &str,
+    cfg: &crate::config::ResolvedConfig,
+) -> anyhow::Result<Vec<String>> {
     let vault_root = &cfg.vault_root;
     let files = crate::vault::scan(vault_root, vault_root, Some(&cfg.ignore))?;
     Ok(resolve_paths_in(&files, vault_root, slug))
@@ -181,11 +184,7 @@ mod tests {
             "See [[A Note|Display]]",
             "1. Numbered",
         ] {
-            assert_eq!(
-                segment(t),
-                path(t),
-                "grains disagree on /-free text {t:?}"
-            );
+            assert_eq!(segment(t), path(t), "grains disagree on /-free text {t:?}");
         }
     }
 

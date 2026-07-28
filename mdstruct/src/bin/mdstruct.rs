@@ -306,10 +306,7 @@ fn run_check(args: &CheckArgs) -> u8 {
                     println!("{rec}");
                 }
                 None => {
-                    eprintln!(
-                        "mdstruct: {path}: warn: {} {} L{}",
-                        d.kind, d.label, d.line
-                    );
+                    eprintln!("mdstruct: {path}: warn: {} {} L{}", d.kind, d.label, d.line);
                 }
             }
         }

@@ -16,8 +16,15 @@ use std::process::Command;
 #[test]
 fn test_consult_relevant_query_exits_0_with_content() {
     let (stdout, code) = run_consult(&["retry backoff failure"]);
-    assert_eq!(code, 0, "expected exit 0 for relevant query, stdout: {}", stdout);
-    assert!(!stdout.is_empty(), "expected non-empty output for selected outcome");
+    assert_eq!(
+        code, 0,
+        "expected exit 0 for relevant query, stdout: {}",
+        stdout
+    );
+    assert!(
+        !stdout.is_empty(),
+        "expected non-empty output for selected outcome"
+    );
     // Should contain the card's title or body excerpt
     assert!(
         stdout.contains("Retry") || stdout.contains("retry") || stdout.contains("backoff"),
@@ -31,8 +38,15 @@ fn test_consult_relevant_query_exits_0_with_content() {
 fn test_consult_irrelevant_query_exits_4_with_near_misses() {
     // Use a nonsense string unlikely to appear in any vault document.
     let (stdout, code) = run_consult(&["xyzzy_zork_quux_frobnicator_abcdefgh123"]);
-    assert_eq!(code, 4, "expected exit 4 (abstain) for irrelevant query, stdout: {}", stdout);
-    assert!(!stdout.is_empty(), "abstain output should be non-empty (near_misses note)");
+    assert_eq!(
+        code, 4,
+        "expected exit 4 (abstain) for irrelevant query, stdout: {}",
+        stdout
+    );
+    assert!(
+        !stdout.is_empty(),
+        "abstain output should be non-empty (near_misses note)"
+    );
 }
 
 /// `--format json` emits a valid `selected` envelope for the relevant query.
@@ -42,7 +56,8 @@ fn test_consult_irrelevant_query_exits_4_with_near_misses() {
 fn test_consult_json_format_selected_is_valid() {
     let (stdout, code) = run_consult(&["retry backoff failure", "--format", "json"]);
     assert_eq!(
-        code, 0,
+        code,
+        0,
         "relevant query must deterministically select; stdout: {}",
         truncate(&stdout, 200)
     );
@@ -57,13 +72,31 @@ fn test_consult_json_format_selected_is_valid() {
 /// `--format json` emits valid JSON for an abstain outcome.
 #[test]
 fn test_consult_json_format_abstain_is_valid() {
-    let (stdout, code) = run_consult(&["xyzzy_zork_quux_frobnicator_abcdefgh123", "--format", "json"]);
-    assert_eq!(code, 4, "expected exit 4 for irrelevant query, stdout: {}", stdout);
-    let v: serde_json::Value = serde_json::from_str(&stdout)
-        .unwrap_or_else(|e| panic!("expected valid JSON abstain envelope ({e}), got: {}", truncate(&stdout, 200)));
+    let (stdout, code) = run_consult(&[
+        "xyzzy_zork_quux_frobnicator_abcdefgh123",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(
+        code, 4,
+        "expected exit 4 for irrelevant query, stdout: {}",
+        stdout
+    );
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
+        panic!(
+            "expected valid JSON abstain envelope ({e}), got: {}",
+            truncate(&stdout, 200)
+        )
+    });
     assert_eq!(v["status"].as_str(), Some("abstain"), "wrong status field");
-    assert!(v["near_misses"].is_array(), "missing near_misses array in abstain envelope");
-    assert!(v.get("reason").is_some(), "missing reason in abstain envelope");
+    assert!(
+        v["near_misses"].is_array(),
+        "missing near_misses array in abstain envelope"
+    );
+    assert!(
+        v.get("reason").is_some(),
+        "missing reason in abstain envelope"
+    );
 }
 
 /// With a per-doc cap that no document can satisfy, a relevant query still exits 0:
@@ -75,7 +108,10 @@ fn test_consult_oversized_candidates_exit_0_with_pointers() {
     // vault: without it the layer-1 walk-up from the test cwd finds the developer's
     // own `.vault.config.json` and queries the real vault.
     let tmp_home = tempfile::tempdir().unwrap();
-    write_root_config(tmp_home.path(), serde_json::json!({ "per_doc_token_cap": 1 }));
+    write_root_config(
+        tmp_home.path(),
+        serde_json::json!({ "per_doc_token_cap": 1 }),
+    );
 
     let output = Command::new(cargo_bin())
         .env("HOME", tmp_home.path())
@@ -107,10 +143,16 @@ fn test_consult_oversized_candidates_exit_0_with_pointers() {
         "no doc fits a 1-token cap; docs must be empty"
     );
     let pointers = v["pointers"].as_array().expect("missing pointers array");
-    assert!(!pointers.is_empty(), "expected at least one pointer for the relevant doc");
+    assert!(
+        !pointers.is_empty(),
+        "expected at least one pointer for the relevant doc"
+    );
     for p in pointers {
         assert!(p["path"].as_str().is_some(), "pointer missing path");
-        assert!(p["tokens_est"].as_u64().unwrap_or(0) > 0, "pointer tokens_est must be > 0");
+        assert!(
+            p["tokens_est"].as_u64().unwrap_or(0) > 0,
+            "pointer tokens_est must be > 0"
+        );
     }
 }
 
@@ -120,7 +162,10 @@ fn test_consult_oversized_candidates_exit_0_with_pointers() {
 #[test]
 fn test_consult_oversized_pointer_emits_read_verb() {
     let tmp_home = tempfile::tempdir().unwrap();
-    write_root_config(tmp_home.path(), serde_json::json!({ "per_doc_token_cap": 1 }));
+    write_root_config(
+        tmp_home.path(),
+        serde_json::json!({ "per_doc_token_cap": 1 }),
+    );
 
     let output = Command::new(cargo_bin())
         .env("HOME", tmp_home.path())
@@ -170,7 +215,10 @@ fn test_consult_log_path_appends_one_jsonl_line() {
     let log_file = tmp.path().join("consult-log.jsonl");
 
     // File must not exist before the invocation.
-    assert!(!log_file.exists(), "log file should not exist before first run");
+    assert!(
+        !log_file.exists(),
+        "log file should not exist before first run"
+    );
 
     let (_stdout, code) = run_consult_with_log("retry backoff failure", &log_file);
 
@@ -178,27 +226,54 @@ fn test_consult_log_path_appends_one_jsonl_line() {
     assert_eq!(code, 0, "retry query must select (exit 0), got {}", code);
 
     // Exactly one line must have been appended.
-    let content = std::fs::read_to_string(&log_file)
-        .expect("log file should exist after invocation");
+    let content =
+        std::fs::read_to_string(&log_file).expect("log file should exist after invocation");
     let lines: Vec<&str> = content.lines().collect();
-    assert_eq!(lines.len(), 1, "expected exactly one JSONL line, got {}", lines.len());
+    assert_eq!(
+        lines.len(),
+        1,
+        "expected exactly one JSONL line, got {}",
+        lines.len()
+    );
 
     // The line must parse as JSON and carry the required keys.
-    let record: serde_json::Value = serde_json::from_str(lines[0])
-        .expect("log line should be valid JSON");
+    let record: serde_json::Value =
+        serde_json::from_str(lines[0]).expect("log line should be valid JSON");
 
     // Required top-level keys:
     for key in &[
-        "timestamp_ms", "query", "mode", "format", "outcome",
-        "num_returned", "num_selected", "total_tokens",
-        "selected_paths", "near_miss_titles", "near_miss_scores",
+        "timestamp_ms",
+        "query",
+        "mode",
+        "format",
+        "outcome",
+        "num_returned",
+        "num_selected",
+        "total_tokens",
+        "selected_paths",
+        "near_miss_titles",
+        "near_miss_scores",
     ] {
-        assert!(record.get(key).is_some(), "missing key '{}' in log record", key);
+        assert!(
+            record.get(key).is_some(),
+            "missing key '{}' in log record",
+            key
+        );
     }
 
     // Diagnostic keys (may be null for empty corpora):
-    for key in &["top_score", "median_score", "coverage", "max_top3_coverage", "elbow_ratio"] {
-        assert!(record.get(key).is_some(), "missing diagnostic key '{}' in log record", key);
+    for key in &[
+        "top_score",
+        "median_score",
+        "coverage",
+        "max_top3_coverage",
+        "elbow_ratio",
+    ] {
+        assert!(
+            record.get(key).is_some(),
+            "missing diagnostic key '{}' in log record",
+            key
+        );
     }
 
     // mode is "deliberate" (no --ambient flag).
@@ -223,7 +298,12 @@ fn test_consult_log_path_appends_not_overwrites() {
 
     let content = std::fs::read_to_string(&log_file).unwrap();
     let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
-    assert_eq!(lines.len(), 2, "expected two JSONL lines after two runs, got {}", lines.len());
+    assert_eq!(
+        lines.len(),
+        2,
+        "expected two JSONL lines after two runs, got {}",
+        lines.len()
+    );
 
     // Both lines must be parseable.
     for (i, line) in lines.iter().enumerate() {
@@ -247,7 +327,10 @@ fn test_consult_no_log_path_no_file_written() {
     assert!(!stdout.is_empty());
 
     // And no file appeared at our would-be location (trivially true; just guards the contract).
-    assert!(!would_be_log.exists(), "log file should not be created when log_path is None");
+    assert!(
+        !would_be_log.exists(),
+        "log file should not be created when log_path is None"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +401,11 @@ fn test_consult_log_path_flag_overrides_config() {
     );
     let content = std::fs::read_to_string(&override_log_file).unwrap();
     let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
-    assert_eq!(lines.len(), 1, "expected exactly one JSONL line at override path");
+    assert_eq!(
+        lines.len(),
+        1,
+        "expected exactly one JSONL line at override path"
+    );
     serde_json::from_str::<serde_json::Value>(lines[0])
         .expect("override log line must be valid JSON");
 
@@ -384,7 +471,9 @@ fn test_consult_superseded_included_with_flag() {
 /// since the CLI fixture corpus has non-checkpoint cards that could satisfy the gate.
 #[test]
 fn test_consult_checkpoint_excluded_by_default() {
-    use vault_query::commands::consult::{run_consult as run_consult_api, ConsultMode, ConsultOutcome};
+    use vault_query::commands::consult::{
+        ConsultMode, ConsultOutcome, run_consult as run_consult_api,
+    };
     use vault_query::config::ConsultConfig;
 
     // Build a minimal VaultFile for a checkpoint with recognisable body text.

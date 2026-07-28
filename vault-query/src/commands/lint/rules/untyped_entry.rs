@@ -35,7 +35,10 @@ impl Rule for UntypedEntry {
                     rule: self.name(),
                     severity: self.default_severity(),
                     file: file.path.clone(),
-                    message: format!("'{}' has no type field; assign a type or move to inbox", file.name),
+                    message: format!(
+                        "'{}' has no type field; assign a type or move to inbox",
+                        file.name
+                    ),
                     data: None,
                 });
             }
@@ -86,7 +89,13 @@ mod tests {
 
     #[test]
     fn untyped_entry_fires_when_type_absent() {
-        let files = vec![make_file("Inbox capture", "/vault/Inbox capture.md", None, false, false)];
+        let files = vec![make_file(
+            "Inbox capture",
+            "/vault/Inbox capture.md",
+            None,
+            false,
+            false,
+        )];
         let findings = check(files);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule, "untyped-entry");
@@ -100,19 +109,37 @@ mod tests {
 
     #[test]
     fn typed_entry_is_silent() {
-        let files = vec![make_file("My Card", "/vault/20 cards/My Card.md", Some("card"), false, false)];
+        let files = vec![make_file(
+            "My Card",
+            "/vault/20 cards/My Card.md",
+            Some("card"),
+            false,
+            false,
+        )];
         assert!(check(files).is_empty());
     }
 
     #[test]
     fn template_without_type_is_silent() {
-        let files = vec![make_file("Card Template", "/vault/templates/card.md", None, true, false)];
+        let files = vec![make_file(
+            "Card Template",
+            "/vault/templates/card.md",
+            None,
+            true,
+            false,
+        )];
         assert!(check(files).is_empty());
     }
 
     #[test]
     fn superseded_without_type_is_silent() {
-        let files = vec![make_file("Old note", "/vault/20 cards/Old note.md", None, false, true)];
+        let files = vec![make_file(
+            "Old note",
+            "/vault/20 cards/Old note.md",
+            None,
+            false,
+            true,
+        )];
         assert!(check(files).is_empty());
     }
 
@@ -133,7 +160,13 @@ mod tests {
         let files = vec![
             make_file("Note A", "/vault/Note A.md", None, false, false),
             make_file("Note B", "/vault/Note B.md", None, false, false),
-            make_file("Typed", "/vault/20 cards/Typed.md", Some("card"), false, false),
+            make_file(
+                "Typed",
+                "/vault/20 cards/Typed.md",
+                Some("card"),
+                false,
+                false,
+            ),
         ];
         let findings = check(files);
         assert_eq!(findings.len(), 2);

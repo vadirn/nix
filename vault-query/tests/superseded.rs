@@ -24,7 +24,11 @@ fn test_regex_labels_superseded_result() {
 #[test]
 fn test_regex_no_superseded_excludes() {
     let (stdout, code) = run_search(&["xkqzflpbvmt", "--regex", "--no-superseded"]);
-    assert_eq!(code, 0, "regex search --no-superseded must exit 0; stdout: {}", stdout);
+    assert_eq!(
+        code, 0,
+        "regex search --no-superseded must exit 0; stdout: {}",
+        stdout
+    );
     assert!(
         stdout.trim().is_empty(),
         "--no-superseded must exclude the only matching superseded entry; stdout: {:?}",
@@ -63,7 +67,13 @@ fn test_epistemic_status_superseded_excluded_by_get_backlinks_list() {
 
     // list --no-superseded drops the epistemic_status: superseded card.
     let out = Command::new(cargo_bin())
-        .args(["list", "20 cards", "--vault-root", root_str, "--no-superseded"])
+        .args([
+            "list",
+            "20 cards",
+            "--vault-root",
+            root_str,
+            "--no-superseded",
+        ])
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -72,7 +82,11 @@ fn test_epistemic_status_superseded_excluded_by_get_backlinks_list() {
         "list must exit 0; stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(stdout.contains("Live source"), "list must keep the live source; stdout: {}", stdout);
+    assert!(
+        stdout.contains("Live source"),
+        "list must keep the live source; stdout: {}",
+        stdout
+    );
     assert!(
         !stdout.contains("Epi gone"),
         "list --no-superseded must exclude epistemic_status: superseded card; stdout: {}",
@@ -104,7 +118,13 @@ fn test_epistemic_status_superseded_excluded_by_get_backlinks_list() {
 
     // get --no-superseded refuses to resolve the epistemic_status: superseded note.
     let out = Command::new(cargo_bin())
-        .args(["get", "Epi gone", "--vault-root", root_str, "--no-superseded"])
+        .args([
+            "get",
+            "Epi gone",
+            "--vault-root",
+            root_str,
+            "--no-superseded",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -176,10 +196,20 @@ fn test_search_superseded_downranked_below_fresh() {
     )
     .unwrap();
 
-    assert!(results.len() >= 2, "expected at least 2 results, got {}", results.len());
+    assert!(
+        results.len() >= 2,
+        "expected at least 2 results, got {}",
+        results.len()
+    );
 
-    let fresh = results.iter().find(|r| r.path.contains("Fresh card")).expect("fresh card not found");
-    let superseded = results.iter().find(|r| r.superseded).expect("superseded card not found");
+    let fresh = results
+        .iter()
+        .find(|r| r.path.contains("Fresh card"))
+        .expect("fresh card not found");
+    let superseded = results
+        .iter()
+        .find(|r| r.superseded)
+        .expect("superseded card not found");
 
     assert!(
         fresh.score > superseded.score,
@@ -189,7 +219,10 @@ fn test_search_superseded_downranked_below_fresh() {
     );
 
     // results are sorted descending: fresh must appear before superseded.
-    let fresh_pos = results.iter().position(|r| r.path.contains("Fresh card")).unwrap();
+    let fresh_pos = results
+        .iter()
+        .position(|r| r.path.contains("Fresh card"))
+        .unwrap();
     let sup_pos = results.iter().position(|r| r.superseded).unwrap();
     assert!(
         fresh_pos < sup_pos,
@@ -294,7 +327,10 @@ fn test_list_labels_superseded() {
         stdout
     );
     // The superseded card names must appear with the prefix.
-    let sup_lines: Vec<&str> = stdout.lines().filter(|l| l.starts_with("[superseded]")).collect();
+    let sup_lines: Vec<&str> = stdout
+        .lines()
+        .filter(|l| l.starts_with("[superseded]"))
+        .collect();
     assert!(
         !sup_lines.is_empty(),
         "expected at least one [superseded]-prefixed line; stdout: {}",
@@ -324,7 +360,11 @@ fn test_list_no_superseded_excludes() {
 #[test]
 fn test_get_resolves_superseded_path() {
     let (stdout, code) = run_get(&["superseded-card"]);
-    assert_eq!(code, 0, "get must exit 0 for superseded entry without --no-superseded; stdout: {}", stdout);
+    assert_eq!(
+        code, 0,
+        "get must exit 0 for superseded entry without --no-superseded; stdout: {}",
+        stdout
+    );
     let line = stdout.trim();
     assert!(
         line.ends_with(".md") && !line.contains("[superseded]"),
@@ -489,8 +529,7 @@ fn test_search_downrank_displaces_superseded_at_limit_1() {
         !results[0].superseded,
         "after 0.3× downrank the non-superseded challenger must rank first at limit=1; \
          got superseded={}, path={}",
-        results[0].superseded,
-        results[0].path
+        results[0].superseded, results[0].path
     );
     assert!(
         results[0].path.contains("Fresh challenger"),
@@ -533,7 +572,12 @@ fn test_get_multi_match_no_superseded_resolves_single_survivor() {
 
     // Verify that without --no-superseded we do get two matches (multi-match case).
     let paths_all = vault_query::slug::resolve_paths("shared-name", &cfg).unwrap();
-    assert_eq!(paths_all.len(), 2, "expected 2 matches before filtering; got {:?}", paths_all);
+    assert_eq!(
+        paths_all.len(),
+        2,
+        "expected 2 matches before filtering; got {:?}",
+        paths_all
+    );
 
     // With --no-superseded the superseded candidate should be dropped and the
     // single survivor resolved normally (exit 0, its path printed to stdout).
@@ -553,7 +597,8 @@ fn test_get_multi_match_no_superseded_resolves_single_survivor() {
     let stdout = String::from_utf8(output.stdout).unwrap();
 
     assert_eq!(
-        code, 0,
+        code,
+        0,
         "get --no-superseded must exit 0 when a single non-superseded match survives; \
          stderr: {}",
         String::from_utf8_lossy(&output.stderr)
@@ -609,7 +654,8 @@ fn test_get_multi_match_lists_bare_paths() {
     // Multi-match must exit 0 and list both candidates.
     // (The binary exits 0 for multi-match listing — it's informational, not an error.)
     assert_eq!(
-        code, 0,
+        code,
+        0,
         "get with multiple matches must exit 0 and list them; stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
@@ -623,7 +669,12 @@ fn test_get_multi_match_lists_bare_paths() {
 
     // Both candidates appear, one bare path per line.
     let lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
-    assert_eq!(lines.len(), 2, "expected both candidate paths listed; stdout: {}", stdout);
+    assert_eq!(
+        lines.len(),
+        2,
+        "expected both candidate paths listed; stdout: {}",
+        stdout
+    );
     assert!(
         stdout.contains("folder-a") && stdout.contains("folder-b"),
         "both candidate paths must appear in the listing; stdout: {}",

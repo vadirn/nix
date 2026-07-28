@@ -11,12 +11,15 @@ use crate::base::date;
 use crate::frontmatter;
 use crate::vault::VaultFile;
 use std::collections::BTreeMap;
+use std::path::Path;
 
 /// A column reference classified by its namespace prefix.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ColumnRef<'a> {
     /// `file.name`
     FileName,
+    /// `file.folder` — the file's vault-relative containing folder.
+    FileFolder,
     /// `file.ctime`
     FileCtime,
     /// `formula.<name>` — looked up in the per-file formula results.
@@ -32,6 +35,7 @@ impl<'a> ColumnRef<'a> {
     pub fn parse(col: &'a str) -> Self {
         match col {
             "file.name" => Self::FileName,
+            "file.folder" => Self::FileFolder,
             "file.ctime" => Self::FileCtime,
             _ => {
                 if let Some(name) = col.strip_prefix("formula.") {
@@ -46,10 +50,31 @@ impl<'a> ColumnRef<'a> {
     }
 
     /// Resolve this column to its display string for `file`, using the
-    /// already-computed `formulas` for `formula.*` columns.
-    pub fn value(&self, file: &VaultFile, formulas: &BTreeMap<String, String>) -> String {
+    /// already-computed `formulas` for `formula.*` columns and `vault_root` to
+    /// make `file.folder` vault-relative.
+    pub fn value(
+        &self,
+        file: &VaultFile,
+        formulas: &BTreeMap<String, String>,
+        vault_root: &Path,
+    ) -> String {
         match self {
             Self::FileName => file.name.clone(),
+            // No separator rewriting here, matching `project_base::init`'s
+            // removal of the same call: this tool runs on macOS only, where
+            // `to_string_lossy` on a `strip_prefix` result already yields `/`
+            // separators, so there is no backslash for the call to fix — only
+            // a literal backslash in a real folder name to corrupt.
+            Self::FileFolder => file
+                .path
+                .parent()
+                .map(|p| {
+                    p.strip_prefix(vault_root)
+                        .unwrap_or(p)
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .unwrap_or_default(),
             Self::FileCtime => {
                 if let Some(Ok(duration)) =
                     file.ctime.map(|c| c.duration_since(std::time::UNIX_EPOCH))
@@ -90,19 +115,66 @@ mod tests {
     #[test]
     fn parse_classifies_each_namespace() {
         assert_eq!(ColumnRef::parse("file.name"), ColumnRef::FileName);
+        assert_eq!(ColumnRef::parse("file.folder"), ColumnRef::FileFolder);
         assert_eq!(ColumnRef::parse("file.ctime"), ColumnRef::FileCtime);
         assert_eq!(ColumnRef::parse("formula.cost"), ColumnRef::Formula("cost"));
         assert_eq!(ColumnRef::parse("note.status"), ColumnRef::Note("status"));
         assert_eq!(ColumnRef::parse("status"), ColumnRef::Bare("status"));
         // A bare name that merely contains a dot is not a known prefix.
-        assert_eq!(ColumnRef::parse("file.other"), ColumnRef::Bare("file.other"));
+        assert_eq!(
+            ColumnRef::parse("file.other"),
+            ColumnRef::Bare("file.other")
+        );
     }
 
     #[test]
     fn value_resolves_file_name() {
         let f = make_file("cp1", vec![]);
         let formulas = BTreeMap::new();
-        assert_eq!(ColumnRef::parse("file.name").value(&f, &formulas), "cp1");
+        assert_eq!(
+            ColumnRef::parse("file.name").value(&f, &formulas, Path::new("/vault")),
+            "cp1"
+        );
+    }
+
+    #[test]
+    fn value_resolves_file_folder_vault_relative() {
+        // The `By Project` grouping of the vault-wide Tracks.base/Tickets.base
+        // reads this column; an absolute path would label every group wrongly.
+        let mut f = make_file("ticket-x", vec![]);
+        f.path = PathBuf::from("/vault/41 projects/nix/ticket-x.md");
+        let formulas = BTreeMap::new();
+        assert_eq!(
+            ColumnRef::parse("file.folder").value(&f, &formulas, Path::new("/vault")),
+            "41 projects/nix"
+        );
+        // A file at the vault root has an empty folder, not a stray separator.
+        assert_eq!(
+            ColumnRef::parse("file.folder").value(
+                &make_file("top", vec![]),
+                &formulas,
+                Path::new("/vault")
+            ),
+            ""
+        );
+    }
+
+    #[test]
+    fn value_preserves_a_literal_backslash_in_a_folder_name() {
+        // Same defect as `project_base::init`'s removed `.replace('\\', "/")`:
+        // this tool is macOS-only, so `to_string_lossy` on a `strip_prefix`
+        // result already yields `/` separators — the call had no separator
+        // left to fix, only a literal backslash in a real folder name (an
+        // ordinary character on macOS) to corrupt. Unlike `init`, this is
+        // display-only, so it never desynchronized a filter — but it is the
+        // same bug, so it goes too.
+        let mut f = make_file("note", vec![]);
+        f.path = PathBuf::from("/vault/41 projects/od\\d/note.md");
+        let formulas = BTreeMap::new();
+        assert_eq!(
+            ColumnRef::parse("file.folder").value(&f, &formulas, Path::new("/vault")),
+            "41 projects/od\\d"
+        );
     }
 
     #[test]
@@ -110,17 +182,29 @@ mod tests {
         let f = make_file("cp1", vec![]);
         let mut formulas = BTreeMap::new();
         formulas.insert("cost".to_string(), "0.025".to_string());
-        assert_eq!(ColumnRef::parse("formula.cost").value(&f, &formulas), "0.025");
+        assert_eq!(
+            ColumnRef::parse("formula.cost").value(&f, &formulas, Path::new("/vault")),
+            "0.025"
+        );
         // Unknown formula resolves to empty rather than panicking.
-        assert_eq!(ColumnRef::parse("formula.missing").value(&f, &formulas), "");
+        assert_eq!(
+            ColumnRef::parse("formula.missing").value(&f, &formulas, Path::new("/vault")),
+            ""
+        );
     }
 
     #[test]
     fn value_resolves_note_and_bare_identically() {
         let f = make_file("cp1", vec![("status", Value::String("done".into()))]);
         let formulas = BTreeMap::new();
-        assert_eq!(ColumnRef::parse("note.status").value(&f, &formulas), "done");
-        assert_eq!(ColumnRef::parse("status").value(&f, &formulas), "done");
+        assert_eq!(
+            ColumnRef::parse("note.status").value(&f, &formulas, Path::new("/vault")),
+            "done"
+        );
+        assert_eq!(
+            ColumnRef::parse("status").value(&f, &formulas, Path::new("/vault")),
+            "done"
+        );
     }
 
     #[test]
@@ -130,7 +214,7 @@ mod tests {
         f.ctime = Some(UNIX_EPOCH + Duration::from_secs(1704067200));
         let formulas = BTreeMap::new();
         assert_eq!(
-            ColumnRef::parse("file.ctime").value(&f, &formulas),
+            ColumnRef::parse("file.ctime").value(&f, &formulas, Path::new("/vault")),
             "2024-01-01 00:00"
         );
     }
@@ -139,6 +223,9 @@ mod tests {
     fn value_ctime_empty_when_absent() {
         let f = make_file("cp1", vec![]);
         let formulas = BTreeMap::new();
-        assert_eq!(ColumnRef::parse("file.ctime").value(&f, &formulas), "");
+        assert_eq!(
+            ColumnRef::parse("file.ctime").value(&f, &formulas, Path::new("/vault")),
+            ""
+        );
     }
 }

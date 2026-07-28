@@ -41,8 +41,13 @@ use super::span::LineIndex;
 
 /// One end of an anchor pair recognised inside a single line.
 enum Anchor<'a> {
-    Open { label: &'a str, info: Option<&'a str> },
-    Close { label: &'a str },
+    Open {
+        label: &'a str,
+        info: Option<&'a str>,
+    },
+    Close {
+        label: &'a str,
+    },
 }
 
 /// A recognised but unpaired anchor: a leftover open (`unpaired-open`) or a

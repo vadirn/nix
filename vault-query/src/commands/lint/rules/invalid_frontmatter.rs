@@ -69,7 +69,11 @@ mod tests {
         assert_eq!(findings[0].rule, "invalid-frontmatter");
         assert_eq!(findings[0].severity, Severity::Error);
         assert_eq!(findings[0].file, PathBuf::from("/vault/30 notes/Bad.md"));
-        assert!(findings[0].message.contains("mapping values are not allowed"));
+        assert!(
+            findings[0]
+                .message
+                .contains("mapping values are not allowed")
+        );
     }
 
     #[test]

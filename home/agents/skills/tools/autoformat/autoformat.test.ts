@@ -3,9 +3,9 @@
  * --), extension routing, batching, and walk failures.
  * Run: `bun test` from this directory, or `bun run --filter autoformat test`
  * from the workspace root (home/agents/skills).
- * Requires oxfmt and git; the format:file case additionally requires bun. The
- * unreadable-directory case is skipped under root via test.skipIf, since root
- * reads a 000 directory anyway.
+ * Requires oxfmt, git, and rustfmt; the format:file case additionally
+ * requires bun. The unreadable-directory case is skipped under root via
+ * test.skipIf, since root reads a 000 directory anyway.
  */
 
 import { expect, test } from "bun:test";
@@ -241,27 +241,52 @@ test("a workspace-root format:file is inherited by a sub-package", () => {
   expect(read(app)).toBe("FORMATTED");
 });
 
+test("rustfmt formats the named file without following mod into its siblings", () => {
+  const dir = work();
+  const lib = join(dir, "lib.rs");
+  const foo = join(dir, "foo.rs");
+  const libBefore = "mod foo;\n\nfn   main()   {}\n";
+  const fooBefore = "pub fn   bar()   {}\n";
+  writeFileSync(lib, libBefore);
+  writeFileSync(foo, fooBefore);
+
+  expect(af([lib], { cwd: dir }).code).toBe(0);
+
+  expect(read(lib)).not.toBe(libBefore);
+  // foo.rs was never named on the command line. Without --config
+  // skip_children=true, rustfmt follows the `mod foo;` declaration in lib.rs
+  // and reflows foo.rs too — the exact behind-the-back rewrite this module
+  // exists to rule out.
+  expect(read(foo)).toBe(fooBefore);
+});
+
 // --- Parity with home/claude/hooks/hint-autoformat.sh -----------------------
 //
 // The hook re-encodes two facts this router owns, so it can hint without
 // paying bun's ~113ms startup on every Write/Edit. Parsing source text this
 // way is inherently a little brittle, so each extractor anchors on a literal
 // that would only change alongside the fact it reads (the WEB_EXTS set, the
-// py/nix routing branches, the FROZEN join, the hook's case patterns) and
-// throws a named error if that anchor goes missing, rather than silently
-// reporting an empty list as if the two sides agreed.
+// single-extension e === "..." branches in routeFiles, the FROZEN join, the
+// hook's case patterns) and throws a named error if that anchor goes
+// missing, rather than silently reporting an empty list as if the two sides
+// agreed.
 
-/** Extensions autoformat.ts routes: WEB_EXTS plus the py and nix branches in routeFiles. */
+/**
+ * Extensions autoformat.ts routes: WEB_EXTS plus every single-extension
+ * `e === "..."` branch in routeFiles. Generic on purpose — a whitelist of
+ * today's branches (py, nix, rs) would go blind the moment a fourth one is
+ * added, which is exactly the drift this test exists to catch.
+ */
 function routerExtensions(src: string): string[] {
   const webExts = src.match(/const WEB_EXTS = new Set\(\[([\s\S]*?)\]\)/);
   if (!webExts) {
     throw new Error("parity test: WEB_EXTS literal not found in autoformat.ts — update the parser");
   }
   const web = [...webExts[1].matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1]);
-  const branches = [...src.matchAll(/e === "(py|nix)"/g)].map((m) => m[1]);
-  if (branches.length < 2) {
+  const branches = [...src.matchAll(/e === "([a-z0-9]+)"/g)].map((m) => m[1]);
+  if (branches.length === 0) {
     throw new Error(
-      "parity test: py/nix routing branches not found in autoformat.ts — update the parser",
+      'parity test: no e === "..." routing branches found in autoformat.ts — update the parser',
     );
   }
   return [...web, ...branches];

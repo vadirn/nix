@@ -73,11 +73,15 @@ pub fn section_ranges(body: &str) -> Vec<SectionRange> {
         total
     };
     if region_end >= region_start
-        && !range_slice(&lines, region_start, region_end).trim().is_empty()
+        && !range_slice(&lines, region_start, region_end)
+            .trim()
+            .is_empty()
     {
         let mut first_line = region_start;
         while first_line <= region_end
-            && lines.get(first_line - 1).is_none_or(|l| l.trim().is_empty())
+            && lines
+                .get(first_line - 1)
+                .is_none_or(|l| l.trim().is_empty())
         {
             first_line += 1;
         }

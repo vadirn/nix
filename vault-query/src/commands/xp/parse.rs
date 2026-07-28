@@ -113,8 +113,7 @@ fn section_lines(text: &str, heading: &str) -> Vec<String> {
 /// parse or names a week that does not exist in that year (e.g. `W53` in a
 /// 52-week ISO year): `from_isoywd_opt` rejects it rather than panicking.
 fn week_monday(week_str: &str) -> Option<NaiveDate> {
-    static WEEK_RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(\d{4})-[Ww](\d{2})").unwrap());
+    static WEEK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d{4})-[Ww](\d{2})").unwrap());
     let caps = WEEK_RE.captures(week_str)?;
     let year: i32 = caps[1].parse().ok()?;
     let week: u32 = caps[2].parse().ok()?;

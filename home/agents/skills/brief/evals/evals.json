@@ -12,7 +12,7 @@
       "id": 1,
       "name": "diagnose-target-gap",
       "prompt": "Sarah just messaged me: 'honestly this is way more than we agreed for this sprint — I expected the dashboard to be done by now.' How should I respond?",
-      "expected_output": "Recognizes this as a target gap, NOT a state gap. Does not immediately draft a status report. Leads with the consequence and a forced choice (is this about what you've done vs what they expected). Classifies (too-large / off-target — the dashboard was never in sprint scope per context.md). Offers 'both, in order': a status update for what is done, then a renegotiation framing from the goal. Stops at drafts; never sends.",
+      "expected_output": "Recognizes this as a target gap, NOT a state gap. Does not immediately draft a status report. Leads with the consequence and a forced choice (is this about what you've done vs what they expected). Classifies (too-large / off-target — the dashboard was never in sprint scope per Context.md). Offers 'both, in order': a status update for what is done, then a renegotiation framing from the goal. Stops at drafts; never sends.",
       "files": []
     },
     {

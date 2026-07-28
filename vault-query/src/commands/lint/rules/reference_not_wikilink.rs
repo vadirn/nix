@@ -16,7 +16,13 @@ impl Rule for ReferenceNotWikilink {
         let mut findings = Vec::new();
         for card in &ctx.cards {
             if let Some(value) = card.frontmatter.get("reference") {
-                check_value(card, value, self.name(), self.default_severity(), &mut findings);
+                check_value(
+                    card,
+                    value,
+                    self.name(),
+                    self.default_severity(),
+                    &mut findings,
+                );
             }
         }
         findings
@@ -92,7 +98,10 @@ mod tests {
 
     #[test]
     fn reference_not_wikilink_raw_url_emits_finding() {
-        let card = card_file("Foo", Some(Value::String("https://example.com".to_string())));
+        let card = card_file(
+            "Foo",
+            Some(Value::String("https://example.com".to_string())),
+        );
         let findings = run(card);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].rule, "reference-not-wikilink");
@@ -166,6 +175,9 @@ mod tests {
         );
 
         let data = findings[0].data.as_ref().unwrap();
-        assert_eq!(data["value"], long_url, "data.value should hold the full string");
+        assert_eq!(
+            data["value"], long_url,
+            "data.value should hold the full string"
+        );
     }
 }

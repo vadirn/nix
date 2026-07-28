@@ -31,6 +31,7 @@
             ngrok
             ruby
             ast-grep
+            rustfmt
           ])
           ++ [
             vault-query

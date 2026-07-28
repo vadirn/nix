@@ -123,7 +123,11 @@ pub struct Heading {
 /// Flat doc-order, NON-heading blocks (distill's harvest feed). Container nodes
 /// carry `children[]`, which is descriptive and EXCLUDED from total tiling.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum Node {
     Paragraph {
         span: Span,
@@ -225,7 +229,11 @@ pub enum Node {
 /// Flat inlines: links + wikilinks + code spans, positioned. `type` (not
 /// `kind`); wikilink target decomposed at top level (no polymorphic `target`).
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum Inline {
     Link {
         url: String,

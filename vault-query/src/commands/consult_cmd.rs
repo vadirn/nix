@@ -11,8 +11,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::commands::consult::{
-    ConsultDiagnostics, ConsultMode, ConsultOutcome, DocPointer, NearMiss, SelectedDoc,
-    run_consult,
+    ConsultDiagnostics, ConsultMode, ConsultOutcome, DocPointer, NearMiss, SelectedDoc, run_consult,
 };
 use crate::config::{ConsultConfig, ResolvedConfig};
 use crate::vault;
@@ -89,7 +88,10 @@ fn render_markdown_selected(
     for doc in docs {
         // Section heading: title + relative path, with optional [superseded] label
         let superseded_label = if doc.superseded { " [superseded]" } else { "" };
-        out.push_str(&format!("## {}{} ({})\n\n", doc.title, superseded_label, doc.path));
+        out.push_str(&format!(
+            "## {}{} ({})\n\n",
+            doc.title, superseded_label, doc.path
+        ));
         out.push_str(doc.body.trim_end());
         out.push_str("\n\n");
     }
@@ -128,7 +130,10 @@ fn render_markdown_abstain(near_misses: &[NearMiss], reason: &str) -> String {
             } else {
                 nm.matched_terms.join(", ")
             };
-            out.push_str(&format!("- **{}** ({}) — matched: {}\n", nm.title, nm.path, terms));
+            out.push_str(&format!(
+                "- **{}** ({}) — matched: {}\n",
+                nm.title, nm.path, terms
+            ));
         }
     }
     out
@@ -268,7 +273,12 @@ fn append_log(
     };
 
     let record: LogRecord = match outcome {
-        ConsultOutcome::Selected { docs, total_tokens, pointers, .. } => LogRecord {
+        ConsultOutcome::Selected {
+            docs,
+            total_tokens,
+            pointers,
+            ..
+        } => LogRecord {
             outcome: "selected",
             num_selected: docs.len(),
             total_tokens: *total_tokens,
@@ -277,7 +287,11 @@ fn append_log(
             pointer_paths: pointers.iter().map(|p| p.path.as_str()).collect(),
             ..base
         },
-        ConsultOutcome::Abstain { near_misses, reason, .. } => LogRecord {
+        ConsultOutcome::Abstain {
+            near_misses,
+            reason,
+            ..
+        } => LogRecord {
             outcome: "abstain",
             reason: Some(reason.as_str()),
             near_miss_titles: near_misses.iter().map(|nm| nm.title.as_str()).collect(),
@@ -354,28 +368,45 @@ pub fn run(
     let mode_str = mode.as_str();
     let format_str = format.to_string();
 
-    let (outcome, diag) =
-        run_consult(task, &files, vault_root, &scope_types, &consult_config, mode, include_superseded)?;
+    let (outcome, diag) = run_consult(
+        task,
+        &files,
+        vault_root,
+        &scope_types,
+        &consult_config,
+        mode,
+        include_superseded,
+    )?;
 
     // Best-effort JSONL logging (Decision 8). Any error is silently swallowed.
     // Precedence: --no-log wins over --log-path, which wins over config log_path.
     let duration_ms = started.elapsed().as_millis();
     if !no_log {
-        let effective_log_path: Option<&str> = log_path_override
-            .or(consult_config.log_path.as_deref());
+        let effective_log_path: Option<&str> =
+            log_path_override.or(consult_config.log_path.as_deref());
         if let Some(log_path) = effective_log_path {
             let _ = append_log(
-                log_path, vault_root, task, mode_str, &format_str, &outcome, &diag, duration_ms,
+                log_path,
+                vault_root,
+                task,
+                mode_str,
+                &format_str,
+                &outcome,
+                &diag,
+                duration_ms,
             );
         }
     }
 
     match outcome {
-        ConsultOutcome::Selected { query, docs, total_tokens, pointers } => {
+        ConsultOutcome::Selected {
+            query,
+            docs,
+            total_tokens,
+            pointers,
+        } => {
             let rendered = match format {
-                ConsultFormat::Markdown => {
-                    render_markdown_selected(&docs, total_tokens, &pointers)
-                }
+                ConsultFormat::Markdown => render_markdown_selected(&docs, total_tokens, &pointers),
                 ConsultFormat::Json => {
                     render_json_selected(&query, &docs, total_tokens, &pointers)?
                 }
@@ -383,7 +414,11 @@ pub fn run(
             print!("{}", rendered);
             Ok(0)
         }
-        ConsultOutcome::Abstain { query, near_misses, reason } => {
+        ConsultOutcome::Abstain {
+            query,
+            near_misses,
+            reason,
+        } => {
             let rendered = match format {
                 ConsultFormat::Markdown => render_markdown_abstain(&near_misses, &reason),
                 ConsultFormat::Json => render_json_abstain(&query, &near_misses, &reason)?,

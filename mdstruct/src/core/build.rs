@@ -178,7 +178,10 @@ pub fn build_document(path: &str, source: &str, opts: &Options) -> Document {
                 let sp = d.sourcepos;
                 if sp.end.line > sp.start.line {
                     let span = idx.span_of(sp);
-                    if source[span.start..span.end].trim_start().starts_with("<!--") {
+                    if source[span.start..span.end]
+                        .trim_start()
+                        .starts_with("<!--")
+                    {
                         region_mask.push(span);
                     }
                 }
@@ -292,7 +295,9 @@ fn fill_gaps(
     nodes: &mut Vec<Node>,
 ) {
     let mut partition: Vec<Span> = Vec::new();
-    if fm.present && let Some(s) = fm.span {
+    if fm.present
+        && let Some(s) = fm.span
+    {
         partition.push(s);
     }
     fn push_heading_spans(hs: &[Heading], out: &mut Vec<Span>) {
@@ -381,7 +386,11 @@ fn emit_fill(source: &str, idx: &LineIndex, g0: usize, g1: usize, out: &mut Vec<
             .unwrap_or(chunk_end);
         let first_line = source[chunk_start..first_line_end].trim_start();
         if first_line.starts_with('[') && first_line.contains("]:") {
-            out.push(Node::LinkReferenceDefinition { span, start_line, end_line });
+            out.push(Node::LinkReferenceDefinition {
+                span,
+                start_line,
+                end_line,
+            });
         } else {
             out.push(Node::Unknown {
                 kind: "uncovered".to_string(),
@@ -406,7 +415,11 @@ fn convert_node<'a>(node: &'a AstNode<'a>, source: &str, idx: &LineIndex) -> Opt
     let end_line = sp.end.line as u32;
 
     let node = match value {
-        NodeValue::Paragraph => Node::Paragraph { span, start_line, end_line },
+        NodeValue::Paragraph => Node::Paragraph {
+            span,
+            start_line,
+            end_line,
+        },
         NodeValue::CodeBlock(ncb) => {
             let fenced = ncb.fenced;
             let fence_char = if fenced {
@@ -497,9 +510,21 @@ fn convert_node<'a>(node: &'a AstNode<'a>, source: &str, idx: &LineIndex) -> Opt
                 children,
             }
         }
-        NodeValue::TableCell => Node::TableCell { span, start_line, end_line },
-        NodeValue::ThematicBreak => Node::ThematicBreak { span, start_line, end_line },
-        NodeValue::HtmlBlock(_) => Node::HtmlBlock { span, start_line, end_line },
+        NodeValue::TableCell => Node::TableCell {
+            span,
+            start_line,
+            end_line,
+        },
+        NodeValue::ThematicBreak => Node::ThematicBreak {
+            span,
+            start_line,
+            end_line,
+        },
+        NodeValue::HtmlBlock(_) => Node::HtmlBlock {
+            span,
+            start_line,
+            end_line,
+        },
         NodeValue::FootnoteDefinition(nfd) => {
             let children = convert_children(node, source, idx);
             Node::FootnoteDefinition {
@@ -645,8 +670,8 @@ fn collect_inlines<'a>(
         match &d.value {
             NodeValue::Link(nl) => {
                 if slice.starts_with('[') {
-                    let text_span = children_span(node, idx)
-                        .unwrap_or(Span::new(span.start, span.start));
+                    let text_span =
+                        children_span(node, idx).unwrap_or(Span::new(span.start, span.start));
                     inlines.push(Inline::Link {
                         url: nl.url.clone(),
                         title: opt_string(nl.title.clone()),
@@ -830,7 +855,9 @@ mod tests {
     }
 
     fn has_wikilink(d: &Document) -> bool {
-        d.inlines.iter().any(|i| matches!(i, Inline::Wikilink { .. }))
+        d.inlines
+            .iter()
+            .any(|i| matches!(i, Inline::Wikilink { .. }))
     }
 
     // --- A: embed scanner is context-blind ---------------------------------
@@ -838,13 +865,19 @@ mod tests {
     #[test]
     fn embed_in_fenced_code_emits_no_wikilink() {
         let d = build("```\n![[Note]]\n```\n");
-        assert!(!has_wikilink(&d), "embed inside a fenced code block is verbatim");
+        assert!(
+            !has_wikilink(&d),
+            "embed inside a fenced code block is verbatim"
+        );
     }
 
     #[test]
     fn embed_in_inline_code_emits_no_wikilink() {
         let d = build("text `![[Note]]` more\n");
-        assert!(!has_wikilink(&d), "embed inside an inline code span is verbatim");
+        assert!(
+            !has_wikilink(&d),
+            "embed inside an inline code span is verbatim"
+        );
     }
 
     #[test]
@@ -856,7 +889,10 @@ mod tests {
     #[test]
     fn embed_in_html_comment_emits_no_wikilink() {
         let d = build("<!-- ![[Note]] -->\n");
-        assert!(!has_wikilink(&d), "embed inside an HTML comment is verbatim");
+        assert!(
+            !has_wikilink(&d),
+            "embed inside an HTML comment is verbatim"
+        );
     }
 
     #[test]
@@ -929,7 +965,9 @@ mod tests {
         // defeats its parser — so no inline survives at all.)
         let d = build("x ![[unclosed [[Real]] y\n");
         assert!(
-            !d.inlines.iter().any(|i| matches!(i, Inline::Wikilink { embed: true, .. })),
+            !d.inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Wikilink { embed: true, .. })),
             "no phantom embed from the unclosed ![[",
         );
     }
@@ -970,11 +1008,22 @@ mod tests {
     fn info_span_slices_raw_with_entities() {
         let src = "```a&amp;b\ncode\n```\n";
         let d = build(src);
-        let cb = d.nodes.iter().find(|n| matches!(n, Node::CodeBlock { .. })).unwrap();
-        if let Node::CodeBlock { info, info_span, .. } = cb {
+        let cb = d
+            .nodes
+            .iter()
+            .find(|n| matches!(n, Node::CodeBlock { .. }))
+            .unwrap();
+        if let Node::CodeBlock {
+            info, info_span, ..
+        } = cb
+        {
             assert_eq!(info, "a&b", "comrak decodes the info string");
             let sp = info_span.expect("info span present");
-            assert_eq!(&src[sp.start..sp.end], "a&amp;b", "span slices the RAW info");
+            assert_eq!(
+                &src[sp.start..sp.end],
+                "a&amp;b",
+                "span slices the RAW info"
+            );
         }
     }
 
@@ -984,7 +1033,11 @@ mod tests {
     fn crlf_body_excludes_carriage_return() {
         let src = "```\r\nbody\r\n```\r\n";
         let d = build(src);
-        let cb = d.nodes.iter().find(|n| matches!(n, Node::CodeBlock { .. })).unwrap();
+        let cb = d
+            .nodes
+            .iter()
+            .find(|n| matches!(n, Node::CodeBlock { .. }))
+            .unwrap();
         if let Node::CodeBlock { body_span, .. } = cb {
             assert_eq!(&src[body_span.start..body_span.end], "body");
         }
@@ -998,7 +1051,10 @@ mod tests {
         let d = build(src);
         let fm = d.frontmatter().expect("frontmatter present");
         let idx = LineIndex::new(src);
-        assert_eq!(fm.body_start_byte, idx.line_start(fm.body_start_line as usize));
+        assert_eq!(
+            fm.body_start_byte,
+            idx.line_start(fm.body_start_line as usize)
+        );
         assert!(src[fm.body_start_byte..].starts_with("body"));
     }
 }
