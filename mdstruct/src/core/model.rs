@@ -19,7 +19,12 @@ use super::region::Dangling;
 /// deploy-skew handshake — a consumer that pins `"1.2"` (distill's `parseDoc`)
 /// fails loud against a stale binary emitting `"1.1"` instead of silently
 /// reading its pre-mask (phantom-region-prone) `regions[]`.
-pub const SCHEMA_VERSION: &str = "1.2";
+/// 1.3 (additive-minor over 1.2): `inlines[]` gained `Inline::Emph` and
+/// `Inline::Strong`, so a consumer enumerates rendered emphasis off comrak's
+/// flanking-delimiter parse instead of hand-rolling CommonMark's rules over a
+/// block's bytes. A consumer that pins `"1.2"` reads a document whose emphasis
+/// is absent as one that has none.
+pub const SCHEMA_VERSION: &str = "1.3";
 
 /// Half-open UTF-8 byte span `[start, end)` — the sole slicing primitive.
 /// Serializes as a two-element array `[start, end]`.
@@ -226,8 +231,11 @@ pub enum Node {
     },
 }
 
-/// Flat inlines: links + wikilinks + code spans, positioned. `type` (not
-/// `kind`); wikilink target decomposed at top level (no polymorphic `target`).
+/// Flat inlines: links + wikilinks + code spans + emphasis, positioned. `type`
+/// (not `kind`); wikilink target decomposed at top level (no polymorphic
+/// `target`). Descriptive and EXCLUDED from total tiling: an inline covers only
+/// the bytes of its own markup, and the unmarked text between inlines is emitted
+/// nowhere.
 #[derive(Debug, Clone, Serialize)]
 #[serde(
     tag = "type",
@@ -278,6 +286,20 @@ pub enum Inline {
         start_line: u32,
     },
     CodeSpan {
+        span: Span,
+        start_line: u32,
+    },
+    /// A single-delimiter emphasis run (`*x*` / `_x_`). comrak's `NodeValue::Emph`
+    /// carries no payload, so the span (delimiters included) is the whole node.
+    /// (Schema 1.3.)
+    Emph {
+        span: Span,
+        start_line: u32,
+    },
+    /// A doubled-delimiter emphasis run (`**x**` / `__x__`). Payload-free like
+    /// `Emph`; nests with it (`***x***` is an `Emph` wrapping a `Strong`).
+    /// (Schema 1.3.)
+    Strong {
         span: Span,
         start_line: u32,
     },
@@ -400,6 +422,8 @@ impl Inline {
             | Inline::Wikilink { span, .. }
             | Inline::Autolink { span, .. }
             | Inline::CodeSpan { span, .. }
+            | Inline::Emph { span, .. }
+            | Inline::Strong { span, .. }
             | Inline::FootnoteRef { span, .. } => *span,
         }
     }
@@ -411,6 +435,8 @@ impl Inline {
             Inline::Wikilink { .. } => "wikilink",
             Inline::Autolink { .. } => "autolink",
             Inline::CodeSpan { .. } => "codeSpan",
+            Inline::Emph { .. } => "emph",
+            Inline::Strong { .. } => "strong",
             Inline::FootnoteRef { .. } => "footnoteRef",
         }
     }

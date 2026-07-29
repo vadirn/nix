@@ -660,8 +660,19 @@ fn collect_inlines<'a>(
         // cells (Decision 19; distill re-slices raw cell bytes). Wikilinks and
         // embeds ARE emitted (1.1): the consumer reads their decoded
         // `target`/`alias`, not the imprecise span, so table-cell backlinks are
-        // not lost. The oracle exempts these cell wikilinks (verify.rs).
-        if in_table(node) && !matches!(&d.value, NodeValue::WikiLink(_)) {
+        // not lost. Emphasis IS emitted too (1.3) on a weaker warrant: the
+        // consumer asks whether emphasis is present at all, and a cell span that
+        // shifts still locates the run's line and cell. That is the same
+        // precision/presence tradeoff wikilinks already accept — except that
+        // `Emph`/`Strong` carry no decoded fallback field, so an escaped-pipe
+        // cell leaves the imprecise span as the only handle. The oracle exempts
+        // all three inside cells (verify.rs).
+        if in_table(node)
+            && !matches!(
+                &d.value,
+                NodeValue::WikiLink(_) | NodeValue::Emph | NodeValue::Strong
+            )
+        {
             continue;
         }
         let span = idx.span_of(sp);
@@ -727,6 +738,12 @@ fn collect_inlines<'a>(
             }
             NodeValue::Code(_) => {
                 inlines.push(Inline::CodeSpan { span, start_line });
+            }
+            NodeValue::Emph => {
+                inlines.push(Inline::Emph { span, start_line });
+            }
+            NodeValue::Strong => {
+                inlines.push(Inline::Strong { span, start_line });
             }
             NodeValue::FootnoteReference(nfr) => {
                 inlines.push(Inline::FootnoteRef {

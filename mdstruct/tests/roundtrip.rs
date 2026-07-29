@@ -276,3 +276,109 @@ fn embed_escape_backslash_parity() {
         Some(("Note".to_string(), true))
     );
 }
+
+/// 1.3 `*x*`/`**x**`: byte-exact spans for the star delimiter family. Neither
+/// run nests here, so each variant has exactly one match.
+#[test]
+fn emph_and_strong_star_delimiter() {
+    let src = "Some *emphasis* and **strong** here.\n";
+    let d = doc(src);
+    let emph = d
+        .inlines
+        .iter()
+        .find(|i| matches!(i, mdstruct::Inline::Emph { .. }))
+        .expect("Emph emitted for *emphasis*");
+    assert_eq!(slice(src, emph.span()), "*emphasis*");
+    let strong = d
+        .inlines
+        .iter()
+        .find(|i| matches!(i, mdstruct::Inline::Strong { .. }))
+        .expect("Strong emitted for **strong**");
+    assert_eq!(slice(src, strong.span()), "**strong**");
+}
+
+/// 1.3 `_x_`/`__x__`: the underscore delimiter family. Both runs sit flanked
+/// by spaces (not intraword), so CommonMark treats them as emphasis rather
+/// than literal underscores.
+#[test]
+fn emph_and_strong_underscore_delimiter() {
+    let src = "Some _underscore_ and __underscore strong__ here.\n";
+    let d = doc(src);
+    let emph = d
+        .inlines
+        .iter()
+        .find(|i| matches!(i, mdstruct::Inline::Emph { .. }))
+        .expect("Emph emitted for _underscore_");
+    assert_eq!(slice(src, emph.span()), "_underscore_");
+    let strong = d
+        .inlines
+        .iter()
+        .find(|i| matches!(i, mdstruct::Inline::Strong { .. }))
+        .expect("Strong emitted for __underscore strong__");
+    assert_eq!(slice(src, strong.span()), "__underscore strong__");
+}
+
+/// 1.3 ticket specimen: a GFM cell containing `*b*` used to leave an empty
+/// `inlines: []` (Emph/Strong were dropped into the catch-all along with
+/// Text/SoftBreak/LineBreak/Strikethrough/HtmlInline). Inside a table cell
+/// comrak's inline sourcepos can shift, so the shape oracle exempts cell
+/// Emph/Strong (verify.rs) the same way it exempts cell wikilinks; this test
+/// asserts presence rather than an exact byte span, mirroring
+/// `table_cell_wikilink_and_embed` above.
+#[test]
+fn table_cell_emphasis_is_emitted() {
+    let src = "| a | b |\n| --- | --- |\n| *b* | c |\n";
+    let d = doc(src);
+    assert!(
+        !d.inlines.is_empty(),
+        "table cell with `*b*` must not yield an empty inlines[]"
+    );
+    assert!(
+        d.inlines
+            .iter()
+            .any(|i| matches!(i, mdstruct::Inline::Emph { .. })),
+        "table cell `*b*` must be emitted as an Emph inline"
+    );
+}
+
+/// 1.3 nesting: `***both***` is an outer `Emph` (three-star run) wrapping an
+/// inner `Strong` (two-star run) — comrak, not this crate, decides which of
+/// the two wraps the other. This is the regression case for the verify oracle
+/// (verify.rs `is_emph_delim`): the outer node's slice opens on THREE `*`, so
+/// an `Emph` predicate that tested run length (expecting exactly one
+/// delimiter) rather than the delimiter character would reject it.
+#[test]
+fn nested_emph_strong_triple_asterisk() {
+    let src = "Some ***both*** here.\n";
+    let d = doc(src);
+    let emph = d
+        .inlines
+        .iter()
+        .find(|i| matches!(i, mdstruct::Inline::Emph { .. }))
+        .expect("outer Emph emitted for ***both***");
+    assert_eq!(slice(src, emph.span()), "***both***");
+    let strong = d
+        .inlines
+        .iter()
+        .find(|i| matches!(i, mdstruct::Inline::Strong { .. }))
+        .expect("inner Strong emitted for ***both***");
+    assert_eq!(slice(src, strong.span()), "**both**");
+    // The inner Strong nests inside the outer Emph.
+    assert!(emph.span().start <= strong.span().start && strong.span().end <= emph.span().end);
+}
+
+/// 1.3 negative: Text, SoftBreak, LineBreak, Strikethrough, and HtmlInline all
+/// stay off `inlines[]` — `collect_inlines`'s catch-all `_ => {}` arm still
+/// drops every one of them (only Emph/Strong graduated out of it). One
+/// fixture exercises all five: a soft-wrapped paragraph, a backslash hard
+/// break, `~~struck~~`, and an inline `<span>` tag.
+#[test]
+fn unemitted_inline_kinds_produce_no_inlines() {
+    let src = "Line one\nline two.\n\nLine three\\\nline four.\n\n~~struck~~ text.\n\nInline <span>tag</span> here.\n";
+    let d = doc(src);
+    assert!(
+        d.inlines.is_empty(),
+        "Text/SoftBreak/LineBreak/Strikethrough/HtmlInline must not appear in inlines[], got {:?}",
+        d.inlines
+    );
+}

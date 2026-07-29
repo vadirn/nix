@@ -58,8 +58,10 @@
         ./Cargo.lock
         ./mdstruct/Cargo.toml
         ./mdstruct/src
+        ./mdstruct/tests
         ./mdread/Cargo.toml
         ./mdread/src
+        ./mdread/tests
         ./vault-query/Cargo.toml
         ./vault-query/src
         ./vault-query/tests

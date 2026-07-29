@@ -5,7 +5,10 @@
 //!    gap (plus the leading/trailing remainder) is inter-block whitespace that
 //!    the check reproduces, so spans + gaps = source byte-for-byte.
 //! 2. **Per-inline grammar oracle** — each inline's slice matches its type's
-//!    delimiter shape, and each sub-span nests within its outer span.
+//!    delimiter shape, and each sub-span nests within its outer span. `inlines[]`
+//!    is EXCLUDED from total tiling (1): inlines overlap by nesting, cover only
+//!    their own markup, and leave the unmarked text between them unemitted, so
+//!    emitting one more inline type never widens the tiling guarantee.
 //! 3. **Node interior nesting** — `codeBlock` `infoSpan`/`bodySpan` nest.
 //! 4. **Region-slice check** — when labels are registered, each region's span
 //!    and body_span slice and nest.
@@ -169,6 +172,11 @@ fn collect_table_cell_spans(nodes: &[Node], out: &mut Vec<Span>) {
     }
 }
 
+/// The two CommonMark emphasis delimiter characters.
+fn is_emph_delim(c: char) -> bool {
+    c == '*' || c == '_'
+}
+
 /// Per-inline grammar oracle + sub-span nesting.
 fn verify_inlines(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
     let mut cells: Vec<Span> = Vec::new();
@@ -176,14 +184,20 @@ fn verify_inlines(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
     for inl in &doc.inlines {
         let sp = inl.span();
         let s = slice(source, sp)?;
-        // Table-cell wikilinks/embeds (1.1): comrak's inline sourcepos shifts on
-        // escaped-pipe cells (Decision 19), so the span is imprecise and fails
-        // the `]]` shape check. The consumer reads the decoded `target`/`alias`,
-        // not the span, so exempt a wikilink contained in a tableCell from the
-        // shape + sub-span-nesting oracle. The boundary slice above still holds
-        // (the span is a valid on-char slice), and Decision 19 stays in force
-        // for every non-wikilink table-cell inline (those are not emitted).
-        if matches!(inl, Inline::Wikilink { .. }) && cells.iter().any(|c| nests(*c, sp)) {
+        // Table-cell wikilinks/embeds (1.1) and emphasis (1.3): comrak's inline
+        // sourcepos shifts on escaped-pipe cells (Decision 19), so the span is
+        // imprecise and fails the `]]` / `*…*` shape check. A wikilink consumer
+        // reads the decoded `target`/`alias` instead of the span; an emphasis
+        // consumer only asks whether emphasis is present, which an imprecise
+        // span still answers. Both are emitted, so both are exempt from the
+        // shape + sub-span-nesting oracle here. The boundary slice above still
+        // holds (the span is a valid on-char slice), and Decision 19 stays in
+        // force for every other table-cell inline (those are not emitted).
+        if matches!(
+            inl,
+            Inline::Wikilink { .. } | Inline::Emph { .. } | Inline::Strong { .. }
+        ) && cells.iter().any(|c| nests(*c, sp))
+        {
             continue;
         }
         let (ok, sub) = match inl {
@@ -213,6 +227,21 @@ fn verify_inlines(doc: &Document, source: &str) -> Result<(), SpanMismatch> {
                 None,
             ),
             Inline::CodeSpan { .. } => (s.starts_with('`') && s.ends_with('`'), None),
+            // Emphasis nests, so the RUN length is not a discriminator: the
+            // outer node of `***x***` is an `Emph` whose slice opens on three
+            // `*`, and the `Strong` it wraps opens on two. Test the delimiter
+            // CHARACTER for `Emph` (any `*`/`_` run) and a doubled character for
+            // `Strong` (whose run is never shorter than two), which holds for
+            // both the outer and the inner node under any nesting.
+            Inline::Emph { .. } => (
+                s.starts_with(is_emph_delim) && s.ends_with(is_emph_delim),
+                None,
+            ),
+            Inline::Strong { .. } => (
+                (s.starts_with("**") && s.ends_with("**"))
+                    || (s.starts_with("__") && s.ends_with("__")),
+                None,
+            ),
             Inline::FootnoteRef { .. } => (s.starts_with("[^") && s.ends_with(']'), None),
         };
         if !ok {
