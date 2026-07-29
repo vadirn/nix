@@ -31,6 +31,17 @@
             ngrok
             ruby
             ast-grep
+            # Rust toolchain, from nixpkgs rather than rustup. Store paths are
+            # immutable and the generation roots them, so these cannot dangle
+            # the way the Homebrew rustup shims did: `~/.cargo/bin/*` were
+            # static symlinks into a versioned Cellar path that
+            # `homebrew.onActivation.cleanup = "zap"` deleted on every upgrade.
+            # This is also the compiler `rustPlatform.buildRustPackage` uses in
+            # flake.nix, so `cargo test` and `nix build` now agree by
+            # construction instead of by coincidence.
+            cargo
+            rustc
+            clippy
             rustfmt
           ])
           ++ [
