@@ -29,6 +29,7 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `ticket-outward-only` | warn | `type: ticket` entry with a body `[[...]]` wikilink — a ticket body must be repo-self-sufficient; restate the material inline or name a repo artifact (file, commit, symbol) instead (frontmatter `track:`/`requires:`/`project:` wikilinks exempt) |
 | `broken-wikilink` | error | `[[target]]` does not resolve to any vault file |
 | `duplicate-h1` | warn | First non-blank body line is `# <basename>`, duplicating the implicit page title. |
+| `callout-missing-separator` | warn | Callout's `[!Type]` header line and body sit in one paragraph — `autoformat`'s `proseWrap: never` joins them, Obsidian reads the joined text as the title, and the body disappears on render (fix: a blank `>` line between header and body) |
 | `invalid-frontmatter` | error | YAML frontmatter fails to parse |
 | `untagged-card` | warn | Card with missing or empty `tags:` array |
 | `missing-required-field` | warn | File missing a required frontmatter field for its `type:` (one finding per field) |
@@ -113,6 +114,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `ticket-outward-only` | `{ "target": <string>, "line": <number> }` |
 | `broken-wikilink` | `{ "target": <string>, "line": <number> }` |
 | `duplicate-h1` | `null` |
+| `callout-missing-separator` | `{ "line": <number>, "callout": <string> }` |
 | `invalid-frontmatter` | `{ "error": <string> }` |
 | `untagged-card` | `null` |
 | `missing-required-field` | `null` |
@@ -131,3 +133,4 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 - `invalid-frontmatter.data.error` is the raw YAML parse error message (e.g. `mapping values are not allowed in this context at line 4 column 28`).
 - `dangling-relation-label.data.label` is the raw local endpoint or from-label string that resolved to no local node; `data.position` distinguishes `endpoint` from `from-label`, and `data.line` is the 1-based source line of the offending `## Relations` bullet.
 - `unknown-rel.data.rel` is the `<rel>` token verbatim; `data.line` is the 1-based source line of the offending `## Relations` bullet.
+- `callout-missing-separator.data.callout` is the `[!Type]` token verbatim (fold marker included, e.g. `[!note]-`); `data.line` is the 1-based source line of the callout's header.
