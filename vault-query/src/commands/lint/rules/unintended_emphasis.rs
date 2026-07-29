@@ -1,0 +1,465 @@
+//! `unintended-emphasis` — flags an emphasis run whose delimiters read as
+//! literal text: two globs, an identifier mentioned twice, a repeated fill-in
+//! blank.
+//!
+//! CommonMark pairs two literal `*` characters in one paragraph into emphasis
+//! whenever the first is left-flanking and the second right-flanking, which a
+//! glob supplies for free: the `*` in `src/*.ts` sits between two punctuation
+//! characters. So `src/*.ts and dist/*.js` already renders as italic in Obsidian
+//! before any tool touches it, and `oxfmt` then normalizes the pair to `_`,
+//! silently rewriting both extensions. comrak, `oxfmt`, and Obsidian all agree
+//! with each other and all three disagree with the author — the defect is
+//! authored, not introduced, so there is no oracle among the tools to consult.
+//! Underscore runs fail through the same mechanism (`__init__` renders bold).
+//!
+//! Nothing can tell a literal glob asterisk from an intended emphasis marker;
+//! that is an authorial-intent question. So this rule reports and never rewrites,
+//! and it biases toward reporting: a human adjudicates every finding, and a false
+//! positive costs one glance during review.
+
+use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
+use crate::mdfacet::EmphasisSpan;
+
+/// Longest run quoted back in a finding. A span can cover most of a paragraph
+/// (the two paired delimiters may sit sentences apart), and the reader needs the
+/// shape, not the payload.
+const QUOTE_CAP: usize = 60;
+
+pub struct UnintendedEmphasis;
+
+impl Rule for UnintendedEmphasis {
+    fn name(&self) -> &'static str {
+        "unintended-emphasis"
+    }
+
+    fn default_severity(&self) -> Severity {
+        Severity::Warn
+    }
+
+    fn check(&self, ctx: &LintContext) -> Vec<Finding> {
+        let mut findings = Vec::new();
+
+        for file in ctx.files {
+            let spans = crate::mdfacet::emphasis_spans(&file.content);
+            let flagged: Vec<(&EmphasisSpan, &'static str)> = spans
+                .iter()
+                .filter_map(|s| shape(s).map(|sh| (s, sh)))
+                .collect();
+
+            for (span, shape) in &flagged {
+                // `___x___` is an `Emph` wrapping a `Strong`: two inline nodes over
+                // one authored hazard. Report the widest run and drop what nests
+                // inside it, so the reader adjudicates the shape once.
+                if flagged.iter().any(|(o, _)| {
+                    o.start <= span.start && span.end <= o.end && !std::ptr::eq(*o, *span)
+                }) {
+                    continue;
+                }
+                let quoted = truncate(&span.text);
+                findings.push(Finding {
+                    rule: self.name(),
+                    severity: self.default_severity(),
+                    file: file.path.clone(),
+                    // `Finding` carries no line field, so the line rides in both the
+                    // human-readable message and the structured payload.
+                    message: format!(
+                        "line {}: `{}` parses as emphasis in {} shape — escape the delimiters or move the text into a code span",
+                        span.line, quoted, shape
+                    ),
+                    data: Some(serde_json::json!({
+                        "line": span.line,
+                        "shape": shape,
+                        "text": quoted,
+                    })),
+                });
+            }
+        }
+
+        findings
+    }
+}
+
+/// The shape that condemns this run, or `None` if it reads as ordinary emphasis.
+/// Glob-or-path is tested first so a path spelled with underscores
+/// (`__src/main.rs__`) reports as the path it is.
+fn shape(span: &EmphasisSpan) -> Option<&'static str> {
+    if is_glob_or_path(span) {
+        return Some("glob-or-path");
+    }
+    if is_identifier_or_placeholder(span) {
+        return Some("identifier-or-placeholder");
+    }
+    None
+}
+
+/// A run whose delimiters sit in a path or a glob.
+///
+/// The test reads the two characters flanking each delimiter and NEVER the run's
+/// content. Content is not evidence of intent: `**src/main.rs**` and
+/// `**config.toml**` are ordinary bold that happens to name a file, and scanning
+/// the content for a path separator or an extension flags 552 such runs across
+/// this vault, all of them intended. What betrays a literal delimiter is the
+/// delimiter being welded into a token instead of framed by whitespace.
+///
+/// A delimiter is welded when path punctuation abuts it on either side, and the
+/// run is flagged only when BOTH of its delimiters are welded. The conjunction is
+/// what makes the test survive real prose: one welded end alone is the ordinary
+/// either-or construction (`auto/**human**`, `_codex_/_vellum_`, `**/experiment
+/// claim:**`), which fired on 14 intended runs across this vault; a glob welds
+/// both ends, because `src/*.ts and dist/*.js` opens after a `/` onto a `.` and
+/// closes on a `/`.
+///
+/// The conjunction is also what lets the closing test accept a `.`: on its own
+/// `after == '.'` is the period ending `this is *really*.`, but that run's open
+/// is unwelded, so the pair never fires. The one asymmetry left is a `.` at the
+/// inner close, excluded because `**/goal (outer framing).**` ends a sentence
+/// inside the bold.
+fn is_glob_or_path(span: &EmphasisSpan) -> bool {
+    let open_welded = matches!(span.before, Some('.') | Some('/'))
+        || span.inner.starts_with('.')
+        || span.inner.starts_with('/');
+    let close_welded = matches!(span.after, Some('.') | Some('/')) || span.inner.ends_with('/');
+    open_welded && close_welded
+}
+
+/// A run whose delimiters belong to a code identifier or a fill-in blank.
+///
+/// Three tells, in the order they discriminate:
+///
+/// - A delimiter run of three or more (`___`, `***`). Emphasis needs one or two;
+///   a longer run is a placeholder the author typed literally, and CommonMark
+///   pairs it into `Emph`-wrapping-`Strong` when punctuation flanks it.
+/// - EITHER delimiter sitting inside a word (`bug*004 … bug*004`). Prose emphasis
+///   opens and closes at word boundaries, so an alphanumeric outside a delimiter
+///   means the delimiter belongs to the word rather than to the prose. Unlike the
+///   glob test this one stays a disjunction, because the paired delimiters of a
+///   corrupted identifier sit sentences apart and only the opening one lands
+///   inside a word: requiring both ends missed all three live corruptions in this
+///   vault (`bug*004`, `UNRESOLVED*IMPORT`) to spare two deliberate partial-word
+///   bolds (`==**A**ffirmo.==`), which is the wrong trade for a rule a human
+///   adjudicates.
+/// - Bare-identifier content under a DOUBLED `_` (`__init__`, `__G0__`). The
+///   doubling is what carries the tell, not the underscore: `autoformat` routes
+///   `.md` through `oxfmt`, which normalizes every intended italic to `_x_`, so a
+///   singly-delimited `_word_` is this vault's canonical emphasis — 394 of them,
+///   all intended — while `__x__` is a spelling oxfmt never writes for bold (it
+///   writes `**x**`) and so survives only where an author typed the underscores
+///   as part of the name.
+fn is_identifier_or_placeholder(span: &EmphasisSpan) -> bool {
+    if span.run >= 3 {
+        return true;
+    }
+    if span.before.is_some_and(char::is_alphanumeric)
+        || span.after.is_some_and(char::is_alphanumeric)
+    {
+        return true;
+    }
+    span.delimiter == '_'
+        && span.run >= 2
+        && !span.inner.is_empty()
+        && span
+            .inner
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// `s` capped at [`QUOTE_CAP`] characters, ellipsized when cut. Counts chars, not
+/// bytes, so the cut lands on a character boundary.
+fn truncate(s: &str) -> String {
+    if s.chars().count() <= QUOTE_CAP {
+        return s.to_string();
+    }
+    let kept: String = s.chars().take(QUOTE_CAP).collect();
+    format!("{kept}…")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::lint::rule::LintContext;
+    use std::path::PathBuf;
+
+    fn make_file(name: &str, content: &str) -> crate::vault::VaultFile {
+        crate::vault::VaultFile {
+            name: name.to_string(),
+            path: PathBuf::from(format!("/vault/{}.md", name)),
+            content: content.to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn check(content: &str) -> Vec<Finding> {
+        let files = vec![make_file("Foo", content)];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+        UnintendedEmphasis.check(&ctx)
+    }
+
+    // Box 1 — two literal asterisks in glob-or-path shape.
+    #[test]
+    fn two_globs_in_one_paragraph_emit_one_finding() {
+        let findings = check("Delete src/*.ts and dist/*.js before rebuilding.\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, "unintended-emphasis");
+        assert_eq!(findings[0].severity, Severity::Warn);
+        // The finding names the file and the line in both channels.
+        assert_eq!(findings[0].file, PathBuf::from("/vault/Foo.md"));
+        assert!(
+            findings[0]
+                .message
+                .starts_with("line 1: `*.ts and dist/*` parses as emphasis in glob-or-path shape"),
+            "message was {:?}",
+            findings[0].message
+        );
+        let data = findings[0].data.as_ref().unwrap();
+        assert_eq!(data["line"], 1);
+        assert_eq!(data["shape"], "glob-or-path");
+        assert_eq!(data["text"], "*.ts and dist/*");
+    }
+
+    // Box 2 — the same shape inside a code span.
+    #[test]
+    fn globs_inside_a_code_span_emit_nothing() {
+        let findings = check("Delete `rm src/*.ts and dist/*.js` before rebuilding.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    // Box 3 — the same shape already escaped.
+    #[test]
+    fn escaped_globs_emit_nothing() {
+        let findings = check("Delete src/\\*.ts and dist/\\*.js before rebuilding.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    // Box 4 — genuine prose emphasis.
+    #[test]
+    fn prose_emphasis_emits_nothing() {
+        let findings = check("This is *really* important, and **nothing** else matters here.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn multi_word_prose_emphasis_emits_nothing() {
+        let findings =
+            check("This is *really quite* important, she said **do not touch it** loudly.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    // Box 5 — an identifier mentioned twice in one paragraph.
+    //
+    // The ticket's own specimen is `bug_004` twice, which parses to NO emphasis at
+    // all: CommonMark forbids an intraword `_` from opening or closing a run, a
+    // restriction unique to `_`. That is not a gap in this rule — where no
+    // emphasis node exists the text renders literally and there is no hazard to
+    // report. The `*` spelling of the same shape has no such restriction, pairs
+    // into one run across the two mentions, and is flagged.
+    #[test]
+    fn underscore_identifier_twice_is_never_emphasis() {
+        let findings = check("The fix for bug_004 landed last week, so bug_004 is closed.\n");
+        assert_eq!(findings.len(), 0);
+        assert!(
+            crate::mdfacet::emphasis_spans("The fix for bug_004 landed, so bug_004 closed.\n")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn intraword_identifier_twice_emits_one_finding() {
+        let findings = check("The fix for bug*004 landed last week, so bug*004 is closed.\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].file, PathBuf::from("/vault/Foo.md"));
+        assert!(
+            findings[0].message.starts_with(
+                "line 1: `*004 landed last week, so bug*` parses as emphasis in identifier-or-placeholder shape"
+            ),
+            "message was {:?}",
+            findings[0].message
+        );
+        let data = findings[0].data.as_ref().unwrap();
+        assert_eq!(data["line"], 1);
+        assert_eq!(data["shape"], "identifier-or-placeholder");
+    }
+
+    #[test]
+    fn dunder_identifier_emits_one_finding_each() {
+        let findings = check("Both __init__ and __main__ are dunder names.\n");
+        assert_eq!(findings.len(), 2);
+        assert_eq!(findings[0].data.as_ref().unwrap()["text"], "__init__");
+        assert_eq!(findings[1].data.as_ref().unwrap()["text"], "__main__");
+    }
+
+    #[test]
+    fn singly_wrapped_identifier_emits_nothing() {
+        // `_start_line_` is indistinguishable from the italic oxfmt writes, so it
+        // stays silent — the doubled `__…__` spelling is the one that betrays a
+        // literal underscore.
+        let findings = check("Compare _start_line_ against the parsed value.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    // Box 6 — a placeholder run of repeated underscores used twice.
+    //
+    // Space-delimited `___` is inert for the same reason as `bug_004`: a `_` run
+    // flanked by whitespace is neither left- nor right-flanking, so it opens
+    // nothing and renders literally. Flanked by punctuation it pairs, and that is
+    // the shape that actually corrupts.
+    #[test]
+    fn space_flanked_placeholder_run_is_never_emphasis() {
+        let findings = check("Fill in ___ with the host and ___ with the port.\n");
+        assert_eq!(findings.len(), 0);
+        assert!(crate::mdfacet::emphasis_spans("Fill in ___ and ___ later.\n").is_empty());
+    }
+
+    #[test]
+    fn punctuation_flanked_placeholder_run_emits_one_finding() {
+        let findings = check("Use [___] and [___] as masks.\n");
+        // `[___] and [___` is an `Emph` wrapping a `Strong`; the nested run is
+        // dropped so one authored hazard yields one finding.
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].file, PathBuf::from("/vault/Foo.md"));
+        let data = findings[0].data.as_ref().unwrap();
+        assert_eq!(data["line"], 1);
+        assert_eq!(data["shape"], "identifier-or-placeholder");
+        assert_eq!(data["text"], "___] and [___");
+    }
+
+    #[test]
+    fn asterisk_placeholder_run_emits_one_finding() {
+        let findings = check("Use (***) for host and (***) for port.\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(
+            findings[0].data.as_ref().unwrap()["shape"],
+            "identifier-or-placeholder"
+        );
+    }
+
+    // A path or a filename INSIDE a well-framed run is intended bold or italic —
+    // the delimiters are framed by whitespace and only the payload mentions a
+    // file. Flagging on content instead of on delimiter context fired on 552 such
+    // runs across the vault, every one of them a false positive.
+    #[test]
+    fn a_path_inside_well_framed_emphasis_emits_nothing() {
+        let findings = check("See **src/main.rs** for the entry point.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn a_filename_inside_well_framed_emphasis_emits_nothing() {
+        let findings = check("Open the *config.toml* file now, then **settings.json**.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    // The form `oxfmt` normalizes every intended italic into. Flagging it would
+    // fire on 394 runs across the vault.
+    #[test]
+    fn single_underscore_italic_emits_nothing() {
+        let findings = check("This is _really_ important, and __init__ is not.\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].data.as_ref().unwrap()["text"], "__init__");
+    }
+
+    #[test]
+    fn a_doublestar_glob_emits_one_finding() {
+        // The close welds on the trailing `/` of `src/**/*.js`, the open on the
+        // leading `/` of the run's own content.
+        let findings = check("Match **/*.ts and src/**/*.js in the config.\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].data.as_ref().unwrap()["shape"], "glob-or-path");
+    }
+
+    #[test]
+    fn a_glob_in_a_table_cell_is_reached() {
+        let findings = check("| a | b |\n| --- | --- |\n| x \\| y | src/*.ts and dist/*.js |\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].data.as_ref().unwrap()["line"], 3);
+    }
+
+    // Everything below is a shape the vault actually contains that must stay
+    // silent. Each one fired under an earlier, looser predicate set; together
+    // they are why the glob test is a conjunction over both delimiters.
+
+    #[test]
+    fn an_either_or_construction_around_a_slash_emits_nothing() {
+        let findings = check(
+            "The boundary shifts from auto/**human** to auto/**curated**, and it rejected _codex_/_vellum_ outright.\n",
+        );
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn a_bolded_slash_command_emits_nothing() {
+        let findings =
+            check("**/experiment claim:** the packer abstains.\n\n**/goal (outer framing).**\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn a_sentence_period_after_emphasis_emits_nothing() {
+        let findings = check("The result was *really*. Then it was **not**.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn a_ratio_inside_emphasis_emits_nothing() {
+        let findings = check("Confidence **10/10 ✅** on that one, **167/0** overall.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn a_literal_placeholder_marker_emits_one_finding() {
+        let findings = check("The revise pass echoed [__G0__] block markers into the glossary.\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].data.as_ref().unwrap()["text"], "__G0__");
+    }
+
+    #[test]
+    fn globs_inside_a_fenced_code_block_emit_nothing() {
+        let findings = check("```sh\nrm src/*.ts and dist/*.js\n```\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn globs_inside_an_indented_code_block_emit_nothing() {
+        let findings = check("text\n\n    rm src/*.ts and dist/*.js\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn identifier_inside_a_wikilink_emits_nothing() {
+        let findings = check("See [[__init__]] for the constructor.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn frontmatter_offsets_do_not_shift_the_line() {
+        let findings = check("---\ntype: card\n---\n\nDelete src/*.ts and dist/*.js now.\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].data.as_ref().unwrap()["line"], 5);
+    }
+
+    #[test]
+    fn a_glob_in_a_heading_or_a_list_is_reached() {
+        let findings = check("# Clean src/*.ts and dist/*.js\n\n- also src/*.ts and dist/*.js\n");
+        assert_eq!(findings.len(), 2);
+        assert_eq!(findings[0].data.as_ref().unwrap()["line"], 1);
+        assert_eq!(findings[1].data.as_ref().unwrap()["line"], 3);
+    }
+
+    #[test]
+    fn a_long_run_is_quoted_truncated() {
+        let filler = "x".repeat(120);
+        let findings = check(&format!("Delete src/*.ts {filler} dist/*.js now.\n"));
+        assert_eq!(findings.len(), 1);
+        let quoted = findings[0].data.as_ref().unwrap()["text"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(quoted.chars().count(), QUOTE_CAP + 1);
+        assert!(quoted.ends_with('…'), "quote was {quoted:?}");
+    }
+
+    #[test]
+    fn empty_file_emits_nothing() {
+        assert_eq!(check("").len(), 0);
+    }
+}

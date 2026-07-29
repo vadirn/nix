@@ -41,6 +41,7 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `singleton-filename-mismatch` | warn    | `type: context`/`type: scratchpad` entry not named `Context.md`/`Scratchpad.md` — a project holds one of each, and `vault-query context` reaches it by joining that constant onto the project path, so a misnamed one is never found (templates, superseded entries, and untyped files exempt) |
 | `slug-filename-mismatch`      | warn    | `type: ticket`/`type: track` entry whose filename is not `<type>-<slug>` — queries resolve a track by filename stem, so a disagreement makes it unreachable by the slug it declares (templates, superseded entries, and entries with no `slug:` exempt) |
 | `filename-hygiene`            | warn    | Basename carries a smart quote, a double space, or a trailing space before `.md` — typing accidents rather than naming choices, checked on every file regardless of `type:` |
+| `unintended-emphasis`         | warn    | Emphasis run whose `*`/`_` delimiters read as literal text — two globs paired into italic (`src/*.ts and dist/*.js`), a doubled-underscore identifier (`__init__`), or a fill-in blank (`[__G0__]`). Obsidian already renders it as emphasis, and `autoformat` then normalizes the pair, rewriting the delimiters (fix: escape them as `\*`/`\_`, or move the text into a code span) |
 | `unknown-rel`                 | warn    | `<rel>` relation token outside the known registry (typo heuristic; can be promoted into the registry) |
 | `oversized-entry`             | warn    | Card/note/experiment/ticket body exceeds consult's per-doc token cap (templates and superseded entries exempt) |
 | `untyped-entry`               | warn    | File with no `type:` frontmatter field (templates, superseded entries, and checkpoints exempt) |
@@ -131,6 +132,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `singleton-filename-mismatch` | `{ "type": <string>, "expected": <string> }` |
 | `slug-filename-mismatch`      | `{ "slug": <string>, "expected": <string> }` |
 | `filename-hygiene`            | `{ "issues": [<string>, ...] }` |
+| `unintended-emphasis`         | `{ "line": <number>, "shape": <string>, "text": <string> }` |
 | `unknown-rel`                 | `{ "rel": <string>, "line": <number> }` |
 | `oversized-entry`             | `null` |
 | `untyped-entry`               | `null` |

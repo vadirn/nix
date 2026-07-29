@@ -23,6 +23,7 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::singleton_tag::SingletonTag),
         Box::new(super::rules::slug_filename_mismatch::SlugFilenameMismatch),
         Box::new(super::rules::ticket_outward_only::TicketOutwardOnly),
+        Box::new(super::rules::unintended_emphasis::UnintendedEmphasis),
         Box::new(super::rules::unknown_field::UnknownField),
         Box::new(super::rules::unknown_rel::UnknownRel),
         Box::new(super::rules::unquoted_frontmatter_link::UnquotedFrontmatterLink),

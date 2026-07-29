@@ -18,7 +18,7 @@
 
 use std::collections::BTreeSet;
 
-use mdstruct::{Heading, Node, Options, parse};
+use mdstruct::{Heading, Inline, Node, Options, Span, parse};
 
 /// A body ATX heading located by mdstruct, filtered to the scanner's rule.
 pub struct BodyHeading {
@@ -172,6 +172,111 @@ fn callout_kind(first_line: &str) -> Option<&str> {
         return None;
     }
     Some(kind)
+}
+
+/// One rendered emphasis run, resolved against the source bytes.
+///
+/// `mdstruct`'s `Inline::Emph`/`Inline::Strong` carry a span and nothing else —
+/// the emphasized text lives in child nodes the schema does not emit — so every
+/// field below is sliced off the original document here, once, and the consumer
+/// never touches byte offsets again.
+pub struct EmphasisSpan {
+    /// 1-based line on which the run opens.
+    pub line: usize,
+    /// Byte offsets of the whole run, delimiters included. Kept so a consumer can
+    /// drop a run nested inside another (`___x___` is an `Emph` wrapping a
+    /// `Strong`, two nodes over one authored hazard).
+    pub start: usize,
+    pub end: usize,
+    /// The delimiter character, `*` or `_`, read off the source.
+    pub delimiter: char,
+    /// Length of the delimiter run at the open, which is `>= 1` for an `Emph` and
+    /// `>= 2` for a `Strong` and exceeds both when the run is longer than the node
+    /// itself (the outer `Emph` of `___x___` reports 3).
+    pub run: usize,
+    /// The whole run, delimiters included.
+    pub text: String,
+    /// What sits between this node's OWN delimiters — one character each side for
+    /// an `Emph`, two for a `Strong`. For the outer `Emph` of `___x___` that is
+    /// `__x__`, since the inner `Strong` is a separate entry.
+    pub inner: String,
+    /// The character immediately before the run, `None` at the start of the file.
+    pub before: Option<char>,
+    /// The character immediately after the run, `None` at the end of the file.
+    pub after: Option<char>,
+}
+
+/// Every emphasis run in the document, in `inlines[]` order.
+///
+/// Reads `doc.inlines()` rather than walking `doc.nodes()`, mirroring
+/// [`crate::wikilink::extract`]: emphasis is an inline, and the flat array is
+/// already in document order with the container nesting resolved.
+///
+/// Two exemptions come free from comrak and are load-bearing for the callers:
+/// a code span and a fenced or indented code block emit no emphasis inline at
+/// all (CommonMark parses code before emphasis), and an escaped `\*` or `\_`
+/// never opens or closes a run. So "the shape is inside code" and "the shape is
+/// already escaped" both reduce to "there is no entry here".
+///
+/// `wikilinks: true` matches the `mdstruct` binary's own default and is
+/// deliberate: with wikilink parsing on, `[[__init__]]` is one `Wikilink` inline
+/// and emits no emphasis, so a link target spelled like a code identifier stays
+/// silent.
+pub fn emphasis_spans(content: &str) -> Vec<EmphasisSpan> {
+    let opts = Options { wikilinks: true };
+    let doc = parse(content, &opts);
+    doc.inlines()
+        .iter()
+        .filter_map(|inline| match inline {
+            Inline::Emph { span, start_line } => resolve_emphasis(content, span, *start_line, 1),
+            Inline::Strong { span, start_line } => resolve_emphasis(content, span, *start_line, 2),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Slice one emphasis span into an [`EmphasisSpan`], or `None` if the span does
+/// not describe a well-formed run.
+///
+/// The well-formedness guard is not defensive noise. `mdstruct` admits emphasis
+/// inside a GFM table cell, where comrak's inline sourcepos shifts on a cell
+/// carrying an escaped pipe, and exempts exactly those spans from its own shape
+/// oracle — so a span reaching here may slice the wrong bytes. A shifted slice
+/// fails the "opens and closes with this node's own delimiters" test and is
+/// dropped, which is the right trade for a reporting caller: a run it cannot
+/// quote back to the reader is a run it cannot ask the reader to adjudicate.
+fn resolve_emphasis(
+    content: &str,
+    span: &Span,
+    start_line: u32,
+    width: usize,
+) -> Option<EmphasisSpan> {
+    // `.get` not indexing: a shifted span can land off a UTF-8 boundary, which
+    // would panic the whole command.
+    let text = content.get(span.start..span.end)?;
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() < width * 2 {
+        return None;
+    }
+    let delimiter = chars[0];
+    if delimiter != '*' && delimiter != '_' {
+        return None;
+    }
+    let closing = &chars[chars.len() - width..];
+    if !chars[..width].iter().all(|c| *c == delimiter) || !closing.iter().all(|c| *c == delimiter) {
+        return None;
+    }
+    Some(EmphasisSpan {
+        line: start_line as usize,
+        start: span.start,
+        end: span.end,
+        delimiter,
+        run: chars.iter().take_while(|c| **c == delimiter).count(),
+        text: text.to_string(),
+        inner: chars[width..chars.len() - width].iter().collect(),
+        before: content[..span.start].chars().next_back(),
+        after: content[span.end..].chars().next(),
+    })
 }
 
 /// Pre-order flatten (document order) of the heading tree, keeping only the
