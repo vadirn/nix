@@ -1,4 +1,5 @@
 pub mod broken_wikilink;
+pub mod callout_missing_separator;
 pub mod dangling_reference;
 pub mod dangling_relation_label;
 pub mod duplicate_h1;
