@@ -22,7 +22,7 @@ import {
   routeSection,
   sections,
 } from "textkit/distill/extract/route.ts";
-import { parseDoc, sliceBytes } from "textkit/distill/mdstruct.ts";
+import { checkSchemaVersion, parseDoc, sliceBytes } from "textkit/distill/mdstruct.ts";
 
 // Region extraction is always-on and complete: every comment-anchor pair surfaces in `doc.regions`
 // with byte-exact `span`/`bodySpan` and the whole post-`interact:` string as `info`. There is no
@@ -192,4 +192,53 @@ test("payloadMask: a list-nested blockquote and an indented table are masked (cl
   const tbl = "- item\n\n  | a | b |\n  | --- | --- |\n  | 1 | 2 |";
   expect(payloadMask(tbl)).not.toContain("---");
   expect(payloadDensity(tbl)).toBeGreaterThan(0.7);
+});
+
+// ---- checkSchemaVersion: the floor comparison parseDoc enforces (ticket
+// mdstruct-schema-version-floor) ----
+// Unit-tested directly against the pure predicate rather than through parseDoc, so the six
+// accept/reject cases run without spawning the `mdstruct` binary. The module's floor is the
+// hardcoded "1.2" (MINIMUM_SCHEMA_VERSION); each case below picks a `reported` version relative
+// to that floor. A revert to the old exact-equality check (`doc.schemaVersion !==
+// EXPECTED_SCHEMA_VERSION`) would flip the two higher-minor cases from accept to reject, so
+// those are the ones that actually pin the floor behavior rather than just re-testing equality.
+
+test("checkSchemaVersion: an exact match on the floor is accepted", () => {
+  expect(checkSchemaVersion("1.2", "mdstruct")).toEqual({ ok: true });
+});
+
+test("checkSchemaVersion: a higher minor than the floor is accepted (the case exact-equality broke)", () => {
+  expect(checkSchemaVersion("1.3", "mdstruct")).toEqual({ ok: true });
+  expect(checkSchemaVersion("1.10", "mdstruct")).toEqual({ ok: true });
+});
+
+test("checkSchemaVersion: a lower minor than the floor is rejected with the stale-binary wording", () => {
+  const result = checkSchemaVersion("1.1", "mdstruct");
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("unreachable");
+  expect(result.message).toContain("Rebuild mdstruct (the installed binary is stale)");
+  expect(result.message).toContain('"1.1"');
+});
+
+test("checkSchemaVersion: a higher major than the floor is rejected, and NOT with the stale wording", () => {
+  const result = checkSchemaVersion("2.0", "mdstruct");
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("unreachable");
+  expect(result.message).not.toContain("is stale");
+  expect(result.message).toContain("MAJOR");
+});
+
+test("checkSchemaVersion: a lower major than the floor is rejected, and NOT with the stale wording", () => {
+  const result = checkSchemaVersion("0.9", "mdstruct");
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("unreachable");
+  expect(result.message).not.toContain("is stale");
+  expect(result.message).toContain("MAJOR");
+});
+
+test("checkSchemaVersion: a value that doesn't parse as major.minor is rejected, not treated as satisfying the floor", () => {
+  for (const bad of [undefined, "", "1", "1.2.3", "abc", "v1.2"]) {
+    const result = checkSchemaVersion(bad, "mdstruct");
+    expect(result.ok).toBe(false);
+  }
 });

@@ -90,15 +90,76 @@ interface MdDoc {
   regions?: MdRegion[];
 }
 
-// The `mdstruct` JSON schema this module is written against (the binary's
-// `SCHEMA_VERSION`, camelCased on the wire as `schemaVersion`). parseDoc asserts
-// an exact match: a stale binary on PATH emits an older version and silently
-// returns pre-mask `regions[]` (phantom regions from anchors buried in indented
-// code or multi-line HTML comments), which every present and future parse-only
-// consumer (interact, highlight) would trust blind. The handshake turns that
-// silent deploy-skew into a loud "rebuild mdstruct" failure. Bump in lockstep
-// with the Rust `SCHEMA_VERSION` whenever this module depends on the new shape.
-const EXPECTED_SCHEMA_VERSION = "1.2";
+// The `mdstruct` JSON schema FLOOR this module is written against (the binary's
+// `SCHEMA_VERSION`, camelCased on the wire as `schemaVersion`). The check below is
+// one-directional: parseDoc accepts a binary reporting the same major version and an
+// equal-or-higher minor, and rejects a lower minor, a different major, or a value that
+// doesn't parse as `major.minor`.
+//
+// A binary reporting a LOWER minor (or an unparseable version) is the failure this floor
+// exists to catch: a stale `mdstruct` on PATH emits an older shape and silently returns
+// pre-mask `regions[]` (phantom regions from anchors buried in indented code or multi-line
+// HTML comments), which every present and future parse-only consumer (interact, highlight)
+// would trust blind. That case must still fail loud with a "rebuild mdstruct" message.
+//
+// A binary reporting a HIGHER minor is not that failure. `mdstruct/src/core/model.rs`
+// documents each bump's kind on `SCHEMA_VERSION` itself (e.g. "additive-minor over 1.0" for
+// 1.1); an additive-minor bump is a superset of the shape this module already handles, so
+// this module's own assumptions all still hold under it. Rejecting it would block a correct,
+// newer binary from being used at all — exact-match equality did exactly that. A different
+// MAJOR is a real break and stays rejected, with its own message (see checkSchemaVersion):
+// "rebuild, yours is stale" misdescribes a binary that is not older, just incompatible.
+//
+// Bump this floor in lockstep with the Rust `SCHEMA_VERSION` only when this module starts
+// depending on the NEW shape (i.e. when a bump stops being additive-only for this consumer).
+const MINIMUM_SCHEMA_VERSION = "1.2";
+
+// Parses a `"major.minor"` string into its numeric parts, or `null` when it doesn't match
+// that shape (missing, empty, non-numeric, extra segments, etc.). A schemaVersion that fails
+// to parse is treated as NOT meeting the floor — see checkSchemaVersion — never as satisfying
+// it by default.
+function parseMajorMinor(v: string | undefined): { major: number; minor: number } | null {
+  if (v === undefined) return null;
+  const m = /^(\d+)\.(\d+)$/.exec(v);
+  if (!m) return null;
+  return { major: Number(m[1]), minor: Number(m[2]) };
+}
+
+// MINIMUM_SCHEMA_VERSION is a hardcoded literal this module controls (not user input), so its
+// own shape is trusted rather than defensively re-checked at every call.
+const MINIMUM_SCHEMA = parseMajorMinor(MINIMUM_SCHEMA_VERSION)!;
+
+// The schema-version floor check `parseDoc` enforces, factored out so it's unit-testable
+// without spawning the binary. `reported` is `doc.schemaVersion` off the wire; `bin` is the
+// binary name, threaded through only to format the error message. Returns `{ ok: true }` when
+// `reported` has the same major as `MINIMUM_SCHEMA_VERSION` and a minor that is equal to or
+// greater than it; otherwise `{ ok: false, message }` with a message already suited to the
+// specific failure — a major mismatch gets its own wording (not a "stale binary" claim), while
+// a lower minor or an unparseable version reuse the stale-binary wording, since a rebuild is
+// the right first move for either.
+export function checkSchemaVersion(
+  reported: string | undefined,
+  bin: string,
+): { ok: true } | { ok: false; message: string } {
+  const staleMessage =
+    `mdstruct schema mismatch: binary '${bin}' emitted schemaVersion ` +
+    `${JSON.stringify(reported)}, this build expects at least ` +
+    `"${MINIMUM_SCHEMA_VERSION}". Rebuild mdstruct (the installed binary is stale).`;
+  const have = parseMajorMinor(reported);
+  if (!have) return { ok: false, message: staleMessage };
+  if (have.major !== MINIMUM_SCHEMA.major) {
+    return {
+      ok: false,
+      message:
+        `mdstruct schema mismatch: binary '${bin}' emitted schemaVersion ` +
+        `"${reported}", a different MAJOR version than this build's floor ` +
+        `"${MINIMUM_SCHEMA_VERSION}" expects. This is not a stale binary — the wire shape ` +
+        "changed; update mdstruct.ts (and its consumers) for the new major schema before using it.",
+    };
+  }
+  if (have.minor < MINIMUM_SCHEMA.minor) return { ok: false, message: staleMessage };
+  return { ok: true };
+}
 
 // The result of parseDoc: the parsed `doc` paired with the raw UTF-8 `buf` its byte spans
 // index into (sliceBytes reads spans off `buf`, never off the original JS string).
@@ -169,15 +230,10 @@ export function parseDoc(text: string): ParsedDoc {
       `mdstruct unavailable: unparseable NDJSON from 'mdstruct' (${(e as Error).message})`,
     );
   }
-  // Exact-match against EXPECTED_SCHEMA_VERSION — see its own comment for why a mismatch
-  // must fail loud rather than silently trust a stale binary's output.
-  if (doc.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
-    throw new Error(
-      `mdstruct schema mismatch: binary '${bin}' emitted schemaVersion ` +
-        `${JSON.stringify(doc.schemaVersion)}, this build expects ` +
-        `"${EXPECTED_SCHEMA_VERSION}". Rebuild mdstruct (the installed binary is stale).`,
-    );
-  }
+  // Floor check against MINIMUM_SCHEMA_VERSION — see its own comment for why a lower minor or
+  // a different major must fail loud, while a higher minor passes through.
+  const schemaCheck = checkSchemaVersion(doc.schemaVersion, bin);
+  if (!schemaCheck.ok) throw new Error(schemaCheck.message);
   const parsed: ParsedDoc = { doc, buf };
   cache.set(key, parsed);
   return parsed;
