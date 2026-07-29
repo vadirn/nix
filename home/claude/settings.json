@@ -255,6 +255,7 @@
       "allowWrite": [
         "~/.bun",
         "~/.cache",
+        "~/.cargo",
         "~/.config/basecamp",
         "~/.docker",
         "~/.gnupg",

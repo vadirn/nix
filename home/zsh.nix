@@ -8,7 +8,9 @@
       LANG = "en_US.UTF-8";
       LC_ALL = "en_US.UTF-8";
       NPM_CONFIG_PREFIX = "$HOME/.npm-global";
-      RUSTUP_HOME = "$HOME/.rustup";
+      # No RUSTUP_HOME: the toolchain comes from home.packages, not rustup.
+      # CARGO_HOME stays — it is where cargo caches the registry and build
+      # credentials, which is independent of how rustc got installed.
       CARGO_HOME = "$HOME/.cargo";
       XDG_CONFIG_HOME = "$HOME/.config";
       EDITOR = "code --wait";
@@ -41,7 +43,10 @@
         eval "$(zoxide init --cmd cd zsh)"
       fi
 
-      export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.bun/bin:$HOME/.npm-global/bin:$PATH"
+      # `$HOME/.cargo/bin` is deliberately absent: it holds only rustup's shim
+      # farm, and cargo installs nothing there under this setup. Leaving it on
+      # PATH would let a stale shim shadow the nixpkgs toolchain.
+      export PATH="$HOME/.local/bin:$HOME/.bun/bin:$HOME/.npm-global/bin:$PATH"
 
       _set_tab_title() { print -Pn "\e]0;%1~\a" }
       precmd_functions+=(_set_tab_title)
