@@ -99,6 +99,81 @@ pub fn first_body_block_h1(content: &str) -> Option<String> {
     Some(text.to_string())
 }
 
+/// An Obsidian callout whose `[!Type]` header line and body share one
+/// CommonMark paragraph — the shape `proseWrap: never` collapses onto one line,
+/// silently turning the body into the callout's title.
+pub struct UnseparatedCallout {
+    /// 1-based line of the callout header.
+    pub line: usize,
+    /// Callout type as written between `[!` and `]`, e.g. `Abstract`.
+    pub kind: String,
+}
+
+/// Every callout in the unsafe shape, in document order.
+///
+/// Detection is exact, not heuristic: a callout is safe IFF a blank quoted `>`
+/// line separates header from body, and that blank line is precisely what makes
+/// CommonMark end the first paragraph. So the unsafe shape is a [`Node::BlockQuote`]
+/// whose FIRST child is a [`Node::Paragraph`] that both opens with a `[!Type]`
+/// token and spans more than one line. A bare header, a titled header followed by
+/// the blank `>`, and a two-paragraph body all leave a single-line first paragraph
+/// and cannot match; a titled header followed directly by a body line does match,
+/// correctly, since collapsing it merges the body into the title.
+///
+/// Fence exemption comes free: comrak parses a fenced block as [`Node::CodeBlock`],
+/// so no `BlockQuote` node exists inside one to walk.
+///
+/// Recurses through [`Node::children`], so a callout nested in an outer blockquote
+/// (`> > [!Note]`) or in a list item is reachable.
+pub fn unseparated_callouts(content: &str) -> Vec<UnseparatedCallout> {
+    let opts = Options { wikilinks: false };
+    let doc = parse(content, &opts);
+    let mut out = Vec::new();
+    collect_unseparated_callouts(doc.nodes(), content, &mut out);
+    out
+}
+
+fn collect_unseparated_callouts(nodes: &[Node], content: &str, out: &mut Vec<UnseparatedCallout>) {
+    for n in nodes {
+        if let Node::BlockQuote { children, .. } = n
+            && let Some(Node::Paragraph {
+                span,
+                start_line,
+                end_line,
+            }) = children.first()
+            && start_line != end_line
+        {
+            // A paragraph span inside a blockquote starts AFTER the `> ` marker of
+            // its first line but keeps the raw `> ` markers on every continuation
+            // line (verified against mdstruct, not assumed). So the header token
+            // sits at the very start of the span, and taking the first line off the
+            // raw slice is enough — no de-quoting.
+            let raw = content.get(span.start..span.end).unwrap_or("");
+            let first_line = raw.split(['\n', '\r']).next().unwrap_or("");
+            if let Some(kind) = callout_kind(first_line) {
+                out.push(UnseparatedCallout {
+                    line: *start_line as usize,
+                    kind: kind.to_string(),
+                });
+            }
+        }
+        collect_unseparated_callouts(n.children(), content, out);
+    }
+}
+
+/// The callout type of a line opening with a `[!Type]` token, else `None`. A
+/// trailing `-`/`+` fold marker follows the closing bracket and so needs no
+/// handling: the token itself ends at `]`.
+fn callout_kind(first_line: &str) -> Option<&str> {
+    let rest = first_line.trim_start().strip_prefix("[!")?;
+    let close = rest.find(']')?;
+    let kind = rest[..close].trim();
+    if kind.is_empty() {
+        return None;
+    }
+    Some(kind)
+}
+
 /// Pre-order flatten (document order) of the heading tree, keeping only the
 /// column-1, non-setext, non-empty ATX headings the old scanner detected.
 fn collect_headings(hs: &[Heading], content: &str, out: &mut Vec<BodyHeading>) {
