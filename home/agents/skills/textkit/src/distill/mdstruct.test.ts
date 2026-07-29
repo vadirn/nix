@@ -1,5 +1,5 @@
 // mdstruct-harvester golden tests — run with `bun test` from this directory (needs the
-// `mdstruct` binary on PATH; the nix host has it at /run/current-system/sw/bin/mdstruct).
+// `mdstruct` binary on PATH; the nix host has it at /etc/profiles/per-user/vadim/bin/mdstruct).
 //
 // The four structural payload harvesters (fences, blockquotes, table rows, image embeds)
 // migrated from hand-rolled line-scanning regex to mdstruct byte-spans. A residue-parity

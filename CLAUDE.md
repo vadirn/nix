@@ -7,4 +7,4 @@ Personal macOS system config: a Nix flake managing two Macs, the Claude Code glo
 ## Building
 
 - `cargo` isn't reliably on PATH — a bare non-login shell can miss it, though the absolute path `/etc/profiles/per-user/vadim/bin/cargo` and an interactive login shell both resolve it. Build the Rust crates through Nix instead: `nix build .#mdstruct` and `nix build .#vault-query` (both run the crate tests as part of the build). `vault-query` links `mdstruct` as a path dependency, so changing `mdstruct` can require rebuilding both.
-- `./rebuild.sh` runs `darwin-rebuild switch` and deploys everything: the system, Claude agent symlinks, and npm globals. Deployed binaries live at `/run/current-system/sw/bin/`.
+- `./rebuild.sh` runs `darwin-rebuild switch` and deploys everything: the system, Claude agent symlinks, and npm globals. Deployed binaries live at `/etc/profiles/per-user/vadim/bin/`.
