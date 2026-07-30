@@ -204,6 +204,14 @@ pub struct EmphasisSpan {
     pub before: Option<char>,
     /// The character immediately after the run, `None` at the end of the file.
     pub after: Option<char>,
+    /// The character immediately after [`Self::after`] — one further character of
+    /// lookahead, `None` when there is no such character (end of input, or
+    /// `after` itself is already `None`). Exists because `after` alone cannot
+    /// tell a sentence-ending `.` from an extension `.`: `**human**.` and
+    /// `**foo**.md` both report `after == Some('.')`; the character past it —
+    /// absent or whitespace in the first case, `m` in the second — is what
+    /// distinguishes them.
+    pub after_next: Option<char>,
 }
 
 /// Every emphasis run in the document, in `inlines[]` order.
@@ -276,6 +284,7 @@ fn resolve_emphasis(
         inner: chars[width..chars.len() - width].iter().collect(),
         before: content[..span.start].chars().next_back(),
         after: content[span.end..].chars().next(),
+        after_next: content[span.end..].chars().nth(1),
     })
 }
 

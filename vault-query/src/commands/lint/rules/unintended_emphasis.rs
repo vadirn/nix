@@ -111,11 +111,15 @@ fn shape(span: &EmphasisSpan) -> Option<&'static str> {
 /// both ends, because `src/*.ts and dist/*.js` opens after a `/` onto a `.` and
 /// closes on a `/`.
 ///
-/// The conjunction is also what lets the closing test accept a `.`: on its own
-/// `after == '.'` is the period ending `this is *really*.`, but that run's open
-/// is unwelded, so the pair never fires. The one asymmetry left is a `.` at the
-/// inner close, excluded because `**/goal (outer framing).**` ends a sentence
-/// inside the bold.
+/// A closing `.` alone is not enough evidence: `after == '.'` is also the period
+/// ending `this is *really*.`, and — the case that motivates the lookahead — the
+/// period ending `auto/**human**.`, where the open already welds on the `/` of
+/// `auto/` so the conjunction alone cannot save it. The close test asks one
+/// character further, [`EmphasisSpan::after_next`], and counts the `.` as a weld
+/// only when an alphanumeric follows it, as in the `md` of `**foo**.md`. A `.` at
+/// end of input, or followed by whitespace, is ordinary sentence punctuation and
+/// does not weld. The one asymmetry left is a `.` at the inner close, excluded
+/// because `**/goal (outer framing).**` ends a sentence inside the bold.
 ///
 /// # Why relaxing the conjunction and testing content instead does not work
 ///
@@ -154,7 +158,12 @@ fn is_glob_or_path(span: &EmphasisSpan) -> bool {
     let open_welded = matches!(span.before, Some('.') | Some('/'))
         || span.inner.starts_with('.')
         || span.inner.starts_with('/');
-    let close_welded = matches!(span.after, Some('.') | Some('/')) || span.inner.ends_with('/');
+    // A trailing `/` always welds. A trailing `.` welds only when it reads as an
+    // extension rather than a full stop — see the doc above for why `after`
+    // alone cannot tell the two apart.
+    let close_welded = span.inner.ends_with('/')
+        || matches!(span.after, Some('/'))
+        || (span.after == Some('.') && span.after_next.is_some_and(char::is_alphanumeric));
     open_welded && close_welded
 }
 
@@ -428,6 +437,32 @@ mod tests {
             "The boundary shifts from auto/**human** to auto/**curated**, and it rejected _codex_/_vellum_ outright.\n",
         );
         assert_eq!(findings.len(), 0);
+    }
+
+    // The bug this ticket fixes: an either-or construction whose open already
+    // welds on a real `/` must not be rescued by a trailing sentence period on
+    // the close. `after == '.'` alone used to weld the close unconditionally, so
+    // `auto/**human**.` — the same construction as above, now ending a sentence —
+    // misfired. The three cases below pin the distinction the fix draws: a `.`
+    // at end of input, a `.` before the next sentence, and a `.` immediately
+    // welded to an extension (the genuine-path case, which must keep flagging).
+    #[test]
+    fn an_either_or_construction_ending_a_sentence_at_end_of_input_emits_nothing() {
+        let findings = check("The split runs auto/**human**.");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn an_either_or_construction_ending_a_sentence_before_more_prose_emits_nothing() {
+        let findings = check("The split runs auto/**human**. Then it repeats.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    #[test]
+    fn a_path_with_an_extension_after_the_close_still_flags() {
+        let findings = check("The generated file is src/**foo**.md today.\n");
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].data.as_ref().unwrap()["shape"], "glob-or-path");
     }
 
     #[test]
