@@ -1,5 +1,5 @@
 ---
-name: laconic
+name: Laconic
 description: Fewest words that resolve the question while keeping the answer whole
 keep-coding-instructions: true
 ---
