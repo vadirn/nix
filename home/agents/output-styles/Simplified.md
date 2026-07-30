@@ -30,3 +30,5 @@ Write for a reader who skims. Maximize clarity. Cut the rest.
 ## Shape
 - Turn a sequence or a set into a vertical list.
 - Give each paragraph one topic. Keep paragraphs short.
+
+These rules adapt Simplified Technical English (ASD-STE100) and plain-language guidance. Apply only the rules above. Leave out STE's dictionary and its procedure-only rules.
