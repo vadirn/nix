@@ -94,12 +94,14 @@ fn shape(span: &EmphasisSpan) -> Option<&'static str> {
 
 /// A run whose delimiters sit in a path or a glob.
 ///
-/// The test reads the two characters flanking each delimiter and NEVER the run's
-/// content. Content is not evidence of intent: `**src/main.rs**` and
-/// `**config.toml**` are ordinary bold that happens to name a file, and scanning
-/// the content for a path separator or an extension flags 552 such runs across
-/// this vault, all of them intended. What betrays a literal delimiter is the
-/// delimiter being welded into a token instead of framed by whitespace.
+/// This test reads the two characters flanking each delimiter and not the run's
+/// content — a property of this test alone, not of the rule: the sibling
+/// [`is_identifier_or_placeholder`] does inspect content, requiring a bare
+/// identifier between the delimiters. What this test asserts is the narrower
+/// claim that content is no evidence a delimiter is literal, since
+/// `**src/main.rs**` and `**config.toml**` are ordinary bold that happens to name
+/// a file. What betrays a literal delimiter is the delimiter being welded into a
+/// token instead of framed by whitespace.
 ///
 /// A delimiter is welded when path punctuation abuts it on either side, and the
 /// run is flagged only when BOTH of its delimiters are welded. The conjunction is
@@ -114,6 +116,40 @@ fn shape(span: &EmphasisSpan) -> Option<&'static str> {
 /// is unwelded, so the pair never fires. The one asymmetry left is a `.` at the
 /// inner close, excluded because `**/goal (outer framing).**` ends a sentence
 /// inside the bold.
+///
+/// # Why relaxing the conjunction and testing content instead does not work
+///
+/// The ticket proposed the opposite trade: accept ONE welded end, and recover the
+/// precision by requiring the content to carry a path separator or a file
+/// extension. Measured over this vault's 6693 emphasis runs on 2026-07-30, it
+/// loses on both sides of the ledger.
+///
+/// Read the content clause faithfully — a `.` followed by a two-to-five-letter
+/// extension at a component boundary, or a `/` joining two path-shaped
+/// components, neither purely numeric — and it matches 168 runs. (An earlier
+/// measurement recorded here put that at 552; that figure came from a scan
+/// firing on a bare `.` or `/` ANYWHERE in the content, which also catches
+/// `**14.5**`, `**A/B test**`, `**50/50 rule.**` and every multi-sentence bold.
+/// The bare scan matches 1925 of the 6693. The clause was never the thing
+/// measured, so it was never the thing refuted.)
+///
+/// AND'ing the faithful clause with `open_welded || close_welded` does reject the
+/// 14 either-or runs, as predicted: `human`, `vellum` and `experiment claim:` are
+/// not path-shaped. It still fails, because it adds 3 findings and recovers 0.
+///
+/// - It recovers nothing. The extension clause matches no one-welded run in this
+///   vault at all. That is structural, not luck: CommonMark needs a closing `*`
+///   to be right-flanking, and in glob text the character before it is the `/` of
+///   `dist/*`, so a glob welds both ends by construction. The one shape that
+///   escapes is a trailing literal `*` after a filename — `Compare src/*.ts to
+///   the file main.ts*` — which this vault does not contain, and reaching it
+///   would flag every sentence-final `**settings.json**.`
+/// - It adds 3 false positives, all from the separator clause:
+///   `**Track/Checkpoint**.`, `**Zig core + Swift/AppKit GUI**.`, and
+///   `_style/structure_.` Each is a word-over-word alternation welded shut by a
+///   sentence period, and each is structurally identical to a two-component
+///   relative path. No content test separates `Track/Checkpoint` from `src/main`,
+///   which is the same wall the either-or construction already put up.
 fn is_glob_or_path(span: &EmphasisSpan) -> bool {
     let open_welded = matches!(span.before, Some('.') | Some('/'))
         || span.inner.starts_with('.')
@@ -135,16 +171,21 @@ fn is_glob_or_path(span: &EmphasisSpan) -> bool {
 ///   glob test this one stays a disjunction, because the paired delimiters of a
 ///   corrupted identifier sit sentences apart and only the opening one lands
 ///   inside a word: requiring both ends missed all three live corruptions in this
-///   vault (`bug*004`, `UNRESOLVED*IMPORT`) to spare two deliberate partial-word
-///   bolds (`==**A**ffirmo.==`), which is the wrong trade for a rule a human
-///   adjudicates.
+///   vault (`bug*004`, `UNRESOLVED*IMPORT`) to spare four deliberate partial-word
+///   bolds (`==**A**ffirmo.==` and its three siblings), which is the wrong trade
+///   for a rule a human adjudicates. Those four are the rule's whole standing
+///   false-positive budget against the live vault. A content test would suppress
+///   them — every one has a single-character `inner`, and a corrupted identifier
+///   never does, because its stolen opener pairs with a delimiter sentences away
+///   — but that exemption buys four glances back at the cost of blinding the rule
+///   to any one-character intraword run, so it stays unspent.
 /// - Bare-identifier content under a DOUBLED `_` (`__init__`, `__G0__`). The
 ///   doubling is what carries the tell, not the underscore: `autoformat` routes
 ///   `.md` through `oxfmt`, which normalizes every intended italic to `_x_`, so a
-///   singly-delimited `_word_` is this vault's canonical emphasis — 394 of them,
-///   all intended — while `__x__` is a spelling oxfmt never writes for bold (it
-///   writes `**x**`) and so survives only where an author typed the underscores
-///   as part of the name.
+///   singly-delimited `_word_` is this vault's canonical emphasis — 405 runs of
+///   that spelling, all intended — while `__x__` is a spelling oxfmt never writes
+///   for bold (it writes `**x**`) and so survives only where an author typed the
+///   underscores as part of the name.
 fn is_identifier_or_placeholder(span: &EmphasisSpan) -> bool {
     if span.run >= 3 {
         return true;
@@ -335,14 +376,17 @@ mod tests {
 
     // A path or a filename INSIDE a well-framed run is intended bold or italic —
     // the delimiters are framed by whitespace and only the payload mentions a
-    // file. Flagging on content instead of on delimiter context fired on 552 such
-    // runs across the vault, every one of them a false positive.
+    // file. 168 runs across the vault carry path-shaped content; flagging on that
+    // content is what `is_glob_or_path` declines to do.
     #[test]
     fn a_path_inside_well_framed_emphasis_emits_nothing() {
         let findings = check("See **src/main.rs** for the entry point.\n");
         assert_eq!(findings.len(), 0);
     }
 
+    // The second clause is the one a content test breaks: `**settings.json**` is
+    // welded shut by the sentence period, so a predicate that accepts ONE welded
+    // end plus an extension in the content flags it. See `is_glob_or_path`.
     #[test]
     fn a_filename_inside_well_framed_emphasis_emits_nothing() {
         let findings = check("Open the *config.toml* file now, then **settings.json**.\n");
@@ -350,7 +394,7 @@ mod tests {
     }
 
     // The form `oxfmt` normalizes every intended italic into. Flagging it would
-    // fire on 394 runs across the vault.
+    // fire on 405 runs across the vault.
     #[test]
     fn single_underscore_italic_emits_nothing() {
         let findings = check("This is _really_ important, and __init__ is not.\n");
@@ -402,6 +446,28 @@ mod tests {
     #[test]
     fn a_ratio_inside_emphasis_emits_nothing() {
         let findings = check("Confidence **10/10 ✅** on that one, **167/0** overall.\n");
+        assert_eq!(findings.len(), 0);
+    }
+
+    // The three runs a one-welded-end predicate with a path-shaped-content test
+    // would flag, and the reason it was rejected: a word-over-word alternation
+    // closed by a sentence period is indistinguishable, by content, from a
+    // two-component relative path.
+    #[test]
+    fn a_word_alternation_closed_by_a_sentence_period_emits_nothing() {
+        let findings = check(
+            "The Card/Note division relocated to **Track/Checkpoint**.\n\nGhostty: **Zig core + Swift/AppKit GUI**.\n\nIt targets _content_ suppression, not _style/structure_.\n",
+        );
+        assert_eq!(findings.len(), 0);
+    }
+
+    // The conjunction's one known miss, recorded rather than closed: a trailing
+    // literal `*` after a filename leaves the close unwelded, so the pair of
+    // literal asterisks renders as italic and goes unreported. Reaching it needs a
+    // content test, which costs `**settings.json**.` above.
+    #[test]
+    fn a_trailing_asterisk_after_a_filename_is_a_known_miss() {
+        let findings = check("Compare src/*.ts to the file main.ts* here.\n");
         assert_eq!(findings.len(), 0);
     }
 
