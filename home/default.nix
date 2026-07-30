@@ -4,6 +4,7 @@
   vault-query,
   mdread,
   mdstruct,
+  mdformat,
   ...
 }: {
   users.users.vadim.home = homeDirectory;
@@ -48,6 +49,7 @@
             vault-query
             mdread
             mdstruct
+            mdformat
           ];
       };
       programs = {

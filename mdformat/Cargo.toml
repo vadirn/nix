@@ -1,0 +1,12 @@
+[package]
+name = "mdformat"
+version.workspace = true
+edition.workspace = true
+description = "Comrak's parser plus mdstruct's shared parse configuration, printing byte-exact source back out (the printer itself lands next; this step is scaffolding + a fixpoint stub)."
+
+[dependencies]
+mdstruct.workspace = true
+clap.workspace = true
+comrak.workspace = true
+
+[dev-dependencies]

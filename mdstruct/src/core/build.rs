@@ -23,7 +23,7 @@ impl Default for Options {
     }
 }
 
-fn comrak_options(opts: &Options) -> comrak::Options<'static> {
+pub(crate) fn comrak_options(opts: &Options) -> comrak::Options<'static> {
     let mut o = comrak::Options::default();
     o.extension.table = true;
     o.extension.strikethrough = true;

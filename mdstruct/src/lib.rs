@@ -6,6 +6,11 @@
 
 mod core;
 
+// Re-exported so a sibling crate (e.g. a formatter) that calls
+// `comrak_options` below gets the SAME `comrak::Options` type our own parse
+// uses, guaranteed by construction rather than by both crates happening to
+// pin the same comrak version.
+pub use comrak;
 pub use core::build::{Options, build_document};
 pub use core::model::{
     Document, FrontMatter, Heading, Inline, Node, Region, SCHEMA_VERSION, Source, Span,
@@ -13,6 +18,15 @@ pub use core::model::{
 pub use core::verify::{SpanMismatch, verify_spans};
 
 use std::str::Utf8Error;
+
+/// The comrak parse configuration mdstruct's core builds against, exposed so
+/// a sibling crate (e.g. a formatter) parses under the IDENTICAL settings —
+/// the two can never disagree about the parse. `mod core` stays private;
+/// this wrapper is the only door into its comrak configuration, so the
+/// module tree itself never becomes public API.
+pub fn comrak_options(opts: &Options) -> comrak::Options<'static> {
+    core::build::comrak_options(opts)
+}
 
 /// Parse in-memory UTF-8 source. Never fails for valid UTF-8.
 pub fn parse(source: &str, opts: &Options) -> Document {

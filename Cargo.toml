@@ -8,7 +8,7 @@
 # so two members cannot drift onto different versions of the same crate.
 [workspace]
 resolver = "3"
-members = ["mdstruct", "mdread", "vault-query"]
+members = ["mdstruct", "mdread", "vault-query", "mdformat"]
 
 [workspace.package]
 version = "0.1.0"
@@ -20,6 +20,7 @@ mdread = { path = "mdread" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+comrak = "0.53"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

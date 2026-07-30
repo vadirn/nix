@@ -8,7 +8,7 @@ description = "Shared comrak-backed markdown structural-parsing core: locates st
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-comrak = "0.53"
+comrak.workspace = true
 sha2 = "0.10"
 
 [dev-dependencies]

@@ -814,6 +814,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
 
 [[package]]
+name = "mdformat"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "comrak",
+ "mdstruct",
+]
+
+[[package]]
 name = "mdread"
 version = "0.1.0"
 dependencies = [
