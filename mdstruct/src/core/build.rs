@@ -31,9 +31,13 @@ pub(crate) fn comrak_options(opts: &Options) -> comrak::Options<'static> {
     // Footnotes OFF: comrak silently DROPS unreferenced footnote definitions,
     // and the vault's citation style is footnote-definitions-as-bibliography
     // (no inline `[^x]`). On, this breaks total tiling (dropped def's bytes go
-    // uncovered) and vanishes distill's citations. Off, they parse as
-    // paragraphs — tiled, content preserved — and footnote harvesting stays a
-    // distill-side regex lane, like pseudo-tables and enum-marker lists.
+    // uncovered) and vanishes distill's citations. Off, link reference definitions
+    // like `[^1]: https://example.com` parse as link refs (render nothing), while
+    // definitions with whitespace in the destination like `[^1]: Some author, 2019`
+    // fail to parse as link refs and fall back to paragraphs — tiled, content
+    // preserved. Footnote harvesting stays a distill-side regex lane, and fill_gaps
+    // back-covers any uncovered bytes. (Tested against comrak 0.53.0; see
+    // 35 experiments/2026-07-30-comrak-sourcepos-defects.md.)
     o.extension.autolink = true;
     o.extension.front_matter_delimiter = Some("---".to_string());
     if opts.wikilinks {

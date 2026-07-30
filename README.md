@@ -8,7 +8,7 @@
          aarch64-darwin
 ```
 
-Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and Rust tooling for an Obsidian vault — a shared markdown-parsing core (`mdstruct`), a general markdown reader (`mdread`), and a query CLI (`vault-query`) built on both.
+Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and Rust tooling for an Obsidian vault — a shared markdown-parsing core (`mdstruct`), a general markdown reader (`mdread`), a markdown formatter (`mdformat`), and a query CLI (`vault-query`) built on the core.
 
 ## Machines
 
@@ -33,6 +33,10 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 The three crates form one cargo workspace rooted at `Cargo.toml`, chained by path dependency: `vault-query → mdread → mdstruct`. One lockfile, one `target/`, one `cargo test --workspace`, and — because a single lockfile vendors a single dependency set — one `cargoHash` in `flake.nix`, shared by all three `buildRustPackage` derivations and recomputed once when a dependency changes. Dependencies used by more than one member are declared in `[workspace.dependencies]` and inherited with `.workspace = true`, so two members cannot drift onto different versions of the same crate. `shell.nix` at the root provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
 
 Each package still builds on its own — `nix build .#mdread` selects its member with `buildAndTestSubdir`, and cargo finds the root manifest above it.
+
+## mdformat
+
+A Rust crate in `mdformat/`. Comrak's parser plus our own printer — a sibling to `mdstruct` rather than built on it, since `mdstruct`'s flat span index is deliberately not printable (the design axiom "never restringify" guards byte-exact read-back). Formats markdown according to a configurable style. Built as a Nix package (`nix build .#mdformat`).
 
 ## mdstruct
 
