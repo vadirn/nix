@@ -75,12 +75,15 @@ fn shared_options_enable_documented_extensions() {
     assert!(has_tasklist, "extension.tasklist must be on");
 }
 
-/// `mdformat::fixpoint_stub` round-trips real (if small) markdown unchanged
-/// today, which is exactly the identity contract the doc comment promises
-/// for this step — a stand-in for the eventual byte-exact printer.
+/// The block-level printer reproduces a realistic document byte-exactly AND
+/// its spans partition the document's content bytes. The second conjunct is
+/// the load-bearing one; `tests/fixpoint.rs` explains why equality alone would
+/// be vacuous, and holds the injection that proves it.
 #[test]
-fn fixpoint_stub_round_trips_a_realistic_document() {
+fn fixpoint_round_trips_a_realistic_document() {
     let src = "---\ntitle: x\n---\n# Heading\n\nSome *text* with a [[Wikilink]] and a [link](https://x.io).\n\n- one\n- two\n";
     let opts = mdstruct::Options::default();
-    assert_eq!(mdformat::fixpoint_stub(src, &opts), src);
+    let report = mdformat::fixpoint(src, &opts).expect("every sourcepos converts");
+    assert!(report.passed(), "{:?}", report.partition.violations);
+    assert_eq!(report.output, src);
 }

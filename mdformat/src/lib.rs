@@ -1,4 +1,4 @@
-//! `mdformat` — comrak's parser plus (eventually) our own printer.
+//! `mdformat` — comrak's parser plus our own sourcepos-driven printer.
 //!
 //! A **sibling** to `mdstruct`, not built on it: `mdstruct::build_document`
 //! allocates a comrak arena, walks it into a flat `Document` span index, and
@@ -15,15 +15,29 @@
 //! the two agree, guarding against a future edit that re-derives instead of
 //! delegating.
 //!
-//! A confirmed experiment underpins the printer step that comes next: a
-//! printer that emits the original source bytes for every node span, plus
-//! the whitespace gap bytes between spans, reconstructs a file byte-exactly,
-//! because comrak's own printer never reads sourcepos — comrak populates
-//! `Ast::sourcepos` unconditionally, independent of `render.sourcepos`. That
-//! printer is not built yet; [`fixpoint_stub`] is scaffolding for it.
+//! # Milestone 1: the partition, not the reformat
+//!
+//! [`fixpoint`] changes nothing about any file's bytes. It parses, claims a
+//! byte range for each top-level block, and proves those ranges form a
+//! partition of the file's content bytes — every non-whitespace byte in
+//! exactly one block span, no overlaps, nothing past the end. That property,
+//! not byte-exact reassembly, is what a later milestone needs: a formatter
+//! that rewrites one block (table padding, list marker unification) splices
+//! its replacement over that block's range, and only a partition guarantees
+//! the splice neither drops nor duplicates the rest of the file. Reassembly
+//! equality comes along for free and proves nothing on its own — [`print`]'s
+//! module docs explain why, and a test holds the trap open.
 
 use comrak::Arena;
 use comrak::nodes::AstNode;
+
+pub mod print;
+pub mod span;
+
+pub use print::{
+    Block, PartitionReport, Violation, block_kind, block_spans, check_partition, reassemble,
+};
+pub use span::{LineIndex, PosError, PosReason};
 
 /// `mdformat`'s comrak parse configuration. Forwards to
 /// [`mdstruct::comrak_options`] verbatim — `mdformat` has no comrak settings
@@ -50,18 +64,44 @@ pub fn parse_with<'a, R>(
     f(root)
 }
 
-/// Stub for the eventual printer. Parses `source` under the shared
-/// configuration (proving the wiring end to end) and returns the input
-/// unchanged. The real printer replaces the body of the callback with a walk
-/// that emits each node's span plus the gap bytes between spans; until then,
-/// the identity transform trivially satisfies `print(parse(f)) == f` because
-/// it never touches the bytes.
-pub fn fixpoint_stub(source: &str, opts: &mdstruct::Options) -> String {
+/// One file's fixpoint result: the block spans, the partition verdict, and the
+/// printer's output.
+#[derive(Debug, Clone)]
+pub struct Fixpoint {
+    pub blocks: Vec<Block>,
+    pub partition: PartitionReport,
+    pub output: String,
+    /// Whether [`print::reassemble`]'s output equals the input. Necessary but
+    /// far from sufficient — see [`print`].
+    pub matches_input: bool,
+}
+
+impl Fixpoint {
+    /// A file passes when its blocks partition its content bytes **and** the
+    /// printer reproduces it. The first conjunct is the one that can fail.
+    pub fn passed(&self) -> bool {
+        self.partition.is_partition() && self.matches_input
+    }
+}
+
+/// Parse `source` under the shared configuration, tile it with the byte range
+/// of each top-level block, and report whether those ranges partition its
+/// content bytes and reproduce it verbatim.
+///
+/// `Err` carries every sourcepos that does not name a byte range in `source`;
+/// unlike `mdstruct`, an out-of-range position is never clamped.
+pub fn fixpoint(source: &str, opts: &mdstruct::Options) -> Result<Fixpoint, Vec<PosError>> {
     let arena = Arena::new();
-    parse_with(&arena, source, opts, |_root| {
-        // TODO(printer): walk `_root`, emit each node's source span and the
-        // whitespace gaps between spans, and drop this passthrough.
-        source.to_string()
+    parse_with(&arena, source, opts, |root| {
+        let blocks = block_spans(root, source)?;
+        let partition = check_partition(source, &blocks);
+        let output = reassemble(source, &blocks);
+        Ok(Fixpoint {
+            matches_input: output == source,
+            blocks,
+            partition,
+            output,
+        })
     })
 }
 
@@ -86,9 +126,12 @@ mod tests {
     }
 
     #[test]
-    fn fixpoint_stub_is_identity_for_now() {
+    fn fixpoint_passes_and_accounts_for_every_content_byte() {
         let src = "# Heading\n\nSome *text* with a [[Wikilink]].\n";
         let opts = mdstruct::Options::default();
-        assert_eq!(fixpoint_stub(src, &opts), src);
+        let r = fixpoint(src, &opts).expect("spans convert");
+        assert!(r.passed(), "{:?}", r.partition.violations);
+        assert_eq!(r.output, src);
+        assert_eq!(r.partition.content_bytes, r.partition.covered_content_bytes);
     }
 }

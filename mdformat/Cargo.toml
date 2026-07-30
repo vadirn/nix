@@ -2,7 +2,7 @@
 name = "mdformat"
 version.workspace = true
 edition.workspace = true
-description = "Comrak's parser plus mdstruct's shared parse configuration, printing byte-exact source back out (the printer itself lands next; this step is scaffolding + a fixpoint stub)."
+description = "Comrak's parser plus mdstruct's shared parse configuration, with a block-level passthrough printer whose spans are gated by a non-whitespace-byte partition oracle."
 
 [dependencies]
 mdstruct.workspace = true
