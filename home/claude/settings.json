@@ -214,7 +214,7 @@
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {},
-  "outputStyle": "Laconic",
+  "outputStyle": "Simplified",
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
