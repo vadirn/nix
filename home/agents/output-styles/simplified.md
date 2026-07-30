@@ -1,5 +1,5 @@
 ---
-name: simplified
+name: Simplified
 description: Clarity-first prose — short active sentences, one term per concept, cut the rest
 keep-coding-instructions: true
 ---
