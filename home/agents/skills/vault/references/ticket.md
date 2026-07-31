@@ -1,6 +1,6 @@
 # Ticket Creation
 
-Creates a ticket — one unit of decided work, sized to one PR.
+Creates a ticket — one self-contained unit of work with a checkable done-condition.
 
 A ticket is where friction graduates into work. Open tickets with no `track:` are the project's backlog; setting `track:` assigns one to the effort that owns it. Distinct from a track: a track is one effort's rolling memory across sessions, a ticket is one deliverable inside it.
 
@@ -8,7 +8,7 @@ A ticket is where friction graduates into work. Open tickets with no `track:` ar
 
 Route the item before creating anything.
 
-- **Ticket** — the work is decided and you can already state the observable condition that closes it. Create `41 projects/<project>/ticket-<slug>.md`.
+- **Ticket** — the unit of work is scoped and you can already state the observable condition that closes it. Create `41 projects/<project>/ticket-<slug>.md`.
 - **`requires:` edge** — the item blocks work that already has a ticket. Add the blocking ticket's wikilink to the blocked ticket's `requires:`, giving the blocker its own ticket first when it has none. Blocked is derived from a `requires:` entry whose ticket is not yet `done`, which is why `blocked` is absent from `status`. Nothing computes that: `vault-query` prints `requires:` verbatim without opening the named ticket, so check its status yourself.
 - **Scratchpad seed** — the item is an idea that may grow into a future effort and has no done-condition yet. Append one line to `41 projects/<project>/Scratchpad.md` (`type: scratchpad`, one per project, template `Scratchpad.md`); create that file from the template when the project has none.
 
@@ -49,6 +49,7 @@ vault_root = Bash(vault-query config).vault_root Read(<vault_root>/templates/Tic
 | `created` / `updated` | `YYYY-MM-DD`. `updated` moves on every edit. |
 | `track` | wikilink to the track that owns this ticket; empty means no track owns it, which is what puts the ticket in the project backlog. Ownership says where the work belongs, not that it is underway — a track owns its queued tickets alongside the one it is working on. |
 | `requires` | list of wikilinks to tickets that must land first; `[]` when none |
+| `kind` | required. The unit of work's type: `decision` \| `fact` \| `feasibility` \| `execution`. `execution` is plain work with nothing open to resolve — the common case, written by the template; a map charts the other three (see `## Map nodes`). |
 
 Quote frontmatter wikilinks: `project: "[[41 projects/nix/Nix]]"`.
 
@@ -61,14 +62,14 @@ Quote frontmatter wikilinks: `project: "[[41 projects/nix/Nix]]"`.
 Three sections, in the template's order. Keep the template's leading HTML comment: it carries the self-sufficiency rule to whoever opens the file next.
 
 - **`## What & why`** — numbered list. Each item states a piece of the work together with the reason it matters. Rationale that lives in a planning note gets restated here in full.
-- **`## Scope`** — what this ticket covers, which files it touches, and what it deliberately leaves out with a pointer to where that work went instead. One ticket is one PR, so work a single PR cannot hold means the ticket splits.
+- **`## Scope`** — what this ticket covers and what it deliberately leaves out, with a pointer to where that work went instead. Keep it self-contained: small enough to finish and check as one unit. In a code project that usually means one PR — work a single PR cannot hold splits the ticket.
 - **`## Done when`** — checklist. Each box names an observable state a reader can check against the repo (a search returning no hits, a field absent from a file), rather than an activity performed. Tick boxes as the work lands; all boxes ticked is what moves `status` to `done`.
 
-### Repo self-sufficiency
+### Self-sufficiency
 
-The body resolves for a reader holding only the git repo, because a ticket publishes to that reader. Restate rationale inline and name artifacts the repo resolves — files, symbols, PR numbers. Frontmatter is exempt: `project:`, `track:`, and `requires:` are wikilinks by design.
+The body resolves for a reader holding the project's context. For a **code** ticket that context is the git repo, because the ticket publishes there: restate rationale inline, name artifacts the repo resolves — files, symbols, PR numbers — and keep body wikilinks out. For a **vault-native** ticket (a map node), the context is the vault project, so linking the map and sibling nodes is correct. Frontmatter is always exempt: `project:`, `track:`, and `requires:` are wikilinks by design.
 
-`vault-query lint`'s `ticket-outward-only` rule flags a body wikilink at warn severity (`vault-query/src/commands/lint/rules/ticket_outward_only.rs`). Run lint after writing.
+`vault-query lint`'s `ticket-outward-only` rule flags a body wikilink at warn severity (`vault-query/src/commands/lint/rules/ticket_outward_only.rs`). It does not yet tell a code ticket from a vault-native one, so treat its warnings on a node's `## Resolution` as expected; teaching it to skip `kind:`-charting tickets is a follow-up. Run lint after writing a code ticket.
 
 ## Example
 
@@ -116,6 +117,14 @@ Out of scope: migrating the Backlog content that already exists in tracks on dis
 2. Tick `## Done when` boxes as the work lands; set `status: done` once they all are.
 3. Set `track:` when an effort takes ownership of the ticket; clear it when the effort ends with the ticket still open, returning it to the backlog.
 4. Bump `updated:` on every edit.
+
+## Map nodes
+
+A map node is just a ticket whose `kind` is `decision`, `fact`, or `feasibility` — its work is to resolve an open question, so the answer is the deliverable. (A `kind: execution` ticket is ordinary work; a map hands it to a parallel execution session and never charts it.)
+
+- **Body.** `## What & why` states the question and why it is load-bearing. `## Resolution` starts empty; the answer lands there — a fact node pastes the `/research` findings block, a decision node records the chosen option and its rationale. Overriding appends the new answer and strikes the old in place (`~~…~~`), never a silent rewrite. No `## Scope`: the work settles a question, it touches no files.
+- **Resolution is the single home.** A node's answer lives in its `## Resolution` and nowhere else. The map's `Decisions so far` holds only a link to it; the owning track's Log narrates only. One artifact per decision (Force 4).
+- **Self-sufficiency** is vault-native: a node's `## Resolution` links the map and sibling nodes by design (see §Self-sufficiency).
 
 ## Notes
 

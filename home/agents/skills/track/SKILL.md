@@ -1,7 +1,7 @@
 ---
 name: track
 description: >
-  Read or save a per-project rolling work log at `41 projects/<project>/track-<slug>.md`. Triggers: `/track`, save phrases ("wrapping up", "save session", "end of session"), resume phrases ("what was I working on", "where did we leave off"). Non-track artifacts route to /vault: cards, notes, references, tickets (one unit of decided work, sized to one PR), and scratchpad seeds (an idea with no done-condition yet).
+  Read or save a per-project rolling work log at `41 projects/<project>/track-<slug>.md`. Triggers: `/track`, save phrases ("wrapping up", "save session", "end of session"), resume phrases ("what was I working on", "where did we leave off"). Non-track artifacts route to /vault: cards, notes, references, tickets (one self-contained unit of work with a checkable done-condition), and scratchpad seeds (an idea with no done-condition yet).
 ---
 
 # Track
