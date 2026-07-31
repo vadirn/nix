@@ -5,6 +5,7 @@ pub mod registry;
 pub mod relations;
 pub mod rule;
 pub mod rules;
+pub mod schema;
 
 use anyhow::Result;
 use std::io::Write;
