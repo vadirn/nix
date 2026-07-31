@@ -30,6 +30,7 @@ fn required_fields(type_val: &str) -> Option<&'static [&'static str]> {
             "description",
             "status",
             "project",
+            "kind",
             "created",
             "updated",
         ]),
@@ -339,15 +340,16 @@ mod tests {
         let ctx = LintContext::build(&root, &files, &[]);
 
         let findings = MissingRequiredField.check(&ctx);
-        // ticket requires: slug, description, status, project, created, updated (6 total)
-        // slug is present, so 5 missing
-        assert_eq!(findings.len(), 5);
+        // ticket requires: slug, description, status, project, kind, created, updated (7 total)
+        // slug is present, so 6 missing
+        assert_eq!(findings.len(), 6);
 
         let messages: Vec<&str> = findings.iter().map(|f| f.message.as_str()).collect();
         assert!(!messages.contains(&"ticket file is missing required field 'slug'"));
         assert!(messages.contains(&"ticket file is missing required field 'description'"));
         assert!(messages.contains(&"ticket file is missing required field 'status'"));
         assert!(messages.contains(&"ticket file is missing required field 'project'"));
+        assert!(messages.contains(&"ticket file is missing required field 'kind'"));
         assert!(messages.contains(&"ticket file is missing required field 'created'"));
         assert!(messages.contains(&"ticket file is missing required field 'updated'"));
     }
@@ -364,6 +366,7 @@ mod tests {
                 ("description", Value::String("do the thing".into())),
                 ("status", Value::String("open".into())),
                 ("project", Value::String("my-project".into())),
+                ("kind", Value::String("feature".into())),
                 ("created", Value::String("2026-07-24".into())),
                 ("updated", Value::String("2026-07-24".into())),
                 // track and requires intentionally absent — must not produce a finding
