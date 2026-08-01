@@ -55,6 +55,18 @@
 //! recovers those bytes because the last item's spans are correct even when
 //! its siblings' are not.
 //!
+//! That condition is also the repair's limit: it needs *some* later block
+//! descendant to report a correct end. Put the indented code block in the LAST
+//! list item and follow the list with a top-level block, and comrak reports
+//! that code block as an empty range too — no correct end is left to borrow,
+//! and the union recovers nothing.
+//! `tests/negative_controls.rs::an_indented_code_block_in_the_last_list_item_leaves_its_content_uncovered`
+//! holds that shape open as an asserted failure, with the same list at EOF as
+//! its passing control. Corpus exposure is zero: comrak finds 8 indented code
+//! blocks across the 1052-file vault — 7 in `30 notes/Goals.md`, 1 in
+//! `30 notes/Nix, nix-shell.md` — and every one has a later sibling to borrow
+//! from.
+//!
 //! **Link reference definitions vanish.** comrak consumes them without
 //! emitting a node, so their bytes belong to no span:
 //! `"[a]: https://x.io\n\nbody\n"` yields a single paragraph covering `body`
@@ -224,6 +236,9 @@ pub fn block_spans<'a>(root: &'a AstNode<'a>, source: &str) -> Result<Vec<Block>
 /// A definition whose destination sits on a following line leaves that line
 /// unclaimed and the file failing. Vault exposure is zero, and inventing a
 /// continuation rule would widen exactly the tolerance this keeps narrow.
+/// `tests/negative_controls.rs::a_link_reference_definition_with_a_continued_destination_loses_its_destination`
+/// asserts that failure rather than leaving it as a comment, so widening the
+/// fill has to break a test first.
 fn fill_dropped_link_reference_definitions(source: &str, idx: &LineIndex, blocks: &mut Vec<Block>) {
     let depth = depth_map(source.len(), blocks);
     if depth.iter().all(|&d| d > 0) {

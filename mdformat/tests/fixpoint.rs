@@ -7,8 +7,17 @@
 //! whose fixtures get reformatted tests nothing. Byte literals also let CRLF,
 //! a lone `\r`, and a BOM appear exactly as bytes.
 //!
-//! The fixtures aim at constructs this vault actually holds and that a naive
-//! printer would damage. The three tests that matter most are the ones a naive
+//! The fixtures aim at two things: constructs this vault actually holds and
+//! that a naive printer would damage, and — since a corpus proves nothing
+//! about what it lacks — the Obsidian constructs a census of all 1052 vault
+//! files found ZERO live occurrences of. Those are marked `zero in corpus`
+//! below; the corpus run cannot exercise them, so only a fixture can.
+//!
+//! Everything here is a specimen the oracle must **accept**. The specimens it
+//! must **reject** live in `negative_controls.rs`, which pins the two shapes
+//! `print.rs`'s workarounds leave open.
+//!
+//! The three tests that matter most are the ones a naive
 //! implementation would *pass*:
 //! [`reassembly_alone_misses_what_the_partition_catches`] (the vacuous-oracle
 //! trap), [`shortening_every_span_by_one_byte_fails_the_partition`] (the
@@ -46,6 +55,28 @@ const FIXTURES: &[(&str, &str)] = &[
     (
         "callout-in-list",
         "- item\n  > [!Tip]\n  > tip body\n- next\n\nafter\n",
+    ),
+    // Foldable callouts — `-` collapsed, `+` expanded. Zero in corpus. comrak
+    // has no callout extension, so the fold marker is just text inside the
+    // block quote's first paragraph; the fixture pins that it stays there.
+    (
+        "callout-foldable",
+        "> [!faq]- Collapsed by default\n> This content is hidden until expanded.\n\n\
+         > [!faq]+ Expanded by default\n> This content is visible but can be collapsed.\n\nafter\n",
+    ),
+    // A callout inside a callout. Zero in corpus. `callout-nested` above nests
+    // a bare quote; this nests a second *callout*, which is the Obsidian
+    // construct, and comrak reads it as a block quote holding a block quote.
+    (
+        "callout-nested-callout",
+        "> [!question] Outer callout\n>\n> > [!note] Inner callout\n> > Nested content\n\nafter\n",
+    ),
+    // The nesting above with an indented code block in the inner callout —
+    // the construct that truncates container sourcepos, reached through two
+    // levels of block quote instead of a list.
+    (
+        "callout-nested-with-indented-code",
+        "> [!question] Outer\n>\n> > [!note] Inner\n> >\n> >     code in inner\n\nafter\n",
     ),
     // --- footnote definitions with no reference ----------------------------
     // `extension.footnote` is deliberately OFF (comrak would drop unreferenced
@@ -93,6 +124,65 @@ const FIXTURES: &[(&str, &str)] = &[
         "wikilink-in-table",
         "| a | b |\n|---|---|\n| [[Note\\|alias]] | x \\| y |\n",
     ),
+    // A wikilink with no note name, targeting a heading in the same file.
+    // Zero in corpus.
+    (
+        "wikilink-same-note",
+        "A link to [[#Heading in same note]] and [[Note#Heading|Custom]].\n\n\
+         # Heading in same note\n\nbody\n",
+    ),
+    // Obsidian's search wikilinks: `[[##…]]` searches headings, `[[^^…]]`
+    // searches blocks. Zero in corpus. Neither is a link target, so what
+    // matters is that comrak's wikilink extension does not eat the bytes.
+    (
+        "wikilink-search",
+        "Search [[##heading]] for headings and [[^^block]] for blocks.\n\nafter\n",
+    ),
+    // PDF embeds, including the `#height=` fragment. Zero in corpus.
+    (
+        "embed-pdf",
+        "![[document.pdf]]\n\n![[document.pdf#page=3]]\n\n![[document.pdf#height=400]]\n\nafter\n",
+    ),
+    // Audio embeds. Zero in corpus.
+    ("embed-audio", "![[audio.mp3]]\n\n![[audio.ogg]]\n\nafter\n"),
+    // A trailing block ID, which is how Obsidian names a block as a link
+    // target. One live occurrence in the corpus. Three placements: after a
+    // paragraph, on its own line after a quote, and on its own line after a
+    // list.
+    (
+        "block-id",
+        "This is a paragraph that can be linked to. ^my-block-id\n\n\
+         > This is a quote\n> With multiple lines\n\n^quote-id\n\n\
+         - Item 1\n- Item 2\n\n^list-id\n",
+    ),
+    // The same block ID with the blank line missing: it becomes a lazy
+    // continuation of the last list item's paragraph rather than a block of
+    // its own, so the list's span has to cover it.
+    (
+        "block-id-absorbed-by-list",
+        "- Item 1\n- Item 2\n^list-id\n\nafter\n",
+    ),
+    // An inline footnote. Zero in corpus, and `extension.footnote` is OFF, so
+    // `^[…]` survives as paragraph text.
+    (
+        "inline-footnote",
+        "Inline footnotes are also supported.^[This is an inline footnote.]\n\nafter\n",
+    ),
+    // Obsidian comments: inline `%%…%%`, and a block delimited by bare `%%`
+    // lines. Zero in corpus. comrak has no comment extension, so both are
+    // ordinary paragraph text and the bytes must survive.
+    (
+        "block-comment",
+        "This is visible %%but this is hidden%% text.\n\n\
+         %%\nThis entire block is hidden.\nIt will not appear in reading view.\n%%\n\nafter\n",
+    ),
+    // A `---` inside such a comment block turns the two lines above it into a
+    // SETEXT HEADING for comrak, splitting one Obsidian comment across three
+    // blocks. The bytes still tile; this pins the surprise.
+    (
+        "block-comment-with-thematic-break",
+        "%%\ncomment\n---\nstill?\n%%\n\nafter\n",
+    ),
     // --- tables, lists, code -----------------------------------------------
     (
         "table",
@@ -109,6 +199,17 @@ const FIXTURES: &[(&str, &str)] = &[
         "- a\n\n  continued\n\n- b\n\nafter\n",
     ),
     ("ordered-list", "1. a\n2. b\n10. c\n\nafter\n"),
+    // `)` as the ordered-list delimiter. Zero in corpus.
+    (
+        "ordered-list-paren",
+        "1) Alternative syntax\n2) With parentheses\n\nafter\n",
+    ),
+    // `*` and `+` bullets. Zero in corpus, which is all `-`. Two adjacent
+    // lists, since a change of bullet character starts a new list.
+    (
+        "unordered-list-star-plus",
+        "* Also works with asterisks\n* Second\n\n+ Or plus signs\n+ Second\n\nafter\n",
+    ),
     ("task-list", "- [ ] todo\n- [x] done\n\nafter\n"),
     // A list at EOF: its span ends on the last content line, and the trailing
     // newline lands in the gap the printer copies verbatim.
@@ -127,7 +228,25 @@ const FIXTURES: &[(&str, &str)] = &[
         "  ```rust\n  let x = 1;\n  ```\n\nafter\n",
     ),
     ("fenced-code-unclosed", "```\nnever closed\n"),
+    // A ```query fence — Obsidian's embedded search. Zero of the corpus's 530
+    // fence-opens use this info string.
+    (
+        "query-fence",
+        "```query\ntag:#project status:done\n```\n\nafter\n",
+    ),
+    (
+        "query-fence-in-list",
+        "- item\n\n  ```query\n  tag:#x\n  ```\n\n^list-id\n",
+    ),
     ("indented-code", "para\n\n    indented code\n\nafter\n"),
+    // An indented code block in the LAST list item, with the list at EOF.
+    // Passes, and is the causal control for the negative control of the same
+    // shape in `negative_controls.rs`: put a top-level block after the list
+    // and comrak loses the code block's range entirely.
+    (
+        "indented-code-in-last-item-at-eof",
+        "- item one\n- last item:\n\n        code line one\n        code line two\n",
+    ),
     // An indented code block inside a list item, which truncates the sourcepos
     // of every container above it — reduced from `30 notes/Goals.md`.
     (
