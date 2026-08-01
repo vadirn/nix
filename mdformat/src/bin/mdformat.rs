@@ -1,4 +1,7 @@
-//! Thin CLI over the `mdformat` crate. Three verbs:
+//! Thin CLI over the `mdformat` crate. Four verbs:
+//!   format     apply every rewriting rule in one pass and print the result, or
+//!              under `--check` report which inputs are not in normal form and
+//!              where.
 //!   fixpoint   parse each input under mdstruct's shared comrak config, tile
 //!              it with its top-level block spans, and report whether those
 //!              spans partition the file's content bytes and reproduce it.
@@ -8,23 +11,34 @@
 //!              any rewrite that changes the parse or moves a non-whitespace
 //!              byte outside a delimiter row.
 //!
+//! `format` is the product verb and the other three are diagnostic, which is
+//! why they take opposite defaults: `format` prints bytes unless asked to
+//! report, `normalize` and `pad` report unless asked for bytes (`--emit`).
+//! Nothing has to chain the diagnostic verbs through stdout to get every rule
+//! applied — that is what `format` is for.
+//!
 //! Like `mdstruct check`, this takes paths and walks no directories: the
 //! corpus run is a shell pipeline, and `-` reads stdin.
 //!
-//! **No verb writes a file.** `normalize` and `pad` are opt-in, report by
-//! default, and emit bytes only to stdout under `--emit`; whether a rewrite may
-//! ever be applied in place is an undecided policy question, so this binary has
-//! no code that opens a file for writing.
+//! **No verb writes a file.** Every rewrite is opt-in and reaches only stdout;
+//! whether one may ever be applied in place is an undecided policy question, so
+//! this binary has no code that opens a file for writing.
 //!
-//! Exit codes: 0 pass, 1 I/O error, 3 input not UTF-8, 4 a file failed the
-//! partition or reassembly check — or, under `normalize`, its rewrite failed
-//! the structural-equivalence guard — 5 a sourcepos did not name a byte range.
+//! Exit codes: 0 pass, 1 I/O error, 2 a flag combination this refuses, 3 input
+//! not UTF-8, 4 a file failed a check — the partition or reassembly check under
+//! `fixpoint`, the structural-equivalence guard under `normalize` and `pad`,
+//! normal form under `format --check` — 5 a sourcepos did not name a byte
+//! range.
+//!
+//! A rule **declining** a document is not a failure and does not set an exit
+//! code: the stage passes its input through, `format --check` reports the
+//! document as normal, and the two agree because they read the same field.
 
 use std::io::{self, Read};
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
-use mdformat::{LineIndex, Violation};
+use mdformat::{LineIndex, Violation, escape_whitespace as escape};
 
 /// Comrak's parser plus mdstruct's shared parse configuration, with a
 /// block-level passthrough printer over node sourcepos.
@@ -41,6 +55,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Apply every rewriting rule — blank-line gaps, then table padding — in
+    /// one pass and print the result to stdout. Under `--check`, print nothing
+    /// and report instead which inputs are not in normal form and where,
+    /// exiting 4 when any is not. Writes no file either way.
+    Format(FormatArgs),
     /// Verify each input is a fixpoint of the block-level passthrough printer:
     /// every non-whitespace byte in exactly one top-level block span, no
     /// overlaps, nothing past the end, and the reassembly equal to the input.
@@ -56,6 +75,22 @@ enum Commands {
     /// unpadded. Writes no file: this reports, and `--emit` prints the padded
     /// bytes of a single input to stdout.
     Pad(PadArgs),
+}
+
+#[derive(Args)]
+struct FormatArgs {
+    /// Input files; `-` reads stdin. With no path given, reads stdin. Without
+    /// `--check` this takes exactly one input, since concatenating two
+    /// documents is not a formatting operation.
+    files: Vec<String>,
+    /// Report which inputs depart from normal form, and where, instead of
+    /// printing formatted bytes. Exits 4 when any input departs.
+    #[arg(short, long)]
+    check: bool,
+    /// Also report what each rule declined — whole documents, and the
+    /// individual constructs left verbatim inside them.
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 #[derive(Args)]
@@ -136,11 +171,148 @@ fn read_input(f: &str) -> Result<(String, Vec<u8>), u8> {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let exit = match cli.command {
+        Commands::Format(args) => run_format(&args),
         Commands::Fixpoint(args) => run_fixpoint(&args),
         Commands::Normalize(args) => run_normalize(&args),
         Commands::Pad(args) => run_pad(&args),
     };
     ExitCode::from(exit)
+}
+
+/// Apply every rule in one pass, or report what stands between each input and
+/// normal form.
+///
+/// The two modes read the same predicate, so they cannot disagree: a rule that
+/// declines a document yields that document unchanged, which is exactly what
+/// makes `--check` call it normal. A declination is therefore reported as an
+/// exemption and sets no exit code.
+///
+/// The only thing this ever writes is stdout, and only without `--check`.
+fn run_format(args: &FormatArgs) -> u8 {
+    let files = resolve(&args.files);
+    if !args.check && files.len() > 1 {
+        eprintln!(
+            "mdformat: format takes exactly one input unless --check is given, got {}",
+            files.len()
+        );
+        return 2;
+    }
+    let opts = mdstruct::Options::default();
+    let mut exit: u8 = 0;
+    let mut files_checked = 0usize;
+    let mut normal = 0usize;
+    let mut changed = 0usize;
+    let mut departures = 0usize;
+    let mut declinations = 0usize;
+    let mut exemptions = 0usize;
+
+    for f in &files {
+        let (path, bytes) = match read_input(f) {
+            Ok(v) => v,
+            Err(code) => {
+                exit = exit.max(code);
+                continue;
+            }
+        };
+        let source = match std::str::from_utf8(&bytes) {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln!("mdformat: {path}: input is not valid UTF-8");
+                exit = exit.max(3);
+                continue;
+            }
+        };
+        files_checked += 1;
+
+        if args.check {
+            let result = match mdformat::check(source, &opts) {
+                Ok(r) => r,
+                Err(errors) => {
+                    for e in &errors {
+                        eprintln!("mdformat: {path}: SOURCEPOS ERROR: {e}");
+                    }
+                    exit = exit.max(5);
+                    continue;
+                }
+            };
+            declinations += result.declined().count();
+            exemptions += result.exempt().count();
+            // Every rule runs against the input itself, so these positions
+            // address the file as it is on disk and sorting them together is
+            // meaningful.
+            let mut found: Vec<_> = result.departures().collect();
+            found.sort_by_key(|(_, d)| (d.line, d.column));
+            departures += found.len();
+
+            if result.is_normal() {
+                normal += 1;
+            } else {
+                exit = exit.max(4);
+                eprintln!("mdformat: {path}: NOT NORMAL ({} departures)", found.len());
+                for (rule, d) in &found {
+                    eprintln!(
+                        "mdformat: {path}:L{}:{}: {rule}: {}",
+                        d.line, d.column, d.what
+                    );
+                }
+            }
+            if args.verbose {
+                for (rule, why) in result.declined() {
+                    eprintln!(
+                        "mdformat: {path}: EXEMPT: the {rule} rule declined this document: {why}"
+                    );
+                }
+                for (rule, e) in result.exempt() {
+                    eprintln!("mdformat: {path}: EXEMPT: L{}: {rule}: {}", e.line, e.why);
+                }
+            }
+            continue;
+        }
+
+        let result = match mdformat::format(source, &opts) {
+            Ok(r) => r,
+            Err(errors) => {
+                for e in &errors {
+                    eprintln!("mdformat: {path}: SOURCEPOS ERROR: {e}");
+                }
+                exit = exit.max(5);
+                continue;
+            }
+        };
+        declinations += result.declined().count();
+        exemptions += result.exempt().count();
+        if result.changed {
+            changed += 1;
+        } else {
+            normal += 1;
+        }
+        // Reported unconditionally: stdout carries only bytes, so a stage that
+        // passed its input through is invisible there, and a caller taking the
+        // output would otherwise not learn the format is partial.
+        for (rule, why) in result.declined() {
+            eprintln!("mdformat: {path}: EXEMPT: the {rule} rule declined this document: {why}");
+        }
+        if args.verbose {
+            for (rule, e) in result.exempt() {
+                eprintln!("mdformat: {path}: EXEMPT: L{}: {rule}: {}", e.line, e.why);
+            }
+        }
+        print!("{}", result.output);
+    }
+
+    if args.check {
+        eprintln!(
+            "mdformat format --check: {normal}/{files_checked} files are in normal form \
+             ({departures} departures, {declinations} rule declinations, \
+             {exemptions} exempt constructs)"
+        );
+    } else {
+        eprintln!(
+            "mdformat format: {changed}/{files_checked} files changed \
+             ({declinations} rule declinations, {exemptions} exempt constructs)"
+        );
+    }
+    exit
 }
 
 fn run_fixpoint(args: &FixpointArgs) -> u8 {
@@ -545,22 +717,6 @@ fn context(source: &str, start: usize, end: usize) -> String {
     }
     if hi < source.len() {
         out.push('…');
-    }
-    out.push('"');
-    out
-}
-
-/// A gap's bytes on one line: newlines and tabs escaped, quoted.
-fn escape(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '"' => out.push_str("\\\""),
-            c => out.push(c),
-        }
     }
     out.push('"');
     out

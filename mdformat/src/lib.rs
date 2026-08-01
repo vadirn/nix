@@ -53,16 +53,34 @@
 //! bytes must survive byte-identical, and no cell's space-trimmed content may
 //! move. It also forced [`structure`] to grow a fourth signature, because the
 //! tree alone cannot see a table row gain or lose a cell.
+//!
+//! # The composition, and what "already formatted" means
+//!
+//! [`format`] applies every rule in [`format::RULES`] in one pass, so nothing
+//! has to chain the single-rule verbs through stdout. [`check`] answers the
+//! other half: whether a document is already in normal form, and where it is
+//! not.
+//!
+//! The predicate is not written beside the rules. It is **derived from them** —
+//! a document is normal for a rule exactly when the rule's own yield for it is
+//! the document unchanged — so a construct a rule declines is exempt by
+//! construction rather than by a second list someone has to keep in step. The
+//! [`format`] module's docs argue why that is the only correspondence that
+//! cannot drift. Like every rewrite here, the composition writes no file.
 
 use comrak::Arena;
 use comrak::nodes::AstNode;
 
+pub mod format;
 pub mod normalize;
 pub mod print;
 pub mod span;
 pub mod structure;
 pub mod table;
 
+pub use format::{
+    Check, Departure, Exemption, Format, Rule, RuleRun, check, escape_whitespace, format,
+};
 pub use normalize::{GapChange, Normalization, normalize};
 pub use print::{
     Block, PartitionReport, Violation, block_kind, block_spans, check_partition, reassemble,
