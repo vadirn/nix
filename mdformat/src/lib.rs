@@ -54,6 +54,22 @@
 //! move. It also forced [`structure`] to grow a fourth signature, because the
 //! tree alone cannot see a table row gain or lose a cell.
 //!
+//! # The third rewrite, and the oracle it must not have
+//!
+//! [`endings`] rewrites every line ending to LF. It is the only rewrite here
+//! that reaches **inside** a block's span, and the only one carrying no oracle.
+//! Both follow from the same fact: every carriage return is a CommonMark line
+//! ending, so the map is total and context-free and its effect is fixed by its
+//! own statement. The structure oracle would refuse it — comrak stores line
+//! endings verbatim in a code-block, HTML-block and front-matter literal — and
+//! an oracle blind to the bytes it changes could never fail. So it carries a
+//! measurement instead of a guard, and it runs first, which is what keeps the
+//! other two rules' inputs free of carriage returns.
+//!
+//! It exists because without it the composition emitted **mixed** endings: the
+//! gap rule states its separators as LF literals, so a CRLF gap was already
+//! rewritten, while a CRLF inside a paragraph is span interior and survived.
+//!
 //! # The composition, and what "already formatted" means
 //!
 //! [`format`] applies every rule in [`format::RULES`] in one pass, so nothing
@@ -71,6 +87,7 @@
 use comrak::Arena;
 use comrak::nodes::AstNode;
 
+pub mod endings;
 pub mod format;
 pub mod normalize;
 pub mod print;
@@ -78,6 +95,7 @@ pub mod span;
 pub mod structure;
 pub mod table;
 
+pub use endings::{EndingChange, LineEndings, to_lf};
 pub use format::{
     Check, Departure, Exemption, Format, Rule, RuleRun, check, escape_whitespace, format,
 };

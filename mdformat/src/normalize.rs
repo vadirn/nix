@@ -42,7 +42,12 @@
 //! paragraphs and `> a\n\n> b` is two quotes. A recursive rule would have to
 //! emit the container's continuation prefix, which means it is no longer
 //! rewriting gap bytes — inside a container the separator is span *interior*,
-//! and "never touch a span's interior" is the whole safety property.
+//! and never touching a span's interior is how **this** rule earns its
+//! faithfulness. That is a proof strategy, not the crate's safety property:
+//! [`crate::endings`] rewrites span interiors and is faithful for a different
+//! reason, which [`crate::format`] sets out. The strategy is the one available
+//! here because a gap rewrite's effect depends on the document — which is
+//! exactly why it also needs the guard below.
 //!
 //! **Applied between list items it would loosen every tight list.** The corpus
 //! holds 2532 tight lists (12770 items); one blank line between children makes

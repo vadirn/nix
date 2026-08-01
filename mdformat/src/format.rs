@@ -16,11 +16,13 @@
 //!
 //! # Why the predicate is derived from the rules, not written beside them
 //!
-//! Every rule here **declines** some construct. [`crate::table::pad`] declines a
-//! ragged table, because comrak does not model raggedness and padding one would
-//! either delete a long row's overflow or materialize a short row's missing
-//! cell. [`crate::normalize`] declines any document whose gaps are undefined
-//! (the input fails the partition) or whose re-parse the rewrite would change.
+//! Two of the three rules here **decline** some construct. [`crate::table::pad`]
+//! declines a ragged table, because comrak does not model raggedness and padding
+//! one would either delete a long row's overflow or materialize a short row's
+//! missing cell. [`crate::normalize`] declines any document whose gaps are
+//! undefined (the input fails the partition) or whose re-parse the rewrite would
+//! change. ([`crate::endings`] declines nothing and can decline nothing — see
+//! below.)
 //!
 //! A hand-written predicate would have to reproduce that list, and the moment
 //! it fell out of step the corrective clause would fail on every file holding a
@@ -51,13 +53,37 @@
 //! standard of correctness comes from outside. `tests/normal_form.rs` holds
 //! ill-formed inputs paired with **hand-written** expected bytes, one per rule
 //! clause, asserted byte for byte; mutating `format` to return its input fails
-//! 25 of its 28 fixtures while leaving both of its idempotence tests green,
+//! 29 of its 32 fixtures while leaving both of its idempotence tests green,
 //! which is the whole reason it exists. `corpus.sh` runs the idempotence half
 //! over the vault.
 //!
 //! [`RuleRun::departures`] localizes the same predicate: `is_normal` is byte
 //! equality, `departures` is *where* the equality fails. `RuleRun::new` asserts
 //! the two agree, so the report cannot drift from the predicate either.
+//!
+//! # One rule reaches inside a span, and what pays for it
+//!
+//! [`GapRule`] and [`TableRule`] are cheap to trust because of *where* they
+//! write: gap bytes and cell padding are outside every block's content span, so
+//! neither can disturb a span interior by construction. It is tempting to read
+//! that as the crate's safety property. It is not — it is one **proof strategy**
+//! for the actual property, which is that a rewrite is faithful to the document.
+//! It is the strategy available when a rewrite's effect depends on the document
+//! it is applied to, and you therefore cannot say what it will do without
+//! looking.
+//!
+//! [`EndingRule`] is faithful for the other reason. Its rewrite is a total,
+//! context-free map on line endings — every `\r` is a CommonMark line ending,
+//! and every line ending becomes `"\n"` — so its effect is fixed by its own
+//! statement and no document can make it do something else. A CRLF between two
+//! lines of a paragraph is span interior, and this rule rewrites it: that is the
+//! point of it, and it is what the gap rule's silence about line endings left
+//! producing files with two endings in them.
+//!
+//! It costs the other rules nothing, because it runs **first** (see [`RULES`]).
+//! Gaps and tables are handed text with no carriage return in it, so their span
+//! interiors are strictly simpler than before. The one rule that reaches inside
+//! a span is the one that removes a byte class the others had no story for.
 //!
 //! # Two evaluations, deliberately
 //!
@@ -82,20 +108,33 @@
 //! may ever be applied in place is an undecided policy question, and this module
 //! does not decide it. Every byte it yields either cleared the rule's own oracle
 //! through [`crate::Normalization::accepted`] / [`crate::Padding::accepted`], or
-//! was never touched by the rule that declined it.
+//! was never touched by the rule that declined it — with the one exception the
+//! section above states: [`EndingRule`] has no oracle to clear, because its
+//! rewrite has no context-dependence for an oracle to witness.
 
+use crate::endings::to_lf;
 use crate::normalize::normalize;
 use crate::span::{LineIndex, PosError};
 use crate::table::pad;
 
 /// The rules [`format`] applies, in pipeline order.
 ///
+/// **Endings first.** [`crate::endings`] is a lexical canonicalization, so
+/// running it at the head means no later rule ever sees a carriage return.
+/// Neither of the other two *states* anything about one — the gap rule's normal
+/// form is a table of LF literals, and the table rule's is a table of widths —
+/// so whatever they would do with a `\r` is incidental behavior rather than
+/// specified behavior. Putting the canonicalization first is what keeps it that
+/// way. It is not observable in the output (the endings rule reaches the same
+/// bytes from any position in the pipeline); it is a claim about which rule owns
+/// the question.
+///
 /// Gaps before tables: gap normalization fixes the block skeleton, and table
-/// padding then works line-locally on whatever skeleton it is handed. The two
+/// padding then works line-locally on whatever skeleton it is handed. Those two
 /// were measured to commute over the 1052-file corpus, but nothing here relies
 /// on that — [`check`] evaluates each rule against the input independently, so
 /// the predicate is order-free whatever this order is.
-pub const RULES: &[&dyn Rule] = &[&GapRule, &TableRule];
+pub const RULES: &[&dyn Rule] = &[&EndingRule, &GapRule, &TableRule];
 
 /// One rewriting rule, as [`format`] and [`check`] see it.
 ///
@@ -337,6 +376,50 @@ pub fn check(source: &str, opts: &mdstruct::Options) -> Result<Check, Vec<PosErr
         rules.push(rule.run(source, opts)?);
     }
     Ok(Check { rules })
+}
+
+/// Line endings — [`crate::endings::to_lf`] as a [`Rule`].
+///
+/// The one rule here that declines nothing and can decline nothing: its rewrite
+/// is a total, context-free map on line endings, so there is no document about
+/// which it could be wrong and no witness for a guard to read.
+/// [`crate::endings`] argues that at length, including why the structure oracle
+/// would refuse this rewrite and why an oracle blind to what it changes could
+/// never fail.
+#[derive(Debug, Clone, Copy)]
+pub struct EndingRule;
+
+impl Rule for EndingRule {
+    fn name(&self) -> &'static str {
+        "endings"
+    }
+
+    fn run(&self, source: &str, _opts: &mdstruct::Options) -> Result<RuleRun, Vec<PosError>> {
+        let e = to_lf(source);
+        let changes = e
+            .changes
+            .iter()
+            .map(|c| Departure {
+                line: c.line,
+                column: c.column,
+                what: format!(
+                    "the line ending is {} where the normal form is {}",
+                    escape_whitespace(c.old),
+                    escape_whitespace("\n")
+                ),
+            })
+            .collect();
+        // No `declined` and no `exempt`: see the type docs. `Ok` unconditionally
+        // — this rule reads no sourcepos, so it has nothing to fail converting.
+        Ok(RuleRun::new(
+            self.name(),
+            source,
+            e.output,
+            None,
+            changes,
+            Vec::new(),
+        ))
+    }
 }
 
 /// Blank-line gaps between top-level blocks — [`crate::normalize`] as a

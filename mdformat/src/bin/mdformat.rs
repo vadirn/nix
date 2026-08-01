@@ -1,7 +1,10 @@
 //! Thin CLI over the `mdformat` crate. Four verbs:
 //!   format     apply every rewriting rule in one pass and print the result, or
 //!              under `--check` report which inputs are not in normal form and
-//!              where.
+//!              where. A CRLF or lone-CR input is reported as departing, and
+//!              formatted to LF throughout — the endings rule is the only one
+//!              with no single-rule verb of its own, because it has no guard to
+//!              dry-run and no corpus exposure to measure.
 //!   fixpoint   parse each input under mdstruct's shared comrak config, tile
 //!              it with its top-level block spans, and report whether those
 //!              spans partition the file's content bytes and reproduce it.
@@ -55,8 +58,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Apply every rewriting rule — blank-line gaps, then table padding — in
-    /// one pass and print the result to stdout. Under `--check`, print nothing
+    /// Apply every rewriting rule — LF line endings, then blank-line gaps, then
+    /// table padding — in one pass and print the result to stdout. Under
+    /// `--check`, print nothing
     /// and report instead which inputs are not in normal form and where,
     /// exiting 4 when any is not. Writes no file either way.
     Format(FormatArgs),

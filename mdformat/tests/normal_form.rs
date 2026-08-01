@@ -46,8 +46,8 @@
 //!
 //! | mutation | result |
 //! | --- | --- |
-//! | `format` returns its input (the identity formatter) | 9 of 13 tests fail, 25 of 28 fixtures depart |
-//! | `MIN_WIDTH` 3 → 1 | 7 of 13 tests fail, 5 of 28 fixtures depart |
+//! | `format` returns its input (the identity formatter) | 13 of 17 tests fail, 29 of 32 fixtures depart |
+//! | `MIN_WIDTH` 3 → 1 | 7 of 17 tests fail, 6 of 32 fixtures depart |
 //!
 //! The first row is the whole argument in one number, and its *other* half is
 //! the more telling one: under the identity mutant
@@ -65,17 +65,31 @@
 //! default (`--fixpoint-only` skips it) under the same accounting guard the
 //! first phase carries.
 //!
-//! Commutativity of the two rules is deliberately **not** asserted anywhere:
-//! it is a corpus-contingent observation, and `format.rs` fixes the pipeline
-//! order at gaps → tables on purpose.
+//! Commutativity of the gap and table rules is deliberately **not** asserted
+//! anywhere: it is a corpus-contingent observation, and `format.rs` fixes the
+//! pipeline order at endings → gaps → tables on purpose. The endings rule's
+//! place at the head is load-bearing rather than contingent — it is what keeps
+//! a carriage return out of the other two rules' inputs.
 //!
 //! # Coverage the corpus cannot give
 //!
 //! A probe measured 0 whole-document declinations across 1244 vault files, so
-//! the decline path fires only here. The same holds for CRLF input, an
-//! unterminated fence at EOF, and an emoji in a table cell — the one place the
-//! display-width measure and the character count disagree. Every one of those
-//! is a fixture below.
+//! the decline path fires only here. The same holds for an unterminated fence
+//! at EOF and for an emoji in a table cell — the one place the display-width
+//! measure and the character count disagree. Every one of those is a fixture
+//! below.
+//!
+//! **Line endings are the extreme case**: 0 of those 1244 files hold a carriage
+//! return, so the entire endings rule — every clause of it — is exercised by
+//! this file and by `tests/endings.rs` and nowhere else. That is also why its
+//! fixtures had to be *rewritten* rather than added. Two of them predate the
+//! rule and pinned the shape it removed: the gap rule stated its separators as
+//! LF literals, so it rewrote the endings it could reach and left the ones
+//! inside a span, and a CRLF file came out holding **both** endings. That
+//! output was pinned deliberately, so that adopting a line-ending policy would
+//! have to be a visible edit rather than silent drift. This is that edit; the
+//! withdrawn form is now an asserted failure, in
+//! [`preserving_a_span_interior_crlf_is_not_the_normal_form`].
 //!
 //! Every specimen is an embedded byte literal, for the reason `table.rs`'s
 //! fixtures are: these shapes are *made of whitespace*, and a specimen on disk
@@ -118,8 +132,8 @@ impl Fixture {
     }
 }
 
-/// The fixtures, in rule order: gaps, then tables, then both at once, then the
-/// constructs a rule declines.
+/// The fixtures, in rule order: gaps, then endings, then tables, then all at
+/// once, then the constructs a rule declines.
 const FIXTURES: &[Fixture] = &[
     // ---------------------------------------------------------------- gaps --
     Fixture {
@@ -241,25 +255,64 @@ const FIXTURES: &[Fixture] = &[
         input: b"---\nk: v\n---\n# H\n\nbody\n",
         expected: b"---\nk: v\n---\n\n# H\n\nbody\n",
     },
+    // ------------------------------------------------------------ endings --
     Fixture {
-        // Zero corpus exposure. The gap rule states its separators as `"\n"`
-        // and `"\n\n"` literally, so a CRLF gap is not in the normal form and
-        // is regenerated as LF. Derived from the rule, not from a run.
-        name: "gaps: CRLF gap bytes are regenerated as LF",
-        clause: "the emitted separator is literally \"\\n\\n\" / \"\\n\"",
+        // Zero corpus exposure: 0 of the vault's 1244 files hold a carriage
+        // return, so every fixture in this section is the only exercise its
+        // clause gets. Two rules agree on this one — the gap rule states its
+        // separators as LF literals, and the endings rule would rewrite them
+        // anyway — which is why it is not the discriminating case.
+        name: "endings: a CRLF document comes out LF throughout",
+        clause: "\"\\r\\n\" -> \"\\n\"",
         input: b"# Title\r\n\r\n\r\nbody\r\n",
         expected: b"# Title\n\nbody\n",
     },
     Fixture {
-        // The same clause where it produces a *mixed*-ending file: the CRLF
-        // between two paragraph lines is span interior, so it survives, while
-        // the ending after the last block is a gap and becomes LF. This is the
-        // stated rule's honest consequence, pinned so that adopting a
-        // line-ending policy later has to change a fixture on purpose.
-        name: "gaps: a CRLF inside a paragraph is span interior and survives",
-        clause: "span interiors are unreachable; only gap bytes are rewritten",
+        // The discriminating case, and the reason this rule exists. The CRLF
+        // between two lines of one paragraph is span **interior**, so no gap
+        // rule reaches it; before the endings rule this input formatted to
+        // `"first\r\nsecond\n\ntail\n"`, with two line endings in one file and
+        // no clause of any normal form asking for it. That output is now
+        // refused by name, in
+        // `preserving_a_span_interior_crlf_is_not_the_normal_form`.
+        name: "endings: a CRLF inside a paragraph is span interior and is rewritten anyway",
+        clause: "\"\\r\\n\" -> \"\\n\", every line ending, span interior included",
         input: b"first\r\nsecond\r\n\r\n\r\ntail\r\n",
-        expected: b"first\r\nsecond\n\ntail\n",
+        expected: b"first\nsecond\n\ntail\n",
+    },
+    Fixture {
+        // The other row of the endings table. A lone `\r` is a CommonMark line
+        // ending too — comrak agrees, which
+        // `fixpoint.rs::lone_cr_is_a_line_ending_for_comrak_too` pins against a
+        // real parse — so these three lines are a paragraph, a heading and a
+        // paragraph, and the gap rule puts one blank line between each pair.
+        name: "endings: a lone CR is a line ending and becomes LF",
+        clause: "a lone \"\\r\" -> \"\\n\"",
+        input: b"a\r## H\rbody\r",
+        expected: b"a\n\n## H\n\nbody\n",
+    },
+    Fixture {
+        // Span interior at its most load-bearing: the bytes between the fences
+        // are a code block's *literal*, which `structure.rs` deliberately
+        // refuses to trim because they are content. The endings rule rewrites
+        // them regardless — a line ending inside a code block is still a line
+        // ending — and this is exactly the shape whose `rich` and `html`
+        // signatures the structure oracle reports as changed, which is why that
+        // oracle does not gate this rule. See `tests/endings.rs`.
+        name: "endings: a CRLF inside a fenced code block becomes LF",
+        clause: "\"\\r\\n\" -> \"\\n\", every line ending, code-block literals included",
+        input: b"# H\r\n\r\n```\r\ncode\r\n```\r\n",
+        expected: b"# H\n\n```\ncode\n```\n",
+    },
+    Fixture {
+        // All three endings in one document, which is the acceptance condition
+        // stated as bytes: whatever a file mixes, the output holds one ending.
+        // `lf\ncrlf` is one paragraph and `cr\nend` is another, so the blank
+        // line between them is the only gap.
+        name: "endings: a document mixing all three endings comes out with one",
+        clause: "\"\\r\\n\" -> \"\\n\", a lone \"\\r\" -> \"\\n\", \"\\n\" -> \"\\n\"",
+        input: b"lf\ncrlf\r\n\r\ncr\rend\n",
+        expected: b"lf\ncrlf\n\ncr\nend\n",
     },
     // -------------------------------------------------------------- tables --
     Fixture {
@@ -310,14 +363,27 @@ const FIXTURES: &[Fixture] = &[
         expected:
             b"| f    | note |\n| ---- | ---- |\n| \xF0\x9F\x8E\x89\xF0\x9F\x8E\x89 | done |\n",
     },
-    // ------------------------------------------------------- both rules ----
+    // -------------------------------------------------------- every rule ---
     Fixture {
-        // One invocation, both rules, on a document that is ill-formed under
-        // each. Column 2 holds "22" (width 2), floored to 3, which is why its
+        // One invocation, gaps and tables, on a document ill-formed under each.
+        // Column 2 holds "22" (width 2), floored to 3, which is why its
         // delimiter is three dashes and not two.
         name: "both: a gap collapse and a table padding in one pass",
         clause: "format applies every rule in RULES, gaps then tables",
         input: b"# H\n\n\n| a | b |\n| --- | --- |\n| 1 | 22 |\n\n\npara\n",
+        expected: b"# H\n\n| a   | b |\n| --- | --- |\n| 1   | 22 |\n\npara\n",
+    },
+    Fixture {
+        // All three rules in one pass, on a document ill-formed under each.
+        // The pipeline order is deliberately *not* observable here — putting
+        // the endings rule last would reach the same bytes, since the gap rule
+        // regenerates its separators as LF either way. What the head position
+        // buys is that no later rule ever has to have a story for a carriage
+        // return, which is a claim about the code rather than about the output,
+        // and so is not the kind of thing a fixture can pin.
+        name: "all: line endings, a gap collapse and a table padding in one pass",
+        clause: "format applies every rule in RULES, endings then gaps then tables",
+        input: b"# H\r\n\r\n\r\n| a | b |\r\n| --- | --- |\r\n| 1 | 22 |\r\n\r\n\r\npara\r\n",
         expected: b"# H\n\n| a   | b |\n| --- | --- |\n| 1   | 22 |\n\npara\n",
     },
     // ------------------------------------------------------- declinations --
@@ -653,7 +719,85 @@ fn more_than_one_blank_line_between_blocks_is_not_the_normal_form() {
     assert_eq!(formatted(src).output, utf8(b"# H\n\npara\n"));
 }
 
-/// **Asserted failure (e).** Deleting the blank line after front matter is the
+/// **Asserted failure (e).** Leaving a span-interior CRLF alone is what this
+/// crate did until the endings rule landed, and it is not a normal form at all:
+/// the gap rule rewrote the endings it could reach and left the ones it could
+/// not, so the output held **both**. Pinned as a refusal, with the exact bytes
+/// that used to come out, so reinstating span-interior CRLF as policy is a
+/// deliberate act with a red test attached.
+#[test]
+fn preserving_a_span_interior_crlf_is_not_the_normal_form() {
+    let src = utf8(b"first\r\nsecond\r\n\r\n\r\ntail\r\n");
+    let mixed = utf8(b"first\r\nsecond\n\ntail\n");
+    let got = formatted(src).output;
+    assert_ne!(got, mixed, "the output must not mix two line endings");
+    assert_eq!(got, utf8(b"first\nsecond\n\ntail\n"));
+    assert!(
+        !got.contains('\r'),
+        "no formatted output may hold a carriage return"
+    );
+}
+
+/// The causal control for (e): the same two paragraph lines with LF endings.
+/// The single differing factor is the ending bytes — nothing about the
+/// paragraph, the gap, or the block skeleton — and the same normal form comes
+/// out, which is what makes the CRLF input's old output a defect rather than a
+/// second legitimate form.
+#[test]
+fn the_same_document_with_lf_endings_reaches_the_same_normal_form() {
+    let src = utf8(b"first\nsecond\n\n\ntail\n");
+    assert_eq!(formatted(src).output, utf8(b"first\nsecond\n\ntail\n"));
+}
+
+/// **The check half of the ruling.** `--check` must call a CRLF file abnormal,
+/// and must locate the departure. A formatter whose check passes a file its own
+/// `format` would rewrite is the vacuity this whole file exists to close, so it
+/// is asserted rather than left to the derived predicate's good behavior.
+#[test]
+fn check_reports_a_crlf_file_as_departing_from_normal_form() {
+    let src = utf8(b"# Title\r\n\r\nfirst\r\nsecond\r\n");
+    let c = check(src, &opts()).expect("spans convert");
+    assert!(!c.is_normal(), "a CRLF file is not in normal form");
+    // One departure per ending, in the source's own coordinates: L1:8 is the
+    // `\r` after `# Title`, L2:1 the blank line's, L3:6 after `first`, L4:7
+    // after `second`.
+    assert_eq!(
+        c.departures()
+            .filter(|(rule, _)| *rule == "endings")
+            .map(|(_, d)| (d.line, d.column))
+            .collect::<Vec<_>>(),
+        vec![(1, 8), (2, 1), (3, 6), (4, 7)]
+    );
+    assert_eq!(formatted(src).output, utf8(b"# Title\n\nfirst\nsecond\n"));
+}
+
+/// The sharp half of the same claim: a file whose **gaps** are already LF and
+/// whose only CRLF is span interior. Every other rule finds it normal — this is
+/// the file the old `check` passed while the old `format` rewrote it, which is
+/// precisely the vacuity a formatter must not have. Only the endings rule
+/// faults it, and that is enough to make the document abnormal.
+#[test]
+fn check_faults_a_file_whose_only_crlf_no_other_rule_can_reach() {
+    let src = utf8(b"first\r\nsecond\n");
+    let c = check(src, &opts()).expect("spans convert");
+    assert!(!c.is_normal());
+    let faulting: Vec<&str> = c
+        .rules
+        .iter()
+        .filter(|r| !r.is_normal())
+        .map(|r| r.rule)
+        .collect();
+    assert_eq!(faulting, vec!["endings"]);
+    assert_eq!(
+        c.departures()
+            .map(|(_, d)| (d.line, d.column))
+            .collect::<Vec<_>>(),
+        vec![(1, 6)]
+    );
+    assert_eq!(formatted(src).output, utf8(b"first\nsecond\n"));
+}
+
+/// **Asserted failure (f).** Deleting the blank line after front matter is the
 /// clause that was measured and withdrawn: it changed 988 of 1052 corpus files
 /// for a cosmetic preference. Pinned as a refusal so reinstating it is a
 /// deliberate act with a red test attached.
