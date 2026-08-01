@@ -17,9 +17,9 @@
 //! So a rewrite needs its own oracle, and this is it:
 //! `structure(parse(src)) == structure(parse(rewrite(src)))`.
 //!
-//! # Why four signatures and not one
+//! # Why five signatures and not one
 //!
-//! [`Structure`] carries four renderings of the same parse, in increasing
+//! [`Structure`] carries five renderings of the same parse, in increasing
 //! strength:
 //!
 //! - **kinds** — a pre-order walk of block nodes emitting `"  "*depth + kind`.
@@ -31,6 +31,9 @@
 //!   three that reads inlines at all.
 //! - **tables** — the one signature read from the **source**, not the tree.
 //!   See below; the other three are jointly blind to a table's source shape.
+//! - **markers** — every list's bullet character and ordered delimiter, held
+//!   apart from `rich` so that one rule can be exempt from them by name. See
+//!   "The marker signature" below.
 //!
 //! **kinds alone is not enough**, and that is demonstrated rather than assumed:
 //! `tests/normalize.rs::kinds_and_html_agree_where_the_rich_signature_does_not`
@@ -80,27 +83,62 @@
 //! sequence table padding is defined to change. Nothing else in this module
 //! reads the source; this signature must, because the defect it covers exists
 //! nowhere else.
+//!
+//! # The marker signature, and why it is a field rather than an exemption
+//!
+//! `NodeList` carries `bullet_char` and `delimiter`, so a rewrite that turns
+//! `*` into `-` changes `rich` — and [`crate::markers`] exists to make exactly
+//! that change. Table padding met the same problem with the delimiter row's
+//! dash count and solved it by making the shared signature *silent*: `tables`
+//! reads colons and cell counts and never the dash run.
+//!
+//! Silence is the wrong shape here, because a marker character is not like a
+//! dash count. It is the byte that decides where one list ends and the next
+//! begins, so every other rule wants the oracle to keep watching it. So the two
+//! fields are **moved** out of `rich` into [`Structure::markers`] rather than
+//! dropped, and the exemption is spelled at the call site:
+//! [`Structure::diff`] compares all five and is what [`crate::normalize`] and
+//! [`crate::table`] use, while [`Structure::diff_ignoring_markers`] compares
+//! the other four and is used by the one rule entitled to change a marker.
+//! Total strength is unchanged, and no rule is quietly exempt from a signature
+//! it never named.
+//!
+//! What that leaves covering the marker rule is `kinds`, and it is enough for
+//! the hazard that rule actually has: in CommonMark a change of bullet
+//! character **starts a new list**, so unifying `- a` / `+ b` splices two lists
+//! into one and the walk emits one fewer `list` entry.
+//! `tests/markers.rs::the_structure_oracle_rejects_the_merge_the_declination_prevents`
+//! feeds the merged bytes past this oracle and asserts the rejection, rather
+//! than assuming it — the rule declines that pair, so those bytes never reach
+//! the oracle in normal operation and an unexercised guard is worth nothing.
 
-use comrak::nodes::{AstNode, NodeValue};
+use comrak::nodes::{AstNode, ListDelimType, NodeList, NodeValue};
 
 use crate::print::block_kind;
 use crate::span::LineIndex;
 use crate::table::{line_content_range, split_unescaped_pipes};
 
-/// Four renderings of one parse: block kinds with nesting, the same walk with
-/// every node attribute, the rendered HTML, and each table's source shape.
-/// Compare with [`Structure::diff`].
+/// Five renderings of one parse: block kinds with nesting, the same walk with
+/// every node attribute, the rendered HTML, each table's source shape, and
+/// every list's marker. Compare with [`Structure::diff`], or with
+/// [`Structure::diff_ignoring_markers`] from the one rule that rewrites a
+/// marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Structure {
     /// Pre-order walk of block nodes: `"  "*depth + kind`.
     pub kinds: Vec<String>,
-    /// The same walk, with each node's full `NodeValue` debug rendering.
+    /// The same walk, with each node's full `NodeValue` debug rendering —
+    /// **less** the two marker fields, which live in `markers`.
     pub rich: Vec<String>,
     /// `comrak::format_html` output.
     pub html: String,
     /// Per table, the source shape of its rows and delimiter — the one
     /// signature the tree cannot supply. See the module docs.
     pub tables: Vec<String>,
+    /// Per list and list item, in the same pre-order walk: the bullet
+    /// character and the ordered-list delimiter. Held apart so
+    /// [`Structure::diff_ignoring_markers`] can name the exemption.
+    pub markers: Vec<String>,
 }
 
 /// How two [`Structure`]s differ, with the first differing entry in context so
@@ -111,6 +149,10 @@ pub struct StructureDiff {
     pub rich_same: bool,
     pub html_same: bool,
     pub tables_same: bool,
+    /// Whether every list's bullet character and ordered delimiter survived.
+    /// Reported honestly even by [`Structure::diff_ignoring_markers`], which
+    /// only declines to *gate* on it.
+    pub markers_same: bool,
     /// Index of the first differing `rich` entry, when there is one.
     pub at: Option<usize>,
     /// The first differing entry before the rewrite, in context.
@@ -119,12 +161,25 @@ pub struct StructureDiff {
     pub after: String,
 }
 
+impl StructureDiff {
+    /// Whether any signature other than `markers` differs — the condition
+    /// [`Structure::diff_ignoring_markers`] gates on.
+    fn beyond_markers(&self) -> bool {
+        !self.kinds_same || !self.rich_same || !self.html_same || !self.tables_same
+    }
+
+    /// Whether any of the five differ.
+    fn any(&self) -> bool {
+        self.beyond_markers() || !self.markers_same
+    }
+}
+
 impl std::fmt::Display for StructureDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "kinds_same={} rich_same={} html_same={} tables_same={}",
-            self.kinds_same, self.rich_same, self.html_same, self.tables_same
+            "kinds_same={} rich_same={} html_same={} tables_same={} markers_same={}",
+            self.kinds_same, self.rich_same, self.html_same, self.tables_same, self.markers_same
         )?;
         if let Some(at) = self.at {
             write!(
@@ -132,10 +187,10 @@ impl std::fmt::Display for StructureDiff {
                 "; first difference at block node {at}: before {:?}, after {:?}",
                 self.before, self.after
             )?;
-        } else if !self.tables_same {
+        } else if !self.tables_same || !self.markers_same {
             write!(
                 f,
-                "; first table-shape difference: before {:?}, after {:?}",
+                "; first source-read difference: before {:?}, after {:?}",
                 self.before, self.after
             )?;
         }
@@ -144,16 +199,35 @@ impl std::fmt::Display for StructureDiff {
 }
 
 impl Structure {
-    /// `None` when the two parses are structurally equivalent; otherwise which
-    /// of the four comparisons failed, and where.
+    /// `None` when the two parses are structurally equivalent on all five
+    /// signatures; otherwise which comparison failed, and where. This is the
+    /// oracle for every rewrite that is **not** entitled to change a list
+    /// marker, which is all of them but one.
     pub fn diff(&self, other: &Structure) -> Option<StructureDiff> {
+        let d = self.compare(other);
+        d.any().then_some(d)
+    }
+
+    /// The same comparison with `markers` reported but not gated on — the
+    /// oracle for [`crate::markers`], the one rewrite whose whole content is
+    /// to change a bullet character or an ordered delimiter.
+    ///
+    /// It is not a weaker oracle for the merge hazard that rule carries:
+    /// splicing two lists into one changes `kinds`, which this still compares.
+    pub fn diff_ignoring_markers(&self, other: &Structure) -> Option<StructureDiff> {
+        let d = self.compare(other);
+        d.beyond_markers().then_some(d)
+    }
+
+    /// Every comparison, always run and always reported. The two public
+    /// accessors differ only in which subset they gate on, so neither can see
+    /// a signature the other cannot.
+    fn compare(&self, other: &Structure) -> StructureDiff {
         let kinds_same = self.kinds == other.kinds;
         let rich_same = self.rich == other.rich;
         let html_same = self.html == other.html;
         let tables_same = self.tables == other.tables;
-        if kinds_same && rich_same && html_same && tables_same {
-            return None;
-        }
+        let markers_same = self.markers == other.markers;
         let window = |v: &[String], i: usize| {
             let lo = i.saturating_sub(1);
             let hi = (i + 2).min(v.len());
@@ -161,40 +235,44 @@ impl Structure {
         };
         let at = (0..self.rich.len().max(other.rich.len()))
             .find(|&i| self.rich.get(i) != other.rich.get(i));
-        // When only the table signature differs there is no differing block
-        // node to point at, so the context window comes from `tables` instead —
-        // otherwise the one failure mode this signature exists for would report
+        // When only a source-read signature differs there is no differing block
+        // node to point at, so the context window comes from that signature
+        // instead — otherwise the one failure mode it exists for would report
         // no location at all.
+        let first_difference = |a: &[String], b: &[String]| {
+            let j = (0..a.len().max(b.len()))
+                .find(|&i| a.get(i) != b.get(i))
+                .unwrap_or(0);
+            (window(a, j), window(b, j))
+        };
         let (before, after) = match at {
             Some(i) => (window(&self.rich, i), window(&other.rich, i)),
-            None if !tables_same => {
-                let j = (0..self.tables.len().max(other.tables.len()))
-                    .find(|&i| self.tables.get(i) != other.tables.get(i))
-                    .unwrap_or(0);
-                (window(&self.tables, j), window(&other.tables, j))
-            }
+            None if !tables_same => first_difference(&self.tables, &other.tables),
+            None if !markers_same => first_difference(&self.markers, &other.markers),
             None => (String::new(), String::new()),
         };
-        Some(StructureDiff {
+        StructureDiff {
             kinds_same,
             rich_same,
             html_same,
             tables_same,
+            markers_same,
             at,
             before,
             after,
-        })
+        }
     }
 }
 
-/// Parse `source` under the shared comrak configuration and take its four
+/// Parse `source` under the shared comrak configuration and take its five
 /// signatures.
 pub fn structure_of(source: &str, opts: &mdstruct::Options) -> Structure {
     let arena = comrak::Arena::new();
     crate::parse_with(&arena, source, opts, |root| {
         let mut kinds = Vec::new();
         let mut rich = Vec::new();
-        walk(root, 0, &mut kinds, &mut rich);
+        let mut markers = Vec::new();
+        walk(root, 0, &mut kinds, &mut rich, &mut markers);
         let mut html = String::new();
         let options = crate::comrak_options(opts);
         comrak::format_html(root, &options, &mut html)
@@ -205,6 +283,7 @@ pub fn structure_of(source: &str, opts: &mdstruct::Options) -> Structure {
             rich,
             html,
             tables,
+            markers,
         }
     })
 }
@@ -270,7 +349,13 @@ fn table_shapes<'a>(root: &'a AstNode<'a>, source: &str) -> Vec<String> {
 /// Pre-order walk of the block skeleton. Inline subtrees are skipped whole —
 /// a block-level rewrite never reaches inside one, and the HTML signature is
 /// what covers inline text.
-fn walk<'a>(node: &'a AstNode<'a>, depth: usize, kinds: &mut Vec<String>, rich: &mut Vec<String>) {
+fn walk<'a>(
+    node: &'a AstNode<'a>,
+    depth: usize,
+    kinds: &mut Vec<String>,
+    rich: &mut Vec<String>,
+    markers: &mut Vec<String>,
+) {
     for child in node.children() {
         {
             let data = child.data.borrow();
@@ -283,19 +368,51 @@ fn walk<'a>(node: &'a AstNode<'a>, depth: usize, kinds: &mut Vec<String>, rich: 
             let pad = "  ".repeat(depth);
             kinds.push(format!("{pad}{}", block_kind(&data.value)));
             rich.push(format!("{pad}{}", normalized_debug(&data.value)));
+            if let Some(sig) = marker_signature(&data.value) {
+                markers.push(format!("{pad}{sig}"));
+            }
         }
-        walk(child, depth + 1, kinds, rich);
+        walk(child, depth + 1, kinds, rich, markers);
     }
 }
 
-/// A node's `Debug` with the two normalizations the module docs justify.
+/// A node's `Debug` with the normalizations the module docs justify — the two
+/// literal trims, the task item's dropped position, and the two list marker
+/// fields, which are moved to [`Structure::markers`] rather than dropped.
 fn normalized_debug(value: &NodeValue) -> String {
     match value {
         NodeValue::FrontMatter(literal) => format!("FrontMatter({:?})", literal.trim_end()),
         NodeValue::HtmlBlock(html) => format!("HtmlBlock({:?})", html.literal.trim_end()),
         NodeValue::TaskItem(task) => format!("TaskItem({:?})", task.symbol),
+        NodeValue::List(list) => format!("List({:?})", marker_blind(*list)),
+        NodeValue::Item(list) => format!("Item({:?})", marker_blind(*list)),
         other => format!("{other:?}"),
     }
+}
+
+/// One `NodeList` with its two marker fields zeroed, so that `rich` says
+/// everything about a list except which character introduces it.
+fn marker_blind(mut list: NodeList) -> NodeList {
+    list.bullet_char = 0;
+    list.delimiter = ListDelimType::Period;
+    list
+}
+
+/// The marker entry for a list or list item, and `None` for every other node.
+///
+/// A task item carries no `NodeList` of its own — comrak replaces the `Item`
+/// with a `TaskItem` — so its marker is read off the enclosing `List`, which is
+/// where the bullet character is decided anyway.
+fn marker_signature(value: &NodeValue) -> Option<String> {
+    let (kind, list) = match value {
+        NodeValue::List(list) => ("list", list),
+        NodeValue::Item(list) => ("item", list),
+        _ => return None,
+    };
+    Some(format!(
+        "{kind} {:?} bullet={:?} delim={:?}",
+        list.list_type, list.bullet_char as char, list.delimiter
+    ))
 }
 
 #[cfg(test)]
@@ -336,6 +453,42 @@ mod tests {
             .diff(&s("```\ncode\n```\n"))
             .expect("a changed code literal must diff");
         assert!(!diff.rich_same);
+    }
+
+    #[test]
+    fn a_bullet_change_is_a_marker_difference_and_nothing_else() {
+        // The split, stated as bytes: two one-item lists differing only in the
+        // bullet character. `rich` must be silent about it — otherwise the
+        // marker rule would decline every document it exists to change — and
+        // `markers` must not be.
+        let d = s("* a\n")
+            .diff(&s("- a\n"))
+            .expect("a changed bullet is a difference");
+        assert!(d.kinds_same && d.rich_same && d.html_same && d.tables_same);
+        assert!(!d.markers_same);
+        // And the exemption is at the call site, not in the signature.
+        assert_eq!(s("* a\n").diff_ignoring_markers(&s("- a\n")), None);
+    }
+
+    #[test]
+    fn an_ordered_delimiter_change_is_a_marker_difference_and_nothing_else() {
+        let d = s("1) a\n")
+            .diff(&s("1. a\n"))
+            .expect("a changed delimiter is a difference");
+        assert!(d.kinds_same && d.rich_same && d.html_same && d.tables_same);
+        assert!(!d.markers_same);
+        assert_eq!(s("1) a\n").diff_ignoring_markers(&s("1. a\n")), None);
+    }
+
+    #[test]
+    fn ignoring_markers_still_sees_two_lists_become_one() {
+        // The hazard the marker rule carries, put past the loosened oracle: a
+        // bullet change that *merges* two adjacent lists is a `kinds` change,
+        // so the exemption does not reach it.
+        let d = s("- a\n+ b\n")
+            .diff_ignoring_markers(&s("- a\n- b\n"))
+            .expect("a merge must survive the marker exemption");
+        assert!(!d.kinds_same, "{d}");
     }
 
     #[test]

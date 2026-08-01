@@ -21,12 +21,17 @@
 # pipeline is one, so it is the stronger of the two readings — and it is one
 # batch of invocations instead of a second full formatting pass.
 #
-# Commutativity of the gap and table rules is deliberately not tested here. It
-# was observed over this corpus, it is not guaranteed, and `src/format.rs` fixes
-# the pipeline order at endings -> gaps -> tables on purpose. The endings rule's
+# Commutativity of the rules is deliberately not tested here. It was observed
+# over this corpus, it is not guaranteed, and `src/format.rs` fixes the pipeline
+# order at endings -> gaps -> tables -> markers on purpose. The endings rule's
 # position is not a preference: it canonicalizes line endings, so running it
-# first is what keeps a carriage return out of the other two rules' inputs. This
+# first is what keeps a carriage return out of the other rules' inputs. This
 # corpus cannot exercise it either way — 0 of these files hold one.
+#
+# The marker rule is expected to change 0 files here too, and for a different
+# reason: a census found the vault unanimous on `-` bullets and `.` ordered
+# delimiters, so the rule is preservative over today's corpus by design. A
+# nonzero count is information about the census, not a failure of this script.
 #
 # Usage: mdformat/corpus.sh [--fixpoint-only] [--no-ignore]
 #                           [-- <extra vault-query files args>]

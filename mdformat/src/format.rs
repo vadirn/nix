@@ -16,12 +16,14 @@
 //!
 //! # Why the predicate is derived from the rules, not written beside them
 //!
-//! Two of the three rules here **decline** some construct. [`crate::table::pad`]
-//! declines a ragged table, because comrak does not model raggedness and padding
-//! one would either delete a long row's overflow or materialize a short row's
-//! missing cell. [`crate::normalize`] declines any document whose gaps are
-//! undefined (the input fails the partition) or whose re-parse the rewrite would
-//! change. ([`crate::endings`] declines nothing and can decline nothing — see
+//! Three of the four rules here **decline** some construct.
+//! [`crate::table::pad`] declines a ragged table, because comrak does not model
+//! raggedness and padding one would either delete a long row's overflow or
+//! materialize a short row's missing cell. [`crate::normalize`] declines any
+//! document whose gaps are undefined (the input fails the partition) or whose
+//! re-parse the rewrite would change. [`crate::markers`] declines two adjacent
+//! lists whose markers differ, because unifying them would splice two lists
+//! into one. ([`crate::endings`] declines nothing and can decline nothing — see
 //! below.)
 //!
 //! A hand-written predicate would have to reproduce that list, and the moment
@@ -53,24 +55,33 @@
 //! standard of correctness comes from outside. `tests/normal_form.rs` holds
 //! ill-formed inputs paired with **hand-written** expected bytes, one per rule
 //! clause, asserted byte for byte; mutating `format` to return its input fails
-//! 29 of its 32 fixtures while leaving both of its idempotence tests green,
-//! which is the whole reason it exists. `corpus.sh` runs the idempotence half
-//! over the vault.
+//! 37 of its 43 fixtures while leaving both of its idempotence tests green,
+//! which is the whole reason it exists. That file's module docs carry the full
+//! mutation table, including the two rows measured for [`MarkerRule`], one of
+//! which found that a byte fixture cannot see a per-construct declination at
+//! all. `corpus.sh` runs the idempotence half over the vault.
 //!
 //! [`RuleRun::departures`] localizes the same predicate: `is_normal` is byte
 //! equality, `departures` is *where* the equality fails. `RuleRun::new` asserts
 //! the two agree, so the report cannot drift from the predicate either.
 //!
-//! # One rule reaches inside a span, and what pays for it
+//! # Where each rule writes, and what pays for it
 //!
-//! [`GapRule`] and [`TableRule`] are cheap to trust because of *where* they
-//! write: gap bytes and cell padding are outside every block's content span, so
-//! neither can disturb a span interior by construction. It is tempting to read
-//! that as the crate's safety property. It is not — it is one **proof strategy**
-//! for the actual property, which is that a rewrite is faithful to the document.
-//! It is the strategy available when a rewrite's effect depends on the document
-//! it is applied to, and you therefore cannot say what it will do without
-//! looking.
+//! [`GapRule`] is cheap to trust because of *where* it writes: gap bytes are
+//! outside every block's content span, so it cannot disturb a span interior by
+//! construction. It is tempting to read that as the crate's safety property. It
+//! is not — it is one **proof strategy** for the actual property, which is that
+//! a rewrite is faithful to the document. It is the strategy available when a
+//! rewrite's effect depends on the document it is applied to, and you therefore
+//! cannot say what it will do without looking.
+//!
+//! [`TableRule`] and [`MarkerRule`] both write **content** bytes — a delimiter
+//! row's dash count, a bullet character — so neither can use that strategy, and
+//! both carry the re-parse oracle instead. [`MarkerRule`] compares four of the
+//! oracle's five signatures: the fifth is the list markers themselves, which is
+//! what it is defined to change, and it is exempt from that one by name at the
+//! call site rather than by a silence built into the signature. See
+//! [`crate::structure`].
 //!
 //! [`EndingRule`] is faithful for the other reason. Its rewrite is a total,
 //! context-free map on line endings — every `\r` is a CommonMark line ending,
@@ -107,12 +118,14 @@
 //! [`format`] returns bytes; the CLI prints them to stdout. Whether a rewrite
 //! may ever be applied in place is an undecided policy question, and this module
 //! does not decide it. Every byte it yields either cleared the rule's own oracle
-//! through [`crate::Normalization::accepted`] / [`crate::Padding::accepted`], or
+//! through [`crate::Normalization::accepted`] / [`crate::Padding::accepted`] /
+//! [`crate::Unification::accepted`], or
 //! was never touched by the rule that declined it — with the one exception the
 //! section above states: [`EndingRule`] has no oracle to clear, because its
 //! rewrite has no context-dependence for an oracle to witness.
 
 use crate::endings::to_lf;
+use crate::markers::unify;
 use crate::normalize::normalize;
 use crate::span::{LineIndex, PosError};
 use crate::table::pad;
@@ -121,8 +134,9 @@ use crate::table::pad;
 ///
 /// **Endings first.** [`crate::endings`] is a lexical canonicalization, so
 /// running it at the head means no later rule ever sees a carriage return.
-/// Neither of the other two *states* anything about one — the gap rule's normal
-/// form is a table of LF literals, and the table rule's is a table of widths —
+/// None of the other three *states* anything about one — the gap rule's normal
+/// form is a table of LF literals, the table rule's is a table of widths, and
+/// the marker rule's is two characters —
 /// so whatever they would do with a `\r` is incidental behavior rather than
 /// specified behavior. Putting the canonicalization first is what keeps it that
 /// way. It is not observable in the output (the endings rule reaches the same
@@ -134,7 +148,16 @@ use crate::table::pad;
 /// were measured to commute over the 1052-file corpus, but nothing here relies
 /// on that — [`check`] evaluates each rule against the input independently, so
 /// the predicate is order-free whatever this order is.
-pub const RULES: &[&dyn Rule] = &[&EndingRule, &GapRule, &TableRule];
+///
+/// **Markers last.** Its guard is a re-parse comparison, and the parse it has
+/// to be right about is the parse of the bytes [`format`] finally emits;
+/// running it at the tail is what makes its input those bytes. The position
+/// costs the rules before it nothing, because a marker rewrite replaces one
+/// ASCII byte with another and so preserves every length, line number and
+/// column the earlier rules computed — which is a reason the position is
+/// *available*, not an assertion that the four rules commute. Nothing here
+/// claims they do.
+pub const RULES: &[&dyn Rule] = &[&EndingRule, &GapRule, &TableRule, &MarkerRule];
 
 /// One rewriting rule, as [`format`] and [`check`] see it.
 ///
@@ -532,6 +555,65 @@ impl Rule for TableRule {
             self.name(),
             source,
             p.output,
+            declined,
+            changes,
+            exempt,
+        ))
+    }
+}
+
+/// List markers — [`crate::markers::unify`] as a [`Rule`].
+#[derive(Debug, Clone, Copy)]
+pub struct MarkerRule;
+
+impl Rule for MarkerRule {
+    fn name(&self) -> &'static str {
+        "markers"
+    }
+
+    fn run(&self, source: &str, opts: &mdstruct::Options) -> Result<RuleRun, Vec<PosError>> {
+        let u = unify(source, opts)?;
+        // The two guards, in the order `unify` decides them: a rewrite that
+        // changes the parse is unfaithful whatever its bytes are, and one that
+        // moved a byte no marker substitution accounts for is unfaithful even
+        // when the parse survives.
+        let declined = u
+            .structure
+            .as_ref()
+            .map(|d| format!("unifying markers changes the parse: {d}"))
+            .or_else(|| {
+                u.violation
+                    .as_ref()
+                    .map(|v| format!("unifying markers moved more than a marker byte: {v}"))
+            });
+        let changes = u
+            .changes
+            .iter()
+            .map(|c| Departure {
+                line: c.line,
+                column: c.column,
+                what: format!(
+                    "{} is {:?} where the normal form is {:?}",
+                    c.what(),
+                    c.old,
+                    c.new
+                ),
+            })
+            .collect();
+        // The per-construct exemption: a declined list produces no edit, so it
+        // produces no departure, so a document holding one is normal.
+        let exempt = u
+            .skipped
+            .iter()
+            .map(|s| Exemption {
+                line: s.line,
+                why: format!("the list is left verbatim: {}", s.reason),
+            })
+            .collect();
+        Ok(RuleRun::new(
+            self.name(),
+            source,
+            u.output,
             declined,
             changes,
             exempt,

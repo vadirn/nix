@@ -102,7 +102,7 @@
 //!
 //! # Why it runs first
 //!
-//! [`crate::format::RULES`] puts this ahead of gaps and tables, so no later rule
+//! [`crate::format::RULES`] puts this at the head, so no later rule
 //! ever sees a `\r`.
 //!
 //! Not for the output's sake: the endings rule reaches the same bytes from any

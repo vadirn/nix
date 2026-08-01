@@ -70,6 +70,23 @@
 //! gap rule states its separators as LF literals, so a CRLF gap was already
 //! rewritten, while a CRLF inside a paragraph is span interior and survived.
 //!
+//! # The fourth rewrite, born under the contract
+//!
+//! [`markers`] unifies every bullet to `-` and every ordered delimiter to `.`.
+//! It is the first rule here written against [`format`]'s contract rather than
+//! retrofitted into it, and the first that is **preservative**: a census found
+//! the vault unanimous on both markers, so its expected corrective effect on
+//! today's corpus is zero files, and zero is what it is supposed to do.
+//!
+//! It rewrites content bytes, so it cannot inherit the gap rule's cheap
+//! faithfulness argument and carries [`structure`] like [`table`] does — with
+//! one exemption, spelled at the call site rather than inside the signature:
+//! `bullet_char` and `delimiter` moved out of the oracle's `rich` rendering
+//! into a `markers` one, and this is the only rule that compares the other four
+//! and not that one. It also carries a per-construct declination, because in
+//! CommonMark a change of bullet character starts a new list, so unifying two
+//! adjacent lists with different markers **merges** them.
+//!
 //! # The composition, and what "already formatted" means
 //!
 //! [`format`] applies every rule in [`format::RULES`] in one pass, so nothing
@@ -89,6 +106,7 @@ use comrak::nodes::AstNode;
 
 pub mod endings;
 pub mod format;
+pub mod markers;
 pub mod normalize;
 pub mod print;
 pub mod span;
@@ -98,6 +116,10 @@ pub mod table;
 pub use endings::{EndingChange, LineEndings, to_lf};
 pub use format::{
     Check, Departure, Exemption, Format, Rule, RuleRun, check, escape_whitespace, format,
+};
+pub use markers::{
+    ListSkipReason, MarkerChange, MarkerViolation, SkippedList, Unification, marker_violation,
+    unify,
 };
 pub use normalize::{GapChange, Normalization, normalize};
 pub use print::{

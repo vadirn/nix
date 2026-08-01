@@ -2,9 +2,7 @@
 //!   format     apply every rewriting rule in one pass and print the result, or
 //!              under `--check` report which inputs are not in normal form and
 //!              where. A CRLF or lone-CR input is reported as departing, and
-//!              formatted to LF throughout — the endings rule is the only one
-//!              with no single-rule verb of its own, because it has no guard to
-//!              dry-run and no corpus exposure to measure.
+//!              formatted to LF throughout.
 //!   fixpoint   parse each input under mdstruct's shared comrak config, tile
 //!              it with its top-level block spans, and report whether those
 //!              spans partition the file's content bytes and reproduce it.
@@ -19,6 +17,16 @@
 //! report, `normalize` and `pad` report unless asked for bytes (`--emit`).
 //! Nothing has to chain the diagnostic verbs through stdout to get every rule
 //! applied — that is what `format` is for.
+//!
+//! **Two rules have no verb of their own.** The endings rule has no guard to
+//! dry-run and no corpus exposure to measure, so a verb would be unearned. The
+//! marker rule has a guard, and it still has none: `format --check --verbose`
+//! already reports every departure and every declined construct **tagged with
+//! the rule that found it**, which is the whole of what a `markers` dry run
+//! would print. `normalize` and `pad` predate that reporting — they are the
+//! instruments that produced the corpus measurements those two rules are
+//! argued from — and they stay; a new rule does not earn a fifth verb that
+//! duplicates an existing one.
 //!
 //! Like `mdstruct check`, this takes paths and walks no directories: the
 //! corpus run is a shell pipeline, and `-` reads stdin.
@@ -59,8 +67,8 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Apply every rewriting rule — LF line endings, then blank-line gaps, then
-    /// table padding — in one pass and print the result to stdout. Under
-    /// `--check`, print nothing
+    /// table padding, then list markers — in one pass and print the result to
+    /// stdout. Under `--check`, print nothing
     /// and report instead which inputs are not in normal form and where,
     /// exiting 4 when any is not. Writes no file either way.
     Format(FormatArgs),
