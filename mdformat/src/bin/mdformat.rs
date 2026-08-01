@@ -1,13 +1,21 @@
-//! Thin CLI over the `mdformat` crate. One verb so far:
+//! Thin CLI over the `mdformat` crate. Two verbs:
 //!   fixpoint   parse each input under mdstruct's shared comrak config, tile
 //!              it with its top-level block spans, and report whether those
 //!              spans partition the file's content bytes and reproduce it.
+//!   normalize  report what the blank-line normal form would do to each input,
+//!              and refuse any rewrite that changes the parse.
 //!
 //! Like `mdstruct check`, this takes paths and walks no directories: the
 //! corpus run is a shell pipeline, and `-` reads stdin.
 //!
+//! **Neither verb writes a file.** `normalize` is opt-in, reports by default,
+//! and emits bytes only to stdout under `--emit`; whether a rewrite may ever be
+//! applied in place is an undecided policy question, so this binary has no code
+//! that opens a file for writing.
+//!
 //! Exit codes: 0 pass, 1 I/O error, 3 input not UTF-8, 4 a file failed the
-//! partition or reassembly check, 5 a sourcepos did not name a byte range.
+//! partition or reassembly check — or, under `normalize`, its rewrite failed
+//! the structural-equivalence guard — 5 a sourcepos did not name a byte range.
 
 use std::io::{self, Read};
 use std::process::ExitCode;
@@ -34,6 +42,11 @@ enum Commands {
     /// every non-whitespace byte in exactly one top-level block span, no
     /// overlaps, nothing past the end, and the reassembly equal to the input.
     Fixpoint(FixpointArgs),
+    /// Report what blank-line normalization would do — one blank line between
+    /// top-level blocks, one after front matter, one trailing newline, no
+    /// trailing whitespace on a blank line. Writes no file: this reports, and
+    /// `--emit` prints the normalized bytes of a single input to stdout.
+    Normalize(NormalizeArgs),
 }
 
 #[derive(Args)]
@@ -41,6 +54,21 @@ struct FixpointArgs {
     /// Input files; `-` reads stdin. With no path given, reads stdin.
     files: Vec<String>,
     /// Report each passing file too, with its block and byte counts.
+    #[arg(short, long)]
+    verbose: bool,
+}
+
+#[derive(Args)]
+struct NormalizeArgs {
+    /// Input files; `-` reads stdin. With no path given, reads stdin.
+    files: Vec<String>,
+    /// Print the normalized bytes to stdout instead of a report. Refuses more
+    /// than one input, since concatenating two documents is not a formatting
+    /// operation, and refuses any input whose rewrite fails the guard.
+    #[arg(short, long)]
+    emit: bool,
+    /// Report each changed gap, with the bytes it holds now and the separator
+    /// the normal form would put there.
     #[arg(short, long)]
     verbose: bool,
 }
@@ -87,6 +115,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let exit = match cli.command {
         Commands::Fixpoint(args) => run_fixpoint(&args),
+        Commands::Normalize(args) => run_normalize(&args),
     };
     ExitCode::from(exit)
 }
@@ -178,6 +207,132 @@ fn run_fixpoint(args: &FixpointArgs) -> u8 {
     exit
 }
 
+/// Report what blank-line normalization would do, and refuse anything the
+/// structural-equivalence guard rejects.
+///
+/// The only thing this ever writes is stdout, and only under `--emit`. A
+/// corpus run over the vault is therefore a read-only operation by
+/// construction, not by convention.
+fn run_normalize(args: &NormalizeArgs) -> u8 {
+    let files = resolve(&args.files);
+    if args.emit && files.len() > 1 {
+        eprintln!(
+            "mdformat: normalize --emit takes exactly one input, got {}",
+            files.len()
+        );
+        return 2;
+    }
+    let opts = mdstruct::Options::default();
+    let mut exit: u8 = 0;
+    let mut files_checked = 0usize;
+    let mut would_change = 0usize;
+    let mut refused = 0usize;
+    let mut skipped = 0usize;
+    let mut gaps_considered = 0usize;
+    let mut gaps_changed = 0usize;
+
+    for f in &files {
+        let (path, bytes) = match read_input(f) {
+            Ok(v) => v,
+            Err(code) => {
+                exit = exit.max(code);
+                continue;
+            }
+        };
+        let source = match std::str::from_utf8(&bytes) {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln!("mdformat: {path}: input is not valid UTF-8");
+                exit = exit.max(3);
+                continue;
+            }
+        };
+
+        files_checked += 1;
+        let result = match mdformat::normalize(source, &opts) {
+            Ok(r) => r,
+            Err(errors) => {
+                for e in &errors {
+                    eprintln!("mdformat: {path}: SOURCEPOS ERROR: {e}");
+                }
+                exit = exit.max(5);
+                continue;
+            }
+        };
+        gaps_considered += result.gaps_considered;
+        gaps_changed += result.gaps.len();
+
+        if !result.input_partition.is_partition() {
+            // The gap between two blocks is whitespace *because* the partition
+            // says no content is unclaimed. Without that, normalizing would be
+            // guessing which bytes are separators.
+            skipped += 1;
+            exit = exit.max(4);
+            eprintln!(
+                "mdformat: {path}: SKIP: the input fails the partition oracle \
+                 ({} violations), so its gaps are not defined",
+                result.input_partition.violations.len()
+            );
+            continue;
+        }
+
+        if let Some(diff) = &result.structure {
+            refused += 1;
+            exit = exit.max(4);
+            eprintln!("mdformat: {path}: REFUSED: normalizing changes the parse: {diff}");
+            if result.output_partitions == Some(true) {
+                eprintln!(
+                    "mdformat: {path}: note: the refused output still satisfies the \
+                     partition oracle — only re-parse equivalence catches this"
+                );
+            }
+            continue;
+        }
+
+        if result.changed() {
+            would_change += 1;
+            eprintln!(
+                "mdformat: {path}: would change ({} of {} gaps)",
+                result.gaps.len(),
+                result.gaps_considered
+            );
+            if args.verbose {
+                let idx = LineIndex::new(source);
+                for g in &result.gaps {
+                    let (line, col) = idx.position_of(g.start);
+                    eprintln!(
+                        "mdformat: {path}: L{line}:{col} {} -> {}: {} => {}",
+                        g.prev,
+                        g.next,
+                        escape(&g.old),
+                        escape(g.new)
+                    );
+                }
+            }
+        }
+
+        if args.emit {
+            match result.accepted() {
+                Some(out) => print!("{out}"),
+                // Unreachable given the two guards above; kept because
+                // `accepted` is the only sanctioned way to reach the bytes and
+                // this must not become a second one.
+                None => {
+                    eprintln!("mdformat: {path}: refusing to emit an unguarded rewrite");
+                    exit = exit.max(4);
+                }
+            }
+        }
+    }
+
+    eprintln!(
+        "mdformat normalize: {would_change}/{files_checked} files would change \
+         ({refused} refused by the structure guard, {skipped} skipped for a failing \
+         partition, {gaps_changed}/{gaps_considered} gaps rewritten)"
+    );
+    exit
+}
+
 /// One violation as a line naming the byte offset, the position, and the
 /// source around it, so the cause is legible without reopening the file.
 fn describe(source: &str, idx: &LineIndex, v: &Violation) -> String {
@@ -238,6 +393,22 @@ fn context(source: &str, start: usize, end: usize) -> String {
     }
     if hi < source.len() {
         out.push('…');
+    }
+    out.push('"');
+    out
+}
+
+/// A gap's bytes on one line: newlines and tabs escaped, quoted.
+fn escape(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '"' => out.push_str("\\\""),
+            c => out.push(c),
+        }
     }
     out.push('"');
     out

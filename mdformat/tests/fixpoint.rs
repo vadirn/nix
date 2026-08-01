@@ -522,9 +522,14 @@ fn an_out_of_range_sourcepos_errors_instead_of_clamping() {
     );
 }
 
-/// Consecutive blank lines are preserved verbatim, byte for byte. The vault has
-/// 427 double-blank and 71 triple-blank gaps; normalizing them is out of scope
-/// for this milestone, so the printer must not touch them.
+/// Consecutive blank lines are preserved verbatim, byte for byte, by the
+/// passthrough printer. Normalizing them is [`mdformat::normalize`]'s job and
+/// is opt-in, so `reassemble` must not touch them.
+///
+/// An earlier version of this comment claimed the vault holds "427 double-blank
+/// and 71 triple-blank gaps". That number could not be reproduced: the corpus
+/// contains **3** occurrences of `\n\n\n` in 2 files, every one inside a fenced
+/// code block or a container, and none in a top-level gap.
 #[test]
 fn consecutive_blank_lines_survive_verbatim() {
     for src in [

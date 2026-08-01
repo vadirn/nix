@@ -27,17 +27,36 @@
 //! the splice neither drops nor duplicates the rest of the file. Reassembly
 //! equality comes along for free and proves nothing on its own — [`print`]'s
 //! module docs explain why, and a test holds the trap open.
+//!
+//! # The first rewrite, and the oracle it needed
+//!
+//! [`normalize`] is the first thing here that changes bytes: it rewrites the
+//! whitespace *between* top-level blocks to a blank-line normal form. It is
+//! **opt-in and default-off** — the CLI's `normalize` verb reports, and can emit
+//! to stdout, and no code path in this crate writes a file.
+//!
+//! It does not run on the partition oracle either. That oracle is a unary
+//! invariant of one document, so it cannot tell a faithful rewrite from an
+//! unfaithful one, and measurement bears that out: it passed on 167 of 167
+//! synthetic documents whose parse the rewrite destroyed. What guards a rewrite
+//! is [`structure`] — re-parse structural equivalence over block kinds, nesting,
+//! node attributes, and rendered HTML. The partition's role is a *precondition*:
+//! it is what makes the gap between two blocks definable as whitespace at all.
 
 use comrak::Arena;
 use comrak::nodes::AstNode;
 
+pub mod normalize;
 pub mod print;
 pub mod span;
+pub mod structure;
 
+pub use normalize::{GapChange, Normalization, normalize};
 pub use print::{
     Block, PartitionReport, Violation, block_kind, block_spans, check_partition, reassemble,
 };
 pub use span::{LineIndex, PosError, PosReason};
+pub use structure::{Structure, StructureDiff, structure_of};
 
 /// `mdformat`'s comrak parse configuration. Forwards to
 /// [`mdstruct::comrak_options`] verbatim — `mdformat` has no comrak settings

@@ -369,7 +369,7 @@ fn depth_map(len: usize, blocks: &[Block]) -> Vec<u32> {
 /// non-breaking space, U+2028, a zero-width space — counts as content and must
 /// be claimed by some block. In practice comrak makes a stray non-breaking
 /// space its own paragraph, so the strictness costs nothing.
-fn is_ws(b: u8) -> bool {
+pub(crate) fn is_ws(b: u8) -> bool {
     b.is_ascii_whitespace() || b == 0x0c
 }
 
