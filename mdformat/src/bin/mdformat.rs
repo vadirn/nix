@@ -52,8 +52,9 @@ enum Commands {
     Normalize(NormalizeArgs),
     /// Report what table padding would do — every cell padded to its column's
     /// terminal display width, alignment markers preserved, the delimiter row
-    /// widened to match. Writes no file: this reports, and `--emit` prints the
-    /// padded bytes of a single input to stdout.
+    /// widened to match, and a trailing unaligned or left-aligned column left
+    /// unpadded. Writes no file: this reports, and `--emit` prints the padded
+    /// bytes of a single input to stdout.
     Pad(PadArgs),
 }
 

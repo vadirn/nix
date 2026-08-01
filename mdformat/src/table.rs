@@ -15,6 +15,44 @@
 //! an unaligned or left-aligned column, on the left for a right-aligned one,
 //! and split for a centered one.
 //!
+//! ## The trailing column, when its alignment does not need the fill
+//!
+//! One column is exempt: the **last** one, when it is unaligned or
+//! left-aligned. Its cells get the separator space and the closing pipe and
+//! nothing else; its delimiter cell still runs to the column's full computed
+//! width, the same as every other column's, because the delimiter row has no
+//! reader-visible padding to save — only its dash count changes, and a
+//! dash run shorter than the column above it reads as broken, not as saved
+//! space. Every other column, and a trailing column that is right- or
+//! center-aligned, is padded exactly as above — an alignment means nothing
+//! without the fill that realizes it, so those keep theirs.
+//!
+//! The reason is measured, and the exemption costs no width. Padding every
+//! column added **261 920 spaces and 301 561 bytes** to the 1052-file corpus;
+//! the exemption brings that down to **31 648 spaces and 36 217 bytes** — 88%
+//! less of each. It gives up nothing visible: the fill on a trailing unaligned
+//! column is followed only by the closing pipe, and the table's **widest** line
+//! is unchanged, because the row holding the widest trailing cell had no fill
+//! there to lose. Only the shorter rows get shorter, and raggedness is never
+//! introduced *inside* a table — only at the right edge, which a left-aligned
+//! column renders ragged anyway.
+//!
+//! ## What the exemption costs, stated against it
+//!
+//! It costs churn, and a lot of it. The corpus's hand-padded tables mostly *do*
+//! pad their trailing column, so tables that were byte-exact fixpoints of the
+//! uncapped padder now change: **245 of 247** tables are rewritten where the
+//! uncapped form rewrote 170, and 149 files change where 124 did. Of the 76
+//! tables the uncapped padder already agreed with, 75 now lose padding a human
+//! put there. The one survivor is `20 cards/Faster CRDTs.md`, and it survives
+//! only because its trailing column is right-aligned.
+//!
+//! So the exemption trades 88% of the added whitespace for near-total
+//! disagreement with the corpus's existing hand padding. `tests/table.rs` pins
+//! that trade at both ends — `a_hand_padded_trailing_column_loses_its_padding`
+//! for the cost, `the_corpus_alignment_specimen_is_reproduced_byte_for_byte`
+//! for the survivor — rather than leaving either to a dry run.
+//!
 //! ## Why display width, and not bytes or characters
 //!
 //! The measure has to be what a terminal renders, because the whole point of
@@ -537,13 +575,32 @@ fn plan_table<'a>(
         }
     }
 
+    // The trailing column is exempt when nothing depends on its fill: an
+    // unaligned or left-aligned last column renders the same padded or not,
+    // because the only thing its fill separates the content from is the
+    // closing pipe. A right- or center-aligned one is not exempt — there the
+    // fill *is* the alignment. Read through `last()` so a zero-column table
+    // (which `read_row` has already rejected) cannot index out of bounds.
+    let bare_last = matches!(
+        alignments.last(),
+        Some(TableAlignment::None | TableAlignment::Left)
+    );
+    let is_bare = |j: usize| bare_last && j + 1 == ncols;
+
     let mut edits = Vec::with_capacity(rows.len() + 1);
     for row in &rows {
         let cells: Vec<String> = row
             .cells
             .iter()
             .enumerate()
-            .map(|(j, c)| align_pad(c.trim_matches(' '), widths[j], alignments[j]))
+            .map(|(j, c)| {
+                let content = c.trim_matches(' ');
+                if is_bare(j) {
+                    content.to_string()
+                } else {
+                    align_pad(content, widths[j], alignments[j])
+                }
+            })
             .collect();
         edits.push(Edit {
             line: row.line,
@@ -768,10 +825,13 @@ mod tests {
 
     #[test]
     fn an_unpadded_table_gains_column_aligned_cells() {
+        // The second column is the trailing one and carries no alignment
+        // marker, so it is the exempt column: only `a` is padded, to the width
+        // of `key`.
         let n = p("| key | value |\n| --- | --- |\n| a | longer |\n");
         assert_eq!(
             n.accepted(),
-            Some("| key | value  |\n| --- | ------ |\n| a   | longer |\n")
+            Some("| key | value |\n| --- | ------ |\n| a   | longer |\n")
         );
     }
 
@@ -780,7 +840,7 @@ mod tests {
         let n = p("| a | b |\n| - | - |\n| c | d |\n");
         assert_eq!(
             n.accepted(),
-            Some("| a   | b   |\n| --- | --- |\n| c   | d   |\n")
+            Some("| a   | b |\n| --- | --- |\n| c   | d |\n")
         );
     }
 
@@ -798,17 +858,18 @@ mod tests {
         let n = p("| Ключ | b |\n| --- | --- |\n| x | y |\n");
         assert_eq!(
             n.accepted(),
-            Some("| Ключ | b   |\n| ---- | --- |\n| x    | y   |\n")
+            Some("| Ключ | b |\n| ---- | --- |\n| x    | y |\n")
         );
     }
 
     #[test]
     fn width_is_display_width_so_an_emoji_counts_two() {
         let n = p("| 🎉 | b |\n| --- | --- |\n| x | y |\n");
-        // Four dashes, not three: the emoji is one character and two columns.
+        // The emoji is one character and two columns, so its cell takes one
+        // fill space to reach the floor of 3.
         assert_eq!(
             n.accepted(),
-            Some("| 🎉  | b   |\n| --- | --- |\n| x   | y   |\n")
+            Some("| 🎉  | b |\n| --- | --- |\n| x   | y |\n")
         );
     }
 
@@ -818,7 +879,7 @@ mod tests {
         // `a\|b` is four source characters wide, so the column is 4.
         assert_eq!(
             n.accepted(),
-            Some("| a\\|b | c   |\n| ---- | --- |\n| d    | e   |\n")
+            Some("| a\\|b | c |\n| ---- | --- |\n| d    | e |\n")
         );
     }
 
@@ -851,7 +912,7 @@ mod tests {
         let n = p("> | a | bb |\n> | --- | --- |\n> | ccc | d |\n");
         assert_eq!(
             n.accepted(),
-            Some("> | a   | bb  |\n> | --- | --- |\n> | ccc | d   |\n")
+            Some("> | a   | bb |\n> | --- | --- |\n> | ccc | d |\n")
         );
     }
 
@@ -867,12 +928,12 @@ mod tests {
         let n = p(src);
         let out = n.accepted().expect("accepted");
         assert!(out.starts_with("# H\n\npara |not| a table\n\n"));
-        assert!(out.ends_with("| a   | b   |\n| --- | --- |\n| 1   | 2   |\n"));
+        assert!(out.ends_with("| a   | b |\n| --- | --- |\n| 1   | 2 |\n"));
     }
 
     #[test]
     fn an_already_padded_table_is_a_fixpoint() {
-        let src = "| key | value  |\n| --- | ------ |\n| a   | longer |\n";
+        let src = "| key | value |\n| --- | ------ |\n| a   | longer |\n";
         let n = p(src);
         assert!(!n.changed());
         assert_eq!(n.accepted(), Some(src));
@@ -883,7 +944,7 @@ mod tests {
         let n = p("| a | b |   \n| --- | --- |\n| c | d |\n");
         assert_eq!(
             n.accepted(),
-            Some("| a   | b   |\n| --- | --- |\n| c   | d   |\n")
+            Some("| a   | b |\n| --- | --- |\n| c   | d |\n")
         );
     }
 

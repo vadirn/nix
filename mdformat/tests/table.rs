@@ -202,10 +202,125 @@ fn a_short_row_is_declined_too_and_comrak_puts_its_phantom_cell_on_the_pipe() {
 /// oracle, because the delimiter's dash count is its one exemption.
 #[test]
 fn widening_only_the_delimiter_row_is_permitted() {
+    // The trailing column's cells are exempt from fill, but its delimiter run
+    // still widens to the column's computed width, same as the first column.
     let src = utf8(b"| aaaaa | bbbbb |\n| - | - |\n| ccccc | ddddd |\n");
     assert_eq!(
         accept(src),
         "| aaaaa | bbbbb |\n| ----- | ----- |\n| ccccc | ddddd |\n"
+    );
+}
+
+/// The trailing-column exemption, stated over the four alignments it turns on.
+///
+/// A trailing column whose alignment is absent or left carries fill that
+/// nothing reads: the only thing it separates the content from is the closing
+/// pipe. A trailing column that is right- or center-aligned carries fill that
+/// *is* the alignment, so it keeps it. Everything before the last column is
+/// padded either way. In every case the delimiter run itself still reflects
+/// the column's computed width — the exemption is about cell fill, not the
+/// dash count.
+#[test]
+fn a_trailing_unaligned_column_is_left_unpadded() {
+    let src = utf8(b"| Term | Definition |\n| --- | --- |\n| a | a long definition |\n");
+    assert_eq!(
+        accept(src),
+        "| Term | Definition |\n| ---- | ----------------- |\n| a    | a long definition |\n"
+    );
+}
+
+#[test]
+fn a_trailing_left_aligned_column_is_left_unpadded_too() {
+    let src = utf8(b"| Term | Definition |\n| :--- | :--- |\n| a | a long definition |\n");
+    // The colon survives on the same side; the dash run behind it still widens
+    // to the column's computed width, same as an aligned non-trailing column.
+    assert_eq!(
+        accept(src),
+        "| Term | Definition |\n| :--- | :---------------- |\n| a    | a long definition |\n"
+    );
+}
+
+#[test]
+fn a_trailing_right_aligned_column_keeps_its_padding() {
+    let src = utf8(b"| Term | Count |\n| --- | ---: |\n| a | 1 |\n");
+    assert_eq!(
+        accept(src),
+        "| Term | Count |\n| ---- | ----: |\n| a    |     1 |\n"
+    );
+}
+
+#[test]
+fn a_trailing_center_aligned_column_keeps_its_padding() {
+    let src = utf8(b"| Term | Count |\n| --- | :-: |\n| a | 1 |\n");
+    assert_eq!(
+        accept(src),
+        "| Term | Count |\n| ---- | :---: |\n| a    |   1   |\n"
+    );
+}
+
+/// A one-column table is all trailing column, so the exemption either takes the
+/// whole table or none of it. Unaligned, cells are left unpadded and an
+/// already-3-wide delimiter is a fixpoint; right-aligned, every cell is.
+#[test]
+fn a_single_column_table_is_all_trailing_column() {
+    let bare = utf8(b"| Key |\n| --- |\n| a |\n");
+    let p = padded(bare);
+    assert_eq!(p.accepted(), Some(bare));
+    assert!(!p.changed(), "there is no cell left to pad");
+    assert_eq!(p.tables_seen, 1);
+    assert_eq!(p.tables_changed, 0);
+
+    let aligned = utf8(b"| Only |\n| ---: |\n| a |\n");
+    assert_eq!(accept(aligned), "| Only |\n| ---: |\n|    a |\n");
+}
+
+/// **The counter-evidence, pinned.** The exemption is not free: a table padded
+/// by hand in the shape the uncapped padder produced — trailing column filled
+/// to its width — is no longer a fixpoint. It loses exactly the trailing
+/// cell fill; the delimiter's dash run, which the exemption never touches,
+/// stays exactly as wide as the column, so a hand-padded header cell that
+/// falls short of it (`value  ` padded to 6 against a 6-wide column) still
+/// loses its own two trailing spaces once the fill is stripped.
+///
+/// This is the shape most of the corpus's hand-padded tables are in, so this
+/// test is the specimen behind "tables that were byte-exact fixpoints now
+/// change". It is asserted here rather than left to a dry run, because the cost
+/// of the rule should fail loudly if anyone tries to argue it away.
+#[test]
+fn a_hand_padded_trailing_column_loses_its_padding() {
+    let src = utf8(b"| key | value  |\n| --- | ------ |\n| a   | longer |\n");
+    let p = padded(src);
+    assert!(
+        p.changed(),
+        "the uncapped padder's own output is no longer a fixpoint"
+    );
+    assert_eq!(
+        p.accepted(),
+        Some("| key | value |\n| --- | ------ |\n| a   | longer |\n")
+    );
+    assert_eq!(p.tables_changed, 1);
+}
+
+/// The claim that makes the exemption cheap: it never narrows a table, and it
+/// never widens one either. The widest line is the row holding the widest
+/// trailing cell, and that cell had no fill to lose — so the maximum line width
+/// is identical with the exemption and without it, and only the shorter rows
+/// get shorter.
+#[test]
+fn the_exemption_leaves_the_widest_line_where_the_uncapped_form_had_it() {
+    let src = utf8(b"| key | value |\n| --- | --- |\n| a | longer |\n| bb | x |\n");
+    let uncapped =
+        utf8(b"| key | value  |\n| --- | ------ |\n| a   | longer |\n| bb  | x      |\n");
+    let widest = |s: &str| s.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+    let out = accept(src);
+    assert_eq!(
+        widest(&out),
+        widest(uncapped),
+        "the exemption must not change the table's widest line"
+    );
+    assert!(
+        out.len() < uncapped.len(),
+        "but it must remove bytes from the shorter rows"
     );
 }
 
@@ -220,6 +335,15 @@ fn padding_is_idempotent() {
         utf8(b"| a | b | c |\n| :-- | --: | :-: |\n| xxxx | yyyy | zzzz |\n"),
         utf8(b"> | a | bb |\n> | --- | --- |\n> | ccc | d |\n"),
         utf8(b"| a\\|b | c |\n| --- | --- |\n| d | e |\n"),
+        // The exemption's own shapes: a trailing column that is dropped from
+        // cell padding must not be re-padded on the second pass, and its
+        // delimiter run — widened to the column's computed width — must be a
+        // fixpoint of itself.
+        utf8(b"| key | value  |\n| --- | ------ |\n| a   | longer |\n"),
+        utf8(b"| Term | Definition |\n| :--- | :--- |\n| a | a long definition |\n"),
+        utf8(b"| Only |\n| --- |\n| a |\n"),
+        utf8(b"| Only |\n| ---: |\n| a |\n"),
+        utf8(b"a | bb\n--- | ---\nccc | d\n"),
     ] {
         let once = accept(src);
         let twice = accept(&once);

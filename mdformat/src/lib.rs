@@ -45,7 +45,8 @@
 //!
 //! # The second rewrite
 //!
-//! [`table`] pads every table's cells to their column's terminal display width.
+//! [`table`] pads every table's cells to their column's terminal display width,
+//! except a trailing column whose alignment does not need the fill.
 //! It is opt-in and default-off on the same terms, and it carries a second,
 //! transformation-specific oracle: outside the delimiter row, whose dash count
 //! is the one thing padding is defined to change, every line's non-whitespace
