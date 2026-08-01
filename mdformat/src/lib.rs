@@ -42,6 +42,16 @@
 //! is [`structure`] — re-parse structural equivalence over block kinds, nesting,
 //! node attributes, and rendered HTML. The partition's role is a *precondition*:
 //! it is what makes the gap between two blocks definable as whitespace at all.
+//!
+//! # The second rewrite
+//!
+//! [`table`] pads every table's cells to their column's terminal display width.
+//! It is opt-in and default-off on the same terms, and it carries a second,
+//! transformation-specific oracle: outside the delimiter row, whose dash count
+//! is the one thing padding is defined to change, every line's non-whitespace
+//! bytes must survive byte-identical, and no cell's space-trimmed content may
+//! move. It also forced [`structure`] to grow a fourth signature, because the
+//! tree alone cannot see a table row gain or lose a cell.
 
 use comrak::Arena;
 use comrak::nodes::AstNode;
@@ -50,6 +60,7 @@ pub mod normalize;
 pub mod print;
 pub mod span;
 pub mod structure;
+pub mod table;
 
 pub use normalize::{GapChange, Normalization, normalize};
 pub use print::{
@@ -57,6 +68,9 @@ pub use print::{
 };
 pub use span::{LineIndex, PosError, PosReason};
 pub use structure::{Structure, StructureDiff, structure_of};
+pub use table::{
+    LineChange, PadViolation, PadViolationKind, Padding, SkipReason, SkippedTable, pad,
+};
 
 /// `mdformat`'s comrak parse configuration. Forwards to
 /// [`mdstruct::comrak_options`] verbatim — `mdformat` has no comrak settings

@@ -8,5 +8,6 @@ description = "Comrak's parser plus mdstruct's shared parse configuration, with 
 mdstruct.workspace = true
 clap.workspace = true
 comrak.workspace = true
+unicode-width.workspace = true
 
 [dev-dependencies]

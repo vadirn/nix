@@ -17,9 +17,9 @@
 //! So a rewrite needs its own oracle, and this is it:
 //! `structure(parse(src)) == structure(parse(rewrite(src)))`.
 //!
-//! # Why three signatures and not one
+//! # Why four signatures and not one
 //!
-//! [`Structure`] carries three renderings of the same parse, in increasing
+//! [`Structure`] carries four renderings of the same parse, in increasing
 //! strength:
 //!
 //! - **kinds** — a pre-order walk of block nodes emitting `"  "*depth + kind`.
@@ -29,6 +29,8 @@
 //!   `marker_offset`, table row/cell counts, and code-block literals.
 //! - **html** — `comrak::format_html` equality, which is the only one of the
 //!   three that reads inlines at all.
+//! - **tables** — the one signature read from the **source**, not the tree.
+//!   See below; the other three are jointly blind to a table's source shape.
 //!
 //! **kinds alone is not enough**, and that is demonstrated rather than assumed:
 //! `tests/normalize.rs::kinds_and_html_agree_where_the_rich_signature_does_not`
@@ -52,13 +54,42 @@
 //! widened. Neither touches a byte a rewrite is allowed to change silently:
 //! the first drops a coordinate, and the second drops trailing whitespace from
 //! the two node kinds whose literal is defined to absorb it.
+//!
+//! # The table signature, and the hole it closes
+//!
+//! The tree is **blind to a table's source shape**, and a census of table
+//! padding found it: `| 1 | 2 |` and `| 1 | 2 |  |` inside a three-column table
+//! parse to the same three `TableCell` nodes, render to the same three `<td>`s,
+//! and carry no attribute that differs — comrak materializes a phantom cell over
+//! the row's trailing pipe for the short row, and drops a long row's excess
+//! cells from the tree while leaving their bytes on the line. So a rewrite that
+//! gains or loses a cell on a ragged row passes **kinds, rich and html
+//! together**. `tests/table_negative_controls.rs` holds that blindness open as
+//! an assertion, in `the_tree_signatures_are_jointly_blind_to_a_synthesized_cell`.
+//!
+//! [`Structure::tables`] closes it by reading the source lines a table occupies:
+//! per table, its column count and alignments, then per row the sequence of
+//! **unescaped-pipe segments** trimmed of spaces, then the delimiter row's
+//! alignment-marker pattern. That rejects
+//!
+//! - any change to a cell's content, as opposed to its surrounding spaces,
+//! - a ragged row gaining or losing a cell,
+//! - a change to a delimiter row's colons,
+//!
+//! and stays silent on the delimiter row's **dash count**, which is the one byte
+//! sequence table padding is defined to change. Nothing else in this module
+//! reads the source; this signature must, because the defect it covers exists
+//! nowhere else.
 
 use comrak::nodes::{AstNode, NodeValue};
 
 use crate::print::block_kind;
+use crate::span::LineIndex;
+use crate::table::{line_content_range, split_unescaped_pipes};
 
-/// Three renderings of one parse: block kinds with nesting, the same walk with
-/// every node attribute, and the rendered HTML. Compare with [`Structure::diff`].
+/// Four renderings of one parse: block kinds with nesting, the same walk with
+/// every node attribute, the rendered HTML, and each table's source shape.
+/// Compare with [`Structure::diff`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Structure {
     /// Pre-order walk of block nodes: `"  "*depth + kind`.
@@ -67,18 +98,22 @@ pub struct Structure {
     pub rich: Vec<String>,
     /// `comrak::format_html` output.
     pub html: String,
+    /// Per table, the source shape of its rows and delimiter — the one
+    /// signature the tree cannot supply. See the module docs.
+    pub tables: Vec<String>,
 }
 
-/// How two [`Structure`]s differ, with the first differing `rich` entry in
-/// context so a failure names the construct rather than the offset.
+/// How two [`Structure`]s differ, with the first differing entry in context so
+/// a failure names the construct rather than the offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructureDiff {
     pub kinds_same: bool,
     pub rich_same: bool,
     pub html_same: bool,
+    pub tables_same: bool,
     /// Index of the first differing `rich` entry, when there is one.
     pub at: Option<usize>,
-    /// `rich` entries around `at`, before the rewrite.
+    /// The first differing entry before the rewrite, in context.
     pub before: String,
     /// The same window after the rewrite.
     pub after: String,
@@ -88,13 +123,19 @@ impl std::fmt::Display for StructureDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "kinds_same={} rich_same={} html_same={}",
-            self.kinds_same, self.rich_same, self.html_same
+            "kinds_same={} rich_same={} html_same={} tables_same={}",
+            self.kinds_same, self.rich_same, self.html_same, self.tables_same
         )?;
         if let Some(at) = self.at {
             write!(
                 f,
                 "; first difference at block node {at}: before {:?}, after {:?}",
+                self.before, self.after
+            )?;
+        } else if !self.tables_same {
+            write!(
+                f,
+                "; first table-shape difference: before {:?}, after {:?}",
                 self.before, self.after
             )?;
         }
@@ -104,33 +145,49 @@ impl std::fmt::Display for StructureDiff {
 
 impl Structure {
     /// `None` when the two parses are structurally equivalent; otherwise which
-    /// of the three comparisons failed, and where.
+    /// of the four comparisons failed, and where.
     pub fn diff(&self, other: &Structure) -> Option<StructureDiff> {
         let kinds_same = self.kinds == other.kinds;
         let rich_same = self.rich == other.rich;
         let html_same = self.html == other.html;
-        if kinds_same && rich_same && html_same {
+        let tables_same = self.tables == other.tables;
+        if kinds_same && rich_same && html_same && tables_same {
             return None;
         }
-        let at = (0..self.rich.len().max(other.rich.len()))
-            .find(|&i| self.rich.get(i) != other.rich.get(i));
         let window = |v: &[String], i: usize| {
             let lo = i.saturating_sub(1);
             let hi = (i + 2).min(v.len());
             v.get(lo..hi).unwrap_or(&[]).join(" | ")
         };
+        let at = (0..self.rich.len().max(other.rich.len()))
+            .find(|&i| self.rich.get(i) != other.rich.get(i));
+        // When only the table signature differs there is no differing block
+        // node to point at, so the context window comes from `tables` instead —
+        // otherwise the one failure mode this signature exists for would report
+        // no location at all.
+        let (before, after) = match at {
+            Some(i) => (window(&self.rich, i), window(&other.rich, i)),
+            None if !tables_same => {
+                let j = (0..self.tables.len().max(other.tables.len()))
+                    .find(|&i| self.tables.get(i) != other.tables.get(i))
+                    .unwrap_or(0);
+                (window(&self.tables, j), window(&other.tables, j))
+            }
+            None => (String::new(), String::new()),
+        };
         Some(StructureDiff {
             kinds_same,
             rich_same,
             html_same,
+            tables_same,
             at,
-            before: at.map(|i| window(&self.rich, i)).unwrap_or_default(),
-            after: at.map(|i| window(&other.rich, i)).unwrap_or_default(),
+            before,
+            after,
         })
     }
 }
 
-/// Parse `source` under the shared comrak configuration and take its three
+/// Parse `source` under the shared comrak configuration and take its four
 /// signatures.
 pub fn structure_of(source: &str, opts: &mdstruct::Options) -> Structure {
     let arena = comrak::Arena::new();
@@ -142,8 +199,72 @@ pub fn structure_of(source: &str, opts: &mdstruct::Options) -> Structure {
         let options = crate::comrak_options(opts);
         comrak::format_html(root, &options, &mut html)
             .expect("formatting into a String cannot fail");
-        Structure { kinds, rich, html }
+        let tables = table_shapes(root, source);
+        Structure {
+            kinds,
+            rich,
+            html,
+            tables,
+        }
     })
+}
+
+/// The source shape of every table in `root`, in document order.
+///
+/// Read from `source`, not from the tree, because the shape this covers has no
+/// tree representation (see the module docs). Rows are addressed through their
+/// own `sourcepos`, so the signature is stable under any rewrite that moves a
+/// table without editing it — which is what keeps it usable as a gate for
+/// [`crate::normalize`] as well as for [`crate::table`].
+fn table_shapes<'a>(root: &'a AstNode<'a>, source: &str) -> Vec<String> {
+    let idx = LineIndex::new(source);
+    let line = |l: usize| line_content_range(&idx, l).map(|(s, e)| &source[s..e]);
+    let mut out = Vec::new();
+    for node in root.descendants() {
+        let alignments = match &node.data.borrow().value {
+            NodeValue::Table(t) => t.alignments.clone(),
+            _ => continue,
+        };
+        out.push(format!(
+            "table cols={} align={alignments:?}",
+            alignments.len()
+        ));
+        let mut header_end: Option<usize> = None;
+        for row in node.children() {
+            let sp = row.data.borrow().sourcepos;
+            if header_end.is_none() {
+                header_end = Some(sp.end.line);
+            }
+            let segments: Vec<&str> = match line(sp.start.line) {
+                Some(text) => split_unescaped_pipes(text)
+                    .into_iter()
+                    .map(|s| s.trim_matches(' '))
+                    .collect(),
+                None => vec!["<line out of range>"],
+            };
+            out.push(format!("  row {segments:?}"));
+        }
+        let delimiter = header_end.and_then(|l| line(l + 1));
+        out.push(match delimiter {
+            // Only the colons and the cell count, never the dash run: the dash
+            // run is exactly what table padding rewrites.
+            Some(text) => format!(
+                "  delim {:?}",
+                text.split('|')
+                    .map(|seg| {
+                        let t = seg.trim();
+                        (
+                            t.starts_with(':'),
+                            t.len() > 1 && t.ends_with(':'),
+                            t.is_empty(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            ),
+            None => "  delim <missing>".to_string(),
+        });
+    }
+    out
 }
 
 /// Pre-order walk of the block skeleton. Inline subtrees are skipped whole —

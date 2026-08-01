@@ -1,17 +1,20 @@
-//! Thin CLI over the `mdformat` crate. Two verbs:
+//! Thin CLI over the `mdformat` crate. Three verbs:
 //!   fixpoint   parse each input under mdstruct's shared comrak config, tile
 //!              it with its top-level block spans, and report whether those
 //!              spans partition the file's content bytes and reproduce it.
 //!   normalize  report what the blank-line normal form would do to each input,
 //!              and refuse any rewrite that changes the parse.
+//!   pad        report what table padding would do to each input, and refuse
+//!              any rewrite that changes the parse or moves a non-whitespace
+//!              byte outside a delimiter row.
 //!
 //! Like `mdstruct check`, this takes paths and walks no directories: the
 //! corpus run is a shell pipeline, and `-` reads stdin.
 //!
-//! **Neither verb writes a file.** `normalize` is opt-in, reports by default,
-//! and emits bytes only to stdout under `--emit`; whether a rewrite may ever be
-//! applied in place is an undecided policy question, so this binary has no code
-//! that opens a file for writing.
+//! **No verb writes a file.** `normalize` and `pad` are opt-in, report by
+//! default, and emit bytes only to stdout under `--emit`; whether a rewrite may
+//! ever be applied in place is an undecided policy question, so this binary has
+//! no code that opens a file for writing.
 //!
 //! Exit codes: 0 pass, 1 I/O error, 3 input not UTF-8, 4 a file failed the
 //! partition or reassembly check — or, under `normalize`, its rewrite failed
@@ -47,6 +50,11 @@ enum Commands {
     /// trailing whitespace on a blank line. Writes no file: this reports, and
     /// `--emit` prints the normalized bytes of a single input to stdout.
     Normalize(NormalizeArgs),
+    /// Report what table padding would do — every cell padded to its column's
+    /// terminal display width, alignment markers preserved, the delimiter row
+    /// widened to match. Writes no file: this reports, and `--emit` prints the
+    /// padded bytes of a single input to stdout.
+    Pad(PadArgs),
 }
 
 #[derive(Args)]
@@ -69,6 +77,19 @@ struct NormalizeArgs {
     emit: bool,
     /// Report each changed gap, with the bytes it holds now and the separator
     /// the normal form would put there.
+    #[arg(short, long)]
+    verbose: bool,
+}
+
+#[derive(Args)]
+struct PadArgs {
+    /// Input files; `-` reads stdin. With no path given, reads stdin.
+    files: Vec<String>,
+    /// Print the padded bytes to stdout instead of a report. Refuses more than
+    /// one input, and refuses any input whose rewrite fails a guard.
+    #[arg(short, long)]
+    emit: bool,
+    /// Report each changed line, and each table this declines to pad.
     #[arg(short, long)]
     verbose: bool,
 }
@@ -116,6 +137,7 @@ fn main() -> ExitCode {
     let exit = match cli.command {
         Commands::Fixpoint(args) => run_fixpoint(&args),
         Commands::Normalize(args) => run_normalize(&args),
+        Commands::Pad(args) => run_pad(&args),
     };
     ExitCode::from(exit)
 }
@@ -329,6 +351,135 @@ fn run_normalize(args: &NormalizeArgs) -> u8 {
         "mdformat normalize: {would_change}/{files_checked} files would change \
          ({refused} refused by the structure guard, {skipped} skipped for a failing \
          partition, {gaps_changed}/{gaps_considered} gaps rewritten)"
+    );
+    exit
+}
+
+/// Report what table padding would do, and refuse anything either guard
+/// rejects.
+///
+/// Like `normalize`, the only thing this ever writes is stdout, and only under
+/// `--emit`.
+fn run_pad(args: &PadArgs) -> u8 {
+    let files = resolve(&args.files);
+    if args.emit && files.len() > 1 {
+        eprintln!(
+            "mdformat: pad --emit takes exactly one input, got {}",
+            files.len()
+        );
+        return 2;
+    }
+    let opts = mdstruct::Options::default();
+    let mut exit: u8 = 0;
+    let mut files_checked = 0usize;
+    let mut would_change = 0usize;
+    let mut refused = 0usize;
+    let mut skipped_files = 0usize;
+    let mut tables_seen = 0usize;
+    let mut tables_changed = 0usize;
+
+    for f in &files {
+        let (path, bytes) = match read_input(f) {
+            Ok(v) => v,
+            Err(code) => {
+                exit = exit.max(code);
+                continue;
+            }
+        };
+        let source = match std::str::from_utf8(&bytes) {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln!("mdformat: {path}: input is not valid UTF-8");
+                exit = exit.max(3);
+                continue;
+            }
+        };
+
+        files_checked += 1;
+        let result = match mdformat::pad(source, &opts) {
+            Ok(r) => r,
+            Err(errors) => {
+                for e in &errors {
+                    eprintln!("mdformat: {path}: SOURCEPOS ERROR: {e}");
+                }
+                exit = exit.max(5);
+                continue;
+            }
+        };
+        tables_seen += result.tables_seen;
+        tables_changed += result.tables_changed;
+
+        if !result.skipped.is_empty() {
+            skipped_files += 1;
+            for s in &result.skipped {
+                eprintln!(
+                    "mdformat: {path}: SKIP: the table at line {} is left verbatim: {}",
+                    s.line, s.reason
+                );
+            }
+        }
+
+        // The partition is reported, never gated on: this rewrite is defined by
+        // row sourcepos and whole-line ranges, so unlike a gap rewrite it does
+        // not need the partition to know which bytes are separators.
+        if !result.input_partition.is_partition() {
+            eprintln!(
+                "mdformat: {path}: note: the input fails the partition oracle \
+                 ({} violations); padding does not depend on it",
+                result.input_partition.violations.len()
+            );
+        }
+
+        if let Some(diff) = &result.structure {
+            refused += 1;
+            exit = exit.max(4);
+            eprintln!("mdformat: {path}: REFUSED: padding changes the parse: {diff}");
+            continue;
+        }
+        if let Some(v) = &result.violation {
+            refused += 1;
+            exit = exit.max(4);
+            eprintln!("mdformat: {path}: REFUSED: padding moved more than whitespace: {v}");
+            continue;
+        }
+
+        if result.changed() {
+            would_change += 1;
+            eprintln!(
+                "mdformat: {path}: would change ({} of {} tables, {} lines)",
+                result.tables_changed,
+                result.tables_seen,
+                result.changes.len()
+            );
+            if args.verbose {
+                for c in &result.changes {
+                    eprintln!(
+                        "mdformat: {path}: L{}: {} => {}",
+                        c.line,
+                        escape(&c.old),
+                        escape(&c.new)
+                    );
+                }
+            }
+        }
+
+        if args.emit {
+            match result.accepted() {
+                Some(out) => print!("{out}"),
+                // Unreachable given the two guards above; kept because
+                // `accepted` is the only sanctioned way to reach the bytes.
+                None => {
+                    eprintln!("mdformat: {path}: refusing to emit an unguarded rewrite");
+                    exit = exit.max(4);
+                }
+            }
+        }
+    }
+
+    eprintln!(
+        "mdformat pad: {would_change}/{files_checked} files would change \
+         ({refused} refused by the guards, {skipped_files} skipped for a table this \
+         cannot pad, {tables_changed}/{tables_seen} tables repadded)"
     );
     exit
 }

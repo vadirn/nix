@@ -78,7 +78,7 @@
     # crates.io's legacy /api/v1 endpoint 403s on curl's default User-Agent.
     # fetchCargoVendor runs `cargo vendor` inside the FOD; cargo's own UA is
     # accepted.
-    workspaceCargoHash = "sha256-DIPeH+xt+MHgmO2/JzK3dn118aSI5JA3kp1MxWFGrrM=";
+    workspaceCargoHash = "sha256-RmTCqkuHQyppDl8Uqsi2XkP805tGvRYmd/Mfpy8lQfo=";
     # Each member builds from the whole workspace tree and is selected by
     # `buildAndTestSubdir`; cargo finds the root manifest above it and builds
     # just that package. The subdirectory is the package name for all three.
