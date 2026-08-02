@@ -91,6 +91,11 @@ fn a_table_cells_sourcepos_is_byte_exact_with_escapes_intact() {
 /// simultaneously a fixpoint claim and the strongest available evidence that the
 /// width measure, the minimum width, the alignment side, and the delimiter's
 /// colon placement all match what a human wrote.
+///
+/// Its trailing column is right-aligned, so the exemption never reaches it and
+/// the header-width delimiter rule never reaches it either: every column here,
+/// delimiter included, is sized by the widest cell. That is what makes it the
+/// one corpus table the exemption leaves standing.
 #[test]
 fn the_corpus_alignment_specimen_is_reproduced_byte_for_byte() {
     let src = utf8(
@@ -203,7 +208,8 @@ fn a_short_row_is_declined_too_and_comrak_puts_its_phantom_cell_on_the_pipe() {
 #[test]
 fn widening_only_the_delimiter_row_is_permitted() {
     // The trailing column's cells are exempt from fill, but its delimiter run
-    // still widens to the column's computed width, same as the first column.
+    // still widens — to the width of the header above it, which here is the
+    // same 5 the first column's computed width gives.
     let src = utf8(b"| aaaaa | bbbbb |\n| - | - |\n| ccccc | ddddd |\n");
     assert_eq!(
         accept(src),
@@ -217,26 +223,27 @@ fn widening_only_the_delimiter_row_is_permitted() {
 /// nothing reads: the only thing it separates the content from is the closing
 /// pipe. A trailing column that is right- or center-aligned carries fill that
 /// *is* the alignment, so it keeps it. Everything before the last column is
-/// padded either way. In every case the delimiter run itself still reflects
-/// the column's computed width — the exemption is about cell fill, not the
-/// dash count.
+/// padded either way. Where the exemption takes the cell fill it also takes the
+/// delimiter's width from the **header** rather than from the column, so the
+/// dash run matches the cell printed directly above it.
 #[test]
 fn a_trailing_unaligned_column_is_left_unpadded() {
     let src = utf8(b"| Term | Definition |\n| --- | --- |\n| a | a long definition |\n");
+    // `Definition` is 10 wide and the column is 17, so the dash run is 10.
     assert_eq!(
         accept(src),
-        "| Term | Definition |\n| ---- | ----------------- |\n| a    | a long definition |\n"
+        "| Term | Definition |\n| ---- | ---------- |\n| a    | a long definition |\n"
     );
 }
 
 #[test]
 fn a_trailing_left_aligned_column_is_left_unpadded_too() {
     let src = utf8(b"| Term | Definition |\n| :--- | :--- |\n| a | a long definition |\n");
-    // The colon survives on the same side; the dash run behind it still widens
-    // to the column's computed width, same as an aligned non-trailing column.
+    // The colon survives on the same side, and the cell it opens is the width
+    // of the header above it — colon included, so nine dashes follow.
     assert_eq!(
         accept(src),
-        "| Term | Definition |\n| :--- | :---------------- |\n| a    | a long definition |\n"
+        "| Term | Definition |\n| :--- | :--------- |\n| a    | a long definition |\n"
     );
 }
 
@@ -276,11 +283,10 @@ fn a_single_column_table_is_all_trailing_column() {
 
 /// **The counter-evidence, pinned.** The exemption is not free: a table padded
 /// by hand in the shape the uncapped padder produced — trailing column filled
-/// to its width — is no longer a fixpoint. It loses exactly the trailing
-/// cell fill; the delimiter's dash run, which the exemption never touches,
-/// stays exactly as wide as the column, so a hand-padded header cell that
-/// falls short of it (`value  ` padded to 6 against a 6-wide column) still
-/// loses its own two trailing spaces once the fill is stripped.
+/// to its width — is no longer a fixpoint. It loses the trailing cell fill
+/// *and* the part of the delimiter run that reached past the header: `value `
+/// gives back its one space, and the six dashes under it come back to the five
+/// `value` occupies.
 ///
 /// This is the shape most of the corpus's hand-padded tables are in, so this
 /// test is the specimen behind "tables that were byte-exact fixpoints now
@@ -296,9 +302,56 @@ fn a_hand_padded_trailing_column_loses_its_padding() {
     );
     assert_eq!(
         p.accepted(),
-        Some("| key | value |\n| --- | ------ |\n| a   | longer |\n")
+        Some("| key | value |\n| --- | ----- |\n| a   | longer |\n")
     );
     assert_eq!(p.tables_changed, 1);
+}
+
+/// **The rule this change is for, pinned directly.** A trailing header cell
+/// far narrower than the widest body cell in its column: the dash run follows
+/// the header, not the column.
+///
+/// The shape is `home/agents/skills/basecamp/SKILL.md`'s reduced to its
+/// operative columns — a `Format` header over a 95-wide body cell, where the
+/// old rule put 95 dashes under a 6-wide word and made the delimiter line more
+/// than twice the header line.
+#[test]
+fn the_trailing_delimiter_follows_the_header_and_not_the_column() {
+    let src = utf8(
+        b"| Command | Format |\n\
+          | --- | --- |\n\
+          | schedule | a long specification of the schedule entry format |\n",
+    );
+    let out = accept(src);
+    assert_eq!(
+        out,
+        "| Command  | Format |\n\
+         | -------- | ------ |\n\
+         | schedule | a long specification of the schedule entry format |\n"
+    );
+    let widths: Vec<usize> = out.lines().map(|l| l.chars().count()).collect();
+    assert_eq!(
+        widths[1], widths[0],
+        "the delimiter line must be as wide as the header line, not the body"
+    );
+}
+
+/// The floor still wins under the new rule: a trailing header narrower than
+/// three leaves three dashes, so `---` (and every alignment marker pair) fits.
+#[test]
+fn a_trailing_header_narrower_than_three_still_gets_three_dashes() {
+    let src = utf8(b"| Key | x |\n| --- | - |\n| a | a much longer cell |\n");
+    assert_eq!(
+        accept(src),
+        "| Key | x |\n| --- | --- |\n| a   | a much longer cell |\n"
+    );
+
+    // And with a colon, where the floor is what keeps the marker renderable.
+    let aligned = utf8(b"| Key | x |\n| --- | :-- |\n| a | a much longer cell |\n");
+    assert_eq!(
+        accept(aligned),
+        "| Key | x |\n| --- | :-- |\n| a   | a much longer cell |\n"
+    );
 }
 
 /// The claim that makes the exemption cheap: it never narrows a table, and it
@@ -337,8 +390,8 @@ fn padding_is_idempotent() {
         utf8(b"| a\\|b | c |\n| --- | --- |\n| d | e |\n"),
         // The exemption's own shapes: a trailing column that is dropped from
         // cell padding must not be re-padded on the second pass, and its
-        // delimiter run — widened to the column's computed width — must be a
-        // fixpoint of itself.
+        // delimiter run — sized to the header above it — must be a fixpoint of
+        // itself.
         utf8(b"| key | value  |\n| --- | ------ |\n| a   | longer |\n"),
         utf8(b"| Term | Definition |\n| :--- | :--- |\n| a | a long definition |\n"),
         utf8(b"| Only |\n| --- |\n| a |\n"),

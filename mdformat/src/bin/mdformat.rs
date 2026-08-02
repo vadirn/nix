@@ -94,8 +94,9 @@ enum Commands {
     /// Report what table padding would do — every cell padded to its column's
     /// terminal display width, alignment markers preserved, the delimiter row
     /// widened to match, and a trailing unaligned or left-aligned column left
-    /// unpadded. Writes no file: this reports, and `--emit` prints the padded
-    /// bytes of a single input to stdout.
+    /// unpadded with its delimiter cell sized to the header above it. Writes no
+    /// file: this reports, and `--emit` prints the padded bytes of a single
+    /// input to stdout.
     Pad(PadArgs),
 }
 

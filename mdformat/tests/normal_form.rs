@@ -344,7 +344,8 @@ const FIXTURES: &[Fixture] = &[
     Fixture {
         // Width 1 in both columns, floored to 3; the trailing unaligned column
         // takes the separator space and the closing pipe and nothing else,
-        // while its delimiter cell still runs the full computed width.
+        // while its delimiter cell runs the width of the header above it —
+        // here 1, so the floor of 3 decides it.
         name: "tables: every column is padded to its width, floored at 3",
         clause: "a column's width is its widest cell, floored at 3",
         input: b"| a | b |\n| --- | --- |\n| 1 | 2 |\n",
@@ -353,11 +354,12 @@ const FIXTURES: &[Fixture] = &[
     Fixture {
         // The direction a do-nothing formatter cannot fake and a
         // padding-only one cannot either: cells and the delimiter run must
-        // *shrink* to the column width.
-        name: "tables: over-wide cells and delimiters shrink to the column width",
+        // *shrink* to the column width — and in the exempt trailing column,
+        // to the width of `value`, the header the dashes sit under.
+        name: "tables: over-wide cells and delimiter runs shrink back",
         clause: "each cell is \"|\" + \" \" + content + fill + \" \"; fill is exact",
         input: b"|   key   |   value   |\n| ------- | --------- |\n| a       | longer    |\n",
-        expected: b"| key | value |\n| --- | ------ |\n| a   | longer |\n",
+        expected: b"| key | value |\n| --- | ----- |\n| a   | longer |\n",
     },
     Fixture {
         // All three alignments at once. Column 3 is right-aligned, so the

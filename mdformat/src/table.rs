@@ -13,45 +13,81 @@
 //! for `---` (and for `:-:`, the widest alignment marker pair). Each cell is
 //! emitted as `"|" + " " + content + fill + " "`, with `fill` on the right for
 //! an unaligned or left-aligned column, on the left for a right-aligned one,
-//! and split for a centered one.
+//! and split for a centered one. The delimiter cell is drawn to that same width
+//! — with one exception, stated next.
 //!
 //! ## The trailing column, when its alignment does not need the fill
 //!
 //! One column is exempt: the **last** one, when it is unaligned or
 //! left-aligned. Its cells get the separator space and the closing pipe and
-//! nothing else; its delimiter cell still runs to the column's full computed
-//! width, the same as every other column's, because the delimiter row has no
-//! reader-visible padding to save — only its dash count changes, and a
-//! dash run shorter than the column above it reads as broken, not as saved
-//! space. Every other column, and a trailing column that is right- or
+//! nothing else, and its delimiter cell is built to the display width of the
+//! **header** cell above it, floored at 3 so `---`, `:--`, `--:` and `:-:` all
+//! still fit. Every other column, and a trailing column that is right- or
 //! center-aligned, is padded exactly as above — an alignment means nothing
-//! without the fill that realizes it, so those keep theirs.
+//! without the fill that realizes it, so those keep theirs, delimiter included.
 //!
-//! The reason is measured, and the exemption costs no width. Padding every
-//! column added **261 920 spaces and 301 561 bytes** to the 1052-file corpus;
-//! the exemption brings that down to **31 648 spaces and 36 217 bytes** — 88%
-//! less of each. It gives up nothing visible: the fill on a trailing unaligned
-//! column is followed only by the closing pipe, and the table's **widest** line
-//! is unchanged, because the row holding the widest trailing cell had no fill
-//! there to lose. Only the shorter rows get shorter, and raggedness is never
-//! introduced *inside* a table — only at the right edge, which a left-aligned
-//! column renders ragged anyway.
+//! ## Why the exempt delimiter follows the header
+//!
+//! A dash run should tie to something the reader can see directly above it. In
+//! an exempt column the column's computed width is set by its widest **body**
+//! cell, and that width is realized nowhere else on the page, because no cell in
+//! that column is padded to it — so a full-width delimiter draws a line under a
+//! measurement no printed row carries.
+//! `home/agents/skills/basecamp/SKILL.md` is the specimen: its trailing header
+//! cell is `Format`, 6 columns, over a 93-column body cell, and the full-width
+//! rule wrote 93 dashes beneath the 6-column word — a 150-byte delimiter line
+//! under a 63-byte header line. Under this rule the two lines are both 63 bytes.
+//!
+//! Three widths were live, and the header was chosen over the other two: a
+//! fixed `N`-dash run ties to nothing in the table, and the full computed width
+//! ties to a cell whose width is printed nowhere. The header is the one width
+//! that is both stable and visible where the dashes are read.
+//!
+//! The floor keeps the rule renderable rather than pretty: a 1-column header
+//! still gets 3 dashes, because `:-:` has to fit under it.
 //!
 //! ## What the exemption costs, stated against it
 //!
-//! It costs churn, and a lot of it. The corpus's hand-padded tables mostly *do*
-//! pad their trailing column, so tables that were byte-exact fixpoints of the
-//! uncapped padder now change: **245 of 247** tables are rewritten where the
-//! uncapped form rewrote 170, and 149 files change where 124 did. Of the 76
-//! tables the uncapped padder already agreed with, 75 now lose padding a human
-//! put there. The one survivor is `20 cards/Faster CRDTs.md`, and it survives
-//! only because its trailing column is right-aligned.
+//! The exemption costs no width and saves a great deal of it. Padding every
+//! column added **261 920 spaces** to the 1052-file vault corpus; the exemption
+//! brings that down to **31 648 spaces** — 88% less. Those two figures are
+//! unaffected by the delimiter rule, since a delimiter row's spaces are the
+//! separators, not the dashes. The byte figures that accompanied them (301 561
+//! and 36 217) were measured against the older, full-width delimiter rule and
+//! are **not** re-measured here; over this repo's own 380 tracked `.md` files
+//! the change is visible directly, and it runs the other way: the table rule's
+//! net byte delta goes from **+2 232 to −2 923** — 5 155 dash bytes removed —
+//! while the space delta stays **−1 047** and the same 52 files and 76 of 78
+//! tables are repadded under either rule.
+//!
+//! It gives up nothing visible: the fill on a trailing unaligned column is
+//! followed only by the closing pipe, and the table's **widest** line is
+//! unchanged, because the row holding the widest trailing cell had no fill there
+//! to lose — and the delimiter row, which the full-width rule made as wide as
+//! that row, is now exactly as wide as the header row instead. Only the shorter
+//! rows get shorter, and raggedness is never introduced *inside* a table — only
+//! at the right edge, which a left-aligned column renders ragged anyway.
+//!
+//! What it does cost is churn, and a lot of it. The corpus's hand-padded tables
+//! mostly *do* pad their trailing column, so tables that were byte-exact
+//! fixpoints of the uncapped padder now change: **245 of 247** tables are
+//! rewritten where the uncapped form rewrote 170, and 149 files change where 124
+//! did. Of the 76 tables the uncapped padder already agreed with, 75 now lose
+//! padding a human put there. Those four counts were measured over the vault
+//! corpus against the full-width delimiter rule; the header-width rule can only
+//! raise them, since it changes bytes in tables the exemption already rewrote
+//! and can newly disagree with a hand-padded delimiter. The one survivor is
+//! `20 cards/Faster CRDTs.md`, and it survives under both rules for the same
+//! reason: its trailing column is right-aligned, so neither the fill exemption
+//! nor the header-width delimiter reaches it.
 //!
 //! So the exemption trades 88% of the added whitespace for near-total
 //! disagreement with the corpus's existing hand padding. `tests/table.rs` pins
 //! that trade at both ends — `a_hand_padded_trailing_column_loses_its_padding`
 //! for the cost, `the_corpus_alignment_specimen_is_reproduced_byte_for_byte`
-//! for the survivor — rather than leaving either to a dry run.
+//! for the survivor — rather than leaving either to a dry run, and
+//! `the_trailing_delimiter_follows_the_header_and_not_the_column` pins the
+//! delimiter rule on the shape that motivated it.
 //!
 //! ## Why display width, and not bytes or characters
 //!
@@ -610,10 +646,26 @@ fn plan_table<'a>(
             delimiter_head: None,
         });
     }
+    // The exempt column's delimiter cell is built to the width of the cell
+    // physically above it — its header — rather than to the column's computed
+    // width, which is the widest *body* cell and can run a dash sequence many
+    // times the header it sits under. The floor still applies, so `---` and
+    // every alignment marker pair fits.
+    let header_width = |j: usize| {
+        header
+            .cells
+            .get(j)
+            .map_or(MIN_WIDTH, |c| UnicodeWidthStr::width(c.trim_matches(' ')))
+            .max(MIN_WIDTH)
+    };
     let cells: Vec<String> = widths
         .iter()
         .zip(alignments)
-        .map(|(&w, &a)| delimiter_cell(w, a))
+        .enumerate()
+        .map(|(j, (&w, &a))| {
+            let w = if is_bare(j) { header_width(j) } else { w };
+            delimiter_cell(w, a)
+        })
         .collect();
     edits.push(Edit {
         line: delim.line,
@@ -827,11 +879,12 @@ mod tests {
     fn an_unpadded_table_gains_column_aligned_cells() {
         // The second column is the trailing one and carries no alignment
         // marker, so it is the exempt column: only `a` is padded, to the width
-        // of `key`.
+        // of `key`, and the dash run under `value` matches that header rather
+        // than the wider `longer` below it.
         let n = p("| key | value |\n| --- | --- |\n| a | longer |\n");
         assert_eq!(
             n.accepted(),
-            Some("| key | value |\n| --- | ------ |\n| a   | longer |\n")
+            Some("| key | value |\n| --- | ----- |\n| a   | longer |\n")
         );
     }
 
@@ -933,7 +986,7 @@ mod tests {
 
     #[test]
     fn an_already_padded_table_is_a_fixpoint() {
-        let src = "| key | value |\n| --- | ------ |\n| a   | longer |\n";
+        let src = "| key | value |\n| --- | ----- |\n| a   | longer |\n";
         let n = p(src);
         assert!(!n.changed());
         assert_eq!(n.accepted(), Some(src));

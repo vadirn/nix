@@ -675,7 +675,7 @@ mod tests {
         let out = fmt(std::str::from_utf8(src).unwrap());
         assert_eq!(
             out.output,
-            "# H\n\n| key | value |\n| --- | ------ |\n| a   | longer |\n"
+            "# H\n\n| key | value |\n| --- | ----- |\n| a   | longer |\n"
         );
         assert!(out.changed);
     }
@@ -683,7 +683,7 @@ mod tests {
     #[test]
     fn an_already_formatted_document_is_a_fixpoint() {
         let src =
-            std::str::from_utf8(b"# H\n\n| key | value |\n| --- | ------ |\n| a   | longer |\n")
+            std::str::from_utf8(b"# H\n\n| key | value |\n| --- | ----- |\n| a   | longer |\n")
                 .unwrap();
         let out = fmt(src);
         assert!(!out.changed);
