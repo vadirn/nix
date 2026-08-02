@@ -92,7 +92,7 @@ fn the_help_lists_two_verbs() {
     let (code, stdout, stderr) = run(&["--help"]);
     assert_eq!(code, 0, "{stderr}");
     assert!(stdout.contains("format"), "{stdout}");
-    assert!(stdout.contains("fixpoint"), "{stdout}");
+    assert!(stdout.contains("partition"), "{stdout}");
     assert!(!stdout.contains("normalize"), "{stdout}");
     assert!(
         !stdout.contains("\n  pad"),

@@ -5,7 +5,7 @@
 #
 # Two phases, both over the same file list:
 #
-#   fixpoint      every file's top-level block spans partition its content
+#   partition     every file's top-level block spans partition its content
 #                 bytes.
 #   idempotence   `format` every file, then require every output to be in
 #                 normal form — that is, `format(format(f)) == format(f)` over
@@ -33,7 +33,7 @@
 # delimiters, so the rule is preservative over today's corpus by design. A
 # nonzero count is information about the census, not a failure of this script.
 #
-# Usage: mdformat/corpus.sh [--fixpoint-only] [--no-ignore]
+# Usage: mdformat/corpus.sh [--partition-only] [--no-ignore]
 #                           [-- <extra vault-query files args>]
 #   MDFORMAT_BIN   path to a built mdformat binary; skips the nix build.
 #   VAULT_ROOT     vault root; defaults to `vault-query config`'s vault_root.
@@ -60,7 +60,7 @@ for arg in "$@"; do
     continue
   fi
   case "$arg" in
-  --fixpoint-only) RUN_IDEMPOTENCE=0 ;;
+  --partition-only) RUN_IDEMPOTENCE=0 ;;
   --)
     passthrough=1
     ARGS+=("$arg")
@@ -95,7 +95,7 @@ fi
 
 STDERR_LOG="$(mktemp "$TMPDIR/mdformat-corpus-stderr.XXXXXX")"
 set +e
-tr '\n' '\0' <"$FILELIST" | xargs -0 "$BIN" fixpoint 2>"$STDERR_LOG"
+tr '\n' '\0' <"$FILELIST" | xargs -0 "$BIN" partition 2>"$STDERR_LOG"
 BIN_EXIT=$?
 set -e
 
@@ -131,13 +131,13 @@ fi
 # reports the same thing as a run that passed. Pointing MDFORMAT_BIN at a
 # nonexistent path printed "4 files checked / 4 passed / 0 failed" and exited
 # 0. So before claiming a pass, require the binary to have exited 0 and to have
-# counted every file itself: it prints one `mdformat fixpoint: OK/CHECKED files
+# counted every file itself: it prints one `mdformat partition: OK/CHECKED files
 # pass` summary per xargs batch, and those CHECKED values must sum to `total`.
 # That catches a binary that could not exec, an xargs batch that never ran, and
 # a process killed mid-corpus. `BIN_EXIT` comes from xargs, which collapses any
 # child failure to 1, so it can flag a bad run but never grade one — the
 # per-file verdict stays with the FAIL lines above.
-CHECKED=$(awk '/^mdformat fixpoint: [0-9]+\/[0-9]+ files pass/ {
+CHECKED=$(awk '/^mdformat partition: [0-9]+\/[0-9]+ files pass/ {
   split($3, a, "/"); n += a[2]
 } END { print n + 0 }' "$STDERR_LOG")
 
@@ -151,7 +151,7 @@ if [ "$failed" -eq 0 ] && { [ "$BIN_EXIT" -ne 0 ] || [ "$CHECKED" -ne "$total" ]
 fi
 
 passed=$((total - failed))
-echo "mdformat corpus fixpoint: $total files checked / $passed passed / $failed failed"
+echo "mdformat corpus partition: $total files checked / $passed passed / $failed failed"
 
 # ---------------------------------------------------------------- phase 2 --
 # Idempotence over the corpus: format every file once, then require every

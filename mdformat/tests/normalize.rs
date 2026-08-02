@@ -1,7 +1,7 @@
 //! Blank-line normalization: the normal form, and every hazard that decided
 //! its shape.
 //!
-//! Same fixture discipline as `fixpoint.rs`: every specimen is an embedded
+//! Same fixture discipline as `partition.rs`: every specimen is an embedded
 //! byte literal, never an on-disk `.md` file. That matters more here than
 //! anywhere else in the crate — these specimens are *about* whitespace, and a
 //! specimen on disk is one `autoformat` pass away from having exactly the

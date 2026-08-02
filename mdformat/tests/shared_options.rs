@@ -79,15 +79,12 @@ fn shared_options_enable_documented_extensions() {
 /// inline link, a list — parses into spans that partition its content bytes.
 /// That partition is the whole verdict: reassembly equality used to be asserted
 /// alongside it here, and was dropped because it is satisfied by corrupt span
-/// sets too. `tests/fixpoint.rs` holds the injection that proves it.
+/// sets too. `tests/partition.rs` holds the injection that proves it.
 #[test]
-fn fixpoint_partitions_a_realistic_document() {
+fn spans_partition_a_realistic_document() {
     let src = "---\ntitle: x\n---\n# Heading\n\nSome *text* with a [[Wikilink]] and a [link](https://x.io).\n\n- one\n- two\n";
     let opts = mdstruct::Options::default();
-    let report = mdformat::fixpoint(src, &opts).expect("every sourcepos converts");
-    assert!(report.passed(), "{:?}", report.partition.violations);
-    assert_eq!(
-        report.partition.content_bytes,
-        report.partition.covered_content_bytes
-    );
+    let part = mdformat::partition(src, &opts).expect("every sourcepos converts");
+    assert!(part.passed(), "{:?}", part.report.violations);
+    assert_eq!(part.report.content_bytes, part.report.covered_content_bytes);
 }

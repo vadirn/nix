@@ -360,7 +360,7 @@ enum PlanStop {
     /// The list is declined; the document is not.
     Skip(ListSkipReason),
     /// A sourcepos that does not name a byte range, which is a whole-document
-    /// failure exactly as it is in [`crate::fixpoint`].
+    /// failure exactly as it is in [`crate::partition`].
     Pos(PosError),
 }
 
@@ -484,7 +484,7 @@ pub fn marker_violation(source: &str, output: &str) -> Option<MarkerViolation> {
 /// cleared them.
 ///
 /// `Err` carries every sourcepos that does not name a byte range in `source`,
-/// exactly as [`crate::fixpoint`] does.
+/// exactly as [`crate::partition`] does.
 pub fn unify(source: &str, opts: &mdstruct::Options) -> Result<Unification, Vec<PosError>> {
     let arena = comrak::Arena::new();
     let idx = LineIndex::new(source);

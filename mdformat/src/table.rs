@@ -786,7 +786,7 @@ pub fn whitespace_violation(
 /// [`Padding::accepted`] is the only way to get bytes that cleared them.
 ///
 /// `Err` carries every sourcepos that does not name a byte range in `source`,
-/// exactly as [`crate::fixpoint`] does.
+/// exactly as [`crate::partition`] does.
 pub fn pad(source: &str, opts: &mdstruct::Options) -> Result<Padding, Vec<PosError>> {
     let arena = comrak::Arena::new();
     let idx = LineIndex::new(source);

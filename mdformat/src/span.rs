@@ -13,7 +13,7 @@
 //!
 //! `LineIndex::new` also keeps `mdstruct`'s line-ending rule: `\n`, `\r\n`,
 //! and a lone `\r` each end a line, per CommonMark. That comrak agrees is not
-//! assumed — `tests/fixpoint.rs::lone_cr_is_a_line_ending_for_comrak_too`
+//! assumed — `tests/partition.rs::lone_cr_is_a_line_ending_for_comrak_too`
 //! pins it against a real parse, where a `\n`-only index would place the
 //! second line seven bytes too late.
 //!

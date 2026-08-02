@@ -208,7 +208,7 @@ pub trait Rule {
     /// Run the rule over `source`.
     ///
     /// `Err` carries every sourcepos that does not name a byte range, exactly
-    /// as [`crate::fixpoint`] does.
+    /// as [`crate::partition`] does.
     fn run(&self, source: &str, opts: &mdstruct::Options) -> Result<RuleRun, Vec<PosError>>;
 }
 
@@ -372,7 +372,7 @@ impl Format {
 /// that declines passes its input through verbatim.
 ///
 /// Writes nothing. `Err` carries every sourcepos that does not name a byte
-/// range, exactly as [`crate::fixpoint`] does.
+/// range, exactly as [`crate::partition`] does.
 pub fn format(source: &str, opts: &mdstruct::Options) -> Result<Format, Vec<PosError>> {
     format_with(RULES, source, opts)
 }

@@ -4,9 +4,19 @@
 //!              where. A CRLF or lone-CR input is reported as departing, and
 //!              formatted to LF throughout. `--rule <name>` narrows either mode
 //!              to one rule.
-//!   fixpoint   parse each input under mdstruct's shared comrak config, tile
+//!   partition  parse each input under mdstruct's shared comrak config, tile
 //!              it with its top-level block spans, and report whether those
 //!              spans partition the file's content bytes.
+//!
+//! **This verb was called `fixpoint` until this commit.** The word was already
+//! taken, and by something more central: `fixpoint` is one of the two clauses
+//! of [`mdformat::format`]'s contract — `format(f) == f` for every `f` already
+//! normal — asserted under that name across `tests/normal_form.rs`,
+//! `tests/endings.rs` and `tests/table.rs`. A verb meaning "the block spans
+//! partition the content bytes" had no claim on it. `corpus.sh` showed the
+//! collision at its sharpest: its `--fixpoint-only` flag *skipped* the
+//! idempotence phase, which is the phase that actually tests the fixpoint
+//! clause. The verb now takes the name every string it prints already uses.
 //!
 //! **`--rule` is what two verbs used to be.** `normalize` and `pad` were dry
 //! runs of the gap and table rules: each reported what its own rule would do,
@@ -66,14 +76,14 @@
 //! 1056-file vault corpus it is **one** line, a ragged table the `tables` rule
 //! leaves verbatim. That is the whole price of never having to know to ask.
 //!
-//! `fixpoint` keeps a `--verbose`, and it is a different flag doing a different
+//! `partition` keeps a `--verbose`, and it is a different flag doing a different
 //! job: it reports each **passing** file, which is noise proportional to the
 //! corpus rather than a refusal that would otherwise go unsaid.
 //!
 //! Exit codes: 0 pass, 1 I/O error, 2 an invocation this refuses — a flag
 //! combination, an unknown `--rule` name, or a `--write` target that is not one
 //! regular file — 3 input not UTF-8, 4 a file failed a check — the partition
-//! under `fixpoint`, normal form under `format --check` — 5 a sourcepos did not
+//! under `partition`, normal form under `format --check` — 5 a sourcepos did not
 //! name a byte range. `--write` writes nothing on any code but 0.
 //!
 //! A rule **declining** a document is not a failure and does not set an exit
@@ -111,11 +121,10 @@ enum Commands {
     Format(FormatArgs),
     /// Verify each input's top-level block spans partition its content bytes:
     /// every non-whitespace byte in exactly one span, no overlaps, nothing past
-    /// the end. That partition is exactly the condition under which the
-    /// block-level passthrough printer is the identity on the file, which is
-    /// what the verb is named for — the reassembly itself is not checked,
-    /// because it holds for corrupt span sets too.
-    Fixpoint(FixpointArgs),
+    /// the end. That partition is what makes a block rewrite safe — it is the
+    /// condition under which splicing over one block's range neither drops nor
+    /// duplicates the rest of the file.
+    Partition(PartitionArgs),
 }
 
 #[derive(Args)]
@@ -145,7 +154,7 @@ struct FormatArgs {
 }
 
 #[derive(Args)]
-struct FixpointArgs {
+struct PartitionArgs {
     /// Input files; `-` reads stdin. With no path given, reads stdin.
     files: Vec<String>,
     /// Report each passing file too, with its block and byte counts.
@@ -195,7 +204,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let exit = match cli.command {
         Commands::Format(args) => run_format(&args),
-        Commands::Fixpoint(args) => run_fixpoint(&args),
+        Commands::Partition(args) => run_partition(&args),
     };
     ExitCode::from(exit)
 }
@@ -527,7 +536,7 @@ fn report_exemptions<'a>(
     (rules, constructs)
 }
 
-fn run_fixpoint(args: &FixpointArgs) -> u8 {
+fn run_partition(args: &PartitionArgs) -> u8 {
     let files = resolve(&args.files);
     let opts = mdstruct::Options::default();
     let mut exit: u8 = 0;
@@ -560,7 +569,7 @@ fn run_fixpoint(args: &FixpointArgs) -> u8 {
         };
 
         files_checked += 1;
-        let report = match mdformat::fixpoint(source, &opts) {
+        let part = match mdformat::partition(source, &opts) {
             Ok(r) => r,
             Err(errors) => {
                 for e in &errors {
@@ -571,21 +580,17 @@ fn run_fixpoint(args: &FixpointArgs) -> u8 {
             }
         };
 
-        content_bytes += report.partition.content_bytes;
-        covered_bytes += report.partition.covered_content_bytes;
-        blocks += report.partition.blocks;
-        synthetic += report
-            .blocks
-            .iter()
-            .filter(|b| b.sourcepos.is_none())
-            .count();
+        content_bytes += part.report.content_bytes;
+        covered_bytes += part.report.covered_content_bytes;
+        blocks += part.report.blocks;
+        synthetic += part.blocks.iter().filter(|b| b.sourcepos.is_none()).count();
 
-        if report.passed() {
+        if part.passed() {
             files_ok += 1;
             if args.verbose {
                 eprintln!(
                     "mdformat: {path}: ok ({} blocks, {} content bytes)",
-                    report.partition.blocks, report.partition.content_bytes
+                    part.report.blocks, part.report.content_bytes
                 );
             }
             continue;
@@ -593,13 +598,13 @@ fn run_fixpoint(args: &FixpointArgs) -> u8 {
 
         exit = exit.max(4);
         let idx = LineIndex::new(source);
-        for v in &report.partition.violations {
+        for v in &part.report.violations {
             eprintln!("mdformat: {path}: FAIL: {}", describe(source, &idx, v));
         }
     }
 
     eprintln!(
-        "mdformat fixpoint: {files_ok}/{files_checked} files pass \
+        "mdformat partition: {files_ok}/{files_checked} files pass \
          ({covered_bytes}/{content_bytes} content bytes in exactly one block span, \
          {blocks} blocks, {synthetic} of them synthetic)"
     );

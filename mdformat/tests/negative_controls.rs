@@ -1,11 +1,11 @@
 //! Specimens the partition oracle must **reject**.
 //!
-//! `fixpoint.rs` asserts the oracle passes on everything the vault holds. That
+//! `partition.rs` asserts the oracle passes on everything the vault holds. That
 //! is only half a contract: an oracle that never fails passes those tests too,
 //! so a regression that silently disabled checking would read as green. These
 //! two specimens pin the failure path against a *real* parser defect rather
 //! than an injected one, which is what
-//! `fixpoint.rs::shortening_every_span_by_one_byte_fails_the_partition`
+//! `partition.rs::shortening_every_span_by_one_byte_fails_the_partition`
 //! already covers.
 //!
 //! Both also demonstrate the trap `print.rs`'s module docs describe: the
@@ -14,7 +14,7 @@
 //! sets the oracle exists to refuse.
 //!
 //! Each specimen is an embedded byte literal, for the same reason the
-//! `fixpoint.rs` fixtures are: a specimen on disk is one `autoformat` pass
+//! `partition.rs` fixtures are: a specimen on disk is one `autoformat` pass
 //! away from being rewritten into something that no longer reproduces the
 //! defect.
 //!

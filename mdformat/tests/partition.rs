@@ -314,14 +314,14 @@ fn shorten_every_span(blocks: &[Block]) -> Vec<Block> {
 fn every_fixture_partitions_its_content_bytes() {
     let opts = mdstruct::Options::default();
     for (name, src) in FIXTURES {
-        let r = mdformat::fixpoint(src, &opts).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let r = mdformat::partition(src, &opts).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         assert!(
-            r.partition.is_partition(),
+            r.report.is_partition(),
             "{name}: {:#?}",
-            r.partition.violations
+            r.report.violations
         );
         assert_eq!(
-            r.partition.content_bytes, r.partition.covered_content_bytes,
+            r.report.content_bytes, r.report.covered_content_bytes,
             "{name}: content bytes unaccounted for"
         );
         assert!(r.passed(), "{name}");

@@ -32,7 +32,7 @@
 //! carriage return and a following newline." There is no other role a `\r` can
 //! play — not inside a code block, not inside a code span, not inside front
 //! matter. [`crate::LineIndex`] already reads the source that way, and
-//! `tests/fixpoint.rs::lone_cr_is_a_line_ending_for_comrak_too` pins that comrak
+//! `tests/partition.rs::lone_cr_is_a_line_ending_for_comrak_too` pins that comrak
 //! agrees against a real parse.
 //!
 //! So this rule reads no parse. It does not need one: there is no document in

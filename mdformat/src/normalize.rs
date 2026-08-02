@@ -337,7 +337,7 @@ fn rewrite(source: &str, blocks: &[Block]) -> (String, Vec<GapChange>, usize) {
 /// [`Normalization::accepted`] is the only way to get bytes that cleared it.
 ///
 /// `Err` carries every sourcepos that does not name a byte range in `source`,
-/// exactly as [`crate::fixpoint`] does.
+/// exactly as [`crate::partition`] does.
 pub fn normalize(source: &str, opts: &mdstruct::Options) -> Result<Normalization, Vec<PosError>> {
     let arena = comrak::Arena::new();
     let blocks = crate::parse_with(&arena, source, opts, |root| block_spans(root, source))?;

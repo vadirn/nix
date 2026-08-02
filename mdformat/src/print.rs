@@ -19,10 +19,10 @@
 //! any boundary error, so `reassemble(src, blocks) == src` holds for a span
 //! set shortened by one byte per block just as it does for the true one. An
 //! earlier scan of this vault made exactly that mistake and had to discard the
-//! result. `tests/fixpoint.rs::reassembly_alone_misses_what_the_partition_catches`
+//! result. `tests/partition.rs::reassembly_alone_misses_what_the_partition_catches`
 //! keeps the trap documented as a live assertion.
 //!
-//! [`crate::Fixpoint`] therefore does not compute the comparison at all. It
+//! [`crate::Partition`] therefore does not compute the comparison at all. It
 //! used to, as a second conjunct of `passed()`, which made a verdict resting
 //! wholly on [`check_partition`] read as though it rested on two things. The
 //! conjunct could not fail, so removing it changed no file's verdict; what it

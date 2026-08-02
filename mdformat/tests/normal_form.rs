@@ -78,7 +78,7 @@
 //! and nothing in the suite enforced it. Here it is enforced per fixture
 //! ([`every_expectation_is_a_fixpoint`], [`formatting_twice_changes_nothing`]);
 //! `corpus.sh` enforces it over the corpus, as a second phase that runs by
-//! default (`--fixpoint-only` skips it) under the same accounting guard the
+//! default (`--partition-only` skips it) under the same accounting guard the
 //! first phase carries.
 //!
 //! Commutativity of the rules is deliberately **not** asserted anywhere: it is
@@ -309,7 +309,7 @@ const FIXTURES: &[Fixture] = &[
     Fixture {
         // The other row of the endings table. A lone `\r` is a CommonMark line
         // ending too — comrak agrees, which
-        // `fixpoint.rs::lone_cr_is_a_line_ending_for_comrak_too` pins against a
+        // `partition.rs::lone_cr_is_a_line_ending_for_comrak_too` pins against a
         // real parse — so these three lines are a paragraph, a heading and a
         // paragraph, and the gap rule puts one blank line between each pair.
         name: "endings: a lone CR is a line ending and becomes LF",

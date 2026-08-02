@@ -17,7 +17,7 @@
 //!
 //! # Milestone 1: the partition, not the reformat
 //!
-//! [`fixpoint`] changes nothing about any file's bytes. It parses, claims a
+//! [`partition`] changes nothing about any file's bytes. It parses, claims a
 //! byte range for each top-level block, and proves those ranges form a
 //! partition of the file's content bytes — every non-whitespace byte in
 //! exactly one block span, no overlaps, nothing past the end. That property,
@@ -25,7 +25,7 @@
 //! that rewrites one block (table padding, list marker unification) splices
 //! its replacement over that block's range, and only a partition guarantees
 //! the splice neither drops nor duplicates the rest of the file. The partition
-//! is therefore the *whole* of [`fixpoint`]'s verdict. Reassembly equality is
+//! is therefore the *whole* of [`partition`]'s verdict. Reassembly equality is
 //! no part of it, because it holds for every span set including corrupt ones —
 //! [`print`]'s module docs explain why, and two tests hold the trap open.
 //!
@@ -184,14 +184,14 @@ pub fn parse_with<'a, R>(
     f(root)
 }
 
-/// One file's fixpoint result: the block spans and the partition verdict.
+/// One file's partition result: the block spans and the verdict on them.
 #[derive(Debug, Clone)]
-pub struct Fixpoint {
+pub struct Partition {
     pub blocks: Vec<Block>,
-    pub partition: PartitionReport,
+    pub report: PartitionReport,
 }
 
-impl Fixpoint {
+impl Partition {
     /// A file passes when its blocks partition its content bytes. That is the
     /// whole verdict.
     ///
@@ -205,10 +205,10 @@ impl Fixpoint {
     /// believe the verdict is doubly grounded when it rests entirely on
     /// [`PartitionReport::is_partition`]. [`print`] argues this at length;
     /// `print::reassemble_is_boundary_insensitive_by_construction` and
-    /// `tests/fixpoint.rs::reassembly_alone_misses_what_the_partition_catches`
+    /// `tests/partition.rs::reassembly_alone_misses_what_the_partition_catches`
     /// pin it, and are what anyone restoring the conjunct has to delete first.
     pub fn passed(&self) -> bool {
-        self.partition.is_partition()
+        self.report.is_partition()
     }
 }
 
@@ -223,12 +223,12 @@ impl Fixpoint {
 ///
 /// `Err` carries every sourcepos that does not name a byte range in `source`;
 /// unlike `mdstruct`, an out-of-range position is never clamped.
-pub fn fixpoint(source: &str, opts: &mdstruct::Options) -> Result<Fixpoint, Vec<PosError>> {
+pub fn partition(source: &str, opts: &mdstruct::Options) -> Result<Partition, Vec<PosError>> {
     let arena = Arena::new();
     parse_with(&arena, source, opts, |root| {
         let blocks = block_spans(root, source)?;
-        let partition = check_partition(source, &blocks);
-        Ok(Fixpoint { blocks, partition })
+        let report = check_partition(source, &blocks);
+        Ok(Partition { blocks, report })
     })
 }
 
@@ -253,11 +253,11 @@ mod tests {
     }
 
     #[test]
-    fn fixpoint_passes_and_accounts_for_every_content_byte() {
+    fn partition_passes_and_accounts_for_every_content_byte() {
         let src = "# Heading\n\nSome *text* with a [[Wikilink]].\n";
         let opts = mdstruct::Options::default();
-        let r = fixpoint(src, &opts).expect("spans convert");
-        assert!(r.passed(), "{:?}", r.partition.violations);
-        assert_eq!(r.partition.content_bytes, r.partition.covered_content_bytes);
+        let r = partition(src, &opts).expect("spans convert");
+        assert!(r.passed(), "{:?}", r.report.violations);
+        assert_eq!(r.report.content_bytes, r.report.covered_content_bytes);
     }
 }
