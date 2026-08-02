@@ -129,6 +129,7 @@
 use comrak::Arena;
 use comrak::nodes::AstNode;
 
+pub mod bom;
 pub mod endings;
 pub mod format;
 pub mod markers;
@@ -139,6 +140,7 @@ pub mod structure;
 pub mod table;
 pub mod write;
 
+pub use bom::BOM;
 pub use endings::{EndingChange, LineEndings, to_lf};
 pub use format::{
     Check, Departure, Exemption, Format, Rule, RuleRun, check, check_with, escape_whitespace,
@@ -173,6 +175,15 @@ pub fn comrak_options(opts: &mdstruct::Options) -> comrak::Options<'static> {
 /// hand the live root node to `f`. The arena has to outlive the callback (the
 /// AST borrows from it), so this takes the shape of a scoped callback rather
 /// than returning the node directly.
+///
+/// One correction runs between the parse and the callback:
+/// [`bom::repair_table_columns`] removes the byte order mark's three bytes from
+/// the columns comrak carries onto the later rows of a table that opens on line
+/// 1. It lives here, and not in one reader, because two readers consume those
+/// columns — [`print::block_spans`] converts them to byte ranges and
+/// [`table::pad`] slices the source at them — so a correction in either alone
+/// would leave the other reading the wrong bytes. That module states the
+/// measured boundary of what it touches.
 pub fn parse_with<'a, R>(
     arena: &'a Arena<'a>,
     source: &str,
@@ -181,6 +192,7 @@ pub fn parse_with<'a, R>(
 ) -> R {
     let options = comrak_options(opts);
     let root = comrak::parse_document(arena, source, &options);
+    bom::repair_table_columns(root, source);
     f(root)
 }
 

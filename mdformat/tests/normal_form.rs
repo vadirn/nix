@@ -391,6 +391,21 @@ const FIXTURES: &[Fixture] = &[
         expected:
             b"| f    | note |\n| ---- | ---- |\n| \xF0\x9F\x8E\x89\xF0\x9F\x8E\x89 | done |\n",
     },
+    Fixture {
+        // The regression fixture for the BOM carry-over. A byte order mark
+        // occupies three bytes of line 1 and of no other line, but comrak
+        // reports every table row's and cell's columns as the table's line-1
+        // opening offset plus their offset within the row — so under a mark
+        // every body row's cells came out three bytes right of where they are,
+        // and the last one's ran past the end of the file. `format` reported
+        // that as a sourcepos error and formatted nothing. The expectation is
+        // the mark-free fixture above, mark restored: nothing about a table is
+        // supposed to depend on what precedes it on line 1.
+        name: "tables: a table opening on a byte order mark's line pads like any other",
+        clause: "a column's width is its widest cell, floored at 3",
+        input: b"\xEF\xBB\xBF| a | b |\n| --- | --- |\n| 1 | 2 |\n",
+        expected: b"\xEF\xBB\xBF| a   | b |\n| --- | --- |\n| 1   | 2 |\n",
+    },
     // ------------------------------------------------------------ markers --
     Fixture {
         // The census says this fires on 0 corpus files, because 10 958 of

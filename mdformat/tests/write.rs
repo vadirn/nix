@@ -66,10 +66,30 @@ fn s(p: &Path) -> String {
 /// bullets would merge them into one list.
 const DECLINING: &[u8] = b"# Title\n\n- alpha\n\n* beta\n\n| x | yy |\n| - | - |\n| 1 | 2 |\n";
 
-/// A UTF-8 BOM followed immediately by a multi-row table. A filed defect makes
-/// `format` return `Err` here; under this tier that surfaces as a refusal a
-/// person reads, which is the behaviour being asserted.
-const ERRS: &[u8] = b"\xef\xbb\xbf| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+/// A UTF-8 byte order mark followed immediately by a multi-row table, unpadded.
+/// This was the specimen `an_erroring_document_is_left_alone` was written
+/// against: comrak carried the mark's three bytes onto every body row, the last
+/// cell's span ran past the end of the file, and `format` returned `Err`.
+/// `mdformat::parse_with` repairs that now, so the same bytes are a document
+/// this tier **rewrites** — which is what the test below asserts, at the only
+/// place the whole path from argument to disk is visible.
+const MARKED: &[u8] = b"\xef\xbb\xbf| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+
+/// A three-space-indented table whose last row is a lazy continuation carrying
+/// no indent. comrak gives every row the table's opening offset on line 1 — the
+/// indent included — so `para`'s cells are reported three columns right of where
+/// they are, and their spans run past the end of the file. `format` returns
+/// `Err`, which under this tier is a refusal a person reads.
+///
+/// This is the same *mechanism* the mark once triggered and a different cause:
+/// an offset a container contributes on line 1 is assumed to repeat on every
+/// line the container spans, and an indent a lazy row omits breaks that
+/// assumption exactly as a mark does. Only the mark is repaired, because only
+/// the mark's carry is a fixed width knowable without re-deriving each row's
+/// indent from the source. Holding this shape as an asserted refusal is what
+/// keeps that boundary visible: the day it starts formatting, this test fails
+/// and someone has to say what changed.
+const ERRS: &[u8] = b"   |a|b|\n   |-|-|\n   |1|2|\npara\n";
 
 /// (1) The happy path: one named file is rewritten in place, stdout stays
 /// empty, and the file on disk holds the formatted bytes.
@@ -259,9 +279,9 @@ fn a_missing_file_is_refused_before_anything_is_read() {
     assert!(stderr.contains("--write cannot read"), "{stderr}");
 }
 
-/// (4) A rule that errors writes nothing. The specimen is the filed BOM defect,
-/// which is exactly the case this tier is meant to surface to a person rather
-/// than paper over.
+/// (4) A rule that errors writes nothing. The specimen is a document comrak
+/// still mis-positions (see [`ERRS`]), which is exactly the case this tier is
+/// meant to surface to a person rather than paper over.
 #[test]
 fn an_erroring_document_is_left_alone() {
     let dir = scratch("err");
@@ -281,6 +301,38 @@ fn an_erroring_document_is_left_alone() {
         before,
         "an untouched file must keep its mtime"
     );
+}
+
+/// The regression this file used to assert the other way round. A byte order
+/// mark in front of a multi-row table exited 5 and wrote nothing; it now goes
+/// all the way to disk, padded, with the mark still the file's first three
+/// bytes. Asserted here as well as in `tests/normal_form.rs` because only this
+/// tier can show the bytes reaching a file rather than a return value — and
+/// because the mark is precisely the kind of byte a rewrite could drop without
+/// any in-process assertion noticing.
+#[test]
+fn a_byte_order_marked_table_is_rewritten_in_place() {
+    let dir = scratch("marked");
+    let p = file(&dir, "note.md", MARKED);
+
+    let (code, stdout, stderr) = run(&["--write", &s(&p)]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(
+        !stderr.contains("SOURCEPOS ERROR"),
+        "the mark must no longer defeat the sourcepos conversion: {stderr}"
+    );
+    assert_eq!(
+        fs::read(&p).expect("read back"),
+        b"\xef\xbb\xbf| a   | b |\n| --- | --- |\n| 1   | 2 |\n",
+        "the table must be padded and the mark must survive as the first bytes"
+    );
+    assert!(stderr.contains("1/1 files rewritten"), "{stderr}");
+
+    // And the rewrite is a fixpoint, mark and all.
+    let (code, _, stderr) = run(&["--check", &s(&p)]);
+    assert_eq!(code, 0, "the rewritten file must be normal: {stderr}");
 }
 
 /// (5) The no-op: a document already in normal form is not rewritten with

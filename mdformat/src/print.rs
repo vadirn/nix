@@ -91,6 +91,7 @@
 
 use comrak::nodes::{AstNode, NodeValue, Sourcepos};
 
+use crate::bom::BOM;
 use crate::span::{LineIndex, PosError};
 
 /// A top-level block and the byte range of source it claims.
@@ -146,9 +147,6 @@ pub fn block_kind(value: &NodeValue) -> &'static str {
         _ => "inline",
     }
 }
-
-/// A byte order mark, UTF-8 encoded: the three bytes `EF BB BF`.
-const BOM: &str = "\u{feff}";
 
 /// Collect the byte range of every top-level block of `root`.
 ///

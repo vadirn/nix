@@ -10,7 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use comrak::Arena;
-use comrak::nodes::NodeValue;
+use comrak::nodes::{NodeValue, Sourcepos};
 use mdformat::table::whitespace_violation;
 use mdformat::{PadViolationKind, Padding, SkipReason, check, pad};
 
@@ -620,4 +620,96 @@ fn every_refusal_this_rule_makes_is_one_table_and_not_the_document() {
         skipped_some >= 3,
         "only {skipped_some} specimens exercised the per-table exemption"
     );
+}
+
+/// Every node's sourcepos in a document, root excluded — the root's own start
+/// column is 1 whatever precedes it, so it is the one node the invariant below
+/// does not describe.
+fn positions(src: &str) -> Vec<(&'static str, Sourcepos)> {
+    let arena = Arena::new();
+    mdformat::parse_with(&arena, src, &opts(), |root| {
+        root.descendants()
+            .skip(1)
+            .map(|n| {
+                let d = n.data.borrow();
+                (mdformat::block_kind(&d.value), d.sourcepos)
+            })
+            .collect()
+    })
+}
+
+/// The boundary of the byte order mark's reach, pinned in both directions.
+///
+/// A mark occupies three bytes of line 1 and of no other line. So a marked
+/// document's sourcepos must equal the unmarked document's with three added to
+/// every column reported **on line 1**, and nothing added anywhere else. That
+/// is the whole invariant, and it is what the crate's spans, widths and splices
+/// all rest on.
+///
+/// comrak breaks it inside a table that opens on line 1: it gives every row and
+/// every cell the table's line-1 opening offset — the mark's bytes included —
+/// plus their offset within the row, so a body row two lines down is reported
+/// three columns right of where it is, and this specimen's last cell ran past
+/// the end of the file. `mdformat::parse_with` repairs that; this holds the
+/// repair to the boundary.
+///
+/// Both directions carry weight, and each of the repair's three conditions has
+/// a specimen here that reddens when it is dropped:
+///
+/// - Repairing too little leaves a later line three columns right.
+/// - Repairing a column **on line 1** moves one where the mark's bytes really do
+///   sit. The `table-on-line-1` specimen catches that.
+/// - Repairing a `Table`'s or a `TableRow`'s own `end` moves one comrak measures
+///   from the line it lands on rather than from the table's opening offset. Two
+///   columns and two body rows are what make that visible; a one-row or
+///   one-column table cannot separate it from the start columns.
+/// - Repairing a table that opens on a **later** line moves columns that never
+///   carried the mark at all. The `table-after-a-paragraph` specimen is there
+///   for that condition alone, and it is the one a `starts_with(BOM)` test
+///   without a line check would fail.
+#[test]
+fn a_byte_order_mark_shifts_only_line_one_columns_inside_a_table() {
+    // (name, the unmarked document). Each is prefixed with the mark to make the
+    // marked half, so the two halves cannot drift apart.
+    let specimens: &[(&str, &[u8])] = &[
+        (
+            "table-on-line-1",
+            b"| abc | defg |\n| --- | --- |\n| 1 | 2 |\n| 33 | 44 |\n",
+        ),
+        (
+            "table-after-a-paragraph",
+            b"intro\n\n| abc | defg |\n| --- | --- |\n| 1 | 2 |\n| 33 | 44 |\n",
+        ),
+    ];
+
+    let mark = "\u{feff}".len();
+    let shift = |line: usize| if line == 1 { mark } else { 0 };
+    for (name, body) in specimens {
+        let bare = positions(utf8(body));
+        let marked = positions(&format!("\u{feff}{}", utf8(body)));
+        assert_eq!(
+            bare.len(),
+            marked.len(),
+            "{name}: the mark must not change the tree, only where its nodes sit"
+        );
+        assert_eq!(
+            bare.iter().filter(|(k, _)| *k == "tableRow").count(),
+            3,
+            "{name}: the specimen must carry a header row and two body rows"
+        );
+
+        for (i, ((kind, b), (_, m))) in bare.iter().zip(&marked).enumerate() {
+            let want = Sourcepos::from((
+                b.start.line,
+                b.start.column + shift(b.start.line),
+                b.end.line,
+                b.end.column + shift(b.end.line),
+            ));
+            assert_eq!(
+                *m, want,
+                "{name}: node {i} ({kind}): the mark moved a column off line 1 \
+                 — unmarked {b:?}, marked {m:?}"
+            );
+        }
+    }
 }

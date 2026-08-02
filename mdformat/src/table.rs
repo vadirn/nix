@@ -159,6 +159,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use comrak::nodes::{AstNode, NodeValue, TableAlignment};
 use unicode_width::UnicodeWidthStr;
 
+use crate::bom::BOM;
 use crate::print::{PartitionReport, block_spans, check_partition};
 use crate::span::{LineIndex, PosError};
 use crate::structure::{StructureDiff, structure_of};
@@ -472,10 +473,20 @@ fn read_delimiter<'s>(
         return fail("there is no line after the header row");
     };
     let text = &source[start..end];
-    if !text.starts_with(header.head) {
+    // A byte order mark is not a container prefix. Every other byte a head can
+    // carry — a block quote's `> `, an indent, the leading pipe — repeats on the
+    // delimiter line, which is what this comparison is for; a mark is written
+    // once, on line 1, so requiring the delimiter to repeat it declined every
+    // table that opened a marked file for a reason having nothing to do with
+    // the table.
+    let prefix = match header.head.strip_prefix(BOM) {
+        Some(rest) if header.line == 1 => rest,
+        _ => header.head,
+    };
+    if !text.starts_with(prefix) {
         return fail("it does not open with the header row's prefix");
     }
-    let rest = &text[header.head.len()..];
+    let rest = &text[prefix.len()..];
     let mut segs: Vec<&str> = rest.split('|').collect();
     let trailing_pipe = segs.len() > 1 && segs[segs.len() - 1].trim().is_empty();
     if trailing_pipe {
@@ -505,7 +516,7 @@ fn read_delimiter<'s>(
         line,
         start,
         end,
-        head: header.head,
+        head: prefix,
         trailing_pipe,
     })
 }

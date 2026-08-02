@@ -261,6 +261,11 @@ const FIXTURES: &[(&str, &str)] = &[
     ("leading-blank-lines", "\n\n# H\n"),
     ("bom", "\u{feff}# H\n\nbody\n"),
     ("bom-frontmatter", "\u{feff}---\ntitle: x\n---\n\nbody\n"),
+    // A BOM whose very next byte opens a table, with a body row on a line of
+    // its own. comrak adds the table's line-1 opening offset — which includes
+    // the mark's three bytes — to every later row's columns, so this is the one
+    // BOM shape whose spans are not simply the BOM-free document's.
+    ("bom-table", "\u{feff}| a | b |\n| --- | --- |\n| 1 | 2 |\n"),
     ("crlf", "# H\r\n\r\npara one\r\n\r\n- a\r\n- b\r\n"),
     ("crlf-frontmatter", "---\r\ntitle: x\r\n---\r\n\r\n# H\r\n"),
     ("lone-cr", "a\r## H\rbody\r"),
