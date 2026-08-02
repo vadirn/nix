@@ -13,9 +13,10 @@
 //!    gate — so the tier boundary is enforced by this program rather than by the
 //!    person running it.
 //! 2. **The reporting.** Every rule declination and every construct left
-//!    verbatim is printed without `--verbose`, because the rewritten bytes do
-//!    not show what was left alone and the person inspecting them is the reason
-//!    this tier is allowed.
+//!    verbatim is printed unasked, because the rewritten bytes do not show what
+//!    was left alone and the person inspecting them is the reason this tier is
+//!    allowed. There is no flag to ask with: `--verbose` gated exactly that
+//!    report elsewhere in the CLI and is gone, which a test here pins.
 //! 3. **Nothing is written unless everything held.** An `Err` from a rule, and
 //!    an already-normal document, both leave the file byte-identical — the
 //!    second without even moving its mtime.
@@ -107,8 +108,8 @@ fn what_is_written_is_in_normal_form() {
     assert_eq!(code, 0, "the rewritten file must be normal: {stderr}");
 }
 
-/// (2) Every declination is reported without `--verbose`, naming the rule, the
-/// line, and the reason — that reporting is the point of this tier.
+/// (2) Every declination is reported without being asked for, naming the rule,
+/// the line, and the reason — that reporting is the point of this tier.
 #[test]
 fn every_declination_is_reported_without_being_asked() {
     let dir = scratch("report");
@@ -153,26 +154,29 @@ fn an_exemption_names_a_line_in_the_file_as_written() {
     assert!(stderr.contains("EXEMPT: L5: markers"), "{stderr}");
 }
 
-/// `--verbose` adds nothing under `--write`: the unconditional report is
-/// already the whole of it.
+/// There is no `--verbose` to ask with any more, under `--write` or anywhere
+/// else. It only ever gated the report the test above asserts is already
+/// unconditional here, so removing it took nothing away — and an invocation
+/// carrying it is refused rather than quietly accepted, so a caller still
+/// passing it learns the report it wanted is the one it is getting.
 #[test]
-fn verbose_adds_nothing_to_the_write_report() {
-    let dir = scratch("verbose-a");
-    let quiet = run(&["--write", &s(&file(&dir, "note.md", DECLINING))]).2;
-    let dir = scratch("verbose-b");
-    let loud = run(&[
-        "--write",
-        "--verbose",
-        &s(&file(&dir, "note.md", DECLINING)),
-    ])
-    .2;
+fn verbose_is_gone_from_the_surface() {
+    let dir = scratch("verbose");
+    let p = file(&dir, "note.md", DECLINING);
 
-    let strip = |t: String| {
-        t.lines()
-            .map(|l| l.rsplit('/').next().unwrap_or(l).to_string())
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(strip(quiet), strip(loud));
+    let (code, stdout, stderr) = run(&["--write", "--verbose", &s(&p)]);
+
+    assert_eq!(code, 2, "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(
+        stderr.contains("unexpected argument '--verbose'"),
+        "{stderr}"
+    );
+    assert_eq!(
+        fs::read(&p).expect("read back"),
+        DECLINING,
+        "a refused invocation writes nothing"
+    );
 }
 
 /// (3) The gate: two paths is what a shell glob looks like from in here, and it

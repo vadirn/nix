@@ -32,9 +32,10 @@
 //!
 //! [`normalize`] is the first thing here that changes bytes: it rewrites the
 //! whitespace *between* top-level blocks to a blank-line normal form. It is
-//! **opt-in and default-off** — the CLI's `normalize` verb reports, and can emit
-//! to stdout, and reaches no file. Only [`write`] opens a file, and only for the
-//! single target the section below describes.
+//! **opt-in and default-off** — the CLI reaches it through `format --rule gaps`,
+//! which reports under `--check` and otherwise emits to stdout, and reaches no
+//! file. Only [`write`] opens a file, and only for the single target the
+//! section below describes.
 //!
 //! It does not run on the partition oracle either. That oracle is a unary
 //! invariant of one document, so it cannot tell a faithful rewrite from an
@@ -90,10 +91,11 @@
 //!
 //! # The composition, and what "already formatted" means
 //!
-//! [`format`] applies every rule in [`format::RULES`] in one pass, so nothing
-//! has to chain the single-rule verbs through stdout. [`check`] answers the
-//! other half: whether a document is already in normal form, and where it is
-//! not.
+//! [`format`] applies every rule in [`format::RULES`] in one pass. [`check`]
+//! answers the other half: whether a document is already in normal form, and
+//! where it is not. Both take the rule list as a parameter
+//! ([`format::format_with`], [`format::check_with`]), which is what the CLI's
+//! `--rule <name>` selects when one rule is wanted on its own.
 //!
 //! The predicate is not written beside the rules. It is **derived from them** —
 //! a document is normal for a rule exactly when the rule's own yield for it is
@@ -138,7 +140,8 @@ pub mod write;
 
 pub use endings::{EndingChange, LineEndings, to_lf};
 pub use format::{
-    Check, Departure, Exemption, Format, Rule, RuleRun, check, escape_whitespace, format,
+    Check, Departure, Exemption, Format, Rule, RuleRun, check, check_with, escape_whitespace,
+    format, format_with, rule_named, rule_names,
 };
 pub use markers::{
     ListSkipReason, MarkerChange, MarkerViolation, SkippedList, Unification, marker_violation,

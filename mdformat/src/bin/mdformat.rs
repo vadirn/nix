@@ -1,32 +1,46 @@
-//! Thin CLI over the `mdformat` crate. Four verbs:
+//! Thin CLI over the `mdformat` crate. Two verbs:
 //!   format     apply every rewriting rule in one pass and print the result, or
 //!              under `--check` report which inputs are not in normal form and
 //!              where. A CRLF or lone-CR input is reported as departing, and
-//!              formatted to LF throughout.
+//!              formatted to LF throughout. `--rule <name>` narrows either mode
+//!              to one rule.
 //!   fixpoint   parse each input under mdstruct's shared comrak config, tile
 //!              it with its top-level block spans, and report whether those
 //!              spans partition the file's content bytes and reproduce it.
-//!   normalize  report what the blank-line normal form would do to each input,
-//!              and refuse any rewrite that changes the parse.
-//!   pad        report what table padding would do to each input, and refuse
-//!              any rewrite that changes the parse or moves a non-whitespace
-//!              byte outside a delimiter row.
 //!
-//! `format` is the product verb and the other three are diagnostic, which is
-//! why they take opposite defaults: `format` prints bytes unless asked to
-//! report, `normalize` and `pad` report unless asked for bytes (`--emit`).
-//! Nothing has to chain the diagnostic verbs through stdout to get every rule
-//! applied — that is what `format` is for.
+//! **`--rule` is what two verbs used to be.** `normalize` and `pad` were dry
+//! runs of the gap and table rules: each reported what its own rule would do,
+//! and emitted that rule's bytes under `--emit`. `format --check --rule gaps`
+//! is the first half and `format --rule gaps` the second — for all four rules
+//! rather than for two of them, and without a second reporting path to keep in
+//! step with `format`'s. The flag takes the name the report already tags a
+//! departure with, resolved against `format::RULES` by
+//! [`mdformat::rule_named`], so it cannot name a rule the reports do not, and
+//! a fifth rule becomes selectable without an edit here.
 //!
-//! **Two rules have no verb of their own.** The endings rule has no guard to
-//! dry-run and no corpus exposure to measure, so a verb would be unearned. The
-//! marker rule has a guard, and it still has none: `format --check --verbose`
-//! already reports every departure and every declined construct **tagged with
-//! the rule that found it**, which is the whole of what a `markers` dry run
-//! would print. `normalize` and `pad` predate that reporting — they are the
-//! instruments that produced the corpus measurements those two rules are
-//! argued from — and they stay; a new rule does not earn a fifth verb that
-//! duplicates an existing one.
+//! The one thing the verbs had that the flag does not is a **refusal**:
+//! `normalize --emit` exited 4 rather than print bytes for a document whose
+//! rewrite failed the structure guard. Under `format` that is not a failure —
+//! the rule declines, yields its input, and the declination goes to stderr
+//! while the input's own bytes go to stdout. That is this crate's settled
+//! position on declinations (see [`mdformat::format`]); the verbs predate it,
+//! and a dry run that exits 4 on a document `format` calls normal is the
+//! disagreement, not the safeguard.
+//!
+//! **The corpus figures the module docs quote were measured with those verbs**,
+//! last present at commit `333ac55`. The space and byte deltas in
+//! [`mdformat::table`], the gap and blank-line-site counts in
+//! [`mdformat::normalize`], and the front-matter clause withdrawn there for
+//! costing 988 of 1052 files all come from batch runs of `mdformat normalize`
+//! and `mdformat pad` over the vault corpus. Re-measuring any of them now means
+//! `format --check --rule <name>` and its summary line, which counts one
+//! departure per changed line: the same number `normalize` reported as a
+//! rewritten gap, and `pad`'s changed-line count rather than its table count.
+//!
+//! **No rule has a verb of its own, and none needs one.** `format --check
+//! --rule <name>` reports every departure and every declined construct for
+//! exactly one rule, tagged with it, which is the whole of what a per-rule dry
+//! run printed.
 //!
 //! Like `mdstruct check`, this takes paths and walks no directories: the
 //! corpus run is a shell pipeline, and `-` reads stdin.
@@ -40,15 +54,28 @@
 //!
 //! Because that person is the reason the tier is allowed, `--write` reports
 //! **every** declination without being asked: each rule that declined the
-//! document, and each construct a rule left verbatim inside it. `--verbose`
-//! adds nothing to it.
+//! document, and each construct a rule left verbatim inside it.
+//!
+//! **So does every other mode of `format`, and it has no `--verbose` to ask
+//! with.** That flag used to gate the per-construct half of the report — and
+//! under `--check`, the whole-document half as well — which left the reporting
+//! mode's default output silent about exactly the refusals this crate spends
+//! its module docs arguing must be legible. Removing it costs close to nothing
+//! in lines: over this repository's 380 tracked `.md` files the report it
+//! gated is empty (zero declinations, zero exempt constructs), and over the
+//! 1056-file vault corpus it is **one** line, a ragged table the `tables` rule
+//! leaves verbatim. That is the whole price of never having to know to ask.
+//!
+//! `fixpoint` keeps a `--verbose`, and it is a different flag doing a different
+//! job: it reports each **passing** file, which is noise proportional to the
+//! corpus rather than a refusal that would otherwise go unsaid.
 //!
 //! Exit codes: 0 pass, 1 I/O error, 2 an invocation this refuses — a flag
-//! combination, or a `--write` target that is not one regular file — 3 input
-//! not UTF-8, 4 a file failed a check — the partition or reassembly check under
-//! `fixpoint`, the structural-equivalence guard under `normalize` and `pad`,
-//! normal form under `format --check` — 5 a sourcepos did not name a byte
-//! range. `--write` writes nothing on any code but 0.
+//! combination, an unknown `--rule` name, or a `--write` target that is not one
+//! regular file — 3 input not UTF-8, 4 a file failed a check — the partition or
+//! reassembly check under `fixpoint`, normal form under `format --check` — 5 a
+//! sourcepos did not name a byte range. `--write` writes nothing on any code
+//! but 0.
 //!
 //! A rule **declining** a document is not a failure and does not set an exit
 //! code: the stage passes its input through, `format --check` reports the
@@ -58,7 +85,7 @@ use std::io::{self, Read};
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
-use mdformat::{LineIndex, Violation, escape_whitespace as escape};
+use mdformat::{LineIndex, Violation};
 
 /// Comrak's parser plus mdstruct's shared parse configuration, with a
 /// block-level passthrough printer over node sourcepos.
@@ -79,25 +106,14 @@ enum Commands {
     /// table padding, then list markers — in one pass and print the result to
     /// stdout. Under `--check`, print nothing
     /// and report instead which inputs are not in normal form and where,
-    /// exiting 4 when any is not. Under `--write`, rewrite one named file in
-    /// place instead of printing; both other modes leave every file alone.
+    /// exiting 4 when any is not. Under `--rule`, do either for one rule alone.
+    /// Under `--write`, rewrite one named file in place instead of printing;
+    /// every other mode leaves every file alone.
     Format(FormatArgs),
     /// Verify each input is a fixpoint of the block-level passthrough printer:
     /// every non-whitespace byte in exactly one top-level block span, no
     /// overlaps, nothing past the end, and the reassembly equal to the input.
     Fixpoint(FixpointArgs),
-    /// Report what blank-line normalization would do — one blank line between
-    /// top-level blocks, one after front matter, one trailing newline, no
-    /// trailing whitespace on a blank line. Writes no file: this reports, and
-    /// `--emit` prints the normalized bytes of a single input to stdout.
-    Normalize(NormalizeArgs),
-    /// Report what table padding would do — every cell padded to its column's
-    /// terminal display width, alignment markers preserved, the delimiter row
-    /// widened to match, and a trailing unaligned or left-aligned column left
-    /// unpadded with its delimiter cell sized to the header above it. Writes no
-    /// file: this reports, and `--emit` prints the padded bytes of a single
-    /// input to stdout.
-    Pad(PadArgs),
 }
 
 #[derive(Args)]
@@ -111,10 +127,12 @@ struct FormatArgs {
     /// printing formatted bytes. Exits 4 when any input departs.
     #[arg(short, long)]
     check: bool,
-    /// Also report what each rule declined — whole documents, and the
-    /// individual constructs left verbatim inside them.
-    #[arg(short, long)]
-    verbose: bool,
+    /// Run one rule instead of all four, named as the reports tag it: endings,
+    /// gaps, tables, or markers. Prints that rule's output, or under `--check`
+    /// reports only its departures. An unknown name is refused. Cannot be
+    /// combined with `--write`, which rewrites a file to the whole normal form.
+    #[arg(short, long, value_name = "NAME")]
+    rule: Option<String>,
     /// Rewrite the file in place, atomically, instead of printing to stdout,
     /// and report everything the rules declined. Takes exactly one path a
     /// person typed: two paths, a directory, a glob, or stdin is refused.
@@ -129,34 +147,6 @@ struct FixpointArgs {
     /// Input files; `-` reads stdin. With no path given, reads stdin.
     files: Vec<String>,
     /// Report each passing file too, with its block and byte counts.
-    #[arg(short, long)]
-    verbose: bool,
-}
-
-#[derive(Args)]
-struct NormalizeArgs {
-    /// Input files; `-` reads stdin. With no path given, reads stdin.
-    files: Vec<String>,
-    /// Print the normalized bytes to stdout instead of a report. Refuses more
-    /// than one input, since concatenating two documents is not a formatting
-    /// operation, and refuses any input whose rewrite fails the guard.
-    #[arg(short, long)]
-    emit: bool,
-    /// Report each changed gap, with the bytes it holds now and the separator
-    /// the normal form would put there.
-    #[arg(short, long)]
-    verbose: bool,
-}
-
-#[derive(Args)]
-struct PadArgs {
-    /// Input files; `-` reads stdin. With no path given, reads stdin.
-    files: Vec<String>,
-    /// Print the padded bytes to stdout instead of a report. Refuses more than
-    /// one input, and refuses any input whose rewrite fails a guard.
-    #[arg(short, long)]
-    emit: bool,
-    /// Report each changed line, and each table this declines to pad.
     #[arg(short, long)]
     verbose: bool,
 }
@@ -204,27 +194,77 @@ fn main() -> ExitCode {
     let exit = match cli.command {
         Commands::Format(args) => run_format(&args),
         Commands::Fixpoint(args) => run_fixpoint(&args),
-        Commands::Normalize(args) => run_normalize(&args),
-        Commands::Pad(args) => run_pad(&args),
     };
     ExitCode::from(exit)
 }
 
-/// Apply every rule in one pass, or report what stands between each input and
-/// normal form.
+/// The rules one invocation runs: all of [`mdformat::format::RULES`], or the
+/// single one `--rule` named.
+///
+/// The name is resolved against `RULES` rather than against a list kept here,
+/// so this function needs no edit when a rule is added and cannot accept a name
+/// no report prints. An unrecognized name is a refused invocation (exit 2), not
+/// a silent fallback to every rule: a caller who asked for one rule and got
+/// four would read a report about rules it did not ask about.
+fn selected_rules(name: Option<&str>) -> Result<Vec<&'static dyn mdformat::Rule>, u8> {
+    let Some(name) = name else {
+        return Ok(mdformat::format::RULES.to_vec());
+    };
+    match mdformat::rule_named(name) {
+        Some(rule) => Ok(vec![rule]),
+        None => {
+            eprintln!(
+                "mdformat: no rule is named {name:?}; --rule takes one of: {}",
+                mdformat::rule_names().collect::<Vec<_>>().join(", ")
+            );
+            Err(2)
+        }
+    }
+}
+
+/// Apply the selected rules in one pass, or report what stands between each
+/// input and their normal form.
 ///
 /// The two modes read the same predicate, so they cannot disagree: a rule that
 /// declines a document yields that document unchanged, which is exactly what
 /// makes `--check` call it normal. A declination is therefore reported as an
 /// exemption and sets no exit code.
 ///
+/// Both modes report every declination and every exempt construct
+/// unconditionally. Under `--check` that is the only place a refusal appears at
+/// all; without it, stdout carries bytes alone, so a stage that passed its
+/// input through is invisible there and a caller taking the output would
+/// otherwise not learn the format is partial.
+///
 /// The only thing this ever writes is stdout, and only without `--check`.
-/// `--write` never reaches this function: it is a different verb wearing a
+/// `--write` never reaches the loop below: it is a different verb wearing a
 /// flag, and its whole point is that it does not loop over a file list.
 fn run_format(args: &FormatArgs) -> u8 {
+    let rules = match selected_rules(args.rule.as_deref()) {
+        Ok(rules) => rules,
+        Err(code) => return code,
+    };
     if args.write {
+        // `--write` rewrites a file to *the* normal form, which is every rule;
+        // one rule's output is by construction not that, and the fixpoint
+        // assertion guarding the write would refuse it a moment later with a
+        // message about a rule interaction that is not what happened. Refuse
+        // here instead, where the reason is the invocation.
+        if args.rule.is_some() {
+            eprintln!(
+                "mdformat: --write rewrites a file to normal form, which is every rule; \
+                 --rule runs one, so give it without --write to print or check that rule"
+            );
+            return 2;
+        }
         return run_write(args);
     }
+    // Named for the summary line, so a restricted run's totals cannot be read
+    // as the whole normal form's.
+    let scope = match args.rule.as_deref() {
+        Some(name) => format!(" --rule {name}"),
+        None => String::new(),
+    };
     let files = resolve(&args.files);
     if !args.check && files.len() > 1 {
         eprintln!(
@@ -261,7 +301,7 @@ fn run_format(args: &FormatArgs) -> u8 {
         files_checked += 1;
 
         if args.check {
-            let result = match mdformat::check(source, &opts) {
+            let result = match mdformat::check_with(&rules, source, &opts) {
                 Ok(r) => r,
                 Err(errors) => {
                     for e in &errors {
@@ -271,8 +311,6 @@ fn run_format(args: &FormatArgs) -> u8 {
                     continue;
                 }
             };
-            declinations += result.declined().count();
-            exemptions += result.exempt().count();
             // Every rule runs against the input itself, so these positions
             // address the file as it is on disk and sorting them together is
             // meaningful.
@@ -292,20 +330,15 @@ fn run_format(args: &FormatArgs) -> u8 {
                     );
                 }
             }
-            if args.verbose {
-                for (rule, why) in result.declined() {
-                    eprintln!(
-                        "mdformat: {path}: EXEMPT: the {rule} rule declined this document: {why}"
-                    );
-                }
-                for (rule, e) in result.exempt() {
-                    eprintln!("mdformat: {path}: EXEMPT: L{}: {rule}: {}", e.line, e.why);
-                }
-            }
+            // The summary's two counts come back from the report that printed
+            // them, so a line printed and a line counted are the same event.
+            let (declined, exempt) = report_exemptions(&path, result.declined(), result.exempt());
+            declinations += declined;
+            exemptions += exempt;
             continue;
         }
 
-        let result = match mdformat::format(source, &opts) {
+        let result = match mdformat::format_with(&rules, source, &opts) {
             Ok(r) => r,
             Err(errors) => {
                 for e in &errors {
@@ -315,36 +348,26 @@ fn run_format(args: &FormatArgs) -> u8 {
                 continue;
             }
         };
-        declinations += result.declined().count();
-        exemptions += result.exempt().count();
         if result.changed {
             changed += 1;
         } else {
             normal += 1;
         }
-        // Reported unconditionally: stdout carries only bytes, so a stage that
-        // passed its input through is invisible there, and a caller taking the
-        // output would otherwise not learn the format is partial.
-        for (rule, why) in result.declined() {
-            eprintln!("mdformat: {path}: EXEMPT: the {rule} rule declined this document: {why}");
-        }
-        if args.verbose {
-            for (rule, e) in result.exempt() {
-                eprintln!("mdformat: {path}: EXEMPT: L{}: {rule}: {}", e.line, e.why);
-            }
-        }
+        let (declined, exempt) = report_exemptions(&path, result.declined(), result.exempt());
+        declinations += declined;
+        exemptions += exempt;
         print!("{}", result.output);
     }
 
     if args.check {
         eprintln!(
-            "mdformat format --check: {normal}/{files_checked} files are in normal form \
+            "mdformat format --check{scope}: {normal}/{files_checked} files are in normal form \
              ({departures} departures, {declinations} rule declinations, \
              {exemptions} exempt constructs)"
         );
     } else {
         eprintln!(
-            "mdformat format: {changed}/{files_checked} files changed \
+            "mdformat format{scope}: {changed}/{files_checked} files changed \
              ({declinations} rule declinations, {exemptions} exempt constructs)"
         );
     }
@@ -410,16 +433,16 @@ fn run_write(args: &FormatArgs) -> u8 {
         }
     };
 
-    // Unconditional, and not behind `--verbose`: a person reading the rewritten
-    // file is the reason this tier exists, and what the rules left verbatim is
-    // invisible in the result. `--verbose` therefore adds nothing here.
+    // A person reading the rewritten file is the reason this tier exists, and
+    // what the rules left verbatim is invisible in the result — so it is said.
     //
     // The line numbers address the **rewritten** file, not the file as it was.
     // That falls out of the pipeline rather than being arranged: only `tables`
     // and `markers` exempt individual constructs, `gaps` is the one rule that
     // can move a line, and it runs before both of them. Which is the useful way
     // round — the report names lines in the file about to be opened.
-    let declinations = report_declinations(&display, &result);
+    let (declined, exempt) = report_exemptions(&display, result.declined(), result.exempt());
+    let declinations = format!("{declined} rule declinations, {exempt} exempt constructs");
 
     if !result.changed {
         eprintln!("mdformat: {display}: already in normal form, left untouched");
@@ -473,22 +496,33 @@ fn run_write(args: &FormatArgs) -> u8 {
 }
 
 /// Print every rule that declined the document and every construct a rule left
-/// verbatim, and return the counts as the summary line words them.
-fn report_declinations(display: &str, result: &mdformat::Format) -> String {
+/// verbatim, and return the two counts.
+///
+/// The one reporting path for both, shared by every mode of `format` —
+/// printing, `--check` and `--write` — so a refusal reads the same wherever it
+/// is met, and no mode can grow a report the others lack. Nothing gates it: a
+/// rule that left something alone is invisible in the bytes, so the only way to
+/// learn of it is to be told, and a report that has to be asked for is one
+/// nobody asks for.
+fn report_exemptions<'a>(
+    display: &str,
+    declined: impl Iterator<Item = (&'static str, &'a str)>,
+    exempt: impl Iterator<Item = (&'static str, &'a mdformat::Exemption)>,
+) -> (usize, usize) {
     let mut rules = 0usize;
-    for (rule, why) in result.declined() {
+    for (rule, why) in declined {
         rules += 1;
         eprintln!("mdformat: {display}: EXEMPT: the {rule} rule declined this document: {why}");
     }
     let mut constructs = 0usize;
-    for (rule, e) in result.exempt() {
+    for (rule, e) in exempt {
         constructs += 1;
         eprintln!(
             "mdformat: {display}: EXEMPT: L{}: {rule}: {}",
             e.line, e.why
         );
     }
-    format!("{rules} rule declinations, {constructs} exempt constructs")
+    (rules, constructs)
 }
 
 fn run_fixpoint(args: &FixpointArgs) -> u8 {
@@ -574,261 +608,6 @@ fn run_fixpoint(args: &FixpointArgs) -> u8 {
         "mdformat fixpoint: {files_ok}/{files_checked} files pass \
          ({covered_bytes}/{content_bytes} content bytes in exactly one block span, \
          {blocks} blocks, {synthetic} of them synthetic)"
-    );
-    exit
-}
-
-/// Report what blank-line normalization would do, and refuse anything the
-/// structural-equivalence guard rejects.
-///
-/// The only thing this ever writes is stdout, and only under `--emit`. A
-/// corpus run over the vault is therefore a read-only operation by
-/// construction, not by convention.
-fn run_normalize(args: &NormalizeArgs) -> u8 {
-    let files = resolve(&args.files);
-    if args.emit && files.len() > 1 {
-        eprintln!(
-            "mdformat: normalize --emit takes exactly one input, got {}",
-            files.len()
-        );
-        return 2;
-    }
-    let opts = mdstruct::Options::default();
-    let mut exit: u8 = 0;
-    let mut files_checked = 0usize;
-    let mut would_change = 0usize;
-    let mut refused = 0usize;
-    let mut skipped = 0usize;
-    let mut gaps_considered = 0usize;
-    let mut gaps_changed = 0usize;
-
-    for f in &files {
-        let (path, bytes) = match read_input(f) {
-            Ok(v) => v,
-            Err(code) => {
-                exit = exit.max(code);
-                continue;
-            }
-        };
-        let source = match std::str::from_utf8(&bytes) {
-            Ok(s) => s,
-            Err(_) => {
-                eprintln!("mdformat: {path}: input is not valid UTF-8");
-                exit = exit.max(3);
-                continue;
-            }
-        };
-
-        files_checked += 1;
-        let result = match mdformat::normalize(source, &opts) {
-            Ok(r) => r,
-            Err(errors) => {
-                for e in &errors {
-                    eprintln!("mdformat: {path}: SOURCEPOS ERROR: {e}");
-                }
-                exit = exit.max(5);
-                continue;
-            }
-        };
-        gaps_considered += result.gaps_considered;
-        gaps_changed += result.gaps.len();
-
-        if !result.input_partition.is_partition() {
-            // The gap between two blocks is whitespace *because* the partition
-            // says no content is unclaimed. Without that, normalizing would be
-            // guessing which bytes are separators.
-            skipped += 1;
-            exit = exit.max(4);
-            eprintln!(
-                "mdformat: {path}: SKIP: the input fails the partition oracle \
-                 ({} violations), so its gaps are not defined",
-                result.input_partition.violations.len()
-            );
-            continue;
-        }
-
-        if let Some(diff) = &result.structure {
-            refused += 1;
-            exit = exit.max(4);
-            eprintln!("mdformat: {path}: REFUSED: normalizing changes the parse: {diff}");
-            if result.output_partitions == Some(true) {
-                eprintln!(
-                    "mdformat: {path}: note: the refused output still satisfies the \
-                     partition oracle — only re-parse equivalence catches this"
-                );
-            }
-            continue;
-        }
-
-        if result.changed() {
-            would_change += 1;
-            eprintln!(
-                "mdformat: {path}: would change ({} of {} gaps)",
-                result.gaps.len(),
-                result.gaps_considered
-            );
-            if args.verbose {
-                let idx = LineIndex::new(source);
-                for g in &result.gaps {
-                    let (line, col) = idx.position_of(g.start);
-                    eprintln!(
-                        "mdformat: {path}: L{line}:{col} {} -> {}: {} => {}",
-                        g.prev,
-                        g.next,
-                        escape(&g.old),
-                        escape(g.new)
-                    );
-                }
-            }
-        }
-
-        if args.emit {
-            match result.accepted() {
-                Some(out) => print!("{out}"),
-                // Unreachable given the two guards above; kept because
-                // `accepted` is the only sanctioned way to reach the bytes and
-                // this must not become a second one.
-                None => {
-                    eprintln!("mdformat: {path}: refusing to emit an unguarded rewrite");
-                    exit = exit.max(4);
-                }
-            }
-        }
-    }
-
-    eprintln!(
-        "mdformat normalize: {would_change}/{files_checked} files would change \
-         ({refused} refused by the structure guard, {skipped} skipped for a failing \
-         partition, {gaps_changed}/{gaps_considered} gaps rewritten)"
-    );
-    exit
-}
-
-/// Report what table padding would do, and refuse anything either guard
-/// rejects.
-///
-/// Like `normalize`, the only thing this ever writes is stdout, and only under
-/// `--emit`.
-fn run_pad(args: &PadArgs) -> u8 {
-    let files = resolve(&args.files);
-    if args.emit && files.len() > 1 {
-        eprintln!(
-            "mdformat: pad --emit takes exactly one input, got {}",
-            files.len()
-        );
-        return 2;
-    }
-    let opts = mdstruct::Options::default();
-    let mut exit: u8 = 0;
-    let mut files_checked = 0usize;
-    let mut would_change = 0usize;
-    let mut refused = 0usize;
-    let mut skipped_files = 0usize;
-    let mut tables_seen = 0usize;
-    let mut tables_changed = 0usize;
-
-    for f in &files {
-        let (path, bytes) = match read_input(f) {
-            Ok(v) => v,
-            Err(code) => {
-                exit = exit.max(code);
-                continue;
-            }
-        };
-        let source = match std::str::from_utf8(&bytes) {
-            Ok(s) => s,
-            Err(_) => {
-                eprintln!("mdformat: {path}: input is not valid UTF-8");
-                exit = exit.max(3);
-                continue;
-            }
-        };
-
-        files_checked += 1;
-        let result = match mdformat::pad(source, &opts) {
-            Ok(r) => r,
-            Err(errors) => {
-                for e in &errors {
-                    eprintln!("mdformat: {path}: SOURCEPOS ERROR: {e}");
-                }
-                exit = exit.max(5);
-                continue;
-            }
-        };
-        tables_seen += result.tables_seen;
-        tables_changed += result.tables_changed;
-
-        if !result.skipped.is_empty() {
-            skipped_files += 1;
-            for s in &result.skipped {
-                eprintln!(
-                    "mdformat: {path}: SKIP: the table at line {} is left verbatim: {}",
-                    s.line, s.reason
-                );
-            }
-        }
-
-        // The partition is reported, never gated on: this rewrite is defined by
-        // row sourcepos and whole-line ranges, so unlike a gap rewrite it does
-        // not need the partition to know which bytes are separators.
-        if !result.input_partition.is_partition() {
-            eprintln!(
-                "mdformat: {path}: note: the input fails the partition oracle \
-                 ({} violations); padding does not depend on it",
-                result.input_partition.violations.len()
-            );
-        }
-
-        if let Some(diff) = &result.structure {
-            refused += 1;
-            exit = exit.max(4);
-            eprintln!("mdformat: {path}: REFUSED: padding changes the parse: {diff}");
-            continue;
-        }
-        if let Some(v) = &result.violation {
-            refused += 1;
-            exit = exit.max(4);
-            eprintln!("mdformat: {path}: REFUSED: padding moved more than whitespace: {v}");
-            continue;
-        }
-
-        if result.changed() {
-            would_change += 1;
-            eprintln!(
-                "mdformat: {path}: would change ({} of {} tables, {} lines)",
-                result.tables_changed,
-                result.tables_seen,
-                result.changes.len()
-            );
-            if args.verbose {
-                for c in &result.changes {
-                    eprintln!(
-                        "mdformat: {path}: L{}: {} => {}",
-                        c.line,
-                        escape(&c.old),
-                        escape(&c.new)
-                    );
-                }
-            }
-        }
-
-        if args.emit {
-            match result.accepted() {
-                Some(out) => print!("{out}"),
-                // Unreachable given the two guards above; kept because
-                // `accepted` is the only sanctioned way to reach the bytes.
-                None => {
-                    eprintln!("mdformat: {path}: refusing to emit an unguarded rewrite");
-                    exit = exit.max(4);
-                }
-            }
-        }
-    }
-
-    eprintln!(
-        "mdformat pad: {would_change}/{files_checked} files would change \
-         ({refused} refused by the guards, {skipped_files} skipped for a table this \
-         cannot pad, {tables_changed}/{tables_seen} tables repadded)"
     );
     exit
 }

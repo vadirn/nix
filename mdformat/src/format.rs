@@ -113,6 +113,23 @@
 //! would additionally need that no rule undoes another's change. The strong
 //! direction is the safe one for a check.
 //!
+//! # One rule at a time
+//!
+//! Both evaluations take the rule list as a **parameter** — [`format_with`] and
+//! [`check_with`] — and [`format`] and [`check`] are those two applied to
+//! [`RULES`]. The CLI's `--rule <name>` is that parameter, resolved through
+//! [`rule_named`], which looks the name up in `RULES` itself. So the vocabulary
+//! the flag accepts is the vocabulary the report tags departures with, and a
+//! rule joins both by joining `RULES`; there is no second list of names to fall
+//! out of step, for the same reason there is no second list of declinations.
+//!
+//! One rule collapses the distinction the section above draws: a one-element
+//! pipeline runs its rule on the input, which is what the independent
+//! evaluation does. So `format --rule gaps` emits exactly what [`GapRule`]
+//! yields for the file on disk, and `format --check --rule gaps` says exactly
+//! where that rule's normal form is missed — reported in the coordinates of
+//! the file as it sits, either way.
+//!
 //! # Nothing here writes a file
 //!
 //! [`format`] returns bytes; the CLI prints them to stdout, or — under
@@ -161,6 +178,22 @@ use crate::table::pad;
 /// *available*, not an assertion that the four rules commute. Nothing here
 /// claims they do.
 pub const RULES: &[&dyn Rule] = &[&EndingRule, &GapRule, &TableRule, &MarkerRule];
+
+/// The rule whose [`Rule::name`] is `name`, or `None` when no rule carries it.
+///
+/// The lookup runs over [`RULES`], so the names this accepts are the names the
+/// reports print in their departure tags — `endings`, `gaps`, `tables`,
+/// `markers` — and a fifth rule becomes selectable by being added to `RULES`
+/// and by nothing else.
+pub fn rule_named(name: &str) -> Option<&'static dyn Rule> {
+    RULES.iter().copied().find(|r| r.name() == name)
+}
+
+/// Every rule's name, in pipeline order — what [`rule_named`] will accept, for
+/// a help text or a refusal message.
+pub fn rule_names() -> impl Iterator<Item = &'static str> {
+    RULES.iter().map(|r| r.name())
+}
 
 /// One rewriting rule, as [`format`] and [`check`] see it.
 ///
@@ -301,11 +334,12 @@ impl RuleRun {
     }
 }
 
-/// The result of applying every rule in [`RULES`], in order.
+/// The result of applying a rule list, in order — [`RULES`] unless the caller
+/// named fewer.
 #[derive(Debug, Clone)]
 pub struct Format {
-    /// One entry per rule, in pipeline order, each run on the previous stage's
-    /// [`RuleRun::yielded`] bytes.
+    /// One entry per rule the run was given, in pipeline order, each run on the
+    /// previous stage's [`RuleRun::yielded`] bytes.
     pub stages: Vec<RuleRun>,
     /// The bytes after every rule has run.
     pub output: String,
@@ -333,17 +367,30 @@ impl Format {
 
 /// Apply every rule in [`RULES`] to `source` and return the result.
 ///
-/// Each rule runs on the previous rule's yield, so one call does what chaining
-/// the single-rule verbs through stdout would do — without the chaining, and
-/// without a stage ever seeing bytes an oracle refused: a rule that declines
-/// passes its input through verbatim.
+/// Each rule runs on the previous rule's yield, so one call applies the whole
+/// normal form — without a stage ever seeing bytes an oracle refused: a rule
+/// that declines passes its input through verbatim.
 ///
 /// Writes nothing. `Err` carries every sourcepos that does not name a byte
 /// range, exactly as [`crate::fixpoint`] does.
 pub fn format(source: &str, opts: &mdstruct::Options) -> Result<Format, Vec<PosError>> {
+    format_with(RULES, source, opts)
+}
+
+/// [`format`] over a chosen rule list — the CLI's `--rule <name>` with one
+/// element, `RULES` with all of them.
+///
+/// The order given is the pipeline order. A one-element list is the case worth
+/// naming: it emits exactly that rule's yield for `source`, which is the
+/// single-rule output the removed `normalize` and `pad` verbs used to print.
+pub fn format_with(
+    rules: &[&dyn Rule],
+    source: &str,
+    opts: &mdstruct::Options,
+) -> Result<Format, Vec<PosError>> {
     let mut current = source.to_string();
-    let mut stages = Vec::with_capacity(RULES.len());
-    for rule in RULES {
+    let mut stages = Vec::with_capacity(rules.len());
+    for rule in rules {
         let run = rule.run(&current, opts)?;
         current = run.yielded().to_string();
         stages.push(run);
@@ -358,8 +405,9 @@ pub fn format(source: &str, opts: &mdstruct::Options) -> Result<Format, Vec<PosE
 /// Whether a document is in normal form, and where it is not.
 #[derive(Debug, Clone)]
 pub struct Check {
-    /// One entry per rule in [`RULES`], every one run against the **same**
-    /// input — see the module docs on why this is not the pipeline.
+    /// One entry per rule the check was given ([`RULES`] unless the caller
+    /// named fewer), every one run against the **same** input — see the module
+    /// docs on why this is not the pipeline.
     pub rules: Vec<RuleRun>,
 }
 
@@ -397,11 +445,23 @@ impl Check {
 /// Unlike [`format`], every rule runs against `source` itself, so every
 /// reported position is a coordinate in `source`.
 pub fn check(source: &str, opts: &mdstruct::Options) -> Result<Check, Vec<PosError>> {
-    let mut rules = Vec::with_capacity(RULES.len());
-    for rule in RULES {
-        rules.push(rule.run(source, opts)?);
+    check_with(RULES, source, opts)
+}
+
+/// [`check`] over a chosen rule list — the CLI's `--check --rule <name>`.
+///
+/// Every rule still runs against `source` itself, so restricting the list
+/// narrows *which* departures are reported and changes no reported position.
+pub fn check_with(
+    rules: &[&dyn Rule],
+    source: &str,
+    opts: &mdstruct::Options,
+) -> Result<Check, Vec<PosError>> {
+    let mut runs = Vec::with_capacity(rules.len());
+    for rule in rules {
+        runs.push(rule.run(source, opts)?);
     }
-    Ok(Check { rules })
+    Ok(Check { rules: runs })
 }
 
 /// Line endings — [`crate::endings::to_lf`] as a [`Rule`].
@@ -758,6 +818,71 @@ mod tests {
                 assert_eq!(run.is_normal(), run.yielded() == src, "rule {}", run.rule);
             }
         }
+    }
+
+    #[test]
+    fn every_rule_is_reachable_by_the_name_its_reports_carry() {
+        // The one property that keeps `--rule`'s vocabulary and the report's
+        // departure tags from drifting: they are read off the same `name()`.
+        for rule in RULES {
+            let found = rule_named(rule.name()).expect("every rule answers to its own name");
+            assert_eq!(found.name(), rule.name());
+        }
+        assert_eq!(
+            rule_names().collect::<Vec<_>>(),
+            ["endings", "gaps", "tables", "markers"]
+        );
+        assert!(rule_named("normalize").is_none());
+        assert!(rule_named("").is_none());
+    }
+
+    #[test]
+    fn one_rule_emits_only_that_rules_rewrite() {
+        // Two departures, one per rule: a doubled blank line for `gaps` and an
+        // unpadded table for `tables`. Each single-rule run fixes its own and
+        // leaves the other alone — which is what makes `--rule` a substitute
+        // for the verbs that dry-ran one rule at a time.
+        let src = std::str::from_utf8(b"# H\n\n\n| key | value |\n| --- | --- |\n| a | longer |\n")
+            .unwrap();
+        let gaps = format_with(&[&GapRule], src, &opts()).expect("spans convert");
+        assert_eq!(
+            gaps.output,
+            "# H\n\n| key | value |\n| --- | --- |\n| a | longer |\n"
+        );
+        let tables = format_with(&[&TableRule], src, &opts()).expect("spans convert");
+        assert_eq!(
+            tables.output,
+            "# H\n\n\n| key | value |\n| --- | ----- |\n| a   | longer |\n"
+        );
+        // And the two together are the full pipeline's output for this input.
+        assert_eq!(
+            fmt(src).output,
+            "# H\n\n| key | value |\n| --- | ----- |\n| a   | longer |\n"
+        );
+    }
+
+    #[test]
+    fn one_rule_checks_only_that_rules_normal_form() {
+        let src = std::str::from_utf8(b"# H\n\n\n| key | value |\n| --- | --- |\n| a | longer |\n")
+            .unwrap();
+        let all = check(src, &opts()).expect("spans convert");
+        assert_eq!(all.departures().count(), 3);
+        let gaps = check_with(&[&GapRule], src, &opts()).expect("spans convert");
+        assert!(!gaps.is_normal());
+        let found: Vec<_> = gaps.departures().collect();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].0, "gaps");
+        // Restricting the list narrows what is reported and moves nothing: the
+        // position is the same one the full check gives.
+        let same = all
+            .departures()
+            .find(|(rule, _)| *rule == "gaps")
+            .expect("the full check finds it too");
+        assert_eq!(same.1, found[0].1);
+        // A rule the document does not offend calls it normal on its own.
+        let markers = check_with(&[&MarkerRule], src, &opts()).expect("spans convert");
+        assert!(markers.is_normal());
+        assert_eq!(markers.departures().count(), 0);
     }
 
     #[test]
