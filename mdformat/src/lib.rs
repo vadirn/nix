@@ -24,9 +24,10 @@
 //! not byte-exact reassembly, is what a later milestone needs: a formatter
 //! that rewrites one block (table padding, list marker unification) splices
 //! its replacement over that block's range, and only a partition guarantees
-//! the splice neither drops nor duplicates the rest of the file. Reassembly
-//! equality comes along for free and proves nothing on its own — [`print`]'s
-//! module docs explain why, and a test holds the trap open.
+//! the splice neither drops nor duplicates the rest of the file. The partition
+//! is therefore the *whole* of [`fixpoint`]'s verdict. Reassembly equality is
+//! no part of it, because it holds for every span set including corrupt ones —
+//! [`print`]'s module docs explain why, and two tests hold the trap open.
 //!
 //! # The first rewrite, and the oracle it needed
 //!
@@ -183,29 +184,42 @@ pub fn parse_with<'a, R>(
     f(root)
 }
 
-/// One file's fixpoint result: the block spans, the partition verdict, and the
-/// printer's output.
+/// One file's fixpoint result: the block spans and the partition verdict.
 #[derive(Debug, Clone)]
 pub struct Fixpoint {
     pub blocks: Vec<Block>,
     pub partition: PartitionReport,
-    pub output: String,
-    /// Whether [`print::reassemble`]'s output equals the input. Necessary but
-    /// far from sufficient — see [`print`].
-    pub matches_input: bool,
 }
 
 impl Fixpoint {
-    /// A file passes when its blocks partition its content bytes **and** the
-    /// printer reproduces it. The first conjunct is the one that can fail.
+    /// A file passes when its blocks partition its content bytes. That is the
+    /// whole verdict.
+    ///
+    /// It carried a second conjunct until this commit — that
+    /// [`print::reassemble`]'s output equals the input — which no file could
+    /// ever fail. `reassemble` walks the source with a monotone cursor,
+    /// emitting the gap before each block and then the block, so it returns its
+    /// input for *any* span set, corrupt ones included. A conjunct true whatever
+    /// the spans are constrains nothing, and one that reads like a second
+    /// safeguard is worse than no second safeguard: it invites a reader to
+    /// believe the verdict is doubly grounded when it rests entirely on
+    /// [`PartitionReport::is_partition`]. [`print`] argues this at length;
+    /// `print::reassemble_is_boundary_insensitive_by_construction` and
+    /// `tests/fixpoint.rs::reassembly_alone_misses_what_the_partition_catches`
+    /// pin it, and are what anyone restoring the conjunct has to delete first.
     pub fn passed(&self) -> bool {
-        self.partition.is_partition() && self.matches_input
+        self.partition.is_partition()
     }
 }
 
 /// Parse `source` under the shared configuration, tile it with the byte range
 /// of each top-level block, and report whether those ranges partition its
-/// content bytes and reproduce it verbatim.
+/// content bytes.
+///
+/// Runs no reassembly. [`reassemble`] returns its input for any span set, so
+/// calling it here would allocate a second copy of every file in a corpus run
+/// to confirm a tautology. A caller wanting the printer's bytes calls
+/// [`reassemble`] itself.
 ///
 /// `Err` carries every sourcepos that does not name a byte range in `source`;
 /// unlike `mdstruct`, an out-of-range position is never clamped.
@@ -214,13 +228,7 @@ pub fn fixpoint(source: &str, opts: &mdstruct::Options) -> Result<Fixpoint, Vec<
     parse_with(&arena, source, opts, |root| {
         let blocks = block_spans(root, source)?;
         let partition = check_partition(source, &blocks);
-        let output = reassemble(source, &blocks);
-        Ok(Fixpoint {
-            matches_input: output == source,
-            blocks,
-            partition,
-            output,
-        })
+        Ok(Fixpoint { blocks, partition })
     })
 }
 
@@ -250,7 +258,6 @@ mod tests {
         let opts = mdstruct::Options::default();
         let r = fixpoint(src, &opts).expect("spans convert");
         assert!(r.passed(), "{:?}", r.partition.violations);
-        assert_eq!(r.output, src);
         assert_eq!(r.partition.content_bytes, r.partition.covered_content_bytes);
     }
 }

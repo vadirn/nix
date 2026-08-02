@@ -22,6 +22,12 @@
 //! result. `tests/fixpoint.rs::reassembly_alone_misses_what_the_partition_catches`
 //! keeps the trap documented as a live assertion.
 //!
+//! [`crate::Fixpoint`] therefore does not compute the comparison at all. It
+//! used to, as a second conjunct of `passed()`, which made a verdict resting
+//! wholly on [`check_partition`] read as though it rested on two things. The
+//! conjunct could not fail, so removing it changed no file's verdict; what it
+//! changed is that no reader has to work out that it never could.
+//!
 //! The load-bearing check is [`check_partition`]: every non-whitespace byte of
 //! the input lies in **exactly one** block span, no two spans overlap, and no
 //! span reaches past the end of the input. That is the property a *later*

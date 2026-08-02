@@ -324,7 +324,6 @@ fn every_fixture_partitions_its_content_bytes() {
             r.partition.content_bytes, r.partition.covered_content_bytes,
             "{name}: content bytes unaccounted for"
         );
-        assert!(r.matches_input, "{name}: printer changed the bytes");
         assert!(r.passed(), "{name}");
     }
 }

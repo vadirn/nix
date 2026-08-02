@@ -75,15 +75,19 @@ fn shared_options_enable_documented_extensions() {
     assert!(has_tasklist, "extension.tasklist must be on");
 }
 
-/// The block-level printer reproduces a realistic document byte-exactly AND
-/// its spans partition the document's content bytes. The second conjunct is
-/// the load-bearing one; `tests/fixpoint.rs` explains why equality alone would
-/// be vacuous, and holds the injection that proves it.
+/// A realistic document under the shared options — front matter, a wikilink, an
+/// inline link, a list — parses into spans that partition its content bytes.
+/// That partition is the whole verdict: reassembly equality used to be asserted
+/// alongside it here, and was dropped because it is satisfied by corrupt span
+/// sets too. `tests/fixpoint.rs` holds the injection that proves it.
 #[test]
-fn fixpoint_round_trips_a_realistic_document() {
+fn fixpoint_partitions_a_realistic_document() {
     let src = "---\ntitle: x\n---\n# Heading\n\nSome *text* with a [[Wikilink]] and a [link](https://x.io).\n\n- one\n- two\n";
     let opts = mdstruct::Options::default();
     let report = mdformat::fixpoint(src, &opts).expect("every sourcepos converts");
     assert!(report.passed(), "{:?}", report.partition.violations);
-    assert_eq!(report.output, src);
+    assert_eq!(
+        report.partition.content_bytes,
+        report.partition.covered_content_bytes
+    );
 }

@@ -6,7 +6,7 @@
 # Two phases, both over the same file list:
 #
 #   fixpoint      every file's top-level block spans partition its content
-#                 bytes and reassemble to the file.
+#                 bytes.
 #   idempotence   `format` every file, then require every output to be in
 #                 normal form — that is, `format(format(f)) == format(f)` over
 #                 the whole corpus. A probe once measured this and found the

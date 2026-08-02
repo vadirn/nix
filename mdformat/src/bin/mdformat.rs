@@ -6,7 +6,7 @@
 //!              to one rule.
 //!   fixpoint   parse each input under mdstruct's shared comrak config, tile
 //!              it with its top-level block spans, and report whether those
-//!              spans partition the file's content bytes and reproduce it.
+//!              spans partition the file's content bytes.
 //!
 //! **`--rule` is what two verbs used to be.** `normalize` and `pad` were dry
 //! runs of the gap and table rules: each reported what its own rule would do,
@@ -72,10 +72,9 @@
 //!
 //! Exit codes: 0 pass, 1 I/O error, 2 an invocation this refuses — a flag
 //! combination, an unknown `--rule` name, or a `--write` target that is not one
-//! regular file — 3 input not UTF-8, 4 a file failed a check — the partition or
-//! reassembly check under `fixpoint`, normal form under `format --check` — 5 a
-//! sourcepos did not name a byte range. `--write` writes nothing on any code
-//! but 0.
+//! regular file — 3 input not UTF-8, 4 a file failed a check — the partition
+//! under `fixpoint`, normal form under `format --check` — 5 a sourcepos did not
+//! name a byte range. `--write` writes nothing on any code but 0.
 //!
 //! A rule **declining** a document is not a failure and does not set an exit
 //! code: the stage passes its input through, `format --check` reports the
@@ -110,9 +109,12 @@ enum Commands {
     /// Under `--write`, rewrite one named file in place instead of printing;
     /// every other mode leaves every file alone.
     Format(FormatArgs),
-    /// Verify each input is a fixpoint of the block-level passthrough printer:
-    /// every non-whitespace byte in exactly one top-level block span, no
-    /// overlaps, nothing past the end, and the reassembly equal to the input.
+    /// Verify each input's top-level block spans partition its content bytes:
+    /// every non-whitespace byte in exactly one span, no overlaps, nothing past
+    /// the end. That partition is exactly the condition under which the
+    /// block-level passthrough printer is the identity on the file, which is
+    /// what the verb is named for — the reassembly itself is not checked,
+    /// because it holds for corrupt span sets too.
     Fixpoint(FixpointArgs),
 }
 
@@ -594,14 +596,6 @@ fn run_fixpoint(args: &FixpointArgs) -> u8 {
         for v in &report.partition.violations {
             eprintln!("mdformat: {path}: FAIL: {}", describe(source, &idx, v));
         }
-        if !report.matches_input {
-            let at = first_difference(source, &report.output);
-            let (line, col) = idx.position_of(at.min(source.len()));
-            eprintln!(
-                "mdformat: {path}: FAIL: reassembly differs from input at byte {at} (L{line}:{col}): {}",
-                context(source, at, at)
-            );
-        }
     }
 
     eprintln!(
@@ -691,14 +685,4 @@ fn ceil_boundary(source: &str, mut i: usize) -> usize {
         i += 1;
     }
     i
-}
-
-/// Byte offset of the first difference between the input and the printer's
-/// output; the shorter length when one is a prefix of the other.
-fn first_difference(a: &str, b: &str) -> usize {
-    a.as_bytes()
-        .iter()
-        .zip(b.as_bytes())
-        .position(|(x, y)| x != y)
-        .unwrap_or_else(|| a.len().min(b.len()))
 }
