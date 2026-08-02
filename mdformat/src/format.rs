@@ -115,9 +115,12 @@
 //!
 //! # Nothing here writes a file
 //!
-//! [`format`] returns bytes; the CLI prints them to stdout. Whether a rewrite
-//! may ever be applied in place is an undecided policy question, and this module
-//! does not decide it. Every byte it yields either cleared the rule's own oracle
+//! [`format`] returns bytes; the CLI prints them to stdout, or — under
+//! `--write`, for one file a person named — hands them to [`crate::write`],
+//! which is the only module that opens a file. Which files a rewrite may reach
+//! is decided there, in a refusal, and not here: this module's job is that the
+//! bytes are right, and that job is the same whatever the caller does with
+//! them. Every byte it yields either cleared the rule's own oracle
 //! through [`crate::Normalization::accepted`] / [`crate::Padding::accepted`] /
 //! [`crate::Unification::accepted`], or
 //! was never touched by the rule that declined it — with the one exception the

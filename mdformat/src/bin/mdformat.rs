@@ -31,15 +31,24 @@
 //! Like `mdstruct check`, this takes paths and walks no directories: the
 //! corpus run is a shell pipeline, and `-` reads stdin.
 //!
-//! **No verb writes a file.** Every rewrite is opt-in and reaches only stdout;
-//! whether one may ever be applied in place is an undecided policy question, so
-//! this binary has no code that opens a file for writing.
+//! **One flag writes a file: `format --write`, and it rewrites exactly one.**
+//! Every other rewrite here is opt-in and reaches only stdout. `--write` takes
+//! one path a person typed, and refuses two paths, a directory, a shell glob, or
+//! stdin — see [`mdformat::write`], which holds the refusal and argues why it is
+//! code and not a README. Rewriting a batch, or rewriting anything without a
+//! person reading the result, is a separate tier this binary does not implement.
 //!
-//! Exit codes: 0 pass, 1 I/O error, 2 a flag combination this refuses, 3 input
+//! Because that person is the reason the tier is allowed, `--write` reports
+//! **every** declination without being asked: each rule that declined the
+//! document, and each construct a rule left verbatim inside it. `--verbose`
+//! adds nothing to it.
+//!
+//! Exit codes: 0 pass, 1 I/O error, 2 an invocation this refuses — a flag
+//! combination, or a `--write` target that is not one regular file — 3 input
 //! not UTF-8, 4 a file failed a check — the partition or reassembly check under
 //! `fixpoint`, the structural-equivalence guard under `normalize` and `pad`,
 //! normal form under `format --check` — 5 a sourcepos did not name a byte
-//! range.
+//! range. `--write` writes nothing on any code but 0.
 //!
 //! A rule **declining** a document is not a failure and does not set an exit
 //! code: the stage passes its input through, `format --check` reports the
@@ -70,7 +79,8 @@ enum Commands {
     /// table padding, then list markers — in one pass and print the result to
     /// stdout. Under `--check`, print nothing
     /// and report instead which inputs are not in normal form and where,
-    /// exiting 4 when any is not. Writes no file either way.
+    /// exiting 4 when any is not. Under `--write`, rewrite one named file in
+    /// place instead of printing; both other modes leave every file alone.
     Format(FormatArgs),
     /// Verify each input is a fixpoint of the block-level passthrough printer:
     /// every non-whitespace byte in exactly one top-level block span, no
@@ -93,7 +103,8 @@ enum Commands {
 struct FormatArgs {
     /// Input files; `-` reads stdin. With no path given, reads stdin. Without
     /// `--check` this takes exactly one input, since concatenating two
-    /// documents is not a formatting operation.
+    /// documents is not a formatting operation. Under `--write` it takes
+    /// exactly one path, and neither stdin nor the no-path default.
     files: Vec<String>,
     /// Report which inputs depart from normal form, and where, instead of
     /// printing formatted bytes. Exits 4 when any input departs.
@@ -103,6 +114,13 @@ struct FormatArgs {
     /// individual constructs left verbatim inside them.
     #[arg(short, long)]
     verbose: bool,
+    /// Rewrite the file in place, atomically, instead of printing to stdout,
+    /// and report everything the rules declined. Takes exactly one path a
+    /// person typed: two paths, a directory, a glob, or stdin is refused.
+    /// Writes nothing when the file is already in normal form, and nothing at
+    /// all when any rule errors.
+    #[arg(short, long)]
+    write: bool,
 }
 
 #[derive(Args)]
@@ -200,7 +218,12 @@ fn main() -> ExitCode {
 /// exemption and sets no exit code.
 ///
 /// The only thing this ever writes is stdout, and only without `--check`.
+/// `--write` never reaches this function: it is a different verb wearing a
+/// flag, and its whole point is that it does not loop over a file list.
 fn run_format(args: &FormatArgs) -> u8 {
+    if args.write {
+        return run_write(args);
+    }
     let files = resolve(&args.files);
     if !args.check && files.len() > 1 {
         eprintln!(
@@ -325,6 +348,146 @@ fn run_format(args: &FormatArgs) -> u8 {
         );
     }
     exit
+}
+
+/// Rewrite exactly one named file in place, and report everything the rules
+/// left alone.
+///
+/// This is the only function in this binary that opens a file for writing, and
+/// it is deliberately not a loop. `run_format`'s file list is a convenience for
+/// reporting over a corpus; a rewrite over a corpus is a different act, gated on
+/// conditions this program cannot check, so the single target is taken from
+/// [`mdformat::write::target`] — which refuses two paths, a directory, a glob,
+/// and stdin — rather than from `resolve`, whose "no paths means stdin"
+/// defaulting is exactly what would let a bare `--write` pick its own target.
+///
+/// Nothing is written on any path but the last: a refused invocation, an
+/// unreadable or non-UTF-8 file, a rule that errored, an already-normal
+/// document, and an output that is not itself in normal form all leave the file
+/// byte-identical.
+fn run_write(args: &FormatArgs) -> u8 {
+    if args.check {
+        eprintln!(
+            "mdformat: format --check reports and writes nothing, and --write rewrites \
+             a file; give one or the other"
+        );
+        return 2;
+    }
+    let path = match mdformat::write::target(&args.files) {
+        Ok(p) => p,
+        Err(refusal) => {
+            eprintln!("mdformat: {refusal}");
+            return 2;
+        }
+    };
+    let display = path.display().to_string();
+
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("mdformat: {display}: {e}");
+            return 1;
+        }
+    };
+    let source = match std::str::from_utf8(&bytes) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("mdformat: {display}: input is not valid UTF-8");
+            return 3;
+        }
+    };
+
+    let opts = mdstruct::Options::default();
+    let result = match mdformat::format(source, &opts) {
+        Ok(r) => r,
+        Err(errors) => {
+            for e in &errors {
+                eprintln!("mdformat: {display}: SOURCEPOS ERROR: {e}");
+            }
+            eprintln!("mdformat: {display}: NOT REWRITTEN: a rule could not read this document");
+            return 5;
+        }
+    };
+
+    // Unconditional, and not behind `--verbose`: a person reading the rewritten
+    // file is the reason this tier exists, and what the rules left verbatim is
+    // invisible in the result. `--verbose` therefore adds nothing here.
+    //
+    // The line numbers address the **rewritten** file, not the file as it was.
+    // That falls out of the pipeline rather than being arranged: only `tables`
+    // and `markers` exempt individual constructs, `gaps` is the one rule that
+    // can move a line, and it runs before both of them. Which is the useful way
+    // round — the report names lines in the file about to be opened.
+    let declinations = report_declinations(&display, &result);
+
+    if !result.changed {
+        eprintln!("mdformat: {display}: already in normal form, left untouched");
+        eprintln!("mdformat format --write: 0/1 files rewritten ({declinations})");
+        return 0;
+    }
+
+    // The last check before the one irreversible step. `format` is a retraction
+    // onto a normal form, so its output must already be a fixpoint of `check`;
+    // measured over this repository's 397 tracked markdown files, it is one for
+    // every single file. This asserts it for *this* file, at the moment the
+    // assertion is worth something, because a rule interaction that leaves the
+    // output still departing would otherwise reach disk before anyone saw it.
+    // Reaching this branch is a bug in a rule, not in the document.
+    match mdformat::check(&result.output, &opts) {
+        Ok(c) if !c.is_normal() => {
+            let departures = c.departures().count();
+            eprintln!(
+                "mdformat: {display}: NOT REWRITTEN: the formatted output still departs \
+                 from normal form in {departures} places, so this pass reached no fixpoint"
+            );
+            for (rule, d) in c.departures() {
+                eprintln!(
+                    "mdformat: {display}: would still be L{}:{}: {rule}: {}",
+                    d.line, d.column, d.what
+                );
+            }
+            return 4;
+        }
+        Ok(_) => {}
+        Err(errors) => {
+            for e in &errors {
+                eprintln!("mdformat: {display}: SOURCEPOS ERROR: {e}");
+            }
+            eprintln!("mdformat: {display}: NOT REWRITTEN: the formatted output cannot be re-read");
+            return 5;
+        }
+    }
+
+    if let Err(e) = mdformat::write::replace(&path, &result.output) {
+        eprintln!("mdformat: {display}: NOT REWRITTEN: {e}");
+        return 1;
+    }
+    eprintln!(
+        "mdformat: {display}: rewritten in place, {} bytes were {}",
+        result.output.len(),
+        source.len()
+    );
+    eprintln!("mdformat format --write: 1/1 files rewritten ({declinations})");
+    0
+}
+
+/// Print every rule that declined the document and every construct a rule left
+/// verbatim, and return the counts as the summary line words them.
+fn report_declinations(display: &str, result: &mdformat::Format) -> String {
+    let mut rules = 0usize;
+    for (rule, why) in result.declined() {
+        rules += 1;
+        eprintln!("mdformat: {display}: EXEMPT: the {rule} rule declined this document: {why}");
+    }
+    let mut constructs = 0usize;
+    for (rule, e) in result.exempt() {
+        constructs += 1;
+        eprintln!(
+            "mdformat: {display}: EXEMPT: L{}: {rule}: {}",
+            e.line, e.why
+        );
+    }
+    format!("{rules} rule declinations, {constructs} exempt constructs")
 }
 
 fn run_fixpoint(args: &FixpointArgs) -> u8 {

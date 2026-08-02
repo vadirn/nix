@@ -33,7 +33,8 @@
 //! [`normalize`] is the first thing here that changes bytes: it rewrites the
 //! whitespace *between* top-level blocks to a blank-line normal form. It is
 //! **opt-in and default-off** — the CLI's `normalize` verb reports, and can emit
-//! to stdout, and no code path in this crate writes a file.
+//! to stdout, and reaches no file. Only [`write`] opens a file, and only for the
+//! single target the section below describes.
 //!
 //! It does not run on the partition oracle either. That oracle is a unary
 //! invariant of one document, so it cannot tell a faithful rewrite from an
@@ -99,7 +100,28 @@
 //! the document unchanged — so a construct a rule declines is exempt by
 //! construction rather than by a second list someone has to keep in step. The
 //! [`format`] module's docs argue why that is the only correspondence that
-//! cannot drift. Like every rewrite here, the composition writes no file.
+//! cannot drift. Like every rewrite here, the composition itself writes no
+//! file: it returns bytes, and [`write`] is what puts them anywhere.
+//!
+//! # The one write, and the tier it is
+//!
+//! [`write`] is the only module that opens a file for writing, and it admits
+//! **exactly one file, named on the command line, at a time** — `format
+//! --write <file>`. A second path, a directory, a shell glob, or stdin is
+//! refused by [`write::target`] before a byte is read.
+//!
+//! That is not caution about the code; every rule's bytes already cleared its
+//! oracle. It is caution about *scale*. A rewrite a person chose, is looking
+//! at, and can undo by hand is inspected; a rewrite of a tree is trusted, and
+//! being trustworthy is a property of the corpus's recoverability — versioning,
+//! a restore actually performed, a dry run read — which no assertion in this
+//! crate can observe. So the boundary is a refusal in code rather than a rule
+//! in a README, and widening it has to be an edit to [`write`].
+//!
+//! Under that single-file tier, [`format`]'s declinations stop being a footnote
+//! and become the product: the CLI reports every rule that declined the
+//! document and every construct a rule left verbatim, unconditionally, because
+//! the person reading the result is the reason this tier is allowed at all.
 
 use comrak::Arena;
 use comrak::nodes::AstNode;
@@ -112,6 +134,7 @@ pub mod print;
 pub mod span;
 pub mod structure;
 pub mod table;
+pub mod write;
 
 pub use endings::{EndingChange, LineEndings, to_lf};
 pub use format::{
@@ -130,6 +153,7 @@ pub use structure::{Structure, StructureDiff, structure_of};
 pub use table::{
     LineChange, PadViolation, PadViolationKind, Padding, SkipReason, SkippedTable, pad,
 };
+pub use write::{Refusal, replace, target};
 
 /// `mdformat`'s comrak parse configuration. Forwards to
 /// [`mdstruct::comrak_options`] verbatim — `mdformat` has no comrak settings
