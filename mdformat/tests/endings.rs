@@ -23,11 +23,18 @@
 //!   holding a literal — and that list is pinned, so nobody reinstates the gate
 //!   without seeing which files it would decline.
 //!
+//! It also carries the one clause those three cannot reach: what the rule says
+//! about a document that already holds LF endings. Every specimen above is
+//! built around a `\r` so the rewrite has something to do, so the rule's
+//! identity case needs its own fixtures and its own instrument — the report,
+//! since an untouched document and an unexamined one are the same bytes. See
+//! [`an_lf_clean_document_is_already_normal_for_this_rule`].
+//!
 //! Specimens are byte literals for the reason `normal_form.rs`'s are: a
 //! carriage return is one editor pass away from not being there. The corpus
 //! cannot supply any of this — 0 of the vault's 1244 files hold a `\r`.
 
-use mdformat::{Structure, structure_of, to_lf};
+use mdformat::{RuleRun, Structure, check, structure_of, to_lf};
 
 fn opts() -> mdstruct::Options {
     mdstruct::Options::default()
@@ -68,8 +75,70 @@ const SPECIMENS: &[(&str, &[u8])] = &[
     ("bom", b"\xEF\xBB\xBF# H\r\n\r\nbody\r\n"),
 ];
 
+/// Documents that already hold the normal form's one line ending, one per block
+/// shape [`SPECIMENS`] covers. Every one of those is deliberately built around a
+/// `\r`, so without these the rule's fixpoint clause has no specimen at all —
+/// the corpus cannot supply one either, since a file with no `\r` exercises the
+/// rewrite's identity case only by accident rather than by name.
+///
+/// `no-final-newline` is here on purpose: it is a document the *gap* rule
+/// faults and this rule does not, which is what makes the claim below a claim
+/// about the endings rule rather than about `check` agreeing with itself.
+const LF_CLEAN: &[(&str, &[u8])] = &[
+    ("blocks", b"# H\n\npara one\n\n- a\n- b\n"),
+    ("front-matter", b"---\ntitle: x\n---\n\n# H\n"),
+    ("fenced-code", b"```\ncode\n\nmore\n```\n"),
+    ("indented-code", b"    indented\n    code\n"),
+    ("html-block", b"<div>\n  <p>x</p>\n</div>\n\nafter\n"),
+    ("table", b"| a   | b   |\n| --- | --- |\n| 1   | 2   |\n"),
+    ("block-quote", b"> quoted\n> lines\n\nafter\n"),
+    ("hard-break", b"first  \nsecond\n"),
+    ("setext", b"Title\n=====\n\nbody\n"),
+    ("code-span", b"para with `co\nde` span\n"),
+    ("task-list", b"- [x] done\n- [ ] todo\n"),
+    ("empty", b""),
+    ("no-final-newline", b"no trailing newline"),
+];
+
 fn signatures(source: &str) -> Structure {
     structure_of(source, &opts())
+}
+
+/// The endings rule's own row of a [`check`] report, which is where this rule's
+/// verdict on a document is readable apart from the other three.
+fn endings_row(source: &str) -> RuleRun {
+    let c = check(source, &opts()).expect("spans convert");
+    c.rules
+        .iter()
+        .find(|r| r.rule == "endings")
+        .expect("the endings rule is in RULES")
+        .clone()
+}
+
+/// Every claim the rule makes about a document it leaves alone, in one place.
+fn assert_reported_normal(name: &str, source: &str) {
+    let r = endings_row(source);
+    assert!(
+        r.is_normal(),
+        "{name}: the rule calls an LF-clean document abnormal"
+    );
+    assert_eq!(
+        r.departures(),
+        &[],
+        "{name}: a departure was reported where there is no `\\r`"
+    );
+    assert!(r.declined.is_none(), "{name}: this rule declines nothing");
+    assert!(r.exempt.is_empty(), "{name}: this rule exempts nothing");
+    assert_eq!(
+        r.yielded(),
+        source,
+        "{name}: the rule did not pass it through"
+    );
+    assert_eq!(
+        r.accepted(),
+        Some(source),
+        "{name}: an unchanged document is still an accepted one"
+    );
 }
 
 /// Every `\r` mapped to `\n`, which is what an HTML parser does to a document's
@@ -208,11 +277,61 @@ fn an_oracle_blind_to_line_endings_is_silent_by_construction() {
 /// The rewrite is total: no output holds a carriage return, and a second pass
 /// changes nothing. Weak on its own — it is the property `format`'s idempotence
 /// tests already imply — and it is the one that states the ruling directly.
+///
+/// The fixpoint is asserted twice over, on the bytes and on the **report**: a
+/// second pass that changed nothing but went on saying it would is a rule whose
+/// predicate and whose rewrite disagree, and only the report can tell those two
+/// apart — the bytes are identical either way.
 #[test]
 fn no_output_holds_a_carriage_return() {
     for (name, input) in SPECIMENS {
         let once = to_lf(utf8(input)).output;
         assert!(!once.contains('\r'), "{name}: a CR survived");
         assert_eq!(to_lf(&once).output, once, "{name}: not a fixpoint");
+        assert_reported_normal(name, &once);
+    }
+}
+
+/// **The fixpoint clause, for this rule and no other.** A document that already
+/// holds LF endings is one the endings rule reports normal: no rewrite, no
+/// departure, and its own input handed on to the next stage.
+///
+/// This is the one clause of the contract every other test in this file
+/// deliberately cannot reach. Each [`SPECIMENS`] entry is built around a `\r`
+/// so that the corrective clause has something to correct, and the corpus holds
+/// no `\r` at all — so the rule's identity case was, until this fixture, a
+/// thing the suite exercised only incidentally and asserted nowhere.
+///
+/// It is asserted on the report rather than on the bytes because the bytes
+/// cannot carry it: `output == source` is what a rule that ran and found
+/// nothing produces *and* what a rule that never ran produces. `is_normal`,
+/// `departures` and `accepted` are the three places the difference shows.
+///
+/// Measured: an `EndingRule` that reports a document with no ending to rewrite
+/// as **declined** rather than normal — a lie the bytes cannot carry, since a
+/// declined rule yields its input — turns this test red, along with the report
+/// half of `no_output_holds_a_carriage_return` and two report-level tests
+/// elsewhere. 179 of 183 still pass, and no byte assertion in the crate is
+/// among the four.
+#[test]
+fn an_lf_clean_document_is_already_normal_for_this_rule() {
+    for (name, input) in LF_CLEAN {
+        let src = utf8(input);
+        assert!(
+            !src.contains('\r'),
+            "{name}: an LF-clean specimen must hold no carriage return"
+        );
+        let e = to_lf(src);
+        assert_eq!(
+            e.changes,
+            vec![],
+            "{name}: an ending was reported changed where every ending is already LF"
+        );
+        assert!(!e.changed(), "{name}: the rewrite claims to have moved");
+        assert_eq!(
+            e.output, src,
+            "{name}: the rewrite is not the identity here"
+        );
+        assert_reported_normal(name, src);
     }
 }

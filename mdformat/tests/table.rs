@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use comrak::Arena;
 use comrak::nodes::NodeValue;
 use mdformat::table::whitespace_violation;
-use mdformat::{PadViolationKind, Padding, SkipReason, pad};
+use mdformat::{PadViolationKind, Padding, SkipReason, check, pad};
 
 fn opts() -> mdstruct::Options {
     mdstruct::Options::default()
@@ -430,4 +430,141 @@ fn the_cell_oracle_catches_what_the_line_check_cannot() {
     let v = whitespace_violation(before, after, &delims, &rows).expect("must reject");
     assert_eq!(v.kind, PadViolationKind::CellContent);
     assert_eq!(v.line, 1);
+}
+
+/// **The whole-document guards, and the claim that nothing reaches them.**
+///
+/// `pad` carries two verdicts a caller can read apart: `skipped`, one table the
+/// rewrite declined, and `structure`/`violation`, the whole document refused.
+/// Every declining fixture in this crate exercises the first. This one states
+/// what could not be turned into a fixture: **no input reaches the second**.
+///
+/// That is a claim about reachability, and it is asserted rather than assumed
+/// because both readings of the silence are live. Either the guards are silent
+/// because the rewrite is faithful — the reading this test pins — or they are
+/// silent because they are wired to something that cannot move, which is the
+/// vacuous-guard failure this crate has shipped three times. The refutation of
+/// the second reading lives in `table_negative_controls.rs`, which hands the
+/// same oracles hand-built wrong padders and gets a refusal every time. So the
+/// guards can fail; nothing here makes them.
+///
+/// And the distance between the two readings is one character class, measured:
+/// trimming a cell with `trim()` instead of `trim_matches(' ')` eats the tab in
+/// `tab-at-cell-edge`, the parse changes, and the rule refuses the whole
+/// document — 182 of the crate's 183 tests still pass, and the one that fails is
+/// this one. A padder that starts declining every document holding a tab in a
+/// cell is a formatter that quietly stops formatting, and until this fixture
+/// nothing in the crate would have said so.
+///
+/// The specimens are the shapes a whole-document refusal would most plausibly
+/// come from: carriage returns the pipeline would have removed but `check` hands
+/// this rule intact, whitespace that is not a space, escapes at a cell edge,
+/// containers, tables with no outer pipes, and the two raggedness directions.
+/// Each is either padded, or declined **one table at a time** — which is the
+/// distinction the report makes and the bytes do not, since a document left
+/// verbatim by an exemption and one left verbatim by a refusal are the same
+/// document.
+#[test]
+fn every_refusal_this_rule_makes_is_one_table_and_not_the_document() {
+    // (name, source). A `\r` here is deliberate: `check` runs every rule on the
+    // same input, so this rule sees the endings the pipeline would have fixed.
+    let specimens: &[(&str, &[u8])] = &[
+        ("crlf", b"| a | b |\r\n| - | - |\r\n| 1 | 2 |\r\n"),
+        ("lone-cr", b"| a | b |\r| - | - |\r| 1 | 2 |\r"),
+        ("tab-in-cell", b"| a\tx | b |\n| - | - |\n| 1 | 2 |\n"),
+        ("tab-at-cell-edge", b"|\ta | b |\n| - | - |\n| 1 | 2 |\n"),
+        (
+            "no-break-space",
+            b"| \xC2\xA0a | b |\n| - | - |\n| 1 | 2 |\n",
+        ),
+        ("escaped-pipe", b"| a \\| b | c |\n| - | - |\n| 1 | 2 |\n"),
+        (
+            "escaped-backslash",
+            b"| a\\\\ | b |\n| - | - |\n| 1 | 2 |\n",
+        ),
+        (
+            "escaped-leading-pipe",
+            b"\\| a | b |\n| - | - |\n| 1 | 2 |\n",
+        ),
+        ("no-outer-pipes", b"a | b\n- | -\n1 | 2\n"),
+        (
+            "in-a-block-quote",
+            b"> | a | b |\n> | - | - |\n> | 1 | 2 |\n",
+        ),
+        ("lazy-continuation", b"> | a | b |\n> | - | - |\nlazy\n"),
+        ("in-a-list-item", b"- item\n\n  | a | b |\n  | - | - |\n"),
+        ("empty-cells", b"|  |  |\n| - | - |\n|  |  |\n"),
+        ("aligned", b"| a | b |\n| :-: | --: |\n| 1 | 2 |\n"),
+        ("trailing-spaces", b"| a | b |  \n| - | - |\n| 1 | 2 |  \n"),
+        ("backslash-at-eol", b"| a | b\\ |\n| - | - |\n| 1 | 2 |\n"),
+        ("code-span-pipe", b"| `a|b` | c |\n| - | - |\n| 1 | 2 |\n"),
+        ("three-space-indent", b"   | a | b |\n   | - | - |\n"),
+        (
+            "two-tables",
+            b"| a | b |\n| - | - |\n\n| c | d |\n| - | - |\n",
+        ),
+        ("long-row", b"| a | b |\n| - | - |\n| 1 | 2 | 3 |\n"),
+        ("short-row", b"| a | b |\n| - | - |\n| 1 |\n"),
+    ];
+
+    let (mut padded_some, mut skipped_some) = (0usize, 0usize);
+    for (name, input) in specimens {
+        let src = utf8(input);
+        let p = padded(src);
+        assert!(
+            p.structure.is_none(),
+            "{name}: padding changed the parse, which no input was thought to \
+             do: {:?}",
+            p.structure.as_ref().map(|d| d.to_string())
+        );
+        assert!(
+            p.violation.is_none(),
+            "{name}: padding moved more than whitespace, which no input was \
+             thought to do: {:?}",
+            p.violation.as_ref().map(|v| v.to_string())
+        );
+        assert_eq!(
+            p.accepted(),
+            Some(&*p.output),
+            "{name}: the bytes must be available, since no guard refused them"
+        );
+        padded_some += usize::from(p.changed());
+        skipped_some += usize::from(!p.skipped.is_empty());
+
+        // And the same verdict where a caller reads it: one exemption per
+        // declined table, and no declination of the document.
+        let c = check(src, &opts()).expect("spans convert");
+        let r = c
+            .rules
+            .iter()
+            .find(|r| r.rule == "tables")
+            .expect("the table rule is in RULES");
+        assert!(
+            r.declined.is_none(),
+            "{name}: the rule declined the whole document: {:?}",
+            r.declined
+        );
+        assert_eq!(
+            r.exempt.len(),
+            p.skipped.len(),
+            "{name}: every declined table must reach the report"
+        );
+        assert_eq!(
+            r.is_normal(),
+            !p.changed(),
+            "{name}: the predicate must agree with the rewrite"
+        );
+    }
+
+    // The battery is not vacuous in either direction: it holds shapes the rule
+    // pads and shapes it declines, so the silence above is a measurement over
+    // both branches rather than over an inert list.
+    assert!(
+        padded_some >= 12,
+        "only {padded_some} specimens were padded"
+    );
+    assert!(
+        skipped_some >= 3,
+        "only {skipped_some} specimens exercised the per-table exemption"
+    );
 }

@@ -26,9 +26,21 @@
 //! declination would emit, and asserts the refusal. The rule is therefore
 //! guarded twice over, and both are measured rather than assumed.
 //!
+//! # What the bytes cannot say
+//!
+//! The rule's other two verdicts — *this construct is declined* and *this
+//! document is already normal* — produce the same bytes as each other and as
+//! doing nothing at all. Three of this file's tests therefore assert on the
+//! **report** (`Unification::skipped`, and `check`'s `exempt`, `departures` and
+//! `declined`) rather than on `correct`'s output, and each states in its own
+//! docs the mutation that was run to show it can go red.
+//!
 //! Fixtures are embedded byte literals, per `negative_controls.rs`.
 
-use mdformat::{MarkerViolation, Structure, marker_violation, structure_of, unify};
+use mdformat::{
+    ListSkipReason, MarkerViolation, RuleRun, Structure, check, marker_violation, structure_of,
+    unify,
+};
 
 fn opts() -> mdstruct::Options {
     mdstruct::Options::default()
@@ -42,6 +54,17 @@ fn structure(source: &str) -> Structure {
     structure_of(source, &opts())
 }
 
+/// The marker rule's own row of a [`check`] report — its verdict on a document,
+/// readable apart from the other three rules.
+fn markers_row(source: &str) -> RuleRun {
+    let c = check(source, &opts()).expect("spans convert");
+    c.rules
+        .iter()
+        .find(|r| r.rule == "markers")
+        .expect("the marker rule is in RULES")
+        .clone()
+}
+
 /// The real unifier's accepted output.
 fn correct(source: &str) -> String {
     unify(source, &opts())
@@ -49,6 +72,104 @@ fn correct(source: &str) -> String {
         .accepted()
         .expect("the real unifier must clear its own guards")
         .to_string()
+}
+
+/// **The report a declined pair must produce**, asserted where a byte
+/// comparison is blind.
+///
+/// A mixed adjacent pair comes back verbatim. So does a document the rule found
+/// nothing to do in, and so does one whose merge the whole-document oracle
+/// caught after the fact — three different events, one set of bytes. The
+/// difference is entirely in the report, and it is read here three ways:
+///
+/// - `skipped` names **both** members, each pointing at the other, which is
+///   what makes the declination symmetric rather than a coin toss over which
+///   list keeps its marker;
+/// - `structure` and `violation` are empty, which says the pair was left alone
+///   *by the rule* and not rescued by its guard — the one distinction that
+///   separates a principled refusal from a merge that got caught;
+/// - the same two constructs survive into `check`'s `exempt`, so the rule
+///   adapter reports them rather than swallowing them.
+///
+/// Measured, not argued. Recording the exemption for top-level pairs only —
+/// which leaves every byte in the crate where it was — turns this test and one
+/// `src/markers.rs` unit test red and nothing else; 181 of 183 still pass.
+/// Making the exemption name its own list instead of its neighbour's turns
+/// **only** this test red, which is the assertion no counting test can make.
+fn assert_the_pair_is_reported_exempt(source: &str) {
+    let u = unify(source, &opts()).expect("spans convert");
+    assert!(
+        u.structure.is_none() && u.violation.is_none(),
+        "{source:?}: a whole-document guard fired, so the per-construct \
+         declination is not what left this document alone: {:?} {:?}",
+        u.structure.as_ref().map(|d| d.to_string()),
+        u.violation.as_ref().map(|v| v.to_string()),
+    );
+    let pair: Vec<(usize, char, char, usize)> = u
+        .skipped
+        .iter()
+        .map(|s| match s.reason {
+            ListSkipReason::MixedAdjacent {
+                neighbour,
+                here,
+                there,
+            } => (s.line, here, there, neighbour),
+            ref other => panic!(
+                "{source:?}: the list at line {} was declined for the wrong reason: {other}",
+                s.line
+            ),
+        })
+        .collect();
+    assert_eq!(
+        pair.len(),
+        2,
+        "{source:?}: both members of the pair must be reported, got {pair:?}"
+    );
+    let (a, b) = (pair[0], pair[1]);
+    assert_eq!(
+        (a.3, b.3),
+        (b.0, a.0),
+        "{source:?}: the two exemptions must name each other's line, got {pair:?}"
+    );
+    assert_eq!(
+        (a.1, a.2),
+        (b.2, b.1),
+        "{source:?}: each exemption must read the pair's markers from its own \
+         side, got {pair:?}"
+    );
+    assert_eq!(
+        u.accepted(),
+        Some(source),
+        "the real rule must leave {source:?} verbatim"
+    );
+
+    let r = markers_row(source);
+    assert!(
+        r.is_normal(),
+        "{source:?}: a document whose only fault is exempt is in normal form"
+    );
+    assert_eq!(
+        r.departures(),
+        &[],
+        "{source:?}: a construct the rule declined produces no departure"
+    );
+    assert!(
+        r.declined.is_none(),
+        "{source:?}: the rule declined the whole document: {:?}",
+        r.declined
+    );
+    assert_eq!(
+        r.exempt.len(),
+        2,
+        "{source:?}: both members must reach the report, got {:?}",
+        r.exempt
+    );
+    for e in &r.exempt {
+        assert!(
+            e.why.contains("merge them into one list"),
+            "{source:?}: the exemption must state why: {e:?}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -93,12 +214,11 @@ fn the_structure_oracle_rejects_the_merge_the_declination_prevents() {
         );
         // And the causal control: the same input left alone by the rule is
         // accepted, so the rejection above is about the merge and not about the
-        // specimen.
-        assert_eq!(
-            correct(input),
-            input,
-            "the real rule must decline {input:?}"
-        );
+        // specimen. Read from the report rather than from the bytes — the two
+        // specimens that live only here, the nested sublists and the pair
+        // inside a block quote, are byte-indistinguishable from a document the
+        // rule had nothing to say about.
+        assert_the_pair_is_reported_exempt(input);
     }
 }
 
@@ -305,6 +425,72 @@ fn unification_is_idempotent() {
             first,
             "the second pass changed the first's output for {src:?}"
         );
+    }
+}
+
+/// **The fixpoint clause, stated on the report.** A document already written in
+/// the normal form's markers is one this rule reports normal: nothing rewritten,
+/// nothing to rewrite, and — the part only the report carries — nothing
+/// *exempt* either.
+///
+/// That last clause is what makes this more than a byte comparison. `- a\n- b\n`
+/// coming back unchanged is consistent with two different rules: one that read
+/// the markers and found them already right, and one that declined the list and
+/// never looked. The suite had a single already-normal marker specimen before
+/// this, in `normal_form.rs`, and it separates those two readings for one
+/// document out of the whole rule.
+///
+/// The specimens cover every position the rule reaches: top level, nested,
+/// ordered, task items, inside a block quote, and a bullet list beside an
+/// ordered one — the pair that *cannot* merge whatever their markers are, and so
+/// must be reported normal rather than exempt.
+///
+/// Measured: a `plan_list` that returns a skip when it finds nothing to change —
+/// "no edits, so leave it alone" — moves no byte anywhere in the crate and
+/// turns this test red, along with two unit tests and the declination test
+/// above. Not one byte fixture notices, which is the point.
+#[test]
+fn an_already_normal_document_is_reported_normal_by_the_rule() {
+    for src in [
+        &b"- a\n- b\n"[..],
+        &b"1. one\n2. two\n"[..],
+        &b"- outer\n  - inner\n  - sibling\n"[..],
+        &b"- [x] done\n- [ ] todo\n"[..],
+        &b"> - q\n> - r\n"[..],
+        &b"- bullet\n\n1. ordered\n"[..],
+        &b"- a\n\n1. one\n   - nested\n"[..],
+    ] {
+        let src = utf8(src);
+        let u = unify(src, &opts()).expect("spans convert");
+        assert!(
+            !u.changed(),
+            "{src:?}: the rule claims a marker to change: {:?}",
+            u.changes
+        );
+        assert_eq!(u.changes, vec![], "{src:?}");
+        assert_eq!(
+            u.skipped,
+            vec![],
+            "{src:?}: an already-normal list must be found normal, not declined"
+        );
+        assert_eq!(u.accepted(), Some(src), "{src:?}");
+
+        let r = markers_row(src);
+        assert!(r.is_normal(), "{src:?}: the rule calls it abnormal");
+        assert_eq!(
+            r.departures(),
+            &[],
+            "{src:?}: a departure was reported where the markers are already \
+             the normal form's"
+        );
+        assert!(r.declined.is_none(), "{src:?}: {:?}", r.declined);
+        assert_eq!(
+            r.exempt,
+            vec![],
+            "{src:?}: nothing here is declined, so nothing here is exempt"
+        );
+        assert_eq!(r.yielded(), src, "{src:?}");
+        assert_eq!(r.accepted(), Some(src), "{src:?}");
     }
 }
 
