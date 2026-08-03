@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn epistemic_tier_multiplier_ordering() {
-        // certified > provisional > superseded — the load-bearing rank order.
+        // certified > provisional > superseded — the key rank order.
         assert!(EpistemicTier::Certified.multiplier() > EpistemicTier::Provisional.multiplier());
         assert!(EpistemicTier::Provisional.multiplier() > EpistemicTier::Superseded.multiplier());
     }

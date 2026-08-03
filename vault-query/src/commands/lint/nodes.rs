@@ -1,6 +1,6 @@
 //! Local-node parser — the "## Glossary = nodes" REBUILD primitive (D13/D22, STEP 3a).
 //!
-//! BUILD (`distill.ts::assembleBody`) renders a note's load-bearing concepts as a
+//! BUILD (`distill.ts::assembleBody`) renders a note's key concepts as a
 //! `## Glossary` table and its actionable directives as a `## Workflow` numbered
 //! list:
 //!

@@ -106,7 +106,7 @@
 //! running every rule on the input keeps every reported line and column
 //! addressable in the file on disk. It also makes the predicate **order-free**:
 //! `check` cannot inherit the pipeline's order choice, so no claim about the
-//! rules commuting is load-bearing for it.
+//! rules commuting is key for it.
 //!
 //! `check`'s conjunction is the stronger of the two readings — every rule
 //! individually a no-op on `f` implies `format(f) == f`, while the converse

@@ -122,7 +122,7 @@ Out of scope: migrating the Backlog content that already exists in tracks on dis
 
 A map node is just a ticket whose `kind` is `decision`, `fact`, or `feasibility` — its work is to resolve an open question, so the answer is the deliverable. (A `kind: execution` ticket is ordinary work; a map hands it to a parallel execution session and never charts it.)
 
-- **Body.** `## What & why` states the question and why it is load-bearing. `## Resolution` starts empty; the answer lands there — a fact node pastes the `/research` findings block, a decision node records the chosen option and its rationale. Overriding appends the new answer and strikes the old in place (`~~…~~`), never a silent rewrite. No `## Scope`: the work settles a question, it touches no files.
+- **Body.** `## What & why` states the question and why it is key. `## Resolution` starts empty; the answer lands there — a fact node pastes the `/research` findings block, a decision node records the chosen option and its rationale. Overriding appends the new answer and strikes the old in place (`~~…~~`), never a silent rewrite. No `## Scope`: the work settles a question, it touches no files.
 - **Resolution is the single home.** A node's answer lives in its `## Resolution` and nowhere else. The map's `Decisions so far` holds only a link to it; the owning track's Log narrates only. One artifact per decision (Force 4).
 - **Self-sufficiency** is vault-native: a node's `## Resolution` links the map and sibling nodes by design (see §Self-sufficiency).
 

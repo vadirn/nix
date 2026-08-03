@@ -106,7 +106,7 @@ stakeholders:
 # <project> — brief context
 
 Optional prose: what the project is for, who counts in what. Durable framing the draft
-digest reads for context. Keep it short; the roster above is the load-bearing part.
+digest reads for context. Keep it short; the roster above is the key part.
 ```
 
 ## The two procedures

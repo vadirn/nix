@@ -28,7 +28,7 @@
 //! conjunct could not fail, so removing it changed no file's verdict; what it
 //! changed is that no reader has to work out that it never could.
 //!
-//! The load-bearing check is [`check_partition`]: every non-whitespace byte of
+//! The key check is [`check_partition`]: every non-whitespace byte of
 //! the input lies in **exactly one** block span, no two spans overlap, and no
 //! span reaches past the end of the input. That is the property a *later*
 //! milestone needs. When a formatter rewrites one block — table padding, list

@@ -59,7 +59,7 @@ if node.kind == decision:
     prior = Bash(vault-query consult "<node question>" --format markdown)
     do("CONSULT INFORMS, NOT FORECLOSES: surface prior (dated) → generate >=1 independent variant regardless
         → present prior + variant(s) + your pick with the reason → user commits.
-        Scale divergence by stakes x staleness: one-line challenge if cheap/fresh, full /design if load-bearing.")
+        Scale divergence by stakes x staleness: one-line challenge if cheap/fresh, full /design if key.")
 
 // 7. Commit
 do("record the answer in the node's ## Resolution — the single home; close the ticket (status: done)")

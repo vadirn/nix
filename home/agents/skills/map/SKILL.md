@@ -55,7 +55,7 @@ A node is a ticket in the project's `Tickets.base`, carrying `kind:` (`decision`
 
 Do not fix an order per map. Read reversibility per **node** (Force 5). The map is **risk-ordered** if any node is high blast-radius and expensive to undo; otherwise **dependency-ordered**.
 
-- **Risk-ordered** — resolve the highest `blast-radius × irreversibility` node — the **crux** — first, globally. Then chart backward from the destination along the spine of next-most-load-bearing nodes. Most of the goal stays fog until the spine is proven. Typical of personal and financial goals.
+- **Risk-ordered** — resolve the highest `blast-radius × irreversibility` node — the **crux** — first, globally. Then chart backward from the destination along the spine of next-most-key nodes. Most of the goal stays fog until the spine is proven. Typical of personal and financial goals.
 - **Dependency-ordered** — resolve leaves-first, the `Planning.md` default. Typical of software, where undo is cheap and uniform.
 
 Blast-radius is judged against the **Frame and destination**, not computed over the graph (most of the graph is still fog). So gate the crux **choice**: `/grade` it; if under 7 or tied, `/debate` the top two — before spending the crux's expensive instrument.
@@ -78,7 +78,7 @@ On a decision node, `/consult` surfaces prior thinking. It is a prior, not a ver
 3. Present prior + variant(s) + where they diverge + your pick, with the reason.
 4. The user commits. Re-affirming the prior is a choice against alternatives, not a default.
 
-Scale the divergence: a one-line challenge on a cheap, fresh node; a full `/design` on a load-bearing one. Weight by **stakes × staleness**, where staleness is the prior's date against a threshold — objective, not the agent's introspection. Diverge hardest when the prior is strongest; that is peak anchoring.
+Scale the divergence: a one-line challenge on a cheap, fresh node; a full `/design` on a key one. Weight by **stakes × staleness**, where staleness is the prior's date against a threshold — objective, not the agent's introspection. Diverge hardest when the prior is strongest; that is peak anchoring.
 
 ### Storage and concurrency
 

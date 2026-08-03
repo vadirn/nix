@@ -91,7 +91,7 @@ Each `personas/<slug>.md` restates this contract, because the subagent sees only
 
 ### Routing notes
 
-- The one-line route announcement is load-bearing: it makes a mis-route visible. If it's wrong, re-run `/opinion <persona>` to force the right lens.
+- The one-line route announcement is key: it makes a mis-route visible. If it's wrong, re-run `/opinion <persona>` to force the right lens.
 - Explicit `/opinion <persona>` always beats the classifier.
 - One persona per run, by design. For contrasting lenses, run it twice — or reach for a neighbor skill below.
 
