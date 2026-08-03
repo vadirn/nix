@@ -17,9 +17,9 @@
 //!    was left alone and the person inspecting them is the reason this tier is
 //!    allowed. There is no flag to ask with: `--verbose` gated exactly that
 //!    report elsewhere in the CLI and is gone, which a test here pins.
-//! 3. **Nothing is written unless everything held.** An `Err` from a rule, and
-//!    an already-normal document, both leave the file byte-identical — the
-//!    second without even moving its mtime.
+//! 3. **Nothing is written unless everything held.** An `Err` from a rule and
+//!    an already-normal document both leave the file byte-identical, and
+//!    neither moves its mtime.
 //!
 //! Every fixture lives in a fresh directory under `TMPDIR`; no test here reads
 //! or writes anything outside it. Specimens are byte literals so no escape in
@@ -67,29 +67,59 @@ fn s(p: &Path) -> String {
 const DECLINING: &[u8] = b"# Title\n\n- alpha\n\n* beta\n\n| x | yy |\n| - | - |\n| 1 | 2 |\n";
 
 /// A UTF-8 byte order mark followed immediately by a multi-row table, unpadded.
-/// This was the specimen `an_erroring_document_is_left_alone` was written
-/// against: comrak carried the mark's three bytes onto every body row, the last
-/// cell's span ran past the end of the file, and `format` returned `Err`.
-/// `mdformat::parse_with` repairs that now, so the same bytes are a document
-/// this tier **rewrites** — which is what the test below asserts, at the only
-/// place the whole path from argument to disk is visible.
+/// The **first** of the two specimens this file has lost to a repair — see
+/// [`ERRS`], which is the third to carry claim 3 and the first still standing:
+/// comrak anchored every body row at the table's line-1
+/// opening offset — the mark's three bytes included — so the last cell's span
+/// ran past the end of the file and `format` returned `Err`.
+/// [`mdformat::anchor`] re-anchors each row at its own line's opening now, so
+/// the same bytes are a document this tier **rewrites** — which is what the test
+/// below asserts, at the only place the whole path from argument to disk is
+/// visible.
 const MARKED: &[u8] = b"\xef\xbb\xbf| a | b |\n| --- | --- |\n| 1 | 2 |\n";
 
 /// A three-space-indented table whose last row is a lazy continuation carrying
-/// no indent. comrak gives every row the table's opening offset on line 1 — the
-/// indent included — so `para`'s cells are reported three columns right of where
-/// they are, and their spans run past the end of the file. `format` returns
-/// `Err`, which under this tier is a refusal a person reads.
+/// no indent: the **second** specimen lost to a repair, and the same defect as
+/// [`MARKED`] wearing an indent instead of a mark. comrak gave every row the
+/// table's line-1 opening offset, so `para`'s
+/// cells were reported three columns right of where they are and ran past the
+/// end of the file.
 ///
-/// This is the same *mechanism* the mark once triggered and a different cause:
-/// an offset a container contributes on line 1 is assumed to repeat on every
-/// line the container spans, and an indent a lazy row omits breaks that
-/// assumption exactly as a mark does. Only the mark is repaired, because only
-/// the mark's carry is a fixed width knowable without re-deriving each row's
-/// indent from the source. Holding this shape as an asserted refusal is what
-/// keeps that boundary visible: the day it starts formatting, this test fails
-/// and someone has to say what changed.
-const ERRS: &[u8] = b"   |a|b|\n   |-|-|\n   |1|2|\npara\n";
+/// The pair is why the repair is keyed on each row's own opening rather than on
+/// the mark: a mark is three bytes wide and an indent is any width, so no
+/// constant could have covered both. This tier is where that is worth restating,
+/// because a document it once refused is a document it now writes to disk. The
+/// library-level fixtures are `tests/partition.rs`'s `table-indented-lazy-row`
+/// and `mdformat::anchor`'s `every_cell_resolves_to_its_own_bytes`.
+const LAZY: &[u8] = b"   |a|b|\n   |-|-|\n   |1|2|\npara\n";
+
+/// The document claim 3 is asserted against today. Three conditions hold at
+/// once, and `the_erroring_specimen_needs_all_three_conditions` below pins each
+/// one by removing it:
+///
+/// 1. a row supplies **fewer cells than the header**, so comrak autocompletes
+///    the missing one;
+/// 2. that row **does not end in a pipe**, so the autocompleted cell is placed
+///    on the delimiter that would have followed the row's last cell rather than
+///    on a delimiter that is there;
+/// 3. that row is the file's **last line and the file has no line ending**, so
+///    the byte the cell was placed on does not exist.
+///
+/// The cell's span therefore resolves one byte past the end of the source and
+/// `format` returns `Err`, which under this tier is a refusal a person reads.
+///
+/// This is a **different** comrak defect from the one [`MARKED`] and [`LAZY`]
+/// carried, and it survives that repair untouched: every line here opens at
+/// column 1, so `mdformat::anchor` is the identity on this document.
+///
+/// **If this document starts formatting, do not weaken the assertions below.**
+/// The claim they make is about the write path, not about comrak, and the
+/// specimen is only its carrier — the third carrier so far. Find a fourth the
+/// way this one was found: run `format` over generated documents built from a
+/// line alphabet and keep one that exits 5. The two carriers it replaced are
+/// still in this file, as [`MARKED`] and [`LAZY`], now asserted as documents
+/// that go all the way to disk.
+const ERRS: &[u8] = b"| a | b |\n| --- | --- |\n| 1 | 2 |\npara";
 
 /// (1) The happy path: one named file is rewritten in place, stdout stays
 /// empty, and the file on disk holds the formatted bytes.
@@ -279,9 +309,19 @@ fn a_missing_file_is_refused_before_anything_is_read() {
     assert!(stderr.contains("--write cannot read"), "{stderr}");
 }
 
-/// (4) A rule that errors writes nothing. The specimen is a document comrak
-/// still mis-positions (see [`ERRS`]), which is exactly the case this tier is
-/// meant to surface to a person rather than paper over.
+/// (4) A rule that errors writes nothing.
+///
+/// The specimen is a document comrak still mis-positions — [`ERRS`], whose own
+/// comment states the three conditions that make it one — which is exactly the
+/// case this tier is meant to surface to a person rather than paper over. Of the
+/// two
+/// routes open to this test when its previous specimen was repaired, this is the
+/// one taken: **a live erroring document**, kept because it is the only route
+/// that exercises the whole path from a typed argument to the bytes on disk. The
+/// alternative — a synthetic `Err` injected at an internal boundary — is out of
+/// reach from an integration test, which sees only the crate's public API and
+/// the compiled binary, and would in any case prove the reporting without
+/// proving that the file was never opened.
 #[test]
 fn an_erroring_document_is_left_alone() {
     let dir = scratch("err");
@@ -301,6 +341,58 @@ fn an_erroring_document_is_left_alone() {
         before,
         "an untouched file must keep its mtime"
     );
+}
+
+/// Each of [`ERRS`]'s three conditions is load-bearing, held by removing one at
+/// a time and watching the refusal go away.
+///
+/// This asserts nothing about the write path; it is the maintenance contract for
+/// the specimen the test above depends on. Two documents have already stopped
+/// erroring under this file's feet, and each time the question that cost the
+/// most was *which* property had changed. Here the answer arrives as the name of
+/// whichever control flipped: a repair aimed at the autocompleted cell reddens
+/// the specimen alone, and a repair that widened further would redden a control
+/// too. The plain `format` verb is enough — the refusal is decided before
+/// anything is written, so `--write` would add a file operation and no
+/// information.
+#[test]
+fn the_erroring_specimen_needs_all_three_conditions() {
+    let dir = scratch("conditions");
+    // (name, document, expected exit code). Each control drops exactly one
+    // condition from `ERRS` and must format.
+    let cases: &[(&str, &[u8], i32)] = &[
+        ("the specimen", ERRS, 5),
+        // 3 dropped: the file ends in a line ending, which is a byte the
+        // autocompleted cell can land on.
+        (
+            "with a final line ending",
+            b"| a | b |\n| --- | --- |\n| 1 | 2 |\npara\n",
+            0,
+        ),
+        // 1 dropped: a square row needs no autocompleted cell at all.
+        (
+            "with a square last row",
+            b"| a | b |\n| --- | --- |\n| 1 | 2 |\n| p | q |",
+            0,
+        ),
+        // 2 dropped: still one cell short, but the row's closing pipe is a byte
+        // the autocompleted cell can be placed on.
+        (
+            "with a closing pipe on the short row",
+            b"| a | b |\n| --- | --- |\n| 1 | 2 |\n| p |",
+            0,
+        ),
+    ];
+    for (name, doc, want) in cases {
+        let p = file(&dir, &format!("{}.md", name.replace(' ', "-")), doc);
+        let (code, _, stderr) = run(&[&s(&p)]);
+        assert_eq!(code, *want, "{name}: {stderr}");
+        assert_eq!(
+            stderr.contains("SOURCEPOS ERROR"),
+            *want == 5,
+            "{name}: {stderr}"
+        );
+    }
 }
 
 /// The regression this file used to assert the other way round. A byte order
@@ -333,6 +425,46 @@ fn a_byte_order_marked_table_is_rewritten_in_place() {
     // And the rewrite is a fixpoint, mark and all.
     let (code, _, stderr) = run(&["--check", &s(&p)]);
     assert_eq!(code, 0, "the rewritten file must be normal: {stderr}");
+}
+
+/// The same regression asserted the other way round for the second specimen
+/// this file lost: an indented table with a lazy continuation row ([`LAZY`])
+/// exited 5 under every verb, and now exits 0 under all three.
+///
+/// It is a *declination* rather than a rewrite, and that is the point of
+/// asserting it here rather than only in `tests/partition.rs`. The lazy row is
+/// one cell short of its header, so the tables rule leaves the table verbatim
+/// and says so — and only under this tier is that sentence the product. A person
+/// gets a named exemption where they used to get a refusal, and the file is
+/// untouched for a stated reason instead of an unreadable one.
+#[test]
+fn an_indented_table_with_a_lazy_row_is_reported_rather_than_refused() {
+    let dir = scratch("lazy");
+    let p = file(&dir, "note.md", LAZY);
+
+    let (code, stdout, stderr) = run(&["--write", &s(&p)]);
+
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(
+        !stderr.contains("SOURCEPOS ERROR"),
+        "the omitted indent must no longer defeat the sourcepos conversion: {stderr}"
+    );
+    assert!(stderr.contains("EXEMPT"), "{stderr}");
+    assert!(stderr.contains("tables"), "{stderr}");
+    assert_eq!(
+        fs::read(&p).expect("read back"),
+        LAZY,
+        "an exempt table leaves the document byte-identical"
+    );
+    assert!(stderr.contains("0/1 files rewritten"), "{stderr}");
+
+    // The second of the three verbs the refusal used to reach. The third,
+    // `partition`, is covered by `tests/partition.rs`'s `table-indented-lazy-row`
+    // fixture, which this file's `run` helper cannot reach — it prepends
+    // `format` to every invocation on purpose.
+    let (code, _, stderr) = run(&["--check", &s(&p)]);
+    assert_eq!(code, 0, "--check must agree it is normal: {stderr}");
 }
 
 /// (5) The no-op: a document already in normal form is not rewritten with

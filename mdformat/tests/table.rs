@@ -646,27 +646,28 @@ fn positions(src: &str) -> Vec<(&'static str, Sourcepos)> {
 /// is the whole invariant, and it is what the crate's spans, widths and splices
 /// all rest on.
 ///
-/// comrak breaks it inside a table that opens on line 1: it gives every row and
-/// every cell the table's line-1 opening offset — the mark's bytes included —
-/// plus their offset within the row, so a body row two lines down is reported
-/// three columns right of where it is, and this specimen's last cell ran past
-/// the end of the file. `mdformat::parse_with` repairs that; this holds the
-/// repair to the boundary.
+/// comrak breaks it inside a table that opens on line 1: it anchors every row
+/// and every cell at the table's line-1 opening offset — the mark's bytes
+/// included — plus their offset within the row, so a body row two lines down is
+/// reported three columns right of where it is, and this specimen's last cell
+/// ran past the end of the file. [`mdformat::anchor`] repairs that by
+/// re-anchoring each row at its own line's opening; this holds the repair to the
+/// boundary from the mark's side, where the carry is a known three bytes and the
+/// arithmetic can be checked by hand.
 ///
-/// Both directions carry weight, and each of the repair's three conditions has
-/// a specimen here that reddens when it is dropped:
+/// Both directions carry weight, and each part of the boundary has a specimen
+/// here that reddens when it is dropped:
 ///
 /// - Repairing too little leaves a later line three columns right.
-/// - Repairing a column **on line 1** moves one where the mark's bytes really do
-///   sit. The `table-on-line-1` specimen catches that.
+/// - Repairing a column on the table's **opening line** moves one where the
+///   mark's bytes really do sit. The `table-on-line-1` specimen catches that.
 /// - Repairing a `Table`'s or a `TableRow`'s own `end` moves one comrak measures
-///   from the line it lands on rather than from the table's opening offset. Two
-///   columns and two body rows are what make that visible; a one-row or
-///   one-column table cannot separate it from the start columns.
-/// - Repairing a table that opens on a **later** line moves columns that never
-///   carried the mark at all. The `table-after-a-paragraph` specimen is there
-///   for that condition alone, and it is the one a `starts_with(BOM)` test
-///   without a line check would fail.
+///   from the line it lands on rather than from the anchor. Two columns and two
+///   body rows are what make that visible; a one-row or one-column table cannot
+///   separate it from the start columns.
+/// - Repairing a table that opens on a **later** line, where the mark is on no
+///   line the table spans, must be the identity. The `table-after-a-paragraph`
+///   specimen is there for that alone.
 #[test]
 fn a_byte_order_mark_shifts_only_line_one_columns_inside_a_table() {
     // (name, the unmarked document). Each is prefixed with the mark to make the

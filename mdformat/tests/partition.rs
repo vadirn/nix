@@ -192,6 +192,22 @@ const FIXTURES: &[(&str, &str)] = &[
         "table-ragged",
         "| a | b |\n|---|---|\n| 1 |\n| 1 | 2 | 3 |\n",
     ),
+    // An indented table whose last row is a lazy continuation carrying no
+    // indent. comrak anchors every row at the header's opening offset, so the
+    // lazy row's cells came back three columns right of where they are and ran
+    // past the end of the file; `mdformat::anchor` re-anchors each row at its
+    // own line. Kept beside `bom-table`, which is the same defect with the
+    // header's extra bytes being a byte order mark instead of an indent.
+    (
+        "table-indented-lazy-row",
+        "   |a|b|\n   |-|-|\n   |1|2|\npara\n",
+    ),
+    // The same table with a row indented *deeper* than its header, where the
+    // carry is negative and no subtraction could express it.
+    (
+        "table-row-deeper-than-header",
+        " | a | b |\n | --- | --- |\n   | 1 | 2 |\n",
+    ),
     ("nested-list", "- a\n  - b\n    - c\n- d\n\nafter\n"),
     ("loose-list", "- a\n\n- b\n\n- c\n\nafter\n"),
     (
