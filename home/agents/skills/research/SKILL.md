@@ -28,12 +28,12 @@ The contract. Depth is **emergent from residual uncertainty**, not declared upfr
 
 ### The depth ladder
 
-| Depth | What runs | For |
-| --- | --- | --- |
-| D0 | one lookup — a scrape of a known URL, one Explore read, or context | a fact with one obvious source |
-| D1 | one focused fork — Explore (code) or general-purpose + Firecrawl (world) | the default fact |
-| D2 | parallel breadth — several agents, distinct sub-questions, merged | a multi-part or landscape question |
-| D3 | parallel breadth + adversarial cross-check | a load-bearing, contested, or high-stakes fact |
+| Depth | What runs                                                                | For |
+| ----- | ------------------------------------------------------------------------ | --- |
+| D0    | one lookup — a scrape of a known URL, one Explore read, or context       | a fact with one obvious source |
+| D1    | one focused fork — Explore (code) or general-purpose + Firecrawl (world) | the default fact |
+| D2    | parallel breadth — several agents, distinct sub-questions, merged        | a multi-part or landscape question |
+| D3    | parallel breadth + adversarial cross-check                               | a load-bearing, contested, or high-stakes fact |
 
 ### Triage — set the start rung and the ceiling
 
@@ -71,6 +71,6 @@ A caller may pass a floor or ceiling ("quick lookup" caps D1; "verify thoroughly
 
 ## Reference
 
-| File | Purpose |
-| --- | --- |
+| File                | Purpose |
+| ------------------- | ------- |
 | `references/run.md` | Triage the depth, run each rung (D0–D3), apply the stop-conditions, synthesize the findings block. |

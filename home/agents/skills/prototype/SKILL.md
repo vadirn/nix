@@ -18,28 +18,28 @@ description: >
 
 Fix term meanings before use. Each row holds one sense throughout this skill.
 
-| Term                | Meaning                                                                                                                                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Prototype           | A build whose purpose is to answer one design question, not to ship a feature.                                                                                                                           |
-| Investigation       | Mode where code is evidence and the deliverable is knowledge.                                                                                                                                            |
-| Throwaway           | Intent: code is investigation. Discarded after the question is answered. Default when undecided.                                                                                                         |
-| Retained            | Intent: code is the first commit of production. Production-quality from line one.                                                                                                                        |
-| Design question     | The single question the prototype answers. One sentence. One of: role, look-and-feel, implementation, integration.                                                                                       |
-| Role                | Design dimension: how the system fits a user's life (Houde & Hill 1997).                                                                                                                                 |
-| Look-and-feel       | Design dimension: what interaction feels like to use (Houde & Hill 1997).                                                                                                                                |
-| Implementation      | Design dimension: does the technique work technically (Houde & Hill 1997).                                                                                                                               |
-| Integration         | Design dimension: do the pieces talk to each other (Houde & Hill 1997).                                                                                                                                  |
-| Time-box            | A duration with a hard stop. Expiry forces an explicit choice: extend with justification, decide, or abandon.                                                                                            |
-| Capture artifact    | The document produced by the prototype: memo, ADR, eval set, or RFC. The prototype is not done until this is filed.                                                                                      |
-| Spike               | Throwaway implementation prototype, minutes to days scale, isolated from production code (Beck 1999).                                                                                                    |
-| Tracer bullet       | Retained end-to-end slice, lean but complete production code, not a facade (Hunt & Thomas 1999).                                                                                                         |
-| Walking skeleton    | Retained thin end-to-end implementation that touches every architectural layer (Cockburn 2004).                                                                                                          |
-| Wizard of Oz        | Throwaway role prototype: the agent produces the session plan; a human runs the sessions (Kelley 1984).                                                                                                  |
-| Prompt-as-prototype | First-step LLM prototype: iterate the prompt against an eval set before RAG, tools, or fine-tuning.                                                                                                      |
-| Decision memo       | Capture template for throwaway findings: Question / Method / Result / Decision / Next step.                                                                                                              |
-| ADR                 | Capture template for retained architectural decisions: Context / Decision / Status / Consequences (Nygard 2011).                                                                                         |
-| Eval set            | Capture for LLM behavioral prototypes: prompt plus JSONL cases with expected behavior.                                                                                                                   |
-| RFC / RFD           | Capture for cross-team change requiring discussion before commit.                                                                                                                                        |
+| Term                | Meaning |
+| ------------------- | ------- |
+| Prototype           | A build whose purpose is to answer one design question, not to ship a feature. |
+| Investigation       | Mode where code is evidence and the deliverable is knowledge. |
+| Throwaway           | Intent: code is investigation. Discarded after the question is answered. Default when undecided. |
+| Retained            | Intent: code is the first commit of production. Production-quality from line one. |
+| Design question     | The single question the prototype answers. One sentence. One of: role, look-and-feel, implementation, integration. |
+| Role                | Design dimension: how the system fits a user's life (Houde & Hill 1997). |
+| Look-and-feel       | Design dimension: what interaction feels like to use (Houde & Hill 1997). |
+| Implementation      | Design dimension: does the technique work technically (Houde & Hill 1997). |
+| Integration         | Design dimension: do the pieces talk to each other (Houde & Hill 1997). |
+| Time-box            | A duration with a hard stop. Expiry forces an explicit choice: extend with justification, decide, or abandon. |
+| Capture artifact    | The document produced by the prototype: memo, ADR, eval set, or RFC. The prototype is not done until this is filed. |
+| Spike               | Throwaway implementation prototype, minutes to days scale, isolated from production code (Beck 1999). |
+| Tracer bullet       | Retained end-to-end slice, lean but complete production code, not a facade (Hunt & Thomas 1999). |
+| Walking skeleton    | Retained thin end-to-end implementation that touches every architectural layer (Cockburn 2004). |
+| Wizard of Oz        | Throwaway role prototype: the agent produces the session plan; a human runs the sessions (Kelley 1984). |
+| Prompt-as-prototype | First-step LLM prototype: iterate the prompt against an eval set before RAG, tools, or fine-tuning. |
+| Decision memo       | Capture template for throwaway findings: Question / Method / Result / Decision / Next step. |
+| ADR                 | Capture template for retained architectural decisions: Context / Decision / Status / Consequences (Nygard 2011). |
+| Eval set            | Capture for LLM behavioral prototypes: prompt plus JSONL cases with expected behavior. |
+| RFC / RFD           | Capture for cross-team change requiring discussion before commit. |
 | Vibe coding         | Agent-driven, intuition-led coding without a stated design question (Karpathy 2025). A stance, not a workflow this skill operates. If the user is vibing, stop the skill and handle the work outside it. |
 
 ## Frame
@@ -127,16 +127,16 @@ if intent == "throwaway":
 
 ### Dispatch table
 
-| Situation                                                    | Reference file                                                         |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| Throwaway implementation prototype                           | [references/spike.md](references/spike.md)                             |
-| Retained tracer bullet or walking skeleton                   | [references/tracer-bullet.md](references/tracer-bullet.md)             |
-| Throwaway role prototype                                     | [references/wizard-of-oz.md](references/wizard-of-oz.md)               |
+| Situation                                                    | Reference file |
+| ------------------------------------------------------------ | -------------- |
+| Throwaway implementation prototype                           | [references/spike.md](references/spike.md) |
+| Retained tracer bullet or walking skeleton                   | [references/tracer-bullet.md](references/tracer-bullet.md) |
+| Throwaway role prototype                                     | [references/wizard-of-oz.md](references/wizard-of-oz.md) |
 | LLM-feature prompt iteration                                 | [references/prompt-as-prototype.md](references/prompt-as-prototype.md) |
-| Draft the capture artifact (memo, ADR, eval, RFC)            | [references/capture-templates.md](references/capture-templates.md)     |
-| Apply confidence / falsification / polish / reasoning checks | [references/capture-checks.md](references/capture-checks.md)           |
-| User cannot state the design question                        | [references/find-goal.md](references/find-goal.md)                     |
-| Expand the artifact's Next step into a task list             | [references/next-steps.md](references/next-steps.md)                   |
+| Draft the capture artifact (memo, ADR, eval, RFC)            | [references/capture-templates.md](references/capture-templates.md) |
+| Apply confidence / falsification / polish / reasoning checks | [references/capture-checks.md](references/capture-checks.md) |
+| User cannot state the design question                        | [references/find-goal.md](references/find-goal.md) |
+| Expand the artifact's Next step into a task list             | [references/next-steps.md](references/next-steps.md) |
 
 Load the matching reference file when the situation arises. Each file is self-contained; apply each only to its own case.
 
@@ -159,12 +159,12 @@ If the user cannot state the question, load `references/find-goal.md`.
 
 ### Method selection matrix
 
-| Question \ Intent | Throwaway                        | Retained                                              |
-| ----------------- | -------------------------------- | ----------------------------------------------------- |
-| Implementation    | Spike (Beck 1999)                | Tracer bullet (Hunt & Thomas 1999)                    |
+| Question \ Intent | Throwaway                        | Retained |
+| ----------------- | -------------------------------- | -------- |
+| Implementation    | Spike (Beck 1999)                | Tracer bullet (Hunt & Thomas 1999) |
 | Look-and-feel     | Spike (throwaway UI slice)       | Out of scope: handle via team's design-system process |
-| Role              | Wizard of Oz (Kelley 1984)       | rare; upgrade to MVP, out of scope                    |
-| Integration       | Agent-driven spike across layers | Walking skeleton (Cockburn 2004)                      |
+| Role              | Wizard of Oz (Kelley 1984)       | rare; upgrade to MVP, out of scope |
+| Integration       | Agent-driven spike across layers | Walking skeleton (Cockburn 2004) |
 
 One orthogonal option:
 

@@ -93,10 +93,10 @@ Frame-invalidation is what the re-validation checkpoint outputs when it fails: t
 
 ### The three resume outcomes
 
-| Frontier  | State                            | Do                                        |
-| --------- | -------------------------------- | ----------------------------------------- |
-| non-empty | a node is takeable               | chart it — resolve, commit, graduate fog  |
-| empty     | blocked on undone execution work | report the checklist, stop — do not spin  |
+| Frontier  | State                            | Do |
+| --------- | -------------------------------- | --- |
+| non-empty | a node is takeable               | chart it — resolve, commit, graduate fog |
+| empty     | blocked on undone execution work | report the checklist, stop — do not spin |
 | empty     | nothing blocks, no fog           | set `status: done`, hand off to execution |
 
 ### Stop — the bookmark

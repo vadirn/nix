@@ -29,12 +29,12 @@ Full CLI coverage: 155 endpoints across todos, cards, messages, files, schedule,
 
 **Choosing a mode:**
 
-| Goal                     | Flag                    | Format                                                                                        |
-| ------------------------ | ----------------------- | --------------------------------------------------------------------------------------------- |
-| Filter/extract JSON data | `--jq '<expr>'`         | Built-in jq filter (no external jq needed). Implies `--json`; filter runs on the envelope.    |
-| Filter in agent mode     | `--agent --jq '<expr>'` | Filter runs on data-only payload (no envelope), matching `--agent` contract.                  |
-| Full JSON output         | `--json`                | JSON envelope: `{ok, data, summary, breadcrumbs, meta}`                                       |
-| Show results to a user   | `--md` / `-m`           | GFM tables, task lists, structured Markdown                                                   |
+| Goal                     | Flag                    | Format |
+| ------------------------ | ----------------------- | ------ |
+| Filter/extract JSON data | `--jq '<expr>'`         | Built-in jq filter (no external jq needed). Implies `--json`; filter runs on the envelope. |
+| Filter in agent mode     | `--agent --jq '<expr>'` | Filter runs on data-only payload (no envelope), matching `--agent` contract. |
+| Full JSON output         | `--json`                | JSON envelope: `{ok, data, summary, breadcrumbs, meta}` |
+| Show results to a user   | `--md` / `-m`           | GFM tables, task lists, structured Markdown |
 | Automation / scripting   | `--agent`               | Success: raw JSON data (no envelope); errors: `{ok:false,...}` object; no interactive prompts |
 
 Always pass `--json` or `--md` explicitly — auto-detection depends on config and may not produce the format you expect. Use `--md` when composing reports, summarizing data, or displaying results inline. `--agent` is for headless integration scripts.
@@ -87,50 +87,50 @@ basecamp <cmd> --page 1     # First page only, no auto-pagination
 
 > **Note:** Most queries require project scope (via `--in <project>` or `.basecamp/config.json`). Cross-project exceptions: `basecamp reports assigned`, `basecamp assignments`, `basecamp reports overdue`, `basecamp reports schedule`, `basecamp recordings <type>`, `basecamp notifications`, `basecamp gauges list`.
 
-| Task                          | Command                                                                            |
-| ----------------------------- | ---------------------------------------------------------------------------------- |
-| List projects                 | `basecamp projects list --json`                                                    |
-| My todos (in project)         | `basecamp todos list --assignee me --in <project> --json`                          |
-| My todos (cross-project)      | `basecamp reports assigned --json` (defaults to "me")                              |
-| My schedule (cross-project)   | `basecamp reports schedule --json` (upcoming events across all projects)           |
-| All todos (cross-project)     | `basecamp recordings todos --json` (no assignee data — cannot filter by person)    |
-| Overdue todos (in project)    | `basecamp todos list --overdue --in <project> --json`                              |
-| Overdue todos (cross-project) | `basecamp reports overdue --json`                                                  |
-| Assign todo                   | `basecamp assign <id> [id...] --to <person> --in <project> --json`                 |
-| Assign card                   | `basecamp assign <id> [id...] --card --to <person> --in <project> --json`          |
-| Assign card step              | `basecamp assign <id> [id...] --step --to <person> --in <project> --json`          |
-| Create todo                   | `basecamp todo "Task" --in <project> --list <list> --json`                         |
-| Create todolist               | `basecamp todolists create "Name" --in <project> --json`                           |
-| Complete todo                 | `basecamp done <id> --json`                                                        |
-| List cards                    | `basecamp cards list --in <project> --json`                                        |
-| Create card                   | `basecamp card "Title" --in <project> --json`                                      |
-| Move card                     | `basecamp cards move <id> --to <column> [--position N] --in <project> --json`      |
-| Move card to on-hold          | `basecamp cards move <id> --on-hold --in <project> --json`                         |
-| Post message                  | `basecamp message "Title" "Body" --in <project> --json`                            |
-| Post with @mention            | `basecamp message "Title" "Hey @First.Last, ..." --in <project> --json`            |
-| Post silently                 | `basecamp message "Title" "Body" --no-subscribe --in <project> --json`             |
-| Post to chat                  | `basecamp chat post "Message" --in <project> --json`                               |
-| Add comment                   | `basecamp comment <recording_id> "Text" --in <project> --json`                     |
-| List attachments              | `basecamp attachments list <id\|url> --json`                                       |
-| Download attachments          | `basecamp attachments download <id> --out /tmp/`                                   |
-| Show + download               | `basecamp todos show <id> --download-attachments --json`                           |
-| Stream attachment to stdout   | `basecamp attachments download <id> --file <name> --out -`                         |
-| Search                        | `basecamp search "query" --json`                                                   |
-| Parse URL                     | `basecamp url parse "<url>" --json`                                                |
+| Task                          | Command |
+| ----------------------------- | ------- |
+| List projects                 | `basecamp projects list --json` |
+| My todos (in project)         | `basecamp todos list --assignee me --in <project> --json` |
+| My todos (cross-project)      | `basecamp reports assigned --json` (defaults to "me") |
+| My schedule (cross-project)   | `basecamp reports schedule --json` (upcoming events across all projects) |
+| All todos (cross-project)     | `basecamp recordings todos --json` (no assignee data — cannot filter by person) |
+| Overdue todos (in project)    | `basecamp todos list --overdue --in <project> --json` |
+| Overdue todos (cross-project) | `basecamp reports overdue --json` |
+| Assign todo                   | `basecamp assign <id> [id...] --to <person> --in <project> --json` |
+| Assign card                   | `basecamp assign <id> [id...] --card --to <person> --in <project> --json` |
+| Assign card step              | `basecamp assign <id> [id...] --step --to <person> --in <project> --json` |
+| Create todo                   | `basecamp todo "Task" --in <project> --list <list> --json` |
+| Create todolist               | `basecamp todolists create "Name" --in <project> --json` |
+| Complete todo                 | `basecamp done <id> --json` |
+| List cards                    | `basecamp cards list --in <project> --json` |
+| Create card                   | `basecamp card "Title" --in <project> --json` |
+| Move card                     | `basecamp cards move <id> --to <column> [--position N] --in <project> --json` |
+| Move card to on-hold          | `basecamp cards move <id> --on-hold --in <project> --json` |
+| Post message                  | `basecamp message "Title" "Body" --in <project> --json` |
+| Post with @mention            | `basecamp message "Title" "Hey @First.Last, ..." --in <project> --json` |
+| Post silently                 | `basecamp message "Title" "Body" --no-subscribe --in <project> --json` |
+| Post to chat                  | `basecamp chat post "Message" --in <project> --json` |
+| Add comment                   | `basecamp comment <recording_id> "Text" --in <project> --json` |
+| List attachments              | `basecamp attachments list <id\|url> --json` |
+| Download attachments          | `basecamp attachments download <id> --out /tmp/` |
+| Show + download               | `basecamp todos show <id> --download-attachments --json` |
+| Stream attachment to stdout   | `basecamp attachments download <id> --file <name> --out -` |
+| Search                        | `basecamp search "query" --json` |
+| Parse URL                     | `basecamp url parse "<url>" --json` |
 | Upload file                   | `basecamp files uploads create <file> [--vault <folder_id>] --in <project> --json` |
-| Download file                 | `basecamp files download <id> --in <project>`                                      |
-| Stream file to stdout         | `basecamp files download <id> --out - --in <project>`                              |
+| Download file                 | `basecamp files download <id> --in <project>` |
+| Stream file to stdout         | `basecamp files download <id> --out - --in <project>` |
 | Download storage URL          | `basecamp files download "https://storage.3.basecamp.com/.../download/report.pdf"` |
-| My assignments                | `basecamp assignments --json` (priorities + non-priorities)                        |
-| Overdue assignments           | `basecamp assignments due overdue --json`                                          |
-| Completed assignments         | `basecamp assignments completed --json`                                            |
-| Notifications                 | `basecamp notifications --json`                                                    |
-| Mark notification read        | `basecamp notifications read <id> --json`                                          |
-| Gauges (account-wide)         | `basecamp gauges list --json`                                                      |
-| Gauge needles                 | `basecamp gauges needles --in <project> --json`                                    |
-| Create needle                 | `basecamp gauges create --position 75 --color green --in <project> --json`         |
-| Account details               | `basecamp accounts show --json`                                                    |
-| Watch timeline                | `basecamp timeline --watch`                                                        |
+| My assignments                | `basecamp assignments --json` (priorities + non-priorities) |
+| Overdue assignments           | `basecamp assignments due overdue --json` |
+| Completed assignments         | `basecamp assignments completed --json` |
+| Notifications                 | `basecamp notifications --json` |
+| Mark notification read        | `basecamp notifications read <id> --json` |
+| Gauges (account-wide)         | `basecamp gauges list --json` |
+| Gauge needles                 | `basecamp gauges needles --in <project> --json` |
+| Create needle                 | `basecamp gauges create --position 75 --color green --in <project> --json` |
+| Account details               | `basecamp accounts show --json` |
+| Watch timeline                | `basecamp timeline --watch` |
 
 ## URL Parsing
 
@@ -844,17 +844,17 @@ basecamp people list --jq '[.data[] | {name: .name, email: .email_address}]'
 
 ## Exit Codes
 
-| Exit | Meaning       | Fix                                                                 |
-| ---- | ------------- | ------------------------------------------------------------------- |
-| 0    | OK            | —                                                                   |
-| 1    | Usage error   | Check `basecamp <cmd> --help`                                       |
-| 2    | Not found     | Verify ID/URL exists                                                |
-| 3    | Auth error    | `basecamp auth login`                                               |
-| 4    | Forbidden     | Check account/project permissions                                   |
+| Exit | Meaning       | Fix |
+| ---- | ------------- | --- |
+| 0    | OK            | — |
+| 1    | Usage error   | Check `basecamp <cmd> --help` |
+| 2    | Not found     | Verify ID/URL exists |
+| 3    | Auth error    | `basecamp auth login` |
+| 4    | Forbidden     | Check account/project permissions |
 | 5    | Rate limit    | Wait and retry (resilience layer handles Retry-After automatically) |
-| 6    | Network error | Check connectivity, `basecamp doctor`                               |
-| 7    | API error     | Retry; if persistent, check `basecamp doctor`                       |
-| 8    | Ambiguous     | Be more specific (use ID instead of name)                           |
+| 6    | Network error | Check connectivity, `basecamp doctor` |
+| 7    | API error     | Retry; if persistent, check `basecamp doctor` |
+| 8    | Ambiguous     | Be more specific (use ID instead of name) |
 
 ## Learn More
 

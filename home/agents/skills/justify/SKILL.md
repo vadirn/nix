@@ -74,16 +74,16 @@ do("close with: N checked, K to cut, A to clarify, rest justified")
 
 ### Terms
 
-| term              | meaning                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------- |
+| term              | meaning |
+| ----------------- | ------- |
 | element           | one discrete thing under audit: a function, abstraction, dependency, flag, step, or command |
-| claimed purpose   | the goal the element is supposed to serve                                                   |
-| logical ground    | something real depends on the element; removing it breaks a stated requirement              |
-| real ground       | the goal is actually wanted and the facts it assumes hold                                   |
-| sufficient reason | both grounds present; the bar an element clears to be kept                                  |
-| keep              | both grounds hold (reported as a count, not listed)                                         |
-| cut               | a ground fails; nothing real needs the element                                              |
-| ask               | purpose or ground cannot be determined from the artifact alone                              |
+| claimed purpose   | the goal the element is supposed to serve |
+| logical ground    | something real depends on the element; removing it breaks a stated requirement |
+| real ground       | the goal is actually wanted and the facts it assumes hold |
+| sufficient reason | both grounds present; the bar an element clears to be kept |
+| keep              | both grounds hold (reported as a count, not listed) |
+| cut               | a ground fails; nothing real needs the element |
+| ask               | purpose or ground cannot be determined from the artifact alone |
 
 Most dead weight fails the real ground, not the logical one: code written for a problem the codebase
 does not have. The logical chain is intact (things call it), but the goal it serves is imaginary. State

@@ -27,10 +27,10 @@ correction you apply to it before the shot.
 
 ## Glossary
 
-| Term            | Definition                          |
-| --------------- | ----------------------------------- |
-| Target distance | how far the target sits             |
-| Aim point       | where the sight rests for a hit     |
+| Term            | Definition |
+| --------------- | ---------- |
+| Target distance | how far the target sits |
+| Aim point       | where the sight rests for a hit |
 | Holdover        | vertical correction for bullet drop |
 
 ## Relations

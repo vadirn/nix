@@ -22,12 +22,12 @@ Canvas-based playgrounds differ from the two-panel split. The interactive visual
 
 ## Control types for concept maps
 
-| Decision                 | Control                               | Example                                          |
-| ------------------------ | ------------------------------------- | ------------------------------------------------ |
-| Knowledge level per node | Click-to-cycle button in sidebar list | Know → Fuzzy → Unknown                           |
-| Connection type          | Selector before drawing               | calls, depends on, contains, reads from          |
-| Node arrangement         | Drag on canvas                        | spatial layout reflects mental model             |
-| Which nodes to include   | Toggle or checkbox per node           | hide/show concepts                               |
+| Decision                 | Control                               | Example |
+| ------------------------ | ------------------------------------- | ------- |
+| Knowledge level per node | Click-to-cycle button in sidebar list | Know → Fuzzy → Unknown |
+| Connection type          | Selector before drawing               | calls, depends on, contains, reads from |
+| Node arrangement         | Drag on canvas                        | spatial layout reflects mental model |
+| Which nodes to include   | Toggle or checkbox per node           | hide/show concepts |
 | Actions                  | Buttons                               | Auto-layout (force-directed), clear edges, reset |
 
 ## Canvas rendering

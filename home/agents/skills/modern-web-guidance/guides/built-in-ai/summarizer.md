@@ -55,12 +55,12 @@ if (availability === "available") {
 When creating a summarizer via `Summarizer.create(options)`, you can customize
 the output:
 
-| Parameter    | Options                                    | Description                             |
-| :----------- | :----------------------------------------- | :-------------------------------------- |
-| `type`       | `key-points`, `tldr`, `teaser`, `headline` | Defines the summary strategy.           |
-| `format`     | `markdown`, `plain-text`                   | Output syntax style.                    |
+| Parameter    | Options                                    | Description |
+| :----------- | :----------------------------------------- | :---------- |
+| `type`       | `key-points`, `tldr`, `teaser`, `headline` | Defines the summary strategy. |
+| `format`     | `markdown`, `plain-text`                   | Output syntax style. |
 | `length`     | `short`, `medium`, `long`                  | Target length (e.g., 1 vs 5 sentences). |
-| `preference` | `auto`, `speed`, `capability`              | Balances latency vs. quality.           |
+| `preference` | `auto`, `speed`, `capability`              | Balances latency vs. quality. |
 
 ### Example Configuration
 

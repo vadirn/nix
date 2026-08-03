@@ -37,10 +37,10 @@ do("act on <type>: a brief is your task; a result updates your plan; a continuat
 
 ## Templates
 
-| type         | file              | purpose                                           |
-| ------------ | ----------------- | ------------------------------------------------- |
-| brief        | `brief.md`        | task packet from delegator to a fresh worker      |
-| result       | `result.md`       | outcome report from worker back to delegator      |
+| type         | file              | purpose |
+| ------------ | ----------------- | ------- |
+| brief        | `brief.md`        | task packet from delegator to a fresh worker |
+| result       | `result.md`       | outcome report from worker back to delegator |
 | continuation | `continuation.md` | session-state packet for the same effort resuming |
 
 ## Reference

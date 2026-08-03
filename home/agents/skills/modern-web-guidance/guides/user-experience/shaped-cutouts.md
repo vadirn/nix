@@ -2,10 +2,10 @@
 
 CSS Masking allows you to clip an element to a custom shape, such as adding a notch to a card or creating a shaped border. When combining shapes for complex layouts, choose your masking strategy based on the type of content the element contains:
 
-| Masking strategy             | Best For                                         | Text Impact                     |
-| ---------------------------- | ------------------------------------------------ | ------------------------------- |
+| Masking strategy             | Best For                                         | Text Impact |
+| ---------------------------- | ------------------------------------------------ | ----------- |
 | Direct Element SVG Masking   | Images, Icons, Decorative shapes, Complex shapes | Not recommended (can crop text) |
-| Adjacent Element SVG Masking | Cards with Text, Crucial content                 | Text remains fully readable     |
+| Adjacent Element SVG Masking | Cards with Text, Crucial content                 | Text remains fully readable |
 | Pure CSS Gradients           | Simple Geometric Shapes                          | Not recommended (can crop text) |
 
 ---

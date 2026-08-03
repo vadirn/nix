@@ -51,11 +51,11 @@ else:
 
 ### Areas of check
 
-| Область / Area                | Файл правил                       | Что ищем / What to look for                                                                       |
-| ----------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Четыре закона логики          | references/laws.md                | Подмена смысла термина, противоречие, ложная дилемма / уход от выбора, утверждения без основания  |
-| Шесть правил доказательства   | references/proof.md               | Размытый/подменённый тезис, ложные/недостаточные доводы, порочный круг, нелогичный вывод          |
-| Определения и деления         | references/definition-division.md | Несоразмерные определения, круг, отрицательные определения, скачки в делении                      |
+| Область / Area                | Файл правил                       | Что ищем / What to look for |
+| ----------------------------- | --------------------------------- | --------------------------- |
+| Четыре закона логики          | references/laws.md                | Подмена смысла термина, противоречие, ложная дилемма / уход от выбора, утверждения без основания |
+| Шесть правил доказательства   | references/proof.md               | Размытый/подменённый тезис, ложные/недостаточные доводы, порочный круг, нелогичный вывод |
+| Определения и деления         | references/definition-division.md | Несоразмерные определения, круг, отрицательные определения, скачки в делении |
 | Формы мысли и статус суждений | references/forms.md               | Гипотеза, поданная как доказанное; смешение понятия, суждения и умозаключения; неверное обращение |
 
 ### Report template — Russian
@@ -124,32 +124,32 @@ If no violations — skip the Violations section, in the overall assessment say:
 
 Use these names when emitting the report. Pick the column that matches the output language.
 
-| Russian (источник)                     | English (output)                            |
-| -------------------------------------- | ------------------------------------------- |
-| Закон тождества                        | Law of identity                             |
-| Закон противоречия                     | Law of non-contradiction                    |
-| Закон исключённого третьего            | Law of excluded middle                      |
-| Закон достаточного основания           | Law of sufficient reason                    |
-| Подмена понятия                        | Equivocation                                |
-| Подмена тезиса                         | Shifting the thesis (ignoratio elenchi)     |
-| Ad hominem                             | Ad hominem                                  |
-| Основное заблуждение                   | False premise                               |
-| Не вытекает / не следует               | Non sequitur                                |
+| Russian (источник)                     | English (output) |
+| -------------------------------------- | ---------------- |
+| Закон тождества                        | Law of identity |
+| Закон противоречия                     | Law of non-contradiction |
+| Закон исключённого третьего            | Law of excluded middle |
+| Закон достаточного основания           | Law of sufficient reason |
+| Подмена понятия                        | Equivocation |
+| Подмена тезиса                         | Shifting the thesis (ignoratio elenchi) |
+| Ad hominem                             | Ad hominem |
+| Основное заблуждение                   | False premise |
+| Не вытекает / не следует               | Non sequitur |
 | От относительного к безотносительному  | Fallacy of accident (a dicto secundum quid) |
-| Порочный круг                          | Circular reasoning (begging the question)   |
-| Учетверение терминов                   | Four terms (quaternio terminorum)           |
-| Поспешное обобщение                    | Hasty generalisation                        |
-| После этого — значит, по причине этого | Post hoc ergo propter hoc                   |
-| Ложная дилемма                         | False dilemma                               |
-| Правило соразмерности определения      | Rule of proportionality (definition)        |
-| Круг в определении                     | Circular definition                         |
-| Отрицательное определение              | Negative definition                         |
-| Правило соразмерности деления          | Rule of exhaustiveness (division)           |
-| Деление по разным основаниям           | Cross-division                              |
-| Скачок в делении                       | Skip in division                            |
-| Гипотеза vs доказанное                 | Hypothesis vs proven claim                  |
-| Доказательство                         | Proof                                       |
-| Неправомерное обращение                | Illicit conversion                          |
+| Порочный круг                          | Circular reasoning (begging the question) |
+| Учетверение терминов                   | Four terms (quaternio terminorum) |
+| Поспешное обобщение                    | Hasty generalisation |
+| После этого — значит, по причине этого | Post hoc ergo propter hoc |
+| Ложная дилемма                         | False dilemma |
+| Правило соразмерности определения      | Rule of proportionality (definition) |
+| Круг в определении                     | Circular definition |
+| Отрицательное определение              | Negative definition |
+| Правило соразмерности деления          | Rule of exhaustiveness (division) |
+| Деление по разным основаниям           | Cross-division |
+| Скачок в делении                       | Skip in division |
+| Гипотеза vs доказанное                 | Hypothesis vs proven claim |
+| Доказательство                         | Proof |
+| Неправомерное обращение                | Illicit conversion |
 
 ### Что не считать нарушением / What not to flag
 

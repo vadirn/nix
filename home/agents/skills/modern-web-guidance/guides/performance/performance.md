@@ -49,12 +49,12 @@ The Critical Rendering Path dictates how quickly the browser converts HTML, CSS,
 
 ### The Resource Hint Navigator
 
-| Hint           | Tool Use Case                                      | Example                            |
-| :------------- | :------------------------------------------------- | :--------------------------------- |
-| `preconnect`   | Resolve TLS/DNS for known third-party APIs         | API endpoints, font services       |
-| `dns-prefetch` | Lean fallback for non-critical third-party origins | Ad servers, analytics fallbacks    |
+| Hint           | Tool Use Case                                      | Example |
+| :------------- | :------------------------------------------------- | :------ |
+| `preconnect`   | Resolve TLS/DNS for known third-party APIs         | API endpoints, font services |
+| `dns-prefetch` | Lean fallback for non-critical third-party origins | Ad servers, analytics fallbacks |
 | `preload`      | Same-origin asset needed _now_ for rendering       | Hero images, render-blocking fonts |
-| `prefetch`     | Assets needed for next-page navigation             | Next-page bundle, detail views     |
+| `prefetch`     | Assets needed for next-page navigation             | Next-page bundle, detail views |
 
 **Single-Sentence Mental Model**: "Preconnect for domains, Preload for viewport, Prefetch for futures."
 

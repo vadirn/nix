@@ -76,4 +76,3 @@ Why: <one line tied to the signal in the complaint>.
 Remedy: <the matching practice above>.
 Want me to draft <the update | the renegotiation framing | both, in order>?
 ```
-

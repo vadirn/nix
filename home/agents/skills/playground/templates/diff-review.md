@@ -23,11 +23,11 @@ Diff review playgrounds display git diffs with syntax highlighting. Users click 
 
 ## Control types for diff review
 
-| Feature           | Control                  | Behavior                         |
-| ----------------- | ------------------------ | -------------------------------- |
-| Line commenting   | Click any diff line      | Opens textarea below the line    |
-| Comment indicator | Badge on commented lines | Shows which lines have feedback  |
-| Save/Cancel       | Buttons in comment box   | Persist or discard comment       |
+| Feature           | Control                  | Behavior |
+| ----------------- | ------------------------ | -------- |
+| Line commenting   | Click any diff line      | Opens textarea below the line |
+| Comment indicator | Badge on commented lines | Shows which lines have feedback |
+| Save/Cancel       | Buttons in comment box   | Persist or discard comment |
 | Copy prompt       | Button in prompt panel   | Copies all comments to clipboard |
 
 ## Diff rendering
@@ -54,12 +54,12 @@ const diffData = [
 
 ## Line type styling
 
-| Type          | Background                                             | Text Color                           | Prefix      |
-| ------------- | ------------------------------------------------------ | ------------------------------------ | ----------- |
+| Type          | Background                                             | Text Color                           | Prefix |
+| ------------- | ------------------------------------------------------ | ------------------------------------ | ------ |
 | `context`     | transparent                                            | default                              | ` ` (space) |
-| `addition`    | green tint (#dafbe1 light / rgba(46,160,67,0.15) dark) | green (#1a7f37 light / #7ee787 dark) | `+`         |
-| `deletion`    | red tint (#ffebe9 light / rgba(248,81,73,0.15) dark)   | red (#cf222e light / #f85149 dark)   | `-`         |
-| `hunk-header` | blue tint (#ddf4ff light)                              | blue (#0969da light)                 | `@@`        |
+| `addition`    | green tint (#dafbe1 light / rgba(46,160,67,0.15) dark) | green (#1a7f37 light / #7ee787 dark) | `+` |
+| `deletion`    | red tint (#ffebe9 light / rgba(248,81,73,0.15) dark)   | red (#cf222e light / #f85149 dark)   | `-` |
+| `hunk-header` | blue tint (#ddf4ff light)                              | blue (#0969da light)                 | `@@` |
 
 ## Comment system
 

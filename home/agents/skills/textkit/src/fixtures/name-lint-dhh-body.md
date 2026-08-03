@@ -1,4 +1,3 @@
-
 Running continuous integration on modern multi-core developer machines is faster and eliminates the complexity of remote CI infrastructure.
 
 **Remote CI setup** traditionally relies on external servers to validate code changes, often taking around five and a half minutes per run. Those servers introduce a network hop, credential management, and scheduling overhead that act as **bridges of complexity**, slowing feedback loops and demanding dedicated maintenance.
@@ -18,12 +17,12 @@ Adopting a **simplified stack** means stripping away the remote orchestration la
 
 ## Glossary
 
-| Term                  | Definition                                                                                                                    |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| remote CI setup       | A BuildKite-based continuous integration system running on remote servers that validates code changes in about 5m30s.         |
-| developer machine     | A high-core local computer (e.g., Intel 14900K, M3 Max) executing checks and tests faster than remote CI.                     |
-| parallelized work     | Concurrent execution of many checks across multiple CPU cores, enabled by machines with 8-20 cores.                           |
-| simplified stack      | A development environment stripped of remote CI complexity, favoring local execution on powerful developer CPUs.              |
+| Term                  | Definition |
+| --------------------- | ---------- |
+| remote CI setup       | A BuildKite-based continuous integration system running on remote servers that validates code changes in about 5m30s. |
+| developer machine     | A high-core local computer (e.g., Intel 14900K, M3 Max) executing checks and tests faster than remote CI. |
+| parallelized work     | Concurrent execution of many checks across multiple CPU cores, enabled by machines with 8-20 cores. |
+| simplified stack      | A development environment stripped of remote CI complexity, favoring local execution on powerful developer CPUs. |
 | bridges of complexity | Metaphorical obstacles representing remote continuous-integration components that should be eliminated for simpler workflows. |
 
 ## Relations

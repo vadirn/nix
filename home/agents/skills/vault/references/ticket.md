@@ -39,17 +39,17 @@ Bash(vault-query lint --format json | jq '[.[] | select(.rule == "ticket-outward
 
 vault_root = Bash(vault-query config).vault_root Read(<vault_root>/templates/Ticket.md) for structure.
 
-| Field | Value |
-| --- | --- |
-| `type` | always `ticket` |
-| `slug` | the filename's slug, minus the `ticket-` prefix |
-| `description` | one sentence. `vault-query tickets` prints it as the ticket's entire summary line, so write it to stand alone. |
-| `status` | `open` at creation; `done` once every `## Done when` box is checked; `abandoned` when the work will not happen — keep the file and record why in the body. |
-| `project` | wikilink to the project note, copied from `Context.md`'s `Project note:` line |
+| Field                 | Value |
+| --------------------- | ----- |
+| `type`                | always `ticket` |
+| `slug`                | the filename's slug, minus the `ticket-` prefix |
+| `description`         | one sentence. `vault-query tickets` prints it as the ticket's entire summary line, so write it to stand alone. |
+| `status`              | `open` at creation; `done` once every `## Done when` box is checked; `abandoned` when the work will not happen — keep the file and record why in the body. |
+| `project`             | wikilink to the project note, copied from `Context.md`'s `Project note:` line |
 | `created` / `updated` | `YYYY-MM-DD`. `updated` moves on every edit. |
-| `track` | wikilink to the track that owns this ticket; empty means no track owns it, which is what puts the ticket in the project backlog. Ownership says where the work belongs, not that it is underway — a track owns its queued tickets alongside the one it is working on. |
-| `requires` | list of wikilinks to tickets that must land first; `[]` when none |
-| `kind` | required. The unit of work's type: `decision` \| `fact` \| `feasibility` \| `execution`. `execution` is plain work with nothing open to resolve — the common case, written by the template; a map charts the other three (see `## Map nodes`). |
+| `track`               | wikilink to the track that owns this ticket; empty means no track owns it, which is what puts the ticket in the project backlog. Ownership says where the work belongs, not that it is underway — a track owns its queued tickets alongside the one it is working on. |
+| `requires`            | list of wikilinks to tickets that must land first; `[]` when none |
+| `kind`                | required. The unit of work's type: `decision` \| `fact` \| `feasibility` \| `execution`. `execution` is plain work with nothing open to resolve — the common case, written by the template; a map charts the other three (see `## Map nodes`). |
 
 Quote frontmatter wikilinks: `project: "[[41 projects/nix/Nix]]"`.
 

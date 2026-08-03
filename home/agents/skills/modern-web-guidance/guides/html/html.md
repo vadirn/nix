@@ -243,11 +243,11 @@ See `declarative-dialog-popover-control` (via `npx -y modern-web-guidance@latest
 
 ### Native UI Overlay & Disclosure Matrix
 
-| Feature         | Modality          | Focus                  | Dismiss Mechanism             | Use Case                   |
-| :-------------- | :---------------- | :--------------------- | :---------------------------- | :------------------------- |
+| Feature         | Modality          | Focus                  | Dismiss Mechanism             | Use Case |
+| :-------------- | :---------------- | :--------------------- | :---------------------------- | :------- |
 | **`<dialog>`**  | Modal / Non-modal | Automatic trap (Modal) | Esc / Form / `closedby`       | Critical Actions, Settings |
-| **`[popover]`** | Non-modal         | Standard Tab flow      | Light-dismiss (Click outside) | Menus, Tooltips, Toasts    |
-| **`<details>`** | Inline Disclosure | Standard Tab flow      | Toggle summary                | Accordions, FAQs           |
+| **`[popover]`** | Non-modal         | Standard Tab flow      | Light-dismiss (Click outside) | Menus, Tooltips, Toasts |
+| **`<details>`** | Inline Disclosure | Standard Tab flow      | Toggle summary                | Accordions, FAQs |
 
 **Heuristic Rule**: Use `<dialog>` for interruptions requiring user action, `popover` for transient info, and `<details>` for inline content expansion.
 

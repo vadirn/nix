@@ -6,10 +6,10 @@ To optimize rendering, you can utilize the CSS `content-visibility` property and
 
 ## When to use which
 
-| Scenario / Example                                     | Feature Applied                  | Performance Benefit                                                                                                                                                                                          |
-| :----------------------------------------------------- | :------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1. Below the fold** (Delay initial load)             | **`content-visibility: auto`**   | Browser automatically offloads layout/paint workload until the container scrolls close to view, keeping standard page load speed frictionless.                                                               |
-| **2. Toggle State** (Fast view switching)              | **`content-visibility: hidden`** | Skips layout calculations for hidden divs but preserves style containment state, allowing for instantaneous toggling without structural shifts (superior to `display: none`).                                |
+| Scenario / Example                                     | Feature Applied                  | Performance Benefit |
+| :----------------------------------------------------- | :------------------------------- | :------------------ |
+| **1. Below the fold** (Delay initial load)             | **`content-visibility: auto`**   | Browser automatically offloads layout/paint workload until the container scrolls close to view, keeping standard page load speed frictionless. |
+| **2. Toggle State** (Fast view switching)              | **`content-visibility: hidden`** | Skips layout calculations for hidden divs but preserves style containment state, allowing for instantaneous toggling without structural shifts (superior to `display: none`). |
 | **3. Searchable & Deferred** (Collapsible disclosures) | **`hidden="until-found"`**       | For detailed instructions on combining rendering performance with find-in-page search accessibility, see `search-hidden-content` (via `npx -y modern-web-guidance@latest retrieve "search-hidden-content"`). |
 
 ## How to implement `content-visibility: auto`
