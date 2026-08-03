@@ -33,6 +33,8 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `invalid-frontmatter`         | error   | YAML frontmatter fails to parse |
 | `untagged-card`               | warn    | Card with missing or empty `tags:` array |
 | `missing-required-field`      | warn    | File missing a required frontmatter field for its `type:` (one finding per field) |
+| `unknown-field`               | warn    | Frontmatter key outside the schema its type's template declares — the template is the authority on which fields a type carries, so a stray key is a typo or a rename that skipped its entries (a type with no template has no schema and is never flagged; a universal meta-set — `created`, `updated`, `related`, `aliases`, the supersession keys — is legal on every type) |
+| `invalid-enum-value`          | warn    | Frontmatter picker field whose string value is outside the option list its type's template declares (an empty, null, or multi-valued value reads as unfilled or non-picker rather than wrong, and a type with no template is never flagged) |
 | `singleton-tag`               | warn    | Tag appearing in exactly one file (typo heuristic) |
 | `singleton-filename-mismatch` | warn    | `type: context`/`type: scratchpad` entry not named `Context.md`/`Scratchpad.md` — a project holds one of each, and `vault-query context` reaches it by joining that constant onto the project path, so a misnamed one is never found (templates, superseded entries, and untyped files exempt) |
 | `slug-filename-mismatch`      | warn    | `type: ticket`/`type: track` entry whose filename is not `<type>-<slug>` — queries resolve a track by filename stem, so a disagreement makes it unreachable by the slug it declares (templates, superseded entries, and entries with no `slug:` exempt) |
@@ -119,6 +121,8 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `invalid-frontmatter`         | `{ "error": <string> }` |
 | `untagged-card`               | `null` |
 | `missing-required-field`      | `null` |
+| `unknown-field`               | `null` |
+| `invalid-enum-value`          | `null` |
 | `singleton-tag`               | `{ "tag": <string> }` |
 | `singleton-filename-mismatch` | `{ "type": <string>, "expected": <string> }` |
 | `slug-filename-mismatch`      | `{ "slug": <string>, "expected": <string> }` |
