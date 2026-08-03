@@ -1,0 +1,13 @@
+[package]
+name = "mdformat"
+version.workspace = true
+edition.workspace = true
+description = "Comrak's parser plus mdstruct's shared parse configuration, with a block-level passthrough printer whose spans are gated by a non-whitespace-byte partition oracle."
+
+[dependencies]
+mdstruct.workspace = true
+clap.workspace = true
+comrak.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]

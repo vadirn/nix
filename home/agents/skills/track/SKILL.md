@@ -21,9 +21,9 @@ else:
 
 ## Reference
 
-| File                 | Purpose                                                            |
-| -------------------- | ------------------------------------------------------------------ |
+| File                 | Purpose |
+| -------------------- | ------- |
 | `references/read.md` | Resume a track. Lists Active tracks, picks one, presents the body. |
-| `references/save.md` | Save session work into an existing track or create a new one.      |
+| `references/save.md` | Save session work into an existing track or create a new one. |
 
 Tracks live in the vault at `<vault_root>/41 projects/<project>/track-<slug>.md`. This skill owns discovery end to end — `references/read.md` finds tracks itself via `vault-query tracks --view Active`; the vault skill has no track route to delegate to.

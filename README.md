@@ -8,7 +8,7 @@
          aarch64-darwin
 ```
 
-Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and Rust tooling for an Obsidian vault — a shared markdown-parsing core (`mdstruct`), a general markdown reader (`mdread`), and a query CLI (`vault-query`) built on both.
+Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and Rust tooling for an Obsidian vault — a shared markdown-parsing core (`mdstruct`), a general markdown reader (`mdread`), a markdown formatter (`mdformat`), and a query CLI (`vault-query`) built on the core.
 
 ## Machines
 
@@ -24,7 +24,7 @@ Personal macOS system config. Three areas: a Nix flake that declaratively manage
 
 `home/claude/` contains `settings.json` with sandbox permissions and environment variables. `home/claude/hooks/` has PreToolUse safety hooks: dangerous command blocking, sensitive file guards, `/commit` and `/pr` nonce enforcement, Firecrawl MCP routing, and sound notifications.
 
-Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/autoformat.ts` (a bun CLI, on PATH as `autoformat`) routes each file to its formatter — the project's `format:file` script, else deno fmt, else oxfmt, or ruff, or alejandra, or rustfmt — and `home/claude/hooks/hint-autoformat.sh` names it in the PostToolUse context after every Write and Edit. Nothing rewrites a file behind the agent, so a reflow can never land between two Edits and break the second one.
+Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/autoformat.ts` (a bun CLI, on PATH as `autoformat`) routes each file to its formatter — the project's `format:file` script, else deno fmt, else mdformat for `.md` and oxfmt for the rest, or ruff, or alejandra, or rustfmt — and `home/claude/hooks/hint-autoformat.sh` names it in the PostToolUse context after every Write and Edit. Nothing rewrites a file behind the agent, so a reflow can never land between two Edits and break the second one.
 
 `agents/AGENTS.md` is the shared reasoning and communication ruleset (dialectical method, formal logic, prose style). `agents/skills/` holds ~30 skills (`commit`, `pr`, `vault`, `debate`, `probe`, `work`, `tdd`, `writing-*`, `design`, etc.); it is also a bun workspace with pinned TypeScript and oxlint, whose `tools/` member holds the `autoformat` CLI. `agents/agents/` holds subagent definitions. `agents/scripts/sync-agents.sh` re-creates agent symlinks without a full rebuild.
 
@@ -33,6 +33,10 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 The three crates form one cargo workspace rooted at `Cargo.toml`, chained by path dependency: `vault-query → mdread → mdstruct`. One lockfile, one `target/`, one `cargo test --workspace`, and — because a single lockfile vendors a single dependency set — one `cargoHash` in `flake.nix`, shared by all three `buildRustPackage` derivations and recomputed once when a dependency changes. Dependencies used by more than one member are declared in `[workspace.dependencies]` and inherited with `.workspace = true`, so two members cannot drift onto different versions of the same crate. `shell.nix` at the root provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
 
 Each package still builds on its own — `nix build .#mdread` selects its member with `buildAndTestSubdir`, and cargo finds the root manifest above it.
+
+## mdformat
+
+A Rust crate in `mdformat/`. Comrak's parser plus our own printer — a sibling to `mdstruct` rather than built on it, since `mdstruct`'s flat span index is deliberately not printable (the design axiom "never restringify" guards byte-exact read-back). Formats markdown according to a configurable style. Built as a Nix package (`nix build .#mdformat`).
 
 ## mdstruct
 

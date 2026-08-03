@@ -25,7 +25,7 @@ Goal body.
 
 | Term | Definition |
 | ---- | ---------- |
-| Foo  | A thing.   |
+| Foo  | A thing. |
 
 ```
 # not a heading inside a fence

@@ -30,12 +30,12 @@
 
 ### Selection Control Decision Matrix
 
-| Options Count     | Choice Type        | Recommended Element                | Usability & Accessibility Logic                                                      |
-| :---------------- | :----------------- | :--------------------------------- | :----------------------------------------------------------------------------------- |
-| **1–5**           | Single (Exclusive) | `<input type="radio">`             | **Zero-click scanning**: All choices are immediately visible. Faster scan time.      |
+| Options Count     | Choice Type        | Recommended Element                | Usability & Accessibility Logic |
+| :---------------- | :----------------- | :--------------------------------- | :------------------------------ |
+| **1–5**           | Single (Exclusive) | `<input type="radio">`             | **Zero-click scanning**: All choices are immediately visible. Faster scan time. |
 | **6+**            | Single (Exclusive) | `<select>`                         | **Space conservation**: Use only when vertical space is premium or the list is long. |
-| **10+ / Dynamic** | Single (Exclusive) | `<input list="id">` (`<datalist>`) | **Fuzzy Search**: Prevents scrolling fatigue in massive sets (e.g., countries).      |
-| **Any**           | Multi-select       | `<input type="checkbox">`          | **Standard semantics**: Native non-exclusive toggles.                                |
+| **10+ / Dynamic** | Single (Exclusive) | `<input list="id">` (`<datalist>`) | **Fuzzy Search**: Prevents scrolling fatigue in massive sets (e.g., countries). |
+| **Any**           | Multi-select       | `<input type="checkbox">`          | **Standard semantics**: Native non-exclusive toggles. |
 
 **Single-Sentence Mental Model**: "Expose mutually exclusive options as visible radio buttons when choices are fewer than six; use `<select>` only when space is constrained or the list is long."
 
@@ -128,10 +128,10 @@
 
 ### Validation Event Timing Matrix
 
-| Event Trigger           | Phase         | Action Allowed                  | UX / Accessibility Logic                                                                     |
-| :---------------------- | :------------ | :------------------------------ | :------------------------------------------------------------------------------------------- |
-| **`input`**             | Active Typing | **Clear** existing errors only. | **Non-intrusive**: Do not yell at the user before they finish typing.                        |
-| **`blur` / `focusout`** | Exiting Field | **Run** check and show error.   | **Contextual validation**: Validate once the user indicates they are "done" with a field.    |
+| Event Trigger           | Phase         | Action Allowed                  | UX / Accessibility Logic |
+| :---------------------- | :------------ | :------------------------------ | :----------------------- |
+| **`input`**             | Active Typing | **Clear** existing errors only. | **Non-intrusive**: Do not yell at the user before they finish typing. |
+| **`blur` / `focusout`** | Exiting Field | **Run** check and show error.   | **Contextual validation**: Validate once the user indicates they are "done" with a field. |
 | **`submit`**            | Final Attempt | **Block** and route focus.      | **Final gatekeeper**: Intercepts bad payloads and forces screen reader focus to the summary. |
 
 **Single-Sentence Mental Model**: "Validate on `blur` to avoid premature warnings while typing, and reset error states on `input` as soon as the user attempts a correction."

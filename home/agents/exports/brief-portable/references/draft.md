@@ -66,15 +66,15 @@ among the chosen (the widest window). No `last_drafted` (or no roster) → last 
 ONE stakeholder-agnostic pass; attach provenance to each field. `.brief/context.md` prose, if
 present, gives durable framing (what the project is for, who counts in what).
 
-| field            | provenance                                                                                    |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| shipped          | inspection-closeable, ONE line, [artifact]                                                    |
-| in_progress      | [artifact] from open work / WIP commits                                                       |
+| field            | provenance |
+| ---------------- | ---------- |
+| shipped          | inspection-closeable, ONE line, [artifact] |
+| in_progress      | [artifact] from open work / WIP commits |
 | blocked_why      | [artifact] if a commit message says so; else [inferred] from a stall; else blank → [elicited] |
-| at_risk          | almost always [inferred] or [elicited] — no artifact states risk                              |
-| revised_estimate | [elicited] unless the user gave a revision                                                    |
-| next             | [artifact] from the commit trail; else [inferred]; else [elicited]                            |
-| counterfactual   | for non-feature work; render as "[claim — verify before sending]"                             |
+| at_risk          | almost always [inferred] or [elicited] — no artifact states risk |
+| revised_estimate | [elicited] unless the user gave a revision |
+| next             | [artifact] from the commit trail; else [inferred]; else [elicited] |
+| counterfactual   | for non-feature work; render as "[claim — verify before sending]" |
 
 ### Projection
 

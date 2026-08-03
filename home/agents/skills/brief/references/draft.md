@@ -55,15 +55,15 @@ Default = since the chosen stakeholder's `last_drafted`. `--all` → the earlies
 
 ONE stakeholder-agnostic pass; attach provenance to each field. `Context.md` gives durable framing (what the project is for, who counts in what).
 
-| field | provenance |
-| --- | --- |
-| shipped | inspection-closeable, ONE line, [artifact] |
-| in_progress | [artifact] from open work / WIP commits |
-| blocked_why | [artifact] if a track note says so; else [inferred] from a stall; else blank → [elicited] |
-| at_risk | almost always [inferred] or [elicited] — no artifact states risk |
+| field            | provenance |
+| ---------------- | ---------- |
+| shipped          | inspection-closeable, ONE line, [artifact] |
+| in_progress      | [artifact] from open work / WIP commits |
+| blocked_why      | [artifact] if a track note says so; else [inferred] from a stall; else blank → [elicited] |
+| at_risk          | almost always [inferred] or [elicited] — no artifact states risk |
 | revised_estimate | [elicited] unless a track note revised it |
-| next | [artifact] from Direction/Log; else [inferred] |
-| counterfactual | for non-feature work; render as "[claim — verify before sending]" |
+| next             | [artifact] from Direction/Log; else [inferred] |
+| counterfactual   | for non-feature work; render as "[claim — verify before sending]" |
 
 ### Projection
 

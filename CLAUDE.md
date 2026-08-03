@@ -1,8 +1,8 @@
 # nix
 
-Personal macOS system config: a Nix flake managing two Macs, the Claude Code global configuration, and two Rust crates (`mdstruct`, `vault-query`) for an Obsidian vault.
+Personal macOS system config: a Nix flake managing two Macs, the Claude Code global configuration, and four Rust crates (`mdstruct`, `mdread`, `vault-query`, `mdformat`) for an Obsidian vault.
 
-**Read `README.md` first.** It maps the top-level directories — `home/` (home-manager modules + Claude config under `home/claude/`), `hosts/`, `mdstruct/` (shared markdown-parsing core), `vault-query/` (vault query CLI) — and what each holds.
+**Read `README.md` first.** It maps the top-level directories — `home/` (home-manager modules + Claude config under `home/claude/`), `hosts/`, `mdstruct/` (shared markdown-parsing core), `mdread/` (markdown reader CLI), `vault-query/` (vault query CLI), `mdformat/` (comrak's parser plus our own printer) — and what each holds.
 
 ## Building
 

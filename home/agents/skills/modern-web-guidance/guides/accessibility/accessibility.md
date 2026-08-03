@@ -275,12 +275,12 @@ function toggleWidgetState() {
 
 ### Content Visibility Decision Matrix
 
-| Intent                 | Visual | Screen Reader | Focusable            | Structural Pattern                                |
-| :--------------------- | :----- | :------------ | :------------------- | :------------------------------------------------ |
-| **Visible to all**     | Yes    | Yes           | Yes                  | Standard rendering                                |
+| Intent                 | Visual | Screen Reader | Focusable            | Structural Pattern |
+| :--------------------- | :----- | :------------ | :------------------- | :----------------- |
+| **Visible to all**     | Yes    | Yes           | Yes                  | Standard rendering |
 | **Screen Reader only** | No     | Yes           | Yes (if interactive) | Visually hidden utility (e.g. `.visually-hidden`) |
-| **Visual only**        | Yes    | No            | No                   | `aria-hidden="true"` / `role="presentation"`      |
-| **Hidden for all**     | No     | No            | No                   | `hidden` attribute / `display: none`              |
+| **Visual only**        | Yes    | No            | No                   | `aria-hidden="true"` / `role="presentation"` |
+| **Hidden for all**     | No     | No            | No                   | `hidden` attribute / `display: none` |
 
 **Heuristic Rule**: If an element can receive keyboard focus, it must not be hidden via `aria-hidden="true"`.
 
@@ -324,11 +324,11 @@ Live regions let assistive tech announce content updates that aren't tied to nav
 
 ### Live Region Urgency Table
 
-| Urgency      | Visual Analogue | `aria-live` Value               | Behavioral Impact                           | Example                        |
-| :----------- | :-------------- | :------------------------------ | :------------------------------------------ | :----------------------------- |
-| **Critical** | Modal / Alert   | `assertive` (or `role="alert"`) | Interrupts immediately, clears speech queue | Session timeout, API failure   |
+| Urgency      | Visual Analogue | `aria-live` Value               | Behavioral Impact                           | Example |
+| :----------- | :-------------- | :------------------------------ | :------------------------------------------ | :------ |
+| **Critical** | Modal / Alert   | `assertive` (or `role="alert"`) | Interrupts immediately, clears speech queue | Session timeout, API failure |
 | **Standard** | Toast / Banner  | `polite`                        | Announces at next graceful break            | Search results, "Saved" status |
-| **Passive**  | Silent text     | `off`                           | Only if user navigates to it                | Live character count           |
+| **Passive**  | Silent text     | `off`                           | Only if user navigates to it                | Live character count |
 
 **Heuristic Rule**: Use `assertive` only for critical, time-sensitive updates that require immediate attention or prevent safe continuation (e.g., data loss, session timeouts, or network drops).
 

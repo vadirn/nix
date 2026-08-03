@@ -104,13 +104,13 @@ The Glossary ships with five pinned rows — Claim, Method, Execution, Verdict, 
 
 ### Frontmatter schema
 
-| Field         | Required | Value                                     |
-| ------------- | -------- | ----------------------------------------- |
-| `type`        | yes      | always `experiment`                       |
-| `description` | yes      | one-line claim summary, ≤ 80 chars        |
+| Field         | Required | Value |
+| ------------- | -------- | ----- |
+| `type`        | yes      | always `experiment` |
+| `description` | yes      | one-line claim summary, ≤ 80 chars |
 | `verdict`     | yes      | `confirmed`, `refuted`, or `inconclusive` |
-| `date`        | yes      | ISO date `YYYY-MM-DD`                     |
-| `tags`        | no       | list of kebab-case strings                |
+| `date`        | yes      | ISO date `YYYY-MM-DD` |
+| `tags`        | no       | list of kebab-case strings |
 
 ### Falsifiability test
 

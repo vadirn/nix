@@ -42,11 +42,11 @@ The contract shared by both modes. Every element names the force it serves; an e
 
 A node is a ticket in the project's `Tickets.base`, carrying `kind:` (`decision`/`fact`/`feasibility`; a plain execution ticket is `kind: execution`), `track: track-<slug>`, and `requires:` blocking edges (see `/vault ticket` §Map nodes). The **charting frontier** is the open, unblocked, **non-execution** nodes (`kind != execution`). Type each node by its uncertainty (Force 2); the type dictates the instrument:
 
-| Node type   | Resolves by               | Instrument                                   |
-| ----------- | ------------------------- | -------------------------------------------- |
-| decision    | someone must choose       | grill, or `/design` → `/debate` → `/grade`   |
-| fact        | research answers it       | `/research` (AFK)                            |
-| feasibility | a probe answers it        | `/prototype`, time-boxed, discarded          |
+| Node type   | Resolves by               | Instrument |
+| ----------- | ------------------------- | ---------- |
+| decision    | someone must choose       | grill, or `/design` → `/debate` → `/grade` |
+| fact        | research answers it       | `/research` (AFK) |
+| feasibility | a probe answers it        | `/prototype`, time-boxed, discarded |
 | execution   | nothing open — just do it | the work itself (this is the execution node) |
 
 `decision` / `fact` / `feasibility` are charting nodes; the frontier is built from these. `execution` is the "milestone" — so it never enters the charting frontier: it is handed to a parallel execution session, not resolved here. Applying the wrong instrument (researching a decision, deliberating a fact) burns time without closing the node.
@@ -97,7 +97,7 @@ Resolve the project with `vault-query config` (or `--project <name>`). Find its 
 
 ## Reference
 
-| File | Purpose |
-| --- | --- |
+| File                  | Purpose |
+| --------------------- | ------- |
 | `references/chart.md` | Bootstrap a new map from a foggy goal: fix destination, frame, classify, pick the rung, create the map and its first frontier. |
-| `references/work.md` | Advance or continue an existing map: reconcile the world, re-validate the Frame, resolve the next frontier node, graduate fog. |
+| `references/work.md`  | Advance or continue an existing map: reconcile the world, re-validate the Frame, resolve the next frontier node, graduate fog. |

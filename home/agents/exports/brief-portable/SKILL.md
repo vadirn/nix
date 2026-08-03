@@ -24,23 +24,23 @@ The skill **drafts but never sends**. The relational axis — the stakeholder's 
 
 The vocabulary both procedures fix to one meaning each. `references/concepts.md` is the long-form why; this is the quick lookup.
 
-| term                 | meaning                                                                                                        |
-| -------------------- | -------------------------------------------------------------------------------------------------------------- |
-| impression distance  | gap between actual work state and a stakeholder's model of it; closed by reporting state (draft)               |
-| target distance      | gap between what they think _should_ be done and what's feasible/agreed; renegotiate, never report             |
-| state gap            | a complaint that is impression distance — report it                                                            |
-| target gap           | a complaint that is target distance — renegotiate; splits impossible / too-large / off-target(a,b)             |
-| artifact axis        | proof-of-work; closed by inspectable artifacts (merged PRs)                                                    |
-| relational axis      | proof-of-care; produced only by the human act of communicating — why brief never sends                         |
-| inspection-closeable | content an artifact already carries; one terse line                                                            |
-| communication-only   | content no artifact carries (blocked/why, at-risk, revised estimate, next, counterfactual); the substance      |
-| currency             | the units a stakeholder counts in (features/dates, infra/risk); draft translates work into them                |
-| model                | a stakeholder's current belief about the work state; draft leads with what it's missing                        |
-| inspects             | what a stakeholder closes on their own (PRs, board); what the draft may omit                                   |
-| counterfactual       | claimed future value of non-feature work; mark for verification, never assert                                  |
-| provenance           | per-field tag in draft: artifact (from git) / inferred (marked guess) / elicited (user supplies)               |
+| term                 | meaning |
+| -------------------- | ------- |
+| impression distance  | gap between actual work state and a stakeholder's model of it; closed by reporting state (draft) |
+| target distance      | gap between what they think _should_ be done and what's feasible/agreed; renegotiate, never report |
+| state gap            | a complaint that is impression distance — report it |
+| target gap           | a complaint that is target distance — renegotiate; splits impossible / too-large / off-target(a,b) |
+| artifact axis        | proof-of-work; closed by inspectable artifacts (merged PRs) |
+| relational axis      | proof-of-care; produced only by the human act of communicating — why brief never sends |
+| inspection-closeable | content an artifact already carries; one terse line |
+| communication-only   | content no artifact carries (blocked/why, at-risk, revised estimate, next, counterfactual); the substance |
+| currency             | the units a stakeholder counts in (features/dates, infra/risk); draft translates work into them |
+| model                | a stakeholder's current belief about the work state; draft leads with what it's missing |
+| inspects             | what a stakeholder closes on their own (PRs, board); what the draft may omit |
+| counterfactual       | claimed future value of non-feature work; mark for verification, never assert |
+| provenance           | per-field tag in draft: artifact (from git) / inferred (marked guess) / elicited (user supplies) |
 | roster               | the `stakeholders:` list in `.brief/context.md` frontmatter; authored by you, brief writes only `last_drafted` |
-| `last_drafted`       | per-stakeholder date of the last accepted draft; the period default                                            |
+| `last_drafted`       | per-stakeholder date of the last accepted draft; the period default |
 
 ## Dispatch
 
@@ -111,9 +111,9 @@ digest reads for context. Keep it short; the roster above is the load-bearing pa
 
 ## The two procedures
 
-| File                     | When                                                  |
-| ------------------------ | ----------------------------------------------------- |
-| `references/draft.md`    | Compose a per-stakeholder update from artifacts.      |
+| File                     | When |
+| ------------------------ | ---- |
+| `references/draft.md`    | Compose a per-stakeholder update from artifacts. |
 | `references/diagnose.md` | Classify a complaint; route to the matching practice. |
 
 Keep `concepts.md` in mind as the why; keep `drafts but never sends` as the one rule that

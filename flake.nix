@@ -65,6 +65,9 @@
         ./vault-query/Cargo.toml
         ./vault-query/src
         ./vault-query/tests
+        ./mdformat/Cargo.toml
+        ./mdformat/src
+        ./mdformat/tests
       ];
     };
     # One lockfile vendors one dependency set, so all three packages share a
@@ -75,7 +78,7 @@
     # crates.io's legacy /api/v1 endpoint 403s on curl's default User-Agent.
     # fetchCargoVendor runs `cargo vendor` inside the FOD; cargo's own UA is
     # accepted.
-    workspaceCargoHash = "sha256-fp2iiM18TVXnQPMNp5/JZqDJGrEQPNOcPUPwthitzBM=";
+    workspaceCargoHash = "sha256-RmTCqkuHQyppDl8Uqsi2XkP805tGvRYmd/Mfpy8lQfo=";
     # Each member builds from the whole workspace tree and is selected by
     # `buildAndTestSubdir`; cargo finds the root manifest above it and builds
     # just that package. The subdirectory is the package name for all three.
@@ -90,11 +93,12 @@
     vault-query = mkCrate "vault-query";
     mdread = mkCrate "mdread";
     mdstruct = mkCrate "mdstruct";
+    mdformat = mkCrate "mdformat";
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:
       nix-darwin.lib.darwinSystem {
         inherit system;
-        specialArgs = {inherit inputs self vault-query mdread mdstruct hostname;};
+        specialArgs = {inherit inputs self vault-query mdread mdstruct mdformat hostname;};
         modules = [
           ./hosts/darwin.nix
           nix-homebrew.darwinModules.nix-homebrew
@@ -102,7 +106,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
-            inherit vault-query mdread mdstruct;
+            inherit vault-query mdread mdstruct mdformat;
           })
         ];
       };
@@ -115,7 +119,7 @@
     };
 
     darwinPackages = self.darwinConfigurations.default.pkgs;
-    packages.${system} = {inherit vault-query mdread mdstruct;};
+    packages.${system} = {inherit vault-query mdread mdstruct mdformat;};
     formatter.${system} = pkgs.alejandra;
   };
 }

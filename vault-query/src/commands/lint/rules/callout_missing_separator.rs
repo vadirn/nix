@@ -1,14 +1,21 @@
 //! `callout-missing-separator` — flags an Obsidian callout whose `[!Type]` header
 //! line and body sit in one CommonMark paragraph.
 //!
-//! `autoformat` routes `.md` to `oxfmt` with `proseWrap: never`, which joins every
-//! line of a paragraph onto one line. A callout is an ordinary blockquote to the
+//! A Prettier-family formatter with `proseWrap: never` joins every line of a
+//! paragraph onto one line. A callout is an ordinary blockquote to such a
 //! formatter, so the header line and the body line directly beneath it are one
 //! paragraph and get joined — and Obsidian reads whatever follows `[!Type]` on the
 //! header line as the callout's *title*, so the body silently becomes the title and
 //! disappears on render. Upstream is Prettier issue 19067 (no maintainer response);
-//! oxfmt advertises Prettier v3.8 compatibility, so it reproducing this is
+//! `oxfmt` advertises Prettier v3.8 compatibility, so it reproducing this is
 //! compatibility working as intended.
+//!
+//! `autoformat` no longer routes `.md` to `oxfmt` — it sends markdown to
+//! `mdformat`, which reflows nothing — so the joining formatter is now reached
+//! another way: the `glow` wrapper in `home/zsh.nix` renders through `oxfmt`,
+//! a project that declares its own `format:file` still formats its markdown
+//! with it, and `oxfmt` remains one hand-typed command away. The hazard is
+//! narrower than it was and the shape that dodges it is unchanged.
 //!
 //! The verified-safe shape is a blank quoted `>` line between header and body,
 //! which survives bare `oxfmt` unchanged. This rule enforces it.

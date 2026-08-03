@@ -21,11 +21,11 @@ For `text-wrap: pretty`, select elements potentially containing long runs of tex
 
 #### Choosing the Right Wrapping Method
 
-| Criteria             | `text-wrap: balance`               | `text-wrap: pretty`             | `text-wrap: wrap` (Default)        |
-| :------------------- | :--------------------------------- | :------------------------------ | :--------------------------------- |
-| **Best For**         | Short blocks (Headings, Titles)    | Long blocks (Paragraphs, Lists) | Performance-critical content       |
-| **Visual Goal**      | Symmetrical line lengths           | Avoiding orphans ("runts")      | Fast, standard wrapping            |
-| **Line Constraints** | Up to 6–10 lines (algorithm limit) | Best for 3 to many lines        | No limit                           |
+| Criteria             | `text-wrap: balance`               | `text-wrap: pretty`             | `text-wrap: wrap` (Default) |
+| :------------------- | :--------------------------------- | :------------------------------ | :-------------------------- |
+| **Best For**         | Short blocks (Headings, Titles)    | Long blocks (Paragraphs, Lists) | Performance-critical content |
+| **Visual Goal**      | Symmetrical line lengths           | Avoiding orphans ("runts")      | Fast, standard wrapping |
+| **Line Constraints** | Up to 6–10 lines (algorithm limit) | Best for 3 to many lines        | No limit |
 | **Perf Cost**        | **High**: Binary search algorithm  | **Medium**: Look-back algorithm | **Low**: Standard greedy algorithm |
 
 ### 2. **Apply the chosen wrapping**:
