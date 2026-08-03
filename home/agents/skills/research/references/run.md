@@ -47,8 +47,13 @@ run_depth(depth, locus, question):
         do("merge the returns; dedupe claims; carry every source")
     if depth == D3:
         do("run the D2 breadth sweep")
-        spawn_subagent(general-purpose, "CROSS-CHECK: given these claims and their sources, mark each claim
-            agreed (>=2 independent sources) | single-source | contradicted. Reconcile conflicts; flag what only one agent found.")
+        (parallel):
+            spawn_subagent(general-purpose, "CROSS-CHECK: given these claims and their sources, mark each claim
+                agreed (>=2 independent sources) | single-source | contradicted. Reconcile conflicts; flag what only one agent found.")
+            spawn_subagent(general-purpose, "GROUND: for each load-bearing claim — the ones the answer rests on — run a
+                FRESH firecrawl_search on sources the breadth agents never saw. Mark each
+                grounded (a fresh source confirms) | agent-only (no fresh source) | contradicted (a fresh source disagrees — cite it).")
+        do("merge both passes; flag any agent-only or contradicted claim and lower its confidence")
     return findings
 ```
 
@@ -78,16 +83,36 @@ Depth never exceeds the stakes. This is the guard against ceremony. A mildly con
 
 The instrument answers _what is_, never _what to pick_. A question that looked factual often hides a preference: "what MRR is realistic?" is fact (research it); "what MRR should I target?" is a decision (yours). When a rung's findings reveal the real fork is a value judgment, stop and return it as a decision — do not let a deeper rung settle it under a factual disguise. This keeps the `Planning.md` type line intact.
 
-### The D3 cross-check
+### The D3 cross-check and grounding
 
-D3 is D2 plus one adversarial pass. The breadth agents gather independently; the cross-check agent then scores each claim by source agreement — agreed (two or more independent sources), single-source (flag as uncertain), or contradicted (reconcile or report both). This is the `/deep` pattern: consensus across independent agents beats any single pass, because errors one agent makes another rarely repeats. For a very large sweep (dozens of sources), the user may opt into the Workflow tool instead; the default D3 is subagent-orchestrated and needs no opt-in.
+D3 is D2 plus two adversarial passes that run in parallel over the gathered claims.
+
+**Cross-check** scores each claim by how its sources agree:
+
+- **agreed** — two or more independent sources;
+- **single-source** — flag as uncertain;
+- **contradicted** — reconcile the sources, or report both.
+
+This is the `/deep` pattern. Consensus across independent agents beats any single pass, because errors one agent makes another rarely repeats.
+
+**Grounding** re-verifies each load-bearing claim against _fresh_ sources the breadth agents never saw. A load-bearing claim is one the answer rests on. Consensus has one hole: independent agents can share a blind spot and agree on a wrong claim. A fresh search is deterministic feedback against that hole. So grounding catches what more agents cannot.
+
+Each load-bearing claim comes back marked:
+
+- **grounded** — a fresh source confirms it;
+- **agent-only** — no fresh source found; treat it as uncertain;
+- **contradicted** — a fresh source disagrees; report both sides, lower the confidence.
+
+Grounding checks only the load-bearing claims. To re-search every minor claim is the ceremony the amortization cap forbids.
+
+For a very large sweep (dozens of sources), the user may opt into the Workflow tool instead; the default D3 is subagent-orchestrated and needs no opt-in.
 
 ### Output — the findings block
 
 ```
 **Answer.** <one-line resolution, or "unresolved — see gaps">
 
-- <claim> — <source URL / file:symbol> · <date> · confidence: high|medium|low
+- <claim> — <source URL / file:symbol> · <date> · confidence: high|medium|low · <grounding>
 - <claim> — ...
 
 Conflicts: <claims where sources disagree, both sides shown> — or "none"
@@ -96,7 +121,7 @@ Gaps: <sub-questions left unanswered> — or "none"
 _depth D_n, because <trigger>_
 ```
 
-The block is the whole return. A fact node pastes it into `## Resolution`; a standalone caller reads it. Either way, `/research` decides nothing on the caller's behalf — it hands back evidence, and the audit line shows how hard it looked.
+`<grounding>` appears only on load-bearing claims when D3 ran: `grounded`, `agent-only`, or `contradicted`. Omit it on every other claim and at every lower depth. The block is the whole return. A fact node pastes it into `## Resolution`; a standalone caller reads it. Either way, `/research` decides nothing on the caller's behalf — it hands back evidence, and the audit line shows how hard it looked.
 
 ### AFK and parallelism
 
