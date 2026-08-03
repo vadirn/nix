@@ -49,7 +49,7 @@ run_depth(depth, locus, question):
         (parallel):
             spawn_subagent(general-purpose, "CROSS-CHECK: given these claims and their sources, mark each claim
                 agreed (>=2 independent sources) | single-source | contradicted. Reconcile conflicts; flag what only one agent found.")
-            spawn_subagent(general-purpose, "GROUND: for each load-bearing claim — the ones the answer rests on — run a
+            spawn_subagent(general-purpose, "GROUND: for each key claim — the ones the answer rests on — run a
                 FRESH firecrawl_search on sources the breadth agents never saw. Mark each
                 grounded (a fresh source confirms) | agent-only (no fresh source) | contradicted (a fresh source disagrees — cite it).")
         do("merge both passes; flag any agent-only or contradicted claim and lower its confidence")
@@ -77,7 +77,7 @@ Any one failing is the climb trigger. It names the next rung. A conflict wants c
 
 ### The amortization cap
 
-Depth never exceeds the stakes. This is the guard against ceremony. Take a mildly contested fact that nothing important rests on. It stops at D1 with the conflict **flagged**, not escalated. The flag is the honest output. D3 would burn a parallel sweep to sharpen a number no decision needs. A crux-feeding fact is the opposite. A wrong load-bearing fact hides behind a clean first pass. So it earns D3 even when the first pass looks clean.
+Depth never exceeds the stakes. This is the guard against ceremony. Take a mildly contested fact that nothing important rests on. It stops at D1 with the conflict **flagged**, not escalated. The flag is the honest output. D3 would burn a parallel sweep to sharpen a number no decision needs. A crux-feeding fact is the opposite. A key fact that is wrong hides behind a clean first pass. So it earns D3 even when the first pass looks clean.
 
 ### Type boundary
 
@@ -95,15 +95,15 @@ D3 is D2 plus two adversarial passes that run in parallel over the gathered clai
 
 This is the `/deep` pattern. Consensus across independent agents beats any single pass, because errors one agent makes another rarely repeats.
 
-**Grounding** re-verifies each load-bearing claim against _fresh_ sources the breadth agents never saw. A load-bearing claim is one the answer rests on. Consensus has one hole: independent agents can share a blind spot and agree on a wrong claim. A fresh search is deterministic feedback against that hole. So grounding catches what more agents cannot.
+**Grounding** re-verifies each key claim against _fresh_ sources the breadth agents never saw. A key claim is one the answer rests on. Consensus has one hole: independent agents can share a blind spot and agree on a wrong claim. A fresh search is deterministic feedback against that hole. So grounding catches what more agents cannot.
 
-Each load-bearing claim comes back marked:
+Each key claim comes back marked:
 
 - **grounded** — a fresh source confirms it;
 - **agent-only** — no fresh source found; treat it as uncertain;
 - **contradicted** — a fresh source disagrees; report both sides, lower the confidence.
 
-Grounding checks only the load-bearing claims. To re-search every minor claim is the ceremony the amortization cap forbids.
+Grounding checks only the key claims. To re-search every minor claim is the ceremony the amortization cap forbids.
 
 For a very large sweep (dozens of sources), the user may opt into the Workflow tool instead; the default D3 is subagent-orchestrated and needs no opt-in.
 
@@ -121,7 +121,7 @@ Gaps: <sub-questions left unanswered> — or "none"
 _depth D_n, because <trigger>_
 ```
 
-`<grounding>` appears only on load-bearing claims when D3 ran: `grounded`, `agent-only`, or `contradicted`. Omit it on every other claim and at every lower depth. The block is the whole return. A fact node pastes it into `## Resolution`. A standalone caller reads it. Either way, `/research` decides nothing for the caller. It hands back evidence. The audit line shows how hard it looked.
+`<grounding>` appears only on key claims when D3 ran: `grounded`, `agent-only`, or `contradicted`. Omit it on every other claim and at every lower depth. The block is the whole return. A fact node pastes it into `## Resolution`. A standalone caller reads it. Either way, `/research` decides nothing for the caller. It hands back evidence. The audit line shows how hard it looked.
 
 ### AFK and parallelism
 
