@@ -5,32 +5,31 @@ Take the lowest depth that closes the question. Climb only when a stop-condition
 ## Pseudocode
 
 ```
-// 1. Fix the question — one sharp, answerable fact
+// Fix the question
 question = do("state the fact question in one line: answerable by evidence, not by preference")
 if the question hinges on a choice or a value judgment:
     do("TYPE BOUNDARY: this is a decision, not a fact. Hand it back — route to /design or a grill. Halt.")
 
-// 2. Triage — set the start rung and the ceiling (see §Triage axes)
-locus  = do("code | world")                       // picks the instrument
-start  = do("single fact → D1; multi-part/landscape → D2")
+// Triage
+locus = do("code | world")
+start = do("single fact → D1; multi-part/landscape → D2")
 ceiling = do("low stakes → D1; crux-feeding or expensive-to-undo → D3")
-apply caller floor/ceiling if given               // 'quick lookup' caps D1; 'verify thoroughly' floors D2
+if caller gave a floor or ceiling: apply it
 depth = start
 
-// 3. Run the rung, then decide whether to climb
+// Run and climb
 loop:
     findings = run_depth(depth, locus, question)
     if findings consistent AND complete AND confident-enough-for-stakes: break
-    if depth == ceiling: break                     // amortization cap — never exceed the stakes
-    depth = depth + 1                              // climb on: conflict (+cross-check) | gap (+breadth) | low confidence
+    if depth == ceiling: break
+    depth = depth + 1
 
-// 4. Synthesize — one contract at every depth (see §Output)
-do("assemble the cited findings block: claims, each with source·date·confidence;
-    flag conflicts; name gaps; add the audit line 'depth D_n, because <trigger>'")
+// Synthesize
+do("assemble the cited findings block from the claims; see §Output for the format")
 
-// 5. Return
-do("fact node → write the block into the node's ## Resolution.
-    standalone → present the block. Do not decide anything on the caller's behalf.")
+// Return
+do("fact node → write the block into its ## Resolution; standalone → present the block.
+    Hand back evidence only; decide nothing for the caller.")
 ```
 
 ```
@@ -64,6 +63,7 @@ run_depth(depth, locus, question):
 - **Locus** decides the instrument, not the depth. Code facts go to Explore — read-only and context-efficient. (Does this API exist? What does this function return?) World facts go to a general-purpose subagent driving Firecrawl — fees, limits, market data, current events. `WebSearch`/`WebFetch` are blocked here. Web is always Firecrawl.
 - **Breadth** is about coverage, not stakes. A single fact needs one pass (D1). A multi-part or landscape question ("compare the payment providers") needs parallel angles (D2), because one pass silently drops sub-questions.
 - **Stakes** set the ceiling, by the amortization rule. Two things set the stakes: how many downstream nodes rest on the answer, and how costly a wrong answer is. A one-off fact caps at D1. A fact feeding a crux earns D3. The caller passes the stakes when known ("this fact feeds the crux"). Otherwise infer them from the question.
+- **Caller floor/ceiling** overrides the triage. "quick lookup" caps the ceiling at D1. "verify thoroughly" floors the start at D2.
 
 ### Stop-conditions
 
