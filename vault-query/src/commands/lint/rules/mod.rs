@@ -2,6 +2,7 @@ pub mod broken_wikilink;
 pub mod callout_missing_separator;
 pub mod dangling_reference;
 pub mod dangling_relation_label;
+pub mod dangling_requires_target;
 pub mod duplicate_h1;
 pub mod filename_hygiene;
 pub mod invalid_enum_value;
