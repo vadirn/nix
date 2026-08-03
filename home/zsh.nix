@@ -118,8 +118,10 @@
       # renderer) mis-breaks hyphenated words when it wraps; oxfmt reflows the
       # source at its print width, and `glow -w 0` prints that verbatim instead
       # of re-wrapping. The reflow is dry (stdin -> stdout), so source files stay
-      # unwrapped on disk (oxfmtrc.json proseWrap:never). Non-markdown, TUI, and
-      # multi-arg calls fall through to plain `glow -w 0`.
+      # as written on disk — autoformat sends `.md` to mdformat, which rewrites
+      # line endings, blank-line gaps, table padding, and list markers and moves
+      # nothing else. Non-markdown, TUI, and multi-arg calls fall through to
+      # plain `glow -w 0`.
       glow() {
         emulate -L zsh
         local cfg="$HOME/nix/home/oxfmt-prose-wrap.json"

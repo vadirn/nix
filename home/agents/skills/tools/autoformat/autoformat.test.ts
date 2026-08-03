@@ -3,9 +3,9 @@
  * --), extension routing, batching, and walk failures.
  * Run: `bun test` from this directory, or `bun run --filter autoformat test`
  * from the workspace root (home/agents/skills).
- * Requires oxfmt, git, and rustfmt; the format:file case additionally
- * requires bun. The unreadable-directory case is skipped under root via
- * test.skipIf, since root reads a 000 directory anyway.
+ * Requires oxfmt, mdformat, git, and rustfmt; the format:file case
+ * additionally requires bun. The unreadable-directory case is skipped under
+ * root via test.skipIf, since root reads a 000 directory anyway.
  */
 
 import { expect, test } from "bun:test";
@@ -96,6 +96,46 @@ test("explicit paths are formatted, spaces and all", () => {
   expect(af([plain, spaced], { cwd: dir }).code).toBe(0);
   expect(formatted(plain)).toBe(true);
   expect(formatted(spaced)).toBe(true);
+});
+
+test("md goes to mdformat, which normalizes the marker and the gap", () => {
+  const dir = work();
+  const note = join(dir, "note.md");
+  writeFileSync(note, "# h\n\n\n\n*  a\n");
+  const r = af([note], { cwd: dir });
+
+  expect(r.out).toContain("mdformat 1");
+  expect(r.out).not.toContain("oxfmt");
+  // The bullet is swapped and the gap collapsed; the space run after the
+  // marker is not mdformat's business and survives.
+  expect(read(note)).toBe("# h\n\n-  a\n");
+});
+
+// The point of the lane, not a detail of it: ~/.oxfmtrc.json sets
+// proseWrap: never, so oxfmt would join these two lines into one. mdformat
+// rewrites endings, gaps, table padding, and markers, and moves nothing else.
+test("mdformat leaves a paragraph's line breaks where oxfmt would join them", () => {
+  const dir = work();
+  const note = join(dir, "wrapped.md");
+  const before = "one line\nand a second\n";
+  writeFileSync(note, before);
+  af([note], { cwd: dir });
+  expect(read(note)).toBe(before);
+});
+
+// A project that declares format:file has answered for its own markdown, and
+// its CI checks that answer rather than this default.
+test("a project format:file script wins over mdformat too", () => {
+  const dir = work();
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({ scripts: { "format:file": "printf FORMATTED > " } }),
+  );
+  writeFileSync(join(dir, "bun.lock"), "");
+  const note = join(dir, "note.md");
+  writeFileSync(note, "# h\n\n\n\n*  a\n");
+  af([note], { cwd: dir });
+  expect(read(note)).toBe("FORMATTED");
 });
 
 test("extensions autoformat does not route are left alone", () => {

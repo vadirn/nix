@@ -14,20 +14,31 @@
  *         nearest ancestor package.json defining a `format:file` script
  *         (convention: takes one path, formats it in place), run via the
  *         detected package manager from the manifest's dir > `deno fmt` at the
- *         nearest deno root > oxfmt. The walk is bounded by .git, $HOME, or /.
- *         A package.json without `format:file` does NOT end the walk —
- *         workspace-root scripts are inherited.
+ *         nearest deno root > the per-extension default. The walk is bounded by
+ *         .git, $HOME, or /. A package.json without `format:file` does NOT end
+ *         the walk — workspace-root scripts are inherited.
+ *         The default is `mdformat format --write` for md and oxfmt for the
+ *         rest. A project that declares its own formatter still wins over both:
+ *         its markdown answers to whatever its CI checks, not to this default.
  *   py    ruff check --fix, then ruff format
  *   nix   alejandra
  *   rs    rustfmt
  *   *     ignored
  *
+ * mdformat (this repo's own crate) replaces oxfmt on md because oxfmt is a
+ * Prettier-family printer and this markdown is not CommonMark: it carries
+ * wikilinks, callouts, and embeds that a reflow destroys. mdformat rewrites
+ * line endings, blank-line gaps, table padding, and list markers, and leaves
+ * every other byte where it was — including paragraph line breaks, so the
+ * proseWrap question below never reaches it.
+ *
  * oxfmt's config is always passed explicitly with -c: its own discovery walks
  * up from the cwd and stops at a .git boundary, which answers a question about
  * the caller's location rather than the file's. Resolved per file: nearest
  * .oxfmtrc.json between the file and its repo root, else ~/.oxfmtrc.json
- * (proseWrap: never — markdown paragraphs stay on one line; other filetypes
- * take oxfmt's defaults).
+ * (proseWrap: never — which now only reaches a `.md` somebody hands to oxfmt
+ * by hand, or the mdread render path in home/zsh.nix; other filetypes take
+ * oxfmt's defaults).
  *
  * Selection:
  *   autoformat PATH...   files are formatted, directories are walked
@@ -43,8 +54,9 @@
  *                        argument precedes it.
  *
  * Files sharing a formatter are handed to it in one invocation, so a walk of a
- * large tree spawns a handful of processes rather than one per file. Formatter
- * output surfaces only on failure.
+ * large tree spawns a handful of processes rather than one per file. format:file
+ * and mdformat are the exceptions: both take exactly one path per call, so md
+ * costs one process per file. Formatter output surfaces only on failure.
  *
  * A run is a pipeline, one function per stage: parseArgs, selectFiles,
  * routeFiles, planJobs, runJobs, report.
@@ -151,6 +163,7 @@ function* ancestors(file: string): Generator<string> {
 type WebTool =
   | { tool: "format:file"; root: string }
   | { tool: "deno"; root: string }
+  | { tool: "mdformat" }
   | { tool: "oxfmt"; config: string };
 
 function hasFormatFile(manifest: string): boolean {
@@ -178,6 +191,9 @@ function resolveWebTool(file: string): WebTool {
       return { tool: "deno", root: dir };
     }
   }
+  // Only the fallback splits by extension. A project that declares format:file
+  // or is a deno root has already answered for its own markdown above.
+  if (ext(file) === "md") return { tool: "mdformat" };
   return { tool: "oxfmt", config: oxfmtConfig(file) };
 }
 
@@ -330,20 +346,22 @@ type Routes = {
   oxfmtByConfig: Map<string, string[]>;
   denoByRoot: Map<string, string[]>;
   formatFile: { root: string; file: string }[];
+  md: string[];
   py: string[];
   nix: string[];
   rs: string[];
 };
 
 /**
- * Group by formatter so each one runs once over many files. format:file is
- * the exception: the convention is one path per call.
+ * Group by formatter so each one runs once over many files. format:file and
+ * mdformat are the exceptions: both take one path per call.
  */
 function routeFiles(files: Set<string>): Routes {
   const routes: Routes = {
     oxfmtByConfig: new Map(),
     denoByRoot: new Map(),
     formatFile: [],
+    md: [],
     py: [],
     nix: [],
     rs: [],
@@ -354,6 +372,7 @@ function routeFiles(files: Set<string>): Routes {
       const target = resolveWebTool(file);
       if (target.tool === "format:file") routes.formatFile.push({ root: target.root, file });
       else if (target.tool === "deno") push(routes.denoByRoot, target.root, file);
+      else if (target.tool === "mdformat") routes.md.push(file);
       else push(routes.oxfmtByConfig, target.config, file);
     } else if (e === "py") routes.py.push(file);
     else if (e === "nix") routes.nix.push(file);
@@ -413,7 +432,22 @@ function planJobs(routes: Routes): Plan {
       pm === "npm" ? ["npm", "run", "format:file", "--", file] : [pm, "run", "format:file", file];
     jobs.push({ tool: "format:file", files: [file], credit: true, cwd: root, cmd });
   }
-  const { py, nix, rs } = routes;
+  const { md, py, nix, rs } = routes;
+  // One job per file: `format --write` refuses two paths, a directory, a glob,
+  // or stdin, because rewriting in place is meant to name a file a person
+  // chose. It also exits nonzero when a rule cannot read the document, which
+  // is per-file news the batch would otherwise swallow.
+  if (md.length && need("mdformat", md.length)) {
+    for (const file of md) {
+      jobs.push({
+        tool: "mdformat",
+        files: [file],
+        credit: true,
+        cwd: "/",
+        cmd: ["mdformat", "format", "--write", file],
+      });
+    }
+  }
   if (py.length && need("ruff", py.length)) {
     jobs.push({
       tool: "ruff",
