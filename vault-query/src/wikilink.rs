@@ -173,6 +173,166 @@ pub fn collect_all_link_targets(file: &crate::vault::VaultFile) -> Vec<String> {
     result
 }
 
+/// Wikilinks recovered from a file's YAML frontmatter block.
+///
+/// Two populations, because YAML gives `[[` a meaning of its own and the two
+/// readings are opposite defects:
+///
+/// - `resolved` — links the parsed tree yielded as string scalars, the form
+///   Obsidian writes (`key: "[[X]]"`). Targets come from the parse, never from
+///   the raw text, so a genuine nested array (`key: [[a, b]]`) can never invent
+///   the target `a, b`.
+/// - `unquoted` — `[[...]]` occurrences present in the raw frontmatter text
+///   that the parse turned into a one-element flow sequence instead of a
+///   string. That is an author writing a link YAML then ate: every scalar-only
+///   consumer, this one included, is blind to it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FrontmatterLinks {
+    /// Links from YAML string scalars, carrying absolute file line numbers,
+    /// ordered by line.
+    pub resolved: Vec<Wikilink>,
+    /// Raw `[[...]]` occurrences YAML swallowed into a nested sequence.
+    pub unquoted: Vec<Wikilink>,
+}
+
+/// One `[[...]]` occurrence located in the raw frontmatter text.
+struct RawOccurrence {
+    /// Text between the brackets, verbatim — `X` for `[[X]]`, `X|Y` for
+    /// `[[X|Y]]`. Compared against the YAML parse to tell an eaten link from a
+    /// real array.
+    inner: String,
+    target: String,
+    alias: Option<String>,
+    /// 1-based line in the whole file. Frontmatter opens on line 1, so no
+    /// offset arithmetic is needed to reach absolute numbering.
+    line: u32,
+}
+
+/// Scan the raw frontmatter block for `[[...]]` occurrences, with file lines.
+///
+/// `frontmatter::body_start_line` reports the line after the closing `---`, so
+/// the block's inner lines are 2 ..= `body_start_line - 2`. A file with no
+/// complete block (or an empty one) yields nothing.
+///
+/// This is a text scan, deliberately: its only job is to supply line numbers
+/// and to expose what the parse dropped. It never decides a link target on its
+/// own — that stays with the YAML parse.
+fn scan_raw_frontmatter(content: &str) -> Vec<RawOccurrence> {
+    let inner_lines = crate::frontmatter::body_start_line(content).saturating_sub(3);
+    let mut out = Vec::new();
+    for (idx, line) in content.lines().enumerate().skip(1).take(inner_lines) {
+        for caps in WIKILINK_RE.captures_iter(line) {
+            let whole = caps.get(0).unwrap().as_str();
+            out.push(RawOccurrence {
+                inner: whole[2..whole.len() - 2].to_string(),
+                target: caps[1].to_string(),
+                alias: caps.get(2).map(|m| m.as_str().to_string()),
+                line: (idx + 1) as u32,
+            });
+        }
+    }
+    out
+}
+
+/// Every string that appears as the sole element of a YAML sequence, anywhere
+/// in the tree.
+///
+/// This is the fingerprint an eaten link leaves. `key: [[X]]` parses to
+/// `Sequence([Sequence([String("X")])])`, so the inner one-element sequence
+/// holds exactly the text between the brackets. A genuine nested array
+/// `key: [[a, b]]` leaves a two-element inner sequence and never lands here,
+/// which is what keeps it out of the quoting rule.
+fn single_string_sequences(
+    frontmatter: &std::collections::BTreeMap<String, serde_yaml::Value>,
+) -> std::collections::HashSet<String> {
+    fn walk(value: &serde_yaml::Value, out: &mut std::collections::HashSet<String>) {
+        match value {
+            serde_yaml::Value::Sequence(items) => {
+                if let [serde_yaml::Value::String(s)] = items.as_slice() {
+                    out.insert(s.clone());
+                }
+                for item in items {
+                    walk(item, out);
+                }
+            }
+            serde_yaml::Value::Mapping(map) => {
+                for (_key, val) in map {
+                    walk(val, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = std::collections::HashSet::new();
+    for value in frontmatter.values() {
+        walk(value, &mut out);
+    }
+    out
+}
+
+/// Extract a file's frontmatter wikilinks: see [`FrontmatterLinks`].
+///
+/// `content` is the whole file (frontmatter included); `frontmatter` is its
+/// parsed tree, as `VaultFile` carries both.
+///
+/// Targets come from the parse ([`walk_frontmatter_links`], string scalars
+/// only). Line numbers come from the raw block, because `serde_yaml::Value`
+/// carries no spans: each parsed link claims the first raw occurrence naming
+/// the same target, and raw occurrences left over after every parsed link has
+/// claimed one are candidates for the quoting defect. A parsed link that
+/// matches no raw occurrence — only reachable through a YAML escape that
+/// rewrites the text, e.g. `"[[Foo]]"` — falls back to line 1.
+///
+/// `frontmatter` is a `BTreeMap`, so the parse visits keys alphabetically
+/// rather than in file order; sorting the result by line restores file order.
+pub fn frontmatter_links(
+    content: &str,
+    frontmatter: &std::collections::BTreeMap<String, serde_yaml::Value>,
+) -> FrontmatterLinks {
+    let raw = scan_raw_frontmatter(content);
+    if raw.is_empty() {
+        return FrontmatterLinks::default();
+    }
+
+    let mut parsed: Vec<Wikilink> = Vec::new();
+    for value in frontmatter.values() {
+        walk_frontmatter_links(value, &mut |link| parsed.push(link));
+    }
+
+    let mut claimed = vec![false; raw.len()];
+    let mut resolved = Vec::with_capacity(parsed.len());
+    for link in parsed {
+        let found = raw
+            .iter()
+            .enumerate()
+            .find(|(i, o)| !claimed[*i] && o.target.trim() == link.target.trim())
+            .map(|(i, o)| (i, o.line));
+        let line = match found {
+            Some((i, line)) => {
+                claimed[i] = true;
+                line
+            }
+            None => 1,
+        };
+        resolved.push(Wikilink { line, ..link });
+    }
+    resolved.sort_by_key(|link| link.line);
+
+    let singles = single_string_sequences(frontmatter);
+    let unquoted = raw
+        .iter()
+        .enumerate()
+        .filter(|(i, o)| !claimed[*i] && singles.contains(o.inner.trim()))
+        .map(|(_, o)| Wikilink {
+            target: o.target.clone(),
+            alias: o.alias.clone(),
+            line: o.line,
+        })
+        .collect();
+
+    FrontmatterLinks { resolved, unquoted }
+}
+
 /// Recursively walk a `serde_yaml::Value` and call `f` on every wikilink found
 /// in string scalars.  Sequences and mapping values are descended into; other
 /// scalar kinds (Bool, Number, Null, Tagged) carry no links.  Single traversal
@@ -522,6 +682,91 @@ mod tests {
         // with \n so [[Body]] appears on line 2 of the body slice, offset adds 4 (newlines
         // before the \n that begins the body). Either way the expected absolute line is 6.
         assert_eq!(links[0].line, 6);
+    }
+
+    // --- Tests: frontmatter link extraction ---
+
+    fn fm_links(content: &str) -> FrontmatterLinks {
+        let fm = crate::frontmatter::parse(content)
+            .unwrap()
+            .unwrap_or_default();
+        frontmatter_links(content, &fm)
+    }
+
+    #[test]
+    fn test_frontmatter_links_quoted_scalar_carries_absolute_line() {
+        let content = "---\ntype: ticket\nproject: \"[[41 projects/nix/Nix]]\"\n---\nBody.";
+        let links = fm_links(content);
+        assert_eq!(links.resolved.len(), 1);
+        assert_eq!(links.resolved[0].target, "41 projects/nix/Nix");
+        assert_eq!(links.resolved[0].line, 3);
+        assert!(links.unquoted.is_empty());
+    }
+
+    #[test]
+    fn test_frontmatter_links_sequence_yields_one_link_per_element() {
+        let content = "---\nrequires:\n  - \"[[a]]\"\n  - \"[[b]]\"\n---\nBody.";
+        let links = fm_links(content);
+        let targets: Vec<&str> = links.resolved.iter().map(|l| l.target.as_str()).collect();
+        assert_eq!(targets, vec!["a", "b"]);
+        assert_eq!(links.resolved[0].line, 3);
+        assert_eq!(links.resolved[1].line, 4);
+    }
+
+    #[test]
+    fn test_frontmatter_links_are_ordered_by_line_not_by_key() {
+        // `frontmatter` is a BTreeMap, so the parse visits `project` before
+        // `zzz` regardless of file order; the result must still read top-down.
+        let content = "---\nzzz: \"[[Later]]\"\nproject: \"[[Earlier]]\"\n---\nBody.";
+        let links = fm_links(content);
+        assert_eq!(links.resolved.len(), 2);
+        assert_eq!(links.resolved[0].target, "Later");
+        assert_eq!(links.resolved[0].line, 2);
+        assert_eq!(links.resolved[1].target, "Earlier");
+        assert_eq!(links.resolved[1].line, 3);
+    }
+
+    #[test]
+    fn test_frontmatter_links_unquoted_link_is_not_resolved_but_is_reported() {
+        let content = "---\nproject: [[X]]\n---\nBody.";
+        let links = fm_links(content);
+        assert!(links.resolved.is_empty());
+        assert_eq!(links.unquoted.len(), 1);
+        assert_eq!(links.unquoted[0].target, "X");
+        assert_eq!(links.unquoted[0].line, 2);
+    }
+
+    #[test]
+    fn test_frontmatter_links_nested_array_yields_nothing() {
+        let content = "---\nmatrix: [[a, b]]\n---\nBody.";
+        let links = fm_links(content);
+        assert!(links.resolved.is_empty());
+        assert!(links.unquoted.is_empty());
+    }
+
+    #[test]
+    fn test_frontmatter_links_ignores_body_wikilinks() {
+        let content = "---\ntype: note\n---\nBody with [[Target]].";
+        let links = fm_links(content);
+        assert!(links.resolved.is_empty());
+        assert!(links.unquoted.is_empty());
+    }
+
+    #[test]
+    fn test_frontmatter_links_absent_block_yields_nothing() {
+        let links = fm_links("No frontmatter, just [[Target]].");
+        assert!(links.resolved.is_empty());
+        assert!(links.unquoted.is_empty());
+    }
+
+    #[test]
+    fn test_frontmatter_links_alias_is_preserved() {
+        let content = "---\nproject: \"[[Nix|the flake]]\"\n---\nBody.";
+        let links = fm_links(content);
+        assert_eq!(links.resolved.len(), 1);
+        assert_eq!(links.resolved[0].target, "Nix");
+        assert_eq!(links.resolved[0].alias, Some("the flake".into()));
+        assert_eq!(links.resolved[0].line, 2);
     }
 
     // --- Tests: 1.1 gains from mdstruct migration ---

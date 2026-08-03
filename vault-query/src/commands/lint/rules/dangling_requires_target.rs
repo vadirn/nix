@@ -8,14 +8,17 @@ use crate::wikilink::normalize;
 /// in the vault.
 ///
 /// `requires:` is the work model's dependency edge: a wikilink from a ticket
-/// to the ticket(s) that must land first. Nothing else checks that the edge
-/// resolves. `broken-wikilink` only scans body wikilinks (`ctx.body_links`,
-/// built from `wikilink::extract(&file.content)`, which never sees inside the
-/// YAML frontmatter block), and `ticket-outward-only` deliberately exempts
-/// `requires:` as a frontmatter wikilink by design. A typo, a rename, or a
-/// deleted ticket leaves `requires:` pointing at nothing with no signal
-/// anywhere — a reader has no way to tell whether the named blocker is done,
-/// renamed, or never existed.
+/// to the ticket(s) that must land first. A typo, a rename, or a deleted
+/// ticket leaves it pointing at nothing, and a reader has no way to tell
+/// whether the named blocker is done, renamed, or never existed.
+///
+/// This is the narrow half of a two-rule split. `broken-wikilink` covers
+/// frontmatter links now and asks only whether a target resolves to *any*
+/// entry; this rule asks the stronger question `requires:` actually poses —
+/// whether it resolves to a **ticket**. So a `requires:` naming a same-named
+/// card or note passes `broken-wikilink` and is still flagged here, which is
+/// the case that would otherwise go unreported. (`ticket-outward-only`
+/// deliberately exempts `requires:` as a frontmatter wikilink by design.)
 ///
 /// Resolution mirrors `reference_wrong_type`'s frontmatter walk rather than
 /// `commands::tickets::ticket_track_slug`'s single-value one:

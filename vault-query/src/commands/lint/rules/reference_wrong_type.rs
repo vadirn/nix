@@ -43,24 +43,11 @@ impl Rule for ReferenceWrongType {
                                 })),
                             });
                         }
-                        // broken-wikilink only scans body links, so an
-                        // unresolved frontmatter target is this rule's to report.
-                        None => {
-                            findings.push(Finding {
-                                rule: self.name(),
-                                severity: self.default_severity(),
-                                file: card.path.clone(),
-                                message: format!(
-                                    "card '{}' cites '{}' in its reference field, but no such entry exists",
-                                    card.name, target
-                                ),
-                                data: Some(serde_json::json!({
-                                    "target": target,
-                                    "target_type": serde_json::Value::Null,
-                                })),
-                            });
-                        }
-                        Some(_) => {}
+                        // A target naming no entry at all is `broken-wikilink`'s
+                        // to report, now that it covers frontmatter links.
+                        // Reporting it here too would earn one defect an Error
+                        // and a Warn.
+                        _ => {}
                     }
                 });
             }
@@ -131,17 +118,29 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_target_emits_finding() {
-        // broken-wikilink only scans body links; a reference field pointing at
-        // a nonexistent entry would otherwise pass every rule.
-        let files = vec![card_citing(
-            "Card",
-            Value::String("[[Nowhere]]".to_string()),
-        )];
-        let findings = run(files);
-        assert_eq!(findings.len(), 1);
-        assert!(findings[0].message.contains("no such entry exists"));
-        assert!(findings[0].data.as_ref().unwrap()["target_type"].is_null());
+    fn dangling_reference_target_emits_exactly_one_finding() {
+        // A `reference:` naming no entry is one defect. `broken-wikilink` now
+        // covers frontmatter links, so this rule stays silent rather than
+        // adding a second report of the same thing.
+        let content = "---\ntype: card\nreference: \"[[Nowhere]]\"\n---\nBody.";
+        let card = crate::vault::VaultFile {
+            name: "Card".to_string(),
+            path: PathBuf::from("/vault/20 cards/Card.md"),
+            frontmatter: crate::frontmatter::parse(content).unwrap().unwrap(),
+            content: content.to_string(),
+            ..Default::default()
+        };
+        let files = vec![card];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        assert!(
+            ReferenceWrongType.check(&ctx).is_empty(),
+            "an unresolved target is broken-wikilink's to report"
+        );
+        let broken = crate::commands::lint::rules::broken_wikilink::BrokenWikilink.check(&ctx);
+        assert_eq!(broken.len(), 1);
+        assert_eq!(broken[0].data.as_ref().unwrap()["target"], "Nowhere");
     }
 
     #[test]

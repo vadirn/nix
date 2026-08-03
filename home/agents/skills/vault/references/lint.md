@@ -23,12 +23,13 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 | `orphan-card`                 | warn    | Card with zero inbound wikilinks (excludes folder-index cards: `<X>/~<X>.md`) |
 | `dangling-reference`          | warn    | Reference not cited by any card's `reference:` frontmatter |
 | `dangling-relation-label`     | error   | A bare `## Relations` endpoint or from-label matches no local `## Glossary` term or `## Workflow` step in the same file (a cross-file `[[wikilink]]` target is `broken-wikilink`'s concern, not this rule's) |
-| `dangling-requires-target`    | warn    | `type: ticket` entry's `requires:` wikilink names no ticket file in the vault (frontmatter link, so outside `broken-wikilink`'s body-only scan; `track:`/`project:` frontmatter links have the same gap and belong to a different rule) |
+| `dangling-requires-target`    | warn    | `type: ticket` entry's `requires:` wikilink names no _ticket_ file in the vault — narrower than `broken-wikilink`, which asks only whether the target resolves to any entry at all, so a `requires:` naming a same-named card or note is still flagged here |
 | `reference-not-wikilink`      | warn    | Card's `reference:` value is a non-wikilink string (e.g. raw URL) |
-| `reference-wrong-type`        | warn    | Card's `reference:` wikilink resolves to a non-`reference` entry, or to no entry at all (frontmatter links are outside `broken-wikilink`'s body-only scan) |
+| `reference-wrong-type`        | warn    | Card's `reference:` wikilink resolves to a non-`reference` entry (a target resolving to nothing at all is `broken-wikilink`'s, so one dangling `reference:` earns one finding, not two) |
 | `reference-vault-link`        | warn    | `type: reference` entry whose body wikilinks resolve to another vault entry — a reference points outward only; analysis belongs in a card or note (asset embeds and unresolved targets exempt) |
 | `ticket-outward-only`         | warn    | `type: ticket` entry with a body `[[...]]` wikilink — a ticket body must be repo-self-sufficient; restate the material inline or name a repo artifact (file, commit, symbol) instead (frontmatter `track:`/`requires:`/`project:` wikilinks exempt) |
-| `broken-wikilink`             | error   | `[[target]]` does not resolve to any vault file |
+| `broken-wikilink`             | error   | `[[target]]` does not resolve to any vault file or asset — in the body **and** in YAML frontmatter (`key: "[[X]]"`), one dedup per file across both surfaces. Frontmatter targets are read from string scalars only, so a sequence value is never a link target and a nested array `key: [[a, b]]` cannot be misread as a link |
+| `unquoted-frontmatter-link`   | warn    | `[[...]]` written unquoted in frontmatter (`key: [[X]]`), which YAML parses as a nested sequence rather than a string — the link becomes invisible to the backlink index and to every link rule, so it is a quoting fault, not a resolution one (fix: quote it, `key: "[[X]]"`) |
 | `duplicate-h1`                | warn    | First non-blank body line is `# <basename>`, duplicating the implicit page title. |
 | `callout-missing-separator`   | warn    | Callout's `[!Type]` header line and body sit in one paragraph — `autoformat`'s `proseWrap: never` joins them, Obsidian reads the joined text as the title, and the body disappears on render (fix: a blank `>` line between header and body) |
 | `invalid-frontmatter`         | error   | YAML frontmatter fails to parse |
@@ -114,10 +115,11 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `dangling-relation-label`     | `{ "label": <string>, "position": "endpoint" or "from-label", "line": <number> }` |
 | `dangling-requires-target`    | `{ "target": <string> }` |
 | `reference-not-wikilink`      | `{ "value": <string> }` |
-| `reference-wrong-type`        | `{ "target": <string>, "target_type": <string or null> }` |
+| `reference-wrong-type`        | `{ "target": <string>, "target_type": <string> }` |
 | `reference-vault-link`        | `{ "target": <string>, "line": <number> }` |
 | `ticket-outward-only`         | `{ "target": <string>, "line": <number> }` |
 | `broken-wikilink`             | `{ "target": <string>, "line": <number> }` |
+| `unquoted-frontmatter-link`   | `{ "target": <string>, "line": <number> }` |
 | `duplicate-h1`                | `null` |
 | `callout-missing-separator`   | `{ "line": <number>, "callout": <string> }` |
 | `invalid-frontmatter`         | `{ "error": <string> }` |
@@ -134,7 +136,8 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `untyped-entry`               | `null` |
 
 - `reference-not-wikilink.data.value` is the raw `reference:` frontmatter value that failed to parse as a wikilink (e.g. a bare URL).
-- `broken-wikilink.data.target` is the **raw** wikilink target verbatim (including any path prefix). Call `wikilink::resolve_name` yourself if you want the bare note name. `broken-wikilink.data.line` is the 1-based source line of the offending `[[...]]`.
+- `broken-wikilink.data.target` is the **raw** wikilink target verbatim (including any path prefix). Call `wikilink::resolve_name` yourself if you want the bare note name. `broken-wikilink.data.line` is the 1-based source line of the offending `[[...]]`, counted over the whole file, so a frontmatter link and a body link are numbered on one scale. The `data` shape is the same either way; the `message` names the surface (`frontmatter wikilink target '…'` vs `wikilink target '…'`).
+- `unquoted-frontmatter-link.data.target` is the text before any `|` inside the brackets; `data.line` is the 1-based file line the occurrence sits on. The `message` echoes the bracketed text verbatim, alias included.
 - `singleton-tag.data.tag` is the tag string that appears in exactly one file across the corpus.
 - `slug-filename-mismatch.data.slug` is the entry's declared `slug:`. `data.expected` is the basename it implies, without the `.md` extension.
 - `singleton-filename-mismatch.data.type` is the entry's declared `type:`. `data.expected` is the basename that type reserves, without the `.md` extension. The two filename rules split the project folder's two populations: the many-per-project files are `<type>-<slug>` and lowercase, the one-per-project files are named for what they are and capitalized.

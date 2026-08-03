@@ -19,5 +19,6 @@ pub mod slug_filename_mismatch;
 pub mod ticket_outward_only;
 pub mod unknown_field;
 pub mod unknown_rel;
+pub mod unquoted_frontmatter_link;
 pub mod untagged_card;
 pub mod untyped_entry;
