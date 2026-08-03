@@ -6,7 +6,7 @@ description: >
 
 # Work
 
-Turn this session into an orchestrator. Hold the plan; delegate the work.
+Turn this session into an orchestrator. Hold the plan. Delegate the work.
 
 ## Parameters
 
@@ -62,7 +62,7 @@ do("list unresolved backlog items as open questions")
 
 ### Brief shape
 
-Three fixed sections: `## Task` / `## Context` / `## Return`. The Return section restates the four-section response shape and routes any multi-step needs from the subagent into Backlog instead of /work.
+Three fixed sections: `## Task` / `## Context` / `## Return`. The Return section restates the four-section response shape. It routes any multi-step needs from the subagent into Backlog instead of /work.
 
 Phrase directives affirmatively. Apply the `/affirm` convention as you write — it tightens output. "Edit only `rules/<name>.rs`" beats "do NOT modify ANY other file": the positive form is narrower and defines done.
 
@@ -102,7 +102,7 @@ Discipline applies only to Recap. `## Modified files`, `## Decisions`, and `## B
 
 ### Delegation classifier
 
-Delegate by default. Answer directly only when the answer is already in the orchestrator's context (a fact just produced by a subagent in this session, or stated by the user this turn). Any step requiring a fresh Read, Bash, Write, or Edit, or producing bulk output → delegate. Conversational asides during orchestration follow the same rule: if the answer is already in context, answer directly; if the aside requires a fresh read or lookup, delegate it like any other read step.
+Delegate by default. Answer directly only when the answer is already in the orchestrator's context (a fact just produced by a subagent in this session, or stated by the user this turn). Any step requiring a fresh Read, Bash, Write, or Edit, or producing bulk output → delegate. Conversational asides during orchestration follow the same rule. If the answer is already in context, answer directly. If the aside requires a fresh read or lookup, delegate it like any other read step.
 
 ### Mapping spawn_subagent to a real tool
 
@@ -110,15 +110,15 @@ Delegate by default. Answer directly only when the answer is already in the orch
 
 Choose `subagent_type` by the step's tag and (for write steps) effort tier:
 
-- **`read` step → `Explore` agent type.** Tool-restricted: Edit, Write, NotebookEdit are absent. Enforcement is at the tool layer, not via brief instruction. Explore reads excerpts rather than whole files — fits parallel discovery (find X / where Y / which files reference Z); whole-module review still happens as a single sequential write step. Effort inherits the session — there is no read effort tier — while the assigned model is still passed per call.
+- **`read` step → `Explore` agent type.** Tool-restricted: Edit, Write, NotebookEdit are absent. Enforcement is at the tool layer, not via brief instruction. Explore reads excerpts rather than whole files — fits parallel discovery (find X / where Y / which files reference Z). Whole-module review still happens as a single sequential write step. Effort inherits the session — there is no read effort tier — while the assigned model is still passed per call.
 - **`write` step → the effort tier's agent type.** light → `work-write-light` (effort low), standard → `general-purpose` (effort inherits), deep → `work-write-deep` (effort high). All three have full read/write/edit/bash access and always run sequentially. The per-call `model` overrides whatever the agent type would inherit, so model and effort are chosen independently.
-- **Commit subagent → `commit-runner` agent type.** Sequential. Narrow toolset (`Bash`, `Read`, `Skill`) and a static system prompt that forces invocation of the `/git commit` skill — keeps message style consistent across orchestrations. Runs at its default model and effort; commits are mechanical. The brief can be one line because the agent's prompt carries the rest.
+- **Commit subagent → `commit-runner` agent type.** Sequential. Narrow toolset (`Bash`, `Read`, `Skill`) and a static system prompt that forces invocation of the `/git commit` skill — keeps message style consistent across orchestrations. Runs at its default model and effort. Commits are mechanical. The brief can be one line because the agent's prompt carries the rest.
 
-`spawn_subagents` is used only for batches of independent `read` steps. Write steps stay sequential. If an `Explore` subagent fails because it tried to use a missing write tool, the failure handler offers "rerun as general-purpose" as the modify option.
+Use `spawn_subagents` only for batches of independent `read` steps. Write steps stay sequential. If an `Explore` subagent fails because it tried to use a missing write tool, the failure handler offers "rerun as general-purpose" as the modify option.
 
 ### Model and effort per task
 
-Two knobs per step, set independently. **Model** is passed per call on the Agent tool (`model`: `haiku` | `sonnet` | `opus` | `fable`, or a full ID like `claude-opus-4-8`); it overrides whatever the agent type would inherit. **Effort** (`low` | `medium` | `high` | `xhigh` | `max`) is not a per-call parameter — it lives in a subagent definition's frontmatter, so effort varies only by routing a step to an agent type that pins it. Read steps therefore run at the session's inherited effort (discovery rarely needs more); write steps carry a real effort tier.
+Two knobs per step, set independently. **Model** is passed per call on the Agent tool (`model`: `haiku` | `sonnet` | `opus` | `fable`, or a full ID like `claude-opus-4-8`). It overrides whatever the agent type would inherit. **Effort** (`low` | `medium` | `high` | `xhigh` | `max`) is not a per-call parameter — it lives in a subagent definition's frontmatter, so effort varies only by routing a step to an agent type that pins it. Read steps therefore run at the session's inherited effort (discovery rarely needs more). Write steps carry a real effort tier.
 
 Effort tiers for write steps:
 
@@ -126,7 +126,7 @@ Effort tiers for write steps:
 - **standard → `general-purpose`** (effort inherits the session). The default write tier.
 - **deep → `work-write-deep`** (effort high). Ambiguous or architectural work: design a module, resolve a cross-cutting bug, choose between approaches.
 
-Assign by the step's demand, not its size. Pick the cheapest model and lowest tier that finishes the step correctly: discovery reads and mechanical writes take a cheap model (`haiku`/`sonnet`) at inherited/light effort; reasoning-heavy writes take a strong model (`opus`) at deep effort. When unsure, default to `sonnet` + standard and note the default in the preview so the user can raise it.
+Assign by the step's demand, not its size. Pick the cheapest model and lowest tier that finishes the step correctly: discovery reads and mechanical writes take a cheap model (`haiku`/`sonnet`) at inherited/light effort. Reasoning-heavy writes take a strong model (`opus`) at deep effort. When unsure, default to `sonnet` + standard and note the default in the preview so the user can raise it.
 
 ### Plan preview
 
@@ -135,7 +135,7 @@ Present the plan as a table before spawning anything:
 | #   | Step | Tag | Model | Effort | Agent type |
 | --- | ---- | --- | ----- | ------ | ---------- |
 
-Show the full table at plan time and get one approval to proceed — that approval covers the run. Before each batch spawns, reprint that batch's rows; spawn immediately unless the user asks to adjust a model or effort. The table is the contract the user approves: every spawned agent's model and agent type trace back to a row, so nothing runs at an unseen tier.
+Show the full table at plan time and get one approval to proceed — that approval covers the run. Before each batch spawns, reprint that batch's rows. Spawn immediately unless the user asks to adjust a model or effort. The table is the contract the user approves: every spawned agent's model and agent type trace back to a row, so nothing runs at an unseen tier.
 
 ### Tmp dir
 
@@ -143,7 +143,7 @@ Show the full table at plan time and get one approval to proceed — that approv
 
 ### Subagent failures
 
-Surface the error and the brief to the user; ask retry / modify / skip. Require user input before any retry.
+Surface the error and the brief to the user. Ask retry / modify / skip. Require user input before any retry.
 
 ### Git posture and auto-commits
 
@@ -154,15 +154,15 @@ At orchestration start, the orchestrator spawns a setup subagent to report git p
 - Inside git, clean tree, on the default branch → spawn a subagent to create and switch to a non-default branch (any reasonable name, collision-safe; a short slug from `<task>` is a fine default). Then enable auto-commits. Orchestration commits never land on main/master.
 - Inside git, dirty tree → ask the user: commit existing changes first (delegated to the `git` skill's commit workflow in a subagent), proceed with auto-commits disabled, or abort. After committing existing changes, re-check posture; if clean and on the default branch, create a non-default branch; then enable auto-commits.
 
-The commit subagent runs as the `commit-runner` agent type, whose static system prompt forces invocation of the `/git commit` skill on the just-completed step's changes. The orchestrator's brief is one line; the agent's narrow toolset (`Bash`, `Read`, `Skill`) and procedural prompt carry the rest. That workflow handles staging, conventional-prefix message generation (short, no body), and pre-commit hook failures. The orchestrator gets back the SHA and message in the subagent's Recap; nothing else enters orchestrator context.
+The commit subagent runs as the `commit-runner` agent type, whose static system prompt forces invocation of the `/git commit` skill on the just-completed step's changes. The orchestrator's brief is one line. The agent's narrow toolset (`Bash`, `Read`, `Skill`) and procedural prompt carry the rest. That workflow handles staging, conventional-prefix message generation (short, no body), and pre-commit hook failures. The orchestrator gets back the SHA and message in the subagent's Recap. Nothing else enters orchestrator context.
 
-If a commit subagent fails (e.g. a pre-commit hook failure the `git` skill's commit workflow can't auto-fix), surface the failure and ask retry / skip this step's commit / stop orchestration. Skipping leaves the working tree dirty into the next step; subsequent commits will include the skipped step's changes.
+If a commit subagent fails (e.g. a pre-commit hook failure the `git` skill's commit workflow can't auto-fix), surface the failure and ask retry / skip this step's commit / stop orchestration. Skipping leaves the working tree dirty into the next step. Subsequent commits will include the skipped step's changes.
 
 The clean-tree precondition lets the commit subagent rely on the commit workflow's default staging behavior. Selective staging from the prior step's `## Modified files` would require teaching either the brief or the skill new staging logic — plumbing for marginal benefit.
 
 ### Plan steps vs backlog items
 
-Plan steps drive the orchestration loop until resolved. Backlog items surfaced by subagents are open questions, presented at orchestration end. The orchestrator promotes a backlog item to a plan step only by deliberate choice; auto-promotion would block loop termination.
+Plan steps drive the orchestration loop until resolved. Backlog items surfaced by subagents are open questions, presented at orchestration end. The orchestrator promotes a backlog item to a plan step only by deliberate choice. Auto-promotion would block loop termination.
 
 ### Stop conditions
 

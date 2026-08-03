@@ -1,7 +1,7 @@
 ---
 name: imagen-nanobanana
 description: >
-  The Google Nano Banana (Gemini) worker for the /imagen hub; use directly only to pin the provider.
+  The Google Nano Banana (Gemini) worker for the /imagen hub. Use directly only to pin the provider.
   Triggers: /imagen-nanobanana, explicit mentions of "Nano Banana", "Gemini image", or "use Nano Banana".
   Edit or restyle existing images by passing them as --source. Skip for non-image tasks and for
   ambiguous image requests (those route through the /imagen hub).
@@ -9,7 +9,7 @@ description: >
 
 # imagen-nanobanana
 
-This skill is the explicit Nano Banana (Google Gemini) worker. The hub skill `imagen` handles routing for ambiguous prompts; invoke this skill directly only when you need to pin the provider to Nano Banana.
+This skill is the explicit Nano Banana (Google Gemini) worker. The hub skill `imagen` handles routing for ambiguous prompts. Invoke this skill directly only when you need to pin the provider to Nano Banana.
 
 Generate or edit images via Google Gemini image models.
 
@@ -80,12 +80,12 @@ if script reports no image:
 
 ## Notes
 
-- Output images land in `~/Pictures/imagen/` (or `$IMAGEN_DIR` if set). The file extension (`.png`, `.jpg`, `.webp`) reflects the format the model actually returned; most models currently return JPEG.
-- Only `~/Pictures/imagen` is on the sandbox write allowlist. Pointing `$IMAGEN_DIR` or `--out` outside it requires adding a matching entry to `home/claude/settings.json`, otherwise writes fail under the sandbox.
-- `--out` honors the path verbatim; it does not adjust the extension to match the returned format. The script warns to stderr on a mismatch.
+- Output images land in `~/Pictures/imagen/` (or `$IMAGEN_DIR` if set). The file extension (`.png`, `.jpg`, `.webp`) reflects the format the model actually returned. Most models currently return JPEG.
+- Only `~/Pictures/imagen` is on the sandbox write allowlist. Pointing `$IMAGEN_DIR` or `--out` outside it requires a matching entry in `home/claude/settings.json`. Without that entry, writes fail under the sandbox.
+- `--out` honors the path verbatim. It does not adjust the extension to match the returned format. The script warns to stderr on a mismatch.
 - The API key (`GEMINI_API_KEY`) is injected by `doppler run` and never appears on a command line.
 - The fetch call runs in-process inside the script, so the `no-network-abuse` hook (which blocks visible `curl --data`) does not fire.
-- `gemini-2.5-flash-image` does not accept `--resolution`; the script warns and ignores it.
+- `gemini-2.5-flash-image` does not accept `--resolution`. The script warns and ignores it.
 - Default model: `gemini-3.1-flash-image-preview`.
 - Default resolution: `2K`. Pass `--resolution 512` for cheap draft runs.
 - For lossless archival, re-encode the JPEG yourself: `ffmpeg -i in.jpg out.png` or `magick in.jpg out.png`. The skill keeps the format the model returned.
@@ -103,7 +103,7 @@ Gemini image models cannot emit a native alpha channel. Asked for a "transparent
 
 Pass `--cutout none` to skip the ffmpeg step and keep only the raw green-plate image.
 
-`--chroma-key-fallback` is a **deprecated** alias for `--transparent --cutout colorkey`; the script prints a deprecation warning to stderr when it sees it.
+`--chroma-key-fallback` is a **deprecated** alias for `--transparent --cutout colorkey`. The script prints a deprecation warning to stderr when it sees it.
 
 The keying command (also embedded in the workflow above):
 
@@ -114,7 +114,7 @@ ffmpeg -i in.jpg \
 ```
 
 - `colorkey=0x00ff00:0.30:0.20` — sets alpha to 0 where pixels are within 30% of pure green, feathering edges over a 20% blend window.
-- `despill=type=green:mix=0.5` — subtracts green spill from edge pixels; without this, JPEG chroma subsampling leaves a visible green halo around the subject.
+- `despill=type=green:mix=0.5` — subtracts green spill from edge pixels. Without this, JPEG chroma subsampling leaves a visible green halo around the subject.
 - `format=rgba` — forces an alpha channel on output (PNG `color_type=6`).
 
 Tuned on a red-apple test: this chain produces 0 green-tinted edge pixels. If the subject has fine hair / fur / glass and edges look chewed, raise the `despill` `mix` to `0.7` and the colorkey `blend` to `0.25` for softer edges.

@@ -64,7 +64,7 @@ do("report created files")
 }
 ```
 
-`projects_path` is used by `vault-query` for project resolution; this skill only stores it.
+`vault-query` uses `projects_path` for project resolution. This skill only stores it.
 
 ### Per-repo config
 

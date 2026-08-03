@@ -1,6 +1,6 @@
 # Inspecting an existing PR
 
-Checking a PR's state, comments, or CI sits outside the `/git pr` workflow — run `gh` directly. Read this file when the task is to look at a PR rather than create or update one. `<pr>` is a number, URL, or branch; omit it to act on the PR for the current branch.
+Checking a PR's state, comments, or CI sits outside the `/git pr` workflow. Run `gh` directly. Read this file when the task is to look at a PR rather than create or update one. `<pr>` is a number, URL, or branch. Omit it to act on the PR for the current branch.
 
 - **State and metadata:** `gh pr view <pr>` — title, body, state, labels, reviewers. Add `--json state,mergeable,reviewDecision,statusCheckRollup` for a machine-readable summary.
 - **CI checks:** `gh pr checks <pr>` — one line per check with pass/fail/pending. `gh pr checks <pr> --watch` blocks until checks settle.

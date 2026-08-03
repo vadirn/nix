@@ -4,7 +4,7 @@ description: >
   Test-driven development for agentic coding: one failing test, one implementation, repeat.
   Triggers: /tdd, "write tests first", "test-driven", "TDD", "red green refactor",
   "write a failing test". Skip when testing an existing behavior against a falsifiable
-  claim (use /experiment); skip for a feasibility spike with no known design (use /prototype).
+  claim (use /experiment). Skip for a feasibility spike with no known design (use /prototype).
 ---
 
 # TDD Skill
@@ -46,9 +46,9 @@ Unfamiliar API or system: write a small PoC (10-line script, learning test) to p
 
 ### 3. Skeleton
 
-Write types, interfaces, and function signatures across all files. Run typecheck. Signatures only; leave bodies empty.
+Write types, interfaces, and function signatures across all files. Run typecheck. Signatures only. Leave bodies empty.
 
-This establishes the shape of the change before any behavior is added.
+This establishes the shape of the change before you add any behavior.
 
 **⏸ Stop.** Show the skeleton. Wait for user to review types and signatures.
 

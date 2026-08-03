@@ -2,7 +2,7 @@
 
 Goal: produce a status update that closes impression distance for one stakeholder, in their
 currency, carrying the communication-only content no artifact holds — without fabricating any
-of it. End at a draft in the terminal; never send.
+of it. End at a draft in the terminal. Never send.
 
 ## Why the seam exists
 
@@ -63,7 +63,7 @@ among the chosen (the widest window). No `last_drafted` (or no roster) → last 
 
 ### Digest
 
-ONE stakeholder-agnostic pass; attach provenance to each field. `.brief/context.md` prose, if
+ONE stakeholder-agnostic pass. Attach provenance to each field. `.brief/context.md` prose, if
 present, gives durable framing (what the project is for, who counts in what).
 
 | field            | provenance |
@@ -120,5 +120,5 @@ DRAFT — not sent. Send it yourself. Sources: <repo + any context you gave>
 
 ## Failure modes to name out loud
 
-- **Thin work → confident prose.** If the period's artifacts are sparse, say so; do not inflate. An honest "quiet week, here is the little there is" beats laundered substance.
+- **Thin work → confident prose.** If the period's artifacts are sparse, say so. Do not inflate. An honest "quiet week, here is the little there is" beats laundered substance.
 - **Stale roster.** The Projection step surfaces the stored assumption precisely so the user can catch a drifted currency/model. Trust `.brief/context.md`, but show what you trusted.

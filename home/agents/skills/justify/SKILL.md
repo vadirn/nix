@@ -6,7 +6,7 @@ description: >
   audits the recent action transcript, or pass a file path or plan to audit that. Also triggers on:
   "does this need to be here", "is this justified", "what can we cut", "does this carry dead weight",
   "audit this diff", "is this code/step/action necessary". To stress-test a plan's decisions use
-  /probe; for code cleanups that assume the code should stay use /simplify.
+  /probe. For code cleanups that assume the code should stay use /simplify.
 ---
 
 # Justify
@@ -20,7 +20,7 @@ Whatever cannot supply both is dead weight, carried at the cost of every future 
 ## Parameters
 
 - `target` (optional): What to audit. Inline text, a file path, the word `actions` (or `transcript`),
-  or empty. Empty defaults to the working-tree diff. Conversation context is used when it carries the plan.
+  or empty. Empty defaults to the working-tree diff. Use conversation context when it carries the plan.
 
 ```
 target = <args> or working-tree diff
@@ -91,7 +91,7 @@ the purpose first, then test each ground against it.
 
 ### The ask branch
 
-The ask verdict separates this from a linter. A linter deletes what nothing references; it has no
+The ask verdict separates this from a linter. A linter deletes what nothing references. It has no
 branch for "this is referenced, but I cannot tell whether the reference itself is needed." That branch
 is where the real waste hides, and it is settled by asking the author, not guessing.
 
@@ -107,7 +107,7 @@ and re-endorses those rationalizations on a warm re-read. So authorship, not the
   Hand it the session's goals as claims to verify against the artifact, never as settled facts, so it
   has the real grounds to test without inheriting the author's rationalizations.
 - Authored by the user or already in the tree (a pasted plan, legacy code): audit inline. This agent
-  did not write it, so it is already independent; isolating it would discard the conversation context
+  did not write it, so it is already independent. Isolating it would discard the conversation context
   that supplies legitimate real grounds.
 
 Always-isolate discards real grounds that live in context (a flag wired for next sprint is justified by
@@ -124,9 +124,9 @@ Keep these:
   caller can reach it before connecting. Cut it only when the bad input is unreachable on every path.
 - **External contract.** A field or method shape a framework, API, or serializer demands, even when
   your own code never reads it directly. Name the specific framework, API version, or schema that
-  requires it; an unnamed contract is not a sufficient reason, so the verdict stays cut or ask.
+  requires it. An unnamed contract is not a sufficient reason, so the verdict stays cut or ask.
 - **Readability scaffolding.** A named intermediate or small helper whose purpose is clarity. Faster
-  comprehension is a real ground; keep it even when it costs a few lines.
+  comprehension is a real ground. Keep it even when it costs a few lines.
 - **Declared-throwaway code.** Spikes and prototypes the user marked exploratory (see /prototype). Their
   goal is to answer a question, not to survive.
 - **Test coverage.** A test's real ground is the behavior it guards, not whether anything depends on it.

@@ -13,12 +13,12 @@ disable-model-invocation: true
 # opinion
 
 Get one expert's take on what's on the table. `/opinion` reads the current context — the artifact,
-diff, plan, or question under discussion — picks the persona whose lens fits best, and spawns that
+diff, plan, or question under discussion. It picks the persona whose lens fits best, then spawns that
 persona as a subagent to return a candid second opinion in its own voice. One voice, not a committee:
 the value is a sharp read from a specific vantage, not consensus mush.
 
 The persona runs as a **spawned subagent**. The main session distills what to opine on and hands it
-off; the persona reasons in isolation and returns its verdict. The main context stays clean and the
+off. The persona reasons in isolation and returns its verdict. The main context stays clean and the
 opinion stays uncolored by the surrounding chat.
 
 ## Roster

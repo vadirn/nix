@@ -2,7 +2,7 @@
 
 Retrieval practice session over cards in `20 cards/`. Tests recall by showing titles first, then revealing content.
 
-Research basis: retrieval practice is the strongest finding in learning science. Testing produces durable learning; passive re-reading doesn't.
+Research basis: retrieval practice is the strongest finding in learning science. Testing produces durable learning. Passive re-reading doesn't.
 
 ## Process
 
@@ -40,6 +40,6 @@ if user had ideas or reactions during recall:
 
 - 3 cards per session: enough for useful practice, not tedious
 - Cards only, not notes (cards are atomic facts for recall; notes are synthesis)
-- Route card edits to /vault card; keep the review session focused on recall only
+- Route card edits to /vault card. Keep the review session focused on recall only
 - Follow note process when creating notes from review insights
 - Follow obsidian-markdown skill for Obsidian syntax

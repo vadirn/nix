@@ -1,6 +1,6 @@
 # Log Weekly
 
-All operations on the weekly log file. Called by SKILL.md after reading the current week's file.
+All operations on the weekly log file. SKILL.md calls it after reading the current week's file.
 
 ```
 week_file = already read by SKILL.md
@@ -44,15 +44,15 @@ else:
 
 Tasks in ## Tasks: `- [ ] description [[project]]` or `- [x] (YYYY-MM-DD) description [[project]]`.
 
-The `(YYYY-MM-DD)` date on completed tasks is used for per-day XP attribution in the calendar view.
+The calendar view uses the `(YYYY-MM-DD)` date on completed tasks for per-day XP attribution.
 
 ### Activity
 
-Activity is auto-appended by the post-commit hook. Each entry prefixed with `YYYY-MM-DD-HH-MM` (no date headings).
+The post-commit hook auto-appends activity. Each entry carries a `YYYY-MM-DD-HH-MM` prefix (no date headings).
 
 ### Weekly file
 
 One file per ISO week: `YYYY-wWW.md` in `41 projects/block-buster/`.
-Created by `vault-query log` with frontmatter: `week`, `start`, `end`, `sleep: []`.
+`vault-query log` creates it with frontmatter: `week`, `start`, `end`, `sleep: []`.
 
 The `sleep` field is a YAML list of ISO dates: `sleep: [2026-03-10, 2026-03-11]`. The sleep action appends today's date to this list.

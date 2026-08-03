@@ -114,7 +114,7 @@ Rules:
 
 ## RFC / RFD
 
-For changes that need cross-team discussion before commit. File at `docs/rfc/<NNNN>-<slug>.md`. The template is project-specific; if no convention exists, use the ADR template with these additions:
+For changes that need cross-team discussion before commit. File at `docs/rfc/<NNNN>-<slug>.md`. The template is project-specific. If no convention exists, use the ADR template with these additions:
 
 - **Stakeholders.** Names and teams who must sign off.
 - **Alternatives considered.** At least two, with one-paragraph evaluation each.
@@ -124,6 +124,6 @@ The RFC is the heaviest artifact in this skill. Reach for it only when the decis
 
 ## Picking the artifact when intent and capture conflict
 
-If `intent=throwaway` and `capture=adr`, stop and ask. An ADR commits the system to the decision; throwaway code cannot back that commitment. Either the intent is actually retained, or the artifact should be a memo.
+If `intent=throwaway` and `capture=adr`, stop and ask. An ADR commits the system to the decision. Throwaway code cannot back that commitment. Either the intent is actually retained, or the artifact should be a memo.
 
-If `intent=retained` and `capture=memo`, stop and ask. A memo does not carry the constraint context that future engineers will need; the decision will be re-litigated later. Either the intent is actually throwaway, or the artifact should be an ADR.
+If `intent=retained` and `capture=memo`, stop and ask. A memo does not carry the constraint context that future engineers will need. The decision will be re-litigated later. Either the intent is actually throwaway, or the artifact should be an ADR.

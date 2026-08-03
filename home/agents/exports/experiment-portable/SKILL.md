@@ -119,18 +119,18 @@ A claim is falsifiable if and only if: running the same method on twin systems (
 Examples:
 
 - Fails: "does oxfmt work" — no method can decide this; restate as a specific predicate.
-- Passes: "oxfmt 0.52.0 reformats `.md` files in place producing valid GFM" — a specific version, a specific file type, a specific output criterion; a second run on a twin system with `.md` files lacking valid GFM could refute it.
+- Passes: "oxfmt 0.52.0 reformats `.md` files in place producing valid GFM" — a specific version, a specific file type, a specific output criterion. A second run on a twin system with `.md` files lacking valid GFM could refute it.
 
 ### Sandbox choice
 
-Use the smallest sandbox that still answers the question without contaminating the host (or being contaminated by it). Reproducibility from the record alone — months later, possibly on a different machine — is the criterion that promotes Docker; without that need, lighter runners are usually right.
+Use the smallest sandbox that still answers the question without contaminating the host (or being contaminated by it). Reproducibility from the record alone — months later, possibly on a different machine — is the criterion that promotes Docker. Without that need, lighter runners are usually right.
 
 **Cascade, first match wins:**
 
 1. **Host itself under test?** (the editor, hooks, OS config, system APIs) → **host execution**. Record the host runtime version in the Method field — a re-run after an update silently tests a different thing otherwise.
 2. **Writes that persist outside `$TMPDIR` and are shared across sessions?** (`~/.config`, `~/.cache`, `~/.npm`, `~/Library/`, Keychain, `launchctl`, OS packages) → **Docker**. Containment is the point. If the claim is platform-specific, Docker on macOS gives a Linux verdict — note the scope in the Verdict field.
 3. **Will the record be re-run from cold storage later?** (months out, different machine, future session) → **Docker** with a pinned image tag (`node:22.11.0`, never `:latest`). Reproducibility is the real reason.
-4. **Otherwise — single-process, user-level, contained to `$TMPDIR`, one-shot verdict** → lightest available runner or host execution; the Method field notes the experiment is not portable to a clean machine.
+4. **Otherwise — single-process, user-level, contained to `$TMPDIR`, one-shot verdict** → lightest available runner or host execution. The Method field notes the experiment is not portable to a clean machine.
 
 Experiments needing network access, GPU, privileged syscalls, multi-process orchestration, or persistent volumes across runs sit outside this cascade — Docker with capability-specific flags, documented in the Method field.
 

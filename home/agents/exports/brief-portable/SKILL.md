@@ -4,7 +4,7 @@ description: >
   Draft a per-stakeholder status update from real work artifacts, or diagnose a stakeholder
   complaint as a state-gap vs a target-gap before you react. Drafts, never sends. Self-contained
   — no vault, no external config, no extra tools: reads the git repo containing cwd and the
-  roster in `<repo-root>/.brief/context.md`; writes only each stakeholder's `last_drafted` there.
+  roster in `<repo-root>/.brief/context.md`. Writes only each stakeholder's `last_drafted` there.
   Out of scope: sending, scheduling. Invoke explicitly with /brief.
 disable-model-invocation: true
 ---
@@ -16,13 +16,13 @@ Two acts that close two different gaps between your work and a stakeholder's hea
 - **draft** — compose a status update that closes **impression distance**: the gap between the actual state of the work and the stakeholder's model of that state.
 - **diagnose** — classify a complaint as a state-gap (report it) or a **target distance** gap (renegotiate it, never report it), so you do not answer a scope objection with a status report.
 
-Read `references/concepts.md` once per session if the impression/target/axis vocabulary is not already loaded; it is the self-contained recap of the two distances and two axes the procedures fix to one meaning each.
+Read `references/concepts.md` once per session if the impression/target/axis vocabulary is not already loaded. It is the self-contained recap of the two distances and two axes the procedures fix to one meaning each.
 
 The skill **drafts but never sends**. The relational axis — the stakeholder's sense that someone is attending to them — is produced only by the human act of communicating. A draft auto-sent is proof-of-work without proof-of-care, the exact collapse the concept warns against. So every path ends at text in your terminal that you read, edit, and send yourself.
 
 ## Glossary
 
-The vocabulary both procedures fix to one meaning each. `references/concepts.md` is the long-form why; this is the quick lookup.
+The vocabulary both procedures fix to one meaning each. `references/concepts.md` is the long-form why. This is the quick lookup.
 
 | term                 | meaning |
 | -------------------- | ------- |
@@ -79,13 +79,13 @@ several repos is out of scope — to read another repo's commits, run brief from
 
 **Roster.** The `stakeholders:` list in `.brief/context.md` frontmatter, one entry per person:
 `name`, `currency`, `model`, `inspects`, optional `role`, and `last_drafted` (template below).
-You author it; brief writes only `last_drafted` (see draft.md). If the file or list is absent,
+You author it. brief writes only `last_drafted` (see draft.md). If the file or list is absent,
 both procedures degrade gracefully: draft writes a single generic update and offers to create
 the file, diagnose works without it.
 
 ## The context file
 
-`<repo-root>/.brief/context.md`. You author the `stakeholders:` block; brief writes only each
+`<repo-root>/.brief/context.md`. You author the `stakeholders:` block. brief writes only each
 `last_drafted`. The template is embedded here — no external file is read. draft offers to create
 it from this template when it is absent.
 
@@ -116,5 +116,5 @@ digest reads for context. Keep it short; the roster above is the key part.
 | `references/draft.md`    | Compose a per-stakeholder update from artifacts. |
 | `references/diagnose.md` | Classify a complaint; route to the matching practice. |
 
-Keep `concepts.md` in mind as the why; keep `drafts but never sends` as the one rule that
+Keep `concepts.md` in mind as the why. Keep `drafts but never sends` as the one rule that
 does not bend.

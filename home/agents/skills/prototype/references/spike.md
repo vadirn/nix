@@ -21,13 +21,13 @@ If the production stack constrains the answer (specific framework, specific runt
 Execute the spike up to the time-box. Cut every corner that does not bear on the design question:
 
 - Hard-code inputs the production system would derive.
-- Skip error handling for paths the production system would cover; assert loudly on the happy path.
+- Skip error handling for paths the production system would cover. Assert loudly on the happy path.
 - Skip tests, except those that _are_ the answer (a benchmark, a load test, a correctness check).
 - Skip authorization, logging, telemetry, retries, configuration. The spike does not run in production.
 
 If the spike requires touching a real database or external service, treat that as a constraint: set up the smallest possible isolated instance, always separate from the shared dev environment. See gotchas in SKILL.md for the Row-Level Security warning.
 
-If a blocker appears (the technique requires something you cannot get inside the time-box), surface it immediately. Respect the time-box; record any extension in writing.
+If a blocker appears (the technique requires something you cannot get inside the time-box), surface it immediately. Respect the time-box. Record any extension in writing.
 
 ## Capture
 

@@ -13,15 +13,15 @@ In the contract:
 
 Outside the contract: speed, memory use, internal structure, log/metric/trace format (unless documented as a stability surface).
 
-Ask three questions in order; stop at the first "yes":
+Ask three questions in order. Stop at the first "yes":
 
 1. Was the contract violated before this change, and now honored? → `fix`
 2. Does this change the contract (add, alter, or remove what's promised)? → `feat`
 3. Otherwise → `chore`
 
-`chore` is the default — most changes (refactor, perf, deps, config, internal docs, tests, migrations, i18n) sit below the contract line. `feat` and `fix` are reserved for changes that cross it, so they carry information: a `feat` commit means callers might need to react; a `fix` commit means a promise that was being violated is now honored.
+`chore` is the default. Most changes (refactor, perf, deps, config, internal docs, tests, migrations, i18n) sit below the contract line. `feat` and `fix` are reserved for changes that cross it, so they carry information: a `feat` commit means callers might need to react. A `fix` commit means a promise that was being violated is now honored.
 
-Read `prefix-examples.md` when a call is unclear; it holds the worked example bank.
+Read `prefix-examples.md` when a call is unclear. It holds the worked example bank.
 
 ## Unit of the prefix
 

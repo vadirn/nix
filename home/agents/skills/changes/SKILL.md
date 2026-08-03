@@ -46,6 +46,6 @@ Per changed file, in the order git reports them, emit:
 
 - **Paths from the repo root.** Print each heading as the path git reports, never absolute or basename-only — repo-relative paths stay clickable.
 - **Summarize intent, not mechanics.** One short paragraph per file: what the change does and, when visible, why. No line-number play-by-play — a hunk recap is what plain `git diff` already gives.
-- **Cover every changed file.** Renames, deletions, new files, and binary changes each get a heading; the `--name-status` letter feeds the status note in the summary.
-- **Untracked files count only for the working-tree scope (`HEAD`).** List them via `git status --porcelain -u` (file-level, not the collapsed directory) and summarize as "new file"; for a ref range they are irrelevant.
+- **Cover every changed file.** Renames, deletions, new files, and binary changes each get a heading. The `--name-status` letter feeds the status note in the summary.
+- **Untracked files count only for the working-tree scope (`HEAD`).** List them via `git status --porcelain -u` (file-level, not the collapsed directory) and summarize as "new file". For a ref range they are irrelevant.
 - **Read-only.** This skill never stages, commits, or mutates the tree.

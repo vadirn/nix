@@ -1,7 +1,7 @@
 ---
 name: imagen-fal
 description: >
-  The fal.ai worker for the /imagen hub; use directly only to pin the provider.
+  The fal.ai worker for the /imagen hub. Use directly only to pin the provider.
   Triggers: /imagen-fal, explicit mentions of "Kling", "BiRefNet", "fal.ai image",
   or "use fal". Skip for non-image tasks, text-in-image prompts (route to
   imagen-nanobanana), and ambiguous image requests (those route through the /imagen
@@ -25,7 +25,7 @@ The script auto-selects between `v3/text-to-image` and `o1` based on whether `--
 
 **Not on fal:** `kling-v3-omni` is not hosted on fal. Calls requiring v3-omni or 4K resolution fall outside what the hub routes today — inform the user and defer.
 
-**Transparency:** `--transparent` invokes BiRefNet v2 (`fal-ai/birefnet/v2`) as a post-processing step after generation. The original Kling PNG is kept; BiRefNet writes a sibling `<base>-alpha.png`. Both files are emitted (`image:` and `alpha:` lines). Cost add: ~$0.001–0.005/image; latency add: ~1–3s. Superior to chroma-key for subjects with hair, fur, and soft edges. Pass `--cutout none` to skip BiRefNet and keep only the raw Kling PNG.
+**Transparency:** `--transparent` invokes BiRefNet v2 (`fal-ai/birefnet/v2`) as a post-processing step after generation. The original Kling PNG is kept. BiRefNet writes a sibling `<base>-alpha.png`. Both files are emitted (`image:` and `alpha:` lines). Cost add: ~$0.001–0.005/image; latency add: ~1–3s. Superior to chroma-key for subjects with hair, fur, and soft edges. Pass `--cutout none` to skip BiRefNet and keep only the raw Kling PNG.
 
 ## Invocation
 
@@ -94,7 +94,7 @@ if user wants to refine:
 
 - `FAL_KEY` is injected by `doppler run -p claude-code -c std --no-fallback`. It is never passed on the command line.
 - Output images land in `~/Pictures/imagen/` by default. That directory is sandbox-allowlisted. Pointing `--out` outside it requires a matching `home/claude/settings.json` entry.
-- fal returns signed CDN URLs (~1h TTL). The script downloads each URL to disk; the CDN URL is not the final path.
+- fal returns signed CDN URLs (~1h TTL). The script downloads each URL to disk. The CDN URL is not the final path.
 - `--transparent` keeps the original Kling PNG and writes BiRefNet output to a sibling `<base>-alpha.png`. Both files persist. The script emits `image: <raw>` and `alpha: <alpha>` on stdout.
 - The green-plate prompt strategy used by `imagen-nanobanana` is NOT used here. Kling does not render flat chroma-key backgrounds — BiRefNet on the raw Kling output is the cutout path.
 - Kling O1 does not render text inside images reliably. Route text-in-image prompts to `imagen-nanobanana`.

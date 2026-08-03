@@ -5,9 +5,9 @@ description: >
   decisions, reasoning) from their personal vault before answering, via `vault-query consult`. Trigger
   whenever the user asks for their own judgment: "what's my take on X", "how do I usually frame or define
   Y", "what have I already reasoned or decided about Z", their stance on a design fork, or planning work
-  they've deliberated before. This holds even when the surface topic is code or engineering; the signal is
+  they've deliberated before. This holds even when the surface topic is code or engineering. The signal is
   the request for the user's view, not the subject matter. The tool abstains silently when nothing fits, so
-  consulting is cheap. Limit triggering to tasks where the user's opinion is sought; mechanical execution
+  consulting is cheap. Limit triggering to tasks where the user's opinion is sought. Mechanical execution
   (running commands, editing, refactoring, debugging code, file operations, routine boilerplate setup, even
   when phrased "how do I usually") and conversational/meta turns fall outside scope. Manually invocable as /consult <task>.
 ---
@@ -15,15 +15,15 @@ description: >
 # Consult
 
 Pull relevant slices of the user's vault to inform the current task, then answer with that context.
-The tool owns retrieval and selection; you own phrasing. It never synthesizes — the corpus is on this
+The tool owns retrieval and selection. You own phrasing. It never synthesizes. The corpus is on this
 filesystem, so a weaker in-tool model pre-chewing it would only degrade what you do better. The returned
 material is the user's own prior thinking: treat it as recovered memory, not an external source to hedge
 about.
 
-When a match is too large to inline, the tool returns a `read` pointer instead of the document. Drilling
-those pointers is delegated to the `vault-navigator` sub-agent: a peer model that works query-side
-(it sees the query, never your full task) and returns a synthesis plus the slices it rests on, which you
-fold in exactly like inline docs. This keeps the navigation cost off your context window — you spend it on
+When a match is too large to inline, the tool returns a `read` pointer instead of the document. The
+`vault-navigator` sub-agent drills those pointers. It is a peer model that works query-side: it sees the
+query, never your full task. It returns a synthesis plus the slices it rests on, which you fold in exactly
+like inline docs. This keeps the navigation cost off your context window — you spend it on
 the answer, not on paging through documents.
 
 ## Procedure
@@ -73,17 +73,17 @@ else:                                 // exit 1 (runtime) or 2 (bad CLI invocati
   from the default. Opt in with `--types card,note,experiment,reference` when the task is about finding
   what the user has _read_ on a topic rather than what they _think_. Reach time-bound project memory
   deliberately with `--types track` when the task is specifically about prior project decisions rather
-  than reusable knowledge; checkpoints are superseded entries, so reaching one also needs
+  than reusable knowledge. Checkpoints are superseded entries, so reaching one also needs
   `--include-superseded` (e.g. `--types track,checkpoint --include-superseded`).
 - `--format markdown` (the default) returns a paste-ready block. Use `--format json` only when you need
   the structured envelope (path, title, type, score, body, tokens, links) for programmatic handling.
-- Pass `--ambient` only on the unattended hook path; as a deliberate caller, use the higher-recall default gate (omit the flag).
+- Pass `--ambient` only on the unattended hook path. As a deliberate caller, use the higher-recall default gate (omit the flag).
 
 ## When to reach for this
 
 Bias toward consulting when the user's own past decisions, definitions, or framing would change your
 answer — that is the whole reason this exists as an agent-judged call rather than an automatic one. A
 prior always-on hook fired on every prompt and injected unrelated notes into mechanical and conversational
-turns; moving the judgment here is the fix. So apply judgment: a question about a concept, a "what do I
-think about", a design fork, or planning work the user has touched before is worth a consult; renaming a
+turns. Moving the judgment here is the fix. So apply judgment: a question about a concept, a "what do I
+think about", a design fork, or planning work the user has touched before is worth a consult. Renaming a
 variable or running a test is not.

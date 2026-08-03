@@ -71,7 +71,7 @@ A rung closes the fact when its findings are, together:
 
 - **consistent** — no unreconciled conflict between sources,
 - **complete** — every sub-question the caller asked is answered,
-- **confident enough for the stakes** — the confidence bar rises with the stakes; a crux-feeding fact needs firmer ground than a throwaway.
+- **confident enough for the stakes** — the confidence bar rises with the stakes. A crux-feeding fact needs firmer ground than a throwaway.
 
 Any one failing is the climb trigger. It names the next rung. A conflict wants cross-check (toward D3). A gap wants breadth (toward D2). Thin confidence wants more sources.
 
@@ -105,7 +105,7 @@ Each key claim comes back marked:
 
 Grounding checks only the key claims. To re-search every minor claim is the ceremony the amortization cap forbids.
 
-For a very large sweep (dozens of sources), the user may opt into the Workflow tool instead; the default D3 is subagent-orchestrated and needs no opt-in.
+For a very large sweep (dozens of sources), the user may opt into the Workflow tool instead. The default D3 is subagent-orchestrated and needs no opt-in.
 
 ### Output — the findings block
 

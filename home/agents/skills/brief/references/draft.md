@@ -1,6 +1,6 @@
 # draft — compose a per-stakeholder update
 
-Goal: produce a status update that closes impression distance for one stakeholder, in their currency, carrying the communication-only content no artifact holds — without fabricating any of it. End at a draft in the terminal; never send.
+Goal: produce a status update that closes impression distance for one stakeholder, in their currency, carrying the communication-only content no artifact holds — without fabricating any of it. End at a draft in the terminal. Never send.
 
 ## Why the seam exists
 
@@ -53,7 +53,7 @@ Default = since the chosen stakeholder's `last_drafted`. `--all` → the earlies
 
 ### Digest
 
-ONE stakeholder-agnostic pass; attach provenance to each field. `Context.md` gives durable framing (what the project is for, who counts in what).
+ONE stakeholder-agnostic pass. Attach provenance to each field. `Context.md` gives durable framing (what the project is for, who counts in what).
 
 | field            | provenance |
 | ---------------- | ---------- |
@@ -103,5 +103,5 @@ DRAFT — not sent. Send it yourself. Sources: <repo/track/weekly seen>
 
 ## Failure modes to name out loud
 
-- **Thin work → confident prose.** If the period's artifacts are sparse, say so; do not inflate. An honest "quiet week, here is the little there is" beats laundered substance.
+- **Thin work → confident prose.** If the period's artifacts are sparse, say so. Do not inflate. An honest "quiet week, here is the little there is" beats laundered substance.
 - **Stale roster.** The Projection step surfaces the stored assumption precisely so the user can catch a drifted currency/model. Trust `Context.md`, but show what you trusted.

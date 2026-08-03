@@ -1,14 +1,18 @@
 # Find the goal when the design question is missing
 
-Use when the user invokes `/prototype` but cannot state the design question in one sentence. The cause is usually one of: the user has a solution in mind but not a problem, the user has a vague feeling that something is wrong, or the user has copied a request from elsewhere and not internalised it.
+Use when the user invokes `/prototype` but cannot state the design question in one sentence. The cause is usually one of:
 
-This workflow extracts a stateable design question. If it cannot, the prototype is premature; recommend stopping.
+- the user has a solution in mind but not a problem,
+- the user has a vague feeling that something is wrong,
+- the user has copied a request from elsewhere and not internalised it.
+
+This workflow extracts a stateable design question. If it cannot, the prototype is premature. Recommend stopping.
 
 ## Symptoms that this workflow is needed
 
 - The user describes a method instead of a question. ("Let's prototype Redis." Redis is the answer; what is the question?)
 - The user describes a feeling instead of a problem. ("The app feels slow." Where, for whom, doing what, slower than what?)
-- The user describes an outcome two steps removed. ("We need to increase retention.") Retention is a goal; the design question is the next layer down.
+- The user describes an outcome two steps removed. ("We need to increase retention.") Retention is a goal. The design question is the next layer down.
 - The user can describe the prototype but not what the prototype would _prove_.
 
 ## Procedure
@@ -27,7 +31,7 @@ What is "still true" is the goal. Method examples and what they hide:
 - "Prototype a chatbot" → goal: let users get answer Y without opening a ticket.
 - "Prototype migrating to gRPC" → goal: cut serialisation overhead, or unblock streaming, or some other property gRPC supplies.
 
-If the user can name a goal that survives the strip, the design question follows directly: "Does <method> deliver <goal>?". That is an implementation question; the prototype is a spike.
+If the user can name a goal that survives the strip, the design question follows directly: "Does <method> deliver <goal>?". That is an implementation question. The prototype is a spike.
 
 ### 2. Five Whys, capped at three
 
@@ -50,7 +54,7 @@ For each candidate question, ask:
 
 A real goal has a real harm. If the user cannot name the harm, the prototype is decoration. Push back: "The prototype answers a question. What question is worth your time?"
 
-If the harm is named ("if we do not validate this, we will build six weeks of features on a stack that cannot scale, and we find out at launch"), the design question is the inverse of the harm. The harm names what must not be true; the question asks whether it is true.
+If the harm is named ("if we do not validate this, we will build six weeks of features on a stack that cannot scale, and we find out at launch"), the design question is the inverse of the harm. The harm names what must not be true. The question asks whether it is true.
 
 ### 4. Acceptance test
 

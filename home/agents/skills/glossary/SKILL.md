@@ -6,7 +6,7 @@ description: >
 
 # Glossary
 
-Build and maintain a glossary as a 2-column Markdown table (`| Term | Definition |`) embedded in an existing document. The skill emits a paragraph + table fragment; the host file (a track's `## Glossary` section, an experiment record, a README) owns where it lives. There is no standalone glossary file: a dedicated `GLOSSARY.md` imposes a documentation spec on the project and rots apart from the documents that use its terms.
+Build and maintain a glossary as a 2-column Markdown table (`| Term | Definition |`) embedded in an existing document. The skill emits a paragraph + table fragment. The host file (a track's `## Glossary` section, an experiment record, a README) owns where it lives. There is no standalone glossary file: a dedicated `GLOSSARY.md` imposes a documentation spec on the project and rots apart from the documents that use its terms.
 
 ## Parameters
 
@@ -46,7 +46,7 @@ do("report: N terms added, M terms unchanged, P pinned, U un-pinned")
 
 ## Output format
 
-A 2-column Markdown table preceded by one explanatory paragraph. The fragment starts with the paragraph — no heading; the host file supplies its own `## Glossary` header.
+A 2-column Markdown table preceded by one explanatory paragraph. The fragment starts with the paragraph — no heading. The host file supplies its own `## Glossary` header.
 
 ```markdown
 Rows whose **Term** is bolded are pinned: text, position, and presence are fixed, and update passes must not edit them. Append project-specific terms beneath the baseline as un-pinned rows; refine an existing un-pinned term by appending a new row with the sharpened wording rather than rewording in place.
@@ -59,7 +59,7 @@ Rows whose **Term** is bolded are pinned: text, position, and presence are fixed
 | Idempotency-Key | Header used to deduplicate POST requests at the API layer. Stored in `idempotency_keys` table for 24h. |
 ```
 
-Pinned rows precede un-pinned rows; un-pinned rows sort A–Z.
+Pinned rows precede un-pinned rows. Un-pinned rows sort A–Z.
 
 ## Reference
 
@@ -73,10 +73,10 @@ The strong form names what differentiates the term from adjacent concepts (`Cart
 
 ### Pinned vs. un-pinned
 
-- **Pinned** (`**Term**` — bolded): baseline rows the table's template or owner placed deliberately — pinning exists so automated updates (a `/track` save, an update-mode rewrite) cannot mangle them. Keep their text, position, and presence fixed. New candidates found by scanning are un-pinned by default; pin a row only when its wording was set deliberately and an update pass must not touch it.
-- **Un-pinned** (`Term` — plain): the working vocabulary. Append-only by convention; refine by appending a new row with sharpened wording rather than rewording in place. The history of a term's understanding stays recoverable.
+- **Pinned** (`**Term**` — bolded): baseline rows the table's template or owner placed deliberately — pinning exists so automated updates (a `/track` save, an update-mode rewrite) cannot mangle them. Keep their text, position, and presence fixed. New candidates found by scanning are un-pinned by default. Pin a row only when its wording was set deliberately and an update pass must not touch it.
+- **Un-pinned** (`Term` — plain): the working vocabulary. Append-only by convention. Refine by appending a new row with sharpened wording rather than rewording in place. The history of a term's understanding stays recoverable.
 
-The convention is shared with `/track` and `/experiment` so a reader who's learned one knows all three.
+`/track` and `/experiment` share this convention, so a reader who's learned one knows all three.
 
 ### Candidate selection
 
@@ -90,7 +90,7 @@ Drop terms that belong to the framework or standard library: `Request`, `Respons
 
 ### Update mode
 
-In update mode, pinned rows remain fixed (enforced by the skill, not just by convention). Un-pinned rows can be sorted A–Z on every write — sorting is deterministic so diffs stay clean. New candidates are appended after user confirmation. If a candidate matches an existing term with a different definition, surface the conflict: "the glossary defines Order as X; code suggests Y. Append a refining row?"
+In update mode, pinned rows remain fixed (enforced by the skill, not just by convention). Un-pinned rows can be sorted A–Z on every write — sorting is deterministic so diffs stay clean. Append new candidates after user confirmation. If a candidate matches an existing term with a different definition, surface the conflict: "the glossary defines Order as X; code suggests Y. Append a refining row?"
 
 ### Boundary with other skills
 

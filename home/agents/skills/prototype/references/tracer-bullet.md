@@ -30,7 +30,7 @@ The goal is a working end-to-end path, not a complete feature.
 - Every layer is real. No mocks, no fakes, no fixtures at the seams.
 - Behaviour is narrow: one input shape, one output shape, one happy path, one error path.
 
-Resist scope creep. If a second use case appears, write it down as a follow-up. The slice answers "do the pieces fit together"; it does not answer "is the feature done".
+Resist scope creep. If a second use case appears, write it down as a follow-up. The slice answers "do the pieces fit together". It does not answer "is the feature done".
 
 ## Capture
 
