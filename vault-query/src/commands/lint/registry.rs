@@ -9,6 +9,7 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::dangling_reference::DanglingReference),
         Box::new(super::rules::dangling_relation_label::DanglingRelationLabel),
         Box::new(super::rules::duplicate_h1::DuplicateH1),
+        Box::new(super::rules::filename_hygiene::FilenameHygiene),
         Box::new(super::rules::invalid_enum_value::InvalidEnumValue),
         Box::new(super::rules::invalid_frontmatter::InvalidFrontmatter),
         Box::new(super::rules::missing_required_field::MissingRequiredField),
