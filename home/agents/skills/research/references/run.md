@@ -1,6 +1,6 @@
 # Run — resolve a fact at calibrated depth
 
-Take the lowest depth that closes the question; climb only when a stop-condition fails.
+Take the lowest depth that closes the question. Climb only when a stop-condition fails.
 
 ## Pseudocode
 
@@ -61,9 +61,9 @@ run_depth(depth, locus, question):
 
 ### Triage axes
 
-- **Locus** decides the instrument, not the depth. Code facts (does this API exist, what does this function return) go to Explore — read-only, context-efficient. World facts (fees, limits, market data, current events) go to a general-purpose subagent driving Firecrawl. `WebSearch`/`WebFetch` are blocked in this environment; web is always Firecrawl.
+- **Locus** decides the instrument, not the depth. Code facts go to Explore — read-only and context-efficient. (Does this API exist? What does this function return?) World facts go to a general-purpose subagent driving Firecrawl — fees, limits, market data, current events. `WebSearch`/`WebFetch` are blocked here. Web is always Firecrawl.
 - **Breadth** is about coverage, not stakes. A single fact needs one pass (D1). A multi-part or landscape question ("compare the payment providers") needs parallel angles (D2), because one pass silently drops sub-questions.
-- **Stakes** set the ceiling, from the amortization rule: how many downstream nodes rest on this answer, and how expensive is being wrong. A one-off fact caps at D1; a fact feeding a crux earns D3. The caller passes this when known (map: "this fact feeds the crux"); otherwise infer it from the question.
+- **Stakes** set the ceiling, by the amortization rule. Two things set the stakes: how many downstream nodes rest on the answer, and how costly a wrong answer is. A one-off fact caps at D1. A fact feeding a crux earns D3. The caller passes the stakes when known ("this fact feeds the crux"). Otherwise infer them from the question.
 
 ### Stop-conditions
 
@@ -73,15 +73,15 @@ A rung closes the fact when its findings are, together:
 - **complete** — every sub-question the caller asked is answered,
 - **confident enough for the stakes** — the confidence bar rises with the stakes; a crux-feeding fact needs firmer ground than a throwaway.
 
-Any one failing is the climb trigger, and it names the next rung: a conflict wants cross-check (toward D3), a gap wants breadth (toward D2), thin confidence wants more sources.
+Any one failing is the climb trigger. It names the next rung. A conflict wants cross-check (toward D3). A gap wants breadth (toward D2). Thin confidence wants more sources.
 
 ### The amortization cap
 
-Depth never exceeds the stakes. This is the guard against ceremony. A mildly contested fact that nothing important rests on stops at D1 with the conflict **flagged**, not escalated — the flag is the honest output, and D3 would burn a parallel sweep to sharpen a number no decision needs. Conversely, a crux-feeding fact earns D3 even when the first pass looked clean, because a single clean pass is exactly how a wrong load-bearing fact hides.
+Depth never exceeds the stakes. This is the guard against ceremony. Take a mildly contested fact that nothing important rests on. It stops at D1 with the conflict **flagged**, not escalated. The flag is the honest output. D3 would burn a parallel sweep to sharpen a number no decision needs. A crux-feeding fact is the opposite. A wrong load-bearing fact hides behind a clean first pass. So it earns D3 even when the first pass looks clean.
 
 ### Type boundary
 
-The instrument answers _what is_, never _what to pick_. A question that looked factual often hides a preference: "what MRR is realistic?" is fact (research it); "what MRR should I target?" is a decision (yours). When a rung's findings reveal the real fork is a value judgment, stop and return it as a decision — do not let a deeper rung settle it under a factual disguise. This keeps the `Planning.md` type line intact.
+The instrument answers _what is_, never _what to pick_. A question that looks factual often hides a preference. "What MRR is realistic?" is a fact — research it. "What MRR should I target?" is a decision — yours. A rung's findings may reveal the real fork is a value judgment. Then stop and return it as a decision. The decision stays yours, however deep the research could go. This keeps the `Planning.md` type line intact.
 
 ### The D3 cross-check and grounding
 
@@ -121,8 +121,8 @@ Gaps: <sub-questions left unanswered> — or "none"
 _depth D_n, because <trigger>_
 ```
 
-`<grounding>` appears only on load-bearing claims when D3 ran: `grounded`, `agent-only`, or `contradicted`. Omit it on every other claim and at every lower depth. The block is the whole return. A fact node pastes it into `## Resolution`; a standalone caller reads it. Either way, `/research` decides nothing on the caller's behalf — it hands back evidence, and the audit line shows how hard it looked.
+`<grounding>` appears only on load-bearing claims when D3 ran: `grounded`, `agent-only`, or `contradicted`. Omit it on every other claim and at every lower depth. The block is the whole return. A fact node pastes it into `## Resolution`. A standalone caller reads it. Either way, `/research` decides nothing for the caller. It hands back evidence. The audit line shows how hard it looked.
 
 ### AFK and parallelism
 
-Research is fire-and-forget. A caller (the map at chart time) may fire several `/research` calls at once, one per fact node; each returns its own block independently. Within a single call, D2/D3 fan their sub-questions out in parallel and join on the merge.
+Research is fire-and-forget. A caller may fire several `/research` calls at once, one per fact node — the map does this at chart time. Each call returns its own block independently. Within a single call, D2 and D3 fan their sub-questions out in parallel, then join on the merge.
