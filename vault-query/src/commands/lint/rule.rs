@@ -29,6 +29,12 @@ pub struct LintContext<'a> {
     /// Body wikilinks per file, parallel to `files`.  Extracted once here so
     /// rules reuse the parse instead of re-running it per rule.
     pub body_links: Vec<Vec<crate::wikilink::Wikilink>>,
+    /// Frontmatter wikilinks per file, parallel to `files`. Carries both the
+    /// links the YAML parse yielded as string scalars (with absolute line
+    /// numbers) and the raw `[[...]]` occurrences YAML ate into a nested
+    /// sequence, so `broken-wikilink` and `unquoted-frontmatter-link` share one
+    /// scan of the frontmatter block.
+    pub frontmatter_links: Vec<crate::wikilink::FrontmatterLinks>,
     pub backlink_index: HashMap<String, Vec<String>>,
     /// Structural-relation edges per file, parallel to `files`. Parsed once here
     /// (lossy, D29) so the relations rules reuse one scan.
@@ -61,6 +67,10 @@ impl<'a> LintContext<'a> {
             .iter()
             .map(|f| crate::wikilink::extract(&f.content))
             .collect();
+        let frontmatter_links: Vec<crate::wikilink::FrontmatterLinks> = files
+            .iter()
+            .map(|f| crate::wikilink::frontmatter_links(&f.content, &f.frontmatter))
+            .collect();
         let backlink_index = crate::wikilink::build_backlink_index_with(files, &body_links);
 
         // One mdstruct parse per file, shared by both structural scanners: the
@@ -87,6 +97,7 @@ impl<'a> LintContext<'a> {
             cards,
             references,
             body_links,
+            frontmatter_links,
             backlink_index,
             relations,
             local_nodes,

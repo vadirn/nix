@@ -51,6 +51,13 @@
     # therefore carry the workspace manifest, the single lockfile, and ALL the
     # member trees at their relative layout. Pin the source to manifests, sources,
     # and tests only (no `target/`) so the input is stable.
+    #
+    # Two files outside the workspace are carried too: the vault skill's lint
+    # rosters. `vault-query/tests/roster.rs` asserts they list exactly the rules
+    # `registry::rule_names()` returns, and it can only read them at build time if
+    # the source includes them. They are listed file by file rather than as the
+    # whole skill directory, so an unrelated skill edit does not invalidate the
+    # crate build.
     crateSrc = lib.fileset.toSource {
       root = ./.;
       fileset = lib.fileset.unions [
@@ -68,6 +75,8 @@
         ./mdformat/Cargo.toml
         ./mdformat/src
         ./mdformat/tests
+        ./home/agents/skills/vault/SKILL.md
+        ./home/agents/skills/vault/references/lint.md
       ];
     };
     # One lockfile vendors one dependency set, so all three packages share a

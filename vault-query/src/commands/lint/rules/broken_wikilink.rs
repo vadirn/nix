@@ -6,6 +6,21 @@ use crate::vault;
 use crate::wikilink;
 use crate::wikilink::normalize;
 
+/// Flags a `[[target]]` — in the body or in the YAML frontmatter — that names
+/// no vault file and no asset.
+///
+/// Frontmatter coverage arrives through `ctx.frontmatter_links`, whose targets
+/// come from YAML string scalars only (`key: "[[X]]"`, the form Obsidian
+/// writes). A sequence value therefore never becomes a link target, so a
+/// genuine nested array `key: [[a, b]]` cannot be misread as a link to
+/// `a, b`. The opposite defect — an unquoted `key: [[X]]` that YAML turns into
+/// a nested sequence — is a quoting fault rather than a resolution fault, and
+/// belongs to `unquoted-frontmatter-link`.
+///
+/// Resolution is one code path for both surfaces, so a frontmatter target gets
+/// the same `resolve_name`/`normalize` folding and the same asset handling a
+/// body target gets, and the per-file dedup spans both: one missing target is
+/// one defect and one fix, however many places in the file name it.
 pub struct BrokenWikilink;
 
 impl Rule for BrokenWikilink {
@@ -24,53 +39,66 @@ impl Rule for BrokenWikilink {
         let asset_basenames: HashSet<String> =
             ctx.assets.iter().map(|a| normalize(&a.name)).collect();
 
-        let mut findings = Vec::new();
-        for (file, links) in ctx.files.iter().zip(&ctx.body_links) {
-            let mut seen: HashSet<String> = HashSet::new();
-            for link in links {
-                // Detect whether the target carries a non-md asset extension.
-                let ext = Path::new(&link.target)
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(|s| s.to_lowercase());
+        let resolves = |target: &str| -> bool {
+            // Detect whether the target carries a non-md asset extension.
+            let ext = Path::new(target)
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_lowercase());
 
-                let is_asset = ext
-                    .as_deref()
-                    .map(|e| vault::ASSET_EXTENSIONS.contains(&e))
-                    .unwrap_or(false);
+            let is_asset = ext
+                .as_deref()
+                .map(|e| vault::ASSET_EXTENSIONS.contains(&e))
+                .unwrap_or(false);
 
-                let resolves = if is_asset {
-                    if link.target.contains('/') {
-                        // Path-qualified: compare vault-relative paths exactly.
-                        let target_path = Path::new(&link.target);
-                        ctx.assets.iter().any(|a| {
-                            a.path
-                                .strip_prefix(ctx.vault_root)
-                                .map(|rel| rel == target_path)
-                                .unwrap_or(false)
-                        })
-                    } else {
-                        // Bare name: look up normalized basename.
-                        asset_basenames.contains(&normalize(&link.target))
-                    }
+            if is_asset {
+                if target.contains('/') {
+                    // Path-qualified: compare vault-relative paths exactly.
+                    let target_path = Path::new(target);
+                    ctx.assets.iter().any(|a| {
+                        a.path
+                            .strip_prefix(ctx.vault_root)
+                            .map(|rel| rel == target_path)
+                            .unwrap_or(false)
+                    })
                 } else {
-                    let resolved = normalize(wikilink::resolve_name(&link.target));
-                    known.contains(&resolved)
-                };
+                    // Bare name: look up normalized basename.
+                    asset_basenames.contains(&normalize(target))
+                }
+            } else {
+                known.contains(&normalize(wikilink::resolve_name(target)))
+            }
+        };
 
-                if resolves {
-                    continue;
+        let mut findings = Vec::new();
+        for (idx, file) in ctx.files.iter().enumerate() {
+            let mut seen: HashSet<String> = HashSet::new();
+            // Frontmatter first: it precedes the body in the file, so findings
+            // come out in line order, and a target broken in both places keeps
+            // the message naming the earlier occurrence.
+            let surfaces = [
+                (
+                    ctx.frontmatter_links[idx].resolved.as_slice(),
+                    "frontmatter wikilink",
+                ),
+                (ctx.body_links[idx].as_slice(), "wikilink"),
+            ];
+            for (links, surface) in surfaces {
+                for link in links {
+                    if resolves(&link.target) {
+                        continue;
+                    }
+                    if !seen.insert(link.target.clone()) {
+                        continue;
+                    }
+                    findings.push(Finding {
+                        rule: self.name(),
+                        severity: self.default_severity(),
+                        file: file.path.clone(),
+                        message: format!("{surface} target '{}' does not resolve", link.target),
+                        data: Some(serde_json::json!({ "target": link.target, "line": link.line })),
+                    });
                 }
-                if !seen.insert(link.target.clone()) {
-                    continue;
-                }
-                findings.push(Finding {
-                    rule: self.name(),
-                    severity: self.default_severity(),
-                    file: file.path.clone(),
-                    message: format!("wikilink target '{}' does not resolve", link.target),
-                    data: Some(serde_json::json!({ "target": link.target, "line": link.line })),
-                });
             }
         }
         findings
@@ -89,6 +117,26 @@ mod tests {
             name: name.to_string(),
             path: PathBuf::from(path),
             content: content.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// A file whose frontmatter is parsed for real from `frontmatter_lines`,
+    /// so the test exercises the same YAML representation `LintContext::build`
+    /// sees in production — including YAML's own reading of an unquoted `[[`.
+    fn fm_file(
+        name: &str,
+        path: &str,
+        frontmatter_lines: &str,
+        body: &str,
+    ) -> crate::vault::VaultFile {
+        let content = format!("---\n{frontmatter_lines}---\n{body}");
+        let fm = crate::frontmatter::parse(&content).unwrap().unwrap();
+        crate::vault::VaultFile {
+            name: name.to_string(),
+            path: PathBuf::from(path),
+            frontmatter: fm,
+            content,
             ..Default::default()
         }
     }
@@ -308,6 +356,149 @@ mod tests {
         let data = findings[0].data.as_ref().unwrap();
         assert_eq!(data["target"], "Missing.png");
         assert_eq!(data["line"], 3);
+    }
+
+    // --- Frontmatter link tests ---
+
+    #[test]
+    fn broken_wikilink_quoted_frontmatter_link_resolves() {
+        let target = plain_file("Nix", "/vault/41 projects/nix/Nix.md", "");
+        let src = fm_file(
+            "Src",
+            "/vault/Src.md",
+            "type: ticket\nproject: \"[[41 projects/nix/Nix]]\"\n",
+            "Body.",
+        );
+        let files = vec![target, src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        assert_eq!(BrokenWikilink.check(&ctx).len(), 0);
+    }
+
+    #[test]
+    fn broken_wikilink_quoted_frontmatter_link_that_does_not_resolve_emits_finding() {
+        let src = fm_file(
+            "Src",
+            "/vault/Src.md",
+            "type: ticket\nproject: \"[[41 projects/nix/Nowhere]]\"\n",
+            "Body.",
+        );
+        let files = vec![src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = BrokenWikilink.check(&ctx);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule, "broken-wikilink");
+        assert_eq!(findings[0].severity, Severity::Error);
+        let data = findings[0].data.as_ref().unwrap();
+        assert_eq!(data["target"], "41 projects/nix/Nowhere");
+        assert!(
+            findings[0].message.contains("frontmatter wikilink target"),
+            "unexpected message: {}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn broken_wikilink_unquoted_frontmatter_link_emits_nothing() {
+        // `project: [[X]]` is a nested sequence to YAML, not a string, so no
+        // link target exists to resolve. `unquoted-frontmatter-link` owns it.
+        let src = fm_file(
+            "Src",
+            "/vault/Src.md",
+            "type: ticket\nproject: [[Nowhere]]\n",
+            "Body.",
+        );
+        let files = vec![src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        assert_eq!(BrokenWikilink.check(&ctx).len(), 0);
+    }
+
+    #[test]
+    fn broken_wikilink_nested_array_is_never_a_link_target() {
+        // `[[a, b]]` is a real nested array. A raw-text scan would invent the
+        // target `a, b`; resolving from string scalars only cannot.
+        let src = fm_file(
+            "Src",
+            "/vault/Src.md",
+            "type: note\nmatrix: [[a, b]]\n",
+            "Body.",
+        );
+        let files = vec![src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        assert_eq!(BrokenWikilink.check(&ctx).len(), 0);
+    }
+
+    #[test]
+    fn broken_wikilink_frontmatter_sequence_is_checked_element_by_element() {
+        // A sequence must be walked per element, not joined into one display
+        // string: the good entry resolves, only the bad one is flagged.
+        let good = plain_file("ticket-foo", "/vault/41 projects/p/ticket-foo.md", "");
+        let src = fm_file(
+            "Src",
+            "/vault/Src.md",
+            "type: ticket\nrequires:\n  - \"[[41 projects/p/ticket-foo]]\"\n  - \"[[41 projects/p/ticket-missing]]\"\n",
+            "Body.",
+        );
+        let files = vec![good, src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = BrokenWikilink.check(&ctx);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(
+            findings[0].data.as_ref().unwrap()["target"],
+            "41 projects/p/ticket-missing"
+        );
+    }
+
+    #[test]
+    fn broken_wikilink_frontmatter_finding_carries_absolute_line() {
+        // Frontmatter opens on line 1, so the raw-block line is already the
+        // absolute file line: `---` is 1, `type:` is 2, `project:` is 3.
+        let src = fm_file(
+            "Src",
+            "/vault/Src.md",
+            "type: ticket\nstatus: open\nproject: \"[[Nowhere]]\"\n",
+            "Body with [[AlsoNowhere]].",
+        );
+        let files = vec![src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        let findings = BrokenWikilink.check(&ctx);
+        assert_eq!(findings.len(), 2);
+        let fm_finding = findings
+            .iter()
+            .find(|f| f.data.as_ref().unwrap()["target"] == "Nowhere")
+            .expect("expected a finding for the frontmatter target");
+        assert_eq!(fm_finding.data.as_ref().unwrap()["line"], 4);
+        let body_finding = findings
+            .iter()
+            .find(|f| f.data.as_ref().unwrap()["target"] == "AlsoNowhere")
+            .expect("expected a finding for the body target");
+        assert_eq!(body_finding.data.as_ref().unwrap()["line"], 6);
+    }
+
+    #[test]
+    fn broken_wikilink_dedups_one_target_across_frontmatter_and_body() {
+        let src = fm_file(
+            "Src",
+            "/vault/Src.md",
+            "type: ticket\nproject: \"[[Nowhere]]\"\n",
+            "Body cites [[Nowhere]] too.",
+        );
+        let files = vec![src];
+        let root = PathBuf::from("/vault");
+        let ctx = LintContext::build(&root, &files, &[]);
+
+        assert_eq!(BrokenWikilink.check(&ctx).len(), 1);
     }
 
     // --- Unicode normalization tests ---

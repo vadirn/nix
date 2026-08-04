@@ -8,7 +8,9 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::callout_missing_separator::CalloutMissingSeparator),
         Box::new(super::rules::dangling_reference::DanglingReference),
         Box::new(super::rules::dangling_relation_label::DanglingRelationLabel),
+        Box::new(super::rules::dangling_requires_target::DanglingRequiresTarget),
         Box::new(super::rules::duplicate_h1::DuplicateH1),
+        Box::new(super::rules::filename_hygiene::FilenameHygiene),
         Box::new(super::rules::invalid_enum_value::InvalidEnumValue),
         Box::new(super::rules::invalid_frontmatter::InvalidFrontmatter),
         Box::new(super::rules::missing_required_field::MissingRequiredField),
@@ -23,6 +25,7 @@ pub fn built_in_rules(per_doc_token_cap: usize) -> Vec<Box<dyn Rule>> {
         Box::new(super::rules::ticket_outward_only::TicketOutwardOnly),
         Box::new(super::rules::unknown_field::UnknownField),
         Box::new(super::rules::unknown_rel::UnknownRel),
+        Box::new(super::rules::unquoted_frontmatter_link::UnquotedFrontmatterLink),
         Box::new(super::rules::untagged_card::UntaggedCard),
         Box::new(super::rules::untyped_entry::UntypedEntry),
     ]
