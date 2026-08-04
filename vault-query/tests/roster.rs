@@ -104,6 +104,12 @@ fn table_roster(text: &str, heading: &str) -> Option<Vec<String>> {
 /// The cell reads `Vault-wide lint: orphan-card (superseded entries exempt),
 /// dangling-reference, ...`: everything after the first colon is the list, and
 /// parenthetical asides are dropped so the commas separate names and nothing else.
+///
+/// The list cell is found by its colon rather than by column index, so reordering
+/// the table's columns leaves this working. Indexing by position would fail the
+/// moment a column moved ahead of `Description`, and it would fail as "no `lint`
+/// row found" — which reads like the row was deleted rather than like the columns
+/// moved, sending the reader after the wrong cause.
 fn skill_roster(text: &str) -> Option<Vec<String>> {
     let row = text.lines().find(|line| {
         table_cells(line)
@@ -111,7 +117,7 @@ fn skill_roster(text: &str) -> Option<Vec<String>> {
             .is_some_and(|first| first == "lint" || first.starts_with("lint "))
     })?;
     let cells = table_cells(row)?;
-    let (_, list) = cells.get(1)?.split_once(':')?;
+    let (_, list) = cells.iter().skip(1).find_map(|c| c.split_once(':'))?;
 
     let mut flat = String::new();
     let mut depth = 0usize;
