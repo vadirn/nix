@@ -47,8 +47,8 @@ else if ahead: Bash(git push)
 - **Tool calls are literal.** `Bash(...)`, `Skill(...)`, `AskUserQuestion(...)` are real instructions — each agent maps them to its own tool surface (e.g. `Skill(git)` means "invoke the git skill").
 - **`do()` for freeform directives.** When the step is "use your judgment", wrap it in `do()`. This distinguishes LLM-directed work from mechanical tool calls.
 - **Variable names carry intent.** `default_branch` not `db`. The model reads these as semantic hints.
-- **Sequence from order.** Omit step numbers; line position encodes sequence.
-- **Comments label sections only.** Every line is a call, assignment, or logic. A comment stands alone only as a section label; otherwise rewrite it as a call, assignment, or logic.
+- **Sequence from order.** Omit step numbers. Line position encodes sequence.
+- **Comments label sections only.** Every line is a call, assignment, or logic. A comment stands alone only as a section label. Otherwise rewrite it as a call, assignment, or logic.
 - **Details live in Reference.** The pseudocode block shows WHAT happens and WHEN. The Reference section explains HOW and WHY.
 
 ## Process

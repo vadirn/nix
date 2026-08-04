@@ -61,7 +61,7 @@ The body covers:
 
 After drafting, apply each check in `references/capture-checks.md`. Record the filled-in templates in the plan.
 
-File the plan at `docs/spikes/<YYYY-MM-DD>-<slug>-woz-plan.md`. The `-woz-plan` suffix and the `Status: planning artifact only` header are load-bearing: they tell future readers this file is not session evidence.
+File the plan at `docs/spikes/<YYYY-MM-DD>-<slug>-woz-plan.md`. The `-woz-plan` suffix and the `Status: planning artifact only` header are key: they tell future readers this file is not session evidence.
 
 ## Boundary
 

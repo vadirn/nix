@@ -58,17 +58,17 @@ graduation:
 
 ### Editing a large track
 
-A mature track runs hundreds of lines / tens of thousands of tokens. Never read or rewrite the whole body on save — that is the cost this procedure exists to avoid.
+A mature track runs hundreds of lines / tens of thousands of tokens. Never read or rewrite the whole body on save. That is the cost this procedure exists to avoid.
 
-- **Shape, not body.** `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its start line and estimated tokens, and each Log entry addressed as a sub-address under Log. The last Log number is the highest of those sub-addresses — read it off the overview instead of grepping the body, and take Log's own section number from the overview too rather than assuming a fixed position. The overview's line numbers are the map for the next step.
+- **Shape, not body.** `vault-query read <track_path>` (no address) prints a folded overview: the frontmatter fields, every top-level section with its start line and estimated tokens, and each Log entry addressed as a sub-address under Log. The last Log number is the highest of those sub-addresses. Read it off the overview instead of grepping the body, and take Log's own section number from the overview too rather than assuming a fixed position. The overview's line numbers are the map for the next step.
 - **Targeted reads.** For each section an edit touches (Decisions, Glossary, Log, the frontmatter block), Read only that section's line range (or unfold it with `vault-query read <track_path> <addr>`, addressing by heading slug) to get the exact anchor text an Edit needs. A save touches three or four sections.
 - **Localized Edits.** Apply the entry as in-place Edits at those anchors — append the log entry under `## Log`, append decisions under `## Decisions`, append Glossary rows, bump `updated:`.
 
-**Full-file writes stay atomic.** Creating a new track writes a whole file from the template — there is no large body to avoid, and a partial write would leave a corrupt half-track that Obsidian Sync recovers only through a manual UI flow. For that one full-file write, stay crash-safe with a sibling temp file renamed over the target: `printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"` (the Write tool does not do this; use Bash with `mv`). Localized Edits into an existing track do not need the temp-file dance.
+**Full-file writes stay atomic.** Creating a new track writes a whole file from the template. There is no large body to avoid, and a partial write would leave a corrupt half-track that Obsidian Sync recovers only through a manual UI flow. For that one full-file write, stay crash-safe with a sibling temp file renamed over the target: `printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"` (the Write tool does not do this; use Bash with `mv`). Localized Edits into an existing track do not need the temp-file dance.
 
 ### Empty-result handling
 
-`vault-query tracks --view Active --format json` exits 0 and prints `[]` when no rows match. Parse the JSON; an empty array means the picker becomes "new" only.
+`vault-query tracks --view Active --format json` exits 0 and prints `[]` when no rows match. Parse the JSON. An empty array means the picker becomes "new" only.
 
 ### Frontmatter
 
@@ -82,11 +82,11 @@ Read `templates/Track.md` for structure. Required fields, in order:
 - `created` — ISO date (`YYYY-MM-DD`). Set on creation; never changed.
 - `updated` — ISO date. Bumped to `<today>` on every save.
 
-No other fields. Drop the template's `template: true` line; replace the `status:` multi-value picker list with the chosen single value. Quote any value containing double quotes with single quotes.
+No other fields. Drop the template's `template: true` line. Replace the `status:` multi-value picker list with the chosen single value. Quote any value containing double quotes with single quotes.
 
 ### Log entry format
 
-Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically across the track's lifetime. Numbers are never reused — even if an entry is later edited or removed, its number stays consumed. The next number is the highest Log sub-address in the `vault-query read` overview plus one (that overview enumerates every Log entry without reading the body); default to 1 when the Log is empty.
+Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically across the track's lifetime. Numbers are never reused. Even if an entry is later edited or removed, its number stays consumed. The next number is the highest Log sub-address in the `vault-query read` overview plus one (that overview enumerates every Log entry without reading the body). Default to 1 when the Log is empty.
 
 `<title>` is a short noun phrase summarizing the session's outcome (e.g. `entry-binding decision`, `format refinement`).
 
@@ -99,7 +99,7 @@ Numbered, append-only. Each decision: a short title, then the rationale. Keep al
 When a decision is reversed or overridden:
 
 1. Append a new decision that supersedes the prior one and references it by number (e.g. `supersedes (3)`).
-2. In the same edit, wrap the superseded decision's title and rationale in `~~…~~` strike-through so a cold reader sees at a glance that it no longer holds. Keep the number and the text intact — strike-through marks it obsolete without erasing the history.
+2. In the same edit, wrap the superseded decision's title and rationale in `~~…~~` strike-through so a cold reader sees at a glance that it no longer holds. Keep the number and the text intact. Strike-through marks it obsolete without erasing the history.
 
 Surface both the new decision and the strike-through edit in the `proposed_edits` confirmation step.
 
@@ -107,8 +107,8 @@ Surface both the new decision and the strike-through edit in the `proposed_edits
 
 The Glossary is a 2-column markdown table: `| Term | Definition |`. Two row classes:
 
-- **Pinned rows** — Term is bolded (e.g. **Track**, **Decision**). Keep pinned rows intact: preserve their order, wording, and presence. The template seeds seven pinned rows describing the track's own conventions; they document the format inside every track so a cold reader can understand it without consulting the skill.
-- **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default; refining a definition is done by appending a new row with the sharpened wording rather than rewording in place. The old row stays so the history of a term's understanding is recoverable.
+- **Pinned rows** — Term is bolded (e.g. **Track**, **Decision**). Keep pinned rows intact: preserve their order, wording, and presence. The template seeds seven pinned rows describing the track's own conventions. They document the format inside every track so a cold reader can understand it without consulting the skill.
+- **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default. Refine a definition by appending a new row with the sharpened wording rather than rewording in place. The old row stays so the history of a term's understanding is recoverable.
 
 Surface every Glossary change in the `proposed_edits` confirmation step. Silent rewrites are the failure mode this section exists to prevent.
 
@@ -122,7 +122,7 @@ Surface every Glossary change in the `proposed_edits` confirmation step. Silent 
 
 ### Filing backstop
 
-`## Filing` in `home/agents/AGENTS.md` is ambient and always loaded. It catches a durable fact the moment it surfaces mid-session and names the typed destination each kind takes — the project's `Context.md`, a vault card, a vault note, a ticket, the project's `Scratchpad.md`, a repository's own `CLAUDE.md` or `AGENTS.md`. Read the routes there; one copy stays authoritative.
+`## Filing` in `home/agents/AGENTS.md` is ambient and always loaded. It catches a durable fact the moment it surfaces mid-session. It names the typed destination each kind takes: the project's `Context.md`, a vault card, a vault note, a ticket, the project's `Scratchpad.md`, a repository's own `CLAUDE.md` or `AGENTS.md`. Read the routes there. One copy stays authoritative.
 
 This step is the backstop, not the sole catcher. It sweeps up whatever the session surfaced and left unrouted, so a candidate that went unproposed at the time still reaches its home at the save.
 
@@ -138,7 +138,7 @@ Include in the Log entry:
 
 - Outcomes a fresh agent would need to continue the work.
 - Decisions made (also written to ## Decisions, but the Log captures _why now_).
-- Frictions encountered that aren't yet resolved. Durable open work leaves the Log for a ticket, a ticket's `requires:` edge, or the project scratchpad; `/vault ticket` routes between the three and holds the ticket contract (`home/agents/skills/vault/references/ticket.md`). Mention the friction in the narrative and offer to file it.
+- Frictions encountered that aren't yet resolved. Durable open work leaves the Log for a ticket, a ticket's `requires:` edge, or the project scratchpad. `/vault ticket` routes between the three and holds the ticket contract (`home/agents/skills/vault/references/ticket.md`). Mention the friction in the narrative and offer to file it.
 - Transient session state: unpushed commits, dirty branches, branch composition, pending pushes. The Log entry is a snapshot the next entry supersedes, so state that expires belongs here and nowhere else.
 
 Exclude:

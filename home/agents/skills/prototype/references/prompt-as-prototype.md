@@ -4,7 +4,7 @@ Use when the design question is "what does the LLM do when given this prompt aga
 
 ## Why this comes first
 
-Most LLM-feature failures trace to a prompt that was not stress-tested. Adding RAG to a prompt that fails on adversarial cases produces a system that fails on adversarial cases plus a vector database. Adding tools to a prompt that hallucinates produces a system that hallucinates with side effects. The prompt is the cheapest layer to iterate; iterate it to convergence before any other layer is added.
+Most LLM-feature failures trace to a prompt that was not stress-tested. Adding RAG to a prompt that fails on adversarial cases produces a system that fails on adversarial cases plus a vector database. Adding tools to a prompt that hallucinates produces a system that hallucinates with side effects. The prompt is the cheapest layer to iterate. Iterate it to convergence before any other layer is added.
 
 This workflow is method-orthogonal in the matrix: it applies whenever the work is LLM-feature, regardless of role / look-and-feel / implementation / integration framing.
 
@@ -24,7 +24,7 @@ Cover three categories in the initial set:
 - **Obvious failures.** Inputs the prompt should refuse, escalate, or clarify. If the prompt complies anyway, the boundary is broken.
 - **Edge cases you predict.** Specific worries you have about ambiguity, adversarial input, or format drift. Documents what the team thinks the prompt must withstand.
 
-The `expected` field is the behaviour, not the exact string. "Should refuse and cite the policy" is a valid expectation. The `notes` field carries the reason the case is in the set; without it, the eval rots as the prompt evolves.
+The `expected` field is the behaviour, not the exact string. "Should refuse and cite the policy" is a valid expectation. The `notes` field carries the reason the case is in the set. Without it, the eval rots as the prompt evolves.
 
 ## Draft the prompt and run
 
@@ -58,10 +58,10 @@ The capture artifact is the eval set itself: `evals/<slug>/prompt.md` plus `eval
 
 After drafting, apply each check in `references/capture-checks.md`. Record the filled-in templates in the prompt.md file under a heading `## Capture checks`.
 
-If `status` reaches `converged`, the eval set is the deliverable. Lock the prompt by copying `prompt.md` to a versioned file (`prompt-v1.md`); subsequent prompt changes that fail cases block the merge through CI (see `references/next-steps.md`).
+If `status` reaches `converged`, the eval set is the deliverable. Lock the prompt by copying `prompt.md` to a versioned file (`prompt-v1.md`). Subsequent prompt changes that fail cases block the merge through CI (see `references/next-steps.md`).
 
-If `status` is `abandoned`, file the eval set anyway. The cases document what was tried and why it failed; the next attempt does not start blind.
+If `status` is `abandoned`, file the eval set anyway. The cases document what was tried and why it failed. The next attempt does not start blind.
 
 ## Boundary
 
-Prompt-as-prototype answers prompt-level questions only. If the prompt converges and the next open question is about retrieval quality, tool design, or fine-tune data composition, that is a new prototype with a new design question. Stop prompt-as-prototype there and open a new prototype invocation for the RAG layer; the eval methodology is different and the open question has moved.
+Prompt-as-prototype answers prompt-level questions only. If the prompt converges and the next open question is about retrieval quality, tool design, or fine-tune data composition, that is a new prototype with a new design question. Stop prompt-as-prototype there and open a new prototype invocation for the RAG layer. The eval methodology is different and the open question has moved.

@@ -63,11 +63,11 @@ graduation:
 
 ### Resolving repo root and template
 
-`git rev-parse --show-toplevel` returns the working tree root; fall back to `pwd` outside a git repo. Tracks live in `<root>/.tracks/`. The template ships inside this skill at `assets/track-template.md` — read it relative to the skill base directory (the directory containing `SKILL.md`), not via any external config. Substitute `__SLUG__`, `__DESCRIPTION__`, and `__DATE__` (replace all) before writing.
+`git rev-parse --show-toplevel` returns the working tree root. Fall back to `pwd` outside a git repo. Tracks live in `<root>/.tracks/`. The template ships inside this skill at `assets/track-template.md`. Read it relative to the skill base directory (the directory containing `SKILL.md`), not via any external config. Substitute `__SLUG__`, `__DESCRIPTION__`, and `__DATE__` (replace all) before writing.
 
 ### Atomic write
 
-A partial write to a track file leaves the rolling history corrupted. Make saves crash-safe by writing to a sibling temp file and renaming it over the target: `printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"`. Use Bash with `mv` for the rename; the Write tool lacks the temp-file step.
+A partial write to a track file leaves the rolling history corrupted. Make saves crash-safe by writing to a sibling temp file and renaming it over the target: `printf %s "$content" > "$path.tmp" && mv "$path.tmp" "$path"`. Use Bash with `mv` for the rename. The Write tool lacks the temp-file step.
 
 ### Empty-result handling
 
@@ -75,11 +75,11 @@ If `.tracks/` does not exist or contains no `track-*.md`, the picker becomes "ne
 
 ### Slug rules
 
-Kebab-case, no spaces, no leading `track-` (the prefix is added when forming the file name). Avoid characters that are awkward in file paths (`/`, `:`, `?`, `*`). The slug becomes the file name (`track-<slug>.md`) and the frontmatter `slug:` field — keep them in sync.
+Kebab-case, no spaces, no leading `track-` (the prefix is added when forming the file name). Avoid characters that are awkward in file paths (`/`, `:`, `?`, `*`). The slug becomes the file name (`track-<slug>.md`) and the frontmatter `slug:` field. Keep them in sync.
 
 ### Log entry format
 
-Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically across the track's lifetime. Numbers are never reused — even if an entry is later edited or removed, its number stays consumed. To find the next number, grep for `^### ([0-9]+)\.` in the `## Log` section, take the max, add one.
+Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically across the track's lifetime. Numbers are never reused. Even if an entry is later edited or removed, its number stays consumed. To find the next number, grep for `^### ([0-9]+)\.` in the `## Log` section, take the max, add one.
 
 `<title>` is a short noun phrase summarizing the session's outcome (e.g. `entry-binding decision`, `format refinement`).
 
@@ -87,20 +87,20 @@ Sub-heading `### N. YYYY-MM-DD — <title>`, where `N` increments monotonically 
 
 ### Decisions conventions
 
-Numbered, append-only. Each decision: a short title, then the rationale. Never delete; if reversed, append a new decision that supersedes the prior one and reference it by number.
+Numbered, append-only. Each decision: a short title, then the rationale. Never delete. If reversed, append a new decision that supersedes the prior one and reference it by number.
 
 ### Glossary conventions
 
 The Glossary is a 2-column markdown table: `| Term | Definition |`. Two row classes:
 
-- **Pinned rows** — Term ends with `†` (e.g. `Track†`, `Decisions†`). Never edit, never remove, never re-order. The template seeds four pinned rows describing the track's own conventions; they document the format inside every track so a cold reader doesn't have to consult the skill.
-- **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default; refine a definition by appending a new row with the sharpened wording. The old row stays so the history of a term's understanding is recoverable.
+- **Pinned rows** — Term ends with `†` (e.g. `Track†`, `Decisions†`). Never edit, never remove, never re-order. The template seeds four pinned rows describing the track's own conventions. They document the format inside every track so a cold reader doesn't have to consult the skill.
+- **Un-pinned rows** — project-specific terms accrued during the work. Append-only by default. Refine a definition by appending a new row with the sharpened wording. The old row stays so the history of a term's understanding is recoverable.
 
 Surface every Glossary change in the `proposed_edits` confirmation step. Silent rewrites are the failure mode this section exists to prevent.
 
 ### Frontmatter parsing and rewrite
 
-Read the first 20 lines to parse the leading `---`-delimited block. Fields used: `slug`, `description`, `status`, `updated`. When saving, only the `updated:` line changes. Rewrite by string replacement on that single line; leave the rest of the frontmatter intact, including any unknown fields the user has added.
+Read the first 20 lines to parse the leading `---`-delimited block. Fields used: `slug`, `description`, `status`, `updated`. When saving, only the `updated:` line changes. Rewrite by string replacement on that single line. Leave the rest of the frontmatter intact, including any unknown fields the user has added.
 
 ### Importance filter for the Log narrative
 

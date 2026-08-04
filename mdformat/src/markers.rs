@@ -43,7 +43,7 @@
 //! content, other tools, and agents writing into the vault all emit `*` bullets
 //! routinely — and this rule closes them.
 //!
-//! The **zero declined constructs** is the more load-bearing half, because it
+//! The **zero declined constructs** is the key half, because it
 //! says the declination path has no corpus exposure at all. Every clause of it
 //! is exercised by this module's tests, `tests/markers.rs` and
 //! `tests/normal_form.rs`, and nowhere else.

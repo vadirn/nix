@@ -44,14 +44,14 @@ else:                          Bash(git checkout -b <name>)
 ## Base branch
 
 - Default: cut from the updated default branch so the new branch starts even with `origin`. `git fetch origin <default>` followed by `git checkout -b <name> origin/<default>` branches from the fetched ref without checking out the default branch first.
-- When the user is already on a feature branch, ask before choosing — stacking the new branch on the current one is sometimes intended.
+- When the user is already on a feature branch, ask before choosing. Stacking the new branch on the current one is sometimes intended.
 
 ## Uncommitted changes
 
-- `git checkout -b` carries the working tree onto the new branch; uncommitted work is carried intact. When the tree is dirty, branch from current HEAD rather than `origin/<default>`; the checkout then carries the changes free of a "would be overwritten" conflict.
+- `git checkout -b` carries the working tree onto the new branch. Uncommitted work is carried intact. When the tree is dirty, branch from current HEAD rather than `origin/<default>`. The checkout then carries the changes free of a "would be overwritten" conflict.
 - Suggest committing on the current branch first only when the user says those changes belong there.
 
 ## Rules
 
 - **Confirm the name before creating.** Show `<name>` and the base. Skip only when the user supplied an explicit branch name.
-- **Create only.** This subcommand cuts new branches; switching to an existing branch is a plain `git checkout`.
+- **Create only.** This subcommand cuts new branches. Switching to an existing branch is a plain `git checkout`.

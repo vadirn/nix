@@ -91,7 +91,7 @@ if project_wikilink is not null:
 
 ### Record template
 
-The authoritative template lives in the vault at `<vault_root>/templates/Experiment.md` (read by Step 5 via `vault-query config`). The shape below mirrors that file; update both if either changes.
+The authoritative template lives in the vault at `<vault_root>/templates/Experiment.md` (read by Step 5 via `vault-query config`). The shape below mirrors that file. Update both if either changes.
 
 ```markdown
 ---
@@ -144,11 +144,11 @@ A claim is falsifiable if and only if: running the same method on twin systems (
 Examples:
 
 - Fails: "does oxfmt work" — no method can decide this; restate as a specific predicate.
-- Passes: "oxfmt 0.52.0 reformats `.md` files in place producing valid GFM" — a specific version, a specific file type, a specific output criterion; a second run on a twin system with `.md` files lacking valid GFM could refute it.
+- Passes: "oxfmt 0.52.0 reformats `.md` files in place producing valid GFM" — a specific version, a specific file type, a specific output criterion. A second run on a twin system with `.md` files lacking valid GFM could refute it.
 
 ### Sandbox choice
 
-Use the smallest sandbox that still answers the question without contaminating the host (or being contaminated by it). Reproducibility from the record alone — months later, possibly on a different machine — is the criterion that promotes Docker; without that need, lighter runners are usually right.
+Use the smallest sandbox that still answers the question without contaminating the host (or being contaminated by it). Reproducibility from the record alone — months later, possibly on a different machine — is the criterion that promotes Docker. Without that need, lighter runners are usually right.
 
 **Cascade, first match wins:**
 
@@ -166,7 +166,7 @@ Whichever runner is chosen, the Execution field captures the exact invocation ve
 
 ### Auto-link rule
 
-The auto-link step appends one line to an active track's `## Experiments` section. The section is inserted after `## Decisions` and before `## Log` if it does not already exist. The link format is:
+The auto-link step appends one line to an active track's `## Experiments` section. The step inserts the section after `## Decisions` and before `## Log` if it does not already exist. The link format is:
 
 ```
 - [[35 experiments/YYYY-MM-DD-<slug>|<claim summary>]] — <verdict>

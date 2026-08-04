@@ -6,7 +6,13 @@ description: >
 
 # Git
 
-Three acts that put work into git: a commit records a change, a branch holds the commits delivering one net change, a PR proposes that change for merge. All three name their work with the same `<prefix>`, defined once in `references/prefix.md`.
+Three acts put work into git:
+
+- a commit records a change,
+- a branch holds the commits delivering one net change,
+- a PR proposes that change for merge.
+
+All three name their work with the same `<prefix>`, defined once in `references/prefix.md`.
 
 ```
 dir = skill base directory
@@ -20,7 +26,7 @@ else:          do("ask which of commit | branch | pr the user wants")
 do("follow the workflow in the reference just read")
 ```
 
-A subcommand that needs another reads its reference and follows it inline — one skill, so there is no `Skill()` hop between them.
+A subcommand that needs another reads its reference and follows it inline. One skill, so there is no `Skill()` hop between them.
 
 ## Rules
 

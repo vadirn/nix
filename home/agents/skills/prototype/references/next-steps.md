@@ -1,6 +1,6 @@
 # Turn the capture artifact's next step into concrete tasks
 
-Use after the capture artifact (memo, ADR, eval set, RFC) is filed. The artifact contains a Next step section with one action; this workflow expands that action into a task list the user can execute without re-deriving it.
+Use after the capture artifact (memo, ADR, eval set, RFC) is filed. The artifact contains a Next step section with one action. This workflow expands that action into a task list the user can execute without re-deriving it.
 
 The goal is to leave the user with a short, ranked, dated list. Long lists rot; ranked lists drive work.
 
@@ -14,7 +14,7 @@ Each task is one line in imperative form. Each task carries:
 
 A task without all three is a wish, not a task. Either complete the missing fields or strike it from the list.
 
-Cap the list at six items, ranked. Six is the Ivy Lee limit; past six the list stops being executable and starts being a record. If more than six tasks emerge, the top six go on the list and the rest go to a backlog file.
+Cap the list at six items, ranked. Six is the Ivy Lee limit. Past six the list stops being executable and starts being a record. If more than six tasks emerge, the top six go on the list and the rest go to a backlog file.
 
 ## Branching by intent and decision
 
@@ -24,7 +24,7 @@ The shape of the task list depends on what the artifact said.
 
 The spike answered "yes". The next prototype or the next feature is now plausible. Tasks:
 
-1. Archive (tag the branch as `spike/<slug>-archived` and delete the working copy) or delete the workspace (`rm -rf _spikes/<slug>` or delete the branch). Ask the user which; default is delete for cheap-to-reproduce spikes. Owner: spike author.
+1. Archive (tag the branch as `spike/<slug>-archived` and delete the working copy) or delete the workspace (`rm -rf _spikes/<slug>` or delete the branch). Ask the user which. Default is delete for cheap-to-reproduce spikes. Owner: spike author.
 2. Open the design for the production version, informed by the spike but not built on it. Owner: feature lead.
 3. Write the acceptance test for the production version. Owner: feature lead. Acceptance: a test exists that fails until the feature is built.
 4. If the spike surfaced unknowns the production design must address, list each as a separate task with its own owner.
@@ -83,4 +83,4 @@ Hand back to the user a numbered list under a heading the artifact already conta
 
 Append this list to the capture artifact in place of the existing single-line Next step, or as a sibling section if the artifact convention requires the single-line summary too.
 
-If the list is empty (the decision was "abandon" and no follow-up matters), say so explicitly: "no next steps; the question is closed." A blank list is the dominant failure mode for abandoned spikes; the absence of a record is what causes the same question to be asked again six months later.
+If the list is empty (the decision was "abandon" and no follow-up matters), say so explicitly: "no next steps; the question is closed." A blank list is the dominant failure mode for abandoned spikes. The absence of a record is what causes the same question to be asked again six months later.

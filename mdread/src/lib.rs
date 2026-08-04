@@ -918,7 +918,7 @@ mod tests {
     fn the_footer_groups_shadows_by_reading_not_by_document_order() {
         // The tree meets the readings in the order links, fm, text; the footer
         // reports them in `Reading`'s declaration order, so the variant order is
-        // load-bearing and a reordering of the enum is a change to the output.
+        // key and a reordering of the enum is a change to the output.
         let content = "# One\n\n## Links\n\na\n\n## Frontmatter\n\nb\n\n## Text\n\nc\n";
         let doc = parse_document(content);
         assert_eq!(

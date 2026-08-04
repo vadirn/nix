@@ -34,11 +34,11 @@ Bash(git status)
 
 ## The message file
 
-Every commit goes through `/tmp/claude/commit.txt`. This is a hard rule, enforced by a global `commit-msg` hook — a commit whose message reaches git any other way is rejected.
+Every commit goes through `/tmp/claude/commit.txt`. This is a hard rule, enforced by a global `commit-msg` hook. A commit whose message reaches git any other way is rejected.
 
 - **Never `-m`.** `git commit -F /tmp/claude/commit.txt` is the only accepted form.
-- **Write the exact final message.** The hook compares the file's content against what git received; any divergence rejects the commit. Settle the message first — including anything a confirmation step changed — then write the file once.
-- **One file validates one commit.** The hook deletes it on success, so every commit writes it fresh. A leftover file from a failed attempt is stale; rewrite it rather than reusing it.
+- **Write the exact final message.** The hook compares the file's content against what git received. Any divergence rejects the commit. Settle the message first — including anything a confirmation step changed — then write the file once.
+- **One file validates one commit.** The hook deletes it on success, so every commit writes it fresh. A leftover file from a failed attempt is stale. Rewrite it rather than reusing it.
 
 Read `commit-hook.md` for why the mechanism is shaped this way, and when a rejection is not explained by the three rules above.
 

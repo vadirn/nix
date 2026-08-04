@@ -9,7 +9,7 @@ description: >
 
 # Probe
 
-Systematic interrogation of a plan or design. Walk every decision branch, pose hard questions, provide recommended answers.
+Systematically interrogate a plan or design. Walk every decision branch, pose hard questions, provide recommended answers.
 
 ## Parameters
 

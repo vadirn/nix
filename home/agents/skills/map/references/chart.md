@@ -1,6 +1,6 @@
 # Chart — bootstrap a new map
 
-Turn a foggy goal into a map and its first frontier. Charting is one session's work; it resolves no nodes by hand beyond what the destination needs.
+Turn a foggy goal into a map and its first frontier. Charting is one session's work. It resolves no nodes by hand beyond what the destination needs.
 
 ## Pseudocode
 
@@ -74,7 +74,7 @@ do("charting is one session's work. List unresolved questions. Halt — resolvin
 
 ### Fixing the destination
 
-The destination fixes scope, so settle it first. It must be **disputable** and carry a **measurable done-condition** — "$1,000 recurring monthly revenue, net of refunds, sustained two consecutive months," not "make money on the side." A crux charts backward from the destination; a fuzzy destination leaves the spine unanchored.
+The destination fixes scope, so settle it first. It must be **disputable** and carry a **measurable done-condition** — "$1,000 recurring monthly revenue, net of refunds, sustained two consecutive months," not "make money on the side." A crux charts backward from the destination. A fuzzy destination leaves the spine unanchored.
 
 De-fuzzing is itself instrument-per-uncertainty-type, aimed at the destination:
 
@@ -82,23 +82,23 @@ De-fuzzing is itself instrument-per-uncertainty-type, aimed at the destination:
 - **Fact** fuzziness ("what MRR is realistic here?") → `/research` — it self-selects depth.
 - **Reality** fuzziness ("is anything here sellable?") → one small recon probe.
 
-Escalate only when the cheaper move stops raising clarity. Time-box the loop. If it drags, the goal is not map-ready — park it as a Scratchpad seed rather than forcing a spine onto fog.
+Escalate only when the cheaper move stops raising clarity. Time-box the loop. If it drags, the goal is not map-ready. Park it as a Scratchpad seed rather than forcing a spine onto fog.
 
 ### Picking the rung
 
-The sweep selects the rung; the rung is not assumed. Climb to rung 4 (a map) only when the goal is **fogged and larger than one session** — a graph over ~12 nodes, or open items that are decisions rather than changes. Below that, the map is ceremony: route to direct execution, a breadth-first skeleton, or probe-then-graph. Absorbing a rung-4 problem into a lower rung converts an estimate into a lie.
+The sweep selects the rung. The rung is not assumed. Climb to rung 4 (a map) only when the goal is **fogged and larger than one session** — a graph over ~12 nodes, or open items that are decisions rather than changes. Below that, the map is ceremony: route to direct execution, a breadth-first skeleton, or probe-then-graph. Absorbing a rung-4 problem into a lower rung converts an estimate into a lie.
 
 ### The Frame
 
-Build a Frame only for a risk-ordered map (see `SKILL.md` §The Frame for why it is the parameter of Force 5, not a new force). Seed it with `/consult`; the user's self-knowledge notes usually hold half of it (a binding time constraint, known biases). Write the walk-away floor as a **pre-committed, dated** kill-condition, so moving it later is a visible edit, not a quiet drift under sunk cost.
+Build a Frame only for a risk-ordered map (see `SKILL.md` §The Frame for why it is the parameter of Force 5, not a new force). Seed it with `/consult`. The user's self-knowledge notes usually hold half of it (a binding time constraint, known biases). Write the walk-away floor as a **pre-committed, dated** kill-condition, so moving it later is a visible edit, not a quiet drift under sunk cost.
 
 ### Node types and edges
 
-Type every charting node with `kind:` — decision / fact / feasibility; the type is the instrument (a plain execution step is a `kind: execution` ticket the map does not chart). Create tickets first, each with an empty `## Resolution`, then wire `requires:` edges in a second pass. Everything you cannot phrase as a sharp question now stays in `Not-yet-specified`; do not pre-slice the fog into ticket-sized pieces, because one patch may graduate into several nodes, or none, once the frontier reaches it.
+Type every charting node with `kind:` — decision / fact / feasibility. The type is the instrument (a plain execution step is a `kind: execution` ticket the map does not chart). Create tickets first, each with an empty `## Resolution`, then wire `requires:` edges in a second pass. Everything you cannot phrase as a sharp question now stays in `Not-yet-specified`. Do not pre-slice the fog into ticket-sized pieces, because one patch may graduate into several nodes, or none, once the frontier reaches it.
 
 ### Adopting an existing track
 
-A goal you are charting is often one you have already been walking — the effort may own a `track-<slug>.md` with a Log history. Step 4 checks for it and **adopts** it: fill Direction only if empty, append a Log entry, leave the body. A blind `printf > track.tmp && mv` would erase that history, which Obsidian Sync then propagates to every device as a deletion. Create-from-template is only for a slug with no track yet.
+A goal you are charting is often one you have already been walking. The effort may own a `track-<slug>.md` with a Log history. Step 4 checks for it and **adopts** it: fill Direction only if empty, append a Log entry, leave the body. A blind `printf > track.tmp && mv` would erase that history, which Obsidian Sync then propagates to every device as a deletion. Create-from-template is only for a slug with no track yet.
 
 ### Atomic writes
 

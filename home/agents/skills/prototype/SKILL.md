@@ -8,7 +8,7 @@ description: >
   "PoC", "proof of concept", "is X feasible", "explore Y approach", "tracer bullet",
   "walking skeleton", "vibe-code this", "quick demo of"; Russian: «прототип», «спайк», «прощупать»,
   «по-быстрому накидать». Skip on feature work with a known design, bug fixes, refactors, or
-  production code paths; prototypes resolve open questions, not closed ones. Also skip when testing an
+  production code paths. Prototypes resolve open questions, not closed ones. Also skip when testing an
   existing behavior against a falsifiable claim without building new code (use /experiment).
 ---
 
@@ -46,11 +46,18 @@ Fix term meanings before use. Each row holds one sense throughout this skill.
 
 A prototype is one of two things and never both at once. It is **investigation**: code is evidence, knowledge is the deliverable. Or it is **retained**: code is the first commit of production, the artifact is the deliverable. Confusion between the two causes most prototype failures, from Brooks's 1975 pilot systems to the 2025 Lovable and Replit incidents.
 
-Every prototype answers one of four design questions (Houde & Hill 1997): **role** (how does the thing fit into a user's life), **look-and-feel** (what does interaction feel like), **implementation** (does the technique work), **integration** (do the pieces talk). Name the dimension before picking a method.
+Every prototype answers one of four design questions (Houde & Hill 1997):
 
-What to keep: build a thin slice and grow it. Brooks's 1995 retraction (_Mythical Man-Month_ 20th anniversary, ch. 19) replaced "plan to throw one away" with this rule. The "grow it" rule binds the retained methods (tracer bullet, walking skeleton); spikes are still discarded. A tracer bullet is lean but complete production code, not a facade (Hunt & Thomas 1999).
+- **role**: how does the thing fit into a user's life,
+- **look-and-feel**: what does interaction feel like,
+- **implementation**: does the technique work,
+- **integration**: do the pieces talk.
 
-If the user cannot state a design question after `references/find-goal.md`, the work is vibing rather than prototyping. Stop the skill and handle the vibing outside it; this skill does not operate that stance.
+Name the dimension before you pick a method.
+
+What to keep: build a thin slice and grow it. Brooks's 1995 retraction (_Mythical Man-Month_ 20th anniversary, ch. 19) replaced "plan to throw one away" with this rule. The "grow it" rule binds the retained methods (tracer bullet, walking skeleton). Spikes are still discarded. A tracer bullet is lean but complete production code, not a facade (Hunt & Thomas 1999).
+
+If the user cannot state a design question after `references/find-goal.md`, the work is vibing rather than prototyping. Stop the skill and handle the vibing outside it. This skill does not operate that stance.
 
 ## Parameters
 
@@ -138,7 +145,7 @@ if intent == "throwaway":
 | User cannot state the design question                        | [references/find-goal.md](references/find-goal.md) |
 | Expand the artifact's Next step into a task list             | [references/next-steps.md](references/next-steps.md) |
 
-Load the matching reference file when the situation arises. Each file is self-contained; apply each only to its own case.
+Load the matching reference file when the situation arises. Each file is self-contained. Apply each only to its own case.
 
 ### The four declarations
 
@@ -174,7 +181,7 @@ When two or more designs look plausible and switching cost after commit is high,
 
 ### Standalone
 
-This skill carries every workflow it needs in `references/`. It does not call any other skill. Confidence rating, stress-testing, prose polish, and reasoning checks live in `references/capture-checks.md` as one-line templates; the agent applies them inline at capture without delegating to a sibling skill. The skill works on a host where no other skills are installed. On hosts where `/grade`, `/distill`, or `/probe` are installed, the user may run them against the filed artifact afterwards.
+This skill carries every workflow it needs in `references/`. It does not call any other skill. Confidence rating, stress-testing, prose polish, and reasoning checks live in `references/capture-checks.md` as one-line templates. The agent applies them inline at capture without delegating to a sibling skill. The skill works on a host where no other skills are installed. On hosts where `/grade`, `/distill`, or `/probe` are installed, the user may run them against the filed artifact afterwards.
 
 ### Pre-conditions
 
@@ -199,7 +206,7 @@ Any one triggers the capture step:
 
 **Row-Level Security off by default.** Lovable CVE-2025-48757 again. If the prototype touches a database, authorization is non-optional, even for throwaway, even on shared infrastructure. Verify RLS or equivalent before any test data goes in.
 
-**Package hallucination (slopsquatting).** Spracklen et al., "We Have a Package for You!", USENIX Security 2025: 576,000 samples across 16 LLMs, package-name hallucination rate roughly 19.6%, with 43% of hallucinations recurring across reruns. Lasso Security demonstrated the attack with `huggingface-cli` (30,000+ downloads after a researcher registered the empty placeholder name). Mitigation: verify every new dependency against the registry before installing; use lock files in spikes too.
+**Package hallucination (slopsquatting).** Spracklen et al., "We Have a Package for You!", USENIX Security 2025: 576,000 samples across 16 LLMs, package-name hallucination rate roughly 19.6%, with 43% of hallucinations recurring across reruns. Lasso Security demonstrated the attack with `huggingface-cli` (30,000+ downloads after a researcher registered the empty placeholder name). Mitigation: verify every new dependency against the registry before installing. Use lock files in spikes too.
 
 **Perceived speed differs from measured speed.** METR study, arXiv 2507.09089, July 2025: 16 experienced open-source developers, 246 issues on their own mature repos. Developers predicted +24% speedup with AI; perceived +20% post-task; measured **−19%** (95% CI: 2% to 39% slower). Trust the time-box, not the felt sense of progress.
 
@@ -207,7 +214,7 @@ Any one triggers the capture step:
 
 **Silent time-box overrun.** Spikes quietly expand past their bound. The skill surfaces expiry and forces a written choice (extend with justification, decide, or abandon). Default is hard stop.
 
-**Willison's rule.** "I won't commit any code to my repository if I couldn't explain exactly what it does to somebody else." (Simon Willison, "Not all AI-assisted programming is vibe coding (but vibe coding rocks)", 19 March 2025.) Writing exploratory, uncommitted code within the spike workspace is allowed; committing it to a tracked branch is not.
+**Willison's rule.** "I won't commit any code to my repository if I couldn't explain exactly what it does to somebody else." (Simon Willison, "Not all AI-assisted programming is vibe coding (but vibe coding rocks)", 19 March 2025.) Writing exploratory, uncommitted code within the spike workspace is allowed. Committing it to a tracked branch is not.
 
 ### Excluded methods and rationale
 

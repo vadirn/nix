@@ -4,7 +4,7 @@ description: >
   Router hub for image generation. Triggers: /imagen, "generate an image", "create a picture",
   "make an image", «нарисуй», «сгенерируй картинку». Dispatches to either imagen-nanobanana
   (Google Nano Banana / Gemini, direct API) or imagen-fal (Kling O1 + BiRefNet via fal.ai)
-  based on prompt characteristics; invoke the worker skills directly only when you need to
+  based on prompt characteristics. Invoke the worker skills directly only when you need to
   pin a provider.
 ---
 
@@ -70,8 +70,8 @@ If multiple signals match: `text_in_image` or `reasoning_image` takes highest pr
 - Character-consistent series (`kling-v3-omni` `series_amount`) is not supported today because v3-omni is not hosted on fal. Both workers treat `num_images > 1` as independent variants, not a coherent series.
 - Kling on fal splits text-to-image (`fal-ai/kling-image/v3/text-to-image`) and image-to-image (`fal-ai/kling-image/o1`, requires `--source`) across separate endpoints. `imagen-fal` auto-picks based on whether `--source` is provided.
 - 4K resolution: Kling O1 on fal tops out at 2K (per fal's hosted variant). 4K output requires direct Kling, which is not implemented.
-- Nano Banana via fal: `fal-ai/nano-banana-2` and `fal-ai/nano-banana-pro` exist on fal but cost 3–10× direct Google API billing. The hub routes Nano Banana work to `imagen-nanobanana` (direct Google) by default. Explicit `--model fal-ai/nano-banana-2` passed to `imagen-fal` is the override when a user wants fal's predictable per-image pricing instead.
+- Nano Banana via fal: `fal-ai/nano-banana-2` and `fal-ai/nano-banana-pro` exist on fal but cost 3–10× direct Google API billing. The hub routes Nano Banana work to `imagen-nanobanana` (direct Google) by default. When a user wants fal's predictable per-image pricing instead, pass `--model fal-ai/nano-banana-2` to `imagen-fal` to override.
 
 ## Cost rationale
 
-Asymmetric pricing drives the asymmetric architecture. fal charges 0% markup on Kling O1 ($0.028/image), so Kling work routes through fal; fal charges 3–10× markup on Nano Banana relative to the direct Google API, so Nano Banana work routes direct to Google via `imagen-nanobanana`. The hybrid keeps the cheapest path for each provider and makes `imagen-nanobanana` the sensible default for ambiguous prompts where either provider could work.
+Asymmetric pricing drives the asymmetric architecture. fal charges 0% markup on Kling O1 ($0.028/image), so Kling work routes through fal. fal charges 3–10× markup on Nano Banana relative to the direct Google API, so Nano Banana work routes direct to Google via `imagen-nanobanana`. The hybrid keeps the cheapest path for each provider and makes `imagen-nanobanana` the sensible default for ambiguous prompts where either provider could work.

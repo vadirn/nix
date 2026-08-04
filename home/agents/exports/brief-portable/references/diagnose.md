@@ -66,7 +66,7 @@ When it is a target gap, the user usually needs two things, and the order matter
    task list ("why before what"): an unrealistic target usually means the why was never pinned.
 ```
 
-Offer both, in that order. Draft #1 via draft.md; compose #2 as a short framing that names the
+Offer both, in that order. Draft #1 via draft.md. Compose #2 as a short framing that names the
 divergence and hands the decision back to the stakeholder. Both stay drafts — the user sends.
 
 ## Output shape
@@ -82,4 +82,4 @@ Want me to draft <the update | the renegotiation framing | both, in order>?
 ```
 
 The full argument for the target-distance split lives in `references/concepts.md` (§Two
-distances). Lead with the verdict and remedy; pull in the concept only when the user needs the why.
+distances). Lead with the verdict and remedy. Pull in the concept only when the user needs the why.

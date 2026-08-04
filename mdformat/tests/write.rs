@@ -343,7 +343,7 @@ fn an_erroring_document_is_left_alone() {
     );
 }
 
-/// Each of [`ERRS`]'s three conditions is load-bearing, held by removing one at
+/// Each of [`ERRS`]'s three conditions is key, held by removing one at
 /// a time and watching the refusal go away.
 ///
 /// This asserts nothing about the write path; it is the maintenance contract for

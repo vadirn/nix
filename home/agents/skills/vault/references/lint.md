@@ -12,9 +12,9 @@ vault-query lint --rule singleton-tag=error   # promote singleton-tag to error
 
 ## When to Use
 
-Run `vault-query lint` as a periodic vault health check, or before a vault-edit session, to surface structural issues: orphan cards, broken wikilinks, references not cited by any card, and similar.
+Run `vault-query lint` as a periodic vault health check, or before a vault-edit session. It surfaces structural issues: orphan cards, broken wikilinks, references not cited by any card, and similar.
 
-The default output is text. Pipe `--format json` to `jq` for machine-readable processing; use `--format summary` to see counts per rule when triaging.
+The default output is text. Pipe `--format json` to `jq` for machine-readable processing. Use `--format summary` to see counts per rule when triaging.
 
 ## Rules
 
@@ -44,9 +44,9 @@ The default output is text. Pipe `--format json` to `jq` for machine-readable pr
 
 Two paths are always excluded regardless of any user configuration: `.git` and `.vaultignore`. These defaults cannot be disabled.
 
-Users add further exclusions in `<vault_root>/.vaultignore`. Vault loads this file once per invocation; there are no nested ignore files.
+Users add further exclusions in `<vault_root>/.vaultignore`. Vault loads this file once per invocation. There are no nested ignore files.
 
-Syntax: one vault-relative path prefix per line, `/` separators. Lines starting with `#` are comments; blank lines are ignored. A trailing `/` is optional and normalized away.
+Syntax: one vault-relative path prefix per line, `/` separators. Lines starting with `#` are comments. Blank lines are ignored. A trailing `/` is optional and normalized away.
 
 ```
 # Tooling and scratch
@@ -66,7 +66,7 @@ vault-query lint --no-ignore           # see findings across all files (user fil
 vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 ```
 
-**Backlink-graph effect.** Ignored files are invisible to lint's backlink index. A card that links to an ignored file will still trigger `broken-wikilink`, because the target does not resolve in the visible file set. This is by design: excluding a file from lint means lint has no record of it as a valid link target.
+**Backlink-graph effect.** Ignored files are invisible to lint's backlink index. A card that links to an ignored file still triggers `broken-wikilink`, because the target does not resolve in the visible file set. This is by design: excluding a file from lint means lint has no record of it as a valid link target.
 
 ## Tips
 
@@ -76,7 +76,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 
 - **`dangling-reference` does not check the wikilink target's `type:`.** A card with `reference: [[20 cards/Foo]]` (pointing at another card, not a `type: reference` file) suppresses the dangling check. The companion rules cover the misses: `reference-not-wikilink` when the `reference:` value is a non-wikilink string, `reference-wrong-type` when the wikilink resolves to a non-`reference` entry.
 
-- **Act on findings interactively.** Use `/vault card <name>`, `/vault reference <name>`, or open the file directly to fix issues; lint is read-only and never edits.
+- **Act on findings interactively.** Use `/vault card <name>`, `/vault reference <name>`, or open the file directly to fix issues. Lint is read-only and never edits.
 
 - **Severity layering.** Effective severity = root config (`~/.config/vault/config.json`'s `lint.rules` block) overridden key-by-key by `--rule` flags. Project config does not participate — lint is whole-vault.
 
@@ -99,7 +99,7 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 ]
 ```
 
-`file` is vault-relative. The top-level keys (`rule`, `severity`, `file`, `message`, `data`) are stable across rules; `data` is per-rule.
+`file` is vault-relative. The top-level keys (`rule`, `severity`, `file`, `message`, `data`) are stable across rules. `data` is per-rule.
 
 ### `data` per rule
 
@@ -126,11 +126,11 @@ vault-query search "foo" --no-ignore   # search skips .vaultignore user file
 | `untyped-entry`               | `null` |
 
 - `reference-not-wikilink.data.value` is the raw `reference:` frontmatter value that failed to parse as a wikilink (e.g. a bare URL).
-- `broken-wikilink.data.target` is the **raw** wikilink target verbatim (including any path prefix); call `wikilink::resolve_name` yourself if you want the bare note name. `broken-wikilink.data.line` is the 1-based source line of the offending `[[...]]`.
+- `broken-wikilink.data.target` is the **raw** wikilink target verbatim (including any path prefix). Call `wikilink::resolve_name` yourself if you want the bare note name. `broken-wikilink.data.line` is the 1-based source line of the offending `[[...]]`.
 - `singleton-tag.data.tag` is the tag string that appears in exactly one file across the corpus.
-- `slug-filename-mismatch.data.slug` is the entry's declared `slug:`; `data.expected` is the basename it implies, without the `.md` extension.
-- `singleton-filename-mismatch.data.type` is the entry's declared `type:`; `data.expected` is the basename that type reserves, without the `.md` extension. The two filename rules split the project folder's two populations: the many-per-project files are `<type>-<slug>` and lowercase, the one-per-project files are named for what they are and capitalized.
+- `slug-filename-mismatch.data.slug` is the entry's declared `slug:`. `data.expected` is the basename it implies, without the `.md` extension.
+- `singleton-filename-mismatch.data.type` is the entry's declared `type:`. `data.expected` is the basename that type reserves, without the `.md` extension. The two filename rules split the project folder's two populations: the many-per-project files are `<type>-<slug>` and lowercase, the one-per-project files are named for what they are and capitalized.
 - `invalid-frontmatter.data.error` is the raw YAML parse error message (e.g. `mapping values are not allowed in this context at line 4 column 28`).
-- `dangling-relation-label.data.label` is the raw local endpoint or from-label string that resolved to no local node; `data.position` distinguishes `endpoint` from `from-label`, and `data.line` is the 1-based source line of the offending `## Relations` bullet.
+- `dangling-relation-label.data.label` is the raw local endpoint or from-label string that resolved to no local node. `data.position` distinguishes `endpoint` from `from-label`, and `data.line` is the 1-based source line of the offending `## Relations` bullet.
 - `unknown-rel.data.rel` is the `<rel>` token verbatim; `data.line` is the 1-based source line of the offending `## Relations` bullet.
 - `callout-missing-separator.data.callout` is the `[!Type]` token verbatim (fold marker included, e.g. `[!note]-`); `data.line` is the 1-based source line of the callout's header.

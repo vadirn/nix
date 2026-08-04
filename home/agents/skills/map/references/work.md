@@ -59,7 +59,7 @@ if node.kind == decision:
     prior = Bash(vault-query consult "<node question>" --format markdown)
     do("CONSULT INFORMS, NOT FORECLOSES: surface prior (dated) → generate >=1 independent variant regardless
         → present prior + variant(s) + your pick with the reason → user commits.
-        Scale divergence by stakes x staleness: one-line challenge if cheap/fresh, full /design if load-bearing.")
+        Scale divergence by stakes x staleness: one-line challenge if cheap/fresh, full /design if key.")
 
 // 7. Commit
 do("record the answer in the node's ## Resolution — the single home; close the ticket (status: done)")
@@ -81,7 +81,7 @@ do("write a track Log entry (see §Stop). The Log NARRATES the decision; it does
 
 ### One decision-commit per session
 
-The invariant binds **decisions**, not nodes. A decision's answer reshapes the next question, so commit one per session. `fact`, `feasibility`, and `execution` nodes have no such property — unlimited of them may resolve in the same session as the decision they feed. Cap the session by resolution-budget, not node count. The line is "one graduation-causing commit," never "one node."
+The invariant binds **decisions**, not nodes. A decision's answer reshapes the next question, so commit one per session. `fact`, `feasibility`, and `execution` nodes have no such property. Unlimited of them may resolve in the same session as the decision they feed. Cap the session by resolution-budget, not node count. The line is "one graduation-causing commit," never "one node."
 
 ### Harvested facts are not inert
 
@@ -89,7 +89,7 @@ A ticket closed a week ago — a fact node's findings or an execution ticket's r
 
 ### Frame-invalidation
 
-Frame-invalidation is what the re-validation checkpoint outputs when it fails: the market bet may be fine, but the person walking the map can no longer keep the pace it assumes. Killing or redrawing a goal is the human's call, never the agent's. Surface the mismatch and two or three options; let the human decide.
+Frame-invalidation is what the re-validation checkpoint outputs when it fails: the market bet may be fine, but the person walking the map can no longer keep the pace it assumes. Killing or redrawing a goal is the human's call, never the agent's. Surface the mismatch and two or three options. Let the human decide.
 
 ### The three resume outcomes
 
@@ -108,8 +108,8 @@ Every charting session ends by writing a `track` Log entry that snapshots the tr
 - what is blocked and on which execution tickets,
 - the next takeable node.
 
-Follow `/track save.md` for the Log mechanics — append the entry, bump `updated:`, never rewrite the body. Skip its `## Decisions` append for a node resolution: the node's `## Resolution` is the decision's one home, and the Log only narrates why-now. Skip the `/git commit` suggestion too — the map and track are vault content propagated by Obsidian Sync, unless changes landed in `.claude/` or the user asked.
+Follow `/track save.md` for the Log mechanics — append the entry, bump `updated:`, never rewrite the body. Skip its `## Decisions` append for a node resolution: the node's `## Resolution` is the decision's one home, and the Log only narrates why-now. Skip the `/git commit` suggestion too. The map and track are vault content propagated by Obsidian Sync, unless changes landed in `.claude/` or the user asked.
 
 ### Editing the map without reading it whole
 
-A mature map, like a track, is large. Get the shape first (`vault-query read <map_path>`), then unfold only the sections an edit touches (Decisions-so-far, Not-yet-specified, the frontier node). Apply localized edits at those anchors. The map is an index; keep node detail in the tickets, not restated in the map.
+A mature map, like a track, is large. Get the shape first (`vault-query read <map_path>`), then unfold only the sections an edit touches (Decisions-so-far, Not-yet-specified, the frontier node). Apply localized edits at those anchors. The map is an index. Keep node detail in the tickets, not restated in the map.

@@ -84,7 +84,7 @@
 //! Commutativity of the rules is deliberately **not** asserted anywhere: it is
 //! a corpus-contingent observation, and `format.rs` fixes the pipeline order at
 //! endings → gaps → tables → markers on purpose. The endings rule's
-//! place at the head is load-bearing rather than contingent — it is what keeps
+//! place at the head is key rather than contingent — it is what keeps
 //! a carriage return out of the other rules' inputs.
 //!
 //! # Coverage the corpus cannot give
@@ -216,7 +216,7 @@ const FIXTURES: &[Fixture] = &[
         expected: b"# Title\n\nbody   \n",
     },
     Fixture {
-        // Load-bearing whitespace, case 1: two spaces at end of line are a
+        // Key whitespace, case 1: two spaces at end of line are a
         // hard line break, and they sit inside the paragraph's span.
         name: "gaps: a hard line break inside a paragraph survives",
         clause: "span interiors are unreachable; only gap bytes are rewritten",
@@ -224,7 +224,7 @@ const FIXTURES: &[Fixture] = &[
         expected: b"first line  \nsecond line\n\ntail\n",
     },
     Fixture {
-        // Load-bearing whitespace, case 2: the blank line between the items is
+        // Key whitespace, case 2: the blank line between the items is
         // what makes the list loose, and it is span interior. Deleting it
         // would change the rendered HTML of 2532 corpus lists.
         name: "gaps: a loose list keeps the interior blank line that makes it loose",
@@ -241,7 +241,7 @@ const FIXTURES: &[Fixture] = &[
         expected: b"# H\n\n- a\n- b\n- c\n\ntail\n",
     },
     Fixture {
-        // Load-bearing whitespace, case 3: the newline between the text and
+        // Key whitespace, case 3: the newline between the text and
         // the underline is span interior. Emitting a blank line there would
         // turn one heading into a paragraph and a thematic break.
         name: "gaps: a setext underline stays attached to its heading",
@@ -318,7 +318,7 @@ const FIXTURES: &[Fixture] = &[
         expected: b"a\n\n## H\n\nbody\n",
     },
     Fixture {
-        // Span interior at its most load-bearing: the bytes between the fences
+        // The key case of span interior: the bytes between the fences
         // are a code block's *literal*, which `structure.rs` deliberately
         // refuses to trim because they are content. The endings rule rewrites
         // them regardless — a line ending inside a code block is still a line

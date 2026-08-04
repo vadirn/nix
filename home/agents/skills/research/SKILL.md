@@ -39,7 +39,7 @@ The contract. Depth is **emergent from residual uncertainty**, not declared upfr
 
 Read three axes off the question before spending anything:
 
-- **Locus** — code or world. It picks the instrument. Explore handles a codebase fact; a general-purpose subagent drives Firecrawl for a world fact. (`WebSearch`/`WebFetch` are blocked here, so web goes through Firecrawl.)
+- **Locus** — code or world. It picks the instrument. Explore handles a codebase fact. A general-purpose subagent drives Firecrawl for a world fact. (`WebSearch`/`WebFetch` are blocked here, so web goes through Firecrawl.)
 - **Breadth** — single fact → start D1; multi-part or landscape → start D2.
 - **Stakes** — how much rests on the answer. Low → ceiling D1; crux-feeding or expensive-to-undo → ceiling D3.
 

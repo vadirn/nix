@@ -1,11 +1,11 @@
 ---
 name: vidgen-fal
 description: >
-  The fal.ai worker for video generation; produces a Kling-rendered MP4 as the
+  The fal.ai worker for video generation. It produces a Kling-rendered MP4 as the
   master output (always kept). Pass --webm to also encode a VP9 WebM loop
   alongside it (default 640px wide, ~1–3 MB for a 5s clip).
-  Targets Kling v1.6 by default (standard tier); pass --pro for the pro tier. No
-  router hub exists today; invoke this skill directly.
+  Targets Kling v1.6 by default (standard tier). Pass --pro for the pro tier. No
+  router hub exists today. Invoke this skill directly.
   Triggers: /vidgen-fal, "generate a video", "make a looping video",
   explicit mentions of "fal video", "Kling video".
   Skip for image-only tasks and non-video generation requests. Skip when the user
@@ -14,7 +14,7 @@ description: >
 
 # vidgen-fal
 
-This skill is a direct-call fal.ai video worker. It calls a Kling v1.6 endpoint, downloads the MP4 (always kept as the master), then optionally runs a local ffmpeg pipeline — scale + VP9 encode — to produce a WebM alongside it. Pass `--webm` to opt into the WebM transcode. No router hub exists today; the user chose this as a direct-call worker.
+This skill is a direct-call fal.ai video worker. It calls a Kling v1.6 endpoint, downloads the MP4 (always kept as the master), then optionally runs a local ffmpeg pipeline — scale + VP9 encode — to produce a WebM alongside it. Pass `--webm` to opt into the WebM transcode. No router hub exists today. The user chose this as a direct-call worker.
 
 ## Models
 

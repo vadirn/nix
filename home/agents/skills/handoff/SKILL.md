@@ -5,12 +5,12 @@ description: >
   between agents or sessions through a mktemp file path. Triggers: /handoff, "write a handoff",
   "hand this to the next session", capturing state before you /clear or compact context.
   Templates: brief (delegator→worker), result (worker→delegator), continuation
-  (session→successor). For durable cross-session memory use /track; for orchestration use /work.
+  (session→successor). For durable cross-session memory use /track. For orchestration use /work.
 ---
 
 # Handoff
 
-A handoff is one short-lived markdown file that carries work-state from one agent or session to the next. The writer reserves a temp path with `mktemp`, writes a filled template, and passes the path; the reader reads the path and acts. The file is the message: plain text both parties can inspect, not hidden context.
+A handoff is one short-lived markdown file that carries work-state from one agent or session to the next. The writer reserves a temp path with `mktemp`, writes a filled template, and passes the path. The reader reads the path and acts. The file is the message: plain text both parties can inspect, not hidden context.
 
 ## Write a handoff
 
@@ -47,8 +47,8 @@ do("act on <type>: a brief is your task; a result updates your plan; a continuat
 
 ### Boundaries
 
-- **vs `/track`:** a handoff is ephemeral and carries into the very next context (e.g. across a `/clear`); a track is the durable, per-project work log saved at session boundaries. The two are independent: a continuation points at a track when one exists, but depends on none.
-- **vs `/work`:** `/work` is orchestration policy — planning, delegation, git posture. It mirrors handoff's brief and result shapes to talk to its subagents, inlining its own copies rather than reading these files; handoff owns only the message shape and the write/read protocol.
+- **vs `/track`:** a handoff is ephemeral and carries into the very next context (e.g. across a `/clear`). A track is the durable, per-project work log saved at session boundaries. The two are independent: a continuation points at a track when one exists, but depends on none.
+- **vs `/work`:** `/work` is orchestration policy — planning, delegation, git posture. It mirrors handoff's brief and result shapes to talk to its subagents, inlining its own copies rather than reading these files. Handoff owns only the message shape and the write/read protocol.
 
 ### Default type
 

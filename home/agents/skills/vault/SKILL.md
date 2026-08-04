@@ -161,4 +161,4 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 
 ### Project commands
 
-Track operations are handled by the /track skill. For generic `<project> <question>`, use `vault-query --project <name> context` or `vault-query search <terms>` as needed.
+The /track skill handles track operations. For generic `<project> <question>`, use `vault-query --project <name> context` or `vault-query search <terms>` as needed.
