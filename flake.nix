@@ -46,41 +46,45 @@
     system = "aarch64-darwin";
     pkgs = nixpkgs.legacyPackages.${system};
     inherit (pkgs) lib;
-    # The three crates form one cargo workspace (root `Cargo.toml`), chained by
+    # The four crates form one cargo workspace (root `Cargo.toml`), chained by
     # path dependency: vault-query → mdread → mdstruct. Every build source must
     # therefore carry the workspace manifest, the single lockfile, and ALL the
     # member trees at their relative layout. Pin the source to manifests, sources,
     # and tests only (no `target/`) so the input is stable.
-    #
-    # Two files outside the workspace are carried too: the vault skill's lint
-    # rosters. `vault-query/tests/roster.rs` asserts they list exactly the rules
-    # `registry::rule_names()` returns, and it can only read them at build time if
-    # the source includes them. They are listed file by file rather than as the
-    # whole skill directory, so an unrelated skill edit does not invalidate the
-    # crate build.
-    crateSrc = lib.fileset.toSource {
-      root = ./.;
-      fileset = lib.fileset.unions [
-        ./Cargo.toml
-        ./Cargo.lock
-        ./mdstruct/Cargo.toml
-        ./mdstruct/src
-        ./mdstruct/tests
-        ./mdread/Cargo.toml
-        ./mdread/src
-        ./mdread/tests
-        ./vault-query/Cargo.toml
-        ./vault-query/src
-        ./vault-query/tests
-        ./mdformat/Cargo.toml
-        ./mdformat/src
-        ./mdformat/tests
-        ./home/agents/skills/vault/SKILL.md
-        ./home/agents/skills/vault/references/lint.md
-      ];
-    };
-    # One lockfile vendors one dependency set, so all three packages share a
+    workspaceFiles = lib.fileset.unions [
+      ./Cargo.toml
+      ./Cargo.lock
+      ./mdstruct/Cargo.toml
+      ./mdstruct/src
+      ./mdstruct/tests
+      ./mdread/Cargo.toml
+      ./mdread/src
+      ./mdread/tests
+      ./vault-query/Cargo.toml
+      ./vault-query/src
+      ./vault-query/tests
+      ./mdformat/Cargo.toml
+      ./mdformat/src
+      ./mdformat/tests
+    ];
+    # Two files outside the workspace, carried by `vault-query` ALONE: the vault
+    # skill's lint rosters. `vault-query/tests/roster.rs` reads them during
+    # `checkPhase` and asserts they list exactly the rules `registry::rule_names()`
+    # returns, so they have to be in that crate's build sandbox. Nix hashes every
+    # fileset member into the derivation input, so any crate carrying these two
+    # rebuilds whenever either one is edited. Keeping them out of `workspaceFiles`
+    # confines that cost to the crate that actually reads them, instead of also
+    # rebuilding mdstruct, mdread, and mdformat, which cannot. Listing them file by
+    # file rather than naming the skill directory keeps an unrelated skill edit
+    # free even for vault-query.
+    rosterDocs = lib.fileset.unions [
+      ./home/agents/skills/vault/SKILL.md
+      ./home/agents/skills/vault/references/lint.md
+    ];
+    # One lockfile vendors one dependency set, so all four packages share a
     # single hash — recompute it here, once, whenever a dependency changes.
+    # Splitting `src` per crate above leaves this alone: the vendored output
+    # depends on `Cargo.lock`, which the split does not touch.
     #
     # Use cargoHash (fetchCargoVendor) instead of cargoLock.lockFile
     # (importCargoLock). The latter fetches each crate via raw curl, and
@@ -90,19 +94,24 @@
     workspaceCargoHash = "sha256-RmTCqkuHQyppDl8Uqsi2XkP805tGvRYmd/Mfpy8lQfo=";
     # Each member builds from the whole workspace tree and is selected by
     # `buildAndTestSubdir`; cargo finds the root manifest above it and builds
-    # just that package. The subdirectory is the package name for all three.
-    mkCrate = pname:
+    # just that package. The subdirectory is the package name for all four.
+    # `extraFiles` carries inputs a single crate needs beyond the workspace tree,
+    # so one crate's extra input never lands in another crate's derivation.
+    mkCrate = pname: extraFiles:
       pkgs.rustPlatform.buildRustPackage {
         inherit pname;
         version = "0.1.0";
-        src = crateSrc;
+        src = lib.fileset.toSource {
+          root = ./.;
+          fileset = lib.fileset.unions ([workspaceFiles] ++ extraFiles);
+        };
         buildAndTestSubdir = pname;
         cargoHash = workspaceCargoHash;
       };
-    vault-query = mkCrate "vault-query";
-    mdread = mkCrate "mdread";
-    mdstruct = mkCrate "mdstruct";
-    mdformat = mkCrate "mdformat";
+    vault-query = mkCrate "vault-query" [rosterDocs];
+    mdread = mkCrate "mdread" [];
+    mdstruct = mkCrate "mdstruct" [];
+    mdformat = mkCrate "mdformat" [];
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:
       nix-darwin.lib.darwinSystem {
