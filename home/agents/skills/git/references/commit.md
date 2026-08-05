@@ -54,6 +54,13 @@ WHY vs WHAT:
 - `fix: typo in error message` — WHAT. Better: `fix: error text referenced removed flag, confusing users`
 - `feat: add retry logic to API client` — WHAT. Better: `feat: retry transient API failures so callers don't see flakes`
 
+### Simplified style
+
+The Simplified output style governs the subject line, as it governs all authored prose.
+
+- "State the WHY" is Simplified's "lead with the conclusion," not a second rule.
+- The subject is one line for one concern. Simplified says split a sentence that carries two claims. Here the split is two commits, never two sentences. `prefix.md` §Unit of the prefix requires one concern per commit.
+
 ## Rules
 
 - **Run hooks.** If a hook fails, fix the issue, re-stage, create a fresh commit.

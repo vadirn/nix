@@ -2,6 +2,10 @@
 
 Rules to apply after creating or editing any vault file (cards, notes, references, weekly log entries) before wrapping the turn. The dispatcher Reads this file alongside the per-type reference whenever an edit branch fires.
 
+## Simplified governs the entry body
+
+The Simplified output style governs the prose of every entry body: cards, notes, references, tickets, and weekly-log entries. Frontmatter and required headings keep their fixed form.
+
 ## Git vs Obsidian Sync
 
 The vault is a git repo, but `.gitignore` allowlists only a small subset (`.gitignore`, `.claude/`, `.scripts/`). Obsidian Sync manages everything else.
