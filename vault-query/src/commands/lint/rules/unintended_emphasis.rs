@@ -1,5 +1,5 @@
 //! `unintended-emphasis` — flags an emphasis run whose delimiters read as
-//! literal text: two globs, an identifier mentioned twice, a repeated fill-in
+//! literal text: two globs, a doubled-underscore identifier, a repeated fill-in
 //! blank.
 //!
 //! CommonMark pairs two literal `*` characters in one paragraph into emphasis
@@ -169,25 +169,11 @@ fn is_glob_or_path(span: &EmphasisSpan) -> bool {
 
 /// A run whose delimiters belong to a code identifier or a fill-in blank.
 ///
-/// Three tells, in the order they discriminate:
+/// Two tells, in the order they discriminate:
 ///
 /// - A delimiter run of three or more (`___`, `***`). Emphasis needs one or two;
 ///   a longer run is a placeholder the author typed literally, and CommonMark
 ///   pairs it into `Emph`-wrapping-`Strong` when punctuation flanks it.
-/// - EITHER delimiter sitting inside a word (`bug*004 … bug*004`). Prose emphasis
-///   opens and closes at word boundaries, so an alphanumeric outside a delimiter
-///   means the delimiter belongs to the word rather than to the prose. Unlike the
-///   glob test this one stays a disjunction, because the paired delimiters of a
-///   corrupted identifier sit sentences apart and only the opening one lands
-///   inside a word: requiring both ends missed all three live corruptions in this
-///   vault (`bug*004`, `UNRESOLVED*IMPORT`) to spare four deliberate partial-word
-///   bolds (`==**A**ffirmo.==` and its three siblings), which is the wrong trade
-///   for a rule a human adjudicates. Those four are the rule's whole standing
-///   false-positive budget against the live vault. A content test would suppress
-///   them — every one has a single-character `inner`, and a corrupted identifier
-///   never does, because its stolen opener pairs with a delimiter sentences away
-///   — but that exemption buys four glances back at the cost of blinding the rule
-///   to any one-character intraword run, so it stays unspent.
 /// - Bare-identifier content under a DOUBLED `_` (`__init__`, `__G0__`). The
 ///   doubling is what carries the tell, not the underscore: `autoformat` routes
 ///   `.md` through `oxfmt`, which normalizes every intended italic to `_x_`, so a
@@ -195,13 +181,18 @@ fn is_glob_or_path(span: &EmphasisSpan) -> bool {
 ///   that spelling, all intended — while `__x__` is a spelling oxfmt never writes
 ///   for bold (it writes `**x**`) and so survives only where an author typed the
 ///   underscores as part of the name.
+///
+/// A retired third tell flagged EITHER delimiter welded to a word
+/// (`before`/`after` alphanumeric), which caught `bug*004`-style asterisk
+/// corruptions. It is gone, because it cannot tell a corruption from deliberate
+/// intraword bold: CommonMark ENABLES asterisk intraword emphasis, so
+/// `==**A**ffirmo.==` and `un**be**lievable` render exactly as the author asked.
+/// The clause's only live findings were the four `**A**ffirmo` siblings — all
+/// false — so retiring it costs the vault nothing and spends its whole
+/// false-positive budget. Underscore needs no such tell: intraword `_` forms no
+/// emphasis at all (`bug_004` is inert), so a `_` delimiter never welds to a word.
 fn is_identifier_or_placeholder(span: &EmphasisSpan) -> bool {
     if span.run >= 3 {
-        return true;
-    }
-    if span.before.is_some_and(char::is_alphanumeric)
-        || span.after.is_some_and(char::is_alphanumeric)
-    {
         return true;
     }
     span.delimiter == '_'
@@ -313,21 +304,38 @@ mod tests {
         );
     }
 
+    // Asterisk intraword emphasis is deliberate, so a `*` welded into a word is
+    // exempt — even the `bug*004 … bug*004` corruption the rule once caught. The
+    // two literal asterisks still pair into one run; the rule declines to report
+    // it, the trade that lets the intended `**A**ffirmo` bolds below pass too.
     #[test]
-    fn intraword_identifier_twice_emits_one_finding() {
+    fn intraword_asterisk_identifier_emits_nothing() {
         let findings = check("The fix for bug*004 landed last week, so bug*004 is closed.\n");
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].file, PathBuf::from("/vault/Foo.md"));
+        assert_eq!(findings.len(), 0);
+        // The run forms — the exemption is the rule's, not the parser's.
         assert!(
-            findings[0].message.starts_with(
-                "line 1: `*004 landed last week, so bug*` parses as emphasis in identifier-or-placeholder shape"
-            ),
-            "message was {:?}",
-            findings[0].message
+            !crate::mdfacet::emphasis_spans(
+                "The fix for bug*004 landed last week, so bug*004 is closed.\n"
+            )
+            .is_empty()
         );
-        let data = findings[0].data.as_ref().unwrap();
-        assert_eq!(data["line"], 1);
-        assert_eq!(data["shape"], "identifier-or-placeholder");
+    }
+
+    // The live-vault false positive the underscore scoping retires: a bolded
+    // word-initial letter (the `A`/`E`/`I`/`O` of `Affirmo`/`nEgo`). The closing
+    // `**` welds onto `ffirmo`, which the old delimiter-agnostic weld flagged.
+    #[test]
+    fn word_initial_asterisk_bold_emits_nothing() {
+        let findings = check("The mnemonic **A**ffirmo names the universal affirmative.\n");
+        assert_eq!(findings.len(), 0);
+        assert!(!crate::mdfacet::emphasis_spans("The mnemonic **A**ffirmo names it.\n").is_empty());
+    }
+
+    // Mid-word emphasis welds on BOTH sides, and is deliberate all the same.
+    #[test]
+    fn mid_word_asterisk_bold_emits_nothing() {
+        let findings = check("It was un**be**lievable how fast super**cali**fragilistic parsed.\n");
+        assert_eq!(findings.len(), 0);
     }
 
     #[test]
