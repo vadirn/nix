@@ -17,6 +17,7 @@ pub mod singleton_filename_mismatch;
 pub mod singleton_tag;
 pub mod slug_filename_mismatch;
 pub mod ticket_outward_only;
+pub mod unintended_emphasis;
 pub mod unknown_field;
 pub mod unknown_rel;
 pub mod unquoted_frontmatter_link;

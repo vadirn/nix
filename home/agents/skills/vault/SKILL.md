@@ -156,7 +156,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `notes`                                    | No              | List all notes with metadata |
 | `experiments`                              | No              | List all experiments with metadata |
 | `log [DATE\|WEEK\|last\|next]`             | No              | Open or create weekly log |
-| `lint [--format ...] [--rule ...]`         | Yes             | Vault-wide lint: orphan-card (superseded entries exempt), dangling-reference, dangling-relation-label, dangling-requires-target, reference-not-wikilink, reference-wrong-type, reference-vault-link, ticket-outward-only, broken-wikilink, duplicate-h1, callout-missing-separator, invalid-frontmatter, untagged-card, missing-required-field, unknown-field, unquoted-frontmatter-link, invalid-enum-value, singleton-tag, singleton-filename-mismatch, slug-filename-mismatch, filename-hygiene, unknown-rel, oversized-entry (superseded entries exempt), untyped-entry |
+| `lint [--format ...] [--rule ...]`         | Yes             | Vault-wide lint: orphan-card (superseded entries exempt), dangling-reference, dangling-relation-label, dangling-requires-target, reference-not-wikilink, reference-wrong-type, reference-vault-link, ticket-outward-only, broken-wikilink, duplicate-h1, callout-missing-separator, invalid-frontmatter, untagged-card, missing-required-field, unknown-field, unquoted-frontmatter-link, invalid-enum-value, singleton-tag, singleton-filename-mismatch, slug-filename-mismatch, filename-hygiene, unintended-emphasis, unknown-rel, oversized-entry (superseded entries exempt), untyped-entry |
 | `xp [YEAR]`                                | No              | XP report: calendar, streak, level |
 
 ### Project commands
