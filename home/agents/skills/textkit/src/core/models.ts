@@ -56,3 +56,17 @@ export const CARD_DRAFT_TOKENS = 96_000;
 // qwencloud to burn the prepaid credit, mirroring distill's fidelity choice.
 export const CARD_JUDGE = dashscope("glm-5.2");
 export const CARD_JUDGE_TOKENS = 16_384;
+
+// ---- simplify ----
+// The Simplified-restyle pass: ONE strong pass fills the seven-key brief (verdict, cut, change,
+// shape, keep, borderline, rewrite). qwen-flash on DashScope won the single-pass role in the
+// feasibility spike — clean, faithful, ~3s, and 8-11x cheaper than the model panel it replaced.
+// A model judge did not pay over it, so the deterministic guard carries verification, not a peer.
+export const SIMPLIFY_MODEL = dashscope("qwen-flash");
+// The whole restyled note rides back in one JSON `rewrite` string (report-brief's transport
+// choice), a larger single output than polish's per-block revise. So the cap is generous — a long
+// note must land the full rewrite before a length-truncation, which the CLI surfaces as a failure.
+export const SIMPLIFY_TOKENS = 32_768;
+// deepseek-v4-flash is the quality-equal, slower fallback on the SAME provider (one key). The CLI
+// re-rolls to it once when the primary throws transient/truncation, before it fails the run.
+export const SIMPLIFY_FALLBACK = dashscope("deepseek-v4-flash");

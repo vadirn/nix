@@ -3,7 +3,7 @@
 // one verifier, not a per-tool copy. Four axes, checked in order; the first failure
 // names the reason. A caller reverts a failing block to its input, so a false positive
 // loses a correction, never meaning.
-import { MASK_TOKEN_RE } from "textkit/core/writing/mask.ts";
+import { masksSurvived } from "textkit/core/writing/mask.ts";
 import { levenshtein, levenshteinBounded } from "textkit/core/writing/levenshtein.ts";
 
 // Deterministic verification on the MASKED text, in this order; the first failure
@@ -17,10 +17,7 @@ import { levenshtein, levenshteinBounded } from "textkit/core/writing/levenshtei
 // reverts a block to its input, losing a correction, never meaning.
 const wordsOf = (s: string): string[] => s.toLowerCase().match(/[\p{L}][\p{L}'’]*/gu) ?? [];
 export function verifySpellBlock(input: string, output: string): { ok: boolean; reason?: string } {
-  const inTokens = (input.match(MASK_TOKEN_RE) ?? []).sort();
-  const outTokens = (output.match(MASK_TOKEN_RE) ?? []).sort();
-  if (inTokens.length !== outTokens.length || inTokens.some((t, i) => t !== outTokens[i]))
-    return { ok: false, reason: "mask tokens changed" };
+  if (!masksSurvived(input, output)) return { ok: false, reason: "mask tokens changed" };
   if (input.split("\n").length !== output.split("\n").length)
     return { ok: false, reason: "line structure changed" };
   // bounded variant: the full DP on a 20k-char block costs seconds; the verify

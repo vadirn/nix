@@ -8,6 +8,17 @@ import { MASK_RE } from "textkit/core/text.ts";
 // output.
 export const MASK_TOKEN_RE = /⟦\d+⟧/g;
 
+// masksSurvived reports whether `output` carries exactly the same multiset of ⟦N⟧ tokens as
+// `input` — every reference span present the same number of times, none dropped, duplicated, or
+// invented. This is the ONE mask-survival mechanism: verifySpellBlock uses it as its first axis
+// (a change-nothing-else pass), and the simplify guard uses it alone (a heavy restyle changes
+// line count and diff size by design, so only mask-survival transfers). Total: never throws.
+export function masksSurvived(input: string, output: string): boolean {
+  const a = (input.match(MASK_TOKEN_RE) ?? []).sort();
+  const b = (output.match(MASK_TOKEN_RE) ?? []).sort();
+  return a.length === b.length && a.every((t, i) => t === b[i]);
+}
+
 // A Masker pairs the mask/unmask functions built by one createMasker() call: mask() replaces
 // reference spans (and that call's literals) with opaque ⟦N⟧ tokens, and unmask() restores the
 // original text from those tokens. The two share state (the token map) and must be called as
