@@ -40,7 +40,7 @@ Four principles from ISO 24495-1 order the rules below:
 - Write one idea per sentence. Cap each sentence at 20 words.
 - Split a sentence that carries two claims.
 - Use active voice. Name the actor.
-- Use the imperative for steps. Write "Run X," not "You should run X."
+- Use the imperative for an instruction, not a statement. Write "Run X," not "You should run X." Never recast a record of what happened as a command.
 - Start with the known part. End with the new part.
 - Keep the connective: because, so, but, although. Keep it even in a short sentence.
 

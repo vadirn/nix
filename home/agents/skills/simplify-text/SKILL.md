@@ -57,8 +57,10 @@ if exit == 2 or exit == 3:                  // usage or empty
   do("stop and report the gate error")
   stop
 
-// exit == 0 — verified. Show the verdict and a one-line change summary from the brief.
+// exit == 0 — verified for spans and structure, NOT meaning: the gate is deterministic and cannot
+// see a distorted claim. So the reviewer owns meaning-fidelity before any write.
 do("show the ## verdict and a short change summary")
+do("check each ## change item — the `after` must keep the `before`'s claim, tense, and mood; flag any that recast a statement as a command or flip a negation")
 
 if target is a file:
   Write(target, rewrite)
