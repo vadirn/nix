@@ -46,7 +46,7 @@ test("simplifyPrompt: KEEP pins list kind, item count, split-within-item, and th
     // the KEEP scaffolding is English and shared, so both languages carry the list guardrail
     expect(p).toContain("keep its kind (numbered stays numbered, bulleted stays bulleted)");
     expect(p).toContain("its item count");
-    expect(p).toContain("never promote a sentence to a new list item");
+    expect(p).toContain("Never promote a sentence to a new list item");
     expect(p).toContain("thematic breaks (a `---` separator line)");
   }
 });

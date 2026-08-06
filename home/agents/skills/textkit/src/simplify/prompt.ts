@@ -72,10 +72,12 @@ const NO_OP =
 // What the pass must never restyle. Structure is fixed; prose is restyled inside it. The list
 // clause is load-bearing: the model was observed to over-split a list (three numbered items became
 // sixteen bullets), so KEEP names list kind, item count, and split-within-item explicitly — the
-// SHAPE rule builds a list only from prose. ⟦N⟧ tokens are frozen reference spans (wikilinks,
-// embeds, inline code) — reproduced, never reworded.
+// SHAPE rule builds a list only from prose. That clause is four short sentences, one idea each, not
+// one 45-word run-on: dogfooding simplify-text on this prompt flagged the run-on over the 20-word
+// cap the rule itself enforces, and a denser instruction is likelier to be misread. ⟦N⟧ tokens are
+// frozen reference spans (wikilinks, embeds, inline code) — reproduced, never reworded.
 const KEEP =
-  "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count: restyle the prose inside each item, and split a long sentence into shorter sentences within the same item — never promote a sentence to a new list item. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
+  "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item. Never promote a sentence to a new list item. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
 
 // simplifyPrompt builds the single-pass prompt for `masked` (text with reference spans already
 // frozen to ⟦N⟧). It embeds the language's ruleset, the keep-verbatim and no-op clauses, and the
