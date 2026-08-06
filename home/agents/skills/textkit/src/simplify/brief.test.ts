@@ -4,6 +4,7 @@
 import { expect, test } from "bun:test";
 import { coerceBrief, renderBrief } from "textkit/simplify/brief.ts";
 import type { GuardReport } from "textkit/simplify/guard.ts";
+import type { MeaningReport } from "textkit/simplify/meaning.ts";
 
 const cleanGuard: GuardReport = {
   masks: { ok: true, input: 2, output: 2 },
@@ -12,6 +13,8 @@ const cleanGuard: GuardReport = {
   wordcap: [],
   list: { ok: true, source: { ordered: 0, unordered: 0 }, rewrite: { ordered: 0, unordered: 0 } },
 };
+
+const cleanMeaning: MeaningReport = { checked: 0, findings: [], skipped: false };
 
 test("coerceBrief: a full object round-trips; a change item keeps its before/after pair", () => {
   const raw = {
@@ -52,7 +55,7 @@ test("coerceBrief: mistyped fields are dropped — a string change item, a numer
 });
 
 test("renderBrief: the eight sections appear in order", () => {
-  const out = renderBrief(coerceBrief({ verdict: "v", rewrite: "body" }), cleanGuard);
+  const out = renderBrief(coerceBrief({ verdict: "v", rewrite: "body" }), cleanGuard, cleanMeaning);
   const order = [
     "## verdict",
     "## cut",
@@ -72,14 +75,44 @@ test("renderBrief: the eight sections appear in order", () => {
 });
 
 test("renderBrief: empty diff sections read as 'None.', and a clean guard leads with the pass line", () => {
-  const out = renderBrief(coerceBrief({ verdict: "clean", rewrite: "x" }), cleanGuard);
+  const out = renderBrief(
+    coerceBrief({ verdict: "clean", rewrite: "x" }),
+    cleanGuard,
+    cleanMeaning,
+  );
   expect(out).toContain("## cut\n\nNone.");
   expect(out).toContain("## guard\n\nAll checks passed.");
+  expect(out).toContain("- meaning: OK"); // the advisory meaning axis renders into the guard section
+});
+
+test("renderBrief: a skipped meaning axis still leads with the pass line and names the skip", () => {
+  const skipped: MeaningReport = { checked: 2, findings: [], skipped: true };
+  const out = renderBrief(coerceBrief({ verdict: "clean", rewrite: "x" }), cleanGuard, skipped);
+  expect(out).toContain("## guard\n\nAll checks passed."); // a skip is clean, not a block
+  expect(out).toContain("- meaning: skipped");
+});
+
+test("renderBrief: a meaning finding drops the pass line and names the shifted pair", () => {
+  const flagged: MeaningReport = {
+    checked: 1,
+    findings: [
+      {
+        before: "The tool masks spans.",
+        after: "Run the tool.",
+        issue: "statement recast as a command",
+      },
+    ],
+    skipped: false,
+  };
+  const out = renderBrief(coerceBrief({ verdict: "v", rewrite: "x" }), cleanGuard, flagged);
+  expect(out).not.toContain("All checks passed.");
+  expect(out).toContain("- meaning: 1 pair(s) shifted the speech act");
+  expect(out).toContain("statement recast as a command");
 });
 
 test("renderBrief: the rewrite fence outruns an inner triple-backtick code block", () => {
   const rewrite = "Intro.\n\n```ts\nconst x = 1;\n```\n\nDone.";
-  const out = renderBrief(coerceBrief({ rewrite }), cleanGuard);
+  const out = renderBrief(coerceBrief({ rewrite }), cleanGuard, cleanMeaning);
   // the wrapper fence must be longer than the inner ``` so the block stays whole
   expect(out).toContain("````markdown\n" + rewrite + "\n````");
 });

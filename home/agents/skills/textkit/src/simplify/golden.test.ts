@@ -133,6 +133,38 @@ test("golden EN: an introduced name typo is flagged by the guard against the sou
   expect(out).toContain("## rewrite"); // advisory — the brief is still produced
 });
 
+test("golden EN: a statement recast as a command is flagged by the advisory meaning axis", async () => {
+  // done-condition: the restyle recasts a narrative statement as a command; the meaning axis runs
+  // one model call over the `change` pair and flags it, advisory — the brief is still produced.
+  // One `ask` fake serves both prompts: the restyle prompt yields the seven-key brief with a recast
+  // change pair; the meaning prompt (carrying "PAIRS:") yields the judge's verdict.
+  const ask: typeof askJson = (async (_model: unknown, prompt: string) => {
+    if (prompt.includes("PAIRS:"))
+      return { findings: [{ index: 0, issue: "statement recast as a command" }] };
+    return {
+      verdict: "recast a statement as a command",
+      cut: [],
+      change: [
+        {
+          before: "We compute the Levenshtein distance.",
+          after: "Compute the Levenshtein distance.",
+          transform: "active",
+          why: "imperative",
+        },
+      ],
+      shape: [],
+      keep: [],
+      borderline: [],
+      rewrite: maskedOf(prompt), // faithful masked echo, so only the meaning axis fires
+    };
+  }) as unknown as typeof askJson;
+  const out = await runSimplify(EN, { lang: "auto" }, { ask });
+  expect(out).toContain("- meaning: 1 pair(s) shifted the speech act");
+  expect(out).toContain("statement recast as a command");
+  expect(out).not.toContain("All checks passed."); // a meaning finding drops the pass line
+  expect(out).toContain("## rewrite"); // advisory — the brief is still produced
+});
+
 test("golden RU: a Russian note routes to the RU ruleset and preserves Cyrillic spans", async () => {
   let prompt = "";
   const out = await runSimplify(

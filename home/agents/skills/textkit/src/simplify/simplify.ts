@@ -23,6 +23,7 @@ import { createMasker } from "textkit/core/writing/mask.ts";
 import { type SimplifyBrief, resolveLang, simplifyPrompt } from "textkit/simplify/prompt.ts";
 import { coerceBrief, renderBrief } from "textkit/simplify/brief.ts";
 import { runGuard } from "textkit/simplify/guard.ts";
+import { runMeaning } from "textkit/simplify/meaning.ts";
 
 // USAGE is the full `--help` text printed to stdout on `-h`/`--help`: the invocation forms, every
 // option, the output contract, and the exit codes — the human-facing counterpart to parseArgs.
@@ -40,8 +41,8 @@ Options:
 Output:
   A markdown brief to stdout: the seven sections (verdict, cut, change,
   shape, keep, borderline, rewrite) plus a ## guard section (masks, code,
-  names, sentences — all advisory). The input file is never modified;
-  diagnostics go to stderr.
+  names, sentences, lists, meaning — all advisory). The input file is never
+  modified; diagnostics go to stderr.
   Exit: 0 brief printed · 1 missing key · 2 usage error · 3 empty input ·
   4 analysis failed (both models exhausted).
 
@@ -138,15 +139,25 @@ export async function runSimplify(
   const rewriteMasked = brief.rewrite;
   const rewriteUnmasked = unmask(rewriteMasked);
   const guard = runGuard({ source: body, maskedInput, rewriteMasked, rewriteUnmasked });
-  // Display brief: unmask the rewrite and each change span so a human reads real spans, and prepend
-  // the original frontmatter (verbatim, never restyled) so `## rewrite` is the whole note the
-  // subagent applies as one block.
+  // Unmask each change span once so a human reads real spans AND the meaning judge reads real prose;
+  // reuse it for both the axis and the display brief.
+  const change = brief.change.map((c) => ({
+    ...c,
+    before: unmask(c.before),
+    after: unmask(c.after),
+  }));
+  // The advisory meaning axis: one bounded model call over the change pairs, degrading to a clean
+  // skip on any flake so the brief still ships. Empty change short-circuits before any call.
+  if (change.length) progress?.("meaning check…");
+  const meaning = await runMeaning(change, { ask });
+  // Display brief: the unmasked change spans, and the original frontmatter (verbatim, never
+  // restyled) prepended so `## rewrite` is the whole note the subagent applies as one block.
   const display: SimplifyBrief = {
     ...brief,
-    change: brief.change.map((c) => ({ ...c, before: unmask(c.before), after: unmask(c.after) })),
+    change,
     rewrite: front ? `${front}\n${rewriteUnmasked}` : rewriteUnmasked,
   };
-  return renderBrief(display, guard);
+  return renderBrief(display, guard, meaning);
 }
 
 // main is the CLI entrypoint: it parses argv, acts on --help and misuse before the key gate or any

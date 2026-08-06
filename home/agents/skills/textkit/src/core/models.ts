@@ -63,3 +63,12 @@ export const SIMPLIFY_TOKENS = 32_768;
 // deepseek-v4-flash is the quality-equal, slower fallback on the SAME provider (one key). The CLI
 // re-rolls to it once when the primary throws transient/truncation, before it fails the run.
 export const SIMPLIFY_FALLBACK = dashscope("deepseek-v4-flash");
+// The judge for the advisory `meaning` guard axis: a grounded-entailment check over the brief's
+// change pairs (did each rewrite keep its source's speech act?). deepseek-v4-flash is a DIFFERENT
+// model than the restyle's qwen-flash — independence, so the judge does not grade its own output —
+// on the SAME DashScope provider, so it needs no new key. Its latency is unimportant: the axis runs
+// at attempts=1 and degrades to a clean skip on any flake.
+export const SIMPLIFY_MEANING_MODEL = dashscope("deepseek-v4-flash");
+// One small JSON verdict (a findings array of {index, issue}), so a modest cap suffices. The axis
+// is one bounded call; a truncation past this cap degrades to a skip, never a failed brief.
+export const SIMPLIFY_MEANING_TOKENS = 4_096;

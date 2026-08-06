@@ -8,6 +8,7 @@
 // expects display-ready fields — the CLI unmasks `rewrite` and each `change` span before calling.
 import type { ChangeItem, SimplifyBrief } from "textkit/simplify/prompt.ts";
 import { type GuardReport, formatGuard, guardClean } from "textkit/simplify/guard.ts";
+import { type MeaningReport, formatMeaning, meaningClean } from "textkit/simplify/meaning.ts";
 
 const asStr = (v: unknown): string => (typeof v === "string" ? v : "");
 const asStrArr = (v: unknown): string[] =>
@@ -66,14 +67,20 @@ function fenceFor(content: string): string {
   return "`".repeat(Math.max(4, longest + 1));
 }
 
-// renderBrief renders the display-ready brief and guard report to the markdown brief printed on
-// stdout: the seven `##` sections in fixed order, then `## guard`. `rewrite` is fenced so the
-// subagent extracts one block; `guard` leads with "All checks passed." when every axis is clean.
-export function renderBrief(brief: SimplifyBrief, guard: GuardReport): string {
+// renderBrief renders the display-ready brief, guard report, and meaning axis to the markdown brief
+// printed on stdout: the seven `##` sections in fixed order, then `## guard`. `rewrite` is fenced so
+// the subagent extracts one block. The `## guard` section holds the mechanical axes plus the
+// advisory meaning line, and leads with "All checks passed." when every axis is clean (a skipped
+// meaning check counts as clean — its own line names the skip).
+export function renderBrief(
+  brief: SimplifyBrief,
+  guard: GuardReport,
+  meaning: MeaningReport,
+): string {
   const fence = fenceFor(brief.rewrite);
-  const guardBody = guardClean(guard)
-    ? `All checks passed.\n\n${formatGuard(guard)}`
-    : formatGuard(guard);
+  const axes = `${formatGuard(guard)}\n${formatMeaning(meaning)}`;
+  const guardBody =
+    guardClean(guard) && meaningClean(meaning) ? `All checks passed.\n\n${axes}` : axes;
   return [
     `## verdict\n\n${brief.verdict || "No verdict."}`,
     `## cut\n\n${bullets(brief.cut)}`,
