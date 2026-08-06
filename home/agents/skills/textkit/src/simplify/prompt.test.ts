@@ -40,6 +40,25 @@ test("simplifyPrompt: the no-op clause and the never-translate guard are pinned 
   }
 });
 
+test("simplifyPrompt: KEEP pins list kind, item count, split-within-item, and thematic breaks", () => {
+  for (const lang of ["en", "ru"] as const) {
+    const p = simplifyPrompt("x ⟦0⟧ y", lang);
+    // the KEEP scaffolding is English and shared, so both languages carry the list guardrail
+    expect(p).toContain("keep its kind (numbered stays numbered, bulleted stays bulleted)");
+    expect(p).toContain("its item count");
+    expect(p).toContain("never promote a sentence to a new list item");
+    expect(p).toContain("thematic breaks (a `---` separator line)");
+  }
+});
+
+test("simplifyPrompt: SHAPE is scoped to prose so it never over-splits an existing list", () => {
+  // the SHAPE rule builds a list only from PROSE; both rulesets scope it to avoid the over-split
+  expect(SIMPLIFY_RULESET_EN).toContain("turn a PROSE sequence or set into a vertical list");
+  expect(SIMPLIFY_RULESET_EN).toContain("keep an existing list's kind and item count");
+  expect(SIMPLIFY_RULESET_RU).toContain("В ПРОЗЕ");
+  expect(SIMPLIFY_RULESET_RU).toContain("сохрани вид и число пунктов");
+});
+
 test("resolveLang: auto-detects by script, and an explicit override wins", () => {
   expect(resolveLang("auto", "plain english prose here")).toBe("en");
   expect(resolveLang("auto", "обычный русский текст здесь")).toBe("ru");

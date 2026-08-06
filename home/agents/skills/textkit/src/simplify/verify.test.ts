@@ -117,16 +117,103 @@ test("verify: a pure-prose note with no spans leans on the structural backstop",
   expect(verifyClean(r)).toBe(false);
 });
 
+// ---- thematic breaks (the structure axis for a `---` separator) ----
+
+// A note whose scaffolding includes a `---` thematic break — the gh-stack-footer shape the restyle
+// was observed to drop.
+const WITH_BREAK = `# Title
+
+Body text here.
+
+---
+
+Footer note.`;
+
+test("verify: a dropped `---` thematic break is drift even when spans and headings survive", () => {
+  const rewrite = `# Title
+
+Body text here.
+
+Footer note.`; // the --- separator is gone
+  const r = verify(WITH_BREAK, rewrite);
+  expect(r.spans.ok).toBe(true);
+  expect(r.headings.ok).toBe(true);
+  expect(r.thematic.ok).toBe(false);
+  expect(r.thematic.original).toBe(1);
+  expect(r.thematic.rewrite).toBe(0);
+  expect(verifyClean(r)).toBe(false);
+});
+
+test("verify: an invented `---` thematic break is drift", () => {
+  const rewrite = `# Title
+
+Body text here.
+
+---
+
+---
+
+Footer note.`; // a second break the source never had
+  const r = verify(WITH_BREAK, rewrite);
+  expect(r.thematic.original).toBe(1);
+  expect(r.thematic.rewrite).toBe(2);
+  expect(verifyClean(r)).toBe(false);
+});
+
+test("verify: a faithful restyle that keeps the `---` break verifies clean", () => {
+  const rewrite = `# Title
+
+Text.
+
+---
+
+Footer.`;
+  const r = verify(WITH_BREAK, rewrite);
+  expect(r.thematic.ok).toBe(true);
+  expect(verifyClean(r)).toBe(true);
+});
+
+test("verify: frontmatter `---` delimiters are not counted as thematic breaks", () => {
+  const src = `---
+title: Note
+---
+
+# Heading
+
+Body.`;
+  const rewrite = `---
+title: Note
+---
+
+# Heading
+
+Shorter body.`;
+  const r = verify(src, rewrite);
+  expect(r.thematic.original).toBe(0); // the frontmatter fence is stripped, not a break
+  expect(r.thematic.ok).toBe(true);
+  expect(verifyClean(r)).toBe(true);
+});
+
+test("verify: a `---` inside a fenced block is not counted as a thematic break", () => {
+  const src = "Intro.\n\n```\n---\n```\n\nOutro.";
+  const rewrite = "Rewritten intro.\n\n```\n---\n```\n\nOutro.";
+  const r = verify(src, rewrite);
+  expect(r.thematic.original).toBe(0); // the --- is code, stripFences blanks it
+  expect(verifyClean(r)).toBe(true);
+});
+
 test("formatVerify: a clean report names each axis OK", () => {
   const clean: VerifyReport = {
     spans: { ok: true, original: 3, rewrite: 3, dropped: [], invented: [] },
     headings: { ok: true, original: 1, rewrite: 1 },
     fences: { ok: true, original: 2, rewrite: 2 },
+    thematic: { ok: true, original: 1, rewrite: 1 },
   };
   const out = formatVerify(clean);
   expect(out).toContain("- spans: OK — 3 reference span(s) preserved");
   expect(out).toContain("- headings: OK");
   expect(out).toContain("- fences: OK");
+  expect(out).toContain("- thematic breaks: OK");
 });
 
 test("formatVerify: a drift report names the offending spans and count deltas", () => {
