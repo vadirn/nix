@@ -130,7 +130,10 @@ export async function runSimplify(
   const { front, body } = parseFrontmatter(input);
   const lang = resolveLang(opts.lang, body);
   // No literals: simplify runs no glossary term list, so createMasker freezes only the reference
-  // spans MASK_RE finds (wikilinks, embeds, inline code).
+  // spans MASK_RE finds (wikilinks, embeds, inline code). Inline emphasis (`**bold**`, `*italic*`) is
+  // deliberately NOT masked: it wraps editable prose, not an atom, and masking it would inject ⟦N⟧
+  // tokens mid-sentence into the restyle prompt. So the restyle drops emphasis, and the simplify-text
+  // skill's subagent re-applies it by intent at apply time (see that skill's apply step).
   const { mask, unmask } = createMasker();
   const maskedInput = mask(body);
   progress?.(`restyle pass (${lang})…`);
