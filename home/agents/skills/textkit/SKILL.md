@@ -1,19 +1,20 @@
 ---
 name: textkit
-description: A text-processing engine shipping three headless CLIs over one shared writing/extraction core. distill-text extracts an expository note's typed knowledge graph — concepts, judgements, inferences, procedures, payload — and projects it as a certified, span-anchored canonical note (abstractive idea-compression, not extractive trimming), with a residue backstop from a different model. polish-text copy-edits a markdown note (four writing passes, spell/grammar, typography, name lint) without compressing or gating it. card-stage reads an already-distilled note and stages extraction candidates as review files under a card-staging inbox. Replaces /cut. Use on /distill, /textkit, "distill this", "compress this note", "make a glossary of this note", "tighten this into its ideas", "summarize as a glossary", "compress this guide/procedure into steps", "this note is too long/verbose", "polish this note", "copy-edit this", "clean up this prose", "stage cards from this note", "extract cards", «дистиллируй», «сократи в глоссарий», «выжимка», «сделай глоссарий», «сократи гайд в шаги», «отредактируй текст»; route whole-repo glossary maintenance to /glossary.
+description: A text-processing engine shipping four headless CLIs over one shared writing/extraction core. distill-text extracts an expository note's typed knowledge graph — concepts, judgements, inferences, procedures, payload — and projects it as a certified, span-anchored canonical note (abstractive idea-compression, not extractive trimming), with a residue backstop from a different model. card-stage reads an already-distilled note and stages extraction candidates as review files under a card-staging inbox. simplify-text analyzes a note against the Simplified output style and prints a restyle brief; it applies nothing. simplify-verify is the deterministic apply-gate for that restyle — reference spans and structure must survive. Replaces /cut. Use on /distill, /textkit, "distill this", "compress this note", "make a glossary of this note", "tighten this into its ideas", "summarize as a glossary", "compress this guide/procedure into steps", "this note is too long/verbose", "stage cards from this note", "extract cards", «дистиллируй», «сократи в глоссарий», «выжимка», «сделай глоссарий», «сократи гайд в шаги»; route whole-repo glossary maintenance to /glossary.
 ---
 
 # textkit
 
-An umbrella over three standalone headless CLIs that share one text-processing core (`src/core/`: the Fireworks transport, frontmatter/text utilities, and the writing passes). Each CLI is a separate binary on PATH via `.local/bin/`. Each fills `FIREWORKS_API_KEY` from the macOS Keychain (service `fireworks-api`) via its `bin/` wrapper, or takes it from env (`doppler run --project claude-code --config std --`).
+An umbrella over four standalone headless CLIs that share one text-processing core (`src/core/`: the model transports, frontmatter/text utilities, and the writing passes). Each CLI is a separate binary on PATH via `.local/bin/`. Each resolves its own provider key lazily through its `bin/` wrapper — env, then the macOS Keychain, then Doppler (`doppler run --project claude-code --config std --`). `simplify-verify` is deterministic and needs no key.
 
-| CLI            | What it does                                                                                            | Input                          | Output |
-| -------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------ | ------ |
-| `distill-text` | Re-express a note as a typed, span-anchored knowledge graph; abstractive compression                    | an expository/how-to note      | a canonical note projected in seven sections, applied back to source after review |
-| `polish-text`  | Copy-edit prose (four writing passes + spell/grammar + typography + name lint); no compression, no gate | any markdown note              | the polished note, exact bytes on stdout |
-| `card-stage`   | Stage extraction candidates from an already-distilled note as review packets                            | a distilled note (a file path) | one staging file per candidate under a card-staging inbox |
+| CLI               | What it does                                                                                 | Input                          | Output |
+| ----------------- | -------------------------------------------------------------------------------------------- | ------------------------------ | ------ |
+| `distill-text`    | Re-express a note as a typed, span-anchored knowledge graph; abstractive compression         | an expository/how-to note      | a canonical note projected in seven sections, applied back to source after review |
+| `card-stage`      | Stage extraction candidates from an already-distilled note as review packets                 | a distilled note (a file path) | one staging file per candidate under a card-staging inbox |
+| `simplify-text`   | Analyze a note against the Simplified style; one restyle pass, then a guard; applies nothing | any markdown note              | a markdown brief on stdout — verdict, cut, change, shape, keep, borderline, rewrite, guard |
+| `simplify-verify` | Gate a proposed restyle against the original; reference spans and structure must survive     | an original note + a rewrite   | a spans/headings/fences report; a nonzero exit blocks the apply |
 
-`distill-text` is the primary tool and carries the bulk of this doc. `polish-text` and `card-stage` are documented after it.
+`distill-text` is the primary tool and carries the bulk of this doc. `card-stage`, `simplify-text`, and `simplify-verify` are documented after it.
 
 ---
 
@@ -99,27 +100,6 @@ The binary is `distill-text`. It is on PATH via `.local/bin/distill-text`. Emit'
 
 ---
 
-# polish-text
-
-`polish-text` copy-edits a markdown note without compressing it, adding a glossary, or applying a fidelity gate — the original claims stay unchanged. It shares distill's writing-core (`src/core/writing/`): four writing passes (`revise()`), then a spell/grammar pass, typography normalization, and a self-consistency **name lint** (flags a name spelled inconsistently across the note). Reference spans are masked before rewriting so links and citations pass through untouched. Frontmatter passes through verbatim. There is no `<result>` envelope and no residue channel — the output IS the file content.
-
-The input file is never modified. The write-back is the reviewer's act, not the tool's. Failsafe mirrors distill: a truncation or transient throw escaping the passes ships the ORIGINAL input with a "polish skipped" footer rather than aborting. A non-transient throw (a code bug) propagates.
-
-```bash
-polish-text input.md                 # polished note → stdout (exact bytes), report → stderr
-polish-text input.md > out.md        # composes: stdout is the file content
-polish-text < input.md               # stdin when no path (or '-')
-polish-text --lang ru input.md       # force the Russian rubric (default: auto-detect)
-polish-text --no-revise input.md     # skip the four writing passes
-polish-text --no-spell input.md      # skip the spell/grammar pass
-polish-text -o input.md              # write to a fresh temp .md; stdout: the path, then the footer
-polish-text --help                   # full CLI surface
-```
-
-Exit codes: **0** polished · **2** usage error · **3** passthrough (failsafe or empty input — the output is the unpolished input). Needs `FIREWORKS_API_KEY` (the wrapper fills it from the Keychain).
-
----
-
 # card-stage
 
 `card-stage` reads one already-emitted distilled note (a file path, never a live `distill()` call) and stages a review file per extraction candidate under a card-staging inbox. Every candidate is staged **regardless** of its band verdict or any recall/judge/draft flag — nothing here gates or drops. A staging file is a review packet, never a committed card.
@@ -137,3 +117,36 @@ card-stage --help                                 # full CLI surface
 ```
 
 `--dry-run` prints a per-candidate report (term, arm, neighbour count) instead of staging anything. Needs `FIREWORKS_API_KEY`.
+
+---
+
+# simplify-text
+
+`simplify-text` analyzes a markdown note against the Simplified output style. It applies nothing — it prints a brief, and the skill's subagent applies the rewrite. So the input file is never touched here. It masks reference spans first, so wikilinks, embeds, and inline code pass through untouched. It reuses distill's writing-core (`src/core/writing/mask.ts`), so it duplicates no logic. It runs one strong restyle pass, then a deterministic guard over the rewrite. The pass runs on qwen-flash (DashScope), with a deepseek-v4-flash fallback. It auto-detects the language and picks the EN or RU ruleset; `--lang` forces one.
+
+The brief is markdown with seven sections: verdict, cut, change, shape, keep, borderline, rewrite. The `## rewrite` section is fenced and holds the whole restyled note. It is the ONLY section the subagent applies; the rest are read-only rationale. A trailing `## guard` section checks masks, code spans, name typos, and sentence length. Guard findings are advisory — they ride the report and never change the exit code. The product is the brief, so a model call that fails after the fallback exits nonzero rather than shipping the input.
+
+```bash
+simplify-text input.md               # brief → stdout; diagnostics → stderr
+simplify-text < input.md             # stdin when no path (or '-')
+simplify-text --lang ru input.md     # force the Russian rubric (default: auto-detect)
+simplify-text --help                 # full CLI surface
+```
+
+Exit codes: **0** brief printed · **1** missing key · **2** usage error · **3** empty input · **4** analysis failed (both models exhausted). Needs `DASHSCOPE_API_KEY` (the wrapper resolves it from Doppler, `claude-code/std`).
+
+---
+
+# simplify-verify
+
+`simplify-verify` is the deterministic apply-gate for a Simplified restyle. It compares a proposed rewrite against the original note. Reference spans (`[[wikilinks]]`, `![[embeds]]`, inline code) and fixed structure (headings, code fences) must survive. A nonzero exit blocks a silent apply. It runs no model and needs no key — the check is pure text comparison.
+
+The original note is a positional path. The proposed rewrite is read from a file, or from stdin when the second path is omitted or `-`. So the skill pipes `simplify-text`'s extracted `## rewrite` block in and gates the write on the exit code. The original is never modified; this tool applies nothing.
+
+```bash
+simplify-verify original.md rewrite.md      # compare a rewrite file against the original
+simplify-verify original.md < rewrite.md    # rewrite on stdin when the second path is omitted
+simplify-verify --help                       # full CLI surface
+```
+
+Exit codes: **0** verified · **1** drift (block the apply) · **2** usage error · **3** empty input. No model, no key.
