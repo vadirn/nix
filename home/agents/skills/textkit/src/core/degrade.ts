@@ -8,4 +8,5 @@ import { makeRethrowIfBug } from "@skills/llm/llm.ts";
 export const distillDegrade = makeRethrowIfBug("distill");
 export const polishDegrade = makeRethrowIfBug("polish");
 export const cardStageDegrade = makeRethrowIfBug("card-stage");
+export const simplifyDegrade = makeRethrowIfBug("simplify");
 export const writingDegrade = makeRethrowIfBug("writing");
