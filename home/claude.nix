@@ -19,6 +19,7 @@ in {
   home.file.".local/bin/polish-text".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/polish-text";
   home.file.".local/bin/card-stage".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/card-stage";
   home.file.".local/bin/simplify-text".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/simplify-text";
+  home.file.".local/bin/simplify-verify".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/simplify-verify";
 
   # Claude Code is not packaged in nixpkgs; this activation intentionally
   # performs an impure network fetch to install the official binary.

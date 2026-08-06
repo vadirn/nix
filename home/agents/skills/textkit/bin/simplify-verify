@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Deploy seam for simplify-verify: the apply-gate is fully deterministic — no model, no API key,
+# no network — so this wrapper only execs the entrypoint. It compares a proposed rewrite against
+# the original note (reference spans + structure) and exits nonzero on drift.
+set -u
+exec bun "$(dirname "$(readlink -f "$0")")/../src/simplify/verify.ts" "$@"
