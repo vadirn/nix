@@ -16,7 +16,6 @@ in {
   home.file.".local/bin/sync-agents".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/sync-agents.sh";
   home.file.".local/bin/pr-template".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/scripts/pr-template.sh";
   home.file.".local/bin/distill-text".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/distill-text";
-  home.file.".local/bin/polish-text".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/polish-text";
   home.file.".local/bin/card-stage".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/card-stage";
   home.file.".local/bin/simplify-text".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/simplify-text";
   home.file.".local/bin/simplify-verify".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/textkit/bin/simplify-verify";

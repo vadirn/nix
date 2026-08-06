@@ -1,5 +1,5 @@
-// models — textkit's model policy, decoupled PER CLIENT so each CLI (distill / polish /
-// card-stage) configures its own provider+model independently. Kept out of the shared
+// models — textkit's model policy, decoupled PER CLIENT so each CLI (distill / card-stage /
+// simplify) configures its own provider+model independently. Kept out of the shared
 // transport (`@skills/llm/llm.ts`), which is provider-neutral and takes a ModelRef + token
 // cap as call arguments; these are textkit's choices, built here with the transport's provider
 // helpers and passed in at every call site. Change a client's model by editing its block below
@@ -41,15 +41,8 @@ export const DISTILL_FIDELITY_TOKENS = 16_384;
 // gate-skipped; attempts=1 bounds the total wait at this value, with no retry behind it.
 export const DISTILL_FIDELITY_TIMEOUT_MS = 480_000;
 
-// ---- polish ----
-// The spell/grammar rewrite model. Defaults to luna like distill; a rewrite pass is lighter than
-// graph extraction, so dial the effort down (or swap to a cheaper model) here if cost matters —
-// this is independent of distill now.
-export const POLISH_MODEL = openai("gpt-5.6-luna", { effort: "medium" });
-export const POLISH_TOKENS = 96_000;
-
 // ---- card-stage ----
-// The card-draft writer. Its own model, independent of distill/polish.
+// The card-draft writer. Its own model, independent of distill.
 export const CARD_DRAFT = openai("gpt-5.6-luna", { effort: "medium" });
 export const CARD_DRAFT_TOKENS = 96_000;
 // The novelty-band + atomicity judges — a DIFFERENT model than the writer (independence), on

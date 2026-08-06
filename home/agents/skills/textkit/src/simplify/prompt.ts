@@ -41,20 +41,25 @@ export type SimplifyBrief = {
   rewrite: string;
 };
 
-// SIMPLIFY_RULESET_EN is the English rule set — the Relevance / Sentences / Words / Shape
-// principles of Simplified.md, condensed to prompt form. It drops the doc's meta sections (~40%
-// of its tokens: "Where it applies", "Relation to Exposition"), which a restyle model does not
-// need and whose dangling cross-references would mislead it.
-export const SIMPLIFY_RULESET_EN = `RELEVANCE: lead each unit with its conclusion, then the reason. Cover only what the reader needs; cut the rest. Use the fewest words that keep the meaning whole.
-SENTENCES: one idea per sentence, at most 20 words. Split a sentence that carries two claims. Use active voice and name the actor. Use the imperative for a step ("Run X", not "You should run X"). Start with the known part, end with the new. Keep the connective — because, so, but, although — even in a short sentence.
+// SIMPLIFY_RULESET_EN is the English rule set — the Meaning / Relevance / Sentences / Words / Shape
+// principles condensed to prompt form. It drops Simplified.md's meta sections (~40% of its tokens:
+// "Where it applies", "Relation to Exposition"), which a restyle model does not need and whose
+// dangling cross-references would mislead it. MEANING is the fidelity governor over the restyle
+// rules — a statement stays a statement, a number stays exact. Three of its claims (verb-near-
+// subject, cut-restatement, keep-numbers) come from CLAUDE.md's Exposition, inlined here because
+// the offline model cannot reach the Simplified.md ↔ CLAUDE.md pair the agent reads.
+export const SIMPLIFY_RULESET_EN = `MEANING: restyle the wording, not the meaning. Keep each sentence's tense, mood, and polarity — a statement stays a statement, a record of what happened stays past, never a command. Use the imperative only where the source already instructs. Keep every number, name, and quoted value exactly as it stands.
+RELEVANCE: lead each unit with its conclusion, then the reason. Cover only what the reader needs; cut the rest. Cut a sentence that only restates, emphasizes, or hedges; cadence earns no clause. Use the fewest words that keep the meaning whole.
+SENTENCES: one idea per sentence, at most 20 words. Split a sentence that carries two claims. Use active voice and name the actor; keep the verb close to its subject. Use the imperative for an instruction ("Run X", not "You should run X"). Start with the known part, end with the new. Keep the connective — because, so, but, although — even in a short sentence.
 WORDS: use one term per concept and reuse it. Prefer plain, concrete words; cut any word the sentence survives without. Replace a hidden verb with a verb ("decide", not "make a decision"). Use the positive form; state what to do. Use simple tenses. Use at most three nouns in a row.
 SHAPE: turn a sequence or a set into a vertical list. Give each paragraph one topic; keep it short. Add a heading for a topic the reader may jump to.`;
 
-// SIMPLIFY_RULESET_RU is the Russian rule set — the same four principles adapted to Russian
-// mechanics, not translated from the English. Tailored terms: канцелярит, отглагольные
-// существительные, «является»/«представляет собой» → тире.
-export const SIMPLIFY_RULESET_RU = `ГЛАВНОЕ: вывод — первым, причина — после. Дай читателю только нужное, остальное убери. Пиши минимумом слов без потери смысла.
-ПРЕДЛОЖЕНИЯ: одна мысль — одно предложение, не длиннее 20 слов. Предложение с двумя утверждениями разбей. Активный залог, назови деятеля. Для шага — повелительное наклонение («Запусти X», а не «Нужно запустить X»). Известное — в начало, новое — в конец. Сохрани связку — потому что, поэтому, но, хотя — даже в коротком предложении.
+// SIMPLIFY_RULESET_RU is the Russian rule set — the same five principles adapted to Russian
+// mechanics, not translated from the English. СМЫСЛ mirrors EN MEANING. Tailored terms:
+// канцелярит, отглагольные существительные, «является»/«представляет собой» → тире.
+export const SIMPLIFY_RULESET_RU = `СМЫСЛ: меняй форму, а не смысл. Сохрани время, наклонение и полярность — утверждение остаётся утверждением, рассказ о случившемся остаётся в прошедшем времени, но не командой. Повелительное наклонение — только там, где источник уже даёт инструкцию. Каждое число, имя и цитату сохрани в точности.
+ГЛАВНОЕ: вывод — первым, причина — после. Дай читателю только нужное, остальное убери. Убери предложение, которое лишь повторяет, усиливает или смягчает; красивость не даёт права на клаузу. Пиши минимумом слов без потери смысла.
+ПРЕДЛОЖЕНИЯ: одна мысль — одно предложение, не длиннее 20 слов. Предложение с двумя утверждениями разбей. Активный залог, назови деятеля; держи глагол рядом с подлежащим. Для инструкции — повелительное наклонение («Запусти X», а не «Нужно запустить X»). Известное — в начало, новое — в конец. Сохрани связку — потому что, поэтому, но, хотя — даже в коротком предложении.
 СЛОВА: один термин на одно понятие, повторяй его. Простые конкретные слова; убери слово, без которого предложение живёт. Отглагольное существительное → глагол («реши», а не «прими решение»); канцелярит → живой глагол. «является»/«представляет собой» → тире или прямой глагол. Утверждение вместо отрицания. Простые времена.
 ФОРМА: последовательность или набор → вертикальный список. Один абзац — одна мысль, абзац короткий. Заголовок для темы, к которой читатель может перейти.`;
 
