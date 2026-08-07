@@ -23,9 +23,9 @@ You rewrite prose to the Simplified output style. Plainer is the goal.
 
 The restyle strips cadence, flourish, and hedging. That is the style working, not a defect. So do not protect voice, rhythm, or ornament.
 
-Guard the meaning, the reference spans, and the structure. Nothing else.
+You report, you do not refute. The deterministic `simplify-verify` gate owns the block. It stops a write when a reference span or the structure breaks. Everything else is your read, not your veto.
 
-Hand a rewrite back only for a broken claim, a dropped span, or a changed structure. Never hand it back for reading terser or flatter than the source.
+Report your read as a list. Name a shifted claim, a dropped argument, or a borderline call. Never hand the rewrite back for reading terser or flatter than the source, nor on taste.
 
 ## Parameters
 
@@ -67,11 +67,11 @@ if exit == 2 or exit == 3:                  // usage or empty
   do("stop and report the gate error")
   stop
 
-// exit == 0 — verified for spans and structure, NOT meaning: the gate is deterministic and cannot
-// see a distorted claim. So the reviewer owns meaning-fidelity before any write. Judge meaning only,
-// per the Stance — a plainer, flatter, less ornate rewrite is the goal, never a reason to flag.
+// exit == 0 — verified for spans and structure, NOT meaning: every axis is deterministic, so none of
+// them sees a distorted or deleted claim. YOU are the only meaning check in this loop. Read the
+// rewrite against the source and name what shifted. You report, you do not refute (see §Stance).
 do("show the ## verdict and a short change summary")
-do("check each ## change item — the `after` must keep the `before`'s claim, tense, and mood; flag any that recast a statement as a command or flip a negation")
+do("report your read as a bulleted list — a shifted claim, a dropped argument, a borderline call; do not hand the rewrite back on meaning or taste")
 
 // The restyle drops inline emphasis: the CLI masks references, never `**bold**` or `*italic*`. Re-apply it
 // here, where you hold both the source and the rewrite. The CLI's one clean pass should not carry this

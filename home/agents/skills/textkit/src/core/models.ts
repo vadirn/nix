@@ -52,14 +52,42 @@ export const CARD_JUDGE_TOKENS = 16_384;
 
 // ---- simplify ----
 // The Simplified-restyle pass: ONE strong pass fills the seven-key brief (verdict, cut, change,
-// shape, keep, borderline, rewrite). qwen-flash on DashScope won the single-pass role in the
-// feasibility spike — clean, faithful, ~3s, and 8-11x cheaper than the model panel it replaced.
-// A model judge did not pay over it, so the deterministic guard carries verification, not a peer.
-export const SIMPLIFY_MODEL = dashscope("qwen-flash");
+// shape, keep, borderline, rewrite). gpt-5.6-luna on OpenAI at medium effort replaced qwen-flash
+// after a dogfooding sweep over one PR body (11 models, then luna vs gpt-5.6-terra at 3 runs each),
+// scored by claim-level entailment — is each source claim still asserted anywhere in the rewrite? —
+// with gpt-5.4 judging, so no swept model graded itself.
+//   - qwen-flash DELETED a load-bearing claim in 2 of 2 runs, and its brief still read
+//     "All checks passed": the deterministic guard cannot see a dropped sentence. glm-5.2 did the
+//     same. Cheap Alibaba tiers (qwen-flash, qwen3.7-flash) drop; the max tiers instead shift claims.
+//   - luna dropped NOTHING across 4 runs and weakened nothing, matching terra's fidelity.
+//   - Price decided the tie: luna is $0.20/$1.20 per 1M vs terra's $2.00/$12.00, and terra also
+//     burns 1.45x the output tokens, so a run costs ~$0.0045 on luna against ~$0.065 on terra —
+//     14x — for no measured fidelity gain. luna also runs ~1.7x faster (28s vs 48s).
+export const SIMPLIFY_MODEL = openai("gpt-5.6-luna", { effort: "medium" });
 // The whole restyled note rides back in one JSON `rewrite` string (report-brief's transport
 // choice), a larger single output than polish's per-block revise. So the cap is generous — a long
 // note must land the full rewrite before a length-truncation, which the CLI surfaces as a failure.
-export const SIMPLIFY_TOKENS = 32_768;
-// deepseek-v4-flash is the quality-equal, slower fallback on the SAME provider (one key). The CLI
-// re-rolls to it once when the primary throws transient/truncation, before it fails the run.
-export const SIMPLIFY_FALLBACK = dashscope("deepseek-v4-flash");
+// Sized like the other luna clients here because it is a reasoning model: max_completion_tokens
+// covers BOTH the reasoning and the JSON, and a measured run spends ~2.3k of it on reasoning alone.
+export const SIMPLIFY_TOKENS = 96_000;
+// gpt-5.4-mini is the cheap same-provider fallback (one key with the primary). The CLI re-rolls to
+// it once when the primary throws transient/truncation, before it fails the run. It dropped no claim
+// in the sweep — the property that matters in a fallback, since a degraded run must not silently
+// lose an argument. Keeping the fallback OFF DashScope also leaves the meaning judge below on a
+// different provider than BOTH restyle models, so the judge stays independent even mid-fallback.
+export const SIMPLIFY_FALLBACK = openai("gpt-5.4-mini", { effort: "medium" });
+// RETIRED: the advisory `meaning` axis (a model judge over the brief's change pairs) and its
+// SIMPLIFY_MEANING_MODEL / SIMPLIFY_MEANING_TOKENS. Dogfooding retired it on two grounds, both
+// properties of the axis rather than of any one restyle model:
+//   - It was blind to the failure that mattered. It judged only the pairs the model REPORTED in
+//     `change`, so a wholesale deletion was never submitted to it. qwen-flash and glm-5.2 each
+//     deleted a load-bearing sentence and the axis passed them clean.
+//   - It fired on nearly every run, so it carried no signal. Three runs on a compliant body raised
+//     4, 3, and 2 findings, almost all of them a bold FRAGMENT gaining a subject ("A different
+//     model, for independence." → "…provides independence.") — the style working, read as a claim.
+// An always-on advisory also suppressed the "All checks passed." lead permanently, costing the five
+// deterministic axes their summary line. Restyle fidelity now rests on the model choice (see
+// SIMPLIFY_MODEL) and on the two prompt clauses the same sweep produced: claim FORCE and a bounded
+// cut licence. If a replacement is ever wanted, check DELETION only — an absent claim is objective,
+// while "weakened" proved unreliable in evaluation (one judge called "showed" a weakening but let
+// "exposed" pass on the same claim).

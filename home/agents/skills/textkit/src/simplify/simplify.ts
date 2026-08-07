@@ -3,8 +3,8 @@
 // See the USAGE block below for the full CLI surface (invocation, flags, output contract, exit
 // codes).
 //
-// The tool APPLIES NOTHING: it masks reference spans, runs up to three restyle passes (qwen-flash,
-// with a deepseek-v4-flash fallback) and keeps the first that clears the apply-gate, runs a
+// The tool APPLIES NOTHING: it masks reference spans, runs up to three restyle passes (gpt-5.6-luna,
+// with a gpt-5.4-mini fallback) and keeps the first that clears the apply-gate, runs a
 // deterministic guard over that rewrite, and prints the markdown brief to stdout. The simplify-text
 // skill's subagent reads the brief, applies the `rewrite`, and owns all file I/O. So the input file
 // is never touched here.
@@ -49,12 +49,12 @@ Options:
 Output:
   A markdown brief to stdout: the seven sections (verdict, cut, change,
   shape, keep, borderline, rewrite) plus a ## guard section (masks, code,
-  names, sentences — all advisory). The input file is never modified;
-  diagnostics go to stderr.
+  names, sentences, lists — all advisory, all deterministic). The input file
+  is never modified; diagnostics go to stderr.
   Exit: 0 brief printed · 1 missing key · 2 usage error · 3 empty input ·
   4 analysis failed (both models exhausted).
 
-Env: DASHSCOPE_API_KEY, resolved from Doppler (claude-code/std) via keys.ts
+Env: OPENAI_API_KEY, resolved from Doppler (claude-code/std) via keys.ts
 (e.g. doppler run --project claude-code --config std --)
 `;
 
