@@ -3,11 +3,14 @@ name: simplify-text
 description: >
   Rewrite a given text to the Simplified output style: short sentences (one idea,
   ≤20 words), active voice, plain words, conclusion first, sets as vertical lists.
-  Use when the user invokes /simplify-text or asks to "apply the Simplified style",
-  "make this simplified", "rewrite in Simplified", or "simplify this text / prose /
-  PR body / commit message / doc". Works on inline text, a file path, or a live
-  surface named in the conversation (the last message, a PR body). Restyle the prose
-  and keep fixed structure verbatim — headings, template scaffolding, code, tables,
+  Two modes, picked by the target. External — a file, a PR body, a commit message —
+  gets a side-by-side artifact and a write back. Reply — your own draft or last
+  message, or a snippet pasted into the chat — gets the rewrite as the message
+  itself. Use when the user invokes /simplify-text or asks to "apply the Simplified
+  style", "make this simplified", "rewrite in Simplified", "simplify this text /
+  prose / PR body / commit message / doc", or turns the style on you: "simplify your
+  reply", "say that more simply", "restyle your last message". Restyle the prose and
+  keep fixed structure verbatim — headings, template scaffolding, code, tables,
   quoted specimens, frontmatter, and any fixed surface limit. Route code cleanups to
   /simplify, idea-compression to /distill, and negative-to-positive instruction
   flips to /affirm.
@@ -25,27 +28,43 @@ The restyle strips cadence, flourish, and hedging. That is the style working, no
 
 You report, you do not refute. The deterministic `simplify-verify` gate owns the block. It stops a write when a reference span or the structure breaks. Everything else is your read, not your veto.
 
-Report your read as a list. Name a shifted claim, a dropped argument, or a borderline call. Never hand the rewrite back for reading terser or flatter than the source, nor on taste.
+Report your read as a list in external mode. Name a shifted claim, a dropped argument, or a borderline call. Never hand the rewrite back for reading terser or flatter than the source, nor on taste.
+
+In reply mode you have no reader to report to, so fix what shifted rather than naming it. Then send the message and stay silent about the pass.
+
+## Modes
+
+The target picks the mode. Nothing else does.
+
+- **External** — a file path, a PR body, an issue, a commit message. The text lives outside this conversation, and the write lands where the user or the public reads it. So publish the artifact, then write.
+- **Reply** — your own draft, your last message, or a snippet pasted into the chat. The text IS this conversation. So send the rewrite as your message: no artifact, no brief, no note that the pass ran.
+
+A pasted snippet takes reply mode, because an artifact for two lines costs more than it shows.
+
+One pass serves both. Only the ending differs.
 
 ## Parameters
 
-- `text` (required): The text to rewrite. Inline text, a file path, or a live surface named in the conversation (the last message, a PR body).
+- `text` (required): The text to rewrite. A file path, an external surface named in the conversation (a PR body, a commit message), or inline text.
 
 ```
 content = <args> or conversation context
 if no content: AskUserQuestion("Which text should I rewrite?")
 
-// Resolve the source and the write target.
+// Resolve the source, the write target, and the mode. The target picks the mode — see §Modes.
 if content is a file path (starts with / or ./, a known extension, or an existing file):
   source = that file
   target = that file
-elif content names a live surface (a PR body, a commit message, the last message):
+  mode = external
+elif content names an external surface (a PR body, an issue, a commit message):
   text = do("fetch it — e.g. gh pr view <n> --json body -q .body")
   source = Write("$TMPDIR/simplify-src.md", text)   // both CLIs read files
   target = that surface
-else:
-  source = Write("$TMPDIR/simplify-src.md", content) // a bare snippet
-  target = none                                      // show the result only
+  mode = external
+else:                                               // your own draft, your last message, a snippet
+  source = Write("$TMPDIR/simplify-src.md", content)
+  target = none
+  mode = reply
 
 // Analyze. The CLI owns the ruleset; language auto-detects (override with --lang en|ru).
 brief = Bash("simplify-text <source>")
@@ -60,18 +79,20 @@ rewrite = do("take the single fenced block under ## Rewrite")
 // Gate before any write. Pipe the rewrite to the apply-gate against the source.
 report = Bash("simplify-verify <source>")   // rewrite piped on stdin
 if exit == 1:                               // drift — do NOT write
-  do("surface the dropped/invented span or the heading/fence count delta from <report>")
-  AskUserQuestion("Re-run simplify-text, or hand this back?")
+  if mode == external:
+    do("surface the dropped/invented span or the heading/fence count delta from <report>")
+    AskUserQuestion("Re-run simplify-text, or hand this back?")
+    stop
+  do("send your original draft unrestyled — the CLI already re-rolled three times, so a fourth buys little")
   stop
 if exit == 2 or exit == 3:                  // usage or empty
   do("stop and report the gate error")
   stop
 
 // exit == 0 — verified for spans and structure, NOT meaning: every axis is deterministic, so none of
-// them sees a distorted or deleted claim. YOU are the only meaning check in this loop. Read the
-// rewrite against the source and name what shifted. You report, you do not refute (see §Stance).
-do("show the ## Verdict and a short change summary")
-do("report your read as a bulleted list — a shifted claim, a dropped argument, a borderline call; do not hand the rewrite back on meaning or taste")
+// them sees a distorted or deleted claim. YOU are the only meaning check in this loop. Both modes
+// read; they differ in what the read produces (see §Stance).
+findings = do("read the rewrite against the source and name every claim the pass shifted or dropped")
 
 // The restyle drops inline emphasis: the CLI masks references, never `**bold**` or `*italic*`. Re-apply it
 // here, where you hold both the source and the rewrite. The CLI's one clean pass should not carry this
@@ -81,22 +102,32 @@ do("report your read as a bulleted list — a shifted claim, a dropped argument,
 // fit is worse than none.
 rewrite = do("replicate the source's emphasis by intent — re-emphasize each stressed idea in the rewrite's new wording, and leave it out where the restyle left no natural fit")
 
-// Show the result as a black-and-white HTML artifact with two modes — original-vs-edited and the
+if mode == reply:
+  rewrite = do("repair every finding in <findings> — you are the only reader here, so a shifted claim is yours to fix, never to report")
+  do("send <rewrite> as your message: no artifact, no brief, no note that the pass ran")
+  stop
+
+// External from here: show the read, publish the artifact, then write.
+do("show the ## Verdict and a short change summary")
+do("report <findings> as a bulleted list — a shifted claim, a dropped argument, a borderline call; do not hand the rewrite back on meaning or taste")
+
+// Show the result as a black-and-white HTML artifact with two views — original-vs-edited and the
 // full brief — verbatim in <pre>, MonoLisaCode, generous spacing. See §Artifact.
 do("build the artifact from <source>, <rewrite>, and <brief>, then publish it")
 
 if target is a file:
   Write(target, rewrite)
   do("show what changed")
-elif target is a live surface:
+else:                                       // an external surface
   do("confirm before writing back — a PR body or commit message is public")
   do("then offer gh pr edit --body-file, or an amend")
-// else: the artifact is the result display
 ```
 
 ## Artifact
 
-Show the result as a black-and-white HTML artifact with two modes. The template is `assets/viewer.html`.
+External mode only. Reply mode publishes nothing.
+
+Show the result as a black-and-white HTML artifact with two views. The template is `assets/viewer.html`.
 
 - Original vs edited: two columns, source left, rewrite right, a center rule.
 - Brief: the full CLI brief.
