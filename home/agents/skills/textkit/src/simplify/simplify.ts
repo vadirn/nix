@@ -25,6 +25,7 @@ import { type SimplifyBrief, resolveLang, simplifyPrompt } from "textkit/simplif
 import { coerceBrief, renderBrief } from "textkit/simplify/brief.ts";
 import { runGuard } from "textkit/simplify/guard.ts";
 import { verify, verifyClean } from "textkit/simplify/verify.ts";
+import { wordCapScan } from "textkit/simplify/wordcap.ts";
 
 // The restyle pass is re-rolled up to this many times to clear the apply-gate. The model is
 // non-deterministic, so a run that drops a span or adds a heading is one bad roll, not a fixed
@@ -151,7 +152,12 @@ export async function runSimplify(
   // skill's subagent re-applies it by intent at apply time (see that skill's apply step).
   const { mask, unmask } = createMasker();
   const maskedInput = mask(body);
-  const prompt = simplifyPrompt(maskedInput, lang);
+  // Deterministic length pre-hint. wordCapScan is the one guard axis that reads a text standalone
+  // (the other four diff the rewrite against the source), so it is the only "what's wrong with the
+  // original" finding available before the pass. Feed the measured over-cap sentences into the prompt
+  // so the model splits the exact offenders it counts unreliably. Empty for a within-cap source.
+  const overCap = wordCapScan(maskedInput);
+  const prompt = simplifyPrompt(maskedInput, lang, overCap);
   // Retry-to-gate. The model is non-deterministic, so a run that drops a span or adds a heading is
   // one bad roll. Re-roll up to `attempts` and keep the FIRST run the apply-gate accepts — the same
   // `verify` the simplify-verify CLI runs, called here on the source and the unmasked rewrite. If no

@@ -9,6 +9,7 @@
 // pattern revise() uses. SIMPLIFY_RULESET_RU is tailored to Russian mechanics (канцелярит,
 // отглагольные существительные, «является» → тире), not a port of the English STE rules.
 import { detectLang } from "textkit/core/text.ts";
+import { type WordCapFinding, WORD_CAP } from "textkit/simplify/wordcap.ts";
 
 // The seven brief keys the pass fills, in render order. `rewrite` carries the whole restyled note
 // as one markdown string (report-brief's JSON transport); the other six are the reviewable diff.
@@ -83,19 +84,42 @@ const NO_OP =
 const KEEP =
   "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item. Never promote a sentence to a new list item. Keep the heading count exact. Never promote a bold lead, a question, or a sentence to a heading. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
 
+// capHint is the deterministic length pre-hint: wordCapScan measures the SOURCE before the pass and
+// names each prose sentence over the cap. The ruleset already states the cap, yet the model counts
+// words unreliably — a live no-op left three sentences over it while reporting the note compliant —
+// so handing the model the measured offenders turns the rule into a checklist. Framed as CANDIDATES,
+// not commands: a legitimately long sentence (an em-dash aside, a quoted line) is kept and flagged in
+// `borderline`, never force-split. Empty when the source is within the cap, so a clean note gets no
+// hint and the no-op clause governs alone.
+export function capHint(overCap: WordCapFinding[], lang: "en" | "ru"): string {
+  if (overCap.length === 0) return "";
+  if (lang === "ru") {
+    const list = overCap.map((f) => `- (${f.words} сл.) ${f.sentence}`).join("\n");
+    return `ПРОВЕРКА ДЛИНЫ: детерминированная проверка нашла эти предложения источника длиннее ${WORD_CAP} слов. Разбей каждое там, где разбивка сохраняет смысл. Если предложение нельзя разбить без искажения — оставь его как есть и отметь в «borderline»:\n${list}`;
+  }
+  const list = overCap.map((f) => `- (${f.words} words) ${f.sentence}`).join("\n");
+  return `LENGTH CHECK: a deterministic scan found these source sentences over the ${WORD_CAP}-word cap. Split each where a split preserves the meaning. If a sentence cannot split without distorting it, keep it and note it in \`borderline\`:\n${list}`;
+}
+
 // simplifyPrompt builds the single-pass prompt for `masked` (text with reference spans already
-// frozen to ⟦N⟧). It embeds the language's ruleset, the keep-verbatim and no-op clauses, and the
+// frozen to ⟦N⟧). It embeds the language's ruleset, the keep-verbatim and no-op clauses, the
+// deterministic length pre-hint (present only when the source has over-cap sentences), and the
 // strict seven-key JSON schema, then the text. The model returns JSON; the CLI renders it to the
 // markdown brief and runs the deterministic guard.
-export function simplifyPrompt(masked: string, lang: "en" | "ru"): string {
+export function simplifyPrompt(
+  masked: string,
+  lang: "en" | "ru",
+  overCap: WordCapFinding[] = [],
+): string {
   const ruleset = lang === "ru" ? SIMPLIFY_RULESET_RU : SIMPLIFY_RULESET_EN;
+  const hint = capHint(overCap, lang);
   return `You are an editor applying the Simplified writing style. Restyle the prose of the TEXT below to the style, and report what you changed as a strict JSON brief.
 
 ${ruleset}
 
 ${KEEP}
 
-${NO_OP}
+${NO_OP}${hint ? `\n\n${hint}` : ""}
 
 Return ONLY JSON with these seven keys:
 {"verdict":"one sentence — does the text meet the style, and the main gap if not","cut":["each word or phrase you removed as padding"],"change":[{"before":"the original span","after":"your restyled span","transform":"split|active|de-nominalize|reorder|plain-word|list","why":"one clause"}],"shape":["each structural shift — a prose set turned into a vertical list"],"keep":["each fixed span you preserved verbatim — a heading, a code block, a specimen"],"borderline":["each judgment call the human should check"],"rewrite":"the full restyled note as markdown, every ⟦N⟧ token reproduced unchanged"}

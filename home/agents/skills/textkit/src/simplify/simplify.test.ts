@@ -129,6 +129,47 @@ test("runSimplify: a Russian note auto-routes to the RU ruleset and preserves Cy
   expect(out).toContain("## guard\n\nAll checks passed.");
 });
 
+test("runSimplify: an over-cap source sentence is measured and forwarded into the prompt", async () => {
+  // a 24-word sentence in the source: wordCapScan must find it and simplifyPrompt must carry it, so
+  // the model gets the exact offender it counts unreliably (the deterministic length pre-hint).
+  const LONG =
+    "We compute the Levenshtein distance between the two given strings and then we also run the build and keep everything short and tidy.";
+  let seenPrompt = "";
+  const ask: typeof askJson = (async (_model: unknown, prompt: string) => {
+    seenPrompt = prompt;
+    return {
+      verdict: "ok",
+      cut: [],
+      change: [],
+      shape: [],
+      keep: [],
+      borderline: [],
+      rewrite: maskedOf(prompt),
+    };
+  }) as unknown as typeof askJson;
+  await runSimplify(LONG, { lang: "auto" }, { ask });
+  expect(seenPrompt).toContain("LENGTH CHECK"); // the pre-hint block reached the model
+  expect(seenPrompt).toContain("We compute the Levenshtein distance"); // the offender itself
+});
+
+test("runSimplify: a within-cap source carries no length hint", async () => {
+  let seenPrompt = "";
+  const ask: typeof askJson = (async (_model: unknown, prompt: string) => {
+    seenPrompt = prompt;
+    return {
+      verdict: "ok",
+      cut: [],
+      change: [],
+      shape: [],
+      keep: [],
+      borderline: [],
+      rewrite: maskedOf(prompt),
+    };
+  }) as unknown as typeof askJson;
+  await runSimplify(NOTE, { lang: "auto" }, { ask }); // NOTE's sentences are all short
+  expect(seenPrompt).not.toContain("LENGTH CHECK");
+});
+
 test("runSimplify: a gate-drifting pass is re-rolled, and the first clean run is kept", async () => {
   let calls = 0;
   const driftThenClean: typeof askJson = (async (_model: unknown, prompt: string) => {
