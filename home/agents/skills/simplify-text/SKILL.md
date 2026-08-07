@@ -81,15 +81,40 @@ do("report your read as a bulleted list — a shifted claim, a dropped argument,
 // fit is worse than none.
 rewrite = do("replicate the source's emphasis by intent — re-emphasize each stressed idea in the rewrite's new wording, and leave it out where the restyle left no natural fit")
 
+// Show the result as a black-and-white HTML artifact with two modes — original-vs-edited and the
+// full brief — verbatim in <pre>, MonoLisaCode, generous spacing. See §Artifact.
+do("build the artifact from <source>, <rewrite>, and <brief>, then publish it")
+
 if target is a file:
   Write(target, rewrite)
   do("show what changed")
 elif target is a live surface:
   do("confirm before writing back — a PR body or commit message is public")
   do("then offer gh pr edit --body-file, or an amend")
-else:
-  do("show the rewrite")
+// else: the artifact is the result display
 ```
+
+## Artifact
+
+Show the result as a black-and-white HTML artifact with two modes. The template is `assets/viewer.html`.
+
+- Original vs edited: two columns, source left, rewrite right, a center rule.
+- Brief: the full CLI brief.
+
+Print every text verbatim. Do not render the markdown to HTML. Show the exact characters — headings, fences, list markers — inside a `<pre>`. HTML-escape each text, fill the markers, then publish.
+
+Fill five markers:
+
+- `__FONT_B64__` — the MonoLisaCode TTF, base64-encoded, because the artifact CSP blocks an external font.
+- `__SRC__` — the source name.
+- `__ORIGINAL__` — the escaped source note.
+- `__EDITED__` — the escaped rewrite, the `## Rewrite` block.
+- `__BRIEF__` — the escaped full brief.
+
+The typography matches the user's ghostty:
+
+- Features: `liga`, `calt`, `cv01`, `cv08`, `cv09`, `ss14`, and `GRAD` 50.
+- Color: black on white in light, white on black in dark. No accent.
 
 ## Reference
 

@@ -1,0 +1,218 @@
+<style>
+  /* simplify-text viewer — two modes, both verbatim. Black & white, MonoLisaCode, pre-formatted.
+     The build fills five markers: FONT_B64 (base64 TTF), SRC (source name), ORIGINAL (escaped
+     source), EDITED (escaped rewrite), BRIEF (escaped full brief). No markdown rendering. */
+  @font-face {
+    font-family: "MonoLisaCode";
+    src: url("data:font/ttf;base64,__FONT_B64__") format("truetype");
+    font-weight: 100 900;
+    font-display: swap;
+  }
+
+  :root {
+    --bg: #ffffff;
+    --ink: #161616;
+    --rule: #e6e6e6;
+    --muted: #8a8a8a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101010;
+      --ink: #f2f2f2;
+      --rule: #2a2a2a;
+      --muted: #7d7d7d;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --ink: #161616;
+    --rule: #e6e6e6;
+    --muted: #8a8a8a;
+  }
+  :root[data-theme="dark"] {
+    --bg: #101010;
+    --ink: #f2f2f2;
+    --rule: #2a2a2a;
+    --muted: #7d7d7d;
+  }
+
+  .artifact {
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    font-family: "MonoLisaCode", ui-monospace, "SF Mono", Menlo, monospace;
+    font-feature-settings:
+      "liga" 1,
+      "calt" 1,
+      "cv01" 1,
+      "cv08" 1,
+      "cv09" 1,
+      "ss14" 1;
+    font-variation-settings: "GRAD" 50;
+  }
+  .wrap {
+    max-width: 68rem;
+    margin: 0 auto;
+    padding: clamp(1.25rem, 4vw, 3rem);
+  }
+
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin-bottom: 1.6rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .brand {
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+  }
+  .src {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .modes {
+    display: inline-flex;
+    border: 1px solid var(--rule);
+  }
+  .mode-btn {
+    appearance: none;
+    background: transparent;
+    color: var(--muted);
+    border: 0;
+    padding: 0.32rem 0.75rem;
+    font: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .mode-btn + .mode-btn {
+    border-left: 1px solid var(--rule);
+  }
+  .mode-btn[aria-pressed="true"] {
+    background: var(--ink);
+    color: var(--bg);
+  }
+  .mode-btn:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  .view {
+    display: none;
+  }
+  .artifact[data-mode="compare"] .view-compare,
+  .artifact[data-mode="brief"] .view-brief {
+    display: block;
+  }
+
+  .compare {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .compare::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--rule);
+  }
+  .col-o {
+    padding-right: clamp(1rem, 3vw, 2rem);
+  }
+  .col-e {
+    padding-left: clamp(1rem, 3vw, 2rem);
+  }
+  .col-label {
+    color: var(--muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.7rem;
+  }
+
+  pre.doc {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: normal;
+    overflow-wrap: break-word;
+    font-size: clamp(13px, 0.35rem + 0.7vw, 15px);
+    line-height: 1.7;
+    font-variation-settings: "GRAD" 50;
+  }
+
+  @media (max-width: 640px) {
+    .compare {
+      grid-template-columns: 1fr;
+    }
+    .compare::before {
+      display: none;
+    }
+    .col-o {
+      padding-right: 0;
+      padding-bottom: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--rule);
+    }
+    .col-e {
+      padding-left: 0;
+    }
+  }
+</style>
+
+<div class="artifact" data-mode="compare">
+  <div class="wrap">
+    <div class="head">
+      <span class="brand">simplify-text</span>
+      <div class="modes" role="group" aria-label="View mode">
+        <button class="mode-btn" type="button" data-mode="compare" aria-pressed="true">
+          Original vs edited
+        </button>
+        <button class="mode-btn" type="button" data-mode="brief" aria-pressed="false">Brief</button>
+      </div>
+      <span class="src">__SRC__</span>
+    </div>
+
+    <div class="view view-compare">
+      <div class="compare">
+        <div class="col col-o">
+          <div class="col-label">Original</div>
+          <pre class="doc">__ORIGINAL__</pre>
+        </div>
+        <div class="col col-e">
+          <div class="col-label">Edited</div>
+          <pre class="doc">__EDITED__</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="view view-brief">
+      <pre class="doc">__BRIEF__</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var root = document.querySelector(".artifact");
+    var btns = document.querySelectorAll(".mode-btn");
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        root.dataset.mode = b.dataset.mode;
+        btns.forEach(function (x) {
+          x.setAttribute("aria-pressed", String(x === b));
+        });
+      });
+    });
+  })();
+</script>
