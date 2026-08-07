@@ -53,6 +53,12 @@ We compute the Levenshtein distance between two strings. See the [[edit-distance
 
 The core step uses the \`wagner-fischer\` recurrence. The grid is in ![[dp-grid.png]].
 
+The recurrence has three moves:
+
+1. Delete a character.
+2. Insert a character.
+3. Substitute a character.
+
 \`\`\`ts
 const cost = a === b ? 0 : 1;
 \`\`\``;
@@ -98,6 +104,21 @@ test("golden EN: a faithful restyle yields a valid brief with every masked span 
   expect(out).toContain("## guard\n\nAll checks passed.");
   // the original frontmatter is prepended to the rewrite verbatim.
   expect(out).toContain("---\ntitle: Edit distance\ntags: [algorithms]\n---");
+  // the numbered list keeps its kind and its three items — the list axis stays clean.
+  expect(out).toContain("1. Delete a character.");
+  expect(out).toContain("3. Substitute a character.");
+});
+
+test("golden EN: over-splitting the numbered list into bullets flips the guard's list axis", async () => {
+  // done-condition: the model turns the 3-item numbered list into bullets; the list axis flags it
+  // (advisory — the brief is still produced, the human decides).
+  const flipToBullets = (m: string): string =>
+    m
+      .replace(/^\d+\. /gm, "- ")
+      .replace("Substitute a character.", "Substitute a character.\n- And more.");
+  const out = await runSimplify(EN, { lang: "auto" }, { ask: fakeAsk(flipToBullets) });
+  expect(out).toContain("- lists: FLIP");
+  expect(out).toContain("## rewrite"); // advisory — the brief is still produced
 });
 
 test("golden EN: an introduced name typo is flagged by the guard against the source", async () => {

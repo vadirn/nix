@@ -12,8 +12,9 @@
 //
 //   spans      — the reference-span multiset ([[wikilinks]], ![[embeds]], inline code, via the
 //                CLI's own MASK_RE) is identical. A dropped, mutated, or invented span is drift.
-//   structure  — the heading count and the fenced-code-marker count match. A truncation that drops
-//                no span still drops a heading or an opening fence, so this is the backstop for a
+//   structure  — the heading count, the fenced-code-marker count, AND the thematic-break (`---`)
+//                count match. A truncation that drops no span still drops a heading, an opening
+//                fence, or a `---` separator a template requires, so this is the backstop for a
 //                pure-prose note the span axis cannot check.
 //
 // No model, no key, no network — the spans and structure markers are the certificate, and checking
@@ -21,7 +22,14 @@
 // block verifier for a change-nothing-else pass. This gate is skill-side and fires on a heavy
 // restyle's applied output.)
 import { readFileSync } from "node:fs";
-import { type FenceState, MASK_RE, fenceScan, stripFences } from "textkit/core/text.ts";
+import { parseFrontmatter } from "textkit/core/frontmatter.ts";
+import {
+  type FenceState,
+  MASK_RE,
+  THEMATIC_BREAK_RE,
+  fenceScan,
+  stripFences,
+} from "textkit/core/text.ts";
 
 // ---- the two axes (pure) ----
 
@@ -41,12 +49,13 @@ type SpanDiff = {
 // Internal — VerifyReport reuses it for both count axes.
 type CountAxis = { ok: boolean; original: number; rewrite: number };
 
-// The full verify outcome — the span axis plus the two structural-count axes. verifyClean reads it
-// to the single gate bit; formatVerify renders it to the report.
+// The full verify outcome — the span axis plus the three structural-count axes. verifyClean reads
+// it to the single gate bit; formatVerify renders it to the report.
 export type VerifyReport = {
   spans: SpanDiff;
   headings: CountAxis;
   fences: CountAxis;
+  thematic: CountAxis;
 };
 
 // The reference spans MASK_RE finds in a text, in document order. `.match` with the shared global
@@ -97,7 +106,20 @@ function fenceMarkers(text: string): number {
   return n;
 }
 
-// verify compares the proposed `rewrite` against the `original` note on both axes and returns the
+// Count thematic-break lines (`---`, `***`, `___`) outside fenced code and outside the leading
+// frontmatter block. parseFrontmatter drops the note's `---`-fenced YAML so its delimiters are not
+// miscounted as breaks; stripFences then blanks a `---` inside a ```code block. Like headingCount,
+// the number is only ever COMPARED between the two sides, so a symmetric count (a setext `---`
+// underline present on both) cancels — the delta is what gates. A dropped `---` separator (the
+// gh-stack footer rule a template needs) is the drift this axis catches.
+function thematicBreakCount(text: string): number {
+  let n = 0;
+  for (const line of stripFences(parseFrontmatter(text).body).split("\n"))
+    if (THEMATIC_BREAK_RE.test(line)) n++;
+  return n;
+}
+
+// verify compares the proposed `rewrite` against the `original` note on every axis and returns the
 // combined report. Pure and total — it reads two strings and touches no process state.
 export function verify(original: string, rewrite: string): VerifyReport {
   const so = spanList(original);
@@ -107,6 +129,8 @@ export function verify(original: string, rewrite: string): VerifyReport {
   const hr = headingCount(rewrite);
   const fo = fenceMarkers(original);
   const fr = fenceMarkers(rewrite);
+  const to = thematicBreakCount(original);
+  const tr = thematicBreakCount(rewrite);
   return {
     spans: {
       ok: dropped.length === 0 && invented.length === 0,
@@ -117,12 +141,13 @@ export function verify(original: string, rewrite: string): VerifyReport {
     },
     headings: { ok: ho === hr, original: ho, rewrite: hr },
     fences: { ok: fo === fr, original: fo, rewrite: fr },
+    thematic: { ok: to === tr, original: to, rewrite: tr },
   };
 }
 
 // verifyClean reports whether every axis matched — the single gate bit. main exits 1 when false.
 export function verifyClean(r: VerifyReport): boolean {
-  return r.spans.ok && r.headings.ok && r.fences.ok;
+  return r.spans.ok && r.headings.ok && r.fences.ok && r.thematic.ok;
 }
 
 // formatVerify renders the report to the stdout body: one line per axis, each OK or DRIFT. A DRIFT
@@ -150,6 +175,11 @@ export function formatVerify(r: VerifyReport): string {
       ? `- fences: OK — ${r.fences.original} marker(s) preserved`
       : `- fences: DRIFT — ${r.fences.original} marker(s) in source, ${r.fences.rewrite} in rewrite`,
   );
+  lines.push(
+    r.thematic.ok
+      ? `- thematic breaks: OK — ${r.thematic.original} preserved`
+      : `- thematic breaks: DRIFT — ${r.thematic.original} in source, ${r.thematic.rewrite} in rewrite`,
+  );
   return lines.join("\n");
 }
 
@@ -161,7 +191,8 @@ export const USAGE = `simplify-verify — deterministic apply-gate for a Simplif
 
 Compare a proposed rewrite against the original note. Reference spans
 ([[wikilinks]], ![[embeds]], inline code) and fixed structure (headings,
-code fences) must survive. A nonzero exit blocks a silent apply.
+code fences, thematic breaks) must survive. A nonzero exit blocks a silent
+apply.
 
 Usage:
   simplify-verify <original.md> [rewrite.md]
@@ -175,8 +206,8 @@ Options:
   -h, --help   show this help and exit
 
 Output:
-  A short report to stdout — spans, headings, fences, each OK or DRIFT. The
-  original is never modified; this tool applies nothing.
+  A short report to stdout — spans, headings, fences, thematic breaks, each
+  OK or DRIFT. The original is never modified; this tool applies nothing.
   Exit: 0 verified · 1 drift (block the apply) · 2 usage error · 3 empty input.
 `;
 

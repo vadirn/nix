@@ -137,6 +137,13 @@ export function stripFences(text: string): string {
   return out.join("\n");
 }
 
+// A CommonMark thematic break line: up to three leading spaces, then three or more of the SAME
+// marker (`-`, `_`, or `*`), optionally space-separated, and nothing else. A `-`-only break under a
+// paragraph is also a valid setext underline; a caller that only COMPARES counts across two sides
+// lets that symmetric case cancel. Shared by the simplify apply-gate (which counts breaks as a
+// structure axis) and the guard (which excludes a `- - -` break from list-marker counting).
+export const THEMATIC_BREAK_RE = /^ {0,3}([-_*])(?:[ \t]*\1){2,}[ \t]*$/;
+
 // Render Blocks back to their `[id] text` display form, one blank line between blocks — the
 // inverse of segment()'s grouping, used to show a segmented note to a human or a prompt.
 export function render(blocks: Block[]): string {

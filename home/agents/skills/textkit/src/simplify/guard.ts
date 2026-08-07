@@ -5,14 +5,18 @@
 // never changes the exit code (an operational failure — bad args, a dead model call — is the CLI's
 // concern, not the guard's). The subagent and the human decide what to do with a reported violation.
 //
-// Four axes, three reusing shared core/writing engines, one new:
+// Five axes, three reusing shared core/writing engines, two new:
 //   masks    — masksSurvived: every ⟦N⟧ reference span survived the rewrite (a heavy restyle
 //              changes line count and diff size by design, so ONLY mask-survival transfers from the
 //              spell verifier).
 //   code     — fenced code blocks (not masked, unlike inline spans) are intact as a multiset.
 //   names    — nameLintAgainstSource: no proper name corrupted toward a source name or invented.
 //   sentences — wordCapScan: no prose sentence over the 20-word cap.
-import { type FenceState, fenceScan } from "textkit/core/text.ts";
+//   lists    — a list KIND the source had (numbered or bulleted) still exists in the rewrite. This
+//              is advisory, not a hard gate: exact item count cannot be an invariant because the
+//              SHAPE rule inflates a list on purpose (a prose set becomes a vertical list), so only
+//              a vanished kind — the observed numbered→bulleted over-split — trips the axis.
+import { THEMATIC_BREAK_RE, type FenceState, fenceScan, stripFences } from "textkit/core/text.ts";
 import { MASK_TOKEN_RE, masksSurvived } from "textkit/core/writing/mask.ts";
 import { type NameLintResult, nameLintAgainstSource } from "textkit/core/writing/name-lint.ts";
 import { type WordCapFinding, WORD_CAP, wordCapScan } from "textkit/simplify/wordcap.ts";
@@ -25,7 +29,13 @@ export type GuardReport = {
   code: { ok: boolean; source: number; rewrite: number };
   names: NameLintResult;
   wordcap: WordCapFinding[];
+  list: { ok: boolean; source: ListCounts; rewrite: ListCounts };
 };
+
+// The list-item marker counts on one side: ordered (`1.`) and unordered (`-`/`*`/`+`) items. The
+// list axis compares these two counts across source and rewrite to detect a vanished kind. Internal
+// — GuardReport reuses it for both sides; consumers build the shape with object literals.
+type ListCounts = { ordered: number; unordered: number };
 
 // The four strings the guard reads: the raw source body (name-lint reference, unmasked prose), the
 // masked input and masked rewrite (mask-survival, code, and word-cap all read masked forms so a
@@ -75,12 +85,45 @@ function multisetEqual(a: string[], b: string[]): boolean {
   return sa.every((x, i) => x === sb[i]);
 }
 
-// runGuard applies all four axes to one rewrite and returns the combined report. Pure and total —
+const ORDERED_ITEM_RE = /^\s*\d{1,9}[.)]\s/;
+const UNORDERED_ITEM_RE = /^\s*[-*+]\s/;
+
+// listMarkers counts list-item lines by kind, outside fenced code. A `- - -` (or `* * *`) thematic
+// break also matches the unordered pattern, so THEMATIC_BREAK_RE excludes it first — a horizontal
+// rule is not a one-item list. Ordered wins ties (a line is one kind), though the two patterns are
+// disjoint in practice. Read on masked forms like the code and word-cap axes: masking freezes
+// reference spans to ⟦N⟧ and never touches a line's leading list marker.
+function listMarkers(text: string): ListCounts {
+  let ordered = 0;
+  let unordered = 0;
+  for (const line of stripFences(text).split("\n")) {
+    if (THEMATIC_BREAK_RE.test(line)) continue;
+    if (ORDERED_ITEM_RE.test(line)) ordered++;
+    else if (UNORDERED_ITEM_RE.test(line)) unordered++;
+  }
+  return { ordered, unordered };
+}
+
+// listKindFlipped reports whether a list KIND present in the source vanished from the rewrite: the
+// source had numbered items and the rewrite has none, or it had bulleted items and the rewrite has
+// none. That is the observed over-split (3 numbered items promoted to 16 bullets → ordered 3→0).
+// It does NOT flag a count change alone: a SHAPE transform legitimately inflates a list, so growth
+// is not drift, only a disappeared kind is.
+function listKindFlipped(source: ListCounts, rewrite: ListCounts): boolean {
+  return (
+    (source.ordered > 0 && rewrite.ordered === 0) ||
+    (source.unordered > 0 && rewrite.unordered === 0)
+  );
+}
+
+// runGuard applies all five axes to one rewrite and returns the combined report. Pure and total —
 // it reads strings and calls total engines, so it never throws and touches no process state.
 export function runGuard(input: GuardInput): GuardReport {
   const { source, maskedInput, rewriteMasked, rewriteUnmasked } = input;
   const srcBlocks = fencedBlocks(maskedInput);
   const outBlocks = fencedBlocks(rewriteMasked);
+  const srcList = listMarkers(maskedInput);
+  const outList = listMarkers(rewriteMasked);
   return {
     masks: {
       ok: masksSurvived(maskedInput, rewriteMasked),
@@ -94,6 +137,7 @@ export function runGuard(input: GuardInput): GuardReport {
     },
     names: nameLintAgainstSource(rewriteUnmasked, source),
     wordcap: wordCapScan(rewriteMasked),
+    list: { ok: !listKindFlipped(srcList, outList), source: srcList, rewrite: outList },
   };
 }
 
@@ -105,7 +149,8 @@ export function guardClean(r: GuardReport): boolean {
     r.code.ok &&
     r.names.corrupted.length === 0 &&
     r.names.invented.length === 0 &&
-    r.wordcap.length === 0
+    r.wordcap.length === 0 &&
+    r.list.ok
   );
 }
 
@@ -125,7 +170,25 @@ export function formatGuard(r: GuardReport): string {
   );
   lines.push(formatNames(r.names));
   lines.push(formatWordcap(r.wordcap));
+  lines.push(formatList(r.list));
   return lines.join("\n");
+}
+
+// Render the list axis: a vanished kind (the over-split signal) names which kind went and prints
+// both count deltas, or an OK line naming the preserved counts (or that there were no lists).
+function formatList(l: GuardReport["list"]): string {
+  const counts = `ordered ${l.source.ordered}→${l.rewrite.ordered}, unordered ${l.source.unordered}→${l.rewrite.unordered}`;
+  if (l.ok) {
+    return l.source.ordered + l.source.unordered === 0
+      ? "- lists: OK — no lists to preserve"
+      : `- lists: OK — list kinds preserved (ordered ${l.source.ordered}, unordered ${l.source.unordered})`;
+  }
+  const gone: string[] = [];
+  if (l.source.ordered > 0 && l.rewrite.ordered === 0)
+    gone.push(`${l.source.ordered} numbered item(s) became bulleted or were dropped`);
+  if (l.source.unordered > 0 && l.rewrite.unordered === 0)
+    gone.push(`${l.source.unordered} bulleted item(s) became numbered or were dropped`);
+  return `- lists: FLIP — ${gone.join("; ")} (${counts})`;
 }
 
 // Render the name-lint axis: corrupted names (found ← wanted) and invented names, or OK.

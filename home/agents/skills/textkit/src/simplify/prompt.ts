@@ -52,7 +52,7 @@ export const SIMPLIFY_RULESET_EN = `MEANING: restyle the wording, not the meanin
 RELEVANCE: lead each unit with its conclusion, then the reason. Cover only what the reader needs; cut the rest. Cut a sentence that only restates, emphasizes, or hedges; cadence earns no clause. Use the fewest words that keep the meaning whole.
 SENTENCES: one idea per sentence, at most 20 words. Split a sentence that carries two claims. Use active voice and name the actor; keep the verb close to its subject. Use the imperative for an instruction ("Run X", not "You should run X"). Start with the known part, end with the new. Keep the connective — because, so, but, although — even in a short sentence.
 WORDS: use one term per concept and reuse it. Prefer plain, concrete words; cut any word the sentence survives without. Replace a hidden verb with a verb ("decide", not "make a decision"). Use the positive form; state what to do. Use simple tenses. Use at most three nouns in a row.
-SHAPE: turn a sequence or a set into a vertical list. Give each paragraph one topic; keep it short. Add a heading for a topic the reader may jump to.`;
+SHAPE: turn a PROSE sequence or set into a vertical list; keep an existing list's kind and item count as they stand. Give each paragraph one topic; keep it short.`;
 
 // SIMPLIFY_RULESET_RU is the Russian rule set — the same five principles adapted to Russian
 // mechanics, not translated from the English. СМЫСЛ mirrors EN MEANING. Tailored terms:
@@ -61,7 +61,7 @@ export const SIMPLIFY_RULESET_RU = `СМЫСЛ: меняй форму, а не �
 ГЛАВНОЕ: вывод — первым, причина — после. Дай читателю только нужное, остальное убери. Убери предложение, которое лишь повторяет, усиливает или смягчает; красивость не даёт права на клаузу. Пиши минимумом слов без потери смысла.
 ПРЕДЛОЖЕНИЯ: одна мысль — одно предложение, не длиннее 20 слов. Предложение с двумя утверждениями разбей. Активный залог, назови деятеля; держи глагол рядом с подлежащим. Для инструкции — повелительное наклонение («Запусти X», а не «Нужно запустить X»). Известное — в начало, новое — в конец. Сохрани связку — потому что, поэтому, но, хотя — даже в коротком предложении.
 СЛОВА: один термин на одно понятие, повторяй его. Простые конкретные слова; убери слово, без которого предложение живёт. Отглагольное существительное → глагол («реши», а не «прими решение»); канцелярит → живой глагол. «является»/«представляет собой» → тире или прямой глагол. Утверждение вместо отрицания. Простые времена.
-ФОРМА: последовательность или набор → вертикальный список. Один абзац — одна мысль, абзац короткий. Заголовок для темы, к которой читатель может перейти.`;
+ФОРМА: последовательность или набор В ПРОЗЕ → вертикальный список; у существующего списка сохрани вид и число пунктов как есть. Один абзац — одна мысль, абзац короткий.`;
 
 // The no-op clause: text already in the style must round-trip unchanged. It is the ruleset's own
 // stop condition — inlined here (its one home), never in Simplified.md. Kept in the prompt so a
@@ -69,10 +69,19 @@ export const SIMPLIFY_RULESET_RU = `СМЫСЛ: меняй форму, а не �
 const NO_OP =
   "If the text already satisfies every rule, change nothing: say so in `verdict`, leave `cut`, `change`, `shape`, and `borderline` empty, and reproduce the input verbatim in `rewrite`.";
 
-// What the pass must never restyle. Structure is fixed; prose is restyled inside it. ⟦N⟧ tokens
-// are frozen reference spans (wikilinks, embeds, inline code) — reproduced, never reworded.
+// What the pass must never restyle. Structure is fixed; prose is restyled inside it. The list
+// clause is load-bearing: the model was observed to over-split a list (three numbered items became
+// sixteen bullets), so KEEP names list kind, item count, and split-within-item explicitly — the
+// SHAPE rule builds a list only from prose. That clause is four short sentences, one idea each, not
+// one 45-word run-on: dogfooding simplify-text on this prompt flagged the run-on over the 20-word
+// cap the rule itself enforces, and a denser instruction is likelier to be misread. The heading
+// clause is load-bearing too: dogfooding on PR bodies showed the model inflating bold list-leads
+// into headings and sectioning off a rhetorical-question paragraph (two headings became six), so
+// KEEP fixes the heading count and forbids promotion while SHAPE no longer invites adding one.
+// ⟦N⟧ tokens are frozen reference spans (wikilinks, embeds, inline code) — reproduced, never
+// reworded.
 const KEEP =
-  "Keep verbatim, never restyle: headings, list and table structure, fenced code blocks, frontmatter, quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
+  "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item. Never promote a sentence to a new list item. Keep the heading count exact. Never promote a bold lead, a question, or a sentence to a heading. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
 
 // simplifyPrompt builds the single-pass prompt for `masked` (text with reference spans already
 // frozen to ⟦N⟧). It embeds the language's ruleset, the keep-verbatim and no-op clauses, and the
@@ -89,7 +98,7 @@ ${KEEP}
 ${NO_OP}
 
 Return ONLY JSON with these seven keys:
-{"verdict":"one sentence — does the text meet the style, and the main gap if not","cut":["each word or phrase you removed as padding"],"change":[{"before":"the original span","after":"your restyled span","transform":"split|active|de-nominalize|reorder|plain-word|list","why":"one clause"}],"shape":["each structural shift — a set turned into a vertical list, a topic heading added"],"keep":["each fixed span you preserved verbatim — a heading, a code block, a specimen"],"borderline":["each judgment call the human should check"],"rewrite":"the full restyled note as markdown, every ⟦N⟧ token reproduced unchanged"}
+{"verdict":"one sentence — does the text meet the style, and the main gap if not","cut":["each word or phrase you removed as padding"],"change":[{"before":"the original span","after":"your restyled span","transform":"split|active|de-nominalize|reorder|plain-word|list","why":"one clause"}],"shape":["each structural shift — a prose set turned into a vertical list"],"keep":["each fixed span you preserved verbatim — a heading, a code block, a specimen"],"borderline":["each judgment call the human should check"],"rewrite":"the full restyled note as markdown, every ⟦N⟧ token reproduced unchanged"}
 
 TEXT:
 ${masked}`;
