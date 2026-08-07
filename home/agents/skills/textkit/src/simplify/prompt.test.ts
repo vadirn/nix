@@ -77,6 +77,29 @@ test("simplifyPrompt: neither the ruleset nor the schema invites adding a headin
   expect(p).not.toContain("a topic heading added"); // the schema's `shape` hint no longer suggests it
 });
 
+test("MEANING pins claim force in both languages — the one drift every swept model showed", () => {
+  // Live sweep finding: nearly every restyle model softened "A live run PROVED the gap" to "showed"
+  // or "found". Tense/mood/polarity all survived, so the existing MEANING clause never caught it —
+  // the weakened verb is a claim-force shift, a fourth axis the rule now names outright.
+  expect(SIMPLIFY_RULESET_EN).toContain("Keep each claim's FORCE");
+  expect(SIMPLIFY_RULESET_EN).toContain("Never trade a strong verb for a weaker one");
+  expect(SIMPLIFY_RULESET_RU).toContain("Сохрани СИЛУ каждого утверждения");
+  for (const lang of ["en", "ru"] as const)
+    expect(simplifyPrompt("x ⟦0⟧ y", lang)).toContain(lang === "ru" ? "СИЛУ" : "FORCE");
+});
+
+test("RELEVANCE bounds the cut to restatement, so a substantive sentence survives", () => {
+  // Live sweep finding: qwen-flash and glm-5.2 each DELETED a load-bearing sentence outright, and
+  // both briefs still printed "All checks passed" — no deterministic axis sees a dropped claim. The
+  // cut licence is now bounded, and the keep is stated positively.
+  expect(SIMPLIFY_RULESET_EN).toContain("Cut a sentence ONLY when it restates");
+  expect(SIMPLIFY_RULESET_EN).toContain("Keep every sentence that carries its own claim");
+  expect(SIMPLIFY_RULESET_RU).toContain("ТОЛЬКО если оно повторяет");
+  expect(SIMPLIFY_RULESET_RU).toContain("Сохрани каждое предложение со своим утверждением");
+  // the blanket licence that invited the deletion is gone
+  expect(SIMPLIFY_RULESET_EN).not.toContain("cut the rest");
+});
+
 test("resolveLang: auto-detects by script, and an explicit override wins", () => {
   expect(resolveLang("auto", "plain english prose here")).toBe("en");
   expect(resolveLang("auto", "обычный русский текст здесь")).toBe("ru");
