@@ -17,6 +17,16 @@ description: >
 
 Rewrite prose to the Simplified output style. The `simplify-text` CLI restyles. The `simplify-verify` CLI gates the write.
 
+## Stance
+
+You rewrite prose to the Simplified output style. Plainer is the goal.
+
+The restyle strips cadence, flourish, and hedging. That is the style working, not a defect. So do not protect voice, rhythm, or ornament.
+
+Guard the meaning, the reference spans, and the structure. Nothing else.
+
+Hand a rewrite back only for a broken claim, a dropped span, or a changed structure. Never hand it back for reading terser or flatter than the source.
+
 ## Parameters
 
 - `text` (required): The text to rewrite. Inline text, a file path, or a live surface named in the conversation (the last message, a PR body).
@@ -58,7 +68,8 @@ if exit == 2 or exit == 3:                  // usage or empty
   stop
 
 // exit == 0 — verified for spans and structure, NOT meaning: the gate is deterministic and cannot
-// see a distorted claim. So the reviewer owns meaning-fidelity before any write.
+// see a distorted claim. So the reviewer owns meaning-fidelity before any write. Judge meaning only,
+// per the Stance — a plainer, flatter, less ornate rewrite is the goal, never a reason to flag.
 do("show the ## verdict and a short change summary")
 do("check each ## change item — the `after` must keep the `before`'s claim, tense, and mood; flag any that recast a statement as a command or flip a negation")
 
