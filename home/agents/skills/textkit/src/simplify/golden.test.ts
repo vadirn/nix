@@ -3,7 +3,7 @@
 // the map's three test done-conditions are asserted together, in one named place, instead of
 // scattered across the per-module suites:
 //   1. the CLI restyles a fixture note end-to-end into a valid brief — the seven `##` sections plus
-//      `## guard`,
+//      `## Guard`,
 //   2. every masked reference span survives the rewrite unchanged — wikilink, embed, inline code,
 //   3. the guard flags an introduced name typo on the fixture — in EN and in RU.
 // The fake echoes the masked body back (a faithful no-op restyle), so mask survival and the guard
@@ -81,14 +81,14 @@ const cost = 1;
 \`\`\``;
 
 const SECTIONS = [
-  "## verdict",
-  "## cut",
-  "## change",
-  "## shape",
-  "## keep",
-  "## borderline",
-  "## rewrite",
-  "## guard",
+  "## Verdict",
+  "## Cut",
+  "## Change",
+  "## Shape",
+  "## Keep",
+  "## Borderline",
+  "## Rewrite",
+  "## Guard",
 ];
 
 test("golden EN: a faithful restyle yields a valid brief with every masked span restored", async () => {
@@ -101,7 +101,7 @@ test("golden EN: a faithful restyle yields a valid brief with every masked span 
   expect(out).toContain("`wagner-fischer`");
   // the fenced code block round-trips and the guard passes every axis.
   expect(out).toContain("const cost = a === b ? 0 : 1;");
-  expect(out).toContain("## guard\n\nAll checks passed.");
+  expect(out).toContain("## Guard\n\nAll checks passed.");
   // the original frontmatter is prepended to the rewrite verbatim.
   expect(out).toContain("---\ntitle: Edit distance\ntags: [algorithms]\n---");
   // the numbered list keeps its kind and its three items — the list axis stays clean.
@@ -118,7 +118,7 @@ test("golden EN: over-splitting the numbered list into bullets flips the guard's
       .replace("Substitute a character.", "Substitute a character.\n- And more.");
   const out = await runSimplify(EN, { lang: "auto" }, { ask: fakeAsk(flipToBullets) });
   expect(out).toContain("- lists: FLIP");
-  expect(out).toContain("## rewrite"); // advisory — the brief is still produced
+  expect(out).toContain("## Rewrite"); // advisory — the brief is still produced
 });
 
 test("golden EN: an introduced name typo is flagged by the guard against the source", async () => {
@@ -130,7 +130,7 @@ test("golden EN: an introduced name typo is flagged by the guard against the sou
   );
   expect(out).toContain("- names:");
   expect(out).toContain("Levenstein ← Levenshtein");
-  expect(out).toContain("## rewrite"); // advisory — the brief is still produced
+  expect(out).toContain("## Rewrite"); // advisory — the brief is still produced
 });
 
 test("golden RU: a Russian note routes to the RU ruleset and preserves Cyrillic spans", async () => {
@@ -149,7 +149,7 @@ test("golden RU: a Russian note routes to the RU ruleset and preserves Cyrillic 
   expect(out).toContain("[[глоссарий]]");
   expect(out).toContain("![[сетка.png]]");
   expect(out).toContain("`--tau`");
-  expect(out).toContain("## guard\n\nAll checks passed.");
+  expect(out).toContain("## Guard\n\nAll checks passed.");
 });
 
 test("golden RU: an introduced Cyrillic name typo is flagged by the guard", async () => {

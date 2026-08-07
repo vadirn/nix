@@ -53,9 +53,9 @@ if exit != 0:
   do("stop and report per the exit — 1 missing key, 2 usage, 3 empty, 4 analysis failed")
   stop
 
-// Extract the proposed rewrite — the one fenced block under the ## rewrite heading.
-// verdict/cut/change/shape/keep/borderline are read-only rationale; ## guard is advisory.
-rewrite = do("take the single fenced block under ## rewrite")
+// Extract the proposed rewrite — the one fenced block under the ## Rewrite heading.
+// Verdict/Cut/Change/Shape/Keep/Borderline are read-only rationale; ## Guard is advisory.
+rewrite = do("take the single fenced block under ## Rewrite")
 
 // Gate before any write. Pipe the rewrite to the apply-gate against the source.
 report = Bash("simplify-verify <source>")   // rewrite piped on stdin
@@ -70,7 +70,7 @@ if exit == 2 or exit == 3:                  // usage or empty
 // exit == 0 — verified for spans and structure, NOT meaning: every axis is deterministic, so none of
 // them sees a distorted or deleted claim. YOU are the only meaning check in this loop. Read the
 // rewrite against the source and name what shifted. You report, you do not refute (see §Stance).
-do("show the ## verdict and a short change summary")
+do("show the ## Verdict and a short change summary")
 do("report your read as a bulleted list — a shifted claim, a dropped argument, a borderline call; do not hand the rewrite back on meaning or taste")
 
 // The restyle drops inline emphasis: the CLI masks references, never `**bold**` or `*italic*`. Re-apply it

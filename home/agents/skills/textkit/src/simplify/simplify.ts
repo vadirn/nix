@@ -11,7 +11,7 @@
 //
 // The product is the BRIEF, not the file. A brief with no rewrite is useless, so — unlike polish's
 // passthrough — a model call that fails after the fallback exits nonzero (4) rather than shipping
-// the input. Guard findings are advisory and never change the exit code (they ride the `## guard`
+// the input. Guard findings are advisory and never change the exit code (they ride the `## Guard`
 // section); only an operational failure — bad args, a missing key, a dead model — exits nonzero.
 import { readFileSync } from "node:fs";
 import { takeValue } from "textkit/core/args.ts";
@@ -48,8 +48,8 @@ Options:
   -h, --help       show this help and exit
 
 Output:
-  A markdown brief to stdout: the seven sections (verdict, cut, change,
-  shape, keep, borderline, rewrite) plus a ## guard section (masks, code,
+  A markdown brief to stdout: the seven sections (Verdict, Cut, Change,
+  Shape, Keep, Borderline, Rewrite) plus a ## Guard section (masks, code,
   names, sentences, lists — all advisory, all deterministic). The input file
   is never modified; diagnostics go to stderr.
   Exit: 0 brief printed · 1 missing key · 2 usage error · 3 empty input ·
@@ -162,7 +162,7 @@ export async function runSimplify(
   // one bad roll. Re-roll up to `attempts` and keep the FIRST run the apply-gate accepts — the same
   // `verify` the simplify-verify CLI runs, called here on the source and the unmasked rewrite. If no
   // run clears the gate, keep the LAST: the tool still prints a brief (blocking drift is the
-  // downstream gate's call), and both the `## guard` and the skill's simplify-verify still fire on
+  // downstream gate's call), and both the `## Guard` and the skill's simplify-verify still fire on
   // what shipped. A pass that throws keeps the last usable brief; the first pass throwing has none,
   // so it propagates and main exits 4.
   const attempts = Math.max(1, maxAttempts);
@@ -195,7 +195,7 @@ export async function runSimplify(
   const { brief, rewriteMasked, rewriteUnmasked } = chosen!;
   const guard = runGuard({ source: body, maskedInput, rewriteMasked, rewriteUnmasked });
   // Display brief: unmask the rewrite and each change span so a human reads real spans, and prepend
-  // the original frontmatter (verbatim, never restyled) so `## rewrite` is the whole note the
+  // the original frontmatter (verbatim, never restyled) so `## Rewrite` is the whole note the
   // subagent applies as one block.
   const display: SimplifyBrief = {
     ...brief,
