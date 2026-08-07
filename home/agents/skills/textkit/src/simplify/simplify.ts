@@ -3,10 +3,11 @@
 // See the USAGE block below for the full CLI surface (invocation, flags, output contract, exit
 // codes).
 //
-// The tool APPLIES NOTHING: it masks reference spans, runs one strong pass (qwen-flash, with a
-// deepseek-v4-flash fallback) that fills the seven-key brief, runs a deterministic guard over the
-// rewrite, and prints the markdown brief to stdout. The simplify-text skill's subagent reads the
-// brief, applies the `rewrite`, and owns all file I/O. So the input file is never touched here.
+// The tool APPLIES NOTHING: it masks reference spans, runs up to three restyle passes (qwen-flash,
+// with a deepseek-v4-flash fallback) and keeps the first that clears the apply-gate, runs a
+// deterministic guard over that rewrite, and prints the markdown brief to stdout. The simplify-text
+// skill's subagent reads the brief, applies the `rewrite`, and owns all file I/O. So the input file
+// is never touched here.
 //
 // The product is the BRIEF, not the file. A brief with no rewrite is useless, so — unlike polish's
 // passthrough — a model call that fails after the fallback exits nonzero (4) rather than shipping
@@ -23,12 +24,20 @@ import { createMasker } from "textkit/core/writing/mask.ts";
 import { type SimplifyBrief, resolveLang, simplifyPrompt } from "textkit/simplify/prompt.ts";
 import { coerceBrief, renderBrief } from "textkit/simplify/brief.ts";
 import { runGuard } from "textkit/simplify/guard.ts";
+import { verify, verifyClean } from "textkit/simplify/verify.ts";
+
+// The restyle pass is re-rolled up to this many times to clear the apply-gate. The model is
+// non-deterministic, so a run that drops a span or adds a heading is one bad roll, not a fixed
+// failure — the next run often clears it. Three balances those odds against the token cost of a
+// heavy pass. Overridable via deps so the retry test pins it.
+const MAX_ATTEMPTS = 3;
 
 // USAGE is the full `--help` text printed to stdout on `-h`/`--help`: the invocation forms, every
 // option, the output contract, and the exit codes — the human-facing counterpart to parseArgs.
 export const USAGE = `simplify-text — analyze a markdown note against the Simplified output style:
-one strong restyle pass, then a deterministic guard. It APPLIES NOTHING —
-it prints a brief; the simplify-text skill applies the rewrite.
+up to three restyle passes (keep the first the gate accepts), then a
+deterministic guard. It APPLIES NOTHING — it prints a brief; the
+simplify-text skill applies the rewrite.
 
 Usage:
   simplify-text [options] [input.md]   analyze a note (stdin when no path or '-')
@@ -97,7 +106,12 @@ export function parseArgs(argv: string[]): ParseResult {
 
 // The seam runSimplify takes to reach the model, injected so a unit test drives the pass without a
 // process-global module mock (default: the real askJson). `progress` is the optional TTY-gated tick.
-type SimplifyDeps = { ask?: typeof askJson; progress?: (line: string) => void };
+// `maxAttempts` is the retry budget for the gate loop (default MAX_ATTEMPTS); the retry test pins it.
+type SimplifyDeps = {
+  ask?: typeof askJson;
+  progress?: (line: string) => void;
+  maxAttempts?: number;
+};
 
 // onePass runs the single restyle pass: the primary model, falling back to the second model on a
 // transient/truncation failure (rethrowIfBug re-throws a real code bug first). If the fallback also
@@ -116,27 +130,60 @@ async function onePass(
   }
 }
 
-// runSimplify is the pure pipeline: parse frontmatter, mask reference spans, run one restyle pass,
-// coerce the brief, guard the masked rewrite, then render the display brief (rewrite and change
-// spans unmasked, original frontmatter prepended so the rewrite is the whole note). It touches no
-// process/fs state — the transport arrives via deps — so it is unit-testable in isolation. Throws
-// (transient/truncation) when both models fail; main maps that to exit 4.
+// runSimplify is the pure pipeline: parse frontmatter, mask reference spans, run the restyle pass
+// (re-rolled to the gate), coerce the brief, guard the masked rewrite, then render the display brief
+// (rewrite and change spans unmasked, original frontmatter prepended so the rewrite is the whole
+// note). It touches no process/fs state — the transport arrives via deps — so it is unit-testable in
+// isolation. Throws (transient/truncation) when the first pass fails on both models; main maps that
+// to exit 4.
 export async function runSimplify(
   input: string,
   opts: SimplifyOpts,
   deps: SimplifyDeps = {},
 ): Promise<string> {
-  const { ask = askJson, progress } = deps;
+  const { ask = askJson, progress, maxAttempts = MAX_ATTEMPTS } = deps;
   const { front, body } = parseFrontmatter(input);
   const lang = resolveLang(opts.lang, body);
   // No literals: simplify runs no glossary term list, so createMasker freezes only the reference
   // spans MASK_RE finds (wikilinks, embeds, inline code).
   const { mask, unmask } = createMasker();
   const maskedInput = mask(body);
-  progress?.(`restyle pass (${lang})…`);
-  const brief = coerceBrief(await onePass(simplifyPrompt(maskedInput, lang), ask, progress));
-  const rewriteMasked = brief.rewrite;
-  const rewriteUnmasked = unmask(rewriteMasked);
+  const prompt = simplifyPrompt(maskedInput, lang);
+  // Retry-to-gate. The model is non-deterministic, so a run that drops a span or adds a heading is
+  // one bad roll. Re-roll up to `attempts` and keep the FIRST run the apply-gate accepts — the same
+  // `verify` the simplify-verify CLI runs, called here on the source and the unmasked rewrite. If no
+  // run clears the gate, keep the LAST: the tool still prints a brief (blocking drift is the
+  // downstream gate's call), and both the `## guard` and the skill's simplify-verify still fire on
+  // what shipped. A pass that throws keeps the last usable brief; the first pass throwing has none,
+  // so it propagates and main exits 4.
+  const attempts = Math.max(1, maxAttempts);
+  let chosen: { brief: SimplifyBrief; rewriteMasked: string; rewriteUnmasked: string } | undefined;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    progress?.(`restyle pass (${lang}) — attempt ${attempt}/${attempts}…`);
+    let brief: SimplifyBrief;
+    try {
+      brief = coerceBrief(await onePass(prompt, ask, progress));
+    } catch (e) {
+      if (chosen) {
+        progress?.(`attempt ${attempt} flaked — keeping the attempt ${attempt - 1} rewrite`);
+        break;
+      }
+      throw e; // first pass died on both models: no brief to keep, so main exits 4
+    }
+    const rewriteUnmasked = unmask(brief.rewrite);
+    chosen = { brief, rewriteMasked: brief.rewrite, rewriteUnmasked };
+    if (verifyClean(verify(body, rewriteUnmasked))) {
+      if (attempt > 1) progress?.(`gate satisfied on attempt ${attempt}`);
+      break;
+    }
+    progress?.(
+      attempt < attempts
+        ? `gate drift on attempt ${attempt} — re-rolling…`
+        : `gate still drifts after ${attempts} attempts — simplify-verify will block the apply`,
+    );
+  }
+  // chosen is set: attempts >= 1, so either a pass returned a brief or the first throw already exited.
+  const { brief, rewriteMasked, rewriteUnmasked } = chosen!;
   const guard = runGuard({ source: body, maskedInput, rewriteMasked, rewriteUnmasked });
   // Display brief: unmask the rewrite and each change span so a human reads real spans, and prepend
   // the original frontmatter (verbatim, never restyled) so `## rewrite` is the whole note the
