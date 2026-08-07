@@ -93,7 +93,7 @@ test("runSimplify: a dropped ⟦N⟧ span is reported as an advisory masks FAIL,
   const out = await runSimplify(
     NOTE,
     { lang: "auto" },
-    { ask: askWithRewrite((m) => m.replace(/⟦1⟧/, "")) }, // drop the inline-code span
+    { ask: askWithRewrite((m) => m.replace(/⟦1⟧/, "")), maxAttempts: 1 }, // one pass, drop the span
   );
   expect(out).toContain("- masks: FAIL");
   expect(out).toContain("## verdict"); // the brief is still produced
@@ -127,6 +127,64 @@ test("runSimplify: a Russian note auto-routes to the RU ruleset and preserves Cy
   expect(seenPrompt).toContain("«является»"); // detectLang → ru selected the Russian ruleset
   expect(out).toContain("[[глоссарий]]"); // reference span restored
   expect(out).toContain("## guard\n\nAll checks passed.");
+});
+
+test("runSimplify: a gate-drifting pass is re-rolled, and the first clean run is kept", async () => {
+  let calls = 0;
+  const driftThenClean: typeof askJson = (async (_model: unknown, prompt: string) => {
+    calls++;
+    const masked = maskedOf(prompt);
+    // attempt 1 drops a reference span (gate DRIFT); attempt 2 is a faithful no-op (gate clean)
+    const rewrite = calls === 1 ? masked.replace(/⟦1⟧/, "") : masked;
+    return { verdict: "ok", cut: [], change: [], shape: [], keep: [], borderline: [], rewrite };
+  }) as unknown as typeof askJson;
+  const out = await runSimplify(NOTE, { lang: "auto" }, { ask: driftThenClean });
+  expect(calls).toBe(2); // attempt 1 drifted, attempt 2 cleared the gate
+  expect(out).toContain("## guard\n\nAll checks passed."); // the clean run was kept
+  expect(out).toContain("`build`"); // the span the drifting run dropped is restored
+});
+
+test("runSimplify: when every pass drifts, the last is kept and the brief still prints", async () => {
+  let calls = 0;
+  const alwaysDrift: typeof askJson = (async (_model: unknown, prompt: string) => {
+    calls++;
+    return {
+      verdict: "ok",
+      cut: [],
+      change: [],
+      shape: [],
+      keep: [],
+      borderline: [],
+      rewrite: maskedOf(prompt).replace(/⟦1⟧/, ""),
+    };
+  }) as unknown as typeof askJson;
+  const out = await runSimplify(NOTE, { lang: "auto" }, { ask: alwaysDrift, maxAttempts: 2 });
+  expect(calls).toBe(2); // exhausted the pinned budget
+  expect(out).toContain("- masks: FAIL"); // the drift rode into the advisory guard
+  expect(out).toContain("## verdict"); // a brief is still produced
+});
+
+test("runSimplify: a late transient flake keeps the earlier drifting brief, not exit 4", async () => {
+  let calls = 0;
+  const driftThenFlake: typeof askJson = (async (_model: unknown, prompt: string) => {
+    calls++;
+    if (calls === 1) {
+      // attempt 1: a usable but gate-drifting brief (a dropped span)
+      return {
+        verdict: "ok",
+        cut: [],
+        change: [],
+        shape: [],
+        keep: [],
+        borderline: [],
+        rewrite: maskedOf(prompt).replace(/⟦1⟧/, ""),
+      };
+    }
+    throw new TransientError("both models down on the re-roll"); // attempt 2: primary + fallback die
+  }) as unknown as typeof askJson;
+  const out = await runSimplify(NOTE, { lang: "auto" }, { ask: driftThenFlake, maxAttempts: 3 });
+  expect(calls).toBe(3); // attempt 1 (1 call) + attempt 2 primary+fallback (2 calls), then kept
+  expect(out).toContain("- masks: FAIL"); // attempt 1's drift shipped rather than failing hard
 });
 
 test("runSimplify: a transient primary flake re-rolls on the fallback model", async () => {
