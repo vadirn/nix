@@ -51,12 +51,30 @@ test("simplifyPrompt: KEEP pins list kind, item count, split-within-item, and th
   }
 });
 
+test("simplifyPrompt: KEEP fixes the heading count and forbids promotion to a heading", () => {
+  for (const lang of ["en", "ru"] as const) {
+    const p = simplifyPrompt("x ⟦0⟧ y", lang);
+    // the heading guardrail is shared English KEEP scaffolding, so both languages carry it
+    expect(p).toContain("Keep the heading count exact");
+    expect(p).toContain("Never promote a bold lead, a question, or a sentence to a heading");
+  }
+});
+
 test("simplifyPrompt: SHAPE is scoped to prose so it never over-splits an existing list", () => {
   // the SHAPE rule builds a list only from PROSE; both rulesets scope it to avoid the over-split
   expect(SIMPLIFY_RULESET_EN).toContain("turn a PROSE sequence or set into a vertical list");
   expect(SIMPLIFY_RULESET_EN).toContain("keep an existing list's kind and item count");
   expect(SIMPLIFY_RULESET_RU).toContain("В ПРОЗЕ");
   expect(SIMPLIFY_RULESET_RU).toContain("сохрани вид и число пунктов");
+});
+
+test("simplifyPrompt: neither the ruleset nor the schema invites adding a heading", () => {
+  // KEEP forbids new headings, so no lingering clause may invite one — that contradiction fed the
+  // observed heading-inflation drift (a PR body's two headings became six).
+  expect(SIMPLIFY_RULESET_EN).not.toContain("Add a heading");
+  expect(SIMPLIFY_RULESET_RU).not.toContain("Заголовок для темы");
+  const p = simplifyPrompt("x ⟦0⟧ y", "en");
+  expect(p).not.toContain("a topic heading added"); // the schema's `shape` hint no longer suggests it
 });
 
 test("resolveLang: auto-detects by script, and an explicit override wins", () => {
