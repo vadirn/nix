@@ -27,6 +27,15 @@ const isStructureLine = (line: string): boolean =>
 const stripLeadingMarker = (line: string): string =>
   line.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s?)+/, "");
 
+// A sentence boundary: end punctuation, then any CLOSING inline markers, then whitespace. The
+// closers are load-bearing: the Simplified style writes bold leads, so a sentence routinely ends at
+// `.**` rather than `.` — "**Advisory, and it degrades to a skip.** The finding rides…". A bare
+// `[.!?…]` lookbehind found no boundary there and merged the lead with the sentence after it,
+// reporting one phantom 23-word sentence where two 7- and 16-word sentences sit, both under the cap.
+// That false positive is noise in the advisory guard, but the prompt's length pre-hint ACTS on these
+// findings, so a phantom offender would push the model to split prose that is already compliant.
+const SENTENCE_SPLIT_RE = /(?<=[.!?…][*_`)\]"'»”’]*)\s+(?=\S)/;
+
 // Count whitespace-separated words in one sentence; empty/whitespace-only counts as 0.
 const wordsIn = (s: string): number => {
   const t = s.trim();
@@ -41,9 +50,9 @@ export function wordCapScan(masked: string, cap: number = WORD_CAP): WordCapFind
   for (const raw of stripFences(masked).split("\n")) {
     if (isStructureLine(raw)) continue;
     const prose = stripLeadingMarker(raw);
-    // split on sentence-ending punctuation followed by whitespace; the trailing run (no closing
-    // punctuation) is still one sentence.
-    for (const sentence of prose.split(/(?<=[.!?…])\s+(?=\S)/)) {
+    // split on sentence-ending punctuation (plus any closing markers) followed by whitespace; the
+    // trailing run (no closing punctuation) is still one sentence.
+    for (const sentence of prose.split(SENTENCE_SPLIT_RE)) {
       const words = wordsIn(sentence);
       if (words > cap) findings.push({ sentence: sentence.trim(), words });
     }
