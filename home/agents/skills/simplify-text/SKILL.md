@@ -62,6 +62,14 @@ if exit == 2 or exit == 3:                  // usage or empty
 do("show the ## verdict and a short change summary")
 do("check each ## change item — the `after` must keep the `before`'s claim, tense, and mood; flag any that recast a statement as a command or flip a negation")
 
+// The restyle drops inline emphasis: the CLI masks references, never `**bold**` or `*italic*`. Re-apply it
+// here, where you hold both the source and the rewrite. The CLI's one clean pass should not carry this
+// judgment. Replicate the INTENT to emphasize, not the exact phrase. For each emphasized span in the
+// source, find the idea it stressed, then emphasize that idea in the rewrite's new wording. Where the
+// restyle left no natural home — the phrase merged, moved, or dissolved — leave it unemphasized. A forced
+// fit is worse than none.
+rewrite = do("replicate the source's emphasis by intent — re-emphasize each stressed idea in the rewrite's new wording, and leave it out where the restyle left no natural fit")
+
 if target is a file:
   Write(target, rewrite)
   do("show what changed")
