@@ -1,13 +1,13 @@
 <style>
-  /* simplify-text viewer — two modes, both verbatim. Black & white, MonoLisaCode, pre-formatted.
-     The build fills five markers: FONT_B64 (base64 TTF), SRC (source name), ORIGINAL (escaped
-     source), EDITED (escaped rewrite), BRIEF (escaped full brief). No markdown rendering. */
-  @font-face {
-    font-family: "MonoLisaCode";
-    src: url("data:font/ttf;base64,__FONT_B64__") format("truetype");
-    font-weight: 100 900;
-    font-display: swap;
-  }
+  /* simplify-text viewer — two views, both verbatim. Black & white, MonoLisaCode, pre-formatted.
+     The build fills four markers: SRC (source name), ORIGINAL (escaped source), EDITED (escaped
+     rewrite), BRIEF (escaped full brief). No markdown rendering.
+
+     No @font-face. The font is named here, never shipped: inlining the TTF as base64 cost ~930 KB
+     per artifact to serve one reader on one machine. A viewer with MonoLisaCode installed still
+     gets it by family name, because a local family resolves without a webfont. Everyone else lands
+     on the platform monospace below. Only the metrics change — the layout is <pre> and fluid, so
+     it holds. The feature and variation settings below are MonoLisa's; a fallback ignores them. */
 
   :root {
     --bg: #ffffff;
@@ -40,7 +40,9 @@
     background: var(--bg);
     color: var(--ink);
     min-height: 100vh;
-    font-family: "MonoLisaCode", ui-monospace, "SF Mono", Menlo, monospace;
+    font-family:
+      "MonoLisaCode", "MonoLisa", ui-monospace, SFMono-Regular, "SF Mono", "Cascadia Mono",
+      "DejaVu Sans Mono", Menlo, Consolas, monospace;
     font-feature-settings:
       "liga" 1,
       "calt" 1,
