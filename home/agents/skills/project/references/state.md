@@ -15,15 +15,16 @@ project_path = cfg.project_path
 context = Bash(vault-query context)
 tracks  = Bash(vault-query tracks --view All --format json)
 tickets = Bash(vault-query tickets --view All --format tsv)   // error naming tickets-init = no tickets yet
-maps    = Bash(vault-query list "<folder>" --fields status,updated | rg "^map-")   // see Reference: Maps have no view
+maps    = Bash(vault-query maps --view All --format json)     // error naming maps-init = no maps yet
 
 // Classify — see Reference: Thresholds
 for each track, map, ticket: bucket by status, then by (today - updated)
 ready, blocked = partition(open tickets, over their Requires edges)   // see Reference: Blocked and ready
 
-// Charting frontier — only for an open map, only its own open tickets
-for each open ticket whose Track is the open map's paired track:
-    kind = Bash(vault-query read <ticket name> fm.kind)
+// Charting frontier — one call per open map — see Reference: Maps and the frontier
+for each open map:
+    frontier = Bash(vault-query tickets --view Open --track <map slug>
+                    --kind decision,fact,feasibility --format tsv)
 
 // Scratchpad — fold, then unfold once if it is small enough
 shape = Bash(vault-query read <project_path>/Scratchpad.md)
@@ -85,48 +86,40 @@ Items with status `done`, `abandoned`, or `superseded` stay out of the report. T
 
 Each row is one call. Run them together.
 
-| What       | Command                                               | Returns                                                                      | Empty case |
-| ---------- | ----------------------------------------------------- | ---------------------------------------------------------------------------- | ---------- |
-| framing    | `vault-query context`                                 | the project's `Context.md`                                                   | missing file → say so, offer `/project setup` |
-| tracks     | `vault-query tracks --view All --format json`         | one object per track: `Track`, `Status`, `Description`, `Updated`            | `[]` |
-| tickets    | `vault-query tickets --view All --format tsv`         | `Ticket`, `Status`, `Track`, `Requires`, `Description`, `Created`, `Updated` | exit 1, `Error: no Tickets.base at … (run` `vault-query tickets-init` `)` → no tickets filed yet, not a failure |
-| maps       | `vault-query list "<folder>" --fields status,updated` | one line per entry: name, description, then each field                       | no `map-` line → no maps |
-| scratchpad | `vault-query read <project_path>/Scratchpad.md`       | folded overview with a token count                                           | error → no scratchpad |
+| What       | Command                                         | Returns                                                                           | Empty case |
+| ---------- | ----------------------------------------------- | --------------------------------------------------------------------------------- | ---------- |
+| framing    | `vault-query context`                           | the project's `Context.md`                                                        | missing file → say so, offer `/project setup` |
+| tracks     | `vault-query tracks --view All --format json`   | one object per track: `Track`, `Status`, `Description`, `Updated`                 | `[]` |
+| tickets    | `vault-query tickets --view All --format tsv`   | `Ticket`, `Status`, `Track`, `Requires`, `Description`, `Created`, `Updated`      | exit 1, `Error: no Tickets.base at … (run` `vault-query tickets-init` `)` → no tickets filed yet, not a failure |
+| maps       | `vault-query maps --view All --format json`     | one object per map: `Map`, `Status`, `Ordering`, `Crux`, `Description`, `Updated` | exit 1 naming `maps-init` → no maps base; `[]` → a base with no maps |
+| scratchpad | `vault-query read <project_path>/Scratchpad.md` | folded overview with a token count                                                | error → no scratchpad |
 
 `tickets --view All` is the only ticket call the report needs. It carries `Status` and `Requires` in one table, which is what the blocked/ready partition reads. Skip the `Open` and `Backlog` views: a backlog ticket is just a row whose `Track` cell is empty.
 
-### Maps have no view
+### Maps and the frontier
 
-`vault-query` ships no `maps` command, so maps need no base and there is nothing to init. `ticket-vault-query-maps-view` proposes one. Until it lands, `list` covers the case — it reads frontmatter across a whole folder in one call:
-
-```bash
-vault-query list "<folder>" --fields status,updated
-```
-
-`<folder>` is vault-relative, so derive it by stripping `vault_root/` off `project_path`: `41 projects/nix`. The command prints every entry in the folder, so filter its **output** to the map lines:
+`maps` reads `Maps.base`, the same way `tracks` reads `Tracks.base`. So a map row comes from a declared view, never from a directory glob:
 
 ```bash
-vault-query list "41 projects/nix" --fields status,updated | rg "^map-"
+vault-query maps --view All --format json
 ```
 
-```
-map-distill-rebuild — A second distillation binary … (status: open) (updated: 2026-08-05)
-map-mdformat — Route `autoformat`'s `.md` lane … (status: done) (updated: 2026-08-03)
-```
+Two columns are a map's own, with no track analogue. `Ordering` says whether the map resolves its highest-risk node first (`risk`) or its leaves first (`dependency`). `Crux` names the one node a risk-ordered map turns on. Report both — a risk-ordered map whose crux is unresolved is the project's real blocker, however fresh its `updated` looks.
 
-No `map-` line means the project has no maps. Filter the printed lines rather than globbing the directory: `rg` and `fd` honor `.gitignore`, which excludes the vault, so a direct file search silently returns nothing.
+A project whose first map has yet to be charted has no base. `maps` then exits 1 naming `maps-init`, the same shape `tickets` uses. Treat that as "no maps", not as an error to report. A base that exists with no maps in it returns `[]`.
 
-A map pairs 1:1 with `track-<slug>.md` by the shared slug. Its tickets are the rows whose `Track` cell reads `track-<slug>`. So a map's remaining work needs no extra query.
-
-To say whether a map still needs deciding, read `kind` on its own open tickets:
+**The frontier is a ticket query, not a map query.** A map's nodes are tickets — they carry `kind` and a `track:` backref, and they live in `Tickets.base`. No view of `Maps.base` can reach them. A map pairs 1:1 with `track-<slug>.md` by the shared slug, so ask the ticket base for that slug:
 
 ```bash
-vault-query read <ticket name> fm.kind
+vault-query tickets --view Open --track <slug> --kind decision,fact,feasibility --format tsv
 ```
 
-`Tickets.base` carries no `kind` column, so this is the only source. One call per ticket, one word back — so scope it to the open tickets of an open map's paired track, typically a handful. Open tickets of kind `decision`, `fact`, or `feasibility` are the **charting frontier**, so the map still needs deciding. Open tickets of kind `execution` only mean the map is charted and ready to hand off.
+`--track` and `--kind` AND together, so this returns exactly the map's unresolved charting nodes. Rows mean the map still needs deciding. No rows mean it is charted, and its remaining `execution` tickets are ready to hand off — which is the distinction the Active block reports.
 
-Reach for `list --fields kind` instead when a project has many maps and the per-ticket calls would outnumber one folder listing.
+Two traps in that query:
+
+- A ticket carrying no `kind:` matches no `--kind` query, so it never lands in either bucket. It is untyped work, not execution work. Surface it separately rather than reading its absence as "nothing left to decide".
+- `--kind` rejects a name outside `decision`, `fact`, `feasibility`, `execution`, but a valid kind with no tickets is a truthful empty result. So an error means a typo, and an empty table means an answer.
 
 ### Blocked and ready
 
@@ -169,6 +162,8 @@ The skill writes nothing. Close the report with the routes its findings imply, n
 | a seed that now has a done-condition         | `/vault ticket` |
 | a stale open track that is actually finished | `/track save`, then set its `status` |
 | a project with no `Tickets.base`             | `vault-query tickets-init` |
+| a project with no `Maps.base`                | `vault-query maps-init` |
+| an open ticket carrying no `kind:`           | `/vault ticket` — type it, so a frontier query can see it |
 | a dangling `requires` edge                   | `/vault lint` |
 | someone who needs the state reported outward | `/brief` |
 
@@ -180,6 +175,6 @@ Never `Read` or `cat` a vault file whole, and never `rg`/`fd` the vault: both ho
 
 The fold is what makes the overview affordable. `track-mdstruct` runs 104k on disk; its fold is a few dozen lines. So size never decides whether to open a file — it decides which address to unfold.
 
-This report unfolds almost nothing, because the bases already answer it. `Tracks.base` and `Tickets.base` carry status, description, and `updated` for every row, and `list --fields` covers maps. Unfold a track only when the user drills into one, and then by address (`Direction`, the highest Log entry) — that is `/track`'s job, and the route hands off to it.
+This report unfolds almost nothing, because the three bases already answer it. `Tracks.base`, `Tickets.base`, and `Maps.base` carry status, description, and `updated` for every row. Unfold a track only when the user drills into one, and then by address (`Direction`, the highest Log entry) — that is `/track`'s job, and the route hands off to it.
 
 The `Scratchpad` is the one artifact whose body **is** its state, so the overview unfolds it. That is the ordinary fold-then-unfold path, not an exception to it. The 4000-token bound only decides whether to pay for the unfold up front or offer it.
