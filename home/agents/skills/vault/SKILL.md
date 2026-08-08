@@ -136,28 +136,30 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | Experiment                                | `35 experiments/`                           | Captured behavior test of an existing thing against a falsifiable claim. Frontmatter `type: experiment`, `verdict` (confirmed/refuted/inconclusive), `date`, optional `project` wikilink. Owned by the `/experiment` skill. Distinct from a track: an experiment is one decided question, a track is a multi-session effort. |
 | Checkpoint _(legacy — replaced by track)_ | `41 projects/<project>/`                    | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain reachable via `vault-query read <name>`. Programmatically treated as superseded: `consult` excludes all checkpoints by default. |
 | Weekly log                                | `41 projects/block-buster/YYYY-wWW.md`      | ISO-week file with Focus, Tasks, Backlog, Activity sections. Tasks wikilink to projects; Activity is auto-appended by a git post-commit hook. Distinct from a track: a weekly log spans all projects for one week, a track spans one project across all weeks. |
-| Base                                      | `90 bases/`, `41 projects/<project>/`       | Obsidian Base file — a saved query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query. Vault-wide bases live in `90 bases/`; a project's `Tracks.base` and `Tickets.base` sit in its own folder and are what `vault-query tracks`/`tickets` read, so the CLI and Obsidian share one definition of each view. |
+| Base                                      | `90 bases/`, `41 projects/<project>/`       | Obsidian Base file — a saved query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query. Vault-wide bases live in `90 bases/`; a project's `Tracks.base`, `Tickets.base`, and `Maps.base` sit in its own folder and are what `vault-query tracks`/`tickets`/`maps` read, so the CLI and Obsidian share one definition of each view. |
 
 ### vault-query subcommands
 
-| Command                                    | Requires config | Description |
-| ------------------------------------------ | --------------- | ----------- |
-| `config`                                   | No              | Print resolved config JSON |
-| `context`                                  | Yes             | Print project Context.md |
-| `tracks [--view <view>]`                   | Yes             | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC |
-| `tracks-init`                              | Yes             | Create Tracks.base in the current project |
-| `tickets [--view <view>] [--track <slug>]` | Yes             | Query project tickets through `Tickets.base` (Backlog/Open/Done/Abandoned/By Track/By Status/All), updated DESC. `Backlog` = open and owned by no track; `--track <slug>` narrows any view to one track's tickets |
-| `tickets-init`                             | Yes             | Create Tickets.base in the current project |
-| `get <fragment>`                           | No              | Resolve an entry name to its absolute path (one per line). For handing a path to another tool; to read an entry, name it to `read` directly |
-| `read <FILE\|NAME> [ADDRESS]`              | No              | Structured read: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, `0`/text, `fm[.path]`, `links`). Takes a path or an entry name — an unresolvable name errors, an ambiguous one errors listing candidates. `--depth`, `--full`, `--threshold`, `--format json` |
-| `search <query>`                           | No              | BM25 full-text search (--regex for grep mode) |
-| `projects [--view <view>]`                 | No              | List active projects |
-| `cards`                                    | No              | List all cards with metadata |
-| `notes`                                    | No              | List all notes with metadata |
-| `experiments`                              | No              | List all experiments with metadata |
-| `log [DATE\|WEEK\|last\|next]`             | No              | Open or create weekly log |
-| `lint [--format ...] [--rule ...]`         | Yes             | Vault-wide lint: orphan-card (superseded entries exempt), dangling-reference, dangling-relation-label, dangling-requires-target, reference-not-wikilink, reference-wrong-type, reference-vault-link, ticket-outward-only, broken-wikilink, duplicate-h1, callout-missing-separator, invalid-frontmatter, untagged-card, missing-required-field, unknown-field, unquoted-frontmatter-link, invalid-enum-value, singleton-tag, singleton-filename-mismatch, slug-filename-mismatch, filename-hygiene, unintended-emphasis, unknown-rel, oversized-entry (superseded entries exempt), untyped-entry |
-| `xp [YEAR]`                                | No              | XP report: calendar, streak, level |
+| Command                                                    | Requires config | Description |
+| ---------------------------------------------------------- | --------------- | ----------- |
+| `config`                                                   | No              | Print resolved config JSON |
+| `context`                                                  | Yes             | Print project Context.md |
+| `tracks [--view <view>]`                                   | Yes             | Query project tracks (Active/Open/Paused/Done/Abandoned/Superseded/All/Stats), updated DESC |
+| `tracks-init`                                              | Yes             | Create Tracks.base in the current project |
+| `tickets [--view <view>] [--track <slug>] [--kind <list>]` | Yes             | Query project tickets through `Tickets.base` (Backlog/Open/Done/Abandoned/By Track/By Status/All), updated DESC. `Backlog` = open and owned by no track; `--track <slug>` narrows any view to one track's tickets; `--kind` narrows to a comma-separated list of `decision`/`fact`/`feasibility`/`execution`, and both narrowings AND. A ticket with no `kind:` matches no `--kind` query |
+| `tickets-init`                                             | Yes             | Create Tickets.base in the current project |
+| `maps [--view <view>]`                                     | Yes             | Query project maps through `Maps.base` (Open/Done/Abandoned/Superseded/All/Stats), updated DESC. Carries `ordering` and `crux`, which say whether a map is risk- or dependency-ordered. A map's charting frontier is a ticket query: `tickets --track <slug> --kind decision,fact,feasibility` |
+| `maps-init`                                                | Yes             | Create Maps.base in the current project |
+| `get <fragment>`                                           | No              | Resolve an entry name to its absolute path (one per line). For handing a path to another tool; to read an entry, name it to `read` directly |
+| `read <FILE\|NAME> [ADDRESS]`                              | No              | Structured read: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, `0`/text, `fm[.path]`, `links`). Takes a path or an entry name — an unresolvable name errors, an ambiguous one errors listing candidates. `--depth`, `--full`, `--threshold`, `--format json` |
+| `search <query>`                                           | No              | BM25 full-text search (--regex for grep mode) |
+| `projects [--view <view>]`                                 | No              | List active projects |
+| `cards`                                                    | No              | List all cards with metadata |
+| `notes`                                                    | No              | List all notes with metadata |
+| `experiments`                                              | No              | List all experiments with metadata |
+| `log [DATE\|WEEK\|last\|next]`                             | No              | Open or create weekly log |
+| `lint [--format ...] [--rule ...]`                         | Yes             | Vault-wide lint: orphan-card (superseded entries exempt), dangling-reference, dangling-relation-label, dangling-requires-target, reference-not-wikilink, reference-wrong-type, reference-vault-link, ticket-outward-only, broken-wikilink, duplicate-h1, callout-missing-separator, invalid-frontmatter, untagged-card, missing-required-field, unknown-field, unquoted-frontmatter-link, invalid-enum-value, singleton-tag, singleton-filename-mismatch, slug-filename-mismatch, filename-hygiene, unintended-emphasis, unknown-rel, oversized-entry (superseded entries exempt), untyped-entry |
+| `xp [YEAR]`                                                | No              | XP report: calendar, streak, level |
 
 ### Project commands
 

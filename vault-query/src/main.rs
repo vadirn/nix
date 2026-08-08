@@ -167,12 +167,28 @@ enum Commands {
         /// the `track-<slug>` backref)
         #[arg(long)]
         track: Option<String>,
+        /// Narrow the view to these kinds, comma-separated (decision, fact,
+        /// feasibility, execution). A map's charting frontier is
+        /// `--kind decision,fact,feasibility`
+        #[arg(long)]
+        kind: Option<String>,
         /// Output format
         #[arg(long, default_value = "table")]
         format: output::Format,
     },
     /// Initialize Tickets.base in the current project
     TicketsInit,
+    /// Query project maps
+    Maps {
+        /// View name (Open, Done, Abandoned, Superseded, All, Stats)
+        #[arg(long, default_value = "Open")]
+        view: String,
+        /// Output format
+        #[arg(long, default_value = "table")]
+        format: output::Format,
+    },
+    /// Initialize Maps.base in the current project
+    MapsInit,
     /// Resolve a note/card/reference/checkpoint name to its absolute path (one per line)
     Get {
         /// Name fragment to resolve
@@ -385,13 +401,22 @@ fn dispatch(cli: &Cli) -> Result<i32> {
         Commands::Tickets {
             view,
             track,
+            kind,
             format,
         } => {
-            commands::tickets::run(&cfg, view, track.as_deref(), *format)?;
+            commands::tickets::run(&cfg, view, track.as_deref(), kind.as_deref(), *format)?;
             0
         }
         Commands::TicketsInit => {
             commands::tickets::init(&cfg)?;
+            0
+        }
+        Commands::Maps { view, format } => {
+            commands::maps::run(&cfg, view, *format)?;
+            0
+        }
+        Commands::MapsInit => {
+            commands::maps::init(&cfg)?;
             0
         }
         Commands::Get {

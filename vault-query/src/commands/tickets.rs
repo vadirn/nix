@@ -1,11 +1,15 @@
 //! `tickets` — a view into the project's `Tickets.base`.
 //!
 //! Structurally the twin of [`super::tracks`], and shares its plumbing through
-//! [`super::project_base`]. The one thing tickets need that tracks do not is
-//! `--track <slug>`, whose argument is known only at call time and so cannot be
-//! a declared view; it arrives through [`super::query::Narrowing`], which both
-//! validates the slug against the project's tracks and selects the tickets they
-//! own.
+//! [`super::project_base`]. What tickets need that tracks do not is two
+//! narrowings whose arguments are known only at call time, so neither can be a
+//! declared view: `--track <slug>` and `--kind <list>`. Both arrive through
+//! [`super::query::Narrowing`] and AND into one predicate.
+//!
+//! The two are validated differently, because their arguments fail differently.
+//! A slug is checked against the project's own tracks by the `precheck` slot,
+//! since only the scan knows which tracks exist. A kind is checked against a
+//! closed vocabulary before the scan, since nothing in the vault can widen it.
 
 use anyhow::{Result, bail};
 use serde_yaml::Value;
@@ -160,6 +164,58 @@ fn owned_by_track(file: &VaultFile, slug: &str) -> bool {
     ticket_track_slug(&file.frontmatter).as_deref() == Some(slug)
 }
 
+/// Every `kind:` a ticket may declare.
+///
+/// `decision`, `fact`, and `feasibility` are the charting node types — each
+/// names the instrument that resolves it. `execution` is plain work, the kind a
+/// ticket carries when nothing about it is open to decide.
+const TICKET_KINDS: [&str; 4] = ["decision", "fact", "feasibility", "execution"];
+
+/// Split `--kind` on commas and reject any member that is not a declared kind.
+///
+/// A comma-separated list rather than a repeatable flag, matching `list
+/// --fields`, because the query this exists for asks for three of the four at
+/// once: a map's charting frontier is `decision,fact,feasibility`.
+///
+/// Validated eagerly here rather than through [`Narrowing::precheck`], which
+/// exists for arguments whose validity only the scan can settle. A kind's
+/// vocabulary is fixed and closed, so nothing about the vault can make
+/// `desicion` valid — and rejecting it before the scan costs nothing.
+///
+/// A known kind that no ticket carries stays a truthful empty result, not an
+/// error. The distinction the precheck slot protects is typo vs. genuinely
+/// empty, and only the first is unanswerable from the output.
+fn parse_kinds(raw: &str) -> Result<BTreeSet<String>> {
+    let mut kinds = BTreeSet::new();
+    for part in raw.split(',') {
+        let kind = part.trim();
+        if kind.is_empty() {
+            bail!(
+                "--kind has an empty entry: \"{raw}\" — list kinds as `decision,fact` with no trailing comma"
+            );
+        }
+        if !TICKET_KINDS.contains(&kind) {
+            bail!(
+                "no ticket kind \"{kind}\"; the declared kinds are {}",
+                TICKET_KINDS.join(", ")
+            );
+        }
+        kinds.insert(kind.to_string());
+    }
+    Ok(kinds)
+}
+
+/// Whether `file` declares one of `kinds`.
+///
+/// A ticket with no `kind:` at all matches nothing, so it drops out of every
+/// `--kind` query rather than defaulting into one. Guessing `execution` for an
+/// absent field would put untyped tickets into the "nothing left to decide"
+/// bucket, which is the one answer the frontier query must never invent.
+fn has_kind(file: &VaultFile, kinds: &BTreeSet<String>) -> bool {
+    let raw = frontmatter::get_display(&file.frontmatter, "kind");
+    kinds.contains(raw.trim())
+}
+
 /// Render one view of the project's `Tickets.base`, optionally narrowed to the
 /// tickets one track owns.
 ///
@@ -171,11 +227,22 @@ fn owned_by_track(file: &VaultFile, slug: &str) -> bool {
 /// than a silent empty result, so this combination follows the same shape — as
 /// does a `--track` naming no track the project declares, via
 /// [`check_track_declared`].
-pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format) -> Result<()> {
-    let Some(slug) = track else {
+pub fn run(
+    cfg: &ResolvedConfig,
+    view: &str,
+    track: Option<&str>,
+    kind: Option<&str>,
+    format: Format,
+) -> Result<()> {
+    // Parsed before the Backlog guard so a run naming both a bad kind and an
+    // impossible view reports the typo, which is the fault the user can fix.
+    let kinds = kind.map(parse_kinds).transpose()?;
+    if track.is_none() && kinds.is_none() {
         return BASE.run(cfg, view, format, Narrowing::default());
-    };
-    if view == "Backlog" {
+    }
+    if let Some(slug) = track
+        && view == "Backlog"
+    {
         bail!(
             "--track {slug} and --view Backlog can never match anything together: \
              Backlog selects only tickets with no owning track, --track narrows to \
@@ -183,19 +250,26 @@ pub fn run(cfg: &ResolvedConfig, view: &str, track: Option<&str>, format: Format
         );
     }
     // `project_path` is `Some` by the time a precheck runs: `ProjectBase::run`
-    // resolves it before opening the base, and errors when it cannot.
-    let declared = |files: &[VaultFile]| match cfg.project_path.as_deref() {
-        Some(project_path) => check_track_declared(files, project_path, slug),
-        None => Ok(()),
+    // resolves it before opening the base, and errors when it cannot. With no
+    // `--track` the closure passes everything, since only a slug can name
+    // nothing — `parse_kinds` has already settled the kinds.
+    let declared = |files: &[VaultFile]| match (track, cfg.project_path.as_deref()) {
+        (Some(slug), Some(project_path)) => check_track_declared(files, project_path, slug),
+        _ => Ok(()),
     };
-    let owned = |f: &VaultFile| owned_by_track(f, slug);
+    // Both narrowings AND into one predicate, so `--track x --kind decision`
+    // returns that track's decision nodes rather than the last flag's answer.
+    let selected = |f: &VaultFile| {
+        track.is_none_or(|slug| owned_by_track(f, slug))
+            && kinds.as_ref().is_none_or(|ks| has_kind(f, ks))
+    };
     BASE.run(
         cfg,
         view,
         format,
         Narrowing {
             precheck: Some(&declared),
-            select: Some(&owned),
+            select: Some(&selected),
         },
     )
 }
@@ -218,6 +292,8 @@ properties:
     displayName: Slug
   note.status:
     displayName: Status
+  note.kind:
+    displayName: Kind
   note.track:
     displayName: Track
   note.requires:
@@ -250,6 +326,7 @@ views:
         - status == "open"
     order:
       - file.name
+      - kind
       - track
       - requires
       - description
@@ -291,6 +368,7 @@ views:
     order:
       - file.name
       - status
+      - kind
       - description
       - updated
     sort:
@@ -314,6 +392,7 @@ views:
     order:
       - file.name
       - status
+      - kind
       - track
       - requires
       - description
@@ -339,6 +418,10 @@ mod tests {
 
     /// A temp vault under `41 projects/nix/` with an owned ticket, an unowned
     /// open ticket (the backlog case), a done ticket, and a plain note.
+    ///
+    /// The two open tickets carry a `kind`; `ticket-done` deliberately carries
+    /// none, so the `--kind` tests can prove an untyped ticket drops out of
+    /// every kind query rather than defaulting into one.
     fn build_ticket_vault() -> TempDir {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path().join("41 projects/nix");
@@ -347,6 +430,7 @@ mod tests {
         std::fs::write(
             dir.join("ticket-owned.md"),
             "---\ntype: ticket\nslug: owned\ndescription: An owned ticket\nstatus: open\n\
+             kind: decision\n\
              track: \"[[41 projects/nix/track-work-tracking-model]]\"\nrequires: []\n---\nbody\n",
         )
         .unwrap();
@@ -354,6 +438,7 @@ mod tests {
         std::fs::write(
             dir.join("ticket-backlog.md"),
             "---\ntype: ticket\nslug: backlog\ndescription: An unowned open ticket\nstatus: open\n\
+             kind: execution\n\
              track:\nrequires:\n  - \"[[41 projects/nix/ticket-owned]]\"\n---\nbody\n",
         )
         .unwrap();
@@ -398,6 +483,18 @@ mod tests {
     /// returning the selected slugs. This is the pipeline `run` delegates to,
     /// minus rendering.
     fn select(root: &Path, view_name: &str, track: Option<&str>) -> Vec<String> {
+        select_narrowed(root, view_name, track, None)
+    }
+
+    /// [`select`] with both narrowings, composed exactly as [`run`] composes
+    /// them — so a test of `--track` plus `--kind` exercises the AND the shipped
+    /// path builds, not a re-derivation of it.
+    fn select_narrowed(
+        root: &Path,
+        view_name: &str,
+        track: Option<&str>,
+        kind: Option<&str>,
+    ) -> Vec<String> {
         let base_path = root.join("41 projects/nix/Tickets.base");
         std::fs::write(&base_path, render_template("41 projects/nix")).unwrap();
         let base_file = base::parse(&base_path).unwrap();
@@ -408,11 +505,16 @@ mod tests {
             .unwrap_or_else(|| panic!("view {view_name} missing from the template"));
 
         let files = vault::scan(root, root, Some(&VaultIgnore::from_patterns(vec![]))).unwrap();
-        // The shipped predicate, not a second copy of it.
-        let owned = track.map(|slug| move |f: &VaultFile| owned_by_track(f, slug));
-        let extra: Option<&dyn Fn(&VaultFile) -> bool> = match owned {
-            Some(ref p) => Some(p),
-            None => None,
+        // The shipped predicates, not a second copy of them.
+        let kinds = kind.map(parse_kinds).transpose().unwrap();
+        let narrowed = |f: &VaultFile| {
+            track.is_none_or(|slug| owned_by_track(f, slug))
+                && kinds.as_ref().is_none_or(|ks| has_kind(f, ks))
+        };
+        let extra: Option<&dyn Fn(&VaultFile) -> bool> = if track.is_some() || kind.is_some() {
+            Some(&narrowed)
+        } else {
+            None
         };
 
         let mut selected =
@@ -422,6 +524,107 @@ mod tests {
             .iter()
             .map(|f| f.get_property("slug"))
             .collect::<Vec<_>>()
+    }
+
+    #[test]
+    fn kind_selects_only_the_named_kinds() {
+        let tmp = build_ticket_vault();
+        assert_eq!(
+            select_narrowed(tmp.path(), "All", None, Some("decision")),
+            ["owned"]
+        );
+        assert_eq!(
+            select_narrowed(tmp.path(), "All", None, Some("decision,execution")),
+            ["backlog", "owned"]
+        );
+    }
+
+    /// The rule the charting frontier rests on: a ticket carrying no `kind:` is
+    /// not an execution ticket, so it matches nothing — even a query naming
+    /// every declared kind. Defaulting it into `execution` would file untyped
+    /// work under "nothing left to decide".
+    #[test]
+    fn a_ticket_without_a_kind_matches_no_kind_query() {
+        let tmp = build_ticket_vault();
+        assert!(select(tmp.path(), "All", None).contains(&"done".to_string()));
+        assert_eq!(
+            select_narrowed(
+                tmp.path(),
+                "All",
+                None,
+                Some("decision,fact,feasibility,execution")
+            ),
+            ["backlog", "owned"]
+        );
+    }
+
+    /// `--track` and `--kind` AND together. A track's decision nodes are its
+    /// tickets that are also decisions, never the union of the two sets.
+    #[test]
+    fn track_and_kind_narrow_together() {
+        let tmp = build_ticket_vault();
+        assert_eq!(
+            select_narrowed(
+                tmp.path(),
+                "Open",
+                Some("work-tracking-model"),
+                Some("decision")
+            ),
+            ["owned"]
+        );
+        assert!(
+            select_narrowed(
+                tmp.path(),
+                "Open",
+                Some("work-tracking-model"),
+                Some("execution")
+            )
+            .is_empty(),
+            "the owned ticket is a decision, so an execution query must not reach it"
+        );
+    }
+
+    #[test]
+    fn parse_kinds_rejects_a_kind_outside_the_declared_vocabulary() {
+        let err = parse_kinds("desicion").unwrap_err().to_string();
+        assert!(err.contains("no ticket kind \"desicion\""), "{err}");
+        // The message names the alternatives, since the vocabulary is closed and
+        // short enough to print in full.
+        assert!(
+            err.contains("decision, fact, feasibility, execution"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn parse_kinds_rejects_an_empty_entry() {
+        let err = parse_kinds("decision,").unwrap_err().to_string();
+        assert!(err.contains("empty entry"), "{err}");
+    }
+
+    #[test]
+    fn parse_kinds_trims_and_dedupes() {
+        let kinds = parse_kinds(" decision , fact ,decision").unwrap();
+        assert_eq!(
+            kinds.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["decision", "fact"]
+        );
+    }
+
+    /// `view.rs` builds both the table headers and the `--format json` keys from
+    /// `order` alone, so a `kind` present only in the properties block would not
+    /// reach the output. These are the three views a frontier query runs.
+    #[test]
+    fn the_views_a_frontier_query_uses_order_the_kind_column() {
+        let rendered = render_template("41 projects/nix");
+        for view_name in ["Open", "By Track", "All"] {
+            let section = rendered
+                .split(&format!("name: {view_name}\n"))
+                .nth(1)
+                .and_then(|rest| rest.split("  - type: table").next())
+                .unwrap_or_else(|| panic!("view {view_name} missing from the template"));
+            assert!(section.contains("- kind"), "view {view_name}: {section}");
+        }
     }
 
     #[test]
@@ -471,9 +674,15 @@ mod tests {
             consult: None,
             ignore: VaultIgnore::from_patterns(vec![]),
         };
-        let err = run(&cfg, "Backlog", Some("work-tracking-model"), Format::Table)
-            .unwrap_err()
-            .to_string();
+        let err = run(
+            &cfg,
+            "Backlog",
+            Some("work-tracking-model"),
+            None,
+            Format::Table,
+        )
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("--track"), "{err}");
         assert!(err.contains("--view Backlog"), "{err}");
     }
