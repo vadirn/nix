@@ -26,11 +26,13 @@ You rewrite prose to the Simplified output style. Plainer is the goal.
 
 The restyle strips cadence, flourish, and hedging. That is the style working, not a defect. So do not protect voice, rhythm, or ornament.
 
-You report, you do not refute. The deterministic `simplify-verify` gate owns the block. It stops a write when a reference span or the structure breaks. Everything else is your read, not your veto.
+You repair, you do not refute. The deterministic `simplify-verify` gate owns the block. It stops a write when a reference span or the structure breaks. Everything else is your read, not your veto.
 
-Report your read as a list in external mode. Name a shifted claim, a dropped argument, or a borderline call. Never hand the rewrite back for reading terser or flatter than the source, nor on taste.
+Repair every claim the pass shifted or dropped. Both modes repair, because a finding you only report still ships. So restore the claim against the source first, then say what you restored.
 
-In reply mode you have no reader to report to, so fix what shifted rather than naming it. Then send the message and stay silent about the pass.
+Report the repairs as a list in external mode. Name each shifted claim, dropped argument, or borderline call. Never hand the rewrite back for reading terser or flatter than the source, nor on taste.
+
+In reply mode you have no reader to report to, so repair and stay silent about the pass.
 
 ## Modes
 
@@ -91,32 +93,55 @@ if exit == 2 or exit == 3:                  // usage or empty
   stop
 
 // exit == 0 — verified for spans and structure, NOT meaning: every axis is deterministic, so none of
-// them sees a distorted or deleted claim. YOU are the only meaning check in this loop. Both modes
-// read; they differ in what the read produces (see §Stance).
+// them sees a distorted or deleted claim. YOU are the only meaning check in this loop.
 findings = do("read the rewrite against the source and name every claim the pass shifted or dropped")
 
+// Repair before the rewrite leaves this loop. BOTH modes repair — a finding you only report still
+// ships, to a file or a public surface in external mode and to the user in reply mode. The report is
+// an audit trail, never a substitute for the fix. Repair against <source>, not your memory of it:
+// restore the shifted claim in the rewrite's new wording, and change nothing else.
+if findings is non-empty:
+  rewrite = do("repair every finding in <findings> against <source>, keeping the Simplified style")
+
 // The restyle drops inline emphasis: the CLI masks references, never `**bold**` or `*italic*`. Re-apply it
-// here, where you hold both the source and the rewrite. The CLI's one clean pass should not carry this
-// judgment. Replicate the INTENT to emphasize, not the exact phrase. For each emphasized span in the
-// source, find the idea it stressed, then emphasize that idea in the rewrite's new wording. Where the
-// restyle left no natural home — the phrase merged, moved, or dissolved — leave it unemphasized. A forced
-// fit is worse than none.
+// here, where you hold both the source and the rewrite, and after the repair, so a repaired sentence
+// carries its own emphasis. The CLI's one clean pass should not carry this judgment. Replicate the INTENT
+// to emphasize, not the exact phrase. For each emphasized span in the source, find the idea it stressed,
+// then emphasize that idea in the rewrite's new wording. Where the restyle left no natural home — the
+// phrase merged, moved, or dissolved — leave it unemphasized. A forced fit is worse than none.
 rewrite = do("replicate the source's emphasis by intent — re-emphasize each stressed idea in the rewrite's new wording, and leave it out where the restyle left no natural fit")
 
+// Re-gate. The first gate read the CLI's rewrite; the repair and the emphasis are YOUR edits, and a
+// hand edit drops a ⟦N⟧ span or shifts a fence count as easily as a model pass does. Gate what you
+// actually intend to ship.
+report = Bash("simplify-verify <source>")   // the edited rewrite piped on stdin
+edits_held = exit == 0
+if not edits_held:
+  do("surface what broke from <report>")
+  rewrite = do("fall back to the CLI's gated rewrite, discarding your edits")
+
 if mode == reply:
-  rewrite = do("repair every finding in <findings> — you are the only reader here, so a shifted claim is yours to fix, never to report")
-  do("send <rewrite> as your message: no artifact, no brief, no note that the pass ran")
+  if edits_held:
+    do("send <rewrite> as your message: no artifact, no brief, no note that the pass ran")
+    stop
+  do("send your original draft unrestyled — shipping a claim you know shifted is worse than shipping no restyle")
   stop
 
 // External from here: show the read, publish the artifact, then write.
 do("show the ## Verdict and a short change summary")
-do("report <findings> as a bulleted list — a shifted claim, a dropped argument, a borderline call; do not hand the rewrite back on meaning or taste")
+do("report <findings> as a bulleted list, each marked repaired or left as-is — a shifted claim, a dropped argument, a borderline call; do not hand the rewrite back on meaning or taste")
 
 // Show the result as a black-and-white HTML artifact with two views — original-vs-edited and the
 // full brief — verbatim in <pre>, MonoLisaCode, generous spacing. Reply mode never reaches here,
 // so the recipe stays out of this file until the run needs it.
 Read(dir/references/artifact.md)
 do("follow it to build and publish the artifact")
+
+// The write is the whole reason external mode repairs. Never let a claim you know shifted land on
+// disk or on a public surface just because you named it above.
+if findings is non-empty and not edits_held:
+  answer = AskUserQuestion("Your repair broke the gate. Write it unrepaired, re-run simplify-text, or hand this back?")
+  if answer != "write": stop
 
 if target is a file:
   Write(target, rewrite)
