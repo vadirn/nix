@@ -76,8 +76,8 @@ const askWithRewrite = (rewrite: (masked: string) => string): typeof askJson =>
 
 test("runSimplify: a faithful no-op rewrite passes the guard and prints the brief", async () => {
   const out = await runSimplify(NOTE, { lang: "auto" }, { ask: askWithRewrite((m) => m) });
-  expect(out).toContain("## rewrite");
-  expect(out).toContain("## guard\n\nAll checks passed.");
+  expect(out).toContain("## Rewrite");
+  expect(out).toContain("## Guard\n\nAll checks passed.");
   // reference spans are restored (unmasked) in the printed rewrite
   expect(out).toContain("[[notes]]");
   expect(out).toContain("`build`");
@@ -85,7 +85,7 @@ test("runSimplify: a faithful no-op rewrite passes the guard and prints the brie
 
 test("runSimplify: the original frontmatter is prepended to the rewrite verbatim", async () => {
   const out = await runSimplify(NOTE, { lang: "auto" }, { ask: askWithRewrite((m) => m) });
-  const rewrite = out.split("## rewrite\n\n")[1]!;
+  const rewrite = out.split("## Rewrite\n\n")[1]!;
   expect(rewrite).toContain("---\ntitle: demo\n---");
 });
 
@@ -96,7 +96,7 @@ test("runSimplify: a dropped ⟦N⟧ span is reported as an advisory masks FAIL,
     { ask: askWithRewrite((m) => m.replace(/⟦1⟧/, "")), maxAttempts: 1 }, // one pass, drop the span
   );
   expect(out).toContain("- masks: FAIL");
-  expect(out).toContain("## verdict"); // the brief is still produced
+  expect(out).toContain("## Verdict"); // the brief is still produced
 });
 
 test("runSimplify: a planted name typo is flagged against the source", async () => {
@@ -126,7 +126,48 @@ test("runSimplify: a Russian note auto-routes to the RU ruleset and preserves Cy
   const out = await runSimplify(RU, { lang: "auto" }, { ask });
   expect(seenPrompt).toContain("«является»"); // detectLang → ru selected the Russian ruleset
   expect(out).toContain("[[глоссарий]]"); // reference span restored
-  expect(out).toContain("## guard\n\nAll checks passed.");
+  expect(out).toContain("## Guard\n\nAll checks passed.");
+});
+
+test("runSimplify: an over-cap source sentence is measured and forwarded into the prompt", async () => {
+  // a 24-word sentence in the source: wordCapScan must find it and simplifyPrompt must carry it, so
+  // the model gets the exact offender it counts unreliably (the deterministic length pre-hint).
+  const LONG =
+    "We compute the Levenshtein distance between the two given strings and then we also run the build and keep everything short and tidy.";
+  let seenPrompt = "";
+  const ask: typeof askJson = (async (_model: unknown, prompt: string) => {
+    seenPrompt = prompt;
+    return {
+      verdict: "ok",
+      cut: [],
+      change: [],
+      shape: [],
+      keep: [],
+      borderline: [],
+      rewrite: maskedOf(prompt),
+    };
+  }) as unknown as typeof askJson;
+  await runSimplify(LONG, { lang: "auto" }, { ask });
+  expect(seenPrompt).toContain("LENGTH CHECK"); // the pre-hint block reached the model
+  expect(seenPrompt).toContain("We compute the Levenshtein distance"); // the offender itself
+});
+
+test("runSimplify: a within-cap source carries no length hint", async () => {
+  let seenPrompt = "";
+  const ask: typeof askJson = (async (_model: unknown, prompt: string) => {
+    seenPrompt = prompt;
+    return {
+      verdict: "ok",
+      cut: [],
+      change: [],
+      shape: [],
+      keep: [],
+      borderline: [],
+      rewrite: maskedOf(prompt),
+    };
+  }) as unknown as typeof askJson;
+  await runSimplify(NOTE, { lang: "auto" }, { ask }); // NOTE's sentences are all short
+  expect(seenPrompt).not.toContain("LENGTH CHECK");
 });
 
 test("runSimplify: a gate-drifting pass is re-rolled, and the first clean run is kept", async () => {
@@ -140,7 +181,7 @@ test("runSimplify: a gate-drifting pass is re-rolled, and the first clean run is
   }) as unknown as typeof askJson;
   const out = await runSimplify(NOTE, { lang: "auto" }, { ask: driftThenClean });
   expect(calls).toBe(2); // attempt 1 drifted, attempt 2 cleared the gate
-  expect(out).toContain("## guard\n\nAll checks passed."); // the clean run was kept
+  expect(out).toContain("## Guard\n\nAll checks passed."); // the clean run was kept
   expect(out).toContain("`build`"); // the span the drifting run dropped is restored
 });
 
@@ -161,7 +202,7 @@ test("runSimplify: when every pass drifts, the last is kept and the brief still 
   const out = await runSimplify(NOTE, { lang: "auto" }, { ask: alwaysDrift, maxAttempts: 2 });
   expect(calls).toBe(2); // exhausted the pinned budget
   expect(out).toContain("- masks: FAIL"); // the drift rode into the advisory guard
-  expect(out).toContain("## verdict"); // a brief is still produced
+  expect(out).toContain("## Verdict"); // a brief is still produced
 });
 
 test("runSimplify: a late transient flake keeps the earlier drifting brief, not exit 4", async () => {
@@ -204,5 +245,5 @@ test("runSimplify: a transient primary flake re-rolls on the fallback model", as
   }) as unknown as typeof askJson;
   const out = await runSimplify(NOTE, { lang: "auto" }, { ask: flakeThenOk });
   expect(calls).toBe(2); // primary threw, fallback answered
-  expect(out).toContain("## guard\n\nAll checks passed.");
+  expect(out).toContain("## Guard\n\nAll checks passed.");
 });

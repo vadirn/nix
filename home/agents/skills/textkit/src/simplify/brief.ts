@@ -1,6 +1,6 @@
 // simplify/brief — coerce the model's JSON into a SimplifyBrief, then render it to the markdown
 // brief on stdout. Two layers, two formats (report-brief's decision): the model returns strict
-// JSON through askJson; the CLI prints markdown with the seven `##` sections plus `## guard`. No
+// JSON through askJson; the CLI prints markdown with the seven `##` sections plus `## Guard`. No
 // textkit CLI prints JSON to stdout — the brief is the analyzer's product.
 //
 // coerceBrief is defensive: askJson enforces the shape through a schema retry, but a surviving
@@ -67,7 +67,7 @@ function fenceFor(content: string): string {
 }
 
 // renderBrief renders the display-ready brief and guard report to the markdown brief printed on
-// stdout: the seven `##` sections in fixed order, then `## guard`. `rewrite` is fenced so the
+// stdout: the seven `##` sections in fixed order, then `## Guard`. `rewrite` is fenced so the
 // subagent extracts one block; `guard` leads with "All checks passed." when every axis is clean.
 export function renderBrief(brief: SimplifyBrief, guard: GuardReport): string {
   const fence = fenceFor(brief.rewrite);
@@ -75,13 +75,13 @@ export function renderBrief(brief: SimplifyBrief, guard: GuardReport): string {
     ? `All checks passed.\n\n${formatGuard(guard)}`
     : formatGuard(guard);
   return [
-    `## verdict\n\n${brief.verdict || "No verdict."}`,
-    `## cut\n\n${bullets(brief.cut)}`,
-    `## change\n\n${renderChange(brief.change)}`,
-    `## shape\n\n${bullets(brief.shape)}`,
-    `## keep\n\n${bullets(brief.keep)}`,
-    `## borderline\n\n${bullets(brief.borderline)}`,
-    `## rewrite\n\n${fence}markdown\n${brief.rewrite}\n${fence}`,
-    `## guard\n\n${guardBody}`,
+    `## Verdict\n\n${brief.verdict || "No verdict."}`,
+    `## Cut\n\n${bullets(brief.cut)}`,
+    `## Change\n\n${renderChange(brief.change)}`,
+    `## Shape\n\n${bullets(brief.shape)}`,
+    `## Keep\n\n${bullets(brief.keep)}`,
+    `## Borderline\n\n${bullets(brief.borderline)}`,
+    `## Rewrite\n\n${fence}markdown\n${brief.rewrite}\n${fence}`,
+    `## Guard\n\n${guardBody}`,
   ].join("\n\n");
 }

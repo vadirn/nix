@@ -4,6 +4,7 @@
 import { expect, test } from "bun:test";
 import {
   BRIEF_KEYS,
+  capHint,
   resolveLang,
   SIMPLIFY_RULESET_EN,
   SIMPLIFY_RULESET_RU,
@@ -75,6 +76,59 @@ test("simplifyPrompt: neither the ruleset nor the schema invites adding a headin
   expect(SIMPLIFY_RULESET_RU).not.toContain("Заголовок для темы");
   const p = simplifyPrompt("x ⟦0⟧ y", "en");
   expect(p).not.toContain("a topic heading added"); // the schema's `shape` hint no longer suggests it
+});
+
+test("MEANING pins claim force in both languages — the one drift every swept model showed", () => {
+  // Live sweep finding: nearly every restyle model softened "A live run PROVED the gap" to "showed"
+  // or "found". Tense/mood/polarity all survived, so the existing MEANING clause never caught it —
+  // the weakened verb is a claim-force shift, a fourth axis the rule now names outright.
+  expect(SIMPLIFY_RULESET_EN).toContain("Keep each claim's FORCE");
+  expect(SIMPLIFY_RULESET_EN).toContain("Never trade a strong verb for a weaker one");
+  expect(SIMPLIFY_RULESET_RU).toContain("Сохрани СИЛУ каждого утверждения");
+  for (const lang of ["en", "ru"] as const)
+    expect(simplifyPrompt("x ⟦0⟧ y", lang)).toContain(lang === "ru" ? "СИЛУ" : "FORCE");
+});
+
+test("RELEVANCE bounds the cut to restatement, so a substantive sentence survives", () => {
+  // Live sweep finding: qwen-flash and glm-5.2 each DELETED a load-bearing sentence outright, and
+  // both briefs still printed "All checks passed" — no deterministic axis sees a dropped claim. The
+  // cut licence is now bounded, and the keep is stated positively.
+  expect(SIMPLIFY_RULESET_EN).toContain("Cut a sentence ONLY when it restates");
+  expect(SIMPLIFY_RULESET_EN).toContain("Keep every sentence that carries its own claim");
+  expect(SIMPLIFY_RULESET_RU).toContain("ТОЛЬКО если оно повторяет");
+  expect(SIMPLIFY_RULESET_RU).toContain("Сохрани каждое предложение со своим утверждением");
+  // the blanket licence that invited the deletion is gone
+  expect(SIMPLIFY_RULESET_EN).not.toContain("cut the rest");
+});
+
+test("capHint: names each over-cap offender with its count, or nothing when the source is clean", () => {
+  // empty in → no hint, so a within-cap source leaves the no-op clause to govern alone
+  expect(capHint([], "en")).toBe("");
+  const over = [
+    { sentence: "A very long first offender that runs well past the cap here.", words: 24 },
+    { sentence: "A second offender that also exceeds the twenty-word limit by a bit.", words: 22 },
+  ];
+  const en = capHint(over, "en");
+  expect(en).toContain("LENGTH CHECK");
+  expect(en).toContain("20-word cap"); // WORD_CAP surfaced in the instruction
+  expect(en).toContain("(24 words) A very long first offender"); // the offender, with its count
+  expect(en).toContain("note it in `borderline`"); // framed as candidates, not commands
+});
+
+test("capHint: the Russian hint uses Russian framing, not a port of the English one", () => {
+  const ru = capHint([{ sentence: "Очень длинное предложение источника здесь.", words: 21 }], "ru");
+  expect(ru).toContain("ПРОВЕРКА ДЛИНЫ");
+  expect(ru).toContain("«borderline»");
+  expect(ru).not.toContain("LENGTH CHECK");
+});
+
+test("simplifyPrompt: over-cap findings ride into the prompt; a clean source carries no hint", () => {
+  const offender = { sentence: "This one sentence is deliberately over the cap.", words: 21 };
+  const withHint = simplifyPrompt("x ⟦0⟧ y", "en", [offender]);
+  expect(withHint).toContain("LENGTH CHECK");
+  expect(withHint).toContain("This one sentence is deliberately over the cap.");
+  // the default (no third arg) omits the block entirely — no dangling "LENGTH CHECK" scaffolding
+  expect(simplifyPrompt("x ⟦0⟧ y", "en")).not.toContain("LENGTH CHECK");
 });
 
 test("resolveLang: auto-detects by script, and an explicit override wins", () => {

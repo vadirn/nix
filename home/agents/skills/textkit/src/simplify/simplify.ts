@@ -3,15 +3,15 @@
 // See the USAGE block below for the full CLI surface (invocation, flags, output contract, exit
 // codes).
 //
-// The tool APPLIES NOTHING: it masks reference spans, runs up to three restyle passes (qwen-flash,
-// with a deepseek-v4-flash fallback) and keeps the first that clears the apply-gate, runs a
+// The tool APPLIES NOTHING: it masks reference spans, runs up to three restyle passes (gpt-5.6-luna,
+// with a gpt-5.4-mini fallback) and keeps the first that clears the apply-gate, runs a
 // deterministic guard over that rewrite, and prints the markdown brief to stdout. The simplify-text
 // skill's subagent reads the brief, applies the `rewrite`, and owns all file I/O. So the input file
 // is never touched here.
 //
 // The product is the BRIEF, not the file. A brief with no rewrite is useless, so — unlike polish's
 // passthrough — a model call that fails after the fallback exits nonzero (4) rather than shipping
-// the input. Guard findings are advisory and never change the exit code (they ride the `## guard`
+// the input. Guard findings are advisory and never change the exit code (they ride the `## Guard`
 // section); only an operational failure — bad args, a missing key, a dead model — exits nonzero.
 import { readFileSync } from "node:fs";
 import { takeValue } from "textkit/core/args.ts";
@@ -25,6 +25,7 @@ import { type SimplifyBrief, resolveLang, simplifyPrompt } from "textkit/simplif
 import { coerceBrief, renderBrief } from "textkit/simplify/brief.ts";
 import { runGuard } from "textkit/simplify/guard.ts";
 import { verify, verifyClean } from "textkit/simplify/verify.ts";
+import { wordCapScan } from "textkit/simplify/wordcap.ts";
 
 // The restyle pass is re-rolled up to this many times to clear the apply-gate. The model is
 // non-deterministic, so a run that drops a span or adds a heading is one bad roll, not a fixed
@@ -47,14 +48,14 @@ Options:
   -h, --help       show this help and exit
 
 Output:
-  A markdown brief to stdout: the seven sections (verdict, cut, change,
-  shape, keep, borderline, rewrite) plus a ## guard section (masks, code,
-  names, sentences — all advisory). The input file is never modified;
-  diagnostics go to stderr.
+  A markdown brief to stdout: the seven sections (Verdict, Cut, Change,
+  Shape, Keep, Borderline, Rewrite) plus a ## Guard section (masks, code,
+  names, sentences, lists — all advisory, all deterministic). The input file
+  is never modified; diagnostics go to stderr.
   Exit: 0 brief printed · 1 missing key · 2 usage error · 3 empty input ·
   4 analysis failed (both models exhausted).
 
-Env: DASHSCOPE_API_KEY, resolved from Doppler (claude-code/std) via keys.ts
+Env: OPENAI_API_KEY, resolved from Doppler (claude-code/std) via keys.ts
 (e.g. doppler run --project claude-code --config std --)
 `;
 
@@ -151,12 +152,17 @@ export async function runSimplify(
   // skill's subagent re-applies it by intent at apply time (see that skill's apply step).
   const { mask, unmask } = createMasker();
   const maskedInput = mask(body);
-  const prompt = simplifyPrompt(maskedInput, lang);
+  // Deterministic length pre-hint. wordCapScan is the one guard axis that reads a text standalone
+  // (the other four diff the rewrite against the source), so it is the only "what's wrong with the
+  // original" finding available before the pass. Feed the measured over-cap sentences into the prompt
+  // so the model splits the exact offenders it counts unreliably. Empty for a within-cap source.
+  const overCap = wordCapScan(maskedInput);
+  const prompt = simplifyPrompt(maskedInput, lang, overCap);
   // Retry-to-gate. The model is non-deterministic, so a run that drops a span or adds a heading is
   // one bad roll. Re-roll up to `attempts` and keep the FIRST run the apply-gate accepts — the same
   // `verify` the simplify-verify CLI runs, called here on the source and the unmasked rewrite. If no
   // run clears the gate, keep the LAST: the tool still prints a brief (blocking drift is the
-  // downstream gate's call), and both the `## guard` and the skill's simplify-verify still fire on
+  // downstream gate's call), and both the `## Guard` and the skill's simplify-verify still fire on
   // what shipped. A pass that throws keeps the last usable brief; the first pass throwing has none,
   // so it propagates and main exits 4.
   const attempts = Math.max(1, maxAttempts);
@@ -189,7 +195,7 @@ export async function runSimplify(
   const { brief, rewriteMasked, rewriteUnmasked } = chosen!;
   const guard = runGuard({ source: body, maskedInput, rewriteMasked, rewriteUnmasked });
   // Display brief: unmask the rewrite and each change span so a human reads real spans, and prepend
-  // the original frontmatter (verbatim, never restyled) so `## rewrite` is the whole note the
+  // the original frontmatter (verbatim, never restyled) so `## Rewrite` is the whole note the
   // subagent applies as one block.
   const display: SimplifyBrief = {
     ...brief,

@@ -9,6 +9,7 @@
 // pattern revise() uses. SIMPLIFY_RULESET_RU is tailored to Russian mechanics (канцелярит,
 // отглагольные существительные, «является» → тире), not a port of the English STE rules.
 import { detectLang } from "textkit/core/text.ts";
+import { type WordCapFinding, WORD_CAP } from "textkit/simplify/wordcap.ts";
 
 // The seven brief keys the pass fills, in render order. `rewrite` carries the whole restyled note
 // as one markdown string (report-brief's JSON transport); the other six are the reviewable diff.
@@ -48,8 +49,8 @@ export type SimplifyBrief = {
 // rules — a statement stays a statement, a number stays exact. Three of its claims (verb-near-
 // subject, cut-restatement, keep-numbers) come from CLAUDE.md's Exposition, inlined here because
 // the offline model cannot reach the Simplified.md ↔ CLAUDE.md pair the agent reads.
-export const SIMPLIFY_RULESET_EN = `MEANING: restyle the wording, not the meaning. Keep each sentence's tense, mood, and polarity — a statement stays a statement, a record of what happened stays past, never a command. Use the imperative only where the source already instructs. Keep every number, name, and quoted value exactly as it stands.
-RELEVANCE: lead each unit with its conclusion, then the reason. Cover only what the reader needs; cut the rest. Cut a sentence that only restates, emphasizes, or hedges; cadence earns no clause. Use the fewest words that keep the meaning whole.
+export const SIMPLIFY_RULESET_EN = `MEANING: restyle the wording, not the meaning. Keep each sentence's tense, mood, and polarity — a statement stays a statement, a record of what happened stays past, never a command. Use the imperative only where the source already instructs. Keep every number, name, and quoted value exactly as it stands. Keep each claim's FORCE: when the source proves, requires, must, or never, say so too. Never trade a strong verb for a weaker one — "proved" stays "proved", it does not become "showed" or "found".
+RELEVANCE: lead each unit with its conclusion, then the reason. Cut a sentence ONLY when it restates, emphasizes, or hedges; cadence earns no clause. Keep every sentence that carries its own claim, reason, or example, even where the passage already runs long — a reason you drop is an argument the reader loses. Use the fewest words that keep the meaning whole.
 SENTENCES: one idea per sentence, at most 20 words. Split a sentence that carries two claims. Use active voice and name the actor; keep the verb close to its subject. Use the imperative for an instruction ("Run X", not "You should run X"). Start with the known part, end with the new. Keep the connective — because, so, but, although — even in a short sentence.
 WORDS: use one term per concept and reuse it. Prefer plain, concrete words; cut any word the sentence survives without. Replace a hidden verb with a verb ("decide", not "make a decision"). Use the positive form; state what to do. Use simple tenses. Use at most three nouns in a row.
 SHAPE: turn a PROSE sequence or set into a vertical list; keep an existing list's kind and item count as they stand. Give each paragraph one topic; keep it short.`;
@@ -57,8 +58,8 @@ SHAPE: turn a PROSE sequence or set into a vertical list; keep an existing list'
 // SIMPLIFY_RULESET_RU is the Russian rule set — the same five principles adapted to Russian
 // mechanics, not translated from the English. СМЫСЛ mirrors EN MEANING. Tailored terms:
 // канцелярит, отглагольные существительные, «является»/«представляет собой» → тире.
-export const SIMPLIFY_RULESET_RU = `СМЫСЛ: меняй форму, а не смысл. Сохрани время, наклонение и полярность — утверждение остаётся утверждением, рассказ о случившемся остаётся в прошедшем времени, но не командой. Повелительное наклонение — только там, где источник уже даёт инструкцию. Каждое число, имя и цитату сохрани в точности.
-ГЛАВНОЕ: вывод — первым, причина — после. Дай читателю только нужное, остальное убери. Убери предложение, которое лишь повторяет, усиливает или смягчает; красивость не даёт права на клаузу. Пиши минимумом слов без потери смысла.
+export const SIMPLIFY_RULESET_RU = `СМЫСЛ: меняй форму, а не смысл. Сохрани время, наклонение и полярность — утверждение остаётся утверждением, рассказ о случившемся остаётся в прошедшем времени, но не командой. Повелительное наклонение — только там, где источник уже даёт инструкцию. Каждое число, имя и цитату сохрани в точности. Сохрани СИЛУ каждого утверждения: если источник доказывает, требует, обязывает или запрещает — говори так же. Не меняй сильный глагол на слабый: «доказал» остаётся «доказал» и не превращается в «показал».
+ГЛАВНОЕ: вывод — первым, причина — после. Убирай предложение, ТОЛЬКО если оно повторяет, усиливает или смягчает; красивость не даёт права на клаузу. Сохрани каждое предложение со своим утверждением, доводом или примером, даже если отрывок и так длинный — выброшенный довод читатель теряет навсегда. Пиши минимумом слов без потери смысла.
 ПРЕДЛОЖЕНИЯ: одна мысль — одно предложение, не длиннее 20 слов. Предложение с двумя утверждениями разбей. Активный залог, назови деятеля; держи глагол рядом с подлежащим. Для инструкции — повелительное наклонение («Запусти X», а не «Нужно запустить X»). Известное — в начало, новое — в конец. Сохрани связку — потому что, поэтому, но, хотя — даже в коротком предложении.
 СЛОВА: один термин на одно понятие, повторяй его. Простые конкретные слова; убери слово, без которого предложение живёт. Отглагольное существительное → глагол («реши», а не «прими решение»); канцелярит → живой глагол. «является»/«представляет собой» → тире или прямой глагол. Утверждение вместо отрицания. Простые времена.
 ФОРМА: последовательность или набор В ПРОЗЕ → вертикальный список; у существующего списка сохрани вид и число пунктов как есть. Один абзац — одна мысль, абзац короткий.`;
@@ -83,19 +84,42 @@ const NO_OP =
 const KEEP =
   "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item. Never promote a sentence to a new list item. Keep the heading count exact. Never promote a bold lead, a question, or a sentence to a heading. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
 
+// capHint is the deterministic length pre-hint: wordCapScan measures the SOURCE before the pass and
+// names each prose sentence over the cap. The ruleset already states the cap, yet the model counts
+// words unreliably — a live no-op left three sentences over it while reporting the note compliant —
+// so handing the model the measured offenders turns the rule into a checklist. Framed as CANDIDATES,
+// not commands: a legitimately long sentence (an em-dash aside, a quoted line) is kept and flagged in
+// `borderline`, never force-split. Empty when the source is within the cap, so a clean note gets no
+// hint and the no-op clause governs alone.
+export function capHint(overCap: WordCapFinding[], lang: "en" | "ru"): string {
+  if (overCap.length === 0) return "";
+  if (lang === "ru") {
+    const list = overCap.map((f) => `- (${f.words} сл.) ${f.sentence}`).join("\n");
+    return `ПРОВЕРКА ДЛИНЫ: детерминированная проверка нашла эти предложения источника длиннее ${WORD_CAP} слов. Разбей каждое там, где разбивка сохраняет смысл. Если предложение нельзя разбить без искажения — оставь его как есть и отметь в «borderline»:\n${list}`;
+  }
+  const list = overCap.map((f) => `- (${f.words} words) ${f.sentence}`).join("\n");
+  return `LENGTH CHECK: a deterministic scan found these source sentences over the ${WORD_CAP}-word cap. Split each where a split preserves the meaning. If a sentence cannot split without distorting it, keep it and note it in \`borderline\`:\n${list}`;
+}
+
 // simplifyPrompt builds the single-pass prompt for `masked` (text with reference spans already
-// frozen to ⟦N⟧). It embeds the language's ruleset, the keep-verbatim and no-op clauses, and the
+// frozen to ⟦N⟧). It embeds the language's ruleset, the keep-verbatim and no-op clauses, the
+// deterministic length pre-hint (present only when the source has over-cap sentences), and the
 // strict seven-key JSON schema, then the text. The model returns JSON; the CLI renders it to the
 // markdown brief and runs the deterministic guard.
-export function simplifyPrompt(masked: string, lang: "en" | "ru"): string {
+export function simplifyPrompt(
+  masked: string,
+  lang: "en" | "ru",
+  overCap: WordCapFinding[] = [],
+): string {
   const ruleset = lang === "ru" ? SIMPLIFY_RULESET_RU : SIMPLIFY_RULESET_EN;
+  const hint = capHint(overCap, lang);
   return `You are an editor applying the Simplified writing style. Restyle the prose of the TEXT below to the style, and report what you changed as a strict JSON brief.
 
 ${ruleset}
 
 ${KEEP}
 
-${NO_OP}
+${NO_OP}${hint ? `\n\n${hint}` : ""}
 
 Return ONLY JSON with these seven keys:
 {"verdict":"one sentence — does the text meet the style, and the main gap if not","cut":["each word or phrase you removed as padding"],"change":[{"before":"the original span","after":"your restyled span","transform":"split|active|de-nominalize|reorder|plain-word|list","why":"one clause"}],"shape":["each structural shift — a prose set turned into a vertical list"],"keep":["each fixed span you preserved verbatim — a heading, a code block, a specimen"],"borderline":["each judgment call the human should check"],"rewrite":"the full restyled note as markdown, every ⟦N⟧ token reproduced unchanged"}

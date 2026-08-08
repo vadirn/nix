@@ -3,8 +3,8 @@
 // below for the CLI surface (invocation, output contract, exit codes).
 //
 // This is the verify half of `apply-mask-verify`. The simplify-text CLI (simplify.ts) covers the
-// model-and-unmask stretch with its advisory `## guard`. This tool covers the stretch after: the
-// subagent extracts the `## rewrite` block from the brief and is about to write it over the user's
+// model-and-unmask stretch with its advisory `## Guard`. This tool covers the stretch after: the
+// subagent extracts the `## Rewrite` block from the brief and is about to write it over the user's
 // real note. That one edit is unverified, and its likely failure — a nested ``` fence truncating a
 // naive extractor mid-block — drops content that trips no name typo. So the gate compares the
 // extracted rewrite against the original on two deterministic axes and, unlike the CLI guard, exits
@@ -199,7 +199,7 @@ Usage:
 
   <original.md> is the reference note on disk. The proposed rewrite is read
   from [rewrite.md], or from stdin when it is omitted or '-'. So the
-  simplify-text skill pipes the extracted ## rewrite block in and gates the
+  simplify-text skill pipes the extracted ## Rewrite block in and gates the
   write on the exit code.
 
 Options:

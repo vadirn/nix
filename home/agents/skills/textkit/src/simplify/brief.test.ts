@@ -54,14 +54,14 @@ test("coerceBrief: mistyped fields are dropped — a string change item, a numer
 test("renderBrief: the eight sections appear in order", () => {
   const out = renderBrief(coerceBrief({ verdict: "v", rewrite: "body" }), cleanGuard);
   const order = [
-    "## verdict",
-    "## cut",
-    "## change",
-    "## shape",
-    "## keep",
-    "## borderline",
-    "## rewrite",
-    "## guard",
+    "## Verdict",
+    "## Cut",
+    "## Change",
+    "## Shape",
+    "## Keep",
+    "## Borderline",
+    "## Rewrite",
+    "## Guard",
   ];
   let last = -1;
   for (const h of order) {
@@ -73,8 +73,8 @@ test("renderBrief: the eight sections appear in order", () => {
 
 test("renderBrief: empty diff sections read as 'None.', and a clean guard leads with the pass line", () => {
   const out = renderBrief(coerceBrief({ verdict: "clean", rewrite: "x" }), cleanGuard);
-  expect(out).toContain("## cut\n\nNone.");
-  expect(out).toContain("## guard\n\nAll checks passed.");
+  expect(out).toContain("## Cut\n\nNone.");
+  expect(out).toContain("## Guard\n\nAll checks passed.");
 });
 
 test("renderBrief: the rewrite fence outruns an inner triple-backtick code block", () => {

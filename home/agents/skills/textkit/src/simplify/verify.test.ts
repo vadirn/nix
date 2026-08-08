@@ -76,7 +76,7 @@ test("verify: an invented span (not in the source) is drift", () => {
 
 test("verify: the nested-fence truncation — a naive extractor stops at the inner fence", () => {
   // The likely real failure: the rewrite kept every reference span up to the code block, then a
-  // naive `## rewrite` extractor closed early on the inner ``` and dropped the block and the tail.
+  // naive `## Rewrite` extractor closed early on the inner ``` and dropped the block and the tail.
   const truncated = `# Title
 
 Cite [[notes]]. Show ![[diagram.png]]. Use the \`build\` flag.`;

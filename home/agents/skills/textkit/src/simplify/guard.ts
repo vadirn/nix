@@ -1,7 +1,7 @@
 // simplify/guard — the deterministic verification layer. The single model pass is unverified until
 // this runs; it replaces the model judge the feasibility spike killed, and it catches the errors a
 // peer model does not — a dropped code span, a mangled reference, a corrupted name, a still-too-long
-// sentence. Every finding is ADVISORY: the guard reports each in the brief's `## guard` section and
+// sentence. Every finding is ADVISORY: the guard reports each in the brief's `## Guard` section and
 // never changes the exit code (an operational failure — bad args, a dead model call — is the CLI's
 // concern, not the guard's). The subagent and the human decide what to do with a reported violation.
 //
@@ -154,7 +154,7 @@ export function guardClean(r: GuardReport): boolean {
   );
 }
 
-// formatGuard renders the GuardReport as the brief's `## guard` body: one line per axis, each an
+// formatGuard renders the GuardReport as the brief's `## Guard` body: one line per axis, each an
 // advisory finding. Clean axes are named too, so the reader sees the check ran and passed.
 export function formatGuard(r: GuardReport): string {
   const lines: string[] = [];

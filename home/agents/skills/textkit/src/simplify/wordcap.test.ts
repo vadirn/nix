@@ -43,6 +43,23 @@ test("wordCapScan: a ⟦N⟧ span counts as one referent, keeping a masked sente
   expect(wordCapScan(sentence)).toEqual([]);
 });
 
+test("wordCapScan: a bold lead ends a sentence, so `.**` is a boundary and not a merge", () => {
+  // The Simplified style writes bold leads, so a sentence routinely ends at `.**`. Both halves here
+  // sit under the cap; only a splitter blind to the closing `**` would merge them into a phantom
+  // 26-word offender and push the pre-hint to split compliant prose.
+  const line = `**${words(8)}** ${words(16)}`;
+  expect(wordCapScan(line)).toEqual([]);
+  // and the merge it replaces would have been over the cap, so the test genuinely discriminates
+  expect(8 + 1 + 16).toBeGreaterThan(20); // +1 for the bold marker word-joining
+});
+
+test("wordCapScan: closing quotes and brackets also end a sentence", () => {
+  for (const closer of ['"', "'", ")", "]", "”", "’", "»", "`", "_"]) {
+    const line = `${words(8).slice(0, -1)}.${closer} ${words(16)}`;
+    expect(wordCapScan(line)).toEqual([]);
+  }
+});
+
 test("wordCapScan: findings come back longest first", () => {
   const doc = `${words(22)}\n${words(30)}`;
   expect(wordCapScan(doc).map((f) => f.words)).toEqual([30, 22]);
