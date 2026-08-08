@@ -1,11 +1,8 @@
----
-name: project-setup
-description: Scaffold a vault project folder and link the current repo via .vault.config.json. Use on /project-setup or "set up a new project".
----
+# Setup — scaffold a project and wire the repo
 
-# Setup Project
+Writes `.vault.config.json` in the current repo, and creates the vault project folder when it does not exist yet.
 
-Writes `.vault.config.json` in the current repo, and creates the vault project folder if it doesn't exist yet.
+## Pseudocode
 
 ```
 // Discover vault root
@@ -64,7 +61,7 @@ do("report created files")
 }
 ```
 
-`vault-query` uses `projects_path` for project resolution. This skill only stores it.
+`vault-query` uses `projects_path` for project resolution. This procedure only stores it.
 
 ### Per-repo config
 
@@ -77,7 +74,7 @@ do("report created files")
 }
 ```
 
-Both values are absolute. `project_path` is `vault_root` joined with the vault-relative `path`. Gitignored because it contains absolute paths.
+Both values are absolute. `project_path` is `vault_root` joined with the vault-relative `path`. Gitignored because it holds absolute paths.
 
 ### Naming files in a project folder
 
@@ -129,4 +126,5 @@ Substitute `<path>`, `<title>`, `<description>`, `<result>`.
 ## Notes
 
 - Generated files live in the vault. Wikilinks work.
+- Report the project's state with `/project` once the folder holds work.
 - Save and resume sessions via `/track`.

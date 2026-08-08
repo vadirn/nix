@@ -33,7 +33,7 @@ pub fn run(cfg: &ResolvedConfig, view: &str) -> Result<()> {
                 return false;
             }
             let name = path.file_name().unwrap_or_default().to_string_lossy();
-            // `context.md` is spelled `Context.md` since project-setup adopted the
+            // `context.md` is spelled `Context.md` since `/project setup` adopted the
             // singleton-file convention; both spellings are the same exclusion.
             !name.starts_with("checkpoint-")
                 && !name.eq_ignore_ascii_case("context.md")
