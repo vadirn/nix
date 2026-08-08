@@ -1,19 +1,14 @@
 ---
 name: simplify-text
 description: >
-  Rewrite a given text to the Simplified output style: short sentences (one idea,
-  ≤20 words), active voice, plain words, conclusion first, sets as vertical lists.
-  Two modes, picked by the target. External — a file, a PR body, a commit message —
-  gets a side-by-side artifact and a write back. Reply — your own draft or last
-  message, or a snippet pasted into the chat — gets the rewrite as the message
-  itself. Use when the user invokes /simplify-text or asks to "apply the Simplified
-  style", "make this simplified", "rewrite in Simplified", "simplify this text /
-  prose / PR body / commit message / doc", or turns the style on you: "simplify your
-  reply", "say that more simply", "restyle your last message". Restyle the prose and
-  keep fixed structure verbatim — headings, template scaffolding, code, tables,
-  quoted specimens, frontmatter, and any fixed surface limit. Route code cleanups to
-  /simplify, idea-compression to /distill, and negative-to-positive instruction
-  flips to /affirm.
+  Rewrite prose to the Simplified output style — one idea per sentence, ≤20 words,
+  active voice, plain words, conclusion first, sets as vertical lists. This is a named
+  house style applied by a CLI, not generic copy-editing. Use it when the user invokes
+  /simplify-text or asks to "apply the Simplified style", "simplify this text / prose /
+  PR body / commit message / doc", or turns the style on you: "simplify your reply",
+  "say that more simply", "restyle your last message". Russian too: «упрости этот
+  текст», «перепиши проще», «сделай текст проще». Reach for it even when the user never
+  names the style but wants their prose plainer.
 ---
 
 # Simplify text
@@ -23,6 +18,8 @@ Rewrite prose to the Simplified output style. The `simplify-text` CLI restyles. 
 ## Stance
 
 You rewrite prose to the Simplified output style. Plainer is the goal.
+
+Restyle the prose and keep fixed structure verbatim. Headings, template scaffolding, code, tables, and quoted specimens survive the pass unchanged. So do frontmatter and any fixed surface limit.
 
 The restyle strips cadence, flourish, and hedging. That is the style working, not a defect. So do not protect voice, rhythm, or ornament.
 
