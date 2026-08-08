@@ -69,51 +69,33 @@ else:                                               // your own draft, your last
   target = none
   mode = reply
 
-// Analyze. The CLI owns the ruleset; language auto-detects (override with --lang en|ru).
+// Analyze — the CLI owns the ruleset; language auto-detects (override with --lang en|ru)
 brief = Bash("simplify-text <source>")
 if exit != 0:
-  do("stop and report per the exit — 1 missing key, 2 usage, 3 empty, 4 analysis failed")
+  do("stop and report per the exit — see §Exit codes")
   stop
+rewrite = do("take the single fenced block under ## Rewrite — see §The brief")
 
-// Extract the proposed rewrite — the one fenced block under the ## Rewrite heading.
-// Verdict/Cut/Change/Shape/Keep/Borderline are read-only rationale; ## Guard is advisory.
-rewrite = do("take the single fenced block under ## Rewrite")
-
-// Gate before any write. Pipe the rewrite to the apply-gate against the source.
+// Gate before any write
 report = Bash("simplify-verify <source>")   // rewrite piped on stdin
 if exit == 1:                               // drift — do NOT write
   if mode == external:
     do("surface the dropped/invented span or the heading/fence count delta from <report>")
     AskUserQuestion("Re-run simplify-text, or hand this back?")
     stop
-  do("send your original draft unrestyled — the CLI already re-rolled three times, so a fourth buys little")
+  do("send your original draft unrestyled")
   stop
-if exit == 2 or exit == 3:                  // usage or empty
+if exit == 2 or exit == 3:
   do("stop and report the gate error")
   stop
 
-// exit == 0 — verified for spans and structure, NOT meaning: every axis is deterministic, so none of
-// them sees a distorted or deleted claim. YOU are the only meaning check in this loop.
+// Read for meaning, then repair — see §The meaning check
 findings = do("read the rewrite against the source and name every claim the pass shifted or dropped")
-
-// Repair before the rewrite leaves this loop. BOTH modes repair — a finding you only report still
-// ships, to a file or a public surface in external mode and to the user in reply mode. The report is
-// an audit trail, never a substitute for the fix. Repair against <source>, not your memory of it:
-// restore the shifted claim in the rewrite's new wording, and change nothing else.
 if findings is non-empty:
   rewrite = do("repair every finding in <findings> against <source>, keeping the Simplified style")
+rewrite = do("replicate the source's emphasis by intent — see §Emphasis")
 
-// The restyle drops inline emphasis: the CLI masks references, never `**bold**` or `*italic*`. Re-apply it
-// here, where you hold both the source and the rewrite, and after the repair, so a repaired sentence
-// carries its own emphasis. The CLI's one clean pass should not carry this judgment. Replicate the INTENT
-// to emphasize, not the exact phrase. For each emphasized span in the source, find the idea it stressed,
-// then emphasize that idea in the rewrite's new wording. Where the restyle left no natural home — the
-// phrase merged, moved, or dissolved — leave it unemphasized. A forced fit is worse than none.
-rewrite = do("replicate the source's emphasis by intent — re-emphasize each stressed idea in the rewrite's new wording, and leave it out where the restyle left no natural fit")
-
-// Re-gate. The first gate read the CLI's rewrite; the repair and the emphasis are YOUR edits, and a
-// hand edit drops a ⟦N⟧ span or shifts a fence count as easily as a model pass does. Gate what you
-// actually intend to ship.
+// Re-gate, because the repair and the emphasis are your own edits
 report = Bash("simplify-verify <source>")   // the edited rewrite piped on stdin
 edits_held = exit == 0
 if not edits_held:
@@ -121,24 +103,16 @@ if not edits_held:
   rewrite = do("fall back to the CLI's gated rewrite, discarding your edits")
 
 if mode == reply:
-  if edits_held:
-    do("send <rewrite> as your message: no artifact, no brief, no note that the pass ran")
-    stop
-  do("send your original draft unrestyled — shipping a claim you know shifted is worse than shipping no restyle")
+  if edits_held: do("send <rewrite> as your message: no artifact, no brief, no note that the pass ran")
+  else: do("send your original draft unrestyled")
   stop
 
-// External from here: show the read, publish the artifact, then write.
+// External: show the read, publish, then write
 do("show the ## Verdict and a short change summary")
-do("report <findings> as a bulleted list, each marked repaired or left as-is — a shifted claim, a dropped argument, a borderline call; do not hand the rewrite back on meaning or taste")
-
-// Show the result as a black-and-white HTML artifact with two views — original-vs-edited and the
-// full brief — verbatim in <pre>, MonoLisaCode, generous spacing. Reply mode never reaches here,
-// so the recipe stays out of this file until the run needs it.
-Read(dir/references/artifact.md)
+do("report <findings> as a bulleted list, each marked repaired or left as-is")
+Read(dir/references/artifact.md)             // external only, so the recipe loads on demand
 do("follow it to build and publish the artifact")
 
-// The write is the whole reason external mode repairs. Never let a claim you know shifted land on
-// disk or on a public surface just because you named it above.
 if findings is non-empty and not edits_held:
   answer = AskUserQuestion("Your repair broke the gate. Write it unrepaired, re-run simplify-text, or hand this back?")
   if answer != "write": stop
@@ -152,5 +126,37 @@ else:                                       // an external surface
 ```
 
 ## Reference
+
+### Exit codes
+
+`simplify-text`: 1 missing key, 2 usage, 3 empty, 4 analysis failed.
+
+`simplify-verify`: 0 clean, 1 drift, 2 usage, 3 empty. Exit 1 blocks the write.
+
+On drift the CLI has already re-rolled three times, so a fourth buys little.
+
+### The brief
+
+`## Rewrite` holds the one fenced block to extract. Verdict, Cut, Change, Shape, Keep, and Borderline are read-only rationale. `## Guard` is advisory.
+
+### The meaning check
+
+A clean gate verifies spans and structure, never meaning. Every axis is deterministic, so none of them sees a distorted or deleted claim. You are the only meaning check in this loop.
+
+Both modes repair. A finding you only report still ships. External mode lands it on a file or a public surface. Reply mode hands it to the user. So the report is an audit trail, never a substitute for the fix.
+
+Repair against the source, not your memory of it. Restore the shifted claim in the rewrite's new wording, and change nothing else.
+
+Then re-gate. The first gate read the CLI's rewrite, but the repair and the emphasis are your edits. A hand edit drops a ⟦N⟧ span or shifts a fence count as easily as a model pass does. So gate what you actually intend to ship.
+
+### Emphasis
+
+The restyle drops inline emphasis, because the CLI masks references and never `**bold**` or `*italic*`. Re-apply it where you hold both texts, and after the repair, so a repaired sentence carries its own emphasis.
+
+Replicate the intent to emphasize, not the exact phrase. For each emphasized span in the source, find the idea it stressed. Then emphasize that idea in the rewrite's new wording.
+
+Leave it out where the restyle left no natural home — the phrase merged, moved, or dissolved. A forced fit is worse than none.
+
+### Style
 
 The canonical style is the Simplified output style at `home/agents/output-styles/Simplified.md`. The `simplify-text` CLI applies it; read the style when a call is unclear.
