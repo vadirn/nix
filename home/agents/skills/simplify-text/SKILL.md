@@ -1,14 +1,13 @@
 ---
 name: simplify-text
 description: >
-  Rewrite prose to the Simplified output style — one idea per sentence, ≤20 words,
-  active voice, plain words, conclusion first, sets as vertical lists. This is a named
-  house style applied by a CLI, not generic copy-editing. Use it when the user invokes
-  /simplify-text or asks to "apply the Simplified style", "simplify this text / prose /
-  PR body / commit message / doc", or turns the style on you: "simplify your reply",
-  "say that more simply", "restyle your last message". Russian too: «упрости этот
-  текст», «перепиши проще», «сделай текст проще». Reach for it even when the user never
-  names the style but wants their prose plainer.
+  Rewrite prose in the Simplified output style. Use one idea per sentence, with ≤20
+  words, active voice, plain words, and the conclusion first. Turn sets into vertical
+  lists. Use it when the user invokes /simplify-text or asks to "apply the Simplified
+  style", "simplify this text / prose / PR body / commit message / doc", or turns the
+  style on you: "simplify your reply", "say that more simply", "restyle your last
+  message". Russian too: «упрости этот текст», «перепиши проще», «сделай текст проще».
+  Reach for it even when the user never names the style but wants plainer prose.
 ---
 
 # Simplify text
