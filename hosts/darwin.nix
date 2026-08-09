@@ -44,6 +44,7 @@
       "yt-dlp"
       "openssl-osx-ca"
       "syncthing"
+      "nmap"
 
       "dopplerhq/cli/doppler"
       "glow"

@@ -171,6 +171,11 @@
             "type": "command",
             "command": "mkdir -p /tmp/claude",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/sandbox-nc-path.sh",
+            "timeout": 5
           }
         ]
       }
@@ -266,7 +271,7 @@
         "$TMPDIR"
       ],
       "denyRead": ["~/.ssh"],
-      "allowRead": ["~/.ssh/*.pub"]
+      "allowRead": ["~/.ssh/*.pub", "~/.ssh/known_hosts"]
     },
     "credentials": {
       "files": [
