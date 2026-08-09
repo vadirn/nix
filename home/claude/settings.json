@@ -271,7 +271,7 @@
         "$TMPDIR"
       ],
       "denyRead": ["~/.ssh"],
-      "allowRead": ["~/.ssh/*.pub", "~/.ssh/known_hosts"]
+      "allowRead": ["~/.ssh/*.pub", "~/.ssh/known_hosts", "~/.ssh/allowed_signers"]
     },
     "credentials": {
       "files": [

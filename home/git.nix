@@ -17,6 +17,7 @@ in {
     settings = {
       user.name = "Vadim Kotov";
       user.email = "vadim@vadirn.io";
+      user.signingkey = "${homeDirectory}/.ssh/github.pub";
       core.editor = "nvim";
       core.hooksPath = "~/.config/git/hooks";
       init.defaultBranch = "main";
@@ -27,6 +28,7 @@ in {
       rebase.autosquash = true;
       rerere.enabled = true;
       gpg.format = "ssh";
+      gpg.ssh.allowedSignersFile = "${homeDirectory}/.ssh/allowed_signers";
       commit.gpgsign = true;
       tag.gpgsign = true;
     };
