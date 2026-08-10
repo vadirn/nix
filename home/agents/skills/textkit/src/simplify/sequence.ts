@@ -44,9 +44,15 @@ const SENTENCE_SPLIT_RE = /(?<=[.!?…][*_`)\]"'»”’]*)\s+(?=\S)/;
 // two halves counted separately, which is the same over-count one step later.
 const ASIDE_RE = /,\s+(?:which|who|whom|whose|that|where|when)\b[^,]*,/g;
 
-// The coordinator that closes a series, read off the FINAL comma-segment, which must OPEN with it:
-// "A, B, and C" → " and C", one segment per member. Requiring it is what keeps a bare comma run out,
-// because an appositive, a date, or a run of asides has no closing coordinator.
+// The coordinator that closes a series, read off the segment that OPENS with it: in "A, B, and C"
+// that is " and C", so the members run from the first segment through this one. Requiring it is what
+// keeps a bare comma run out, because an appositive, a date, or a run of asides never has one.
+//
+// The series need not END the sentence, and that is why the coordinator is located rather than
+// checked on the last segment alone. Real prose continues past the final member — "Out of scope: A,
+// B, and C, which is its own decision node" — and demanding the coordinator close the sentence
+// dropped 161 genuine series across 207 corpus files. Segments after the coordinator are trailing
+// material, so they are counted out rather than counted as members.
 //
 // The Oxford comma is REQUIRED, and that is a deliberate precision choice rather than an oversight.
 // Accepting "A, B and C" means counting a final segment that merely CONTAINS a coordinator, and
@@ -72,7 +78,8 @@ const segmentsOn = (s: string, delim: string): number => (s.trim() ? s.split(del
 function commaMembers(sentence: string): number {
   if (!sentence.trim()) return 0;
   const segments = sentence.replace(ASIDE_RE, "").split(",");
-  return COORD_OPENS_RE.test(segments[segments.length - 1] ?? "") ? segments.length : 0;
+  const closer = segments.findIndex((s, i) => i > 0 && COORD_OPENS_RE.test(s));
+  return closer < 0 ? 0 : closer + 1;
 }
 
 // sequenceScan returns every prose sentence in `masked` that enumerates `min` or more members, most

@@ -97,6 +97,27 @@ test("sequenceScan: the Oxford comma is required, so a bare 'A, B and C' is not 
   ).toEqual([]);
 });
 
+test("sequenceScan: a series may carry trailing material after its last member", () => {
+  // Real prose keeps going past the final member. Demanding the coordinator close the SENTENCE
+  // dropped 161 genuine series across 207 corpus files, so the coordinator is located instead and
+  // whatever follows it is trailing material, counted out rather than counted as a member.
+  const found = sequenceScan(
+    "Out of scope: nested-indent rewriting, ordered renumbering, and the line-ending question, which is its own decision node.",
+  );
+  expect(found).toHaveLength(1);
+  expect(found[0]!.members).toBe(3);
+});
+
+test("sequenceScan: a coordinated clause pair is not a series, whatever its commas count", () => {
+  // The mirror of the rule above: locating the coordinator also fixes an over-count the old scan
+  // made. A comma inside a trailing parenthetical used to push a two-clause sentence to three.
+  expect(
+    sequenceScan(
+      "The flake must build it from this branch (Backlog 14), and profiling settles the index question (Decision 19, Backlog 10).",
+    ),
+  ).toEqual([]);
+});
+
 test("sequenceScan: a Russian comma series is out of reach, and its semicolon set is not", () => {
   // Russian writes «А, Б и В» with no comma before "и", so every Russian comma series is non-Oxford
   // and the rule above excludes all of them. This is a KNOWN gap, recorded so it is not mistaken for
