@@ -219,9 +219,41 @@ export const hasOperational = (text: string): boolean =>
   /```|`[^`\n]+`|\s--?[a-z]/i.test(text) || /(^|\s)(\/|~\/|\.\/)\S+/.test(text);
 
 // Reference spans the revise passes must keep verbatim and that never need
-// rewording: wikilinks, embeds (![[...]]), and inline code. They are masked to
-// opaque ⟦N⟧ tokens for the duration of revise, then restored (see revise()).
+// rewording: wikilinks, embeds (![[...]]), and inline code.
+//
+// TWO consumers with opposite intents read this constant, which is why it stays exactly
+// this narrow. A rewriting pass FREEZES these spans to ⟦N⟧ tokens (see VERBATIM_SPAN_RE
+// below, the constant those passes actually import); distill/extract BLANKS them to spaces
+// in its probe copies (harvest.ts, route.ts) so a `[[a|b]]` alias pipe is never read as a
+// table cell and a digit inside inline code is never harvested as a statistic. An HTML
+// comment is deliberately ABSENT here: `<!-- label -->` … `<!-- /label -->` is a live anchor
+// grammar in this repo (mdstruct's MdRegion, the review/interact blocks), so blanking a
+// comment in a probe copy would erase structure distill is built to find.
 export const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
+
+// A markdown HTML comment, `<!-- … -->`. Lazily closed at the FIRST `-->`, so two comments on
+// one line are two spans, and `[\s\S]` lets one comment span lines. An unclosed `<!--` matches
+// nothing and rides through as prose — matching to end-of-note would swallow the rest of the
+// file on a stray angle bracket, which is a worse failure than leaving a malformed comment
+// editable. Source-string form so VERBATIM_SPAN_RE can compose it.
+const HTML_COMMENT = String.raw`<!--[\s\S]*?-->`;
+
+// Every span a REWRITING pass must reproduce byte-identical: MASK_RE's reference spans PLUS
+// HTML comments. This — not MASK_RE — is what createMasker freezes to ⟦N⟧ and what the
+// simplify apply-gate diffs as its span multiset; the two agree by importing this one
+// constant, so neither can drift on what counts as an atom.
+//
+// A comment is an atom by the same argument as a wikilink: it is authored text no restyle has
+// standing to reword. A template's comment is copied verbatim into every note it creates, so
+// restyling each copy separately makes them diverge and a reader can no longer tell a
+// deliberate edit from restyle drift. Measured: a restyle turned `repo-self-sufficient` into
+// `self-sufficient`, dropping the qualifier that carried the whole condition.
+//
+// Composed from MASK_RE.source rather than respelled, so the reference-span half can never
+// drift from MASK_RE. The comment alternative leads, though the three alternatives open on
+// disjoint characters (`<`, `!`/`[`, a backtick), so no position can match two: a comment
+// holding a wikilink masks whole, and a wikilink is never carved out of a comment.
+export const VERBATIM_SPAN_RE = new RegExp(`${HTML_COMMENT}|${MASK_RE.source}`, "g");
 
 // Deterministic typographic normalization — owned by kernel/typography.ts (the
 // core), re-exported here so text.ts's existing importers (pure.test.ts:35 and

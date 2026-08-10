@@ -146,8 +146,11 @@ export async function runSimplify(
   const { ask = askJson, progress, maxAttempts = MAX_ATTEMPTS } = deps;
   const { front, body } = parseFrontmatter(input);
   const lang = resolveLang(opts.lang, body);
-  // No literals: simplify runs no glossary term list, so createMasker freezes only the reference
-  // spans MASK_RE finds (wikilinks, embeds, inline code). Inline emphasis (`**bold**`, `*italic*`) is
+  // No literals: simplify runs no glossary term list, so createMasker freezes only the verbatim
+  // spans VERBATIM_SPAN_RE finds — wikilinks, embeds, inline code, and `<!-- HTML comments -->`. A
+  // comment is authored text no restyle has standing to reword, and a template's comment is copied
+  // into every note it creates, so restyling each copy separately makes them diverge.
+  // Inline emphasis (`**bold**`, `*italic*`) is
   // deliberately NOT masked: it wraps editable prose, not an atom, and masking it would inject ⟦N⟧
   // tokens mid-sentence into the restyle prompt. So the restyle drops emphasis, and the simplify-text
   // skill's subagent re-applies it by intent at apply time (see that skill's apply step).

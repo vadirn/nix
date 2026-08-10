@@ -4,7 +4,8 @@
 // scattered across the per-module suites:
 //   1. the CLI restyles a fixture note end-to-end into a valid brief — the seven `##` sections plus
 //      `## Guard`,
-//   2. every masked reference span survives the rewrite unchanged — wikilink, embed, inline code,
+//   2. every masked verbatim span survives the rewrite unchanged — wikilink, embed, inline code,
+//      HTML comment,
 //   3. the guard flags an introduced name typo on the fixture — in EN and in RU.
 // The fake echoes the masked body back (a faithful no-op restyle), so mask survival and the guard
 // run on genuine ⟦N⟧ tokens; a sabotage variant perturbs one span to drive done-condition 3.
@@ -39,15 +40,17 @@ const fakeAsk = (
 const echo = (m: string): string => m; // a faithful no-op restyle
 
 // A representative English vault note: frontmatter, a heading, a wikilink, an inline-code span, an
-// embed, and a fenced code block — every span kind the masker and the guard axes read. One proper
-// name (Levenshtein) sits in body prose, the only place the name axis inspects. Every sentence
-// stays under the 20-word cap, so a faithful echo passes every axis clean.
+// embed, an HTML comment, and a fenced code block — every span kind the masker and the guard axes
+// read. One proper name (Levenshtein) sits in body prose, the only place the name axis inspects.
+// Every sentence stays under the 20-word cap, so a faithful echo passes every axis clean.
 const EN = `---
 title: Edit distance
 tags: [algorithms]
 ---
 
 # Edit distance
+
+<!-- Body stays repo-self-sufficient: keep [[wikilinks]] and vault-entry references to the frontmatter. -->
 
 We compute the Levenshtein distance between two strings. See the [[edit-distance]] note.
 
@@ -65,12 +68,15 @@ const cost = a === b ? 0 : 1;
 
 // A representative Russian vault note: it must auto-route to the RU ruleset (Cyrillic prose), and
 // carries the same span kinds plus a Cyrillic proper name (Левенштейна) in body prose for the name
-// axis. Sentences stay under the cap.
+// axis. Sentences stay under the cap. Its HTML comment is Cyrillic, so comment masking is shown to
+// be language-blind — the atom is the syntax, never the words inside it.
 const RU = `---
 title: Расстояние
 ---
 
 # Расстояние
+
+<!-- Тело заметки самодостаточно в пределах репозитория: ссылки на хранилище держи во фронтматтере. -->
 
 Мы считаем расстояние Левенштейна между строками. Смотри заметку [[глоссарий]].
 
@@ -99,6 +105,10 @@ test("golden EN: a faithful restyle yields a valid brief with every masked span 
   expect(out).toContain("[[edit-distance]]");
   expect(out).toContain("![[dp-grid.png]]");
   expect(out).toContain("`wagner-fischer`");
+  // the HTML comment round-trips byte-identical, coined term and nested wikilink intact
+  expect(out).toContain(
+    "<!-- Body stays repo-self-sufficient: keep [[wikilinks]] and vault-entry references to the frontmatter. -->",
+  );
   // the fenced code block round-trips and the guard passes every axis.
   expect(out).toContain("const cost = a === b ? 0 : 1;");
   expect(out).toContain("## Guard\n\nAll checks passed.");
@@ -119,6 +129,21 @@ test("golden EN: over-splitting the numbered list into bullets flips the guard's
   const out = await runSimplify(EN, { lang: "auto" }, { ask: fakeAsk(flipToBullets) });
   expect(out).toContain("- lists: FLIP");
   expect(out).toContain("## Rewrite"); // advisory — the brief is still produced
+});
+
+test("golden EN: rewording the masked HTML comment is reported by the guard", async () => {
+  // The measured defect, replayed end-to-end: the model un-tokenizes the comment and rewrites it,
+  // turning the coined `repo-self-sufficient` into plain `self-sufficient`. The comment is the FIRST
+  // span in the body, so it holds the first minted token; dissolving that token costs the rewrite a
+  // ⟦N⟧ the source carried, and the mask axis says so.
+  const rewordComment = (m: string): string =>
+    m.replace(
+      /⟦\d+⟧/,
+      "<!-- The body stays self-sufficient: keep [[wikilinks]] and vault-entry references to the frontmatter. -->",
+    );
+  const out = await runSimplify(EN, { lang: "auto" }, { ask: fakeAsk(rewordComment) });
+  expect(out).toContain("- masks: FAIL");
+  expect(out).toContain("## Rewrite"); // advisory here — simplify-verify blocks the apply
 });
 
 test("golden EN: an introduced name typo is flagged by the guard against the source", async () => {
@@ -149,6 +174,9 @@ test("golden RU: a Russian note routes to the RU ruleset and preserves Cyrillic 
   expect(out).toContain("[[глоссарий]]");
   expect(out).toContain("![[сетка.png]]");
   expect(out).toContain("`--tau`");
+  expect(out).toContain(
+    "<!-- Тело заметки самодостаточно в пределах репозитория: ссылки на хранилище держи во фронтматтере. -->",
+  );
   expect(out).toContain("## Guard\n\nAll checks passed.");
 });
 

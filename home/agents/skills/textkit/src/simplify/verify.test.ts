@@ -117,6 +117,58 @@ test("verify: a pure-prose note with no spans leans on the structural backstop",
   expect(verifyClean(r)).toBe(false);
 });
 
+// ---- HTML comments (a verbatim span, not a count) ----
+
+// A ticket-template note carrying the exact comment the measured defect rewrote. The comment is the
+// instruction the template copies verbatim into every ticket it creates, so a per-copy restyle makes
+// the copies diverge.
+const WITH_COMMENT = `# Ticket
+
+<!-- Body stays repo-self-sufficient: keep [[wikilinks]] and vault-entry references to the frontmatter. -->
+
+Some body prose to restyle.`;
+
+test("verify: a reworded HTML comment is named as drift, both halves", () => {
+  // The measured failure, verbatim: `repo-self-sufficient` (the body resolves for a reader holding
+  // only the git repo) became plain `self-sufficient`, dropping the qualifier that carried the
+  // condition. Every COUNT in the note is unchanged — one comment before, one after — which is why
+  // a comment has to be a content span and not a fifth count axis.
+  const rewrite = WITH_COMMENT.replace(
+    "Body stays repo-self-sufficient:",
+    "The body stays self-sufficient:",
+  );
+  const r = verify(WITH_COMMENT, rewrite);
+  expect(r.spans.ok).toBe(false);
+  expect(r.spans.dropped).toEqual([
+    "<!-- Body stays repo-self-sufficient: keep [[wikilinks]] and vault-entry references to the frontmatter. -->",
+  ]);
+  expect(r.spans.invented).toEqual([
+    "<!-- The body stays self-sufficient: keep [[wikilinks]] and vault-entry references to the frontmatter. -->",
+  ]);
+  // the count axes all still pass — before this change the gate returned exit 0 on this rewrite
+  expect(r.headings.ok).toBe(true);
+  expect(r.fences.ok).toBe(true);
+  expect(r.thematic.ok).toBe(true);
+  expect(verifyClean(r)).toBe(false);
+  expect(formatVerify(r)).toContain("- spans: DRIFT — 1 dropped");
+});
+
+test("verify: an untouched HTML comment counts as one span, not two with its nested wikilink", () => {
+  const rewrite = WITH_COMMENT.replace("Some body prose to restyle.", "Restyled prose.");
+  const r = verify(WITH_COMMENT, rewrite);
+  expect(r.spans.ok).toBe(true);
+  expect(r.spans.original).toBe(1); // the inner [[wikilinks]] is part of the comment atom
+  expect(verifyClean(r)).toBe(true);
+});
+
+test("verify: a dropped HTML comment is drift", () => {
+  const rewrite = "# Ticket\n\nSome body prose to restyle.";
+  const r = verify(WITH_COMMENT, rewrite);
+  expect(r.spans.dropped.length).toBe(1);
+  expect(r.spans.invented).toEqual([]);
+  expect(verifyClean(r)).toBe(false);
+});
+
 // ---- thematic breaks (the structure axis for a `---` separator) ----
 
 // A note whose scaffolding includes a `---` thematic break — the gh-stack-footer shape the restyle
