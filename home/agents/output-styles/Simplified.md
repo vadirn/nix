@@ -55,7 +55,8 @@ Four principles from ISO 24495-1 order the rules below:
 
 ## Shape
 
-- Turn a sequence or a set into a vertical list.
+- Turn a sequence or a set into a vertical list. Three or more members makes a sequence, so a pair stays prose.
+- Build a list only from prose. Leave an existing list's kind and item count as they stand.
 - Give each paragraph one topic. Keep paragraphs short.
 - Add a heading for each topic a reader may jump to.
 
