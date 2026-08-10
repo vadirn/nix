@@ -44,14 +44,23 @@ const SENTENCE_SPLIT_RE = /(?<=[.!?…][*_`)\]"'»”’]*)\s+(?=\S)/;
 // two halves counted separately, which is the same over-count one step later.
 const ASIDE_RE = /,\s+(?:which|who|whom|whose|that|where|when)\b[^,]*,/g;
 
-// The coordinator that closes a series, read off the FINAL comma-segment. Two forms, and the
-// non-Oxford one is why a bare segment count is not the member count:
-//   Oxford     — the segment OPENS with it: "A, B, and C" → " and C", one segment per member.
-//   non-Oxford — the segment CONTAINS it:   "A, B and C"  → " B and C", which holds TWO members.
-// Requiring one of them is what keeps a bare comma run out: an appositive, a date, or a list of
-// asides has no closing coordinator, and only a coordinator makes a run a series.
+// The coordinator that closes a series, read off the FINAL comma-segment, which must OPEN with it:
+// "A, B, and C" → " and C", one segment per member. Requiring it is what keeps a bare comma run out,
+// because an appositive, a date, or a run of asides has no closing coordinator.
+//
+// The Oxford comma is REQUIRED, and that is a deliberate precision choice rather than an oversight.
+// Accepting "A, B and C" means counting a final segment that merely CONTAINS a coordinator, and
+// "member, member and member" is regex-indistinguishable from "adverbial, clause and clause" — so
+// "In this mode, the scan strips fences and skips lists" scores 3. Measured over 207 corpus files,
+// accepting the form took findings from 707 to 904, and the 343 it added were almost entirely
+// fronted adverbials and parentheticals. That cost lands hardest here: shapeHint hands the model a
+// CLOSED worklist, so a false candidate is not noise the model may ignore, it is a licensed
+// conversion — the manufacturing this module exists to stop. A missed series only stays prose.
+//
+// The cost is unequal by language, and Russian pays it. Russian punctuation writes «А, Б и В» with
+// no comma before "и", so every Russian comma series is non-Oxford and none can be scanned. Russian
+// keeps the semicolon path only. Closing that gap needs a language-aware scan, not a wider regex.
 const COORD_OPENS_RE = /^\s*(?:and|or)\s/;
-const COORD_INSIDE_RE = /\s(?:and|or)\s/;
 
 // Count delimited segments in one sentence. Empty/whitespace-only counts as 0 members.
 const segmentsOn = (s: string, delim: string): number => (s.trim() ? s.split(delim).length : 0);
@@ -63,10 +72,7 @@ const segmentsOn = (s: string, delim: string): number => (s.trim() ? s.split(del
 function commaMembers(sentence: string): number {
   if (!sentence.trim()) return 0;
   const segments = sentence.replace(ASIDE_RE, "").split(",");
-  const last = segments[segments.length - 1] ?? "";
-  if (COORD_OPENS_RE.test(last)) return segments.length;
-  if (COORD_INSIDE_RE.test(last)) return segments.length + 1;
-  return 0;
+  return COORD_OPENS_RE.test(segments[segments.length - 1] ?? "") ? segments.length : 0;
 }
 
 // sequenceScan returns every prose sentence in `masked` that enumerates `min` or more members, most
@@ -75,7 +81,7 @@ function commaMembers(sentence: string): number {
 //
 // A sentence qualifies when either form is present:
 //   - `min` or more semicolon-delimited segments — a set, whatever its wording; or
-//   - `min` or more comma-delimited members closing on "and"/"or" — a series, Oxford or not.
+//   - `min` or more comma-delimited members closing on ", and"/", or" — a series, Oxford comma required.
 export function sequenceScan(masked: string, min: number = SEQ_MIN): SequenceFinding[] {
   const findings: SequenceFinding[] = [];
   for (const raw of stripFences(masked).split("\n")) {

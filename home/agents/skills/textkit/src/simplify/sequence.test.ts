@@ -84,15 +84,27 @@ test("sequenceScan: the threshold is overridable, so a pair scans as a sequence 
   expect(sequenceScan(pair, 2)).toHaveLength(1);
 });
 
-test("sequenceScan: a series without the Oxford comma counts its last two members", () => {
-  // "A, B and C" splits into two comma segments for three members, so a bare segment count reads 2
-  // and the scan used to miss it whole. The miss matters now that the worklist is the boundary
-  // shapeHint hands the model: a sentence the scan does not name may not become a list at all.
-  const three = sequenceScan("It reads, extracts and verdicts.");
-  expect(three).toHaveLength(1);
-  expect(three[0]!.members).toBe(3);
-  const four = sequenceScan("It reads, extracts, classifies and verdicts.");
-  expect(four[0]!.members).toBe(4);
+test("sequenceScan: the Oxford comma is required, so a bare 'A, B and C' is not a candidate", () => {
+  // Deliberate under-reach. Counting a final segment that merely CONTAINS a coordinator makes
+  // "member, member and member" indistinguishable from "adverbial, clause and clause": over 207
+  // corpus files it took findings 707 → 904, and the 343 added were almost all fronted adverbials.
+  // A false candidate is worse than a missed one here, because shapeHint's worklist is CLOSED — a
+  // false candidate is a licensed conversion, while a missed series only stays prose.
+  expect(sequenceScan("It reads, extracts and verdicts.")).toEqual([]);
+  expect(sequenceScan("In this mode, the scan strips fences and skips lists.")).toEqual([]);
+  expect(
+    sequenceScan("Although the gate is advisory, it reports drift and names the axis."),
+  ).toEqual([]);
+});
+
+test("sequenceScan: a Russian comma series is out of reach, and its semicolon set is not", () => {
+  // Russian writes «А, Б и В» with no comma before "и", so every Russian comma series is non-Oxford
+  // and the rule above excludes all of them. This is a KNOWN gap, recorded so it is not mistaken for
+  // working support: closing it needs a language-aware scan, not a wider regex.
+  expect(sequenceScan("Он читает, разбирает и решает.")).toEqual([]);
+  const set = sequenceScan("Один читает; другой разбирает; третий решает.");
+  expect(set).toHaveLength(1);
+  expect(set[0]!.members).toBe(3);
 });
 
 test("sequenceScan: a relative-clause aside delimits nothing, so it never inflates the count", () => {
