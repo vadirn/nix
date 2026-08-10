@@ -23,9 +23,12 @@ const isStructureLine = (line: string): boolean =>
   line.trim() === "";
 
 // Strip a leading list marker, blockquote marker, or numbered-list prefix so the prose after it is
-// what gets counted — "- Run the thing." counts the sentence, not the bullet.
+// what gets counted — "- Run the thing." counts the sentence, not the bullet. A GFM task marker
+// (`[ ]`, `[x]`, `[X]`) is stripped too, but only when it follows a bullet or numbered prefix — the
+// anchor that preceding marker gives is what tells a checklist's `[ ]` apart from a bare `[ ]` opening
+// a line of prose, where the brackets may be a link reference and must stay in the count.
 const stripLeadingMarker = (line: string): string =>
-  line.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s?)+/, "");
+  line.replace(/^\s*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|>\s?)+/, "");
 
 // A sentence boundary: end punctuation, then any CLOSING inline markers, then whitespace. The
 // closers are load-bearing: the Simplified style writes bold leads, so a sentence routinely ends at
