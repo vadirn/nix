@@ -56,6 +56,9 @@ Four principles from ISO 24495-1 order the rules below:
 ## Shape
 
 - Turn a sequence or a set into a vertical list. Three or more members makes a sequence, so a pair stays prose.
+- Count the source's members. The list takes one item per member. Never invent a member, split one, or merge two.
+- A contrast, a condition, a concession, or a cause and its effect is a relation, not a sequence. Keep a relation in prose.
+- Where nearby prose counts the members, keep that word and match its count.
 - Build a list only from prose. Leave an existing list's kind and item count as they stand.
 - Give each paragraph one topic. Keep paragraphs short.
 - Add a heading for each topic a reader may jump to.
