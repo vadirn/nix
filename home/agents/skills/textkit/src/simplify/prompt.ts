@@ -94,7 +94,7 @@ const NO_OP =
 // one. ⟦N⟧ tokens are frozen reference spans (wikilinks, embeds, inline code) — reproduced, never
 // reworded.
 const KEEP =
-  "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item, and never grow that list's item count. A sentence inside a list item stays prose, so never nest a new list under one. SHAPE still governs prose OUTSIDE any list: build a vertical list there only for a sentence the SHAPE CHECK names. Keep the heading count exact. Never promote a bold lead, a question, or a sentence to a heading. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
+  "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item, and never grow that list's item count. A sentence inside a list item stays prose, so never nest a new list under one. SHAPE still governs prose OUTSIDE any list: build a vertical list there only where the sentence carries three or more parallel members. Keep the heading count exact. Never promote a bold lead, a question, or a sentence to a heading. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
 
 // capHint is the deterministic length pre-hint: wordCapScan measures the SOURCE before the pass and
 // names each prose sentence over the cap. The ruleset already states the cap, yet the model counts
@@ -126,27 +126,42 @@ export function capHint(overCap: WordCapFinding[], lang: "en" | "ru"): string {
 // receipt — there is no guard axis for shape, because a legitimate decline would show up as a
 // permanent finding with no way to acknowledge it.
 //
-// The worklist is CLOSED, and unlike capHint the hint is emitted even when the scan finds nothing.
-// Both departures answer the same observed failure: across thirteen restyled notes SHAPE did not
-// merely fire, it MANUFACTURED. It padded a two-consequence passage to a third invented bullet, split
-// a benefit/cost pair into flat siblings, left "both facts" and "Both sides" pointing at three and
-// four items, and followed "the Destination fixes two things" with three. One split replicated a
-// masked ⟦N⟧ span three times and hard-blocked the apply gate. The rule stated "fewer than three
-// stays prose" throughout; a rule that only states loses to a rule that measures, which is the same
-// asymmetry capHint exists for — so the scan's worklist has to be the boundary, not an example set.
-// capHint may stay silent because an absent length finding means nothing to split. Shape silence
-// means the opposite: it leaves SHAPE an unbounded principle, which is exactly when it over-fires.
+// Unlike capHint the hint ALWAYS rides. An absent length finding means nothing to split, but shape
+// silence means the opposite: it leaves SHAPE an unbounded principle, which is exactly when it
+// over-fires. It rides for an observed failure — across thirteen restyled notes SHAPE did not merely
+// fire, it MANUFACTURED. It padded a two-consequence passage to a third invented bullet, split a
+// benefit/cost pair into flat siblings, left "both facts" and "Both sides" pointing at three and four
+// items, and followed "the Destination fixes two things" with three. One split replicated a masked
+// ⟦N⟧ span three times and hard-blocked the apply gate.
+//
+// The worklist is a FLOOR, not a boundary, and that reverses the first fix for the above. The
+// worklist was closed outright — "convert no other sentence, however list-like it reads" — which did
+// stop the manufacturing and cost Russian everything: Russian writes «А, Б и В» with no comma before
+// "и", so no Russian comma series is ever confirmed, and against zero findings the closed form banned
+// the rule wholesale. Reopening is safe because the RULESET now carries what the ban stood in for —
+// count the members, never invent one, a relation is not a sequence, match a stated count. Measured
+// against the closed form: on a trap-dense English fixture over four runs the open hint converted the
+// one real series every time and left every pair as prose, and on a Russian note it converted a
+// genuine three-member series the closed form had suppressed.
+//
+// Both languages take the same wording, deliberately. The scan reaches Russian less far, but that is
+// a fact about Russian punctuation, so it belongs in what the scan CONFIRMS — never in what the two
+// contracts permit. A per-language ban would make the tool behave differently by language, which is
+// a divergence no source asked for.
 export function shapeHint(sequences: SequenceFinding[], lang: "en" | "ru"): string {
   if (lang === "ru") {
+    const base =
+      "ПРОВЕРКА ФОРМЫ: детерминированная проверка измерила источник. Она читает только две формы: ряд, закрытый на «, и»/«, или», и набор через точку с запятой. Все прочие формы ей не видны, поэтому её итог — нижняя граница, а не предел. Строй список только там, где предложение несёт три и более грамматически параллельных члена — одна часть речи в одной форме — и где оно перечисляет, а не связывает. Противопоставление, условие, уступка, причина со следствием — это отношение, поэтому оставь его прозой. Не придумывай член ради третьего пункта и не дроби один член надвое.";
     if (sequences.length === 0)
-      return "ПРОВЕРКА ФОРМЫ: детерминированная проверка измерила источник и не нашла ни одного предложения с тремя и более однородными членами. Значит, новых списков не строй. Каждое предложение остаётся прозой, как бы перечислением оно ни выглядело.";
+      return `${base} Проверка не подтвердила ни одного такого предложения. Каждый построенный список отметь в «borderline» с причиной.`;
     const list = sequences.map((f) => `- (${f.members} чл.) ${f.sentence}`).join("\n");
-    return `ПРОВЕРКА ФОРМЫ: детерминированная проверка измерила источник. У этих предложений три и более однородных члена, и только они — кандидаты на список. Никакое другое предложение в список не превращай, как бы перечислением оно ни выглядело. Каждого кандидата сделай вертикальным списком: один пункт на один член источника. Число ниже — это измерение, и оно завышено, когда последний член сам является перечислением, поэтому пересчитай перед тем, как строить. Оставь кандидата прозой, если перечисление уже дано рядом другой записью, если предложение стоит внутри пункта списка или если список повторил бы токен ⟦N⟧. Каждого оставленного отметь в «borderline» с причиной:\n${list}`;
+    return `${base} Эти предложения проверка подтвердила, поэтому каждое сделай вертикальным списком: один пункт на один член источника. Число — это измерение, и оно завышено, когда последний член сам является перечислением, поэтому пересчитай перед тем, как строить. Оставь подтверждённое предложение прозой, если перечисление уже дано рядом другой записью, если предложение стоит внутри пункта списка или если список повторил бы токен ⟦N⟧. Каждый построенный список и каждое оставленное предложение отметь в «borderline» с причиной:\n${list}`;
   }
+  const base = `SHAPE CHECK: a deterministic scan measured the source. It reads two forms only: a series closing on ", and"/", or", and a semicolon set. Every other form is invisible to it, so its result is a floor, not a boundary. Build a list only where the sentence carries ${SEQ_MIN} or more grammatically parallel members — the same part of speech in the same form — and where it enumerates rather than relates. A contrast, a condition, a concession, or a cause and its effect is a relation, so keep it prose. Never invent a member to reach three, and never split one member into two.`;
   if (sequences.length === 0)
-    return `SHAPE CHECK: a deterministic scan measured the source and found no sentence carrying ${SEQ_MIN} or more members. So build no new list. Every sentence stays prose, however list-like it reads.`;
+    return `${base} The scan confirmed no such sentence. Note each list you build in \`borderline\` with the reason.`;
   const list = sequences.map((f) => `- (${f.members} members) ${f.sentence}`).join("\n");
-  return `SHAPE CHECK: a deterministic scan measured the source. These sentences carry ${SEQ_MIN} or more members, and they are the ONLY conversion candidates. Convert no other sentence, however list-like it reads. Turn each candidate into a vertical list, one item per source member. The count below is a measurement, and it runs high when the last member is itself a series, so recount before you build. Keep a candidate as prose when the enumeration already appears nearby in another notation, when it sits inside a list item, or when a list would repeat a ⟦N⟧ token. Note each one you keep in \`borderline\` with the reason:\n${list}`;
+  return `${base} The scan confirmed these sentences, so turn each into a vertical list, one item per source member. The count is a measurement, and it runs high when the last member is itself a series, so recount before you build. Keep a confirmed sentence as prose when the enumeration already appears nearby in another notation, when it sits inside a list item, or when a list would repeat a ⟦N⟧ token. Note each list you build and each confirmed sentence you keep in \`borderline\` with the reason:\n${list}`;
 }
 
 // simplifyPrompt builds the single-pass prompt for `masked` (text with reference spans already
