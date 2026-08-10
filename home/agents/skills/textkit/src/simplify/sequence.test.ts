@@ -83,3 +83,33 @@ test("sequenceScan: the threshold is overridable, so a pair scans as a sequence 
   expect(sequenceScan(pair)).toEqual([]);
   expect(sequenceScan(pair, 2)).toHaveLength(1);
 });
+
+test("sequenceScan: a series without the Oxford comma counts its last two members", () => {
+  // "A, B and C" splits into two comma segments for three members, so a bare segment count reads 2
+  // and the scan used to miss it whole. The miss matters now that the worklist is the boundary
+  // shapeHint hands the model: a sentence the scan does not name may not become a list at all.
+  const three = sequenceScan("It reads, extracts and verdicts.");
+  expect(three).toHaveLength(1);
+  expect(three[0]!.members).toBe(3);
+  const four = sequenceScan("It reads, extracts, classifies and verdicts.");
+  expect(four[0]!.members).toBe(4);
+});
+
+test("sequenceScan: a relative-clause aside delimits nothing, so it never inflates the count", () => {
+  // Two commas wrap the aside AND cut its host clause in two: "The scan, which is deterministic,
+  // measures the source" reads as three segments where there is one member. With the coordinated
+  // clause after it that reached 4 and the scan named a candidate that is not a series at all.
+  expect(
+    sequenceScan("The scan, which is deterministic, measures the source, and it never throws."),
+  ).toEqual([]);
+});
+
+test("sequenceScan: a real series carrying a relative clause still counts its own members", () => {
+  // The aside comes out of the sentence before the split, so removing it must not cost the series
+  // its members — only the aside's own two commas go.
+  const found = sequenceScan(
+    "The tools we ship, which run offline, are distill-text, card-stage, and simplify-text.",
+  );
+  expect(found).toHaveLength(1);
+  expect(found[0]!.members).toBe(3);
+});

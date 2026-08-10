@@ -15,7 +15,7 @@ import { stripFences } from "textkit/core/text.ts";
 // counts comma- or semicolon-delimited segments, whichever is larger. It is a measurement, not a
 // parse — "verdicts it ⟦1⟧, ⟦2⟧, ⟦3⟧, or ⟦4⟧" reads as four members inside one clause, so the count
 // runs high on a sentence whose final member is itself a series. The finding is what acts; the
-// number only tells the reader how it was reached.
+// number only tells the reader how it was reached, and shapeHint tells the model to recount.
 export type SequenceFinding = { sentence: string; members: number };
 
 // The Simplified threshold: three or more members is a sequence. Two is a pair, and a pair reads
@@ -37,13 +37,37 @@ const isSkippedLine = (line: string): boolean =>
 // than `.`, and a bare `[.!?…]` lookbehind merges the lead into the sentence after it.
 const SENTENCE_SPLIT_RE = /(?<=[.!?…][*_`)\]"'»”’]*)\s+(?=\S)/;
 
-// A serial coordination closing a comma-delimited run: "A, B, and C" or "A, B, or C". Required for
-// the comma form, because a comma count alone also matches an aside or an appositive. A semicolon
-// run needs no such marker — semicolons at this density only ever delimit members.
-const SERIAL_RE = /,\s+(?:and|or)\s/;
+// A relative-clause aside sits between two commas and delimits nothing. Splitting on its commas
+// counts the aside AND cuts its host clause in two, so "The scan, which is deterministic, measures
+// the source" reads as three segments where there is one member. The aside is therefore removed from
+// the sentence BEFORE the split, not dropped from the segments after it — dropping leaves the host's
+// two halves counted separately, which is the same over-count one step later.
+const ASIDE_RE = /,\s+(?:which|who|whom|whose|that|where|when)\b[^,]*,/g;
+
+// The coordinator that closes a series, read off the FINAL comma-segment. Two forms, and the
+// non-Oxford one is why a bare segment count is not the member count:
+//   Oxford     — the segment OPENS with it: "A, B, and C" → " and C", one segment per member.
+//   non-Oxford — the segment CONTAINS it:   "A, B and C"  → " B and C", which holds TWO members.
+// Requiring one of them is what keeps a bare comma run out: an appositive, a date, or a list of
+// asides has no closing coordinator, and only a coordinator makes a run a series.
+const COORD_OPENS_RE = /^\s*(?:and|or)\s/;
+const COORD_INSIDE_RE = /\s(?:and|or)\s/;
 
 // Count delimited segments in one sentence. Empty/whitespace-only counts as 0 members.
 const segmentsOn = (s: string, delim: string): number => (s.trim() ? s.split(delim).length : 0);
+
+// commaMembers counts the members of a comma-delimited series, or 0 when the sentence closes with no
+// coordinator — a bare comma run is an aside or an appositive, never a series. Asides come out
+// first, so a series carrying a relative clause ("The tools we ship, which run offline, are A, B,
+// and C") still counts its three real members.
+function commaMembers(sentence: string): number {
+  if (!sentence.trim()) return 0;
+  const segments = sentence.replace(ASIDE_RE, "").split(",");
+  const last = segments[segments.length - 1] ?? "";
+  if (COORD_OPENS_RE.test(last)) return segments.length;
+  if (COORD_INSIDE_RE.test(last)) return segments.length + 1;
+  return 0;
+}
 
 // sequenceScan returns every prose sentence in `masked` that enumerates `min` or more members, most
 // members first. It strips fenced code, skips structure and list items, splits each remaining line
@@ -51,16 +75,16 @@ const segmentsOn = (s: string, delim: string): number => (s.trim() ? s.split(del
 //
 // A sentence qualifies when either form is present:
 //   - `min` or more semicolon-delimited segments — a set, whatever its wording; or
-//   - `min` or more comma-delimited segments AND a closing "and"/"or" — a series.
+//   - `min` or more comma-delimited members closing on "and"/"or" — a series, Oxford or not.
 export function sequenceScan(masked: string, min: number = SEQ_MIN): SequenceFinding[] {
   const findings: SequenceFinding[] = [];
   for (const raw of stripFences(masked).split("\n")) {
     if (isSkippedLine(raw)) continue;
     for (const sentence of raw.split(SENTENCE_SPLIT_RE)) {
       const semis = segmentsOn(sentence, ";");
-      const commas = segmentsOn(sentence, ",");
+      const commas = commaMembers(sentence);
       const isSet = semis >= min;
-      const isSeries = commas >= min && SERIAL_RE.test(sentence);
+      const isSeries = commas >= min;
       if (isSet || isSeries)
         findings.push({ sentence: sentence.trim(), members: Math.max(semis, commas) });
     }
