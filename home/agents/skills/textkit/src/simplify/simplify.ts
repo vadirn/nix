@@ -201,7 +201,16 @@ export async function runSimplify(
   }
   // chosen is set: attempts >= 1, so either a pass returned a brief or the first throw already exited.
   const { brief, rewriteMasked, rewriteUnmasked } = chosen!;
-  const guard = runGuard({ source: body, maskedInput, rewriteMasked, rewriteUnmasked });
+  // `sequences` rides into the guard as well as the prompt: the list axis measures the rewrite's
+  // added structure against what the same scan confirmed, so both sides read one measurement.
+  const guard = runGuard({
+    source: body,
+    maskedInput,
+    rewriteMasked,
+    rewriteUnmasked,
+    sequences,
+    lang,
+  });
   // Display brief: unmask the rewrite and each change span so a human reads real spans, and prepend
   // the original frontmatter (verbatim, never restyled) so `## Rewrite` is the whole note the
   // subagent applies as one block.

@@ -10,7 +10,13 @@ const cleanGuard: GuardReport = {
   code: { ok: true, source: 1, rewrite: 1 },
   names: { corrupted: [], invented: [] },
   wordcap: [],
-  list: { ok: true, source: { ordered: 0, unordered: 0 }, rewrite: { ordered: 0, unordered: 0 } },
+  list: {
+    ok: true,
+    source: { ordered: 0, unordered: 0 },
+    rewrite: { ordered: 0, unordered: 0 },
+    short: { source: 0, rewrite: 0 },
+    unconfirmed: { blocks: 0, items: 0, candidates: 0, budget: 0 },
+  },
 };
 
 test("coerceBrief: a full object round-trips; a change item keeps its before/after pair", () => {

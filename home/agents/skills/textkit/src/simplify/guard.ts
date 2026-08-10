@@ -12,13 +12,30 @@
 //   code     — fenced code blocks (not masked, unlike inline spans) are intact as a multiset.
 //   names    — nameLintAgainstSource: no proper name corrupted toward a source name or invented.
 //   sentences — wordCapScan: no prose sentence over the 20-word cap.
-//   lists    — a list KIND the source had (numbered or bulleted) still exists in the rewrite. This
-//              is advisory, not a hard gate: exact item count cannot be an invariant because the
-//              SHAPE rule inflates a list on purpose (a prose set becomes a vertical list), so only
-//              a vanished kind — the observed numbered→bulleted over-split — trips the axis.
+//   lists    — three readings of one question: did the rewrite build list structure the source never
+//              licensed? (a) FLIP: a list KIND the source had (numbered or bulleted) still exists —
+//              the observed numbered→bulleted over-split. (b) SHORT: no NEW block falls under the
+//              SEQ_MIN member floor. The ruleset builds a list only at three or more members, so a
+//              new two-item block is a violation with no judgment call in it. (c) UNCONFIRMED,
+//              English only: how many blocks and items the rewrite added beyond what sequenceScan
+//              confirmed.
+//              Exact item count still cannot be an invariant — the SHAPE rule inflates a list on
+//              purpose — which is why (c) reports UNCONFIRMED and never "excessive". The scan reads
+//              an Oxford series and a semicolon set and nothing else, so a legitimate conversion of
+//              a series it cannot see lands here too, and the finding says so in its own line.
+//              Measured over eleven source/rewrite pairs before shipping: (c) named every known
+//              manufactured list (4 of 4) at two false alarms, (b) named one at none. Together they
+//              caught two live defects in four ordinary vault notes — a cause-and-effect relation
+//              flattened into three siblings, and two 2-item lists built from a prose pair.
+//              (c) is English-only because the scan finds 1360 sequences across 913 English vault
+//              files and 5 across 251 Russian ones. With no budget to speak of it would fire on any
+//              Russian note that gains a list, which is noise, not a finding. The contract the model
+//              receives stays identical in both languages; only this measurement's reach differs,
+//              exactly as the scan's own reach does.
 import { THEMATIC_BREAK_RE, type FenceState, fenceScan, stripFences } from "textkit/core/text.ts";
 import { MASK_TOKEN_RE, masksSurvived } from "textkit/core/writing/mask.ts";
 import { type NameLintResult, nameLintAgainstSource } from "textkit/core/writing/name-lint.ts";
+import { type SequenceFinding, SEQ_MIN } from "textkit/simplify/sequence.ts";
 import { type WordCapFinding, WORD_CAP, wordCapScan } from "textkit/simplify/wordcap.ts";
 
 // GuardReport is the outcome of one guard run — one field per axis. `masks` and `code` carry the
@@ -29,7 +46,13 @@ export type GuardReport = {
   code: { ok: boolean; source: number; rewrite: number };
   names: NameLintResult;
   wordcap: WordCapFinding[];
-  list: { ok: boolean; source: ListCounts; rewrite: ListCounts };
+  list: {
+    ok: boolean;
+    source: ListCounts;
+    rewrite: ListCounts;
+    short: { source: number; rewrite: number };
+    unconfirmed: UnconfirmedStructure | null;
+  };
 };
 
 // The list-item marker counts on one side: ordered (`1.`) and unordered (`-`/`*`/`+`) items. The
@@ -37,15 +60,36 @@ export type GuardReport = {
 // — GuardReport reuses it for both sides; consumers build the shape with object literals.
 type ListCounts = { ordered: number; unordered: number };
 
-// The four strings the guard reads: the raw source body (name-lint reference, unmasked prose), the
+// Reading (c): list structure the rewrite added beyond what the scan could vouch for. `blocks` and
+// `items` are the overruns — at or below zero the rewrite stayed inside what the scan confirmed, so
+// a negative number is a clean measurement, not a deficit. `candidates` and `budget` carry the scan
+// totals the finding quotes, so a reader sees what the overrun was measured against. The whole
+// record is null on Russian, where the scan has no usable reach; null therefore means NOT MEASURED,
+// which is a different statement from a zero overrun, and the rendered line keeps them apart.
+type UnconfirmedStructure = {
+  blocks: number;
+  items: number;
+  candidates: number;
+  budget: number;
+};
+
+// What the guard reads. Four strings: the raw source body (name-lint reference, unmasked prose), the
 // masked input and masked rewrite (mask-survival, code, and word-cap all read masked forms so a
 // frozen span is one referent), and the unmasked rewrite (name-lint target — names live in prose,
-// which masking never touches).
+// which masking never touches). Then the scan's findings and the resolved language, which only the
+// list axis reads. Neither is optional: there is one production call site, and a defaulted `lang`
+// would silently run the English-only reading over a Russian rewrite — the one mistake this axis is
+// scoped to avoid.
+//
+// The rewrite arrives BEFORE the CLI prepends the source frontmatter for display, so both sides are
+// bodies and a `tags:` entry is never read as a one-item list on the rewrite side alone.
 export type GuardInput = {
   source: string;
   maskedInput: string;
   rewriteMasked: string;
   rewriteUnmasked: string;
+  sequences: SequenceFinding[];
+  lang: "en" | "ru";
 };
 
 const countTokens = (s: string): number => (s.match(MASK_TOKEN_RE) ?? []).length;
@@ -104,6 +148,53 @@ function listMarkers(text: string): ListCounts {
   return { ordered, unordered };
 }
 
+// listBlockSizes returns one item count per list BLOCK, outside fenced code — a block being a run of
+// consecutive item lines, closed by a blank line or any prose line. Readings (b) and (c) need block
+// boundaries, which listMarkers deliberately discards. Frontmatter never reaches here: the CLI
+// splits it off before masking, so a `tags:` entry is never read as a one-item list. A nested
+// sublist merges into its parent's run rather than opening its own block, which undercounts blocks
+// and so can only make reading (b) miss a violation, never invent one.
+function listBlockSizes(text: string): number[] {
+  const sizes: number[] = [];
+  let run = 0;
+  for (const line of stripFences(text).split("\n")) {
+    const isItem =
+      !THEMATIC_BREAK_RE.test(line) && (ORDERED_ITEM_RE.test(line) || UNORDERED_ITEM_RE.test(line));
+    if (isItem) {
+      run++;
+    } else if (run) {
+      sizes.push(run);
+      run = 0;
+    }
+  }
+  if (run) sizes.push(run);
+  return sizes;
+}
+
+const sum = (ns: number[]): number => ns.reduce((a, b) => a + b, 0);
+
+// unconfirmedStructure measures reading (c): blocks and items the rewrite added beyond what the scan
+// confirmed. The scan's findings are a FLOOR on what the source licenses, never a ceiling, so an
+// overrun is a pointer to check and not a violation to remove — the caller's rendering must keep
+// that distinction. Null on Russian: 251 Russian vault files yield 5 findings against 1360 from 913
+// English ones, so the budget there is effectively zero and every added list would trip it.
+function unconfirmedStructure(
+  srcSizes: number[],
+  outSizes: number[],
+  sequences: SequenceFinding[],
+  lang: "en" | "ru",
+): UnconfirmedStructure | null {
+  if (lang !== "en") return null;
+  const candidates = sequences.length;
+  const budget = sum(sequences.map((f) => f.members));
+  return {
+    blocks: outSizes.length - srcSizes.length - candidates,
+    items: sum(outSizes) - sum(srcSizes) - budget,
+    candidates,
+    budget,
+  };
+}
+
 // listKindFlipped reports whether a list KIND present in the source vanished from the rewrite: the
 // source had numbered items and the rewrite has none, or it had bulleted items and the rewrite has
 // none. That is the observed over-split (3 numbered items promoted to 16 bullets → ordered 3→0).
@@ -119,11 +210,18 @@ function listKindFlipped(source: ListCounts, rewrite: ListCounts): boolean {
 // runGuard applies all five axes to one rewrite and returns the combined report. Pure and total —
 // it reads strings and calls total engines, so it never throws and touches no process state.
 export function runGuard(input: GuardInput): GuardReport {
-  const { source, maskedInput, rewriteMasked, rewriteUnmasked } = input;
+  const { source, maskedInput, rewriteMasked, rewriteUnmasked, sequences, lang } = input;
   const srcBlocks = fencedBlocks(maskedInput);
   const outBlocks = fencedBlocks(rewriteMasked);
   const srcList = listMarkers(maskedInput);
   const outList = listMarkers(rewriteMasked);
+  const srcSizes = listBlockSizes(maskedInput);
+  const outSizes = listBlockSizes(rewriteMasked);
+  const short = {
+    source: srcSizes.filter((n) => n < SEQ_MIN).length,
+    rewrite: outSizes.filter((n) => n < SEQ_MIN).length,
+  };
+  const unconfirmed = unconfirmedStructure(srcSizes, outSizes, sequences, lang);
   return {
     masks: {
       ok: masksSurvived(maskedInput, rewriteMasked),
@@ -137,7 +235,16 @@ export function runGuard(input: GuardInput): GuardReport {
     },
     names: nameLintAgainstSource(rewriteUnmasked, source),
     wordcap: wordCapScan(rewriteMasked),
-    list: { ok: !listKindFlipped(srcList, outList), source: srcList, rewrite: outList },
+    list: {
+      ok:
+        !listKindFlipped(srcList, outList) &&
+        short.rewrite <= short.source &&
+        (unconfirmed === null || (unconfirmed.blocks <= 0 && unconfirmed.items <= 0)),
+      source: srcList,
+      rewrite: outList,
+      short,
+      unconfirmed,
+    },
   };
 }
 
@@ -170,25 +277,50 @@ export function formatGuard(r: GuardReport): string {
   );
   lines.push(formatNames(r.names));
   lines.push(formatWordcap(r.wordcap));
-  lines.push(formatList(r.list));
+  lines.push(...formatList(r.list));
   return lines.join("\n");
 }
 
-// Render the list axis: a vanished kind (the over-split signal) names which kind went and prints
-// both count deltas, or an OK line naming the preserved counts (or that there were no lists).
-function formatList(l: GuardReport["list"]): string {
+// Render the list axis: one line per reading that fired, or a single OK line when none did. FLIP and
+// SHORT state violations, because each is certain — a kind vanished, or a new block sits under the
+// member floor. UNCONFIRMED must NOT read as a violation, and the wording is the whole mechanism
+// keeping it from doing so: it reports structure the scan could not vouch for, which a legitimate
+// conversion of a series the scan cannot see also produces. So the line names the scan's reach, asks
+// the reader to check the extra lists, and never asks for a removal. A reader who takes it as a
+// verdict re-imposes the closed worklist this tool deliberately dropped.
+function formatList(l: GuardReport["list"]): string[] {
+  const out: string[] = [];
   const counts = `ordered ${l.source.ordered}→${l.rewrite.ordered}, unordered ${l.source.unordered}→${l.rewrite.unordered}`;
-  if (l.ok) {
-    return l.source.ordered + l.source.unordered === 0
-      ? "- lists: OK — no lists to preserve"
-      : `- lists: OK — list kinds preserved (ordered ${l.source.ordered}, unordered ${l.source.unordered})`;
-  }
   const gone: string[] = [];
   if (l.source.ordered > 0 && l.rewrite.ordered === 0)
     gone.push(`${l.source.ordered} numbered item(s) became bulleted or were dropped`);
   if (l.source.unordered > 0 && l.rewrite.unordered === 0)
     gone.push(`${l.source.unordered} bulleted item(s) became numbered or were dropped`);
-  return `- lists: FLIP — ${gone.join("; ")} (${counts})`;
+  if (gone.length) out.push(`- lists: FLIP — ${gone.join("; ")} (${counts})`);
+  if (l.short.rewrite > l.short.source)
+    out.push(
+      `- lists: SHORT — ${l.short.rewrite - l.short.source} new list block(s) under ${SEQ_MIN} items` +
+        ` (${l.short.source}→${l.short.rewrite}). A list needs ${SEQ_MIN} or more parallel members, so a pair stays prose.`,
+    );
+  const u = l.unconfirmed;
+  if (u && (u.blocks > 0 || u.items > 0)) {
+    const over: string[] = [];
+    if (u.blocks > 0)
+      over.push(`${u.blocks} block(s) beyond the ${u.candidates} the scan confirmed`);
+    if (u.items > 0) over.push(`${u.items} item(s) beyond the confirmed ${u.budget}-member total`);
+    out.push(
+      `- lists: UNCONFIRMED — ${over.join(", ")}. The scan reads an Oxford series and a semicolon set` +
+        ` only, so a real series it cannot see lands here too. Check each extra list carries ${SEQ_MIN}` +
+        ` or more parallel members from one source sentence; keep it if it does.`,
+    );
+  }
+  if (out.length) return out;
+  if (l.source.ordered + l.source.unordered === 0 && l.rewrite.ordered + l.rewrite.unordered === 0)
+    return ["- lists: OK — no lists to preserve"];
+  const scope = l.unconfirmed === null ? ", structure unmeasured (RU)" : "";
+  return [
+    `- lists: OK — list kinds preserved (ordered ${l.source.ordered}, unordered ${l.source.unordered})${scope}`,
+  ];
 }
 
 // Render the name-lint axis: corrupted names (found ← wanted) and invented names, or OK.
