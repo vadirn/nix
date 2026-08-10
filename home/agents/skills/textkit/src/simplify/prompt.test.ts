@@ -6,6 +6,7 @@ import {
   BRIEF_KEYS,
   capHint,
   resolveLang,
+  shapeHint,
   SIMPLIFY_RULESET_EN,
   SIMPLIFY_RULESET_RU,
   simplifyPrompt,
@@ -47,9 +48,22 @@ test("simplifyPrompt: KEEP pins list kind, item count, split-within-item, and th
     // the KEEP scaffolding is English and shared, so both languages carry the list guardrail
     expect(p).toContain("keep its kind (numbered stays numbered, bulleted stays bulleted)");
     expect(p).toContain("its item count");
-    expect(p).toContain("Never promote a sentence to a new list item");
+    expect(p).toContain("never grow that list's item count");
+    expect(p).toContain("never nest a new list under one");
     expect(p).toContain("thematic breaks (a `---` separator line)");
   }
+});
+
+test("KEEP scopes its list prohibition, so it no longer cancels SHAPE outright", () => {
+  // The clause used to end "Never promote a sentence to a new list item" — meant to bound the
+  // existing list in front of it, read as a flat ban among unqualified absolutes. A live pass on a
+  // four-verb sentence then returned four sentences tagged `split` with `## Shape` empty: SHAPE
+  // built nothing, ever. guard.ts had assumed the opposite the whole time, forgiving a grown item
+  // count because "the SHAPE rule inflates a list on purpose".
+  const p = simplifyPrompt("x ⟦0⟧ y", "en");
+  expect(p).not.toContain("Never promote a sentence to a new list item");
+  // the prohibition now names the list it governs, and KEEP hands SHAPE its remaining territory
+  expect(p).toContain("SHAPE still governs prose OUTSIDE any list");
 });
 
 test("simplifyPrompt: KEEP fixes the heading count and forbids promotion to a heading", () => {
@@ -64,9 +78,19 @@ test("simplifyPrompt: KEEP fixes the heading count and forbids promotion to a he
 test("simplifyPrompt: SHAPE is scoped to prose so it never over-splits an existing list", () => {
   // the SHAPE rule builds a list only from PROSE; both rulesets scope it to avoid the over-split
   expect(SIMPLIFY_RULESET_EN).toContain("turn a PROSE sequence or set into a vertical list");
-  expect(SIMPLIFY_RULESET_EN).toContain("keep an existing list's kind and item count");
+  expect(SIMPLIFY_RULESET_EN).toContain("Keep an existing list's kind and item count");
+  expect(SIMPLIFY_RULESET_EN).toContain("a list you build comes only from prose");
   expect(SIMPLIFY_RULESET_RU).toContain("В ПРОЗЕ");
   expect(SIMPLIFY_RULESET_RU).toContain("сохрани вид и число пунктов");
+});
+
+test("SHAPE names a countable trigger, so it competes with the cap it used to lose to", () => {
+  // "a PROSE sequence" is a judgment standing next to "at most 20 words", which is a measurement.
+  // The unmeasured rule lost every time. Both rulesets now define the threshold outright.
+  expect(SIMPLIFY_RULESET_EN).toContain("three or more parallel actions");
+  expect(SIMPLIFY_RULESET_EN).toContain("fewer than three stays prose");
+  expect(SIMPLIFY_RULESET_RU).toContain("тремя и более параллельными действиями");
+  expect(SIMPLIFY_RULESET_RU).toContain("меньше трёх остаётся прозой");
 });
 
 test("simplifyPrompt: neither the ruleset nor the schema invites adding a heading", () => {
@@ -129,6 +153,41 @@ test("simplifyPrompt: over-cap findings ride into the prompt; a clean source car
   expect(withHint).toContain("This one sentence is deliberately over the cap.");
   // the default (no third arg) omits the block entirely — no dangling "LENGTH CHECK" scaffolding
   expect(simplifyPrompt("x ⟦0⟧ y", "en")).not.toContain("LENGTH CHECK");
+});
+
+test("shapeHint: names each enumerating sentence, or nothing when the source enumerates none", () => {
+  // empty in → no hint, so a source with no sequence leaves the no-op clause to govern alone
+  expect(shapeHint([], "en")).toBe("");
+  const seqs = [{ sentence: "It reads, extracts, classifies, and verdicts.", members: 4 }];
+  const en = shapeHint(seqs, "en");
+  expect(en).toContain("SHAPE CHECK");
+  expect(en).toContain("3 or more members"); // SEQ_MIN surfaced in the instruction
+  expect(en).toContain("(4 members) It reads, extracts, classifies, and verdicts.");
+  // framed as candidates with a REASON required, because a sequence is often right left as prose —
+  // the enumeration may already appear nearby as a diagram or a table, which the scan cannot see
+  expect(en).toContain("note it in `borderline` with the reason");
+});
+
+test("shapeHint: the Russian hint uses Russian framing, not a port of the English one", () => {
+  const ru = shapeHint([{ sentence: "Он читает, разбирает и решает.", members: 3 }], "ru");
+  expect(ru).toContain("ПРОВЕРКА ФОРМЫ");
+  expect(ru).toContain("«borderline»");
+  expect(ru).not.toContain("SHAPE CHECK");
+});
+
+test("simplifyPrompt: both pre-hints ride together, each gated on its own findings", () => {
+  const overCap = { sentence: "This one sentence is deliberately over the cap.", words: 21 };
+  const seq = { sentence: "It reads, extracts, and verdicts.", members: 3 };
+  const both = simplifyPrompt("x ⟦0⟧ y", "en", [overCap], [seq]);
+  expect(both).toContain("LENGTH CHECK");
+  expect(both).toContain("SHAPE CHECK");
+  // each is independent: a source long-but-unenumerating gets one hint, not both
+  const lengthOnly = simplifyPrompt("x ⟦0⟧ y", "en", [overCap]);
+  expect(lengthOnly).toContain("LENGTH CHECK");
+  expect(lengthOnly).not.toContain("SHAPE CHECK");
+  const shapeOnly = simplifyPrompt("x ⟦0⟧ y", "en", [], [seq]);
+  expect(shapeOnly).toContain("SHAPE CHECK");
+  expect(shapeOnly).not.toContain("LENGTH CHECK");
 });
 
 test("resolveLang: auto-detects by script, and an explicit override wins", () => {

@@ -24,6 +24,7 @@ import { createMasker } from "textkit/core/writing/mask.ts";
 import { type SimplifyBrief, resolveLang, simplifyPrompt } from "textkit/simplify/prompt.ts";
 import { coerceBrief, renderBrief } from "textkit/simplify/brief.ts";
 import { runGuard } from "textkit/simplify/guard.ts";
+import { sequenceScan } from "textkit/simplify/sequence.ts";
 import { verify, verifyClean } from "textkit/simplify/verify.ts";
 import { wordCapScan } from "textkit/simplify/wordcap.ts";
 
@@ -152,12 +153,19 @@ export async function runSimplify(
   // skill's subagent re-applies it by intent at apply time (see that skill's apply step).
   const { mask, unmask } = createMasker();
   const maskedInput = mask(body);
-  // Deterministic length pre-hint. wordCapScan is the one guard axis that reads a text standalone
-  // (the other four diff the rewrite against the source), so it is the only "what's wrong with the
-  // original" finding available before the pass. Feed the measured over-cap sentences into the prompt
-  // so the model splits the exact offenders it counts unreliably. Empty for a within-cap source.
+  // Two deterministic pre-hints, one per rule the model applies unreliably on its own. Both read the
+  // source standalone — the guard's other axes diff the rewrite against it, so these are the only
+  // "what's wrong with the original" findings available before the pass. Feeding measured spans in
+  // turns each rule from a principle into a checklist, which is the whole reason capHint exists.
+  //
+  // wordCapScan names the sentences over the 20-word cap; sequenceScan names the sentences that
+  // enumerate three or more members and should become vertical lists. SHAPE went unapplied for as
+  // long as only the first hint existed: given a four-verb sentence the model split it and reported
+  // `## Shape` empty, because SENTENCES arrived as a worklist and SHAPE arrived as a sentence in the
+  // ruleset. Both are empty for a source clean on that axis, leaving the no-op clause to govern.
   const overCap = wordCapScan(maskedInput);
-  const prompt = simplifyPrompt(maskedInput, lang, overCap);
+  const sequences = sequenceScan(maskedInput);
+  const prompt = simplifyPrompt(maskedInput, lang, overCap, sequences);
   // Retry-to-gate. The model is non-deterministic, so a run that drops a span or adds a heading is
   // one bad roll. Re-roll up to `attempts` and keep the FIRST run the apply-gate accepts — the same
   // `verify` the simplify-verify CLI runs, called here on the source and the unmasked rewrite. If no
