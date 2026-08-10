@@ -2,6 +2,11 @@
 // keep-verbatim and no-op clauses, the never-translate guard, and the strict seven-key JSON schema
 // are all pinned. Pure, offline: no model call.
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { createMasker } from "textkit/core/writing/mask.ts";
+import { sequenceScan } from "textkit/simplify/sequence.ts";
+import { wordCapScan } from "textkit/simplify/wordcap.ts";
 import {
   BRIEF_KEYS,
   capHint,
@@ -11,6 +16,11 @@ import {
   SIMPLIFY_RULESET_RU,
   simplifyPrompt,
 } from "textkit/simplify/prompt.ts";
+
+// The live-measurement fixture for the SHAPE member test. It is not read by any production code —
+// it is the input the three-run measurement is taken over — so this suite pins the property that
+// gives it its power. See the shapeHint note in prompt.ts for the runs it produced.
+const SHAPE_FIXTURE = resolve(import.meta.dir, "fixtures", "shape-member-test.md");
 
 test("simplifyPrompt: EN embeds the English ruleset, the schema, and the masked text", () => {
   const p = simplifyPrompt("A wordy ⟦0⟧ sentence.", "en");
@@ -112,6 +122,114 @@ test("SHAPE excludes a relation, and holds a counting word to its count", () => 
   expect(SIMPLIFY_RULESET_EN).toContain("keep that word and match its count");
   expect(SIMPLIFY_RULESET_RU).toContain("это отношение, а не перечисление");
   expect(SIMPLIFY_RULESET_RU).toContain("сохрани это слово и совпади с ним");
+});
+
+test("the SHAPE contract names the member test as a gate, everywhere it speaks, in both languages", () => {
+  // The rule stated the test and still lost, because the test arrived as a DESCRIPTION while
+  // shapeHint's worklist arrived as an imperative carrying a count. Measured on
+  // fixtures/shape-member-test.md, where the scan confirms a relation ("Build the DSL outward from
+  // the operations that consume it, not top-down as a taxonomy, or it becomes ornament") and a real
+  // series at the same 3 members and cannot tell them apart: the relation was flattened into three
+  // bullets in 2 of 3 live runs, once under an invented "Build the DSL in three ways:".
+  //
+  // So both halves must bind — three or more parallel members, ENUMERATING rather than relating —
+  // in every place the contract speaks: the ruleset, KEEP, and both shapeHint branches. A half
+  // stated in one place and dropped in another is what the model exploited, since a relation passes
+  // the count on its own.
+  const seq = { sentence: "x, y, and z.", members: 3 };
+  const halves = {
+    en: ["three or more parallel members", "enumerates rather than relates"],
+    ru: ["три и более параллельных члена", "перечисляет, а не связывает"],
+  } as const;
+  for (const half of halves.en) expect(SIMPLIFY_RULESET_EN).toContain(half);
+  for (const half of halves.ru) expect(SIMPLIFY_RULESET_RU).toContain(half);
+  // stated as a gate with a build-only-on-pass condition, not as a description standing beside one
+  expect(SIMPLIFY_RULESET_EN).toContain("build only where it passes both halves");
+  expect(SIMPLIFY_RULESET_RU).toContain("строй список, только если он прошёл обе половины");
+  // the reorder diagnostic, which is what makes "enumerates rather than relates" checkable
+  expect(SIMPLIFY_RULESET_EN).toContain("Members enumerate when you can reorder them");
+  expect(SIMPLIFY_RULESET_RU).toContain("Члены перечисляют, если их можно переставить местами");
+  // KEEP restates SHAPE's territory, so it must restate BOTH halves — the count alone is what a
+  // relation passes, and KEEP used to hand over the count and stop
+  const keep = simplifyPrompt("x ⟦0⟧ y", "en");
+  expect(keep).toContain("three or more parallel members that enumerate rather than relate");
+  // and the hint, in both branches and both languages: the scan is declared blind to the second
+  // half, so a confirmed candidate is a candidate rather than a licence to convert
+  for (const hint of [shapeHint([], "en"), shapeHint([seq], "en")]) {
+    expect(hint).toContain("passes the member test");
+    expect(hint).toContain("enumerating rather than relating");
+    expect(hint).toContain("cannot tell a member from a contrast or a consequence");
+  }
+  for (const hint of [shapeHint([], "ru"), shapeHint([seq], "ru")]) {
+    expect(hint).toContain("прошло тест на члены");
+    expect(hint).toContain("перечисление, а не связь");
+    expect(hint).toContain("не отличит член от противопоставления или следствия");
+  }
+  // the worklist branch is the place the licence was issued, so it carries the gate too
+  expect(shapeHint([seq], "en")).toContain("a confirmed count is no licence");
+  expect(shapeHint([seq], "ru")).toContain("подтверждённый счёт права не даёт");
+});
+
+test("the SHAPE contract keeps a pair prose, and sends a long pair's split to sentences", () => {
+  // The second specimen's defect is an INTERACTION, not a lone misreading: a 40-word sentence naming
+  // two deferred strands (fetch adapters, card-collection hygiene) drew a capHint "split this", and
+  // the model reached for a list to split into — twice in one note. Two members sit under the floor,
+  // so naming where the split LANDS is what neither hint could say alone.
+  expect(SIMPLIFY_RULESET_EN).toContain("a pair stays prose however long the sentence runs");
+  expect(SIMPLIFY_RULESET_EN).toContain("never into a two-item list");
+  expect(SIMPLIFY_RULESET_RU).toContain("пара остаётся прозой, какой бы длинной ни была фраза");
+  expect(SIMPLIFY_RULESET_RU).toContain("а не на список из двух пунктов");
+  for (const hint of [
+    shapeHint([], "en"),
+    shapeHint([{ sentence: "x, y, and z.", members: 3 }], "en"),
+  ])
+    expect(hint).toContain("never into a two-item list");
+  for (const hint of [
+    shapeHint([], "ru"),
+    shapeHint([{ sentence: "х, у и я.", members: 3 }], "ru"),
+  ])
+    expect(hint).toContain("а не на список из двух пунктов");
+  // KEEP carries the floor as well, so its restatement cannot license what SHAPE forbids
+  expect(simplifyPrompt("x ⟦0⟧ y", "en")).toContain(
+    "Two members is a pair, and a pair stays prose",
+  );
+  // a counting word the source never had is a manufactured member by another route — one live run
+  // led its three bullets with "Build the DSL in three ways:", a phrase no source sentence states
+  expect(SIMPLIFY_RULESET_EN).toContain("never add a counting word the source does not have");
+  expect(SIMPLIFY_RULESET_RU).toContain("не добавляй счёт, которого в источнике нет");
+});
+
+test("the SHAPE fixture holds a relation and a series the scan cannot tell apart", () => {
+  // The fixture is a single-differing-factor comparison, and this test is what keeps it one. Both
+  // specimens must reach the model on the SAME worklist at the SAME count, so the only thing that
+  // can separate them is the member test. A fixture edit that drops either from the worklist, or
+  // that splits their counts, turns a passing three-run measurement into a measurement of nothing.
+  const { mask } = createMasker();
+  const masked = mask(readFileSync(SHAPE_FIXTURE, "utf8"));
+  const confirmed = sequenceScan(masked);
+  expect(confirmed).toHaveLength(2);
+  expect(confirmed.map((f) => f.members)).toEqual([3, 3]);
+  const sentences = confirmed.map((f) => f.sentence);
+  // the relation: a contrast and its consequence, which must stay prose despite being confirmed
+  expect(sentences).toContain(
+    "Build the DSL outward from the operations that consume it, not top-down as a taxonomy, or it becomes ornament.",
+  );
+  // the positive control: three parallel enumerated members, which must still convert. It guards
+  // the failure mode of the first revision of this rule, which killed SHAPE outright while looking
+  // like a fix for the over-building.
+  expect(sentences).toContain(
+    "The scan strips fenced code, skips every list item, and measures both delimiters.",
+  );
+  // the pair specimen is a PAIR, so the scan confirms nothing in it — its pressure comes from the
+  // length hint instead, which is the interaction that produced its two-item list
+  const pair = wordCapScan(masked);
+  expect(pair).toHaveLength(1);
+  expect(pair[0]!.sentence).toContain("fetch adapters");
+  expect(pair[0]!.sentence).toContain("card-collection hygiene");
+  expect(pair[0]!.words).toBeGreaterThan(20);
+  // and it reaches the model as prose only: no list markers anywhere in the source, so every list
+  // block the guard's SHORT reading sees in a rewrite is one the restyle built
+  expect(masked).not.toMatch(/^\s*(?:[-*+]\s|\d+[.)]\s)/m);
 });
 
 test("simplifyPrompt: neither the ruleset nor the schema invites adding a heading", () => {
