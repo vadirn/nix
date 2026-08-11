@@ -34,9 +34,11 @@
 //              manufactured list (4 of 4) at two false alarms, (b) named one at none. Together they
 //              caught two live defects in four ordinary vault notes — a cause-and-effect relation
 //              flattened into three siblings, and two 2-item lists built from a prose pair.
-//              (c) is English-only because the scan finds 1360 sequences across 913 English vault
-//              files and 5 across 251 Russian ones. With no budget to speak of it would fire on any
-//              Russian note that gains a list, which is noise, not a finding. The contract the model
+//              (c) is English-only because the scan finds 1268 sequences across 909 English vault
+//              files and 1 across 263 Russian ones — `bun run measure:oxford`, fed the vault's
+//              markdown on stdin, reports that split under `byLang`. With no budget to speak of it
+//              would fire on any Russian note that gains a list, which is noise, not a finding.
+//              The contract the model
 //              receives stays identical in both languages; only this measurement's reach differs,
 //              exactly as the scan's own reach does.
 import { parseDoc, sliceBytes, walkNodes } from "textkit/core/mdstruct.ts";
@@ -177,8 +179,9 @@ const listBlockSizes = (blocks: ListBlock[]): number[] => blocks.map((b) => b.it
 // unconfirmedStructure measures reading (c): blocks and items the rewrite added beyond what the scan
 // confirmed. The scan's findings are a FLOOR on what the source licenses, never a ceiling, so an
 // overrun is a pointer to check and not a violation to remove — the caller's rendering must keep
-// that distinction. Null on Russian: 251 Russian vault files yield 5 findings against 1360 from 913
-// English ones, so the budget there is effectively zero and every added list would trip it.
+// that distinction. Null on Russian: 263 Russian vault files yield 1 finding against 1268 from 909
+// English ones, so the budget there is effectively zero and every added list would trip it. Re-derive
+// the split with `bun run measure:oxford` over the vault; it prints one under `byLang`.
 function unconfirmedStructure(
   srcSizes: number[],
   outSizes: number[],

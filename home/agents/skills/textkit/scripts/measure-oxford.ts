@@ -18,10 +18,16 @@
 // prints DRIFT and lands in the report — so a copy that falls behind the module fails loud instead
 // of quietly measuring something else.
 //
+// Arm A is also split by language, because src/simplify/guard.ts nulls its UNCONFIRMED axis on
+// Russian and cites this scan's reach for the reason. That claim was a remembered pair of numbers
+// with no way to re-derive them, which is the same defect the arms above were written to fix. The
+// `byLang` block is therefore the evidence guard.ts points at.
+//
 // Corpus: `git ls-files '*.md'` at the repo root, or a newline-separated file list on stdin.
 // Run: bun run measure:oxford
 
 import { parseFrontmatter } from "textkit/core/frontmatter.ts";
+import { detectLang } from "textkit/core/text.ts";
 import { createMasker } from "textkit/core/writing/mask.ts";
 import { proseParagraphs } from "textkit/simplify/prose.ts";
 import { SEQ_MIN, sequenceScan } from "textkit/simplify/sequence.ts";
@@ -100,6 +106,10 @@ let a = 0,
   drift = 0;
 const addedByB: string[] = [];
 const droppedByC: string[] = [];
+const byLang = {
+  en: { files: 0, armA: 0 },
+  ru: { files: 0, armA: 0 },
+};
 
 for (const file of files) {
   let text: string;
@@ -128,6 +138,12 @@ for (const file of files) {
   b += fb.length;
   c += fc.length;
 
+  // Language is read off the body, exactly as resolveLang does, so the split matches what the CLI
+  // would have picked for the same file.
+  const lang = detectLang(body);
+  byLang[lang].files++;
+  byLang[lang].armA += fa.length;
+
   const aSet = new Set(fa.map((f) => f.sentence));
   const cSet = new Set(fc.map((f) => f.sentence));
   for (const f of fb) if (!aSet.has(f.sentence)) addedByB.push(`${file}\t${f.sentence}`);
@@ -144,6 +160,7 @@ console.log(
       armC_coordinatorMustClose: c,
       addedByBareForm: addedByB.length,
       droppedByDemandingClose: droppedByC.length,
+      byLang,
     },
     null,
     2,
