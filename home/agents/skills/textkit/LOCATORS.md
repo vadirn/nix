@@ -1,7 +1,7 @@
 # Structure locators
 
 textkit locates markdown structure two ways. Regex line scans do it in TypeScript. The `mdstruct`
-binary does it in Rust, through the `src/distill/mdstruct.ts` wrapper.
+binary does it in Rust, through the `src/core/mdstruct.ts` wrapper.
 
 This file catalogues every structure-locating expression in `src/core/text.ts` and `src/simplify/`.
 Each carries exactly one verdict:
@@ -26,7 +26,7 @@ Three grounds carried the answer.
 that reports "verified" off a weaker check is worse than no gate. So a missing binary must block the
 apply, never degrade to regex.
 
-**The package already answers this question.** `src/distill/mdstruct.ts` throws `mdstruct
+**The package already answers this question.** `src/core/mdstruct.ts` throws `mdstruct
 unavailable` on a spawn failure, because a silent fallback reintroduces the bugs the swap fixes. A
 second policy in one package would be a second answer to one question.
 
@@ -212,12 +212,13 @@ the one crate change this inventory asks for.
 
 ## Implementation order
 
-**Step 1 unblocks the most.** `scripts/boundaries.ts` allows a cross-slice import only when the
-imported slice is `core`. So no file under `simplify/` may import `textkit/distill/mdstruct.ts`
-today, and every other step waits on the move.
+**Step 1 unblocked the most.** `scripts/boundaries.ts` allows a cross-slice import only when the
+imported slice is `core`. Before the move, no file under `simplify/` could import the wrapper
+(it lived under `distill/`), and every other step waited on it.
 
-1. **Move the wrapper to `src/core/mdstruct.ts`.** Rewrite the import specifier in 17 files. Import
-   paths only, so distill's behaviour is untouched. This is the precondition for every step below.
+1. **Move the wrapper to `src/core/mdstruct.ts`.** ~~Rewrite the import specifier in 17 files.~~
+   Done. Import paths only, so distill's behaviour is untouched. This was the precondition for every
+   step below.
 2. **Swap `verify.ts`'s three structural axes** to one `parseDoc` per side. Add the exit 5 path and
    its `--help` line. This closes defect 1, the frontmatter asymmetry, and the setext-to-ATX double
    drift. It is the smallest surface with the most expensive failure.

@@ -15,7 +15,7 @@ import { Buffer } from "node:buffer";
 import { computeSource, type PreGraph } from "textkit/distill/graph/graph.ts";
 import { locateGraph } from "textkit/distill/extract/locate-graph.ts";
 import { SnapError } from "textkit/distill/extract/snap.ts";
-import { sliceBytes } from "textkit/distill/mdstruct.ts";
+import { sliceBytes } from "textkit/core/mdstruct.ts";
 import { projectMarkdown } from "textkit/distill/graph/project.ts";
 import type { Block } from "textkit/core/text.ts";
 

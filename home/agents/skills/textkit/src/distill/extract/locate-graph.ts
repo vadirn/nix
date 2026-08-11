@@ -30,7 +30,7 @@ import {
   type SnapTarget,
 } from "textkit/distill/extract/snap.ts";
 import { oneLine } from "textkit/distill/extract/harvest.ts";
-import { parseDoc, type Span } from "textkit/distill/mdstruct.ts";
+import { parseDoc, type Span } from "textkit/core/mdstruct.ts";
 import { slugSegment, type Block } from "textkit/core/text.ts";
 import type { Projection } from "textkit/distill/graph/project.ts";
 

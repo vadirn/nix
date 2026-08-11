@@ -5,7 +5,7 @@
 // `sliceBytes`/`Span` from mdstruct.ts, not the CLI wrapper.
 import { expect, test } from "bun:test";
 import { LocateError, locate } from "textkit/distill/extract/locate.ts";
-import { sliceBytes } from "textkit/distill/mdstruct.ts";
+import { sliceBytes } from "textkit/core/mdstruct.ts";
 
 // Round-trip a computed span against the byte-exact slice — the hard invariant every locate must
 // satisfy.
