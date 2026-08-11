@@ -21,18 +21,15 @@
 // Corpus: `git ls-files '*.md'` at the repo root, or a newline-separated file list on stdin.
 // Run: bun run measure:oxford
 
-import { stripFences } from "textkit/core/text.ts";
 import { parseFrontmatter } from "textkit/core/frontmatter.ts";
 import { createMasker } from "textkit/core/writing/mask.ts";
+import { proseParagraphs } from "textkit/simplify/prose.ts";
 import { SEQ_MIN, sequenceScan } from "textkit/simplify/sequence.ts";
 
-// Verbatim from src/simplify/sequence.ts. The DRIFT check below is what keeps them in step.
-const isSkippedLine = (line: string): boolean =>
-  /^\s*#{1,6}\s/.test(line) ||
-  /\|/.test(line) ||
-  /^\s*>/.test(line) ||
-  /^\s*(?:[-*+]\s|\d{1,9}[.)]\s)/.test(line) ||
-  line.trim() === "";
+// Verbatim from src/simplify/sequence.ts. The DRIFT check below is what keeps them in step. The
+// three arms differ only in how they count a comma series, so all three read the module's own prose
+// source — mdstruct's paragraphs, minus every blockquote and list.
+const SHAPED_BLOCKS = new Set(["blockQuote", "list"]);
 
 const SENTENCE_SPLIT_RE = /(?<=[.!?…][*_`)\]"'»”’]*)\s+(?=\S)/;
 const ASIDE_RE = /,\s+(?:which|who|whom|whose|that|where|when)\b[^,]*,/g;
@@ -68,9 +65,8 @@ type Finding = { sentence: string; members: number };
 
 function scan(masked: string, arm: Arm, min = SEQ_MIN): Finding[] {
   const findings: Finding[] = [];
-  for (const raw of stripFences(masked).split("\n")) {
-    if (isSkippedLine(raw)) continue;
-    for (const sentence of raw.split(SENTENCE_SPLIT_RE)) {
+  for (const paragraph of proseParagraphs(masked, SHAPED_BLOCKS)) {
+    for (const sentence of paragraph.split(SENTENCE_SPLIT_RE)) {
       const semis = segmentsOn(sentence, ";");
       const commas = commaMembers(sentence, arm);
       if (semis >= min || commas >= min)

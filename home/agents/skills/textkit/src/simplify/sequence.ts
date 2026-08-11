@@ -1,15 +1,18 @@
 // simplify/sequence — the deterministic scan behind the SHAPE rule: find prose sentences that
 // enumerate three or more members, which the style turns into a vertical list. Sibling of wordcap:
-// same line-based scan over the MASKED source, same advisory framing, same feed into a prompt
+// same walk over the MASKED source's parsed blocks, same advisory framing, same feed into a prompt
 // pre-hint. It exists for the reason capHint exists — the ruleset states SHAPE, and a live pass
 // applied it to nothing. A source sentence coordinating four verbs came back as four sentences,
 // tagged `split`, with `## Shape` reporting "None": the model reached for the rule that arrived as a
 // measured worklist over the rule that arrived as a principle.
 //
-// Unlike wordcap, this scan SKIPS list items rather than stripping their markers. A sequence inside
-// an existing list item must stay prose — KEEP forbids growing a list's item count, and nesting a
-// new list under an item is the over-split this whole module guards against.
-import { stripFences } from "textkit/core/text.ts";
+// Unlike wordcap, this scan SKIPS a list whole rather than measuring the prose inside each item. A
+// sequence inside an existing list item must stay prose — KEEP forbids growing a list's item count,
+// and nesting a new list under an item is the over-split this whole module guards against.
+//
+// The prose comes from mdstruct's node tree, through proseParagraphs. Everything the scan measures
+// below is prose measurement and stays here; the parser only decides which bytes are prose.
+import { proseParagraphs } from "textkit/simplify/prose.ts";
 
 // One prose sentence that enumerates: its text and how many delimited members it carries. `members`
 // counts comma- or semicolon-delimited segments, whichever is larger. It is a measurement, not a
@@ -22,15 +25,12 @@ export type SequenceFinding = { sentence: string; members: number };
 // better as prose than as a two-item list.
 export const SEQ_MIN = 3;
 
-// A line that is structure or already-shaped content, so the scan skips it whole: a heading, a table
-// row, a blank line, a blockquote (a quoted specimen KEEP freezes), or a list item. The list-item
-// skip is the load-bearing one — see the header note.
-const isSkippedLine = (line: string): boolean =>
-  /^\s*#{1,6}\s/.test(line) || // heading
-  /\|/.test(line) || // table row (or any cell-delimited line)
-  /^\s*>/.test(line) || // blockquote — a quoted specimen
-  /^\s*(?:[-*+]\s|\d{1,9}[.)]\s)/.test(line) || // list item: a nested list is the over-split
-  line.trim() === "";
+// The container blocks whose contents this scan never reads, as mdstruct node types. A blockquote
+// holds a quoted specimen KEEP freezes. A list is already-shaped content, and that skip is the
+// load-bearing one — see the header note. Everything else the old line scan tested for is settled by
+// the tree: a heading lives in `headings[]` and never reaches a node walk, a table's cells hold no
+// paragraph, a code block is not a paragraph wherever it sits, and a blank line is no node at all.
+const SHAPED_BLOCKS = new Set(["blockQuote", "list"]);
 
 // Sentence boundary: end punctuation, then any CLOSING inline markers, then whitespace. Identical to
 // wordcap's — the Simplified style writes bold leads, so a sentence routinely ends at `.**` rather
@@ -49,7 +49,7 @@ const ASIDE_RE = /,\s+(?:which|who|whom|whose|that|where|when)\b[^,]*,/g;
 // keeps a bare comma run out, because an appositive, a date, or a run of asides never has one.
 //
 // Every count below comes from one corpus, so a later reader can re-run it: `bun run
-// measure:oxford`, which scans the markdown `git ls-files '*.md'` returns at the repo root — 383
+// measure:oxford`, which scans the markdown `git ls-files '*.md'` returns at the repo root — 384
 // files when this was measured, on 2026-08-11 — each read the way runSimplify reads it, body only
 // and masked. Keep a number here reproducible by that script. The figures these replaced gave a
 // file count and no selector, so nobody could recheck them, and their arithmetic drifted unnoticed.
@@ -64,7 +64,7 @@ const ASIDE_RE = /,\s+(?:which|who|whom|whose|that|where|when)\b[^,]*,/g;
 // Accepting "A, B and C" means counting a final segment that merely CONTAINS a coordinator, and
 // "member, member and member" is regex-indistinguishable from "adverbial, clause and clause" — so
 // "In this mode, the scan strips fences and skips lists" scores 3. Accepting the form takes findings
-// from 562 to 971. Every one of those 409 is a new candidate, because the strict scan's findings all
+// from 565 to 979. Every one of those 414 is a new candidate, because the strict scan's findings all
 // survive it, and two samples totalling 49 of them turned up no genuine series — nearly all open
 // with a subordinate clause or an adverbial. That cost lands hardest here: shapeHint hands the model
 // a CLOSED worklist, so a false candidate is not noise the model may ignore, it is a licensed
@@ -90,17 +90,20 @@ function commaMembers(sentence: string): number {
 }
 
 // sequenceScan returns every prose sentence in `masked` that enumerates `min` or more members, most
-// members first. It strips fenced code, skips structure and list items, splits each remaining line
-// into sentences, and measures both delimiters. Total: never throws.
+// members first. It reads mdstruct's paragraphs, skipping every blockquote and list, splits each
+// into sentences, and measures both delimiters.
 //
 // A sentence qualifies when either form is present:
 //   - `min` or more semicolon-delimited segments — a set, whatever its wording; or
 //   - `min` or more comma-delimited members closing on ", and"/", or" — a series, Oxford comma required.
+//
+// Not total: the parse throws MdstructUnavailableError when the binary cannot run. simplify-text
+// parses the source before its first model call and maps that class to exit 5, so the failure lands
+// before any token is spent.
 export function sequenceScan(masked: string, min: number = SEQ_MIN): SequenceFinding[] {
   const findings: SequenceFinding[] = [];
-  for (const raw of stripFences(masked).split("\n")) {
-    if (isSkippedLine(raw)) continue;
-    for (const sentence of raw.split(SENTENCE_SPLIT_RE)) {
+  for (const paragraph of proseParagraphs(masked, SHAPED_BLOCKS)) {
+    for (const sentence of paragraph.split(SENTENCE_SPLIT_RE)) {
       const semis = segmentsOn(sentence, ";");
       const commas = commaMembers(sentence);
       const isSet = semis >= min;

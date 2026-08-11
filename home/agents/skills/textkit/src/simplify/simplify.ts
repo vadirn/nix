@@ -142,9 +142,9 @@ async function onePass(
 // (re-rolled to the gate), coerce the brief, guard the masked rewrite, then render the display brief
 // (rewrite and change spans unmasked, original frontmatter prepended so the rewrite is the whole
 // note). It touches no fs state and reaches the model only through deps, so it is unit-testable in
-// isolation; the one process it does spawn is mdstruct, for the apply-gate's parse. Throws
-// (transient/truncation) when the first pass fails on both models, which main maps to exit 4, or
-// MdstructUnavailableError when the parse cannot run, which main maps to exit 5.
+// isolation; the one process it does spawn is mdstruct, for the apply-gate and for the two source
+// scans. Throws (transient/truncation) when the first pass fails on both models, which main maps to
+// exit 4, or MdstructUnavailableError when a parse cannot run, which main maps to exit 5.
 export async function runSimplify(
   input: string,
   opts: SimplifyOpts,
@@ -152,10 +152,12 @@ export async function runSimplify(
 ): Promise<string> {
   const { ask = askJson, progress, maxAttempts = MAX_ATTEMPTS } = deps;
   const { front, body } = parseFrontmatter(input);
-  // Parse the source BEFORE the first model call. The apply-gate below reads mdstruct, so a missing
-  // binary fails this run either way — the only question is whether it fails after a heavy restyle
-  // pass has already been paid for. This probe answers it for free: the parse cache keys on source
-  // text, so the gate's own parse of `body` is this same spawn, and main maps the throw to exit 5.
+  // Parse the source BEFORE the first model call. The apply-gate below reads mdstruct, and so do the
+  // two pre-hint scans, so a missing binary fails this run either way — the only question is whether
+  // it fails after a heavy restyle pass has already been paid for. This probe answers it for free:
+  // the parse cache keys on source text, so the gate's own parse of `body` is this same spawn, and
+  // main maps the throw to exit 5. The scans parse `maskedInput`, which is a different text and so a
+  // second spawn, but they too run ahead of the model, so neither can burn a token on a dead binary.
   parseDoc(body);
   const lang = resolveLang(opts.lang, body);
   // No literals: simplify runs no glossary term list, so createMasker freezes only the verbatim

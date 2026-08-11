@@ -11,7 +11,9 @@
 //              spell verifier).
 //   code     — fenced code blocks (not masked, unlike inline spans) are intact as a multiset.
 //   names    — nameLintAgainstSource: no proper name corrupted toward a source name or invented.
-//   sentences — wordCapScan: no prose sentence over the 20-word cap.
+//   sentences — wordCapScan: no prose sentence over the 20-word cap. It reads mdstruct's parse of
+//              the rewrite, so a blockquote's frozen specimen is never reported as an offender the
+//              restyle failed to close.
 //   lists    — three readings of one question: did the rewrite build list structure the source never
 //              licensed? (a) FLIP: a list KIND the source had (numbered or bulleted) still exists —
 //              the observed numbered→bulleted over-split. (b) SHORT: no NEW block falls under the
@@ -207,8 +209,10 @@ function listKindFlipped(source: ListCounts, rewrite: ListCounts): boolean {
   );
 }
 
-// runGuard applies all five axes to one rewrite and returns the combined report. Pure and total —
-// it reads strings and calls total engines, so it never throws and touches no process state.
+// runGuard applies all five axes to one rewrite and returns the combined report. Deterministic, and
+// pure but for one spawn: the sentences axis reads mdstruct's parse of the rewrite, so it throws
+// MdstructUnavailableError when the binary cannot run. runSimplify parses the source before its
+// first model call, so by the time this runs a missing binary has already exited 5.
 export function runGuard(input: GuardInput): GuardReport {
   const { source, maskedInput, rewriteMasked, rewriteUnmasked, sequences, lang } = input;
   const srcBlocks = fencedBlocks(maskedInput);
