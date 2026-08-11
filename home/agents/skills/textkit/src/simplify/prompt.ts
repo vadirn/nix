@@ -123,8 +123,12 @@ export function capHint(overCap: WordCapFinding[], lang: "en" | "ru"): string {
 // over-cap sentence is always a miss, but a sequence left as prose is often right: the enumeration
 // may already appear nearby in another notation (a diagram, a table), which is context this scan
 // cannot see. So a declined candidate goes to `borderline` with its reason, and that note is the
-// receipt — there is no guard axis for shape, because a legitimate decline would show up as a
+// receipt. No guard axis watches DECLINES, for that reason: a legitimate decline would show up as a
 // permanent finding with no way to acknowledge it.
+//
+// The guard's list axis runs the opposite direction — it measures what the rewrite ADDED, never what
+// it declined — so that objection does not reach it. A candidate left as prose produces no finding
+// there at all. See guard.ts for the axis and the measurements that scoped it.
 //
 // Unlike capHint the hint ALWAYS rides. An absent length finding means nothing to split, but shape
 // silence means the opposite: it leaves SHAPE an unbounded principle, which is exactly when it
