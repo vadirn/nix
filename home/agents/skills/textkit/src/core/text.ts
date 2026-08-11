@@ -67,6 +67,9 @@ export type LinkInventory = {
 // line start opens; a run of 3+ of the SAME char closes. An opposite-marker run inside an open
 // fence is literal content, not a close — latching the opener is what stops segment() (and its
 // five siblings) from mis-toggling parity on a nested opposite fence and swallowing the tail.
+// `^\s*` matches the indentation, so a fence indented inside a list item is read fine. The real
+// blind spot is a fence inside a blockquote: the `>` marker sits before the backticks, `^\s*`
+// never matches past it, and the fence reads as plain prose.
 // Returns the next state and whether THIS line was a real fence marker (opener or closer);
 // callers that emit or skip marker lines branch on `isMarker`.
 export type FenceState = string | null;
