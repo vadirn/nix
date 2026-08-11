@@ -55,6 +55,35 @@ test("createMasker: an unclosed `<!--` stays prose rather than swallowing the no
   expect(m.mask(src)).toBe(src);
 });
 
+// ---- inline code follows CommonMark's matched-run rule ----
+// The measured defect: the code-span spelling was a single-backtick pair. Against `` a`b `` it
+// opened on the first backtick and closed on the inner one. So it froze the fragment ` a` and
+// handed the model the rest of the span as editable prose.
+test("createMasker: a double-backtick span masks whole, not as a fragment", () => {
+  const m = createMasker();
+  const src = "Text with `` a`b `` tail.";
+  const masked = m.mask(src);
+  expect(masked).toBe("Text with ⟦0⟧ tail."); // one atom, not a fragment plus loose prose
+  expect(masked).not.toContain("`"); // no backtick survives as editable text
+  expect(m.unmask(masked)).toBe(src);
+});
+
+// The closer is the first run of EXACTLY the opener's length, so a longer run inside the span is
+// content. A closer-length test alone would end the span at the last two of the three backticks.
+test("createMasker: a longer backtick run inside a span is content, not the closer", () => {
+  const m = createMasker();
+  const src = "Text with ``a ```b``` c`` tail.";
+  const masked = m.mask(src);
+  expect(masked).toBe("Text with ⟦0⟧ tail.");
+  expect(m.unmask(masked)).toBe(src);
+});
+
+test("createMasker: a single-backtick span masks exactly as it did before", () => {
+  const m = createMasker();
+  const src = "Run `bun test src`, then read the `--help` line.";
+  expect(m.mask(src)).toBe("Run ⟦0⟧, then read the ⟦1⟧ line.");
+});
+
 // ---- masksSurvived: mask-token multiset equality (the shared survival mechanism) ----
 test("masksSurvived: an identical token multiset survives a heavy reword around it", () => {
   // simplify rewrites prose freely; only the ⟦N⟧ spans must be reproduced unchanged.

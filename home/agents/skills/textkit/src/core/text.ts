@@ -222,7 +222,17 @@ export const hasOperational = (text: string): boolean =>
 // comment is deliberately ABSENT here: `<!-- label -->` … `<!-- /label -->` is a live anchor
 // grammar in this repo (mdstruct's MdRegion, the review/interact blocks), so blanking a
 // comment in a probe copy would erase structure distill is built to find.
-export const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
+//
+// The inline-code alternative spells CommonMark's matched-run rule. A span opens on a run of
+// backticks. It closes on the first run of exactly that length. Four guards keep both runs whole:
+// `(?<!`)` puts the opener at the head of its run, `[^`\n]` ends that run at the first content
+// character, and `(?<!`)\k<tick>(?!`)` fences the closer to the same length. A single-backtick pair
+// sliced the wider span instead — against `` a`b `` it opened on the first backtick, closed on the
+// inner one, and froze the fragment ` a`, leaving the rest of the span editable prose. A span still
+// stops at a newline, so a stray backtick cannot swallow the paragraphs below it. The run is a NAMED
+// group because VERBATIM_SPAN_RE composes this source behind another alternative, where a numbered
+// backreference would depend on how many groups lead it.
+export const MASK_RE = /!?\[\[[^\]]+\]\]|(?<!`)(?<tick>`+)[^`\n][^\n]*?(?<!`)\k<tick>(?!`)/g;
 
 // A markdown HTML comment, `<!-- … -->`. Lazily closed at the FIRST `-->`, so two comments on
 // one line are two spans, and `[\s\S]` lets one comment span lines. An unclosed `<!--` matches
@@ -245,7 +255,9 @@ const HTML_COMMENT = String.raw`<!--[\s\S]*?-->`;
 // Composed from MASK_RE.source rather than respelled, so the reference-span half can never
 // drift from MASK_RE. The comment alternative leads, though the three alternatives open on
 // disjoint characters (`<`, `!`/`[`, a backtick), so no position can match two: a comment
-// holding a wikilink masks whole, and a wikilink is never carved out of a comment.
+// holding a wikilink masks whole, and a wikilink is never carved out of a comment. MASK_RE's
+// code-span backreference names its group, so composing it behind another alternative keeps it
+// bound; a numbered backreference would shift the moment a leading alternative grew a group.
 export const VERBATIM_SPAN_RE = new RegExp(`${HTML_COMMENT}|${MASK_RE.source}`, "g");
 
 // Deterministic typographic normalization — owned by kernel/typography.ts (the

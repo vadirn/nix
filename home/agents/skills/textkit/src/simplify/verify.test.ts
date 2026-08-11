@@ -78,6 +78,20 @@ test("verify: an invented span (not in the source) is drift", () => {
   expect(verifyClean(r)).toBe(false);
 });
 
+// A double-backtick span is ONE atom on this axis, the same atom the masker freezes. Under the old
+// single-pair spelling the axis sliced it into two fragments and compared invented spans on both
+// sides, so a restyle could rework the middle of the span and still read clean.
+test("verify: a double-backtick span is one atom, and rewording inside it is drift", () => {
+  const src = "# Title\n\nThe masker freezes `` a`b `` whole.";
+  const kept = "# Title\n\nThe masker freezes `` a`b `` as one atom.";
+  const clean = verify(src, kept);
+  expect(clean.spans.original).toBe(1); // one span, not the two fragments a single pair carved
+  expect(clean.spans.ok).toBe(true);
+  const reworded = verify(src, "# Title\n\nThe masker freezes `` a`c `` whole.");
+  expect(reworded.spans.dropped).toEqual(["`` a`b ``"]);
+  expect(reworded.spans.invented).toEqual(["`` a`c ``"]);
+});
+
 test("verify: the nested-fence truncation — a naive extractor stops at the inner fence", () => {
   // The likely real failure: the rewrite kept every reference span up to the code block, then a
   // naive `## Rewrite` extractor closed early on the inner ``` and dropped the block and the tail.
