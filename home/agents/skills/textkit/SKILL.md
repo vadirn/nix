@@ -7,12 +7,12 @@ description: A text-processing engine shipping four headless CLIs over one share
 
 An umbrella over four standalone headless CLIs that share one text-processing core (`src/core/`: the model transports, frontmatter/text utilities, and the writing passes). Each CLI is a separate binary on PATH via `.local/bin/`. Each resolves its own provider key lazily through its `bin/` wrapper — env, then the macOS Keychain, then Doppler (`doppler run --project claude-code --config std --`). `simplify-verify` is deterministic and needs no key.
 
-| CLI               | What it does                                                                                 | Input                          | Output |
-| ----------------- | -------------------------------------------------------------------------------------------- | ------------------------------ | ------ |
-| `distill-text`    | Re-express a note as a typed, span-anchored knowledge graph; abstractive compression         | an expository/how-to note      | a canonical note projected in seven sections, applied back to source after review |
-| `card-stage`      | Stage extraction candidates from an already-distilled note as review packets                 | a distilled note (a file path) | one staging file per candidate under a card-staging inbox |
-| `simplify-text`   | Analyze a note against the Simplified style; one restyle pass, then a guard; applies nothing | any markdown note              | a markdown brief on stdout — Verdict, Cut, Change, Shape, Keep, Borderline, Rewrite, Guard |
-| `simplify-verify` | Gate a proposed restyle against the original; reference spans and structure must survive     | an original note + a rewrite   | a spans/headings/fences report; a nonzero exit blocks the apply |
+| CLI               | What it does                                                                                                   | Input                          | Output |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------ |
+| `distill-text`    | Re-express a note as a typed, span-anchored knowledge graph; abstractive compression                           | an expository/how-to note      | a canonical note projected in seven sections, applied back to source after review |
+| `card-stage`      | Stage extraction candidates from an already-distilled note as review packets                                   | a distilled note (a file path) | one staging file per candidate under a card-staging inbox |
+| `simplify-text`   | Analyze a note against the Simplified style; up to three gated restyle attempts, then a guard; applies nothing | any markdown note              | a markdown brief on stdout — Verdict, Cut, Change, Shape, Keep, Borderline, Rewrite, Guard |
+| `simplify-verify` | Gate a proposed restyle against the original; reference spans and structure must survive                       | an original note + a rewrite   | a spans/headings/fences report; a nonzero exit blocks the apply |
 
 `distill-text` is the primary tool and carries the bulk of this doc. `card-stage`, `simplify-text`, and `simplify-verify` are documented after it.
 
@@ -122,7 +122,7 @@ card-stage --help                                 # full CLI surface
 
 # simplify-text
 
-`simplify-text` analyzes a markdown note against the Simplified output style. It applies nothing — it prints a brief, and the skill's subagent applies the rewrite. So the input file is never touched here. It masks verbatim spans first, so wikilinks, embeds, inline code, and `<!-- HTML comments -->` pass through untouched. A comment is masked because a template copies it into every note it creates, so restyling each copy separately makes them diverge. It reuses distill's writing-core (`src/core/writing/mask.ts`), so it duplicates no logic. It runs one strong restyle pass, then a deterministic guard over the rewrite. The pass runs on qwen-flash (DashScope), with a deepseek-v4-flash fallback. It auto-detects the language and picks the EN or RU ruleset; `--lang` forces one.
+`simplify-text` analyzes a markdown note against the Simplified output style. It applies nothing — it prints a brief, and the skill's subagent applies the rewrite. So the input file is never touched here. It masks verbatim spans first, so wikilinks, embeds, inline code, and `<!-- HTML comments -->` pass through untouched. A comment is masked because a template copies it into every note it creates, so restyling each copy separately makes them diverge. It reuses distill's writing-core (`src/core/writing/mask.ts`), so it duplicates no logic. It runs up to three restyle attempts, gating each one the way `simplify-verify` does. A deterministic guard then reads the surviving rewrite. The pass runs on gpt-5.6-luna, with a gpt-5.4-mini fallback. It auto-detects the language and picks the EN or RU ruleset; `--lang` forces one.
 
 The brief is markdown with seven sections: Verdict, Cut, Change, Shape, Keep, Borderline, Rewrite. The `## Rewrite` section is fenced and holds the whole restyled note. It is the ONLY section the subagent applies; the rest are read-only rationale. A trailing `## Guard` section checks masks, code spans, name typos, sentence length, and list structure. Guard findings are advisory — they ride the report and never change the exit code. The product is the brief, so a model call that fails after the fallback exits nonzero rather than shipping the input.
 
@@ -133,7 +133,7 @@ simplify-text --lang ru input.md     # force the Russian rubric (default: auto-d
 simplify-text --help                 # full CLI surface
 ```
 
-Exit codes: **0** brief printed · **1** missing key · **2** usage error · **3** empty input · **4** analysis failed (both models exhausted) · **5** the apply-gate could not run (the `mdstruct` binary is missing or stale — rebuild it). The source is parsed before the first model call, so exit 5 costs no tokens. Needs `DASHSCOPE_API_KEY` (the wrapper resolves it from Doppler, `claude-code/std`).
+Exit codes: **0** brief printed · **1** missing key · **2** usage error · **3** empty input · **4** analysis failed (both models exhausted) · **5** the apply-gate could not run (the `mdstruct` binary is missing or stale — rebuild it). The source is parsed before the first model call, so exit 5 costs no tokens. Needs `OPENAI_API_KEY` (the wrapper resolves it from Doppler, `claude-code/std`).
 
 ---
 
