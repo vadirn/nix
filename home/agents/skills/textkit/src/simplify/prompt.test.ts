@@ -88,9 +88,30 @@ test("SHAPE names a countable trigger, so it competes with the cap it used to lo
   // "a PROSE sequence" is a judgment standing next to "at most 20 words", which is a measurement.
   // The unmeasured rule lost every time. Both rulesets now define the threshold outright.
   expect(SIMPLIFY_RULESET_EN).toContain("three or more parallel actions");
-  expect(SIMPLIFY_RULESET_EN).toContain("fewer than three stays prose");
+  expect(SIMPLIFY_RULESET_EN).toContain("a pair stays prose");
   expect(SIMPLIFY_RULESET_RU).toContain("тремя и более параллельными действиями");
-  expect(SIMPLIFY_RULESET_RU).toContain("меньше трёх остаётся прозой");
+  expect(SIMPLIFY_RULESET_RU).toContain("пара остаётся прозой");
+});
+
+test("SHAPE binds the list's item count to the source's members, in both languages", () => {
+  // A stated threshold was not enough: given a pair, the rule reached for a third member instead of
+  // leaving prose alone. Across thirteen restyled notes it invented a consequence, split a
+  // benefit/cost pair into flat siblings, and followed "fixes two things" with three bullets. So the
+  // count is now a contract — one item per source member, and no member may be created or divided.
+  expect(SIMPLIFY_RULESET_EN).toContain("exactly that many items, one per member");
+  expect(SIMPLIFY_RULESET_EN).toContain("Never invent a member to reach three");
+  expect(SIMPLIFY_RULESET_RU).toContain("ровно столько пунктов, по одному на член");
+  expect(SIMPLIFY_RULESET_RU).toContain("Не придумывай член ради третьего пункта");
+});
+
+test("SHAPE excludes a relation, and holds a counting word to its count", () => {
+  // The other half of the same failure: a contrast ("a live problem rather than a solved one") came
+  // back as two flat bullets, and splitting a pair left "both facts" and "Both sides" pointing at
+  // three and four items. A relation is not a sequence, and a counting word fixes the count.
+  expect(SIMPLIFY_RULESET_EN).toContain("is a relation, not a sequence");
+  expect(SIMPLIFY_RULESET_EN).toContain("keep that word and match its count");
+  expect(SIMPLIFY_RULESET_RU).toContain("это отношение, а не перечисление");
+  expect(SIMPLIFY_RULESET_RU).toContain("сохрани это слово и совпади с ним");
 });
 
 test("simplifyPrompt: neither the ruleset nor the schema invites adding a heading", () => {
@@ -155,39 +176,93 @@ test("simplifyPrompt: over-cap findings ride into the prompt; a clean source car
   expect(simplifyPrompt("x ⟦0⟧ y", "en")).not.toContain("LENGTH CHECK");
 });
 
-test("shapeHint: names each enumerating sentence, or nothing when the source enumerates none", () => {
-  // empty in → no hint, so a source with no sequence leaves the no-op clause to govern alone
-  expect(shapeHint([], "en")).toBe("");
+test("shapeHint: names each confirmed sentence, and states the scan's reach as a floor", () => {
   const seqs = [{ sentence: "It reads, extracts, classifies, and verdicts.", members: 4 }];
   const en = shapeHint(seqs, "en");
   expect(en).toContain("SHAPE CHECK");
-  expect(en).toContain("3 or more members"); // SEQ_MIN surfaced in the instruction
+  expect(en).toContain("3 or more grammatically parallel members"); // SEQ_MIN surfaced
   expect(en).toContain("(4 members) It reads, extracts, classifies, and verdicts.");
-  // framed as candidates with a REASON required, because a sequence is often right left as prose —
-  // the enumeration may already appear nearby as a diagram or a table, which the scan cannot see
-  expect(en).toContain("note it in `borderline` with the reason");
+  expect(en).toContain("The scan confirmed these sentences");
+  expect(en).toContain("one item per source member");
+  // the reported count runs high when the last member is itself a series, so it is a floor to check,
+  // never the item count to build to
+  expect(en).toContain("recount before you build");
+  // a decline needs a REASON, because a sequence is often right left as prose — the enumeration may
+  // already appear nearby as a diagram or a table, which the scan cannot see
+  expect(en).toContain("`borderline` with the reason");
+  // a list that repeats a frozen span is a hard apply-gate block, so it declines instead
+  expect(en).toContain("repeat a ⟦N⟧ token");
+  // NOT closed. The worklist was "Convert no other sentence" and that banned Russian outright — no
+  // Russian comma series is ever confirmed, so the closed form suppressed the rule wholesale there.
+  expect(en).toContain("a floor, not a boundary");
+  expect(en).not.toContain("Convert no other sentence");
+});
+
+test("shapeHint: a source with no confirmed sequence gets the scan's limits, not a ban", () => {
+  // shapeHint still departs from capHint by always riding: an absent LENGTH finding means nothing to
+  // split, while SHAPE silence would leave the ruleset's rule standing alone as an unbounded
+  // principle. What it must NOT do is claim the source has no sequence — the scan reads two forms,
+  // and a source may enumerate in a third.
+  const en = shapeHint([], "en");
+  expect(en).toContain("The scan confirmed no such sentence");
+  expect(en).toContain("a floor, not a boundary");
+  expect(en).not.toContain("build no new list");
+  const ru = shapeHint([], "ru");
+  expect(ru).toContain("не подтвердила ни одного такого предложения");
+  expect(ru).not.toContain("новых списков не строй");
+  expect(ru).not.toContain("SHAPE CHECK");
 });
 
 test("shapeHint: the Russian hint uses Russian framing, not a port of the English one", () => {
   const ru = shapeHint([{ sentence: "Он читает, разбирает и решает.", members: 3 }], "ru");
   expect(ru).toContain("ПРОВЕРКА ФОРМЫ");
   expect(ru).toContain("«borderline»");
+  expect(ru).toContain("Эти предложения проверка подтвердила");
   expect(ru).not.toContain("SHAPE CHECK");
 });
 
-test("simplifyPrompt: both pre-hints ride together, each gated on its own findings", () => {
+test("shapeHint: both languages carry the same contract, in both branches", () => {
+  // The scan reaches Russian less far, because Russian writes «А, Б и В» with no comma before "и" and
+  // the series form requires that comma. That is a fact about what the scan CONFIRMS, so it must not
+  // leak into what the two contracts PERMIT — a per-language ban would make the tool behave
+  // differently by language. Every invariant clause therefore appears in all four hints.
+  const seq = { sentence: "x, y, and z.", members: 3 };
+  const clauses = {
+    en: [
+      "a floor, not a boundary",
+      "grammatically parallel",
+      "is a relation, so keep it prose",
+      "Never invent a member",
+      "`borderline` with the reason",
+    ],
+    ru: [
+      "нижняя граница, а не предел",
+      "грамматически параллельных",
+      "это отношение, поэтому оставь его прозой",
+      "Не придумывай член",
+      "«borderline» с причиной",
+    ],
+  } as const;
+  for (const lang of ["en", "ru"] as const)
+    for (const hint of [shapeHint([], lang), shapeHint([seq], lang)])
+      for (const clause of clauses[lang]) expect(hint).toContain(clause);
+});
+
+test("simplifyPrompt: both pre-hints ride, and only the length one is gated on findings", () => {
   const overCap = { sentence: "This one sentence is deliberately over the cap.", words: 21 };
   const seq = { sentence: "It reads, extracts, and verdicts.", members: 3 };
   const both = simplifyPrompt("x ⟦0⟧ y", "en", [overCap], [seq]);
   expect(both).toContain("LENGTH CHECK");
-  expect(both).toContain("SHAPE CHECK");
-  // each is independent: a source long-but-unenumerating gets one hint, not both
-  const lengthOnly = simplifyPrompt("x ⟦0⟧ y", "en", [overCap]);
-  expect(lengthOnly).toContain("LENGTH CHECK");
-  expect(lengthOnly).not.toContain("SHAPE CHECK");
+  expect(both).toContain("The scan confirmed these sentences");
+  // LENGTH is gated: a source within the cap gets no length block, and no dangling scaffolding
   const shapeOnly = simplifyPrompt("x ⟦0⟧ y", "en", [], [seq]);
-  expect(shapeOnly).toContain("SHAPE CHECK");
   expect(shapeOnly).not.toContain("LENGTH CHECK");
+  // SHAPE always rides. With no sequences it reports what the scan could not confirm, because that
+  // report is what bounds the rule — silence would leave it an unbounded principle
+  const noSeq = simplifyPrompt("x ⟦0⟧ y", "en", [overCap]);
+  expect(noSeq).toContain("LENGTH CHECK");
+  expect(noSeq).toContain("The scan confirmed no such sentence");
+  expect(noSeq).not.toContain("The scan confirmed these sentences");
 });
 
 test("resolveLang: auto-detects by script, and an explicit override wins", () => {

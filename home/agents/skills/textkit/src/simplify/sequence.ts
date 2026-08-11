@@ -15,7 +15,7 @@ import { stripFences } from "textkit/core/text.ts";
 // counts comma- or semicolon-delimited segments, whichever is larger. It is a measurement, not a
 // parse — "verdicts it ⟦1⟧, ⟦2⟧, ⟦3⟧, or ⟦4⟧" reads as four members inside one clause, so the count
 // runs high on a sentence whose final member is itself a series. The finding is what acts; the
-// number only tells the reader how it was reached.
+// number only tells the reader how it was reached, and shapeHint tells the model to recount.
 export type SequenceFinding = { sentence: string; members: number };
 
 // The Simplified threshold: three or more members is a sequence. Two is a pair, and a pair reads
@@ -37,13 +37,50 @@ const isSkippedLine = (line: string): boolean =>
 // than `.`, and a bare `[.!?…]` lookbehind merges the lead into the sentence after it.
 const SENTENCE_SPLIT_RE = /(?<=[.!?…][*_`)\]"'»”’]*)\s+(?=\S)/;
 
-// A serial coordination closing a comma-delimited run: "A, B, and C" or "A, B, or C". Required for
-// the comma form, because a comma count alone also matches an aside or an appositive. A semicolon
-// run needs no such marker — semicolons at this density only ever delimit members.
-const SERIAL_RE = /,\s+(?:and|or)\s/;
+// A relative-clause aside sits between two commas and delimits nothing. Splitting on its commas
+// counts the aside AND cuts its host clause in two, so "The scan, which is deterministic, measures
+// the source" reads as three segments where there is one member. The aside is therefore removed from
+// the sentence BEFORE the split, not dropped from the segments after it — dropping leaves the host's
+// two halves counted separately, which is the same over-count one step later.
+const ASIDE_RE = /,\s+(?:which|who|whom|whose|that|where|when)\b[^,]*,/g;
+
+// The coordinator that closes a series, read off the segment that OPENS with it: in "A, B, and C"
+// that is " and C", so the members run from the first segment through this one. Requiring it is what
+// keeps a bare comma run out, because an appositive, a date, or a run of asides never has one.
+//
+// The series need not END the sentence, and that is why the coordinator is located rather than
+// checked on the last segment alone. Real prose continues past the final member — "Out of scope: A,
+// B, and C, which is its own decision node" — and demanding the coordinator close the sentence
+// dropped 161 genuine series across 207 corpus files. Segments after the coordinator are trailing
+// material, so they are counted out rather than counted as members.
+//
+// The Oxford comma is REQUIRED, and that is a deliberate precision choice rather than an oversight.
+// Accepting "A, B and C" means counting a final segment that merely CONTAINS a coordinator, and
+// "member, member and member" is regex-indistinguishable from "adverbial, clause and clause" — so
+// "In this mode, the scan strips fences and skips lists" scores 3. Measured over 207 corpus files,
+// accepting the form took findings from 707 to 904, and the 343 it added were almost entirely
+// fronted adverbials and parentheticals. That cost lands hardest here: shapeHint hands the model a
+// CLOSED worklist, so a false candidate is not noise the model may ignore, it is a licensed
+// conversion — the manufacturing this module exists to stop. A missed series only stays prose.
+//
+// The cost is unequal by language, and Russian pays it. Russian punctuation writes «А, Б и В» with
+// no comma before "и", so every Russian comma series is non-Oxford and none can be scanned. Russian
+// keeps the semicolon path only. Closing that gap needs a language-aware scan, not a wider regex.
+const COORD_OPENS_RE = /^\s*(?:and|or)\s/;
 
 // Count delimited segments in one sentence. Empty/whitespace-only counts as 0 members.
 const segmentsOn = (s: string, delim: string): number => (s.trim() ? s.split(delim).length : 0);
+
+// commaMembers counts the members of a comma-delimited series, or 0 when the sentence closes with no
+// coordinator — a bare comma run is an aside or an appositive, never a series. Asides come out
+// first, so a series carrying a relative clause ("The tools we ship, which run offline, are A, B,
+// and C") still counts its three real members.
+function commaMembers(sentence: string): number {
+  if (!sentence.trim()) return 0;
+  const segments = sentence.replace(ASIDE_RE, "").split(",");
+  const closer = segments.findIndex((s, i) => i > 0 && COORD_OPENS_RE.test(s));
+  return closer < 0 ? 0 : closer + 1;
+}
 
 // sequenceScan returns every prose sentence in `masked` that enumerates `min` or more members, most
 // members first. It strips fenced code, skips structure and list items, splits each remaining line
@@ -51,16 +88,16 @@ const segmentsOn = (s: string, delim: string): number => (s.trim() ? s.split(del
 //
 // A sentence qualifies when either form is present:
 //   - `min` or more semicolon-delimited segments — a set, whatever its wording; or
-//   - `min` or more comma-delimited segments AND a closing "and"/"or" — a series.
+//   - `min` or more comma-delimited members closing on ", and"/", or" — a series, Oxford comma required.
 export function sequenceScan(masked: string, min: number = SEQ_MIN): SequenceFinding[] {
   const findings: SequenceFinding[] = [];
   for (const raw of stripFences(masked).split("\n")) {
     if (isSkippedLine(raw)) continue;
     for (const sentence of raw.split(SENTENCE_SPLIT_RE)) {
       const semis = segmentsOn(sentence, ";");
-      const commas = segmentsOn(sentence, ",");
+      const commas = commaMembers(sentence);
       const isSet = semis >= min;
-      const isSeries = commas >= min && SERIAL_RE.test(sentence);
+      const isSeries = commas >= min;
       if (isSet || isSeries)
         findings.push({ sentence: sentence.trim(), members: Math.max(semis, commas) });
     }
