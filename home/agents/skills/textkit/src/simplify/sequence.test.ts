@@ -86,8 +86,9 @@ test("sequenceScan: the threshold is overridable, so a pair scans as a sequence 
 
 test("sequenceScan: the Oxford comma is required, so a bare 'A, B and C' is not a candidate", () => {
   // Deliberate under-reach. Counting a final segment that merely CONTAINS a coordinator makes
-  // "member, member and member" indistinguishable from "adverbial, clause and clause": over 207
-  // corpus files it took findings 707 → 904, and the 343 added were almost all fronted adverbials.
+  // "member, member and member" indistinguishable from "adverbial, clause and clause": over the
+  // repo's 383 markdown files (`git ls-files '*.md'`) it took findings 562 → 971, and samples
+  // totalling 49 of the 409 added held no series — nearly all opened with a subordinate clause.
   // A false candidate is worse than a missed one here, because shapeHint's worklist is CLOSED — a
   // false candidate is a licensed conversion, while a missed series only stays prose.
   expect(sequenceScan("It reads, extracts and verdicts.")).toEqual([]);
@@ -99,8 +100,9 @@ test("sequenceScan: the Oxford comma is required, so a bare 'A, B and C' is not 
 
 test("sequenceScan: a series may carry trailing material after its last member", () => {
   // Real prose keeps going past the final member. Demanding the coordinator close the SENTENCE
-  // dropped 161 genuine series across 207 corpus files, so the coordinator is located instead and
-  // whatever follows it is trailing material, counted out rather than counted as a member.
+  // drops 70 genuine series across the repo's 383 markdown files, so the coordinator is located
+  // instead and whatever follows it is trailing material, counted out rather than counted as a
+  // member.
   const found = sequenceScan(
     "Out of scope: nested-indent rewriting, ordered renumbering, and the line-ending question, which is its own decision node.",
   );

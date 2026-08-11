@@ -48,19 +48,26 @@ const ASIDE_RE = /,\s+(?:which|who|whom|whose|that|where|when)\b[^,]*,/g;
 // that is " and C", so the members run from the first segment through this one. Requiring it is what
 // keeps a bare comma run out, because an appositive, a date, or a run of asides never has one.
 //
+// Every count below comes from one corpus, so a later reader can re-run it: `bun run
+// measure:oxford`, which scans the markdown `git ls-files '*.md'` returns at the repo root — 383
+// files when this was measured, on 2026-08-11 — each read the way runSimplify reads it, body only
+// and masked. Keep a number here reproducible by that script. The figures these replaced gave a
+// file count and no selector, so nobody could recheck them, and their arithmetic drifted unnoticed.
+//
 // The series need not END the sentence, and that is why the coordinator is located rather than
 // checked on the last segment alone. Real prose continues past the final member — "Out of scope: A,
 // B, and C, which is its own decision node" — and demanding the coordinator close the sentence
-// dropped 161 genuine series across 207 corpus files. Segments after the coordinator are trailing
-// material, so they are counted out rather than counted as members.
+// drops 70 genuine series. Segments after the coordinator are trailing material, so they are
+// counted out rather than counted as members.
 //
 // The Oxford comma is REQUIRED, and that is a deliberate precision choice rather than an oversight.
 // Accepting "A, B and C" means counting a final segment that merely CONTAINS a coordinator, and
 // "member, member and member" is regex-indistinguishable from "adverbial, clause and clause" — so
-// "In this mode, the scan strips fences and skips lists" scores 3. Measured over 207 corpus files,
-// accepting the form took findings from 707 to 904, and the 343 it added were almost entirely
-// fronted adverbials and parentheticals. That cost lands hardest here: shapeHint hands the model a
-// CLOSED worklist, so a false candidate is not noise the model may ignore, it is a licensed
+// "In this mode, the scan strips fences and skips lists" scores 3. Accepting the form takes findings
+// from 562 to 971. Every one of those 409 is a new candidate, because the strict scan's findings all
+// survive it, and two samples totalling 49 of them turned up no genuine series — nearly all open
+// with a subordinate clause or an adverbial. That cost lands hardest here: shapeHint hands the model
+// a CLOSED worklist, so a false candidate is not noise the model may ignore, it is a licensed
 // conversion — the manufacturing this module exists to stop. A missed series only stays prose.
 //
 // The cost is unequal by language, and Russian pays it. Russian punctuation writes «А, Б и В» with
