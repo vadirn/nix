@@ -25,7 +25,7 @@ import {
   resolveInteract,
   stripInteract,
 } from "textkit/distill/review/interact.ts";
-import type { MdRegion, RegionDiagnostic } from "textkit/distill/mdstruct.ts";
+import type { MdRegion, RegionDiagnostic } from "textkit/core/mdstruct.ts";
 
 const FIX = (name: string): string =>
   readFileSync(resolve(import.meta.dir, "..", "..", "fixtures", name), "utf8");

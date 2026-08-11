@@ -1,7 +1,9 @@
 // simplify/guard tests — the five advisory axes on synthetic input/rewrite pairs: mask survival,
 // fenced-code intactness, name corruption against source, the word-cap scan, and list structure
 // (kind flip, a new block under the member floor, and structure the scan could not confirm). Plus
-// guardClean and the formatGuard rendering. Pure, offline.
+// guardClean and the formatGuard rendering. Offline, but not process-free: the code, sentences, and
+// lists axes read mdstruct's node tree, so the binary must be on PATH (the nix host has it at
+// /etc/profiles/per-user/vadim/bin/mdstruct).
 import { expect, test } from "bun:test";
 import { type GuardInput, formatGuard, guardClean, runGuard } from "textkit/simplify/guard.ts";
 
@@ -44,6 +46,92 @@ test("runGuard: a reworded fenced block fails the code axis", () => {
   // ⟦1⟧ still present (masks ok), but the block bytes changed
   expect(r.masks.ok).toBe(true);
   expect(r.code.ok).toBe(false);
+});
+
+test("runGuard: a fence inside a blockquote is a code block, and rewording it fails the axis", () => {
+  // The line scan never saw an unprefixed marker on `> ```js`, so a quoted block reached this axis
+  // as prose and any reword passed. mdstruct parses it as blockQuote → codeBlock.
+  const quoted = "> ```js\n> const a = 1;\n> ```";
+  const base = {
+    ...clean,
+    source: "a quoted block",
+    maskedInput: `Before.\n\n${quoted}\n\nAfter.`,
+    rewriteUnmasked: "Before. After.",
+  };
+  const kept = runGuard({ ...base, rewriteMasked: `Before.\n\n${quoted}\n\nAfter.` });
+  expect(kept.code).toEqual({ ok: true, source: 1, rewrite: 1 });
+  const reworded = runGuard({
+    ...base,
+    rewriteMasked: "Before.\n\n> ```js\n> const b = 2;\n> ```\n\nAfter.",
+  });
+  expect(reworded.code.ok).toBe(false);
+});
+
+test("runGuard: a nested sublist opens its own block, so a two-item sublist trips SHORT", () => {
+  // The undercount listBlockSizes admitted in its own comment: the line scan merged `  - nested`
+  // into the parent run and read one block of five, missing the two-item sublist under the floor.
+  // The parser puts a `list` inside the parent's `listItem`, so the sublist is its own block.
+  const r = runGuard({
+    ...clean,
+    source: "three steps",
+    maskedInput: "1. first\n2. second\n3. third",
+    rewriteMasked: "1. first\n2. second\n   - nested one\n   - nested two\n3. third",
+    rewriteUnmasked: "1. first\n2. second\n   - nested one\n   - nested two\n3. third",
+  });
+  expect(r.list.source).toEqual({ ordered: 3, unordered: 0 });
+  expect(r.list.rewrite).toEqual({ ordered: 3, unordered: 2 });
+  expect(r.list.short).toEqual({ source: 0, rewrite: 1 });
+  expect(r.list.unconfirmed).toEqual({ blocks: 1, items: 2, candidates: 0, budget: 0 });
+  expect(formatGuard(r)).toContain("- lists: SHORT");
+  expect(formatGuard(r)).not.toContain("- lists: FLIP");
+});
+
+test("runGuard: a `- - -` break splits a list run in two rather than counting as an item", () => {
+  // The parse settles what the old exclusion handled by hand: CommonMark gives a thematic break
+  // precedence over a list item, so the run becomes two one-item lists and the break is neither.
+  const r = runGuard({
+    ...clean,
+    source: "two lists",
+    maskedInput: "- p\n\n- - -\n\n- q",
+    rewriteMasked: "- p\n\n- - -\n\n- q",
+    rewriteUnmasked: "- p\n\n- - -\n\n- q",
+  });
+  expect(r.list.rewrite).toEqual({ ordered: 0, unordered: 2 });
+  expect(r.list.short).toEqual({ source: 2, rewrite: 2 });
+});
+
+test("runGuard: a blank-line-separated list run is one loose list, not two blocks", () => {
+  // CommonMark keeps a blank line inside a list run LOOSE, not a new list — mdstruct emits one
+  // `list` node holding all four items, so short.source is 0 (a four-item block clears SEQ_MIN).
+  // That low source block count is what makes SHORT strict: a rewrite that genuinely splits the
+  // run (real content between the halves) now shows two NEW short blocks, and UNCONFIRMED shows
+  // one block added beyond what the scan confirmed.
+  const r = runGuard({
+    ...clean,
+    source: "a loose list",
+    maskedInput: "- a\n- b\n\n- c\n- d",
+    rewriteMasked: "- a\n- b\n\nSplit note.\n\n- c\n- d",
+    rewriteUnmasked: "- a\n- b\n\nSplit note.\n\n- c\n- d",
+  });
+  expect(r.list.source).toEqual({ ordered: 0, unordered: 4 });
+  expect(r.list.short).toEqual({ source: 0, rewrite: 2 });
+  expect(r.list.unconfirmed).toEqual({ blocks: 1, items: 0, candidates: 0, budget: 0 });
+  expect(r.list.ok).toBe(false);
+});
+
+test("runGuard: a marker change mid-run splits into two lists, not one two-item block", () => {
+  // "- a" then "* b" changes the bullet character, so CommonMark starts a new list — mdstruct
+  // emits two `list` nodes of one item each, not one list of two. short.source is 2 (each
+  // one-item block sits under SEQ_MIN on its own), which a merged one-block reading would miss.
+  const r = runGuard({
+    ...clean,
+    source: "two markers",
+    maskedInput: "- a\n* b",
+    rewriteMasked: "- a\n* b",
+    rewriteUnmasked: "- a\n* b",
+  });
+  expect(r.list.source).toEqual({ ordered: 0, unordered: 2 });
+  expect(r.list.short).toEqual({ source: 2, rewrite: 2 });
 });
 
 test("runGuard: a corrupted proper name is flagged against the source", () => {

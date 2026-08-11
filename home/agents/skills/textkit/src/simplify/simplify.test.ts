@@ -1,7 +1,10 @@
 // simplify/simplify tests — the CLI surface as a pure argv→result function, and the runSimplify
 // pipeline driven through an injected `ask` fake (no network, no process-global mock). The fake
 // echoes the masked text back as the rewrite (a perfect no-op restyle), so mask survival and the
-// guard are exercised on real masking; targeted variants break one axis. Offline.
+// guard are exercised on real masking; targeted variants break one axis. Offline, though the
+// pipeline's apply-gate parses through the mdstruct binary, so it must be on PATH.
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { askJson, TransientError } from "@skills/llm/llm.ts";
 import { parseArgs, runSimplify, USAGE } from "textkit/simplify/simplify.ts";
@@ -44,6 +47,29 @@ test("parseArgs: `--` ends options so a dash-named file survives; a bare `-` is 
 test("USAGE names the exit codes and the no-apply contract", () => {
   expect(USAGE).toContain("APPLIES NOTHING");
   expect(USAGE).toContain("4 analysis failed");
+  expect(USAGE).toContain("5 the apply-gate could not run");
+});
+
+// ---- exit 5: the apply-gate could not run, before any model call (spawned, offline) ----
+
+test("main: a missing mdstruct binary exits 5 before the first model call, not 4", () => {
+  // The bin/ wrapper, so the deploy seam runs too. The keys are dummies pointing at no reachable
+  // provider, so ANY model call would fail and exit 4 — exit 5 is the proof the parse came first
+  // and no tokens were spent. MDSTRUCT_BIN names a path that does not exist.
+  const bin = join(import.meta.dir, "..", "..", "bin", "simplify-text");
+  const proc = Bun.spawnSync([bin, "-"], {
+    env: {
+      ...process.env,
+      LLM_KEYS_ENV_ONLY: "1",
+      DASHSCOPE_API_KEY: "test-dummy",
+      OPENAI_API_KEY: "test-dummy",
+      MDSTRUCT_BIN: join(tmpdir(), "no-such-mdstruct"),
+    },
+    stdin: Buffer.from("# Note\n\nA sentence worth restyling.\n"),
+  });
+  expect(proc.exitCode).toBe(5);
+  expect(proc.stdout.toString()).toBe("");
+  expect(proc.stderr.toString()).toContain("the apply-gate could not run");
 });
 
 // ---- runSimplify pipeline: injected `ask` fake ----

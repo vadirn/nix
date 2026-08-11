@@ -11,7 +11,7 @@ import { expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
 import { computeSource, type Edge, type Unit } from "textkit/distill/graph/graph.ts";
 import { locate } from "textkit/distill/extract/locate.ts";
-import { sliceBytes } from "textkit/distill/mdstruct.ts";
+import { sliceBytes } from "textkit/core/mdstruct.ts";
 import { projectMarkdown, type Projection } from "textkit/distill/graph/project.ts";
 
 const PATH = "widgets.md";

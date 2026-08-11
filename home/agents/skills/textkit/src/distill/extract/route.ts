@@ -7,7 +7,7 @@
 // compaction); low → re-author (compact prose). Deterministic and free — no LLM. Sits a
 // tier above harvest.ts + text.ts and never cycles back into them (text.ts re-exports
 // `sections` only as a compat shim for cards/).
-import { parseDoc, sliceBytes, walkHeadings, type Heading } from "textkit/distill/mdstruct.ts";
+import { parseDoc, sliceBytes, walkHeadings, type Heading } from "textkit/core/mdstruct.ts";
 import { DISPLAY_MATH_PATTERNS, structuralSpans } from "textkit/distill/extract/harvest.ts";
 import { wordCount } from "textkit/core/text.ts";
 

@@ -67,6 +67,9 @@ export type LinkInventory = {
 // line start opens; a run of 3+ of the SAME char closes. An opposite-marker run inside an open
 // fence is literal content, not a close — latching the opener is what stops segment() (and its
 // five siblings) from mis-toggling parity on a nested opposite fence and swallowing the tail.
+// `^\s*` matches the indentation, so a fence indented inside a list item is read fine. The real
+// blind spot is a fence inside a blockquote: the `>` marker sits before the backticks, `^\s*`
+// never matches past it, and the fence reads as plain prose.
 // Returns the next state and whether THIS line was a real fence marker (opener or closer);
 // callers that emit or skip marker lines branch on `isMarker`.
 export type FenceState = string | null;
@@ -136,13 +139,6 @@ export function stripFences(text: string): string {
   }
   return out.join("\n");
 }
-
-// A CommonMark thematic break line: up to three leading spaces, then three or more of the SAME
-// marker (`-`, `_`, or `*`), optionally space-separated, and nothing else. A `-`-only break under a
-// paragraph is also a valid setext underline; a caller that only COMPARES counts across two sides
-// lets that symmetric case cancel. Shared by the simplify apply-gate (which counts breaks as a
-// structure axis) and the guard (which excludes a `- - -` break from list-marker counting).
-export const THEMATIC_BREAK_RE = /^ {0,3}([-_*])(?:[ \t]*\1){2,}[ \t]*$/;
 
 // Render Blocks back to their `[id] text` display form, one blank line between blocks — the
 // inverse of segment()'s grouping, used to show a segmented note to a human or a prompt.
@@ -229,7 +225,17 @@ export const hasOperational = (text: string): boolean =>
 // comment is deliberately ABSENT here: `<!-- label -->` … `<!-- /label -->` is a live anchor
 // grammar in this repo (mdstruct's MdRegion, the review/interact blocks), so blanking a
 // comment in a probe copy would erase structure distill is built to find.
-export const MASK_RE = /!?\[\[[^\]]+\]\]|`[^`\n]+`/g;
+//
+// The inline-code alternative spells CommonMark's matched-run rule. A span opens on a run of
+// backticks. It closes on the first run of exactly that length. Four guards keep both runs whole:
+// `(?<!`)` puts the opener at the head of its run, `[^`\n]` ends that run at the first content
+// character, and `(?<!`)\k<tick>(?!`)` fences the closer to the same length. A single-backtick pair
+// sliced the wider span instead — against `` a`b `` it opened on the first backtick, closed on the
+// inner one, and froze the fragment ` a`, leaving the rest of the span editable prose. A span still
+// stops at a newline, so a stray backtick cannot swallow the paragraphs below it. The run is a NAMED
+// group because VERBATIM_SPAN_RE composes this source behind another alternative, where a numbered
+// backreference would depend on how many groups lead it.
+export const MASK_RE = /!?\[\[[^\]]+\]\]|(?<!`)(?<tick>`+)[^`\n][^\n]*?(?<!`)\k<tick>(?!`)/g;
 
 // A markdown HTML comment, `<!-- … -->`. Lazily closed at the FIRST `-->`, so two comments on
 // one line are two spans, and `[\s\S]` lets one comment span lines. An unclosed `<!--` matches
@@ -252,7 +258,9 @@ const HTML_COMMENT = String.raw`<!--[\s\S]*?-->`;
 // Composed from MASK_RE.source rather than respelled, so the reference-span half can never
 // drift from MASK_RE. The comment alternative leads, though the three alternatives open on
 // disjoint characters (`<`, `!`/`[`, a backtick), so no position can match two: a comment
-// holding a wikilink masks whole, and a wikilink is never carved out of a comment.
+// holding a wikilink masks whole, and a wikilink is never carved out of a comment. MASK_RE's
+// code-span backreference names its group, so composing it behind another alternative keeps it
+// bound; a numbered backreference would shift the moment a leading alternative grew a group.
 export const VERBATIM_SPAN_RE = new RegExp(`${HTML_COMMENT}|${MASK_RE.source}`, "g");
 
 // Deterministic typographic normalization — owned by kernel/typography.ts (the

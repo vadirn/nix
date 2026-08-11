@@ -1,6 +1,7 @@
 // simplify/sequence tests — the SHAPE scan on synthetic prose: it flags a serial run and a
 // semicolon set, holds its fire on a pair or a bare comma, and skips the structure a list must never
-// grow into. Pure, offline.
+// grow into. Offline, but not process-free: the scan reads mdstruct's node tree, so the binary must
+// be on PATH (the nix host has it at /etc/profiles/per-user/vadim/bin/mdstruct).
 import { expect, test } from "bun:test";
 import { sequenceScan } from "textkit/simplify/sequence.ts";
 
@@ -37,17 +38,47 @@ test("sequenceScan: a list item is skipped whole, so SHAPE never nests a list un
     expect(sequenceScan(`${marker}${sentence}`)).toEqual([]);
 });
 
-test("sequenceScan: headings, table rows, blockquotes, and fenced code never count as prose", () => {
+test("sequenceScan: headings, tables, blockquotes, and fenced code never count as prose", () => {
+  // Each block is what the PARSER calls it, so the scan needs no test of its own for any of them: a
+  // heading lives in `headings[]` and never enters a node walk, a table's cells hold no paragraph, a
+  // code block is not a paragraph, and a blockquote is skipped whole as a specimen KEEP freezes.
   const sentence = "It extracts every comment, classifies each one, and verdicts it.";
   const doc = [
     `# ${sentence}`, // heading
+    "",
     "```", // fenced code opener
     sentence, // code line — not prose
     "```",
-    `| ${sentence} | cell |`, // table row
+    "",
+    `| ${sentence} | cell |`, // a REAL table: the delimiter row below is what makes it one
+    "| --- | --- |",
+    `| ${sentence} | cell |`,
+    "",
     `> ${sentence}`, // blockquote — a quoted specimen KEEP freezes
   ].join("\n");
   expect(sequenceScan(doc)).toEqual([]);
+});
+
+test("sequenceScan: a literal pipe in prose is prose, so the series behind it is found", () => {
+  // The defect this closes: the old line scan dropped any line holding a `|`, commented "table row
+  // (or any cell-delimited line)". A sentence naming a CLI's two exit codes carries one, so real
+  // prose left the worklist. A pipe makes a table only with a delimiter row, which the parser knows
+  // and a per-line regex cannot.
+  const line = "The gate reads exit 0 | 1, then names the axis, the span, and the count.";
+  const found = sequenceScan(line);
+  expect(found).toHaveLength(1);
+  expect(found[0]!.sentence).toBe(line);
+  expect(found[0]!.members).toBe(4);
+});
+
+test("sequenceScan: a fence inside a blockquote or a list item is code, at any indent", () => {
+  // The old scan blanked a TOP-LEVEL fence only, so a blockquoted fence's body arrived as prose.
+  // Both forms are a `codeBlock` node here, and neither container yields a paragraph to this scan.
+  const sentence = "It extracts every comment, classifies each one, and verdicts it.";
+  const quoted = ["> ```js", `> ${sentence}`, "> ```"].join("\n");
+  const indented = ["- an item", "", "  ```sh", `  ${sentence}`, "  ```"].join("\n");
+  expect(sequenceScan(quoted)).toEqual([]);
+  expect(sequenceScan(indented)).toEqual([]);
 });
 
 test("sequenceScan: only the enumerating sentence on a line is flagged", () => {
@@ -87,8 +118,8 @@ test("sequenceScan: the threshold is overridable, so a pair scans as a sequence 
 test("sequenceScan: the Oxford comma is required, so a bare 'A, B and C' is not a candidate", () => {
   // Deliberate under-reach. Counting a final segment that merely CONTAINS a coordinator makes
   // "member, member and member" indistinguishable from "adverbial, clause and clause": over the
-  // repo's 383 markdown files (`git ls-files '*.md'`) it took findings 562 → 971, and samples
-  // totalling 49 of the 409 added held no series — nearly all opened with a subordinate clause.
+  // repo's 384 markdown files (`git ls-files '*.md'`) it took findings 565 → 979, and samples
+  // totalling 49 of the 414 added held no series — nearly all opened with a subordinate clause.
   // A false candidate is worse than a missed one here, because shapeHint's worklist is CLOSED — a
   // false candidate is a licensed conversion, while a missed series only stays prose.
   expect(sequenceScan("It reads, extracts and verdicts.")).toEqual([]);

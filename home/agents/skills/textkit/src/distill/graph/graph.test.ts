@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { computeSource, formatSpan, parseSpan, stampSha } from "textkit/distill/graph/graph.ts";
 import { stampHash } from "textkit/distill/review/execute.ts";
-import type { Span } from "textkit/distill/mdstruct.ts";
+import type { Span } from "textkit/core/mdstruct.ts";
 
 test("formatSpan emits the bare start..end notation", () => {
   expect(formatSpan([289, 442])).toBe("289..442");

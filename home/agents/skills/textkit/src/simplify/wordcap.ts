@@ -4,10 +4,12 @@
 // guard reports the count and the offenders; the CLI never fails on them.
 //
 // Scans the MASKED rewrite (a frozen ⟦N⟧ reference span counts as one referent, not its inner
-// words), skipping structure that is not prose: fenced code, headings, and table rows. Notes in
-// this corpus are unwrapped — one paragraph per line, per segment() — so a line-based scan does
-// not split a sentence across a hard wrap.
-import { stripFences } from "textkit/core/text.ts";
+// words), reading only what mdstruct parsed as a paragraph — so fenced code, headings, and table
+// cells never reach the count.
+//
+// The prose comes from proseParagraphs, and everything measured below is prose measurement that
+// stays here. The parser only decides which bytes are prose.
+import { proseParagraphs } from "textkit/simplify/prose.ts";
 
 // One over-cap prose sentence: its text and its word count. `words` always exceeds the cap.
 export type WordCapFinding = { sentence: string; words: number };
@@ -15,20 +17,18 @@ export type WordCapFinding = { sentence: string; words: number };
 // The Simplified cap: one idea per sentence, at most this many words.
 export const WORD_CAP = 20;
 
-// A line that is structure, not prose: a heading, a table row, or a blank/marker-only line.
-// Fenced code is already blanked by stripFences before this runs.
-const isStructureLine = (line: string): boolean =>
-  /^\s*#{1,6}\s/.test(line) || // heading
-  /\|/.test(line) || // table row (or any cell-delimited line)
-  line.trim() === "";
-
-// Strip a leading list marker, blockquote marker, or numbered-list prefix so the prose after it is
-// what gets counted — "- Run the thing." counts the sentence, not the bullet. A GFM task marker
-// (`[ ]`, `[x]`, `[X]`) is stripped too, but only when it follows a bullet or numbered prefix — the
-// anchor that preceding marker gives is what tells a checklist's `[ ]` apart from a bare `[ ]` opening
-// a line of prose, where the brackets may be a link reference and must stay in the count.
-const stripLeadingMarker = (line: string): string =>
-  line.replace(/^\s*(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|>\s?)+/, "");
+// The container blocks whose contents this scan never reads, as mdstruct node types. Only one
+// entry, and it is where this scan and sequence's policy diverge: a list is NOT skipped here,
+// because a list item's prose is prose the restyle may shorten, while sequence must never reach
+// into one. The parser hands that prose over already stripped — a list item's paragraph starts
+// after the marker and after the GFM task box, which is what retired the old marker strip.
+//
+// A blockquote is skipped because KEEP freezes a quoted specimen, so an over-cap sentence inside
+// one is a finding no rewrite is allowed to close. capHint hands the model each finding as "split
+// this", and the guard re-reports whatever is left, so a quoted long sentence used to ride as a
+// permanent finding that pointed at text the ruleset forbids touching. The old line scan measured
+// it because its marker-stripping helper treated `>` as one more marker to peel off.
+const FROZEN_BLOCKS = new Set(["blockQuote"]);
 
 // A sentence boundary: end punctuation, then any CLOSING inline markers, then whitespace. The
 // closers are load-bearing: the Simplified style writes bold leads, so a sentence routinely ends at
@@ -46,16 +46,18 @@ const wordsIn = (s: string): number => {
 };
 
 // wordCapScan returns every prose sentence in `masked` whose word count exceeds `cap`, longest
-// first. It strips fenced code and structure lines, drops leading list/quote markers, splits each
-// remaining line into sentences on end punctuation, and counts words. Total: never throws.
+// first. It reads mdstruct's paragraphs, skipping every blockquote, splits each into sentences on
+// end punctuation, and counts words.
+//
+// Not total: the parse throws MdstructUnavailableError when the binary cannot run. simplify-text
+// parses the source before its first model call and maps that class to exit 5, so the failure lands
+// before any token is spent.
 export function wordCapScan(masked: string, cap: number = WORD_CAP): WordCapFinding[] {
   const findings: WordCapFinding[] = [];
-  for (const raw of stripFences(masked).split("\n")) {
-    if (isStructureLine(raw)) continue;
-    const prose = stripLeadingMarker(raw);
+  for (const paragraph of proseParagraphs(masked, FROZEN_BLOCKS)) {
     // split on sentence-ending punctuation (plus any closing markers) followed by whitespace; the
     // trailing run (no closing punctuation) is still one sentence.
-    for (const sentence of prose.split(SENTENCE_SPLIT_RE)) {
+    for (const sentence of paragraph.split(SENTENCE_SPLIT_RE)) {
       const words = wordsIn(sentence);
       if (words > cap) findings.push({ sentence: sentence.trim(), words });
     }

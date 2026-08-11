@@ -22,7 +22,7 @@ import {
   stripTrailingAnchor,
 } from "textkit/distill/graph/graph.ts";
 import { fenceScan, type FenceState } from "textkit/core/text.ts";
-import type { Span } from "textkit/distill/mdstruct.ts";
+import type { Span } from "textkit/core/mdstruct.ts";
 
 // One `## ` section: its heading text (verbatim, e.g. "Concepts"), the body lines between the
 // heading and the next `## ` (or EOF), and the half-open line range [start, end). Fence-aware:

@@ -4,7 +4,7 @@
 // against each concept/procedure unit's located source slice; runProseGate matches the
 // harvested prose-list inventory (glm, batched). The deterministic loss-surface primitives
 // they build on (proseResidue et al.) live in residue.ts.
-import { sliceBytes, type Span } from "textkit/distill/mdstruct.ts";
+import { sliceBytes, type Span } from "textkit/core/mdstruct.ts";
 import { type Projection } from "textkit/distill/graph/project.ts";
 import {
   type ConceptVerdict,

@@ -9,11 +9,18 @@
 //   masks    — masksSurvived: every ⟦N⟧ reference span survived the rewrite (a heavy restyle
 //              changes line count and diff size by design, so ONLY mask-survival transfers from the
 //              spell verifier).
-//   code     — fenced code blocks (not masked, unlike inline spans) are intact as a multiset.
+//   code     — code blocks (not masked, unlike inline spans) are intact as a multiset. It reads
+//              mdstruct's `codeBlock` nodes, so a fence inside a blockquote is a block here — the
+//              latching line scan read that one as prose and passed a mangled quoted block.
 //   names    — nameLintAgainstSource: no proper name corrupted toward a source name or invented.
-//   sentences — wordCapScan: no prose sentence over the 20-word cap.
+//   sentences — wordCapScan: no prose sentence over the 20-word cap. It reads mdstruct's parse of
+//              the rewrite, so a blockquote's frozen specimen is never reported as an offender the
+//              restyle failed to close.
 //   lists    — three readings of one question: did the rewrite build list structure the source never
-//              licensed? (a) FLIP: a list KIND the source had (numbered or bulleted) still exists —
+//              licensed? All three read mdstruct's `list` and `listItem` nodes, so a nested sublist
+//              opens its own block and a `- - -` is a thematic break splitting a run, not a
+//              one-item list — both fall out of the parse with no exclusion to write.
+//              (a) FLIP: a list KIND the source had (numbered or bulleted) still exists —
 //              the observed numbered→bulleted over-split. (b) SHORT: no NEW block falls under the
 //              SEQ_MIN member floor. The ruleset builds a list only at three or more members, so a
 //              new two-item block is a violation with no judgment call in it. (c) UNCONFIRMED,
@@ -27,12 +34,14 @@
 //              manufactured list (4 of 4) at two false alarms, (b) named one at none. Together they
 //              caught two live defects in four ordinary vault notes — a cause-and-effect relation
 //              flattened into three siblings, and two 2-item lists built from a prose pair.
-//              (c) is English-only because the scan finds 1360 sequences across 913 English vault
-//              files and 5 across 251 Russian ones. With no budget to speak of it would fire on any
-//              Russian note that gains a list, which is noise, not a finding. The contract the model
+//              (c) is English-only because the scan finds 1268 sequences across 909 English vault
+//              files and 1 across 263 Russian ones — `bun run measure:oxford`, fed the vault's
+//              markdown on stdin, reports that split under `byLang`. With no budget to speak of it
+//              would fire on any Russian note that gains a list, which is noise, not a finding.
+//              The contract the model
 //              receives stays identical in both languages; only this measurement's reach differs,
 //              exactly as the scan's own reach does.
-import { THEMATIC_BREAK_RE, type FenceState, fenceScan, stripFences } from "textkit/core/text.ts";
+import { parseDoc, sliceBytes, walkNodes } from "textkit/core/mdstruct.ts";
 import { MASK_TOKEN_RE, masksSurvived } from "textkit/core/writing/mask.ts";
 import { type NameLintResult, nameLintAgainstSource } from "textkit/core/writing/name-lint.ts";
 import { type SequenceFinding, SEQ_MIN } from "textkit/simplify/sequence.ts";
@@ -94,34 +103,24 @@ export type GuardInput = {
 
 const countTokens = (s: string): number => (s.match(MASK_TOKEN_RE) ?? []).length;
 
-// fencedBlocks extracts every fenced code block (opener through closer, inclusive) from `text`,
-// using the shared latching fence scanner so an opposite-marker run inside a fence is literal
-// content, not a close. An unclosed fence yields its tail as one block. Compared as a multiset
-// between input and rewrite: masked forms on both sides, so a preserved block is byte-identical.
-function fencedBlocks(text: string): string[] {
+// codeBlocks extracts every code block from `text` as its exact bytes, opener through closer, by
+// slicing each `codeBlock` node's span. The parser reads a block wherever it sits, which the
+// latching line scan could not: a fence inside a blockquote never showed the scanner an unprefixed
+// marker, so a quoted block reached this axis as prose and a reworded one passed. An indented block
+// is a `codeBlock` too and now counts, which only widens what must survive. An unclosed fence still
+// parses as one block, swallowing its tail. Compared as a multiset between input and rewrite: masked
+// forms on both sides, so a preserved block is byte-identical.
+function codeBlocks(text: string): string[] {
+  const { doc, buf } = parseDoc(text);
   const blocks: string[] = [];
-  let cur: string[] | null = null;
-  let fence: FenceState = null;
-  for (const line of text.split("\n")) {
-    const inFence = fence !== null;
-    const scan = fenceScan(line, fence);
-    fence = scan.fence;
-    if (scan.isMarker && !inFence) {
-      cur = [line]; // opener
-    } else if (scan.isMarker && inFence) {
-      cur?.push(line);
-      if (cur) blocks.push(cur.join("\n")); // closer
-      cur = null;
-    } else if (cur) {
-      cur.push(line);
-    }
-  }
-  if (cur) blocks.push(cur.join("\n"));
+  walkNodes(doc.nodes, (n) => {
+    if (n.type === "codeBlock" && n.span) blocks.push(sliceBytes(buf, n.span));
+  });
   return blocks;
 }
 
 // multisetEqual reports whether two string arrays hold the same elements with the same
-// multiplicities (order-independent) — the fenced-block intactness test.
+// multiplicities (order-independent) — the code-block intactness test.
 function multisetEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const sa = [...a].sort();
@@ -129,55 +128,60 @@ function multisetEqual(a: string[], b: string[]): boolean {
   return sa.every((x, i) => x === sb[i]);
 }
 
-const ORDERED_ITEM_RE = /^\s*\d{1,9}[.)]\s/;
-const UNORDERED_ITEM_RE = /^\s*[-*+]\s/;
-
-// listMarkers counts list-item lines by kind, outside fenced code. A `- - -` (or `* * *`) thematic
-// break also matches the unordered pattern, so THEMATIC_BREAK_RE excludes it first — a horizontal
-// rule is not a one-item list. Ordered wins ties (a line is one kind), though the two patterns are
-// disjoint in practice. Read on masked forms like the code and word-cap axes: masking freezes
-// reference spans to ⟦N⟧ and never touches a line's leading list marker.
-function listMarkers(text: string): ListCounts {
-  let ordered = 0;
-  let unordered = 0;
-  for (const line of stripFences(text).split("\n")) {
-    if (THEMATIC_BREAK_RE.test(line)) continue;
-    if (ORDERED_ITEM_RE.test(line)) ordered++;
-    else if (UNORDERED_ITEM_RE.test(line)) unordered++;
-  }
-  return { ordered, unordered };
-}
-
-// listBlockSizes returns one item count per list BLOCK, outside fenced code — a block being a run of
-// consecutive item lines, closed by a blank line or any prose line. Readings (b) and (c) need block
-// boundaries, which listMarkers deliberately discards. Frontmatter never reaches here: the CLI
-// splits it off before masking, so a `tags:` entry is never read as a one-item list. A nested
-// sublist merges into its parent's run rather than opening its own block, which undercounts blocks
-// and so can only make reading (b) miss a violation, never invent one.
-function listBlockSizes(text: string): number[] {
-  const sizes: number[] = [];
-  let run = 0;
-  for (const line of stripFences(text).split("\n")) {
-    const isItem =
-      !THEMATIC_BREAK_RE.test(line) && (ORDERED_ITEM_RE.test(line) || UNORDERED_ITEM_RE.test(line));
-    if (isItem) {
-      run++;
-    } else if (run) {
-      sizes.push(run);
-      run = 0;
-    }
-  }
-  if (run) sizes.push(run);
-  return sizes;
-}
-
 const sum = (ns: number[]): number => ns.reduce((a, b) => a + b, 0);
+
+// One list BLOCK on one side: its kind and how many items it holds. mdstruct emits a `list` node per
+// block and a `listItem` child per item, so both numbers the three readings need come off one walk.
+// Internal — the readings consume the derived counts below, never this shape.
+type ListBlock = { ordered: boolean; items: number };
+
+// listBlocks reads every list in `text`, in document order. Four things the two line patterns had to
+// guess at now fall out of the parse. A nested sublist is its own `list` node inside its parent's
+// item, so it opens its own block instead of merging into the parent's run — the undercount the old
+// listBlockSizes admitted in its own comment. A `- - -` is a `thematicBreak` that splits the run in
+// two, because CommonMark gives a break precedence over a list item, so the old explicit exclusion
+// has nothing left to exclude. A run broken by a blank line is ONE loose list, where the line scan
+// closed the run and counted two blocks. And a `- x` line inside a fence belongs to a `codeBlock`,
+// which is what retired the stripFences pre-pass.
+//
+// The walk descends into a blockquote too. A quoted specimen is frozen by KEEP, so its lists stand
+// unchanged on both sides and cancel out of all three readings; when they stop cancelling, the
+// specimen was mangled, which is a finding worth reporting.
+//
+// Read on masked forms like the code and word-cap axes: masking freezes reference spans to ⟦N⟧ and
+// never touches a list marker. Frontmatter never reaches here either — the CLI splits it off before
+// masking, so a `tags:` entry is never read as a one-item list.
+function listBlocks(text: string): ListBlock[] {
+  const blocks: ListBlock[] = [];
+  walkNodes(parseDoc(text).doc.nodes, (n) => {
+    if (n.type !== "list") return;
+    blocks.push({
+      ordered: n.ordered === true,
+      items: (n.children ?? []).filter((c) => c.type === "listItem").length,
+    });
+  });
+  return blocks;
+}
+
+// listMarkers totals items by kind across one side's blocks: ordered (`1.`) and unordered
+// (`-`/`*`/`+`). The list axis compares these two counts across source and rewrite to detect a
+// vanished kind. A multi-line item counts once now, because the parser owns the item boundary and
+// the old pattern counted marker LINES.
+const listMarkers = (blocks: ListBlock[]): ListCounts => ({
+  ordered: sum(blocks.filter((b) => b.ordered).map((b) => b.items)),
+  unordered: sum(blocks.filter((b) => !b.ordered).map((b) => b.items)),
+});
+
+// listBlockSizes returns one item count per list block — the boundaries readings (b) and (c) need,
+// which listMarkers deliberately discards.
+const listBlockSizes = (blocks: ListBlock[]): number[] => blocks.map((b) => b.items);
 
 // unconfirmedStructure measures reading (c): blocks and items the rewrite added beyond what the scan
 // confirmed. The scan's findings are a FLOOR on what the source licenses, never a ceiling, so an
 // overrun is a pointer to check and not a violation to remove — the caller's rendering must keep
-// that distinction. Null on Russian: 251 Russian vault files yield 5 findings against 1360 from 913
-// English ones, so the budget there is effectively zero and every added list would trip it.
+// that distinction. Null on Russian: 263 Russian vault files yield 1 finding against 1268 from 909
+// English ones, so the budget there is effectively zero and every added list would trip it. Re-derive
+// the split with `bun run measure:oxford` over the vault; it prints one under `byLang`.
 function unconfirmedStructure(
   srcSizes: number[],
   outSizes: number[],
@@ -207,16 +211,21 @@ function listKindFlipped(source: ListCounts, rewrite: ListCounts): boolean {
   );
 }
 
-// runGuard applies all five axes to one rewrite and returns the combined report. Pure and total —
-// it reads strings and calls total engines, so it never throws and touches no process state.
+// runGuard applies all five axes to one rewrite and returns the combined report. Deterministic, and
+// pure but for the parse: the code, sentences, and lists axes all read mdstruct's tree, so it throws
+// MdstructUnavailableError when the binary cannot run. parseDoc caches by exact source text, so
+// those three axes over two sides cost two spawns. runSimplify parses the source before its first
+// model call, so by the time this runs a missing binary has already exited 5.
 export function runGuard(input: GuardInput): GuardReport {
   const { source, maskedInput, rewriteMasked, rewriteUnmasked, sequences, lang } = input;
-  const srcBlocks = fencedBlocks(maskedInput);
-  const outBlocks = fencedBlocks(rewriteMasked);
-  const srcList = listMarkers(maskedInput);
-  const outList = listMarkers(rewriteMasked);
-  const srcSizes = listBlockSizes(maskedInput);
-  const outSizes = listBlockSizes(rewriteMasked);
+  const srcBlocks = codeBlocks(maskedInput);
+  const outBlocks = codeBlocks(rewriteMasked);
+  const srcLists = listBlocks(maskedInput);
+  const outLists = listBlocks(rewriteMasked);
+  const srcList = listMarkers(srcLists);
+  const outList = listMarkers(outLists);
+  const srcSizes = listBlockSizes(srcLists);
+  const outSizes = listBlockSizes(outLists);
   const short = {
     source: srcSizes.filter((n) => n < SEQ_MIN).length,
     rewrite: outSizes.filter((n) => n < SEQ_MIN).length,
@@ -272,7 +281,7 @@ export function formatGuard(r: GuardReport): string {
   );
   lines.push(
     r.code.ok
-      ? `- code: OK — ${r.code.source} fenced block(s) intact`
+      ? `- code: OK — ${r.code.source} code block(s) intact`
       : `- code: FAIL — ${r.code.source} block(s) in source, ${r.code.rewrite} in rewrite (a block was reworded, dropped, or added)`,
   );
   lines.push(formatNames(r.names));

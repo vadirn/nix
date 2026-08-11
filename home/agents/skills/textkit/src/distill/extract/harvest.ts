@@ -15,7 +15,7 @@ import {
   type Span,
   type MdNode,
   type MdInline,
-} from "textkit/distill/mdstruct.ts";
+} from "textkit/core/mdstruct.ts";
 import {
   ASSET_RE,
   decodeTarget,
