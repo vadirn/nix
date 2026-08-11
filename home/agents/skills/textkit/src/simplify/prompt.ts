@@ -50,11 +50,15 @@ export type SimplifyBrief = {
 // rules — a statement stays a statement, a number stays exact. Three of its claims (verb-near-
 // subject, cut-restatement, keep-numbers) come from CLAUDE.md's Exposition, inlined here because
 // the offline model cannot reach the Simplified.md ↔ CLAUDE.md pair the agent reads.
+//
+// SHAPE states its member test as a GATE — two ordered halves, build only on two passes — because
+// the same claims stated as a description lost to the worklist shapeHint hands over. See shapeHint's
+// note for the measurement, and `fixtures/shape-member-test.md` for the two specimens it turns on.
 export const SIMPLIFY_RULESET_EN = `MEANING: restyle the wording, not the meaning. Keep each sentence's tense, mood, and polarity — a statement stays a statement, a record of what happened stays past, never a command. Use the imperative only where the source already instructs. Keep every number, name, and quoted value exactly as it stands. Keep each claim's FORCE: when the source proves, requires, must, or never, say so too. Never trade a strong verb for a weaker one — "proved" stays "proved", it does not become "showed" or "found".
 RELEVANCE: lead each unit with its conclusion, then the reason. Cut a sentence ONLY when it restates, emphasizes, or hedges; cadence earns no clause. Keep every sentence that carries its own claim, reason, or example, even where the passage already runs long — a reason you drop is an argument the reader loses. Use the fewest words that keep the meaning whole.
 SENTENCES: one idea per sentence, at most 20 words. Split a sentence that carries two claims. Use active voice and name the actor; keep the verb close to its subject. Use the imperative for an instruction ("Run X", not "You should run X"). Start with the known part, end with the new. Keep the connective — because, so, but, although — even in a short sentence.
 WORDS: use one term per concept and reuse it. Prefer plain, concrete words; cut any word the sentence survives without. Replace a hidden verb with a verb ("decide", not "make a decision"). Use the positive form; state what to do. Use simple tenses. Use at most three nouns in a row.
-SHAPE: turn a PROSE sequence or set into a vertical list. A sequence is one subject governing three or more parallel actions, or three or more delimited members under one stem. Two members is a pair, and a pair stays prose. Count the members in the source sentence; the list gets exactly that many items, one per member. Never invent a member to reach three, never split one member into two, never merge two into one. A contrast, a condition, a concession, or a cause and its effect is a relation, not a sequence, so keep a relation in prose. Where nearby prose counts the members (both, two, three), keep that word and match its count. Keep an existing list's kind and item count as they stand; a list you build comes only from prose. Give each paragraph one topic; keep it short.`;
+SHAPE: turn a PROSE sequence or set into a vertical list. A sequence is one subject governing three or more parallel actions, or three or more delimited members under one stem. Put every candidate to the member test, and build only where it passes both halves. First: the sentence carries three or more parallel members — the same part of speech in the same form. Second: the sentence enumerates rather than relates. Members enumerate when you can reorder them and the meaning holds. Parts that lose their sense when reordered stand in a relation. A contrast, a condition, a concession, or a cause and its effect is a relation, not a sequence, so keep a relation in prose. Two members is a pair, and a pair stays prose however long the sentence runs. Split a long pair into shorter sentences, never into a two-item list. Count the members in the source sentence; the list gets exactly that many items, one per member. Never invent a member to reach three, never split one member into two, never merge two into one. Where nearby prose counts the members (both, two, three), keep that word and match its count, and never add a counting word the source does not have. Keep an existing list's kind and item count as they stand; a list you build comes only from prose. Give each paragraph one topic; keep it short.`;
 
 // SIMPLIFY_RULESET_RU is the Russian rule set — the same five principles adapted to Russian
 // mechanics, not translated from the English. СМЫСЛ mirrors EN MEANING. Tailored terms:
@@ -63,7 +67,7 @@ export const SIMPLIFY_RULESET_RU = `СМЫСЛ: меняй форму, а не �
 ГЛАВНОЕ: вывод — первым, причина — после. Убирай предложение, ТОЛЬКО если оно повторяет, усиливает или смягчает; красивость не даёт права на клаузу. Сохрани каждое предложение со своим утверждением, доводом или примером, даже если отрывок и так длинный — выброшенный довод читатель теряет навсегда. Пиши минимумом слов без потери смысла.
 ПРЕДЛОЖЕНИЯ: одна мысль — одно предложение, не длиннее 20 слов. Предложение с двумя утверждениями разбей. Активный залог, назови деятеля; держи глагол рядом с подлежащим. Для инструкции — повелительное наклонение («Запусти X», а не «Нужно запустить X»). Известное — в начало, новое — в конец. Сохрани связку — потому что, поэтому, но, хотя — даже в коротком предложении.
 СЛОВА: один термин на одно понятие, повторяй его. Простые конкретные слова; убери слово, без которого предложение живёт. Отглагольное существительное → глагол («реши», а не «прими решение»); канцелярит → живой глагол. «является»/«представляет собой» → тире или прямой глагол. Утверждение вместо отрицания. Простые времена.
-ФОРМА: последовательность или набор В ПРОЗЕ → вертикальный список. Последовательность — это одно подлежащее с тремя и более параллельными действиями либо три и более однородных члена при одной основе. Два члена — это пара, а пара остаётся прозой. Посчитай члены в исходном предложении: в списке ровно столько пунктов, по одному на член. Не придумывай член ради третьего пункта, не дроби один член надвое, не сливай два в один. Противопоставление, условие, уступка, причина со следствием — это отношение, а не перечисление, поэтому отношение оставь прозой. Если рядом в тексте назван счёт (оба, два, три), сохрани это слово и совпади с ним. У существующего списка сохрани вид и число пунктов как есть; новый список строится только из прозы. Один абзац — одна мысль, абзац короткий.`;
+ФОРМА: последовательность или набор В ПРОЗЕ → вертикальный список. Последовательность — это одно подлежащее с тремя и более параллельными действиями либо три и более однородных члена при одной основе. Проверь каждого кандидата тестом на члены и строй список, только если он прошёл обе половины. Первое: предложение несёт три и более параллельных члена — одна часть речи в одной форме. Второе: предложение перечисляет, а не связывает. Члены перечисляют, если их можно переставить местами и смысл сохранится. Части, которые при перестановке теряют смысл, стоят в отношении. Противопоставление, условие, уступка, причина со следствием — это отношение, а не перечисление, поэтому отношение оставь прозой. Два члена — это пара, а пара остаётся прозой, какой бы длинной ни была фраза. Длинную пару разбей на короткие предложения, а не на список из двух пунктов. Посчитай члены в исходном предложении: в списке ровно столько пунктов, по одному на член. Не придумывай член ради третьего пункта, не дроби один член надвое, не сливай два в один. Если рядом в тексте назван счёт (оба, два, три), сохрани это слово и совпади с ним, и не добавляй счёт, которого в источнике нет. У существующего списка сохрани вид и число пунктов как есть; новый список строится только из прозы. Один абзац — одна мысль, абзац короткий.`;
 
 // The no-op clause: text already in the style must round-trip unchanged. It is the ruleset's own
 // stop condition — inlined here (its one home), never in Simplified.md. Kept in the prompt so a
@@ -88,6 +92,11 @@ const NO_OP =
 // prohibition is now tied to the list it governs, and KEEP names SHAPE's remaining territory —
 // prose outside any list — so the two rules no longer contradict.
 //
+// That restated territory now restates the whole member test, not half of it. KEEP used to hand
+// SHAPE "three or more parallel members" and stop there, which is the count without the kind — and
+// the count alone is what a relation passes. Both halves ride here now, plus the pair floor, so a
+// reader of KEEP alone reaches the same verdict as a reader of SHAPE.
+//
 // The heading clause is load-bearing too: dogfooding on PR bodies showed the model inflating bold
 // list-leads into headings and sectioning off a rhetorical-question paragraph (two headings became
 // six), so KEEP fixes the heading count and forbids promotion while SHAPE no longer invites adding
@@ -96,7 +105,7 @@ const NO_OP =
 // opaque, so the ruleset's existing "reproduce every ⟦N⟧ token unchanged" already covers a comment,
 // and a stated rule the model may or may not obey never enters the picture.
 const KEEP =
-  "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item, and never grow that list's item count. A sentence inside a list item stays prose, so never nest a new list under one. SHAPE still governs prose OUTSIDE any list: build a vertical list there only where the sentence carries three or more parallel members. Keep the heading count exact. Never promote a bold lead, a question, or a sentence to a heading. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
+  "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item, and never grow that list's item count. A sentence inside a list item stays prose, so never nest a new list under one. SHAPE still governs prose OUTSIDE any list: build a vertical list there only where the sentence carries three or more parallel members that enumerate rather than relate. Two members is a pair, and a pair stays prose. Keep the heading count exact. Never promote a bold lead, a question, or a sentence to a heading. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
 
 // capHint is the deterministic length pre-hint: wordCapScan measures the SOURCE before the pass and
 // names each prose sentence over the cap. The ruleset already states the cap, yet the model counts
@@ -150,6 +159,32 @@ export function capHint(overCap: WordCapFinding[], lang: "en" | "ru"): string {
 // one real series every time and left every pair as prose, and on a Russian note it converted a
 // genuine three-member series the closed form had suppressed.
 //
+// Reopening then exposed the defect this hint's current wording answers: the worklist read as a
+// LICENCE. It said "The scan confirmed these sentences, so turn each into a vertical list, one item
+// per source member" — an imperative carrying a count — while the relation carve-out sat back in the
+// preamble. So a confirmed candidate that was actually a relation got converted, and the model
+// back-filled members to reach the count it had been handed.
+//
+// That is a measured cause, not a reading. The fixture `fixtures/shape-member-test.md` holds two
+// sentences the scan confirms at 3 members each and cannot tell apart: "Build the DSL outward from
+// the operations that consume it, not top-down as a taxonomy, or it becomes ornament" (a contrast
+// plus its consequence — a relation) and "The scan strips fenced code, skips every list item, and
+// measures both delimiters" (a real series). One factor differs between them, and it is the member
+// test. On the old wording the relation was flattened into three bullets in 2 of 3 live runs, once
+// under an invented lead "Build the DSL in three ways:"; the series converted in 3 of 3. On this
+// wording the relation stayed prose in 3 of 3 and the series still converted in 3 of 3.
+//
+// The fix is therefore placed where the licence was issued, not only where the rule is stated. The
+// hint now says outright that the scan counts DELIMITERS and cannot tell a member from a contrast or
+// a consequence, and its worklist branch hands over candidates to be tested rather than sentences to
+// be converted — "a confirmed count is no licence". The floor is untouched: a candidate that fails
+// the test goes to prose, never to a ban on the sentences the scan never saw.
+//
+// The pair clause rides here for the second specimen, whose defect is an INTERACTION. A 40-word
+// sentence naming two deferred strands drew a capHint "split this" and the model reached for a list
+// to split into, twice in one note. Naming where a long pair's split lands — in shorter sentences —
+// closes the gap between the two hints, which neither hint could close alone.
+//
 // Both languages take the same wording, deliberately. The scan reaches Russian less far, but that is
 // a fact about Russian punctuation, so it belongs in what the scan CONFIRMS — never in what the two
 // contracts permit. A per-language ban would make the tool behave differently by language, which is
@@ -157,17 +192,17 @@ export function capHint(overCap: WordCapFinding[], lang: "en" | "ru"): string {
 export function shapeHint(sequences: SequenceFinding[], lang: "en" | "ru"): string {
   if (lang === "ru") {
     const base =
-      "ПРОВЕРКА ФОРМЫ: детерминированная проверка измерила источник. Она читает только две формы: ряд, закрытый на «, и»/«, или», и набор через точку с запятой. Все прочие формы ей не видны, поэтому её итог — нижняя граница, а не предел. Строй список только там, где предложение несёт три и более грамматически параллельных члена — одна часть речи в одной форме — и где оно перечисляет, а не связывает. Противопоставление, условие, уступка, причина со следствием — это отношение, поэтому оставь его прозой. Не придумывай член ради третьего пункта и не дроби один член надвое.";
+      "ПРОВЕРКА ФОРМЫ: детерминированная проверка измерила источник. Она читает только две формы: ряд, закрытый на «, и»/«, или», и набор через точку с запятой. Все прочие формы ей не видны, поэтому её итог — нижняя граница, а не предел. Проверка считает разделители, поэтому она не отличит член от противопоставления или следствия — это читаешь ты. Строй список только там, где предложение прошло тест на члены: три и более грамматически параллельных члена — одна часть речи в одной форме — и перечисление, а не связь. Члены перечисляют, если их можно переставить местами и смысл сохранится. Противопоставление, условие, уступка, причина со следствием — это отношение, поэтому оставь его прозой. Два члена — это пара, и пара остаётся прозой, даже когда предложение длинное: разбей его на короткие предложения, а не на список из двух пунктов. Не придумывай член ради третьего пункта и не дроби один член надвое.";
     if (sequences.length === 0)
       return `${base} Проверка не подтвердила ни одного такого предложения. Каждый построенный список отметь в «borderline» с причиной.`;
     const list = sequences.map((f) => `- (${f.members} чл.) ${f.sentence}`).join("\n");
-    return `${base} Эти предложения проверка подтвердила, поэтому каждое сделай вертикальным списком: один пункт на один член источника. Число — это измерение, и оно завышено, когда последний член сам является перечислением, поэтому пересчитай перед тем, как строить. Оставь подтверждённое предложение прозой, если перечисление уже дано рядом другой записью, если предложение стоит внутри пункта списка или если список повторил бы токен ⟦N⟧. Каждый построенный список и каждое оставленное предложение отметь в «borderline» с причиной:\n${list}`;
+    return `${base} Эти предложения проверка подтвердила как кандидатов, поэтому каждого прогони через тест на члены, прежде чем строить. Прошедший кандидат становится вертикальным списком: один пункт на один член источника. Не прошедший остаётся прозой — проверка этой разницы не видит, и подтверждённый счёт права не даёт. Число — это измерение, и оно завышено, когда последний член сам является перечислением, поэтому пересчитай перед тем, как строить. Оставь подтверждённое предложение прозой, если перечисление уже дано рядом другой записью, если предложение стоит внутри пункта списка или если список повторил бы токен ⟦N⟧. Каждый построенный список и каждое оставленное предложение отметь в «borderline» с причиной:\n${list}`;
   }
-  const base = `SHAPE CHECK: a deterministic scan measured the source. It reads two forms only: a series closing on ", and"/", or", and a semicolon set. Every other form is invisible to it, so its result is a floor, not a boundary. Build a list only where the sentence carries ${SEQ_MIN} or more grammatically parallel members — the same part of speech in the same form — and where it enumerates rather than relates. A contrast, a condition, a concession, or a cause and its effect is a relation, so keep it prose. Never invent a member to reach three, and never split one member into two.`;
+  const base = `SHAPE CHECK: a deterministic scan measured the source. It reads two forms only: a series closing on ", and"/", or", and a semicolon set. Every other form is invisible to it, so its result is a floor, not a boundary. The scan counts delimiters, so it cannot tell a member from a contrast or a consequence — that reading is yours. Build a list only where the sentence passes the member test: ${SEQ_MIN} or more grammatically parallel members — the same part of speech in the same form — enumerating rather than relating. Members enumerate when you can reorder them and the meaning holds. A contrast, a condition, a concession, or a cause and its effect is a relation, so keep it prose. Two members is a pair, and a pair stays prose even when the sentence runs long: split it into shorter sentences, never into a two-item list. Never invent a member to reach three, and never split one member into two.`;
   if (sequences.length === 0)
     return `${base} The scan confirmed no such sentence. Note each list you build in \`borderline\` with the reason.`;
   const list = sequences.map((f) => `- (${f.members} members) ${f.sentence}`).join("\n");
-  return `${base} The scan confirmed these sentences, so turn each into a vertical list, one item per source member. The count is a measurement, and it runs high when the last member is itself a series, so recount before you build. Keep a confirmed sentence as prose when the enumeration already appears nearby in another notation, when it sits inside a list item, or when a list would repeat a ⟦N⟧ token. Note each list you build and each confirmed sentence you keep in \`borderline\` with the reason:\n${list}`;
+  return `${base} The scan confirmed these sentences as candidates, so put each to the member test before you build. A candidate that passes becomes a vertical list, one item per source member. A candidate that fails stays prose — the scan cannot see the difference, and a confirmed count is no licence. The count is a measurement, and it runs high when the last member is itself a series, so recount before you build. Keep a confirmed sentence as prose when the enumeration already appears nearby in another notation, when it sits inside a list item, or when a list would repeat a ⟦N⟧ token. Note each list you build and each confirmed sentence you keep in \`borderline\` with the reason:\n${list}`;
 }
 
 // simplifyPrompt builds the single-pass prompt for `masked` (text with reference spans already
