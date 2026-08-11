@@ -10,8 +10,12 @@
 // extracted rewrite against the original on two deterministic axes and, unlike the CLI guard, exits
 // NONZERO on drift: the apply mutates a real file, so a shipped corruption is permanent.
 //
-//   spans      — the reference-span multiset ([[wikilinks]], ![[embeds]], inline code, via the
-//                CLI's own MASK_RE) is identical. A dropped, mutated, or invented span is drift.
+//   spans      — the verbatim-span multiset ([[wikilinks]], ![[embeds]], inline code,
+//                `<!-- HTML comments -->`, via the shared VERBATIM_SPAN_RE the masker also
+//                freezes) is identical. A dropped, mutated, or invented span is drift. A comment
+//                sits here because a REWORDED one is the failure — the restyle turned a
+//                template's `repo-self-sufficient` into `self-sufficient` and every count in the
+//                note stayed equal — so only content equality catches it.
 //   structure  — the heading count, the fenced-code-marker count, AND the thematic-break (`---`)
 //                count match. A truncation that drops no span still drops a heading, an opening
 //                fence, or a `---` separator a template requires, so this is the backstop for a
@@ -25,8 +29,8 @@ import { readFileSync } from "node:fs";
 import { parseFrontmatter } from "textkit/core/frontmatter.ts";
 import {
   type FenceState,
-  MASK_RE,
   THEMATIC_BREAK_RE,
+  VERBATIM_SPAN_RE,
   fenceScan,
   stripFences,
 } from "textkit/core/text.ts";
@@ -58,10 +62,11 @@ export type VerifyReport = {
   thematic: CountAxis;
 };
 
-// The reference spans MASK_RE finds in a text, in document order. `.match` with the shared global
-// regex resets its lastIndex and returns every match (mask.ts relies on the same idiom), so reusing
-// the CLI's own MASK_RE is safe and keeps the gate's span definition identical to what it masks.
-const spanList = (text: string): string[] => text.match(MASK_RE) ?? [];
+// The verbatim spans VERBATIM_SPAN_RE finds in a text, in document order. `.match` with the shared
+// global regex resets its lastIndex and returns every match (mask.ts relies on the same idiom), so
+// reusing the constant createMasker freezes is safe and keeps the gate's span definition identical
+// to what it masks — the invariant that lets the gate catch a span the masker meant to protect.
+const spanList = (text: string): string[] => text.match(VERBATIM_SPAN_RE) ?? [];
 
 // The multiset difference of two span lists: spans present more often in `a` than `b` are `dropped`;
 // spans present more often in `b` than `a` are `invented`. A mutated span shows as one dropped
@@ -189,10 +194,10 @@ export function formatVerify(r: VerifyReport): string {
 // human-facing counterpart to parseArgs.
 export const USAGE = `simplify-verify — deterministic apply-gate for a Simplified restyle.
 
-Compare a proposed rewrite against the original note. Reference spans
-([[wikilinks]], ![[embeds]], inline code) and fixed structure (headings,
-code fences, thematic breaks) must survive. A nonzero exit blocks a silent
-apply.
+Compare a proposed rewrite against the original note. Verbatim spans
+([[wikilinks]], ![[embeds]], inline code, <!-- HTML comments -->) and fixed
+structure (headings, code fences, thematic breaks) must survive. A nonzero
+exit blocks a silent apply.
 
 Usage:
   simplify-verify <original.md> [rewrite.md]

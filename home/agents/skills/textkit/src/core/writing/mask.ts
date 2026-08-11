@@ -1,7 +1,7 @@
 // writing/mask — the ⟦N⟧ masking engine shared by revise() and spellPass(): freeze
 // reference spans (and caller-supplied literal spans) to opaque tokens the writing
 // model cannot reword or drop, then restore them verbatim after the rewrite.
-import { MASK_RE } from "textkit/core/text.ts";
+import { VERBATIM_SPAN_RE } from "textkit/core/text.ts";
 
 // Matches a single ⟦N⟧ mask token (the numbered placeholder createMasker mints), e.g. "⟦3⟧".
 // Exported so spell.ts's verify step can multiset-compare mask tokens between input and
@@ -29,8 +29,9 @@ export type Masker = {
 };
 
 // createMasker builds a Masker: `literals` are exact spans frozen first (longest-first, so a
-// containing span masks whole before its substring), then MASK_RE spans ([[wikilinks]],
-// ![[embeds]], inline code). Token numbering is per-factory-call, monotonically increasing. A
+// containing span masks whole before its substring), then VERBATIM_SPAN_RE spans ([[wikilinks]],
+// ![[embeds]], inline code, `<!-- HTML comments -->`). Token numbering is per-factory-call,
+// monotonically increasing. A
 // ⟦N⟧ span already present in the incoming text (a note documenting the mask engine itself) is
 // frozen first to a fresh minted token mapping back to the literal, so every token in masked
 // text is minted here, and unmask can never rewrite a pre-existing literal into another span's
@@ -65,7 +66,7 @@ export function createMasker(literals: string[] = []): Masker {
       return key;
     });
   const mask = (text: string): string =>
-    maskLiterals(freezeExistingTokens(text)).replace(MASK_RE, (m) => {
+    maskLiterals(freezeExistingTokens(text)).replace(VERBATIM_SPAN_RE, (m) => {
       const key = `⟦${n++}⟧`;
       masks.set(key, m);
       return key;

@@ -106,8 +106,8 @@ export async function revise(
   // process-global module mock; production callers omit it for the real transport.
   ask: typeof askJson = askJson,
 ): Promise<Block[]> {
-  // Mask reference spans ([[wikilinks]], ![[embeds]], inline code) to opaque ⟦N⟧
-  // tokens before the passes so the rewriting model cannot reword or drop them;
+  // Mask verbatim spans ([[wikilinks]], ![[embeds]], inline code, `<!-- comments -->`)
+  // to opaque ⟦N⟧ tokens before the passes so the model cannot reword or drop them;
   // restored verbatim at the end. General emphasis is left unmasked (it spans words
   // that legitimately get reworded) and relies on the prompt instruction instead.
   // `literals` are exact spans to freeze too — the bolded glossary terms (**Term**),

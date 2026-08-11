@@ -122,7 +122,7 @@ card-stage --help                                 # full CLI surface
 
 # simplify-text
 
-`simplify-text` analyzes a markdown note against the Simplified output style. It applies nothing — it prints a brief, and the skill's subagent applies the rewrite. So the input file is never touched here. It masks reference spans first, so wikilinks, embeds, and inline code pass through untouched. It reuses distill's writing-core (`src/core/writing/mask.ts`), so it duplicates no logic. It runs one strong restyle pass, then a deterministic guard over the rewrite. The pass runs on qwen-flash (DashScope), with a deepseek-v4-flash fallback. It auto-detects the language and picks the EN or RU ruleset; `--lang` forces one.
+`simplify-text` analyzes a markdown note against the Simplified output style. It applies nothing — it prints a brief, and the skill's subagent applies the rewrite. So the input file is never touched here. It masks verbatim spans first, so wikilinks, embeds, inline code, and `<!-- HTML comments -->` pass through untouched. A comment is masked because a template copies it into every note it creates, so restyling each copy separately makes them diverge. It reuses distill's writing-core (`src/core/writing/mask.ts`), so it duplicates no logic. It runs one strong restyle pass, then a deterministic guard over the rewrite. The pass runs on qwen-flash (DashScope), with a deepseek-v4-flash fallback. It auto-detects the language and picks the EN or RU ruleset; `--lang` forces one.
 
 The brief is markdown with seven sections: Verdict, Cut, Change, Shape, Keep, Borderline, Rewrite. The `## Rewrite` section is fenced and holds the whole restyled note. It is the ONLY section the subagent applies; the rest are read-only rationale. A trailing `## Guard` section checks masks, code spans, name typos, sentence length, and list structure. Guard findings are advisory — they ride the report and never change the exit code. The product is the brief, so a model call that fails after the fallback exits nonzero rather than shipping the input.
 
@@ -139,7 +139,7 @@ Exit codes: **0** brief printed · **1** missing key · **2** usage error · **3
 
 # simplify-verify
 
-`simplify-verify` is the deterministic apply-gate for a Simplified restyle. It compares a proposed rewrite against the original note. Reference spans (`[[wikilinks]]`, `![[embeds]]`, inline code) and fixed structure (headings, code fences) must survive. A nonzero exit blocks a silent apply. It runs no model and needs no key — the check is pure text comparison.
+`simplify-verify` is the deterministic apply-gate for a Simplified restyle. It compares a proposed rewrite against the original note. Verbatim spans (`[[wikilinks]]`, `![[embeds]]`, inline code, `<!-- HTML comments -->`) and fixed structure (headings, code fences) must survive. A nonzero exit blocks a silent apply. It runs no model and needs no key — the check is pure text comparison.
 
 The original note is a positional path. The proposed rewrite is read from a file, or from stdin when the second path is omitted or `-`. So the skill pipes `simplify-text`'s extracted `## Rewrite` block in and gates the write on the exit code. The original is never modified; this tool applies nothing.
 

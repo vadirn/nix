@@ -91,8 +91,10 @@ const NO_OP =
 // The heading clause is load-bearing too: dogfooding on PR bodies showed the model inflating bold
 // list-leads into headings and sectioning off a rhetorical-question paragraph (two headings became
 // six), so KEEP fixes the heading count and forbids promotion while SHAPE no longer invites adding
-// one. ⟦N⟧ tokens are frozen reference spans (wikilinks, embeds, inline code) — reproduced, never
-// reworded.
+// one. ⟦N⟧ tokens are frozen verbatim spans (wikilinks, embeds, inline code, HTML comments) —
+// reproduced, never reworded. KEEP needs no clause naming any of them: masking makes each one
+// opaque, so the ruleset's existing "reproduce every ⟦N⟧ token unchanged" already covers a comment,
+// and a stated rule the model may or may not obey never enters the picture.
 const KEEP =
   "Keep verbatim, never restyle: headings, table structure, fenced code blocks, frontmatter, thematic breaks (a `---` separator line), quoted specimens, and any fixed surface limit (a one-line commit subject, a template's sections). For an existing list, keep its kind (numbered stays numbered, bulleted stays bulleted) and its item count. Restyle the prose inside each item. Split a long sentence into shorter sentences within the same item, and never grow that list's item count. A sentence inside a list item stays prose, so never nest a new list under one. SHAPE still governs prose OUTSIDE any list: build a vertical list there only where the sentence carries three or more parallel members. Keep the heading count exact. Never promote a bold lead, a question, or a sentence to a heading. Reproduce every ⟦N⟧ placeholder token unchanged, exactly as many times as it appears. Keep every word in the language it is written in; never translate.";
 
