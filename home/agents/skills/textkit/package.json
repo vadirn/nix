@@ -13,6 +13,7 @@
     "lint": "oxlint src",
     "typecheck": "tsc --noEmit",
     "dead": "knip && bun scripts/orphans.ts",
+    "measure:oxford": "bun scripts/measure-oxford.ts",
     "cycles": "madge --circular --extensions ts --ts-config tsconfig.json src",
     "boundaries": "bun scripts/boundaries.ts"
   },
