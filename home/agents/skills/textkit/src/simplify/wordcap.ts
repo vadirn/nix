@@ -27,7 +27,7 @@ export const WORD_CAP = 20;
 // one is a finding no rewrite is allowed to close. capHint hands the model each finding as "split
 // this", and the guard re-reports whatever is left, so a quoted long sentence used to ride as a
 // permanent finding that pointed at text the ruleset forbids touching. The old line scan measured
-// it because stripLeadingMarker treated `>` as one more marker to peel off.
+// it because its marker-stripping helper treated `>` as one more marker to peel off.
 const FROZEN_BLOCKS = new Set(["blockQuote"]);
 
 // A sentence boundary: end punctuation, then any CLOSING inline markers, then whitespace. The

@@ -9,6 +9,7 @@ Each carries exactly one verdict:
 - **mdstruct today** — the binary already emits what the expression computes.
 - **crate change** — mdstruct could answer it after a change to the Rust crate.
 - **TypeScript** — the question is not markdown structure, so it stays here.
+- **removed** — the swap deleted the expression outright, with no replacement.
 
 It then records the dependency decision, the defects the verdicts must fix, and the migration order.
 
