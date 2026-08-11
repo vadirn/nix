@@ -1,7 +1,11 @@
-// simplify/verify tests — the deterministic apply-gate as pure functions: the two axes (reference
-// spans, structural counts) on synthetic original/rewrite pairs, verifyClean, the formatVerify
-// rendering, and the argv→result parse. The load-bearing case is the nested-fence truncation the
-// span-and-structure diff exists to catch. Pure, offline.
+// simplify/verify tests — the deterministic apply-gate: the two axes (reference spans, structural
+// counts) on synthetic original/rewrite pairs, verifyClean, the formatVerify rendering, and the
+// argv→result parse. The load-bearing case is the nested-fence truncation the span-and-structure
+// diff exists to catch. Offline, but not process-free: the three structural axes read one mdstruct
+// parse per side, so these need the binary on PATH — which the exit-5 tests at the bottom pin.
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import {
   type VerifyReport,
@@ -83,9 +87,10 @@ Cite [[notes]]. Show ![[diagram.png]]. Use the \`build\` flag.`;
   const r = verify(NOTE, truncated);
   // spans alone MISS it — every surviving span is a faithful subset, none dropped or invented...
   expect(r.spans.dropped).toEqual([]);
-  // ...but the structural count is the backstop: the fenced block's two markers vanished.
+  // ...but the structural count is the backstop: the one code block vanished. The axis counts
+  // BLOCKS, so a whole dropped block reads 1 → 0.
   expect(r.fences.ok).toBe(false);
-  expect(r.fences.original).toBe(2);
+  expect(r.fences.original).toBe(1);
   expect(r.fences.rewrite).toBe(0);
   expect(verifyClean(r)).toBe(false);
 });
@@ -103,7 +108,7 @@ test("verify: a '#' comment inside a fenced block is not counted as a heading", 
   const src = "Intro.\n\n```bash\n# not a heading\necho hi\n```";
   const rewrite = "Rewritten intro.\n\n```bash\n# not a heading\necho hi\n```";
   const r = verify(src, rewrite);
-  expect(r.headings.original).toBe(0); // the '#' is code, stripFences blanks it
+  expect(r.headings.original).toBe(0); // the '#' is code block content, so it is no heading
   expect(verifyClean(r)).toBe(true);
 });
 
@@ -241,7 +246,7 @@ title: Note
 
 Shorter body.`;
   const r = verify(src, rewrite);
-  expect(r.thematic.original).toBe(0); // the frontmatter fence is stripped, not a break
+  expect(r.thematic.original).toBe(0); // a frontmatter delimiter is not a break
   expect(r.thematic.ok).toBe(true);
   expect(verifyClean(r)).toBe(true);
 });
@@ -250,8 +255,75 @@ test("verify: a `---` inside a fenced block is not counted as a thematic break",
   const src = "Intro.\n\n```\n---\n```\n\nOutro.";
   const rewrite = "Rewritten intro.\n\n```\n---\n```\n\nOutro.";
   const r = verify(src, rewrite);
-  expect(r.thematic.original).toBe(0); // the --- is code, stripFences blanks it
+  expect(r.thematic.original).toBe(0); // the --- is code block content, so it is no break
   expect(verifyClean(r)).toBe(true);
+});
+
+// ---- the parsed structure axes (mdstruct reads all three) ----
+// Each case below is one the line-scanning axes got wrong. They are the reason the three counts
+// moved onto the parse tree.
+
+// A setext-underlined heading: `Sub` over a `---` rule is an h2 whose second line IS that rule. The
+// old scan read it as zero headings and one thematic break — the exact inversion.
+const SETEXT = "Sub\n---\n\nBody text here.\n";
+
+test("verify: a setext-underlined heading counts as one heading per side, and as no thematic break", () => {
+  const r = verify(SETEXT, "Sub\n---\n\nShorter body.\n");
+  expect(r.headings.original).toBe(1);
+  expect(r.headings.rewrite).toBe(1);
+  expect(r.thematic.original).toBe(0); // the rule belongs to the heading, not to this axis
+  expect(verifyClean(r)).toBe(true);
+});
+
+test("verify: a setext heading normalized to ATX form no longer trips both count axes at once", () => {
+  // Same document, two spellings of one h2. The old axes read it as headings 0 → 1 AND thematic
+  // 1 → 0, so the gate blocked a correct restyle on two counts at once.
+  const r = verify(SETEXT, "## Sub\n\nShorter body.\n");
+  expect(r.headings.original).toBe(1);
+  expect(r.headings.rewrite).toBe(1);
+  expect(r.thematic.original).toBe(0);
+  expect(r.thematic.rewrite).toBe(0);
+  expect(verifyClean(r)).toBe(true);
+});
+
+test("verify: a setext heading rewritten to a bare rule is drift, where the old axes cancelled", () => {
+  // The heading's TEXT is gone and its underline is left standing as a separator. The old counts
+  // both stayed put (one ATX heading, one `---` line on each side), so the gate passed it silently.
+  const src = "# Title\n\nSub\n---\n\nBody text here.\n";
+  const rewrite = "# Title\n\n---\n\nBody text here.\n";
+  const r = verify(src, rewrite);
+  expect(r.headings.original).toBe(2);
+  expect(r.headings.rewrite).toBe(1);
+  expect(r.thematic.original).toBe(0);
+  expect(r.thematic.rewrite).toBe(1);
+  expect(verifyClean(r)).toBe(false);
+});
+
+test("verify: a `#` line inside YAML frontmatter is not a heading, so a body-only rewrite is clean", () => {
+  // The CLI reads a whole file as the original and takes the rewrite on stdin, so the skill pipes
+  // the body alone. The old scan counted the YAML comment as a heading on the original side only,
+  // and reported false drift on every such note.
+  const src = "---\ntitle: Note\n# a yaml comment\n---\n\n# Real heading\n\nBody text here.\n";
+  const rewrite = "# Real heading\n\nShorter body.\n";
+  const r = verify(src, rewrite);
+  expect(r.headings.original).toBe(1);
+  expect(r.headings.rewrite).toBe(1);
+  expect(verifyClean(r)).toBe(true);
+});
+
+// A fenced block indented inside a blockquote. The old latching scanner never saw the `>` prefix,
+// so it read the whole quote as prose and counted zero markers.
+const QUOTED_FENCE = "> ```js\n> const a = 1;\n> ```\n\nAfter.\n";
+
+test("verify: a fence inside a blockquote is one code block, so dropping it is drift", () => {
+  const kept = verify(QUOTED_FENCE, "> ```js\n> const a = 1;\n> ```\n\nAfter that.\n");
+  expect(kept.fences.original).toBe(1);
+  expect(kept.fences.rewrite).toBe(1);
+  expect(kept.fences.ok).toBe(true);
+  const dropped = verify(QUOTED_FENCE, "After.\n");
+  expect(dropped.fences.original).toBe(1);
+  expect(dropped.fences.rewrite).toBe(0);
+  expect(verifyClean(dropped)).toBe(false);
 });
 
 test("formatVerify: a clean report names each axis OK", () => {
@@ -273,7 +345,7 @@ test("formatVerify: a drift report names the offending spans and count deltas", 
   const out = formatVerify(r);
   expect(out).toContain("- spans: DRIFT");
   expect(out).toContain("dropped ([[notes]])");
-  expect(out).toContain("- fences: DRIFT — 2 marker(s) in source, 0 in rewrite");
+  expect(out).toContain("- fences: DRIFT — 1 code block(s) in source, 0 in rewrite");
 });
 
 // ---- parseArgs (pure) ----
@@ -318,4 +390,39 @@ test("parseArgs: `--` ends options so a dash-named file survives; a bare `-` is 
 test("USAGE names the exit codes and the no-apply contract", () => {
   expect(USAGE).toContain("applies nothing");
   expect(USAGE).toContain("1 drift (block the apply)");
+  expect(USAGE).toContain("5 the gate could not run");
+});
+
+// ---- exit 5: the gate could not run (spawned, offline) ----
+// The bin/ wrapper, not the entrypoint module: spawning what PATH resolves keeps the deploy seam
+// under test too. MDSTRUCT_BIN points at a path that does not exist, which is the missing-binary
+// case the wrapper's fail-loud contract raises.
+
+const VERIFY_BIN = join(import.meta.dir, "..", "..", "bin", "simplify-verify");
+
+test("main: a missing mdstruct binary exits 5 — distinct from 1 — and prints no report", () => {
+  const dir = mkdtempSync(join(tmpdir(), "simplify-verify-"));
+  const originalPath = join(dir, "note.md");
+  const rewritePath = join(dir, "rewrite.md");
+  // The two sides are IDENTICAL, so a working gate would exit 0. The exit is 5 because the gate
+  // never ran — nothing about the rewrite decided it.
+  writeFileSync(originalPath, "# Title\n\nBody text here.\n");
+  writeFileSync(rewritePath, "# Title\n\nBody text here.\n");
+  const proc = Bun.spawnSync([VERIFY_BIN, originalPath, rewritePath], {
+    env: { ...process.env, MDSTRUCT_BIN: join(dir, "no-such-mdstruct") },
+  });
+  expect(proc.exitCode).toBe(5);
+  expect(proc.stdout.toString()).toBe(""); // no report: there is no verdict to print
+  expect(proc.stderr.toString()).toContain("the gate could not run");
+});
+
+test("main: a drifting rewrite still exits 1, so the two failures stay distinguishable", () => {
+  const dir = mkdtempSync(join(tmpdir(), "simplify-verify-"));
+  const originalPath = join(dir, "note.md");
+  const rewritePath = join(dir, "rewrite.md");
+  writeFileSync(originalPath, "# Title\n\nBody text here.\n");
+  writeFileSync(rewritePath, "Body text here.\n"); // the heading is gone
+  const proc = Bun.spawnSync([VERIFY_BIN, originalPath, rewritePath], { env: { ...process.env } });
+  expect(proc.exitCode).toBe(1);
+  expect(proc.stdout.toString()).toContain("- headings: DRIFT");
 });

@@ -133,13 +133,13 @@ simplify-text --lang ru input.md     # force the Russian rubric (default: auto-d
 simplify-text --help                 # full CLI surface
 ```
 
-Exit codes: **0** brief printed · **1** missing key · **2** usage error · **3** empty input · **4** analysis failed (both models exhausted). Needs `DASHSCOPE_API_KEY` (the wrapper resolves it from Doppler, `claude-code/std`).
+Exit codes: **0** brief printed · **1** missing key · **2** usage error · **3** empty input · **4** analysis failed (both models exhausted) · **5** the apply-gate could not run (the `mdstruct` binary is missing or stale — rebuild it). The source is parsed before the first model call, so exit 5 costs no tokens. Needs `DASHSCOPE_API_KEY` (the wrapper resolves it from Doppler, `claude-code/std`).
 
 ---
 
 # simplify-verify
 
-`simplify-verify` is the deterministic apply-gate for a Simplified restyle. It compares a proposed rewrite against the original note. Verbatim spans (`[[wikilinks]]`, `![[embeds]]`, inline code, `<!-- HTML comments -->`) and fixed structure (headings, code fences) must survive. A nonzero exit blocks a silent apply. It runs no model and needs no key — the check is pure text comparison.
+`simplify-verify` is the deterministic apply-gate for a Simplified restyle. It compares a proposed rewrite against the original note. Verbatim spans (`[[wikilinks]]`, `![[embeds]]`, inline code, `<!-- HTML comments -->`) and fixed structure (headings, code blocks, thematic breaks) must survive. A nonzero exit blocks a silent apply. It runs no model and needs no key. Structure comes from the `mdstruct` binary, which must be on PATH — there is no regex fallback, because a gate that reports "verified" off a weaker check is worse than no gate.
 
 The original note is a positional path. The proposed rewrite is read from a file, or from stdin when the second path is omitted or `-`. So the skill pipes `simplify-text`'s extracted `## Rewrite` block in and gates the write on the exit code. The original is never modified; this tool applies nothing.
 
@@ -149,4 +149,4 @@ simplify-verify original.md < rewrite.md    # rewrite on stdin when the second p
 simplify-verify --help                       # full CLI surface
 ```
 
-Exit codes: **0** verified · **1** drift (block the apply) · **2** usage error · **3** empty input. No model, no key.
+Exit codes: **0** verified · **1** drift (block the apply) · **2** usage error · **3** empty input · **5** the gate could not run (the `mdstruct` binary is missing or stale — rebuild it; no report is printed). Both 1 and 5 block the apply, so name which one happened. No model, no key.

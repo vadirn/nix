@@ -16,6 +16,7 @@
 import { readFileSync } from "node:fs";
 import { takeValue } from "textkit/core/args.ts";
 import { parseFrontmatter } from "textkit/core/frontmatter.ts";
+import { MdstructUnavailableError, parseDoc } from "textkit/core/mdstruct.ts";
 import { askJson, ensureKeys, isTransient, TruncationError } from "@skills/llm/llm.ts";
 import { MissingKeyError } from "@skills/llm/keys.ts";
 import { SIMPLIFY_FALLBACK, SIMPLIFY_MODEL, SIMPLIFY_TOKENS } from "textkit/core/models.ts";
@@ -54,7 +55,12 @@ Output:
   names, sentences, lists — all advisory, all deterministic). The input file
   is never modified; diagnostics go to stderr.
   Exit: 0 brief printed · 1 missing key · 2 usage error · 3 empty input ·
-  4 analysis failed (both models exhausted).
+  4 analysis failed (both models exhausted) · 5 the apply-gate could not run.
+
+The apply-gate reads the mdstruct binary, which must be on PATH. A missing
+or stale binary exits 5, and the source is parsed before the first model
+call, so that exit costs no tokens. Rebuild with ./rebuild.sh in the nix
+repo. Exit 4 stays the exhausted-model failure, which is a different thing.
 
 Env: OPENAI_API_KEY, resolved from Doppler (claude-code/std) via keys.ts
 (e.g. doppler run --project claude-code --config std --)
@@ -135,9 +141,10 @@ async function onePass(
 // runSimplify is the pure pipeline: parse frontmatter, mask reference spans, run the restyle pass
 // (re-rolled to the gate), coerce the brief, guard the masked rewrite, then render the display brief
 // (rewrite and change spans unmasked, original frontmatter prepended so the rewrite is the whole
-// note). It touches no process/fs state — the transport arrives via deps — so it is unit-testable in
-// isolation. Throws (transient/truncation) when the first pass fails on both models; main maps that
-// to exit 4.
+// note). It touches no fs state and reaches the model only through deps, so it is unit-testable in
+// isolation; the one process it does spawn is mdstruct, for the apply-gate's parse. Throws
+// (transient/truncation) when the first pass fails on both models, which main maps to exit 4, or
+// MdstructUnavailableError when the parse cannot run, which main maps to exit 5.
 export async function runSimplify(
   input: string,
   opts: SimplifyOpts,
@@ -145,6 +152,11 @@ export async function runSimplify(
 ): Promise<string> {
   const { ask = askJson, progress, maxAttempts = MAX_ATTEMPTS } = deps;
   const { front, body } = parseFrontmatter(input);
+  // Parse the source BEFORE the first model call. The apply-gate below reads mdstruct, so a missing
+  // binary fails this run either way — the only question is whether it fails after a heavy restyle
+  // pass has already been paid for. This probe answers it for free: the parse cache keys on source
+  // text, so the gate's own parse of `body` is this same spawn, and main maps the throw to exit 5.
+  parseDoc(body);
   const lang = resolveLang(opts.lang, body);
   // No literals: simplify runs no glossary term list, so createMasker freezes only the verbatim
   // spans VERBATIM_SPAN_RE finds — wikilinks, embeds, inline code, and `<!-- HTML comments -->`. A
@@ -227,7 +239,8 @@ export async function runSimplify(
 
 // main is the CLI entrypoint: it parses argv, acts on --help and misuse before the key gate or any
 // network call, reads the input (file or stdin), runs the pass, and prints the brief. It returns no
-// value; it sets the exit code (0 brief, 1 missing key, 2 usage, 3 empty input, 4 analysis failed).
+// value; it sets the exit code (0 brief, 1 missing key, 2 usage, 3 empty input, 4 analysis failed,
+// 5 the apply-gate could not run).
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.kind === "help") {
@@ -266,6 +279,15 @@ async function main(): Promise<void> {
     const out = await runSimplify(input, parsed.opts, { progress });
     process.stdout.write(out.endsWith("\n") ? out : `${out}\n`);
   } catch (e) {
+    // The apply-gate could not run. runSimplify parses before its first model call, so this fires
+    // with no tokens spent, and 5 says so rather than blaming the model the way 4 would.
+    if (e instanceof MdstructUnavailableError) {
+      console.error(
+        `simplify: the apply-gate could not run — ${e.message}\n` +
+          "Rebuild mdstruct (./rebuild.sh in the nix repo), then re-run.",
+      );
+      process.exit(5);
+    }
     // Both models exhausted (transient) or truncated: the brief has no usable rewrite, so fail
     // rather than print a hollow brief. A non-transient throw (a code bug) propagates.
     if (isTransient(e) || e instanceof TruncationError) {

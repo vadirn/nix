@@ -2,9 +2,10 @@
 // blockquotes, table rows, image embeds) locate their spans through this module instead of
 // line-scanning regex. Only the LOCATOR moved here; the key-normalization stays in text.ts.
 //
-// Fail-loud: a missing or unparseable binary throws `mdstruct unavailable` rather than
+// Fail-loud: a missing or unparseable binary throws MdstructUnavailableError rather than
 // degrading to regex. Residue is a correctness gate (it tells the user real payload was
-// dropped), so a silent fallback would reintroduce the very bugs this fixes.
+// dropped), so a silent fallback would reintroduce the very bugs this fixes. simplify's
+// apply-gate shares that reasoning and maps the class to its own exit 5.
 import { execFileSync, type StdioOptions } from "node:child_process";
 
 // MDSTRUCT_BIN overrides the bare-name PATH resolution so tests can point at a freshly-built
@@ -161,6 +162,18 @@ export function checkSchemaVersion(
   return { ok: true };
 }
 
+// The one failure this module raises: the parse could not run. A missing binary, an empty or
+// unparseable stdout, and a schema mismatch all land here, because each leaves the caller with no
+// structure to read. A CLI catches this CLASS rather than sniffing the message, and maps it to its
+// own "the gate could not run" exit code (simplify-verify and simplify-text both exit 5) — distinct
+// from the exit that says the check RAN and failed.
+export class MdstructUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MdstructUnavailableError";
+  }
+}
+
 // The result of parseDoc: the parsed `doc` paired with the raw UTF-8 `buf` its byte spans
 // index into (sliceBytes reads spans off `buf`, never off the original JS string).
 export interface ParsedDoc {
@@ -199,9 +212,9 @@ function runMdstruct(
     if (opts.recoverNonzero && typeof err.status === "number") {
       return typeof err.stdout === "string" ? err.stdout : "";
     }
-    throw new Error(
+    throw new MdstructUnavailableError(
       `mdstruct unavailable: could not run '${bin}' (${(e as Error).message}). ` +
-        "The payload-residue gate needs the mdstruct binary on PATH; it must not degrade to regex.",
+        "Every gate reading this parse needs the mdstruct binary on PATH; none may degrade to regex.",
     );
   }
 }
@@ -221,19 +234,21 @@ export function parseDoc(text: string): ParsedDoc {
   const bin = MDSTRUCT_BIN;
   const stdout = runMdstruct(text, ["-"]);
   const line = stdout.split("\n").find((l) => l.trim());
-  if (!line) throw new Error("mdstruct unavailable: empty output from 'mdstruct'");
+  if (!line)
+    throw new MdstructUnavailableError("mdstruct unavailable: empty output from 'mdstruct'");
   let doc: MdDoc;
   try {
     doc = JSON.parse(line) as MdDoc;
   } catch (e) {
-    throw new Error(
+    throw new MdstructUnavailableError(
       `mdstruct unavailable: unparseable NDJSON from 'mdstruct' (${(e as Error).message})`,
     );
   }
   // Floor check against MINIMUM_SCHEMA_VERSION — see its own comment for why a lower minor or
-  // a different major must fail loud, while a higher minor passes through.
+  // a different major must fail loud, while a higher minor passes through. A stale binary blocks
+  // the same gates a missing one does, so it raises the same class.
   const schemaCheck = checkSchemaVersion(doc.schemaVersion, bin);
-  if (!schemaCheck.ok) throw new Error(schemaCheck.message);
+  if (!schemaCheck.ok) throw new MdstructUnavailableError(schemaCheck.message);
   const parsed: ParsedDoc = { doc, buf };
   cache.set(key, parsed);
   return parsed;

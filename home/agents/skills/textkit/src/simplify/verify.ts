@@ -16,26 +16,30 @@
 //                sits here because a REWORDED one is the failure — the restyle turned a
 //                template's `repo-self-sufficient` into `self-sufficient` and every count in the
 //                note stayed equal — so only content equality catches it.
-//   structure  — the heading count, the fenced-code-marker count, AND the thematic-break (`---`)
-//                count match. A truncation that drops no span still drops a heading, an opening
-//                fence, or a `---` separator a template requires, so this is the backstop for a
-//                pure-prose note the span axis cannot check.
+//   structure  — the heading count, the code-block count, AND the thematic-break (`---`) count
+//                match. mdstruct parses each side once and all three counts are read off that one
+//                tree, so a setext heading counts as a heading, a fence inside a blockquote counts
+//                as a code block, and a `#` line in frontmatter counts as neither. A truncation
+//                that drops no span still drops a heading, a code block, or a `---` separator a
+//                template requires, so this is the backstop for a pure-prose note the span axis
+//                cannot check.
 //
-// No model, no key, no network — the spans and structure markers are the certificate, and checking
-// them is format validation. (Not core/writing/verify.ts, which is verifySpellBlock, the CLI-side
-// block verifier for a change-nothing-else pass. This gate is skill-side and fires on a heavy
-// restyle's applied output.)
+// No model, no key, no network — the spans and the parsed structure are the certificate, and
+// checking them is format validation. The parse itself shells out to the `mdstruct` binary, which
+// this gate depends on hard: a missing binary exits 5 and prints no report, because a gate that
+// reports "verified" off a weaker check is worse than no gate. (Not core/writing/verify.ts, which
+// is verifySpellBlock, the CLI-side block verifier for a change-nothing-else pass. This gate is
+// skill-side and fires on a heavy restyle's applied output.)
 import { readFileSync } from "node:fs";
-import { parseFrontmatter } from "textkit/core/frontmatter.ts";
 import {
-  type FenceState,
-  THEMATIC_BREAK_RE,
-  VERBATIM_SPAN_RE,
-  fenceScan,
-  stripFences,
-} from "textkit/core/text.ts";
+  MdstructUnavailableError,
+  parseDoc,
+  walkHeadings,
+  walkNodes,
+} from "textkit/core/mdstruct.ts";
+import { VERBATIM_SPAN_RE } from "textkit/core/text.ts";
 
-// ---- the two axes (pure) ----
+// ---- the two axes (deterministic; the structural one reads a parse) ----
 
 // One reference-span multiset diff: `original`/`rewrite` are the span counts on each side, and
 // `dropped`/`invented` list the exact spans that fail to balance (with multiplicity), so the report
@@ -49,8 +53,8 @@ type SpanDiff = {
   invented: string[];
 };
 
-// One structural-count axis (headings or fences): the count on each side and whether they match.
-// Internal — VerifyReport reuses it for both count axes.
+// One structural-count axis (headings, code blocks, or thematic breaks): the count on each side and
+// whether they match. Internal — VerifyReport reuses it for all three count axes.
 type CountAxis = { ok: boolean; original: number; rewrite: number };
 
 // The full verify outcome — the span axis plus the three structural-count axes. verifyClean reads
@@ -86,54 +90,58 @@ function multisetDiff(a: string[], b: string[]): { dropped: string[]; invented: 
   return { dropped, invented };
 }
 
-// Count ATX headings outside fenced code: stripFences blanks every fence region line-for-line, so a
-// `#`-prefixed comment inside a ```bash block is not miscounted. Up to three leading spaces and a
-// `#`..`######` run followed by a space or end-of-line is a heading (CommonMark). The count is only
-// ever COMPARED between the two sides, so a symmetric false positive (a `#` in verbatim frontmatter
-// on both sides) cancels — the delta is what gates.
+// Count every heading mdstruct parsed, ATX and setext alike, walking the nested `headings[]` tree.
+// The parser settles three cases the old line scan got wrong: a setext underline makes a heading, a
+// `#` inside a fenced block does not, and a `#` line inside YAML frontmatter does not either. That
+// last one is why the count is now an ABSOLUTE reading rather than one whose false positives had to
+// cancel across the two sides — the CLI reads a whole file as the original and takes a rewrite piped
+// without frontmatter, so nothing guarantees the two sides carry the same frontmatter to cancel.
 function headingCount(text: string): number {
   let n = 0;
-  for (const line of stripFences(text).split("\n")) if (/^ {0,3}#{1,6}(?:\s|$)/.test(line)) n++;
+  walkHeadings(parseDoc(text).doc.headings, () => n++);
   return n;
 }
 
-// Count fenced-code marker lines (each ``` / ~~~ opener AND closer) via the latching scanner, so an
-// opposite-marker run inside a fence is literal content, not a marker. A whole block is two markers;
-// a truncation that eats a block's closer leaves one — an odd delta the count catches.
-function fenceMarkers(text: string): number {
+// Count the block nodes of one `type` in a parsed side. walkNodes descends into every child, so a
+// node nested in a blockquote or a list item counts the same as one at the top level.
+function nodeCount(text: string, type: string): number {
   let n = 0;
-  let fence: FenceState = null;
-  for (const line of text.split("\n")) {
-    const scan = fenceScan(line, fence);
-    fence = scan.fence;
-    if (scan.isMarker) n++;
-  }
+  walkNodes(parseDoc(text).doc.nodes, (node) => {
+    if (node.type === type) n++;
+  });
   return n;
 }
 
-// Count thematic-break lines (`---`, `***`, `___`) outside fenced code and outside the leading
-// frontmatter block. parseFrontmatter drops the note's `---`-fenced YAML so its delimiters are not
-// miscounted as breaks; stripFences then blanks a `---` inside a ```code block. Like headingCount,
-// the number is only ever COMPARED between the two sides, so a symmetric count (a setext `---`
-// underline present on both) cancels — the delta is what gates. A dropped `---` separator (the
+// The fence axis counts CODE BLOCKS, not marker lines: one `codeBlock` node per block, fenced or
+// indented, including a fence inside a blockquote the old line scan read as prose. So a truncation
+// that eats a whole block reads as a 1 → 0 delta rather than the old odd marker delta. A truncation
+// that eats only a closer no longer shows here at all — an unclosed fence still parses as one block
+// — but it swallows the tail into that block, which the heading and span axes then report.
+function codeBlockCount(text: string): number {
+  return nodeCount(text, "codeBlock");
+}
+
+// Count `thematicBreak` nodes — the parser's own reading of `---`, `***`, and `___`. It excludes
+// what the old regex had to strip by hand (frontmatter delimiters, a `---` inside a fenced block)
+// and, load-bearing here, it excludes a setext underline: that `---` is a heading's second line, so
+// the parser gives it to the heading axis and never to this one. A dropped `---` separator (the
 // gh-stack footer rule a template needs) is the drift this axis catches.
 function thematicBreakCount(text: string): number {
-  let n = 0;
-  for (const line of stripFences(parseFrontmatter(text).body).split("\n"))
-    if (THEMATIC_BREAK_RE.test(line)) n++;
-  return n;
+  return nodeCount(text, "thematicBreak");
 }
 
 // verify compares the proposed `rewrite` against the `original` note on every axis and returns the
-// combined report. Pure and total — it reads two strings and touches no process state.
+// combined report. Deterministic but not pure: the three structural axes read one mdstruct parse per
+// side (the cache keys on source text, so each side spawns once). It throws
+// MdstructUnavailableError when that parse cannot run, and main maps that to exit 5.
 export function verify(original: string, rewrite: string): VerifyReport {
   const so = spanList(original);
   const sr = spanList(rewrite);
   const { dropped, invented } = multisetDiff(so, sr);
   const ho = headingCount(original);
   const hr = headingCount(rewrite);
-  const fo = fenceMarkers(original);
-  const fr = fenceMarkers(rewrite);
+  const fo = codeBlockCount(original);
+  const fr = codeBlockCount(rewrite);
   const to = thematicBreakCount(original);
   const tr = thematicBreakCount(rewrite);
   return {
@@ -177,8 +185,8 @@ export function formatVerify(r: VerifyReport): string {
   );
   lines.push(
     r.fences.ok
-      ? `- fences: OK — ${r.fences.original} marker(s) preserved`
-      : `- fences: DRIFT — ${r.fences.original} marker(s) in source, ${r.fences.rewrite} in rewrite`,
+      ? `- fences: OK — ${r.fences.original} code block(s) preserved`
+      : `- fences: DRIFT — ${r.fences.original} code block(s) in source, ${r.fences.rewrite} in rewrite`,
   );
   lines.push(
     r.thematic.ok
@@ -213,7 +221,14 @@ Options:
 Output:
   A short report to stdout — spans, headings, fences, thematic breaks, each
   OK or DRIFT. The original is never modified; this tool applies nothing.
-  Exit: 0 verified · 1 drift (block the apply) · 2 usage error · 3 empty input.
+  Exit: 0 verified · 1 drift (block the apply) · 2 usage error · 3 empty input ·
+  5 the gate could not run (see below).
+
+Structure comes from the mdstruct binary, which must be on PATH. A missing
+or stale binary exits 5 and prints no report: 1 says the rewrite drifted,
+5 says the gate never ran. Both block the apply — name which one happened.
+Rebuild with ./rebuild.sh in the nix repo. There is no regex fallback: a
+gate that reports "verified" off a weaker check is worse than no gate.
 `;
 
 // The validated options parseArgs hands to main: the original note path (always a file) and the
@@ -258,8 +273,8 @@ export function parseArgs(argv: string[]): ParseResult {
 }
 
 // main is the CLI entrypoint: parse argv, act on --help and misuse, read the original file and the
-// rewrite (file or stdin), run the pure verify, print the report, and set the exit code (0 verified,
-// 1 drift, 2 usage, 3 empty input). It returns no value.
+// rewrite (file or stdin), run verify, print the report, and set the exit code (0 verified, 1 drift,
+// 2 usage, 3 empty input, 5 the gate could not run). It returns no value.
 function main(): void {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.kind === "help") {
@@ -281,7 +296,22 @@ function main(): void {
     console.error("simplify-verify: empty input — need both the original note and the rewrite");
     process.exit(3);
   }
-  const report = verify(originalText, rewriteText);
+  // Exit 5 is its own lane, ahead of the report: the structure axes could not be computed, so there
+  // is no report to print and no verdict to claim. It stays distinct from 1 so the caller can say
+  // whether the rewrite drifted or the gate never ran.
+  let report: VerifyReport;
+  try {
+    report = verify(originalText, rewriteText);
+  } catch (e) {
+    if (e instanceof MdstructUnavailableError) {
+      console.error(
+        `simplify-verify: the gate could not run — ${e.message}\n` +
+          "Rebuild mdstruct (./rebuild.sh in the nix repo), then re-run. Block the apply meanwhile.",
+      );
+      process.exit(5);
+    }
+    throw e;
+  }
   process.stdout.write(`${formatVerify(report)}\n`);
   if (!verifyClean(report)) process.exit(1);
 }
