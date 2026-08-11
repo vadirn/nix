@@ -100,6 +100,40 @@ test("runGuard: a `- - -` break splits a list run in two rather than counting as
   expect(r.list.short).toEqual({ source: 2, rewrite: 2 });
 });
 
+test("runGuard: a blank-line-separated list run is one loose list, not two blocks", () => {
+  // CommonMark keeps a blank line inside a list run LOOSE, not a new list — mdstruct emits one
+  // `list` node holding all four items, so short.source is 0 (a four-item block clears SEQ_MIN).
+  // That low source block count is what makes SHORT strict: a rewrite that genuinely splits the
+  // run (real content between the halves) now shows two NEW short blocks, and UNCONFIRMED shows
+  // one block added beyond what the scan confirmed.
+  const r = runGuard({
+    ...clean,
+    source: "a loose list",
+    maskedInput: "- a\n- b\n\n- c\n- d",
+    rewriteMasked: "- a\n- b\n\nSplit note.\n\n- c\n- d",
+    rewriteUnmasked: "- a\n- b\n\nSplit note.\n\n- c\n- d",
+  });
+  expect(r.list.source).toEqual({ ordered: 0, unordered: 4 });
+  expect(r.list.short).toEqual({ source: 0, rewrite: 2 });
+  expect(r.list.unconfirmed).toEqual({ blocks: 1, items: 0, candidates: 0, budget: 0 });
+  expect(r.list.ok).toBe(false);
+});
+
+test("runGuard: a marker change mid-run splits into two lists, not one two-item block", () => {
+  // "- a" then "* b" changes the bullet character, so CommonMark starts a new list — mdstruct
+  // emits two `list` nodes of one item each, not one list of two. short.source is 2 (each
+  // one-item block sits under SEQ_MIN on its own), which a merged one-block reading would miss.
+  const r = runGuard({
+    ...clean,
+    source: "two markers",
+    maskedInput: "- a\n* b",
+    rewriteMasked: "- a\n* b",
+    rewriteUnmasked: "- a\n* b",
+  });
+  expect(r.list.source).toEqual({ ordered: 0, unordered: 2 });
+  expect(r.list.short).toEqual({ source: 2, rewrite: 2 });
+});
+
 test("runGuard: a corrupted proper name is flagged against the source", () => {
   const r = runGuard({
     ...clean,
