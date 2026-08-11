@@ -58,23 +58,23 @@ governs every row below.
 expression, and leave the expression in place for distill until a distill ticket retires it. Two rows
 break the rule and say so.
 
-| Expression                 | Verdict        | Reason                                                                                      | Callers |
-| -------------------------- | -------------- | ------------------------------------------------------------------------------------------- | ------- |
-| `fenceScan`                | mdstruct today | A `codeBlock` node carries `fenced`, `fenceChar`, and spans, including inside a blockquote. | shared |
-| `segment`                  | mdstruct today | Top-level `nodes[]` tile the document, so block boundaries need no blank-line scan.         | distill |
-| `stripFences`              | mdstruct today | `codeBlock` spans name the exact bytes a caller wants blanked.                              | shared |
-| `THEMATIC_BREAK_RE`        | mdstruct today | A `thematicBreak` node is never a setext underline. The regex cannot tell them apart.       | shared |
-| `WIKILINK` / `hasWikilink` | mdstruct today | A `wikilink` inline covers the `![[embed]]` form through its `embed` flag.                  | distill |
-| `ASSET_RE`                 | TypeScript     | It classifies a file extension. That is a vault policy, not markdown structure.             | distill |
-| `isExternalUrl`            | TypeScript     | It classifies a URL string. The parse tree holds no vault-versus-external opinion.          | distill |
-| `normalizeEdgeTarget`      | TypeScript     | It also strips fragments from markdown-link URLs, which mdstruct emits raw.                 | distill |
-| `wikilinkTarget`           | mdstruct today | `wikilink{page}` already carries the alias-stripped, fragment-stripped target.              | distill |
-| `decodeTarget`             | TypeScript     | Percent-decoding a path is a URL concern, outside the parser's surface.                     | distill |
-| `hasOperational`           | TypeScript     | It scores prose for CLI flags and paths. That is a writing judgment.                        | distill |
-| `MASK_RE`                  | mdstruct today | A `codeSpan` span includes its delimiters, so a double-backtick span slices whole.          | shared |
-| `HTML_COMMENT`             | crate change   | A block comment is an `htmlBlock`. An inline comment emits no inline at all.                | shared |
-| `VERBATIM_SPAN_RE`         | crate change   | It composes `HTML_COMMENT`, so the whole atom set waits on that gap.                        | shared |
-| `slugSegment`              | TypeScript     | It mirrors vault-query's `slug.rs` byte for byte, pinned by a parity test.                  | distill, cards |
+| Expression                 | Verdict        | Reason                                                                                                                                                                                    | Callers |
+| -------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `fenceScan`                | mdstruct today | A `codeBlock` node carries `fenced`, `fenceChar`, and spans, including inside a blockquote.                                                                                               | shared |
+| `segment`                  | mdstruct today | Top-level `nodes[]` tile the document, so block boundaries need no blank-line scan.                                                                                                       | distill |
+| `stripFences`              | mdstruct today | `codeBlock` spans name the exact bytes a caller wants blanked.                                                                                                                            | shared |
+| `THEMATIC_BREAK_RE`        | removed        | guard.ts was its last consumer, and the swap deleted the regex outright.                                                                                                                  | — |
+| `WIKILINK` / `hasWikilink` | mdstruct today | A `wikilink` inline covers the `![[embed]]` form through its `embed` flag.                                                                                                                | distill |
+| `ASSET_RE`                 | TypeScript     | It classifies a file extension. That is a vault policy, not markdown structure.                                                                                                           | distill |
+| `isExternalUrl`            | TypeScript     | It classifies a URL string. The parse tree holds no vault-versus-external opinion.                                                                                                        | distill |
+| `normalizeEdgeTarget`      | TypeScript     | It also strips fragments from markdown-link URLs, which mdstruct emits raw.                                                                                                               | distill |
+| `wikilinkTarget`           | mdstruct today | `wikilink{page}` already carries the alias-stripped, fragment-stripped target.                                                                                                            | distill |
+| `decodeTarget`             | TypeScript     | Percent-decoding a path is a URL concern, outside the parser's surface.                                                                                                                   | distill |
+| `hasOperational`           | TypeScript     | It scores prose for CLI flags and paths. That is a writing judgment.                                                                                                                      | distill |
+| `MASK_RE`                  | mdstruct today | A `codeSpan` span includes its delimiters, so a double-backtick span slices whole. The applied fix stayed a regex — `VERBATIM_SPAN_RE` still needs the crate's missing `htmlInline` kind. | shared |
+| `HTML_COMMENT`             | crate change   | A block comment is an `htmlBlock`. An inline comment emits no inline at all.                                                                                                              | shared |
+| `VERBATIM_SPAN_RE`         | crate change   | It composes `HTML_COMMENT`, so the whole atom set waits on that gap.                                                                                                                      | shared |
+| `slugSegment`              | TypeScript     | It mirrors vault-query's `slug.rs` byte for byte, pinned by a parity test.                                                                                                                | distill, cards |
 
 Two rows break the routing rule, because their defect lives in one shared constant:
 
@@ -216,9 +216,8 @@ the one crate change this inventory asks for.
 imported slice is `core`. Before the move, no file under `simplify/` could import the wrapper
 (it lived under `distill/`), and every other step waited on it.
 
-1. **Move the wrapper to `src/core/mdstruct.ts`.** ~~Rewrite the import specifier in 17 files.~~
-   Done. Import paths only, so distill's behaviour is untouched. This was the precondition for every
-   step below.
+1. **Move the wrapper to `src/core/mdstruct.ts`.** Rewrite the import specifier in 17 files. Import
+   paths only, so distill's behaviour is untouched. This was the precondition for every step below.
 2. **Swap `verify.ts`'s three structural axes** to one `parseDoc` per side. Add the exit 5 path and
    its `--help` line. This closes defect 1, the frontmatter asymmetry, and the setext-to-ATX double
    drift. It is the smallest surface with the most expensive failure.
