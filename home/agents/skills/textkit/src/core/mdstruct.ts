@@ -23,10 +23,12 @@ export type Span = [number, number];
 
 // A block node in `nodes[]`. `bodySpan` is a fence's inner body (info-string + fences
 // excluded); `span` is the whole node. `children` is walked recursively (comrak nests blocks
-// under lists/quotes).
+// under lists/quotes). `ordered` is a `list` node's kind — true for `1.`, false for `-`/`*`/`+`
+// — and is absent on every other type, so a consumer tests it only after matching `list`.
 export interface MdNode {
   type: string;
   fenced?: boolean;
+  ordered?: boolean;
   bodySpan?: Span;
   span?: Span;
   startLine?: number;
