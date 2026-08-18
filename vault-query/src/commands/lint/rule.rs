@@ -37,7 +37,7 @@ pub struct LintContext<'a> {
     pub frontmatter_links: Vec<crate::wikilink::FrontmatterLinks>,
     pub backlink_index: HashMap<String, Vec<String>>,
     /// Structural-relation edges per file, parallel to `files`. Parsed once here
-    /// (lossy, D29) so the relations rules reuse one scan.
+    /// (lossy) so the relations rules reuse one scan.
     pub relations: Vec<Vec<super::relations::RelationEdge>>,
     /// Local-node slug set per file, parallel to `files`. The Glossary terms +
     /// Workflow steps (STEP 3a) that a bare local relation endpoint resolves

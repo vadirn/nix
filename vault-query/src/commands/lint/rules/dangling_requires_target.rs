@@ -7,30 +7,12 @@ use crate::wikilink::normalize;
 /// Flags a `type: ticket` file's `requires:` entry that names no ticket file
 /// in the vault.
 ///
-/// `requires:` is the work model's dependency edge: a wikilink from a ticket
-/// to the ticket(s) that must land first. A typo, a rename, or a deleted
-/// ticket leaves it pointing at nothing, and a reader has no way to tell
-/// whether the named blocker is done, renamed, or never existed.
+/// Asks a stronger question than `broken-wikilink`, which only asks whether a
+/// target resolves to any entry: `requires:` names a ticket specifically, so an
+/// entry resolving to a same-named card or note passes there and is flagged here.
 ///
-/// This is the narrow half of a two-rule split. `broken-wikilink` covers
-/// frontmatter links now and asks only whether a target resolves to *any*
-/// entry; this rule asks the stronger question `requires:` actually poses —
-/// whether it resolves to a **ticket**. So a `requires:` naming a same-named
-/// card or note passes `broken-wikilink` and is still flagged here, which is
-/// the case that would otherwise go unreported. (`ticket-outward-only`
-/// deliberately exempts `requires:` as a frontmatter wikilink by design.)
-///
-/// Resolution mirrors `reference_wrong_type`'s frontmatter walk rather than
-/// `commands::tickets::ticket_track_slug`'s single-value one:
-/// `wikilink::walk_frontmatter_links` visits every entry of the `requires:`
-/// sequence individually (not joined into one display string, so a multi-
-/// entry list is checked in full, not just its first member), and
-/// `wikilink::resolve_name` strips the folder prefix and `.md` suffix down to
-/// a bare stem for comparison. The known set here is scoped to `type: ticket`
-/// files only — `requires:` names a ticket specifically, so an entry
-/// resolving to a same-named card or note is still a defect, not a pass.
-/// Whether a resolved blocker is still open is a separate, status-level
-/// question this rule does not answer.
+/// Whether a resolved blocker is still open is a status-level question this rule
+/// does not answer.
 pub struct DanglingRequiresTarget;
 
 impl Rule for DanglingRequiresTarget {

@@ -37,16 +37,11 @@ impl VaultFile {
 
     /// Check if this file is in the given folder (relative to vault root).
     ///
-    /// Matches on a path-segment boundary, not a bare string prefix: `folder`
-    /// must be the whole leading path, so `"41 projects/nix"` matches
-    /// `"41 projects/nix/ticket-a.md"` (direct child) and
-    /// `"41 projects/nix/sub/deep.md"` (nested), but not
-    /// `"41 projects/nixon/ticket.md"` — a plain `starts_with` would treat
-    /// `folder` as a substring and let a sibling folder whose name happens to
-    /// extend it (`nix` vs. `nixon`) slip through. `*-init` writes
-    /// `file.inFolder("<project folder>")` into every generated `.base`, so an
-    /// over-inclusive match here pulls a sibling project's files into the
-    /// wrong base.
+    /// Matches on a path-segment boundary, not a bare string prefix, so
+    /// `"41 projects/nix"` matches its children at any depth but never
+    /// `"41 projects/nixon/ticket.md"`. Every generated `.base` carries a
+    /// `file.inFolder(...)`, so an over-inclusive match pulls a sibling project's
+    /// files into the wrong base.
     pub fn in_folder(&self, folder: &str, vault_root: &Path) -> bool {
         let rel = self.relative_path(vault_root);
         rel.strip_prefix(folder)

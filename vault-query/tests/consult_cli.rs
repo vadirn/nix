@@ -204,7 +204,7 @@ fn test_consult_oversized_pointer_emits_read_verb() {
 }
 
 // ---------------------------------------------------------------------------
-// JSONL logging tests (Backlog 6, Decision 8)
+// JSONL logging tests
 // ---------------------------------------------------------------------------
 
 /// With `log_path` set, one invocation appends exactly one parseable JSON line
@@ -334,7 +334,7 @@ fn test_consult_no_log_path_no_file_written() {
 }
 
 // ---------------------------------------------------------------------------
-// --no-log and --log-path flag tests (Backlog 26)
+// --no-log and --log-path flag tests
 // ---------------------------------------------------------------------------
 
 /// `--no-log` suppresses the JSONL record even when the config has a log_path set.

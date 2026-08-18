@@ -16,26 +16,17 @@ pub struct Wikilink {
 
 /// Extract all wikilinks from content.
 ///
-/// Parses via mdstruct (comrak-backed) and maps each `Inline::Wikilink` to a
-/// [`Wikilink`], copying the schema-1.1 `target`/`alias` fields directly rather
-/// than re-slicing spans or re-running [`WIKILINK_RE`]. Those two fields are
-/// reliable decoded strings even inside escaped-pipe table cells, where comrak's
-/// inline byte spans shift onto non-char boundaries.
+/// Copies mdstruct's decoded `target`/`alias` rather than re-slicing spans: those
+/// two stay reliable inside escaped-pipe table cells, where comrak's inline byte
+/// spans shift onto non-char boundaries.
 ///
-/// Suppression is inherited from mdstruct: wikilinks inside fenced code blocks
-/// and inline code spans do not appear as `Inline::Wikilink`, and YAML
-/// frontmatter is treated as opaque, so `inlines()` already excludes any
-/// wikilink written inside a `---...---` block. Embed wikilinks (`![[X]]`,
-/// `embed: true`) ARE included — comrak emits them with `target = X`, matching
-/// the prior pulldown+regex behaviour.
+/// Suppression is inherited from mdstruct — code fences, code spans, and
+/// frontmatter yield no wikilink. Embeds (`![[X]]`) ARE included.
 ///
-/// `line` is mdstruct's `start_line`: 1-based over the whole document, counting
-/// frontmatter lines, which matches the absolute-line numbering callers expect.
+/// `line` is 1-based over the whole document, counting frontmatter lines.
 ///
-/// Dual use: called both on whole file content and on individual YAML
-/// frontmatter scalar strings (via [`walk_frontmatter_links`]). A bare scalar
-/// won't begin with `---\n`, so mdstruct parses it as body and emits its
-/// wikilink normally.
+/// Also called on a bare YAML scalar via [`walk_frontmatter_links`]. A scalar does
+/// not begin with `---\n`, so mdstruct parses it as body.
 pub fn extract(content: &str) -> Vec<Wikilink> {
     let doc = mdstruct::parse(content, &mdstruct::Options { wikilinks: true });
 
@@ -182,10 +173,9 @@ pub fn collect_all_link_targets(file: &crate::vault::VaultFile) -> Vec<String> {
 ///   Obsidian writes (`key: "[[X]]"`). Targets come from the parse, never from
 ///   the raw text, so a genuine nested array (`key: [[a, b]]`) can never invent
 ///   the target `a, b`.
-/// - `unquoted` — `[[...]]` occurrences present in the raw frontmatter text
-///   that the parse turned into a one-element flow sequence instead of a
-///   string. That is an author writing a link YAML then ate: every scalar-only
-///   consumer, this one included, is blind to it.
+/// - `unquoted` — `[[...]]` occurrences present in the raw frontmatter text that
+///   the parse turned into a one-element flow sequence instead of a string. Every
+///   scalar-only consumer, this one included, is blind to those.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FrontmatterLinks {
     /// Links from YAML string scalars, carrying absolute file line numbers,
@@ -275,16 +265,13 @@ fn single_string_sequences(
 /// `content` is the whole file (frontmatter included); `frontmatter` is its
 /// parsed tree, as `VaultFile` carries both.
 ///
-/// Targets come from the parse ([`walk_frontmatter_links`], string scalars
-/// only). Line numbers come from the raw block, because `serde_yaml::Value`
-/// carries no spans: each parsed link claims the first raw occurrence naming
-/// the same target, and raw occurrences left over after every parsed link has
-/// claimed one are candidates for the quoting defect. A parsed link that
-/// matches no raw occurrence — only reachable through a YAML escape that
-/// rewrites the text, e.g. `"[[Foo]]"` — falls back to line 1.
+/// Line numbers come from the raw block, because `serde_yaml::Value` carries no
+/// spans: each parsed link claims the first raw occurrence naming the same target,
+/// and the leftovers are candidates for the quoting defect. A parsed link matching
+/// no raw occurrence falls back to line 1.
 ///
-/// `frontmatter` is a `BTreeMap`, so the parse visits keys alphabetically
-/// rather than in file order; sorting the result by line restores file order.
+/// `frontmatter` is a `BTreeMap`, so the parse visits keys alphabetically; sorting
+/// the result by line restores file order.
 pub fn frontmatter_links(
     content: &str,
     frontmatter: &std::collections::BTreeMap<String, serde_yaml::Value>,
@@ -660,18 +647,8 @@ mod tests {
 
     #[test]
     fn test_extract_frontmatter_line_offset() {
-        // 5-line frontmatter block:
-        //   line 1: ---
-        //   line 2: title: Foo
-        //   line 3: tags:
-        //   line 4:   - a
-        //   line 5: ---
-        //   line 6: [[Body]]
-        //
-        // frontmatter::body() returns "\n[[Body]]" (starts at the \n after closing ---).
-        // The rewritten extract will feed body() to the parser and add a frontmatter_line_offset
-        // equal to the number of newlines before the body slice. Those 5 newlines (one per
-        // frontmatter line) plus the leading \n in the body slice shift [[Body]] to line 6.
+        // `[[Body]]` sits on line 6: five frontmatter lines, then the newline that
+        // opens the body slice.
         let content = "---\ntitle: Foo\ntags:\n  - a\n---\n[[Body]]";
         let links = extract(content);
         assert_eq!(links.len(), 1);

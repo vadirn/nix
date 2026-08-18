@@ -1,8 +1,7 @@
-//! Local-node parser — the "## Glossary = nodes" REBUILD primitive (D13/D22, STEP 3a).
+//! Local-node parser: scans a note's `## Glossary` and `## Workflow` sections
+//! back into its local-node slug set.
 //!
-//! BUILD (`distill.ts::assembleBody`) renders a note's key concepts as a
-//! `## Glossary` table and its actionable directives as a `## Workflow` numbered
-//! list:
+//! `distill.ts` writes those two sections; this module reads them:
 //!
 //! ```text
 //! ## Workflow
@@ -16,22 +15,16 @@
 //! | <term> | <def> |
 //! ```
 //!
-//! This module is the REBUILD half: [`parse_local_nodes`] scans those two sections
-//! back into a file's **local-node slug set** — the term-slugs (D28, via
-//! [`crate::slug::segment`]) that a bare `Endpoint::Local` relation endpoint (D29)
-//! resolves against. A Glossary row contributes its first-cell Term; a Workflow item
-//! contributes its step text; both are slugged. The GFM header (`| Term | … |`) and
-//! separator (`| ---- | … |`) rows carry no concept — collection starts only after
-//! the separator, so the header is skipped without matching its literal text.
+//! A Glossary row contributes its first-cell Term, a Workflow item its step text,
+//! both slugged. Collection starts after the GFM separator row, so the header is
+//! skipped without matching its literal text.
 //!
-//! Parsing mirrors [`super::relations`]'s scanner: fenced code is ignored, an ATX
-//! heading opens its section, and the next heading of any level closes it. The two
-//! section headings (`## Glossary`, `## Workflow`) are emitted in English by BUILD
-//! regardless of the note's language, so the slug match is language-stable.
+//! `distill.ts` emits both headings in English whatever the note's language, so
+//! the slug match is language-stable.
 
 /// The local-node slug set of one file: Glossary term-slugs and Workflow step-slugs,
 /// each normalized by [`crate::slug::segment`]. These are the labels a bare local
-/// relation endpoint or from-label (D29/D26) resolves against.
+/// relation endpoint or from-label resolves against.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LocalNodes {
     /// Glossary term-slugs, in table order.

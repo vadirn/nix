@@ -4,24 +4,12 @@ use crate::frontmatter;
 /// Flags a file whose `type:` says a project holds exactly one of it, but whose
 /// filename is not the name that type reserves.
 ///
-/// A project folder mixes two populations. The many-per-project files are named
-/// `<type>-<slug>` in lowercase and `slug-filename-mismatch` keeps that half
-/// honest. The one-per-project files are named for what they are, capitalized —
-/// `Context.md`, `Scratchpad.md`, beside `Tracks.base` and the project note.
-/// Casing is what separates the two at a glance in a listing that interleaves
-/// them, so a lowercase `context.md` reads as a `<type>-<slug>` file with its
-/// slug missing.
+/// The name is the only address these files have. They carry no `slug:`, and
+/// `commands/context.rs` reaches one by joining a constant onto the project path
+/// rather than by scanning for a `type:`, so a misnamed one is never found.
 ///
-/// The name is also the only address these files have. They carry no `slug:`,
-/// and `commands/context.rs` reaches one by joining a constant onto the project
-/// path rather than by scanning for a `type:` — so a misnamed one is not found
-/// at all, and the command prints nothing rather than reporting a problem.
-///
-/// A file carrying no `type:` is skipped: `untyped-entry` reports that, and this
-/// rule cannot know a file is a singleton without being told.
-///
-/// Exempt: templates and superseded entries. `templates/Scratchpad.md` is the
-/// source a project's scratchpad is instantiated from, not a project's own.
+/// Skips a file carrying no `type:`, since `untyped-entry` reports that. Exempt:
+/// templates and superseded entries.
 pub struct SingletonFilenameMismatch;
 
 /// The types a project holds exactly one of, each with the basename it reserves.

@@ -492,15 +492,10 @@ mod tests {
 
     #[test]
     fn test_grouped_view_end_to_end_through_filter_and_view_apply() {
-        // Closes W4: a fixture `.base` declaring `groupBy: file.folder`, driven
-        // through the real `filter::apply` + `view::apply` pipeline instead of
-        // a hand-built `ViewResult`. This is the only checked-in exercise of
-        // the `view.group_by -> group_header` mapping at view.rs:211-214 — the
-        // hand-built test above never calls `apply`, so deleting that mapping
-        // breaks nothing today — and the only checked-in consumer of the
-        // `file.folder` column; the real consumers are the vault-side
-        // `41 projects/Tracks.base` and `Tickets.base` "By Project" views,
-        // which live outside this repo.
+        // The only checked-in exercise of the `view.group_by -> group_header`
+        // mapping, and the only consumer of the `file.folder` column. The
+        // hand-built test above never calls `apply`, so without this one deleting
+        // that mapping would break nothing here.
         let base = crate::base::parse::parse_str(
             r#"
 filters:

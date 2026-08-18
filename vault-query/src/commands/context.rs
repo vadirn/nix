@@ -4,14 +4,9 @@ use crate::config::ResolvedConfig;
 
 /// The names a project's context file can carry, in preference order.
 ///
-/// `Context.md` is what `project-setup` writes: a project folder holds exactly
-/// one, so it is named like the other singletons beside it (`Tracks.base`,
-/// the project note) rather than like the `<type>-<slug>` files.
-///
-/// The lowercase spelling predates that convention. macOS is case-insensitive
-/// by default, so a single `join` would resolve either on this machine and fail
-/// only once the vault reaches a case-sensitive one — checking both names keeps
-/// that difference out of the result.
+/// `Context.md` is what `project-setup` writes; the lowercase spelling predates
+/// that convention. macOS is case-insensitive by default, so a single `join` would
+/// resolve either here and fail only on a case-sensitive filesystem.
 const CONTEXT_NAMES: [&str; 2] = ["Context.md", "context.md"];
 
 pub fn run(cfg: &ResolvedConfig) -> Result<()> {

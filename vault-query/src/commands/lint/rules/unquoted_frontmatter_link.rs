@@ -8,23 +8,14 @@ use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 /// `key: [[X]]` is not a string. The outer `[` opens a flow sequence whose one
 /// element is another flow sequence whose one element is the plain scalar `X`,
 /// so the parsed value is `Sequence([Sequence([String("X")])])`. Every consumer
-/// that recovers links from string scalars — the backlink index,
-/// `broken-wikilink`, `reference-wrong-type`, `dangling-requires-target` — then
-/// sees `X`, finds no `[[` in it, and reports nothing. The author wrote a link,
-/// the vault holds an array, and no rule fires. That silence is the defect this
-/// rule exists to break.
+/// that recovers links from string scalars then sees `X`, finds no `[[` in it,
+/// and reports nothing.
 ///
-/// It is a quoting fault, not a resolution fault: the target it names may well
-/// exist. So it carries its own message and its own severity rather than
-/// joining `broken-wikilink`, and quoting the value is the whole fix.
-///
-/// Detection is a discrepancy between two readings of the same block, supplied
-/// by `wikilink::frontmatter_links`: a `[[...]]` present in the raw frontmatter
-/// text that the parse did not yield as a string scalar, and whose bracketed
-/// text does appear as the sole element of some sequence in the parsed tree.
-/// The second condition is what spares a genuine nested array — `key: [[a, b]]`
-/// leaves a two-element inner sequence, never a one-element one, so it is not
-/// mistaken for a link an author fumbled.
+/// Detection is a discrepancy between two readings of the same block: a `[[...]]`
+/// present in the raw frontmatter text that the parse did not yield as a string
+/// scalar, and whose bracketed text is the sole element of some sequence. That
+/// last condition spares a genuine nested array, since `key: [[a, b]]` leaves a
+/// two-element inner sequence.
 pub struct UnquotedFrontmatterLink;
 
 impl Rule for UnquotedFrontmatterLink {

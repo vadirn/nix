@@ -1,17 +1,9 @@
 //! Vault-body section addressing.
 //!
-//! A single primitive — [`section_ranges`] — that maps a Markdown body onto the
-//! structural addresses `read` resolves (`"0"`/`text` for the pre-heading lede,
-//! then dotted-numeric heading addresses like `1.2`) together with the inclusive
-//! 1-based line range each section owns. Callers (e.g. `consult`'s pointer
-//! assembly) use it to attribute body positions to sections without rendering
-//! the full heading tree.
-//!
-//! Heading detection comes from the shared [`crate::mdfacet`] locator facet (one
-//! mdstruct parse), the same source `read` uses; only the address/range arithmetic
-//! lives in this module. Addresses are kept identical to `read`'s overview tree so
-//! an address produced here resolves against the on-disk file via
-//! `read <path> <address>`.
+//! [`section_ranges`] maps a Markdown body onto the structural addresses `read`
+//! resolves, with the inclusive 1-based line range each section owns. Addresses are
+//! kept identical to `read`'s overview tree, so one produced here resolves against
+//! the on-disk file via `read <path> <address>`.
 
 /// A section's structural address and the inclusive 1-based line range it owns,
 /// for callers that map positions onto sections without rendering the tree.

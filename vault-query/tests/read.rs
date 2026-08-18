@@ -335,7 +335,7 @@ fn test_read_resolves_vault_relative_path() {
     );
 }
 
-// --- read smart-unfold (Step 2, Backlog 5) ---------------------------------
+// --- read smart-unfold ---------------------------------------------------
 
 #[test]
 fn test_unfold_threshold_inlines_small_folds_large() {
