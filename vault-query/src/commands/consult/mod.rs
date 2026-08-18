@@ -1,11 +1,11 @@
-//! Selection core for `vault-query consult` (Backlog item 4).
+//! Selection core for `vault-query consult`.
 //!
 //! Implements three pieces, all reading constants from `ConsultConfig`:
 //!   1. Scope-before-index: filter to in-scope files, build BM25 over that set.
-//!   2. Relative abstain gate (Decision 12): coverage + score-elbow, threshold backstop.
-//!   3. Greedy whole-body budget packing (Decision 15).
+//!   2. Relative abstain gate: coverage + score-elbow, threshold backstop.
+//!   3. Greedy whole-body budget packing.
 //!
-//! This module is the unit-test surface — no CLI wiring (Step D does that).
+//! CLI wiring lives in [`super::consult_cmd`].
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
@@ -27,7 +27,7 @@ use crate::wikilink;
 // Public API types (Decision: final names locked here)
 // ---------------------------------------------------------------------------
 
-/// Invocation mode (Decision 18): Ambient uses stricter gate constants.
+/// Invocation mode: Ambient uses stricter gate constants.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConsultMode {
     /// Interactive / deliberate query — fears false-abstain.
@@ -63,7 +63,7 @@ pub struct SelectedDoc {
     pub superseded: bool,
 }
 
-/// A sub-gate hit reported on ABSTAIN (Decision 16).
+/// A sub-gate hit reported on ABSTAIN.
 /// Serializes directly into the `consult --format json` envelope.
 #[derive(Debug, Clone, Serialize)]
 pub struct NearMiss {
@@ -115,10 +115,10 @@ pub enum ConsultOutcome {
     },
 }
 
-/// Gate diagnostics captured during a `run_consult` call (Backlog 6).
+/// Gate diagnostics captured during a `run_consult` call.
 ///
 /// Exposes the raw numbers behind each gate decision so that the JSONL log
-/// (Step F) can retroactively determine which constant values would have
+/// can retroactively determine which constant values would have
 /// flipped each abstain/select.
 #[derive(Debug, Clone)]
 pub struct ConsultDiagnostics {
@@ -130,7 +130,7 @@ pub struct ConsultDiagnostics {
     /// (`None` if the query tokenizes to nothing or no hits).
     pub coverage: Option<f32>,
     /// Maximum coverage fraction over the top-3 elbow candidates (the value the
-    /// Decision 27 gate uses to decide).  `None` when the query tokenizes to
+    /// gate uses to decide).  `None` when the query tokenizes to
     /// nothing or there are no hits.
     pub max_top3_coverage: Option<f32>,
     /// Elbow ratio: top_score / median_score (`None` if ≤1 hit).
@@ -141,7 +141,7 @@ pub struct ConsultDiagnostics {
     /// operator like `AND` survives sanitization and trips Tantivy's parser).
     /// An abstain with `query_error: Some` is a parse failure, not a genuine
     /// empty result — the two are otherwise both reported as `reason: "no results"`
-    /// and would be indistinguishable (§4.2).
+    /// and would be indistinguishable.
     pub query_error: Option<String>,
 }
 
@@ -169,12 +169,12 @@ struct Hit {
 ///
 /// `limit` controls the Tantivy top-N cut (IDF and top-N are computed only over
 /// the provided `files`, so callers must pre-filter to the in-scope set before
-/// calling this — Decision 11).
+/// calling this).
 ///
 /// Returns the scored hits paired with an optional parse-error message: `Some`
 /// when `QueryParser` rejected the sanitized query (the hit set is then empty),
 /// `None` otherwise. Surfacing the error lets `run_consult` flag a parse-failure
-/// abstain distinctly from a genuine no-results abstain (§4.2).
+/// abstain distinctly from a genuine no-results abstain.
 fn bm25_rank(
     files: &[&VaultFile],
     vault_root: &Path,
@@ -208,7 +208,7 @@ fn bm25_rank(
     // QueryParser can still fail on a query that survives sanitization (e.g. a bare
     // boolean operator like `AND`). Return the parser error to the caller rather
     // than swallowing it as an empty result, so the abstain it causes is
-    // distinguishable from a genuine no-results abstain (§4.2).
+    // distinguishable from a genuine no-results abstain.
     let parsed = match query_parser.parse_query(&sanitized) {
         Ok(p) => p,
         Err(e) => return Ok((vec![], Some(e.to_string()))),
@@ -254,7 +254,7 @@ fn bm25_rank(
 /// all non-empty lowercase stemmed tokens.
 ///
 /// No stopword list is readily available in this dependency set (tantivy ships
-/// none; adding a crate just for stopwords is out of scope for Step C).
+/// none; a crate just for stopwords is not worth the dependency).
 /// Decision: all non-empty stemmed tokens count as content terms. Stopwords
 /// such as "the", "a", "in" will stem to themselves and be counted; their
 /// near-universal presence in docs means they contribute fractionally to coverage
@@ -396,7 +396,7 @@ fn median_f32(values: &[f32]) -> f32 {
 // Near-miss helper
 // ---------------------------------------------------------------------------
 
-/// Build the `near_misses` payload from the top ~3 hits (Decision 16).
+/// Build the `near_misses` payload from the top ~3 hits.
 ///
 /// `top3_tokens` carries the pre-computed stemmed token set per hit (parallel
 /// to `hits`, at most 3 entries), so the bodies are not re-tokenized here.
@@ -431,7 +431,7 @@ fn build_near_misses(
 // ---------------------------------------------------------------------------
 
 /// Outcome of the relative abstain gate over a non-empty, tier-scaled,
-/// score-descending hit set (Decision 12). Pure function of its inputs — the
+/// score-descending hit set. Pure function of its inputs — the
 /// unit-test seam for the coverage/elbow/threshold math, decoupled from BM25 and
 /// the packer.
 #[derive(Debug, Clone)]
@@ -443,17 +443,17 @@ struct GateEval {
     /// Rank-1 coverage fraction (diagnostics only; the gate uses `max_top3_coverage`).
     coverage: Option<f32>,
     /// Maximum coverage over the top-3 elbow window — the value the coverage gate
-    /// decides on (Decision 27).
+    /// decides on.
     max_top3_coverage: Option<f32>,
     /// `top_score / median`, `None` when ≤1 hit or the median is zero.
     elbow_ratio: Option<f32>,
 }
 
-/// Apply the relative abstain gate (Decision 12) to a non-empty hit set.
+/// Apply the relative abstain gate to a non-empty hit set.
 ///
 /// `hits` must be score-descending and non-empty; `hit_tokens` carries the
 /// per-hit stemmed body token sets, parallel to `hits` (computed once by the
-/// caller — Step C). The gate combines three tests:
+/// caller). The gate combines three tests:
 ///   - coverage: pass when ANY of the top-3 highest-scoring candidates reaches
 ///     coverage ≥ `coverage_fraction` (the packer emits a set, so judging only
 ///     rank 1 would let a high-score/low-coverage doc block a relevant rank-2 doc);
@@ -534,10 +534,10 @@ fn evaluate_gate(
 // Greedy budget packing + pointer assembly (pure stage)
 // ---------------------------------------------------------------------------
 
-/// Greedy whole-body budget packing (Decision 15) plus pointer assembly.
+/// Greedy whole-body budget packing plus pointer assembly.
 ///
 /// Runs only after the gate opens. `hit_tokens` is parallel to `hits` and carries
-/// the per-hit stemmed body tokens computed once by the caller (Step C); the
+/// the per-hit stemmed body tokens computed once by the caller; the
 /// per-doc coverage filter reads them rather than re-tokenizing. Returns the
 /// packed docs, their summed token estimate, and the pointers for
 /// coverage-cleared candidates the packer dropped (per-doc cap or budget).
@@ -552,7 +552,7 @@ fn pack_candidates(
 ) -> (Vec<SelectedDoc>, usize, Vec<DocPointer>) {
     // Candidate set: hits with score >= median (above-median set), each paired
     // with its per-doc coverage computed once from the shared token set.
-    // PROVISIONAL membership rule: above-median score cut. Tunable in Step F.
+    // PROVISIONAL membership rule: above-median score cut.
     let candidates: Vec<(&Hit, f32)> = hits
         .iter()
         .zip(hit_tokens)
@@ -560,17 +560,11 @@ fn pack_candidates(
         .map(|(h, tokens)| (h, coverage_fraction_of(query_terms, tokens)))
         .collect();
 
-    // Per-doc coverage filter: keep only candidates clearing coverage_fraction.
-    // This prevents a high-score / low-coverage "displacer" from consuming token
-    // budget at the expense of genuinely relevant docs.
+    // Keeps a high-score / low-coverage "displacer" from consuming token budget.
     //
-    // `query_terms` is non-empty here — an empty token set fails the coverage gate
-    // and abstains before packing.
-    //
-    // Safety: the gate verified that at least one of the top-3 hits clears
-    // coverage_fraction, but that hit may be below the median and absent from
-    // `candidates`. If the filter empties the candidate set, fall back to the
-    // top-3 hits that clear coverage so the result is never empty.
+    // The gate verified that one of the top-3 hits clears `coverage_fraction`, but
+    // that hit may be below the median and absent from `candidates`. So an empty
+    // filter falls back to the top-3 clearing hits, and the result is never empty.
     let coverage_filtered: Vec<(&Hit, f32)> = {
         let filtered: Vec<(&Hit, f32)> = candidates
             .iter()
@@ -622,7 +616,7 @@ fn pack_candidates(
         }
 
         // Include if it fits in the remaining budget; skip and continue otherwise.
-        // A later smaller doc may still fit (Decision 15: greedy whole-body, no truncation).
+        // A later smaller doc may still fit: packing is greedy whole-body, never truncating.
         if running_tokens + tokens <= config.token_budget {
             running_tokens += tokens;
             packed.push(SelectedDoc {
@@ -643,7 +637,7 @@ fn pack_candidates(
     // budget), as the set difference coverage_filtered − packed by path. The
     // difference is uniform across the normal path and the sub-median fallback
     // because both feed `coverage_filtered`; the displacer suppressed by the
-    // per-doc coverage filter (Decision 30) never enters it. Found-but-too-big
+    // per-doc coverage filter never enters it. Found-but-too-big
     // is a success: an empty pack with pointers returns Selected (exit 0) so
     // the caller can read the doc itself, and exit 4 keeps meaning "nothing
     // relevant exists".
@@ -674,14 +668,14 @@ fn pack_candidates(
 /// Run the full consult pipeline: scope filter → BM25 → gate → pack.
 ///
 /// `files` is the pre-scanned vault slice (all files; scope filtering happens
-/// inside this function — Decision 11).
+/// inside this function).
 /// `scope_types` is the resolved type list (from config.types or CLI override).
 /// An empty `scope_types` matches all types (pass-through), meaning a config
 /// with `types = []` searches the whole vault rather than abstaining. The default
 /// config types are non-empty, so this is an edge case in practice.
 ///
 /// Returns a `(ConsultOutcome, ConsultDiagnostics)` tuple.  The diagnostics
-/// expose the raw gate numbers so the JSONL log can record them for Step F.
+/// expose the raw gate numbers so the JSONL log can record them.
 pub fn run_consult(
     query: &str,
     files: &[VaultFile],
@@ -691,7 +685,7 @@ pub fn run_consult(
     mode: ConsultMode,
     include_superseded: bool,
 ) -> Result<(ConsultOutcome, ConsultDiagnostics)> {
-    // --- 1. Scope-before-index (Decision 11 + 13) ---
+    // --- 1. Scope-before-index ---
     //
     // Filter to files whose frontmatter `type` is in scope_types AND whose
     // `template` key is not `true`.  Mirrors the `run_by_type` exclusion in
@@ -723,7 +717,7 @@ pub fn run_consult(
     let limit = 20;
     let (mut hits, query_error) = bm25_rank(&in_scope, vault_root, query, limit, config)?;
 
-    // Grade by epistemic tier (Decision 18): scale each hit's score by its
+    // Grade by epistemic tier: scale each hit's score by its
     // multiplier so a certified entry outranks a provisional one (and, when
     // `--include-superseded` restores them, a superseded one) on the same query.
     // The downstream gate is *relative* (coverage / median / elbow), so a
@@ -743,7 +737,7 @@ pub fn run_consult(
 
     if hits.is_empty() {
         // `query_error` distinguishes a parse-failure abstain from a genuine
-        // no-results abstain; both surface as `reason: "no results"` (§4.2).
+        // no-results abstain; both surface as `reason: "no results"`.
         let diag = ConsultDiagnostics {
             top_score: None,
             median_score: None,
@@ -763,7 +757,7 @@ pub fn run_consult(
         ));
     }
 
-    // --- 2. Relative abstain gate (Decision 12) ---
+    // --- 2. Relative abstain gate ---
 
     let (coverage_fraction, elbow_k) = match mode {
         ConsultMode::Deliberate => (config.coverage_fraction, config.elbow_k),
@@ -771,7 +765,7 @@ pub fn run_consult(
     };
 
     // Stemmed query terms, and the stemmed body tokens of every hit computed once
-    // (Step C): the gate, near-misses, and the packer's per-doc coverage filter
+    //: the gate, near-misses, and the packer's per-doc coverage filter
     // all read these instead of re-tokenizing the same bodies.
     let query_terms: BTreeSet<String> = stemmed_tokens(query).into_iter().collect();
     let hit_tokens: Vec<HashSet<String>> = hits
@@ -799,7 +793,7 @@ pub fn run_consult(
     };
 
     if let Some(reason) = gate.abstain_reason {
-        // Populate near_misses from the top ~3 hits (Decision 16); their token
+        // Populate near_misses from the top ~3 hits; their token
         // sets are the leading slice of the shared `hit_tokens`.
         let top3 = &hit_tokens[..hit_tokens.len().min(3)];
         let near_misses = build_near_misses(&hits, &query_terms, top3);
@@ -814,7 +808,7 @@ pub fn run_consult(
         ));
     }
 
-    // --- 3. Greedy whole-body budget packing (Decision 15) ---
+    // --- 3. Greedy whole-body budget packing ---
     let (docs, total_tokens, pointers) = pack_candidates(
         &hits,
         &hit_tokens,

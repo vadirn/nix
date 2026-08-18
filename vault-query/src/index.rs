@@ -45,7 +45,7 @@ pub(crate) fn sanitize_query(query: &str) -> String {
 // Shared English analysis chain
 // ---------------------------------------------------------------------------
 
-/// Build the bilingual (EN + RU) analysis chain shared by `consult` and `search` (Decision 6):
+/// Build the bilingual (EN + RU) analysis chain shared by `consult` and `search`:
 ///   SimpleTokenizer → RemoveLongFilter(40) → LowerCaser → Stemmer(English) → Stemmer(Russian).
 ///
 /// English Snowball only mutates Latin vowel/suffix patterns and passes Cyrillic through
@@ -79,9 +79,8 @@ pub(crate) struct IndexFields {
     pub path: Field,
 }
 
-/// Build the in-RAM Tantivy index shared by every BM25 site: `consult`'s `bm25_rank`
-/// and `search`'s `collect_bm25_results` + `run_bm25` text arm. One definition so the
-/// three sites cannot drift in schema or analyzer.
+/// Build the in-RAM Tantivy index shared by every BM25 site, so the three cannot
+/// drift in schema or analyzer.
 ///
 /// Schema:
 ///   - `title`       ← `file.name` (the filename), STORED, default tokenizer
@@ -90,10 +89,8 @@ pub(crate) struct IndexFields {
 ///   - `body`        ← `frontmatter::body()`, STORED
 ///   - `path`        ← relative path, STRING | STORED
 ///
-/// Everything downstream of `commit()` (query-parser boosts, search, snippet
-/// generation, result shaping) stays in the caller, since those steps diverge between
-/// consult and search. Per-field boosts are set by the caller — from `ConsultConfig`
-/// (consult) or `DEFAULT_TITLE_BOOST` / `DEFAULT_DESCRIPTION_BOOST` (search).
+/// Everything downstream of `commit()` stays in the caller, including per-field
+/// boosts, since those steps diverge between consult and search.
 pub(crate) fn build_index(files: &[&VaultFile], vault_root: &Path) -> Result<(Index, IndexFields)> {
     let mut schema_builder = Schema::builder();
     let stored_text = || {
@@ -119,7 +116,7 @@ pub(crate) fn build_index(files: &[&VaultFile], vault_root: &Path) -> Result<(In
 
     let index = Index::create_in_ram(schema);
 
-    // Register the bilingual analysis chain (Decision 6) so every site stems identically.
+    // Register the bilingual analysis chain so every site stems identically.
     index.tokenizers().register("default", bilingual_analyzer());
 
     let total_content: usize = files.iter().map(|f| f.content.len()).sum();

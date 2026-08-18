@@ -10,8 +10,8 @@ use crate::frontmatter::{is_superseded, is_template};
 use serde_yaml::Value;
 use std::collections::BTreeMap;
 
-/// Machine-legible per-node trust level (Decision 18). Retrieval ranks entries
-/// by tier so unverified content cannot be served as ground (Decision 7). Ordered
+/// Machine-legible per-node trust level. Retrieval ranks entries
+/// by tier so unverified content cannot be served as ground. Ordered
 /// worst-to-best; `multiplier()` gives the post-retrieval BM25 score factor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EpistemicTier {
@@ -19,7 +19,7 @@ pub enum EpistemicTier {
     /// explicit `epistemic_status: superseded`. Excluded from consult by default;
     /// labeled and heavily downranked in search.
     Superseded,
-    /// Filed but not yet curated (e.g. agent-distilled output, D27). Real ground
+    /// Filed but not yet curated, e.g. agent-distilled output. Real ground
     /// for a thin query, so downranked rather than excluded.
     Provisional,
     /// Curated / human-gated, and the trusted default for the ~955 existing notes
@@ -30,7 +30,7 @@ pub enum EpistemicTier {
 
 impl EpistemicTier {
     /// Post-retrieval score multiplier. Certified is neutral (1.0); the
-    /// superseded factor matches the historical binary downrank (Decision 7).
+    /// superseded factor matches the historical binary downrank.
     /// Both non-neutral values are uncalibrated — revisit with real data.
     pub fn multiplier(self) -> f32 {
         match self {

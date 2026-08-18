@@ -4,17 +4,12 @@ use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 
 /// Flags `[[...]]` wikilinks in the body of a `type: ticket` file.
 ///
-/// A ticket publishes to a reader who has only the git repo, so a vault
-/// wikilink in the body resolves to nothing for them — the rationale has to
-/// be restated inline, or the ticket has to name a repo artifact (file,
-/// commit, symbol) the reader can resolve instead.
+/// A ticket publishes to a reader who has only the git repo, so a vault wikilink
+/// in the body resolves to nothing for them.
 ///
-/// Ticket frontmatter is the opposite case: `track:`, `requires:`, and
-/// `project:` are wikilinks by design and must never be flagged. No explicit
-/// exemption is needed for them here — `ctx.body_links` is built from
-/// `wikilink::extract`, which parses via `mdstruct` and never emits a
-/// wikilink node for text inside the leading YAML frontmatter block, so
-/// frontmatter wikilinks are already outside this rule's view.
+/// Frontmatter wikilinks (`track:`, `requires:`, `project:`) are by design and need
+/// no exemption here: `ctx.body_links` comes from `wikilink::extract`, which emits
+/// nothing for the leading YAML block.
 pub struct TicketOutwardOnly;
 
 impl Rule for TicketOutwardOnly {

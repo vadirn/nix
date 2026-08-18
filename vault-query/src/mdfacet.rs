@@ -1,20 +1,15 @@
 //! Locator facet over [`mdstruct`]: the structural primitives the vault-body
 //! walkers need, derived from one whole-document parse instead of per-line
-//! scanning. Replaces the hand-rolled `markdown.rs` scanner (mdstruct-plan §4 step 3).
+//! scanning.
 //!
-//! [`Facet::headings`] reproduces `markdown::atx_heading`'s rule as a filter over
-//! mdstruct's heading tree: an ATX heading starts at column 1 (`start_col == 1`,
-//! rejecting the 1–3 space indents CommonMark allows but the scanner rejected), is
-//! not setext, and has non-empty post-`#` text. comrak already excludes a `#`
-//! inside a code fence or the frontmatter block, so the fence-toggling first pass
-//! the callers ran is no longer needed for heading detection.
+//! [`Facet::headings`] filters mdstruct's heading tree to ATX headings starting at
+//! column 1 — rejecting the 1–3 space indents CommonMark allows — that are not
+//! setext and carry non-empty post-`#` text. comrak already excludes a `#` inside
+//! a code fence or the frontmatter block.
 //!
-//! [`Facet::fenced_lines`] reproduces the fence toggler's skip set: the 1-based
-//! lines covered by every code block, fenced OR indented. The old `markdown.rs`
-//! toggler ran `fence_marker` on the left-trimmed line, so it masked indented
-//! fences too; masking every `CodeBlock` keeps code content — an indented block is
-//! comrak's `CodeBlock { fenced: false }` — out of the relation and glossary
-//! scanners, which must never parse code as edges or terms.
+//! [`Facet::fenced_lines`] gives the 1-based lines covered by every code block,
+//! fenced OR indented, keeping code content out of the relation and glossary
+//! scanners. An indented block is comrak's `CodeBlock { fenced: false }`.
 
 use std::collections::BTreeSet;
 

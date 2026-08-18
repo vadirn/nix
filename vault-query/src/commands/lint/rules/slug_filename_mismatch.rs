@@ -3,25 +3,12 @@ use crate::frontmatter;
 
 /// Flags a ticket or track whose filename disagrees with `<type>-<slug>`.
 ///
-/// The two are one identity written twice, and queries read the filename half.
-/// `commands/tickets.rs` derives `--track`'s slug from the *stem* of the
-/// wikilink a ticket backrefs, deliberately, so resolution never depends on the
-/// linked file being present or scannable — and `--track` validates its argument
-/// against the stems of the project's track files. So when a track's stem and
-/// its `slug:` disagree, the track is addressable only by the name that is not
-/// written inside it, and `--track <the slug it declares>` reports it as unknown.
+/// Queries read the filename half: `--track` validates its argument against the
+/// stems of a project's track files. So a track whose stem and `slug:` disagree
+/// is addressable only by the name not written inside it.
 ///
-/// Only `ticket` and `track` are named `<type>-<slug>`. A `checkpoint` is
-/// timestamped and declares no slug; cards, notes, and references are named by
-/// their title.
-///
-/// Skips an entry whose `slug:` is absent: `slug` is already required for both
-/// types, so `missing-required-field` reports that, and firing here as well
-/// would name one defect twice.
-///
-/// Exempt: templates and superseded entries. A template legitimately has no
-/// slug — the field is filled in at instantiation — so `templates/Ticket.md` is
-/// correct as it stands rather than in breach.
+/// Skips an entry whose `slug:` is absent, since `missing-required-field` reports
+/// that. Exempt: templates and superseded entries.
 pub struct SlugFilenameMismatch;
 
 /// The types whose filename encodes their slug.

@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn test_unknown_expression_errors() {
         // An unsupported predicate must error rather than silently matching
-        // every file (the §4.1 pass-through-true bug).
+        // every file (the pass-through-true bug).
         let f = make_file("cp1", vec![], "cp1.md");
         let err = evaluate("status =~ /foo/", &f, Path::new("/vault")).unwrap_err();
         assert!(err.to_string().contains("unsupported filter expression"));

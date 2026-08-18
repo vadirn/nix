@@ -39,7 +39,7 @@ fn test_regex_no_superseded_excludes() {
 /// `epistemic_status: superseded` must be excluded by get/backlinks/list under
 /// --no-superseded — not just the legacy `superseded: true` flag. Before the
 /// epistemic_tier dedup these three commands keyed off `is_superseded()` only and
-/// leaked an `epistemic_status: superseded` entry as live (plan §4.6). The note
+/// leaked an `epistemic_status: superseded` entry as live . The note
 /// here carries NO legacy flag, so it exercises the fix specifically.
 #[test]
 fn test_epistemic_status_superseded_excluded_by_get_backlinks_list() {
@@ -230,7 +230,7 @@ fn test_search_superseded_downranked_below_fresh() {
     );
 }
 
-/// Backlog 21 (falsifiable): on the same query, a `certified` sibling outranks a
+/// On the same query, a `certified` sibling outranks a
 /// `provisional` one, which outranks a `superseded` one. Fails before the graded
 /// `epistemic_tier` multiplier replaces the binary 0.3 downrank; passes after.
 #[test]

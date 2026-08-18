@@ -1,7 +1,7 @@
 use crate::commands::lint::relations::Endpoint;
 use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 
-/// `dangling-relation-label` — a hard correctness lint (D29/D32). A bare LOCAL
+/// `dangling-relation-label` — a hard correctness lint. A bare LOCAL
 /// relation endpoint, or a from-label, that matches no local node — no `## Glossary`
 /// term and no `## Workflow` step in the same file — is an unanchored edge. The
 /// label is slugged before lookup (BUILD pre-slugs, but a hand-authored label may
@@ -24,7 +24,7 @@ impl Rule for DanglingRelationLabel {
         let mut findings = Vec::new();
         for ((file, edges), nodes) in ctx.files.iter().zip(&ctx.relations).zip(&ctx.local_nodes) {
             for edge in edges {
-                // A from-label, when present (multi-node note, D26), is itself a
+                // A from-label, when present on a multi-node note, is itself a
                 // local node label.
                 if let Some(from) = &edge.from_label
                     && !nodes.contains(&crate::slug::segment(from))

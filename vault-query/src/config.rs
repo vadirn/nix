@@ -9,7 +9,7 @@ use crate::vault_ignore::{self, VaultIgnore};
 // ConsultConfig
 // ---------------------------------------------------------------------------
 
-/// Default consult per-doc token cap.  Raised from 2000 to 4000 (Decision 19):
+/// Default consult per-doc token cap.  Raised from 2000 to 4000:
 /// two confirmed ANSWER-MISS cases had expected docs of ~3000 estimated tokens
 /// and were skipped whole while the packer still had budget to spare.  4000
 /// recovers those docs while keeping the single-doc cap at exactly half of the
@@ -32,10 +32,10 @@ pub const DEFAULT_DESCRIPTION_BOOST: f32 = 1.5;
 /// Default project subdirectory (relative to `vault_root`) the generic `log`
 /// command writes weekly logs into. Config-driven via the root config's
 /// `log_project_path` key so the project name is not baked into shared code
-/// (§9 Q4). When the root config omits the key, this default is used.
+///. When the root config omits the key, this default is used.
 pub const DEFAULT_LOG_PROJECT_PATH: &str = "41 projects/block-buster";
 
-/// Configuration for the `consult` command (Decision 5).
+/// Configuration for the `consult` command.
 ///
 /// A missing or partial `[consult]` block in the root config is valid; the
 /// container-level `#[serde(default)]` fills every missing field from
@@ -43,14 +43,14 @@ pub const DEFAULT_LOG_PROJECT_PATH: &str = "41 projects/block-buster";
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ConsultConfig {
-    /// Default corpus scope by frontmatter `type` (Decision 13).
+    /// Default corpus scope by frontmatter `type`.
     /// Override at the call site with `--types`.
     pub types: Vec<String>,
 
-    /// Total token budget for packed bodies (Decision 15).
+    /// Total token budget for packed bodies.
     pub token_budget: usize,
 
-    /// Skip any single document whose body exceeds this token estimate (Decision 15).
+    /// Skip any single document whose body exceeds this token estimate.
     pub per_doc_token_cap: usize,
 
     /// BM25 query-parser boost for the `title` field (note filename).
@@ -64,30 +64,30 @@ pub struct ConsultConfig {
     pub description_boost: f32,
 
     /// Deliberate-mode coverage gate: the top document must match at least this
-    /// fraction of the query's content terms (Decision 12).
-    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    /// fraction of the query's content terms.
+    /// Calibrated against the 29-pair eval set in vault-query/eval/consult-eval.jsonl.
     pub coverage_fraction: f32,
 
     /// Deliberate-mode elbow gate: the top score must be at least k× the median
-    /// of the returned set (Decision 12).
-    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    /// of the returned set.
+    /// Calibrated against the 29-pair eval set in vault-query/eval/consult-eval.jsonl.
     pub elbow_k: f32,
 
-    /// Stricter `--ambient` coverage fraction (Decision 18).
-    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    /// Stricter `--ambient` coverage fraction.
+    /// Calibrated against the 29-pair eval set in vault-query/eval/consult-eval.jsonl.
     /// Kept mildly stricter than base as a hedge for the global UserPromptSubmit hook.
     pub ambient_coverage_fraction: f32,
 
-    /// Stricter `--ambient` elbow multiplier (Decision 18).
-    /// Calibrated against the 29-pair eval set in consult-materials/consult-eval.jsonl (Step F).
+    /// Stricter `--ambient` elbow multiplier.
+    /// Calibrated against the 29-pair eval set in vault-query/eval/consult-eval.jsonl.
     /// Kept mildly stricter than base as a hedge for the global UserPromptSubmit hook.
     pub ambient_elbow_k: f32,
 
-    /// Optional absolute-score backstop; `None` means no hard floor (Decision 12).
+    /// Optional absolute-score backstop; `None` means no hard floor.
     pub threshold: Option<f32>,
 
     /// Optional path (relative to `vault_root`, or absolute) for the JSONL
-    /// invocation log (Decision 8, Backlog 6).  When `Some`, `consult` appends
+    /// invocation log.  When `Some`, `consult` appends
     /// one JSON object per invocation.  When `None`, no logging occurs.
     /// Parent directory is created if it does not exist; any IO/serialize error
     /// is swallowed (logging is best-effort and never affects the exit code).
@@ -109,7 +109,7 @@ impl Default for ConsultConfig {
             title_boost: DEFAULT_TITLE_BOOST,
             description_boost: DEFAULT_DESCRIPTION_BOOST,
             // Gate constants calibrated against the 29-pair eval set in
-            // consult-materials/consult-eval.jsonl (Step F, 9% false-abstain,
+            // vault-query/eval/consult-eval.jsonl (9% false-abstain,
             // 0% false-positive); the ambient pair is kept mildly stricter as
             // a hedge for the global UserPromptSubmit hook.
             coverage_fraction: 0.45,
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn resolve_optional_malformed_config_errors() {
         // A present-but-broken root config must surface as Err, not be conflated
-        // with absence (the §7 Read-path distinction).
+        // with absence (the Read-path distinction).
         let tmp = tempfile::tempdir().unwrap();
         let cfg_dir = tmp.path().join(".config/vault");
         std::fs::create_dir_all(&cfg_dir).unwrap();
@@ -649,7 +649,7 @@ mod tests {
     #[test]
     fn consult_block_absent_defaults_are_correct() {
         // When no [consult] block is present, the Default impl must yield the calibrated defaults
-        // from the 29-pair eval set (consult-materials/consult-eval.jsonl, Step F).
+        // from the 29-pair eval set in vault-query/eval/consult-eval.jsonl.
         let defaults = ConsultConfig::default();
         assert_eq!(
             defaults.types,
@@ -689,7 +689,7 @@ mod tests {
         let consult = config.consult.expect("consult block should be present");
         // The overridden field:
         assert_eq!(consult.token_budget, 4000);
-        // Everything else stays at calibrated defaults (Step F, 29-pair eval):
+        // Everything else stays at calibrated defaults:
         assert_eq!(
             consult.types,
             vec!["card", "note", "reference", "experiment", "ticket"]

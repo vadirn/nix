@@ -1,19 +1,15 @@
 //! `read FILE [ADDRESS]`: the vault-facing wrapper over the [`mdread`] engine.
 //!
-//! The reader itself — heading tree, addressing, fold/unfold, rendering — lives
-//! in the standalone `mdread` crate, which knows nothing about vaults. This
-//! wrapper adds the two vault concerns the general reader must not carry:
+//! The reader itself lives in the standalone `mdread` crate, which knows nothing
+//! about vaults. This wrapper adds the two vault concerns:
 //!
-//! 1. **Target resolution.** A literal path that exists wins; then a bare
-//!    vault-relative pointer (`read "20 cards/Foo.md"`) against the configured
-//!    vault root; then the argument is treated as a *name fragment* and resolved
-//!    through the same [`crate::slug::resolve_paths`] index `get` uses, so
-//!    `read "Skill vs note"` works without a `get` round-trip first.
-//! 2. **The vault dialect.** Vault content never indents headings, and the
-//!    historical scanner rejected any leading whitespace, so headings read with
-//!    [`mdread::HeadingRule::StrictColumn1`] rather than CommonMark's 0–3-space
-//!    allowance. Links count as [`mdread::LinkRule::Wikilinks`]: the vault's
-//!    `links:` figure measures its own note graph, which URLs are not part of.
+//! 1. **Target resolution.** A literal path that exists wins; then a vault-relative
+//!    pointer against the configured root; then the argument is treated as a name
+//!    fragment and resolved through the same index `get` uses.
+//! 2. **The vault dialect.** Headings read with [`mdread::HeadingRule::StrictColumn1`],
+//!    since vault content never indents them. Links count as
+//!    [`mdread::LinkRule::Wikilinks`], because the `links:` figure measures the
+//!    note graph, which URLs are not part of.
 
 use std::path::{Path, PathBuf};
 

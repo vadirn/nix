@@ -1,8 +1,8 @@
 use crate::commands::lint::relations::is_known_rel;
 use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 
-/// `unknown-rel` — a soft registry nudge (D32). A `<rel>` token outside the open
-/// `REL_REGISTRY` is not an error: the edge is kept (lossy parse, D29) and surfaced
+/// `unknown-rel` — a soft registry nudge. A `<rel>` token outside the open
+/// `REL_REGISTRY` is not an error: the edge is kept by the lossy parse and surfaced
 /// at `Warn` (config-downgradable to Off) so the curator can canonicalize a typo or
 /// promote a genuinely new relation into the registry.
 pub struct UnknownRel;

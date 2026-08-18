@@ -210,7 +210,7 @@ enum Commands {
         /// Comma-separated frontmatter types to search (overrides config types)
         #[arg(long, value_delimiter = ',')]
         types: Vec<String>,
-        /// Stricter abstain gate for ambient/hook invocations (Decision 18)
+        /// Stricter abstain gate for ambient/hook invocations
         #[arg(long)]
         ambient: bool,
         /// Output format: markdown (default) or json

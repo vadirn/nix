@@ -1,6 +1,6 @@
-//! CLI wiring for `vault-query consult <task>` (Backlog item 5, Step D).
+//! CLI wiring for `vault-query consult <task>`.
 //!
-//! Exit codes (Decision 4):
+//! Exit codes:
 //!   0 — ConsultOutcome::Selected (docs returned, printed to stdout)
 //!   4 — ConsultOutcome::Abstain  (no confident match; near_misses printed to stdout)
 //!   1 — IO / config / scan error (propagated via anyhow, printed by main)
@@ -47,7 +47,7 @@ impl std::fmt::Display for ConsultFormat {
 }
 
 // ---------------------------------------------------------------------------
-// JSON envelope types (Decision 3)
+// JSON envelope types
 // ---------------------------------------------------------------------------
 //
 // The domain types (`SelectedDoc`, `DocPointer`, `NearMiss`) derive `Serialize`
@@ -166,7 +166,7 @@ fn render_json_abstain(query: &str, near_misses: &[NearMiss], reason: &str) -> R
 }
 
 // ---------------------------------------------------------------------------
-// JSONL invocation log (Decision 8, Backlog 6)
+// JSONL invocation log
 // ---------------------------------------------------------------------------
 
 /// One JSONL record appended per `consult` invocation.
@@ -198,7 +198,7 @@ struct LogRecord<'a> {
     num_returned: usize,
     /// Parser error message when the sanitized query failed to parse; `null`
     /// otherwise. Lets log analysis tell a parse-failure abstain apart from a
-    /// genuine no-results abstain (§4.2).
+    /// genuine no-results abstain.
     query_error: Option<&'a str>,
     // Selection summary
     num_selected: usize,
@@ -378,7 +378,7 @@ pub fn run(
         include_superseded,
     )?;
 
-    // Best-effort JSONL logging (Decision 8). Any error is silently swallowed.
+    // Best-effort JSONL logging. Any error is silently swallowed.
     // Precedence: --no-log wins over --log-path, which wins over config log_path.
     let duration_ms = started.elapsed().as_millis();
     if !no_log {

@@ -9,18 +9,12 @@ use crate::wikilink::normalize;
 /// Flags a `[[target]]` — in the body or in the YAML frontmatter — that names
 /// no vault file and no asset.
 ///
-/// Frontmatter coverage arrives through `ctx.frontmatter_links`, whose targets
-/// come from YAML string scalars only (`key: "[[X]]"`, the form Obsidian
-/// writes). A sequence value therefore never becomes a link target, so a
-/// genuine nested array `key: [[a, b]]` cannot be misread as a link to
-/// `a, b`. The opposite defect — an unquoted `key: [[X]]` that YAML turns into
-/// a nested sequence — is a quoting fault rather than a resolution fault, and
-/// belongs to `unquoted-frontmatter-link`.
+/// Frontmatter targets come from YAML string scalars only, so a genuine nested
+/// array `key: [[a, b]]` cannot be misread as a link to `a, b`. The opposite
+/// defect, an unquoted `key: [[X]]`, belongs to `unquoted-frontmatter-link`.
 ///
-/// Resolution is one code path for both surfaces, so a frontmatter target gets
-/// the same `resolve_name`/`normalize` folding and the same asset handling a
-/// body target gets, and the per-file dedup spans both: one missing target is
-/// one defect and one fix, however many places in the file name it.
+/// Body and frontmatter share one resolution path, and the per-file dedup spans
+/// both: one missing target is one finding however many places name it.
 pub struct BrokenWikilink;
 
 impl Rule for BrokenWikilink {

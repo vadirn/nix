@@ -109,8 +109,6 @@ fn vault_root() -> std::path::PathBuf {
     std::path::PathBuf::from("/vault")
 }
 
-// --- Test 1: scope filter excludes out-of-type docs ---
-
 #[test]
 fn scope_filter_excludes_out_of_type() {
     // Build a file set with a mix of types; only "card" is in scope.
@@ -165,8 +163,6 @@ fn scope_filter_excludes_out_of_type() {
     }
 }
 
-// --- Test 2: scope filter excludes template:true docs ---
-
 #[test]
 fn scope_filter_excludes_template_docs() {
     let template = make_vault_file_ext(
@@ -208,8 +204,6 @@ fn scope_filter_excludes_template_docs() {
         ConsultOutcome::Abstain { .. } => {}
     }
 }
-
-// --- Test 3: relevant query answers with correct docs ---
 
 #[test]
 fn relevant_query_selects_and_packs() {
@@ -264,8 +258,6 @@ fn relevant_query_selects_and_packs() {
         }
     }
 }
-
-// --- Test 3b: epistemic tier downranks provisional below certified ---
 
 #[test]
 fn certified_outranks_provisional_in_consult() {
@@ -326,8 +318,6 @@ fn certified_outranks_provisional_in_consult() {
     }
 }
 
-// --- Test 4: irrelevant query abstains with near_misses ---
-
 #[test]
 fn irrelevant_query_abstains_with_near_misses() {
     let card = make_vault_file(
@@ -373,8 +363,6 @@ fn irrelevant_query_abstains_with_near_misses() {
         }
     }
 }
-
-// --- Test 5: packing respects per_doc_token_cap; the dropped doc becomes a pointer ---
 
 #[test]
 fn packing_skips_oversized_doc() {
@@ -450,13 +438,7 @@ fn packing_skips_oversized_doc() {
     }
 }
 
-// --- Test 5b: per_doc_token_cap regression — docs between old cap (2000) and new cap (4000) pack ---
-//
-// Two confirmed ANSWER-MISS cases had bodies of 3035 and 2994 estimated tokens
-// (chars/4) and were skipped whole while the packer still had budget.  This test
-// constructs a doc in that range (~2800 estimated tokens = 11200 chars) and asserts
-// that it is included with the default cap of 4000.  If the cap is ever lowered back
-// below 2800, this test will fail — that is the intent.
+// Lowering `per_doc_token_cap` below 2800 must fail this test — that is the intent.
 
 #[test]
 fn packing_includes_doc_between_old_and_new_cap() {
@@ -527,21 +509,11 @@ fn packing_includes_doc_between_old_and_new_cap() {
     }
 }
 
-// --- Test 6: greedy packing — later smaller doc fits when earlier large one overflows ---
-
 #[test]
 fn packing_greedy_later_small_doc_fits() {
-    // Three docs with identical high relevance (same terms):
-    //   - medium: exactly fits half the budget
-    //   - large: overflows the budget
-    //   - tiny: fits in the remaining half
-    // Order by score: we arrange content so all score similarly and test that the
-    // greedy loop skips the large one and includes the tiny one.
-    // We achieve this by making all three docs equally relevant, then relying on
-    // the packing logic to be order-independent (skip large, continue, include tiny).
-
-    // Budget: 100 tokens. per_doc_cap: 200.
-    // medium: ~50 tokens (200 chars). large: ~80 tokens (320 chars). tiny: ~10 tokens (40 chars).
+    // Three docs of identical relevance, so only size decides: medium fits half the
+    // 100-token budget, large overflows it, tiny fits the remainder. The greedy loop
+    // must skip large and still reach tiny.
     let budget = 100usize;
 
     // Each doc has the same high-relevance terms so they score similarly.
@@ -590,21 +562,10 @@ fn packing_greedy_later_small_doc_fits() {
     }
 }
 
-// --- Test 7: Ambient mode abstains where Deliberate would answer ---
-
 #[test]
 fn ambient_stricter_than_deliberate() {
-    // A query whose top doc covers 2 of 3 query terms. With the calibrated
-    // defaults (deliberate coverage_fraction = 0.45, ambient = 0.50) both
-    // would pass on coverage alone, so this test forces the ambient gate by
-    // raising ambient_coverage_fraction to 0.9 below — the invariant under
-    // test is "stricter ambient params never answer where deliberate does."
-    //
-    // Build two cards: one relevant, one completely unrelated.
-    //
-    // Query: "retry backoff timeout" (3 terms after stemming).
-    // Relevant card body contains "retry" and "backoff" but NOT "timeout",
-    // so coverage = 2/3 ≈ 0.67.
+    // Coverage is 2/3 ≈ 0.67, which both calibrated defaults pass, so the test forces
+    // the ambient gate by raising `ambient_coverage_fraction` to 0.9 below.
 
     let relevant = make_vault_file(
         "RetryCard",
@@ -675,8 +636,6 @@ fn ambient_stricter_than_deliberate() {
     }
 }
 
-// --- Test 8: threshold backstop forces abstain ---
-
 #[test]
 fn threshold_backstop_forces_abstain() {
     let card = make_vault_file(
@@ -712,8 +671,6 @@ fn threshold_backstop_forces_abstain() {
     }
 }
 
-// --- Test 9: empty scope produces abstain (no results) ---
-
 #[test]
 fn empty_scope_abstains() {
     let card = make_vault_file("Card1", "card", "Some content about retry patterns.");
@@ -740,8 +697,6 @@ fn empty_scope_abstains() {
 }
 
 // --- Test 11 moved to crate::index (sanitize_query now lives there) ---
-
-// --- Test 12: colon-containing query still retrieves matching doc ---
 
 #[test]
 fn colon_query_retrieves_matching_doc() {
@@ -790,8 +745,6 @@ fn colon_query_retrieves_matching_doc() {
         }
     }
 }
-
-// --- Test 13: Russian morphological query variant matches via bilingual analyzer ---
 
 #[test]
 fn russian_stemming_matches_morphological_variant() {
@@ -843,8 +796,6 @@ fn russian_stemming_matches_morphological_variant() {
     }
 }
 
-// --- Test 14: stemmed_tokens produces Russian stems ---
-
 #[test]
 fn stemmed_tokens_produces_russian_stems() {
     // "сортировки" (genitive) and "сортировку" (accusative) should reduce to the
@@ -868,8 +819,6 @@ fn stemmed_tokens_produces_russian_stems() {
         "stemmed_tokens must return at least one token for Russian input"
     );
 }
-
-// --- Test 10: near_misses contain matched_terms ---
 
 #[test]
 fn near_misses_contain_matched_terms() {
@@ -924,8 +873,6 @@ fn near_misses_contain_matched_terms() {
     }
 }
 
-// --- Test 15: top-3 coverage gate — rank-1 displacer (low coverage) + rank-2 relevant ---
-//
 // This is the displacement case: a high-BM25/low-coverage doc sits at rank 1 above a
 // lower-BM25/high-coverage doc.  Under the old rank-1-only gate the whole query would
 // abstain.  Under the new top-3 max-coverage gate it should return (rank-2 coverage
@@ -969,12 +916,9 @@ fn top3_coverage_gate_recovers_rank2_relevant_doc() {
     let files = vec![displacer, relevant];
     let scope = vec!["card".to_string()];
 
-    // Set elbow_k = 1.0 to isolate the coverage gate test (elbow is trivially satisfied).
-    // coverage_fraction remains 0.45 (default).
-    // Pin title_boost = 2.0 (the historical value): this fixture manufactures a
-    // high-score / low-coverage rank-1 displacer via the filename, which only ranks #1
-    // when the title is boosted above body. The default is now 1.0, so without this pin
-    // the body-saturated relevant doc would take rank 1 and the gate would not be exercised.
+    // `elbow_k = 1.0` makes the elbow trivially satisfied, isolating the coverage gate.
+    // `title_boost = 2.0` is pinned because the fixture manufactures its rank-1
+    // displacer through the filename, which outranks the body only when boosted.
     let mut config = default_config();
     config.elbow_k = 1.0;
     config.title_boost = 2.0;
@@ -1020,7 +964,7 @@ fn top3_coverage_gate_recovers_rank2_relevant_doc() {
                 "the low-coverage rank-1 displacer must not be packed (bug_004)"
             );
             // The displacer never enters `coverage_filtered`, so it must not leak
-            // into pointers either (Decision 30 holds for the pointer set).
+            // into pointers either.
             assert!(
                 !pointers
                     .iter()
@@ -1038,13 +982,7 @@ fn top3_coverage_gate_recovers_rank2_relevant_doc() {
     }
 }
 
-// --- Test 15a: the frontmatter `description` field is indexed and drives ranking ---
-//
-// A query term that appears ONLY in a note's frontmatter `description` — not in its
-// filename and not in its body — must surface that note. Before this change the
-// `description` was stripped from the index entirely (zero weight), so such a note was
-// invisible to BM25. This test operates on `bm25_rank` (pure ranking; the body-only
-// coverage gate is a separate concern, deliberately not exercised here).
+// Operates on `bm25_rank` alone: the body-only coverage gate is a separate concern.
 
 #[test]
 fn description_field_is_indexed_and_surfaces_a_doc() {
@@ -1088,13 +1026,9 @@ fn description_field_is_indexed_and_surfaces_a_doc() {
     );
 }
 
-// --- Test 15b: the demoted title boost lets `description` outrank a filename-only match ---
-//
-// Regression lock on the boost change: with two symmetric 3-word fields each matching all
-// query terms (one in the filename, one in the description), the winner is decided by the
-// boost ratio. Under the historical title boost (2.0) the filename dominates; under the new
-// default (title 1.0, description 1.5) the curated description wins. Asserting the flip
-// proves the demotion is the cause, independent of absolute BM25 magnitudes.
+// Two symmetric 3-word fields each match every query term, so only the boost ratio
+// decides. Asserting the flip proves the boost is the cause, independent of absolute
+// BM25 magnitudes.
 
 #[test]
 fn demoted_title_boost_lets_description_outrank_filename() {
@@ -1142,13 +1076,6 @@ fn demoted_title_boost_lets_description_outrank_filename() {
             .collect::<Vec<_>>()
     );
 }
-
-// --- Test 16: max_top3_coverage diagnostics field is populated ---
-//
-// Reuses the displacer/relevant fixture from Test 15.  Asserts that
-// `diag.max_top3_coverage` is `Some` and is ≥ rank-1 `diag.coverage`
-// (since the relevant doc at rank 2 has higher coverage than the displacer
-// at rank 1).
 
 #[test]
 fn max_top3_coverage_diagnostics_field_is_populated() {
@@ -1214,13 +1141,8 @@ fn max_top3_coverage_diagnostics_field_is_populated() {
     );
 }
 
-// --- Test 17: gate passes but packer admits nothing → Selected with pointers ---
-//
-// The abstain gate can open while the packer drops every candidate.  Here the sole
-// high-coverage doc clears the gate but exceeds a tiny per-doc token cap, so the
-// pack ends empty.  Found-but-too-big is a success: the result is Selected with no
-// docs and a pointer to the oversized doc, so exit 4 keeps meaning "nothing
-// relevant exists" (Decision 4 contract).
+// Found-but-too-big is a success, not an abstain: the gate opens, the packer drops
+// the oversized doc, and the pointer keeps exit 4 meaning "nothing relevant exists".
 
 #[test]
 fn empty_pack_after_gate_pass_returns_selected_with_pointers() {
@@ -1400,7 +1322,7 @@ fn gate_uses_max_coverage_over_top3_not_rank1() {
     assert_eq!(g.max_top3_coverage, Some(1.0));
 }
 
-// --- query_error diagnostic: parse-failure vs genuine no-results abstain (§4.2) ---
+// --- query_error diagnostic: parse-failure vs genuine no-results abstain ---
 
 #[test]
 fn parse_failure_sets_query_error_diagnostic() {
@@ -1461,8 +1383,6 @@ fn genuine_no_results_leaves_query_error_none() {
         "a genuine no-results abstain must not set query_error"
     );
 }
-
-// --- Test 18: a fully-packed selection carries no pointers ---
 
 #[test]
 fn selected_with_all_docs_packed_has_empty_pointers() {

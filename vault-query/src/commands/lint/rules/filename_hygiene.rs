@@ -3,32 +3,16 @@ use crate::commands::lint::rule::{Finding, LintContext, Rule, Severity};
 /// Flags a basename that carries a smart quote, a double space, or a space
 /// immediately before the `.md` suffix.
 ///
-/// These three are typing accidents, not naming choices: a curly quote
-/// autocorrected in place of a straight one, a stray extra space from a
-/// copy-paste, or a trailing space left before the extension when a title was
-/// edited. None of them is ever intentional, so the rule needs no frontmatter
-/// and no type check to decide whether a name is in breach — it reads the
-/// basename alone and applies to every file in the vault.
+/// Reads the basename alone, so it needs no frontmatter and applies to every file.
 ///
-/// This is why it does not fold into `slug-filename-mismatch` or
-/// `singleton-filename-mismatch`: those two ask "is this the right name" by
-/// comparing a basename against a value the file itself declares
-/// (`slug:` or `type:`); this one asks "is this name well-formed" and reads
-/// nothing but the name.
-///
-/// One finding per file: a name can carry more than one of the three issues
-/// at once (a double space that also lands right before `.md`, say), and
-/// reporting each separately would describe one bad filename as several
-/// unrelated defects. `data.issues` lists every applicable kind so a future
-/// fixer can dispatch per issue without re-deriving it from the raw basename.
+/// One finding per file: a name can carry more than one issue at once, and
+/// `data.issues` lists every applicable kind.
 pub struct FilenameHygiene;
 
-/// The smart-quote codepoints this rule flags: the curly single-quote pair
-/// U+2018/U+2019 and the curly double-quote pair U+201C/U+201D — the marks a
-/// word processor's autocorrect substitutes for a straight `'` or `"`. The
-/// low-9 quotes (U+201A, U+201E) and guillemets (U+00AB, U+00BB) are a
-/// different mark family, used deliberately in some Russian filenames rather
-/// than produced by accident, so they stay out of this set.
+/// The curly quote pairs autocorrect substitutes for a straight `'` or `"`.
+///
+/// Excludes the low-9 quotes (U+201A, U+201E) and guillemets (U+00AB, U+00BB):
+/// those are used deliberately in some Russian filenames.
 const SMART_QUOTES: [char; 4] = ['\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}'];
 
 impl Rule for FilenameHygiene {

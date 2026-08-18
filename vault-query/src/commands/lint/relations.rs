@@ -1,27 +1,21 @@
-//! Relations channel — the structural-edge round-trip (REBUILD side).
+//! Relations channel: scans a note's `## Relations` block back into edges.
 //!
-//! BUILD (`distill.ts`) serializes structural edges into a `## Relations` block,
-//! one edge per list item:
+//! `distill.ts` writes one edge per list item:
 //!
 //! ```text
 //! - <from-label> <rel>:: <to-endpoint> (predicate)
 //! ```
 //!
-//! This module is the REBUILD half: [`parse_relations`] scans those lines back
-//! into [`RelationEdge`]s. Parsing is **lossy** (D29) — a malformed line yields
-//! no edge and never aborts the rebuild.
+//! Parsing is **lossy** — a malformed line yields no edge and never aborts.
 //!
-//! The relations channel is an OPEN string set: a `<rel>` token is whitespace-free
-//! and registry-soft-checked. This module owns the Rust-native copy of that
-//! registry. `distill.ts` holds the TS-native copy; `rel-registry.json` (sibling
-//! file) is the test-only canonical ground truth. Neither tool reads the JSON at
-//! runtime — membership checks hit [`REL_REGISTRY`] directly. The `registry_parity`
-//! test pins this const to the JSON; `distill.test.ts` pins its const to the same
-//! JSON. Each side owns its own assertion, so the two copies cannot drift silently.
+//! The `<rel>` token is an OPEN string set, whitespace-free and soft-checked
+//! against [`REL_REGISTRY`]. This module owns the Rust copy of that registry and
+//! `distill.ts` owns the TS copy; neither reads `rel-registry.json` at runtime.
+//! The `registry_parity` test pins this const to the JSON and `distill.test.ts`
+//! pins its own, so the two copies cannot drift silently.
 //!
-//! Channel exclusions (D32): `supersedes` lives in file-grain frontmatter
-//! (`superseded_by:`) and `contradicts` is merge-gated / curator-promoted. Neither
-//! is a structural-channel token, so neither appears here.
+//! Channel exclusions: `supersedes` lives in frontmatter (`superseded_by:`) and
+//! `contradicts` is merge-gated, so neither is a structural-channel token.
 
 /// Open relation vocabulary, structural channel only. Three tokens the extractor
 /// already emits (subsumes / precondition-for / contrast-to, normalized to the
@@ -39,13 +33,13 @@ pub const REL_REGISTRY: &[&str] = &[
     "refines",
 ];
 
-/// Soft registry membership (D32): a known `<rel>` is canonical; an unknown one is
+/// Soft registry membership: a known `<rel>` is canonical; an unknown one is
 /// kept as an edge and surfaced by the `unknown-rel` lint, never rejected.
 pub fn is_known_rel(rel: &str) -> bool {
     REL_REGISTRY.contains(&rel)
 }
 
-/// An edge endpoint. Scope is marked by brackets in the source (D29): a bare
+/// An edge endpoint. Scope is marked by brackets in the source: a bare
 /// `term-slug` is local (another node in the same file), `[[file-slug]]` is a real
 /// wikilink to another file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,7 +53,7 @@ pub enum Endpoint {
 /// One parsed structural edge from a `## Relations` list item.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelationEdge {
-    /// Source node label; `None` on a single-atom card, which omits it (D26).
+    /// Source node label; `None` on a single-atom card, which omits it.
     pub from_label: Option<String>,
     /// The relation token (open vocabulary, registry-soft-checked).
     pub rel: String,
@@ -73,7 +67,7 @@ pub struct RelationEdge {
 
 /// Parse every `## Relations` section's edge lines in `content`.
 ///
-/// Lossy (D29): a line that is not a well-formed edge yields no edge and is
+/// Lossy: a line that is not a well-formed edge yields no edge and is
 /// skipped, never aborting. Fenced code is ignored. A `## Relations` heading opens
 /// the section; the next heading of any level closes it.
 ///
@@ -189,7 +183,7 @@ fn split_predicate(right: &str) -> (&str, Option<String>) {
     (right, None)
 }
 
-/// Classify an endpoint by bracket scope (D29).
+/// Classify an endpoint by bracket scope.
 fn parse_endpoint(s: &str) -> Option<Endpoint> {
     let s = s.trim();
     if s.is_empty() {
@@ -258,7 +252,7 @@ mod tests {
         );
         assert_eq!(edges[2].predicate, None);
 
-        // Card block: from-label omitted (single-atom card, D26), file endpoint.
+        // Card block: from-label omitted on a single-atom card, file endpoint.
         assert_eq!(edges[3].from_label, None);
         assert_eq!(edges[3].rel, "precondition-for");
         assert_eq!(edges[3].endpoint, Endpoint::File("note-graph-demo".into()));

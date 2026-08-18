@@ -29,28 +29,16 @@ const BASE: ProjectBase = ProjectBase {
 
 /// Resolve the track that owns a ticket to a bare slug.
 ///
-/// The ticket's `track:` frontmatter is a backref wikilink whose target stem is
-/// `track-<slug>` (e.g. `[[41 projects/nix/track-work-tracking-model]]`). We
-/// resolve query-side from the wikilink's **target**, stripping the folder
-/// prefix ([`wikilink::resolve_name`]) and then the `track-` prefix, rather than
-/// opening the linked track file to read its `slug:`. The stem is
-/// self-contained, so resolution never depends on the target track file being
-/// present or scannable — the robust choice for a filter.
+/// Reads the wikilink's **target** stem (`track-<slug>`), never the alias, which
+/// would name a slug no user can type. Resolving from the stem means the linked
+/// track file need not be present or scannable.
 ///
-/// The target, never the alias: `[[…/track-foo|Work tracking model]]` owns
-/// `foo`, and reading the alias instead would name a slug no user can type. A
-/// bare (non-wikilink) value passes through trimmed, since
-/// [`wikilink::extract`] yields nothing for it. When the field holds a sequence,
-/// the first wikilink wins — [`frontmatter::get_display`] would otherwise join
-/// the members with `, ` into a stem matching nothing.
+/// When the field holds a sequence the first wikilink wins, since
+/// [`frontmatter::get_display`] would otherwise join the members with `, `.
 ///
-/// Returns `None` for every value the shared [`crate::base::is_truthy`] calls
-/// falsy — absent, `null`, empty, `false`, `0` — so an unowned ticket reads the
-/// same way here as under the Backlog view's `!track.isTruthy()`. That gate runs
-/// *before* the parse deliberately: [`crate::base::filter::apply`] evaluates
-/// this predicate ahead of the declared filters, over every file in the vault,
-/// so parsing first would put a full Markdown parse on all of them, mostly on
-/// the empty string.
+/// The [`crate::base::is_truthy`] gate runs BEFORE the parse deliberately: this
+/// predicate is evaluated over every file in the vault, so parsing first would put
+/// a full Markdown parse on all of them, mostly on the empty string.
 fn ticket_track_slug(fm: &BTreeMap<String, Value>) -> Option<String> {
     let raw = frontmatter::get_display(fm, "track");
     if !base::is_truthy(&raw) {

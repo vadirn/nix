@@ -2,25 +2,15 @@
 //!
 //! Templates are the source of truth for which frontmatter fields a type may
 //! carry (`allowed`) and, for picker fields, which values are legal (`enums`).
-//! `build_type_schemas` gathers templates from TWO sources — the `ctx.files`
-//! scan and a direct `read_dir` of `vault_root/templates` — unions each
-//! template's keys into its type's `allowed` set, and unions each non-empty
-//! scalar-sequence picker into `enums[key]`. A universal meta-set of
-//! cross-cutting infrastructure fields is then unioned into every type's
-//! `allowed`, so genuinely shared fields never read as drift.
 //!
-//! The disk read exists because `.vaultignore` can exclude `templates/` from the
-//! scan (the real vault does). When that happens `ctx.files` yields no templates,
-//! the schema map comes out empty, and both rules skip every entry. Reading the
-//! templates directory straight off disk bypasses `.vaultignore`, so the schema
-//! is populated regardless. The two sources are unioned; a template seen in both
-//! folds idempotently (set unions), and a vault that does NOT ignore `templates/`
-//! (or a test that passes templates via `ctx.files`) keeps working unchanged.
+//! `build_type_schemas` gathers templates from TWO sources: the `ctx.files` scan
+//! and a direct `read_dir` of `vault_root/templates`. The disk read exists because
+//! `.vaultignore` can exclude `templates/` from the scan, as the real vault does —
+//! the schema map would then come out empty and both rules would skip every entry.
+//! The two sources union, so a template seen in both folds idempotently.
 //!
-//! A type with no template gets NO entry in the returned map: both the
-//! `unknown-field` and `invalid-enum-value` rules skip entries whose type is
-//! absent here, so an un-templated type (e.g. `context`, `spike`, `bookmark`) is
-//! never flagged.
+//! A type with no template gets NO entry, and both `unknown-field` and
+//! `invalid-enum-value` skip a type absent here.
 
 use crate::commands::lint::rule::LintContext;
 use crate::frontmatter;

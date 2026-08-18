@@ -6,16 +6,13 @@
 //! turns that disagreement into a build failure at the moment the rule is added,
 //! which is the only moment anyone holds the context needed to write the doc row.
 //!
-//! The three rosters live outside the crate, under `home/agents/skills/vault/`.
-//! `nix build .#vault-query` builds from a `lib.fileset` source that carries only
-//! the files it lists, so both markdown files are named explicitly in the
-//! `crateSrc` fileset in `flake.nix`. They therefore land at the same path
-//! relative to `CARGO_MANIFEST_DIR` in the build sandbox as in a plain checkout,
-//! and this test runs in the ordinary build loop with no extra command.
+//! The rosters live outside the crate, under `home/agents/skills/vault/`, so
+//! `flake.nix` names both markdown files in its `rosterDocs` fileset. They land at
+//! the same path relative to `CARGO_MANIFEST_DIR` in the build sandbox as in a
+//! plain checkout, and this test needs no command of its own.
 //!
-//! Deliberately out of scope: generating the prose from the registry. The
-//! hand-written "what it flags" wording carries reasoning a generated table
-//! cannot, so the prose stays authored and disagreement is made loud instead.
+//! Generating the prose from the registry is out of scope: the hand-written "what
+//! it flags" wording carries reasoning a generated table cannot.
 
 use std::collections::BTreeSet;
 use vault_query::commands::lint::registry;

@@ -9,8 +9,8 @@
 //!   with `/`, so the path-segment boundary survives.
 //!
 //! Invariant by construction: for any `/`-free text `t`, `path(t) == segment(t)`.
-//! That single namespace is the D28 precondition — a Glossary term `Foo: Bar`
-//! and a file titled `Foo: Bar` now reduce to the same slug `foo-bar`.
+//! So a Glossary term `Foo: Bar` and a file titled `Foo: Bar` reduce to the same
+//! slug `foo-bar`.
 
 use crate::wikilink;
 
@@ -144,22 +144,20 @@ mod tests {
 
     #[test]
     fn segment_strips_wikilink_to_display() {
-        // Ports read.rs:959.
         assert_eq!(segment("See [[A Note|Display]]"), "see-display");
     }
 
     #[test]
     fn segment_collapses_ambiguous_punctuation() {
-        // Ports read.rs:956-957: both reduce to the same slug.
+        // Both reduce to the same slug.
         assert_eq!(segment("Log & Notes"), "log-notes");
         assert_eq!(segment("Log Notes"), "log-notes");
     }
 
-    // --- path grain: '/' survives, ports resolve.rs::test_slugify guarantees ---
+    // --- path grain: '/' survives ---
 
     #[test]
     fn path_preserves_segment_boundary() {
-        // Ports resolve.rs:43 verbatim.
         assert_eq!(path("41 projects/nix"), "41-projects/nix");
         assert_eq!(path("Impureim sandwich"), "impureim-sandwich");
         assert_eq!(path("already-lowercase"), "already-lowercase");
@@ -172,7 +170,7 @@ mod tests {
         assert_eq!(path("41 projects/nix/Foo: Bar"), "41-projects/nix/foo-bar");
     }
 
-    // --- cross-grain parity: the D28 single-namespace requirement ---
+    // --- cross-grain parity: the single-namespace requirement ---
 
     #[test]
     fn parity_segment_and_path_agree_on_slash_free_text() {
