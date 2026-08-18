@@ -143,6 +143,27 @@ err=$(
 )
 check "deleted snapshot sources silently" "$err" "rc=0"
 
+# --- a project that replaces PATH outright ----------------------------------
+
+# direnv's value then shares no suffix with the live PATH, which is the case
+# that used to produce a bare assignment and wipe other hooks' entries.
+mkdir -p "$TMPROOT/override"
+printf 'export PATH=/usr/bin:/bin\n' > "$TMPROOT/override/.envrc"
+(cd "$TMPROOT/override" && direnv allow) 2> /dev/null
+
+run_hook override "$TMPROOT/override" env
+check "override: exit 0" "$RC" "0"
+check "override: prepends, never assigns" \
+  "$(grep -c "^export PATH='.*\":\$PATH\"$" "$SNAP")" "1"
+check "override: project entry comes first" \
+  "$(grep -c "^export PATH='/usr/bin:/bin'" "$SNAP")" "1"
+got=$(
+  PATH="/sentinel/bin:$PATH"
+  . "$ENVFILE" > /dev/null 2>&1
+  case ":$PATH:" in *:/sentinel/bin:*) echo kept ;; *) echo lost ;; esac
+)
+check "override: earlier PATH entry survives" "$got" "kept"
+
 # --- no residue -------------------------------------------------------------
 
 check "no stray temp files" \
