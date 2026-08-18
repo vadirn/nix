@@ -105,6 +105,7 @@
         ./nvim/nvim.nix
         ./bat.nix
         ./claude.nix
+        ./opencode.nix
         ./ghostty.nix
         ./lazygit.nix
         ./micro.nix
