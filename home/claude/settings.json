@@ -176,6 +176,22 @@
             "type": "command",
             "command": "bash ~/.claude/hooks/sandbox-nc-path.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/direnv-env.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "CwdChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/direnv-env.sh",
+            "timeout": 30
           }
         ]
       }
