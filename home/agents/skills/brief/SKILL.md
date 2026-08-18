@@ -76,7 +76,7 @@ repo    = the git repo containing cwd        // single repo; see below
 
 **Repo.** brief reads one git history: the repo containing cwd. An engagement spanning several repos is out of scope — if you need another repo's commits, the user points brief at it explicitly. No repo paths live in the vault: they differ per device.
 
-**Roster.** The `stakeholders:` list in `Context.md` frontmatter, one entry per person: `name`, `currency`, `model`, `inspects`, optional `role`, and `last_drafted` (see the Context.md template in `project-setup`). You author it. brief writes only `last_drafted` (see draft.md). If the list is absent, both procedures degrade gracefully: draft writes a single generic update and offers to add the list, diagnose works without it.
+**Roster.** The `stakeholders:` list in `Context.md` frontmatter, one entry per person: `name`, `currency`, `model`, `inspects`, optional `role`, and `last_drafted` (see the Context.md template in `/project setup`). You author it. brief writes only `last_drafted` (see draft.md). If the list is absent, both procedures degrade gracefully: draft writes a single generic update and offers to add the list, diagnose works without it.
 
 ## The two procedures
 

@@ -4,7 +4,7 @@ use crate::config::ResolvedConfig;
 
 /// The names a project's context file can carry, in preference order.
 ///
-/// `Context.md` is what `project-setup` writes: a project folder holds exactly
+/// `Context.md` is what `/project setup` writes: a project folder holds exactly
 /// one, so it is named like the other singletons beside it (`Tracks.base`,
 /// the project note) rather than like the `<type>-<slug>` files.
 ///
