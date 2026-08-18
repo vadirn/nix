@@ -8,7 +8,7 @@
          aarch64-darwin
 ```
 
-Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and Rust tooling for an Obsidian vault — a shared markdown-parsing core (`mdstruct`), a general markdown reader (`mdread`), a markdown formatter (`mdformat`), and a query CLI (`vault-query`) built on the core.
+Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and `vault-query`, a query CLI for an Obsidian vault. The markdown core it builds on — `mdstruct`, `mdread`, `mdformat` — lives in [md-for-agents](https://github.com/vadirn/md-for-agents) and arrives here as a pinned flake input.
 
 ## Machines
 
@@ -30,21 +30,15 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 
 ## Rust workspace
 
-The three crates form one cargo workspace rooted at `Cargo.toml`, chained by path dependency: `vault-query → mdread → mdstruct`. One lockfile, one `target/`, one `cargo test --workspace`, and — because a single lockfile vendors a single dependency set — one `cargoHash` in `flake.nix`, shared by all three `buildRustPackage` derivations and recomputed once when a dependency changes. Dependencies used by more than one member are declared in `[workspace.dependencies]` and inherited with `.workspace = true`, so two members cannot drift onto different versions of the same crate. `shell.nix` at the root provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
+`vault-query` is the only crate in this repo, a one-member workspace rooted at `Cargo.toml`. It links `mdstruct` and `mdread` as a git dependency on [md-for-agents](https://github.com/vadirn/md-for-agents), pinned by rev in `Cargo.lock`. `shell.nix` provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
 
-Each package still builds on its own — `nix build .#mdread` selects its member with `buildAndTestSubdir`, and cargo finds the root manifest above it.
+## md-for-agents
 
-## mdformat
+The three markdown crates, built from the flake input as one derivation (`nix build .#md-for-agents`) carrying all three binaries — `mdstruct`, `mdread`, `mdformat`. One derivation rather than three so comrak compiles once, and one `cargoHash` covers the lot. Bump the pin with `nix flake update md-for-agents`. The libraries `vault-query` links follow a separate pin on the same branch: `cargo update -p mdstruct -p mdread`.
 
-A Rust crate in `mdformat/`. Comrak's parser plus our own printer — a sibling to `mdstruct` rather than built on it, since `mdstruct`'s flat span index is deliberately not printable (the design axiom "never restringify" guards byte-exact read-back). Formats markdown according to a configurable style. Built as a Nix package (`nix build .#mdformat`).
-
-## mdstruct
-
-A Rust crate in `mdstruct/`. The shared comrak-backed markdown structural-parsing core: it locates structure (headings, fenced code, tables, blockquotes, lists, links, wikilinks, comment-delimited regions, frontmatter) and emits half-open byte spans, never restringifying — consumers slice their own original bytes, so byte-exact write-back is preserved. Exposed both as an in-process library and as a thin JSON CLI (`mdstruct FILES...` → NDJSON, with `check` and `stats` subcommands). Built as a Nix package (`nix build .#mdstruct`) and installed system-wide; `vault-query` links it as a path dependency and the distill skill shells the CLI.
-
-## mdread
-
-A Rust crate in `mdread/`, and the general-purpose consumer of `mdstruct`: read any markdown file without loading all of it. `mdread FILE` folds the file to one line per section with line and estimated-token counts; `mdread FILE <address>` unfolds just the part you want. An address is dotted-numeric (`2.1.3`), a heading slug (`installation`), `0`/`text` for the pre-heading lede, `fm`/`fm.<path>` for the frontmatter block or one value in it (`fm.reference[0].target` navigates the parsed YAML), or `links` for the outgoing links. The reserved names win over a heading that slugs to the same word — a `## Links` section is served by its numeric address instead, and the reader announces the collision rather than resolving it. Two dialect flags cover the places a defensible reading differs: `--strict-headings` rejects the 0–3-space indent CommonMark allows, and `--wikilinks-only` counts `[[wikilinks]]` but not URLs. Built as a Nix package and installed system-wide.
+- `mdstruct` — the shared comrak-backed structural-parsing core. It locates structure (headings, fenced code, tables, blockquotes, lists, links, wikilinks, comment-delimited regions, frontmatter) and emits half-open byte spans, never restringifying, so consumers slice their own original bytes and byte-exact write-back is preserved. A library and a thin JSON CLI (`mdstruct FILES...` → NDJSON, with `check` and `stats`).
+- `mdread` — read any markdown file without loading all of it. `mdread FILE` folds it to one line per section with line and estimated-token counts; `mdread FILE <address>` unfolds one part. An address is dotted-numeric (`2.1.3`), a heading slug, `0`/`text` for the lede, `fm`/`fm.<path>` for frontmatter, or `links`. The reserved names beat a heading that slugs the same way, and the reader announces the collision rather than resolving it. `--strict-headings` rejects CommonMark's 0–3-space indent; `--wikilinks-only` counts `[[wikilinks]]` but not URLs.
+- `mdformat` — comrak's parser plus our own printer, a sibling to `mdstruct` rather than built on it, since `mdstruct`'s flat span index is deliberately not printable. Formats markdown to a configurable style. `scripts/corpus.sh` runs its partition and idempotence checks over the vault; `scripts/dryrun.sh` applies one rule to a throwaway copy and leaves a reviewable diff.
 
 ## vault-query
 

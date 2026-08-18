@@ -22,7 +22,7 @@
 # batch of invocations instead of a second full formatting pass.
 #
 # Commutativity of the rules is deliberately not tested here. It was observed
-# over this corpus, it is not guaranteed, and `src/format.rs` fixes the pipeline
+# over this corpus, it is not guaranteed, and mdformat fixes the pipeline
 # order at endings -> gaps -> tables -> markers on purpose. The endings rule's
 # position is not a preference: it canonicalizes line endings, so running it
 # first is what keeps a carriage return out of the other rules' inputs. This
@@ -33,7 +33,7 @@
 # delimiters, so the rule is preservative over today's corpus by design. A
 # nonzero count is information about the census, not a failure of this script.
 #
-# Usage: mdformat/corpus.sh [--partition-only] [--no-ignore]
+# Usage: scripts/corpus.sh [--partition-only] [--no-ignore]
 #                           [-- <extra vault-query files args>]
 #   MDFORMAT_BIN   path to a built mdformat binary; skips the nix build.
 #   VAULT_ROOT     vault root; defaults to `vault-query config`'s vault_root.
@@ -80,7 +80,7 @@ BIN="${MDFORMAT_BIN:-}"
 if [ -z "$BIN" ]; then
   echo "corpus.sh: building mdformat via nix..." >&2
   OUT_LINK="$(mktemp -d "$TMPDIR/mdformat-corpus-bin.XXXXXX")/result"
-  nix build "$REPO_ROOT#mdformat" -o "$OUT_LINK"
+  nix build "$REPO_ROOT#md-for-agents" -o "$OUT_LINK"
   BIN="$OUT_LINK/bin/mdformat"
 fi
 

@@ -118,6 +118,22 @@
         "type": "github"
       }
     },
+    "md-for-agents": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787047029,
+        "narHash": "sha256-eKutrbeX58pEYfM5XnLgHc+im5ytdDQW59AgotePJu4=",
+        "owner": "vadirn",
+        "repo": "md-for-agents",
+        "rev": "4c01516c4d1cbec791ba2ab908ee8e786f13eb73",
+        "type": "github"
+      },
+      "original": {
+        "owner": "vadirn",
+        "repo": "md-for-agents",
+        "type": "github"
+      }
+    },
     "nix-darwin": {
       "inputs": {
         "nixpkgs": [
@@ -182,6 +198,7 @@
         "homebrew-basecamp-tap": "homebrew-basecamp-tap",
         "homebrew-dopplerhq-cli": "homebrew-dopplerhq-cli",
         "homebrew-oven-sh-bun": "homebrew-oven-sh-bun",
+        "md-for-agents": "md-for-agents",
         "nix-darwin": "nix-darwin",
         "nix-homebrew": "nix-homebrew",
         "nixpkgs": "nixpkgs"
