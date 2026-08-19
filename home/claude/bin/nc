@@ -1,15 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The sandbox routes traffic through an authenticated SOCKS5 proxy and points
+# ssh's ProxyCommand at `nc -X 5 -x`. macOS /usr/bin/nc cannot pass proxy
+# credentials, so this shim re-execs ncat for that one invocation shape.
+#
+#   - It resolves ncat by absolute path as well as by PATH. A devshell that
+#     rewrites PATH can drop /opt/homebrew/bin, and a bare `command -v` there
+#     fell through to /usr/bin/nc and failed as an opaque "connection refused".
+#     NC_SHIM_CANDIDATES overrides that absolute list, space separated.
+#   - It says so on stderr when ncat is missing. ssh surfaces ProxyCommand
+#     stderr, so the next failure names its own cause.
+
+_ncat=$(command -v ncat 2> /dev/null || true)
+if [[ -z "$_ncat" ]]; then
+  # Unquoted on purpose: the candidate list is space separated.
+  for _c in ${NC_SHIM_CANDIDATES:-/opt/homebrew/bin/ncat /usr/local/bin/ncat /run/current-system/sw/bin/ncat}; do
+    if [[ -x "$_c" ]]; then
+      _ncat="$_c"
+      break
+    fi
+  done
+fi
+
 if [[ "$#" -ge 6 ]] \
   && [[ "$1" == "-X" && "$2" == "5" && "$3" == "-x" ]] \
   && [[ "${ALL_PROXY:-}" == *"@"* ]] \
-  && [[ "$4" == "${ALL_PROXY##*@}" ]] \
-  && command -v ncat >/dev/null 2>&1; then
-  _auth="${ALL_PROXY#*://}"
-  _auth="${_auth%@*}"
-  _proxy="127.0.0.1:${4##*:}"
-  NCAT_PROXY_AUTH="$_auth" exec ncat --proxy-type socks5 --proxy "$_proxy" "${@: -2}"
+  && [[ "$4" == "${ALL_PROXY##*@}" ]]; then
+  if [[ -n "$_ncat" ]]; then
+    _auth="${ALL_PROXY#*://}"
+    _auth="${_auth%@*}"
+    _proxy="127.0.0.1:${4##*:}"
+    NCAT_PROXY_AUTH="$_auth" exec "$_ncat" --proxy-type socks5 --proxy "$_proxy" "${@: -2}"
+  fi
+  echo "nc shim: ncat not found, so the sandbox proxy cannot authenticate" >&2
+  echo "nc shim: install nmap, or restore /opt/homebrew/bin on PATH" >&2
 fi
 
 exec /usr/bin/nc "$@"
