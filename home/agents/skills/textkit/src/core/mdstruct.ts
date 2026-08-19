@@ -105,10 +105,9 @@ interface MdDoc {
 // HTML comments), which every present and future parse-only consumer (interact, highlight)
 // would trust blind. That case must still fail loud with a "rebuild mdstruct" message.
 //
-// A binary reporting a HIGHER minor is not that failure. `mdstruct/src/core/model.rs`
-// documents each bump's kind on `SCHEMA_VERSION` itself (e.g. "additive-minor over 1.0" for
-// 1.1); an additive-minor bump is a superset of the shape this module already handles, so
-// this module's own assumptions all still hold under it. Rejecting it would block a correct,
+// A binary reporting a HIGHER minor is not that failure. A minor bump is additive, so it is
+// a superset of the shape this module already handles and this module's own assumptions all
+// still hold under it. Rejecting it would block a correct,
 // newer binary from being used at all — exact-match equality did exactly that. A different
 // MAJOR is a real break and stays rejected, with its own message (see checkSchemaVersion):
 // "rebuild, yours is stale" misdescribes a binary that is not older, just incompatible.

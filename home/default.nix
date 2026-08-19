@@ -2,9 +2,7 @@
   username,
   homeDirectory,
   vault-query,
-  mdread,
-  mdstruct,
-  mdformat,
+  md-for-agents,
   ...
 }: {
   users.users.vadim.home = homeDirectory;
@@ -47,9 +45,7 @@
           ])
           ++ [
             vault-query
-            mdread
-            mdstruct
-            mdformat
+            md-for-agents
           ];
       };
       programs = {

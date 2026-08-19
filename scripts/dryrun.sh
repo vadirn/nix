@@ -4,7 +4,7 @@
 # mdformat transformation to the copy in place, and leaves a reviewable diff.
 # The real vault is read-only input here — nothing under it is ever written.
 #
-# Usage: mdformat/dryrun.sh [RULE] [-- <extra vault-query files args>]
+# Usage: scripts/dryrun.sh [RULE] [-- <extra vault-query files args>]
 #   RULE           one rewriting rule to dry-run, named as mdformat's reports
 #                  tag it: endings, gaps, tables, markers. Pass `all` to run
 #                  the whole normal form. Default: gaps.
@@ -20,7 +20,7 @@
 # stderr rather than exit codes: `normalize --emit` exited 4 for a document
 # whose rewrite failed its guard, and `format --rule` does not. A rule that
 # declines yields its input, prints an EXEMPT line, and exits 0 — a
-# declination is not a failure (see src/format.rs). So a refusal is counted
+# declination is not a failure. So a refusal is counted
 # here by reading it, not by catching it.
 #
 # What "the operative corpus" means: exactly the paths `vault-query files`
@@ -70,7 +70,7 @@ BIN="${MDFORMAT_BIN:-}"
 if [ -z "$BIN" ]; then
   echo "dryrun.sh: building mdformat via nix..." >&2
   OUT_LINK="$(mktemp -d "$TMPDIR/mdformat-dryrun-bin.XXXXXX")/result"
-  nix build "$REPO_ROOT#mdformat" -o "$OUT_LINK"
+  nix build "$REPO_ROOT#md-for-agents" -o "$OUT_LINK"
   BIN="$OUT_LINK/bin/mdformat"
 fi
 if [ ! -x "$BIN" ]; then
