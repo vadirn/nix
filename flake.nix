@@ -87,14 +87,14 @@
       };
       cargoHash = "sha256-e6PAdFaEyZ+ShQje2P6bcbEafFg5IWdd3Bar4fNEHAs=";
     };
-    # The extracted workspace builds as one derivation carrying all three
-    # binaries — mdstruct, mdread, mdformat — so comrak compiles once instead of
-    # once per crate, and one cargoHash covers the lot.
+    # The extracted workspace builds as one derivation carrying all four
+    # binaries — mdstruct, mdread, mdformat, mdsearch — so comrak compiles once
+    # instead of once per crate, and one cargoHash covers the lot.
     md-for-agents = pkgs.rustPlatform.buildRustPackage {
       pname = "md-for-agents";
       version = "0.1.0";
       src = inputs.md-for-agents;
-      cargoHash = "sha256-zp/LaWL+VmN6ne+1yQf74bpVICKip6qlVEvy7xFQW0k=";
+      cargoHash = "sha256-FUfHwiOwEgK3x+ficJr8NWK2N5BpypRD3jVgPZMOU2A=";
     };
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:

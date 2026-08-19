@@ -8,7 +8,7 @@
          aarch64-darwin
 ```
 
-Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and `vault-query`, a query CLI for an Obsidian vault. The markdown core it builds on — `mdstruct`, `mdread`, `mdformat` — lives in [md-for-agents](https://github.com/vadirn/md-for-agents) and arrives here as a pinned flake input.
+Personal macOS system config. Three areas: a Nix flake that declaratively manages two Macs, a full Claude Code global configuration, and `vault-query`, a query CLI for an Obsidian vault. The markdown core it builds on lives in [md-for-agents](https://github.com/vadirn/md-for-agents) and arrives here as a pinned flake input.
 
 ## Machines
 
@@ -34,11 +34,12 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 
 ## md-for-agents
 
-The three markdown crates, built from the flake input as one derivation (`nix build .#md-for-agents`) carrying all three binaries — `mdstruct`, `mdread`, `mdformat`. One derivation rather than three so comrak compiles once, and one `cargoHash` covers the lot. Bump the pin with `nix flake update md-for-agents`. The libraries `vault-query` links follow a separate pin on the same branch: `cargo update -p mdstruct -p mdread`.
+Built from the flake input as one derivation (`nix build .#md-for-agents`) carrying every binary in the workspace. One derivation rather than one per crate, so comrak compiles once and one `cargoHash` covers the lot. Bump the pin with `nix flake update md-for-agents`. The libraries `vault-query` links follow a separate pin on the same branch: `cargo update -p mdstruct -p mdread`.
 
 - `mdstruct` — the shared comrak-backed structural-parsing core. It locates structure (headings, fenced code, tables, blockquotes, lists, links, wikilinks, comment-delimited regions, frontmatter) and emits half-open byte spans, never restringifying, so consumers slice their own original bytes and byte-exact write-back is preserved. A library and a thin JSON CLI (`mdstruct FILES...` → NDJSON, with `check` and `stats`).
 - `mdread` — read any markdown file without loading all of it. `mdread FILE` folds it to one line per section with line and estimated-token counts; `mdread FILE <address>` unfolds one part. An address is dotted-numeric (`2.1.3`), a heading slug, `0`/`text` for the lede, `fm`/`fm.<path>` for frontmatter, or `links`. The reserved names beat a heading that slugs the same way, and the reader announces the collision rather than resolving it. `--strict-headings` rejects CommonMark's 0–3-space indent; `--wikilinks-only` counts `[[wikilinks]]` but not URLs.
 - `mdformat` — comrak's parser plus our own printer, a sibling to `mdstruct` rather than built on it, since `mdstruct`'s flat span index is deliberately not printable. Formats markdown to a configurable style. `scripts/corpus.sh` runs its partition and idempotence checks over the vault; `scripts/dryrun.sh` applies one rule to a throwaway copy and leaves a reviewable diff.
+- `mdsearch` — rank a folder's markdown files against a query, best match first. BM25 over three fields: the file name, the frontmatter `description:`, and the prose after that block. Terms are stemmed in English and Russian. The walk obeys `.gitignore`, `.ignore`, and `.mdsearchignore`, and skips dot-files unless `--hidden`. The index is built in RAM for the one run, so an edit needs no reindex.
 
 ## vault-query
 
