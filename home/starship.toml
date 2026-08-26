@@ -11,23 +11,23 @@ truncation_length = 3
 truncate_to_repo = true
 style = "cyan"
 format = "[$path]($style)"
-read_only = " 󰌾"
+read_only = " (ro)"
 
 [character]
 success_symbol = "[❯](purple)"
 error_symbol = "[❯](red)"
 
 [git_branch]
-symbol = "󰘬 "
+symbol = ""
 format = " [│](dimmed white) [$symbol$branch]($style)"
 style = "purple"
 
 [git_status]
 format = "( [$ahead_behind]($style))"
 style = "cyan"
-ahead = "󰁝$count"
-diverged = "󰁝$ahead_count󰁅$behind_count"
-behind = "󰁅$count"
+ahead = "↑$count"
+diverged = "↑$ahead_count↓$behind_count"
+behind = "↓$count"
 
 [git_metrics]
 disabled = false
