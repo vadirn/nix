@@ -68,6 +68,7 @@
       "zed"
       "pearcleaner"
       "orbstack"
+      "openlogi"
       "basecamp/tap/basecamp-cli"
     ];
     onActivation = {
