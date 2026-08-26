@@ -8,7 +8,23 @@
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 
-SENSITIVE='(\.env($|[^[:alnum:]_])|[/-]credentials|(^|[^[:alnum:]_.])credentials\.[[:alnum:]]|/secrets?|(^|[^[:alnum:]_.])secrets?\.[[:alnum:]]|(^|[^[:alnum:]_.])[[:alnum:]_~][^[:space:]]*\.(pem|key|p12|pfx|keystore)($|[^[:alnum:]])|id_rsa|id_ed25519|token\.json|auth\.json|\.netrc|\.npmrc|\.pypirc)'
+# Extensions a secret actually ships in. Source and doc extensions are absent on
+# purpose: a module named credentials.ts is code ABOUT secrets, not a secret, and
+# denying it only teaches the agent to rename its files — which costs a real
+# rename and buys nothing, since this hook is a tripwire and not the boundary.
+SECRET_EXT='(json|ya?ml|ini|cfg|conf|toml|properties|txt|csv|xml|enc|b64|bak)'
+
+# A bare credentials/secret file ends its token; one with an extension has to
+# carry a data extension to count. The two differ on a trailing slash, and the
+# asymmetry is deliberate: a `secrets/` directory nearly always holds secrets,
+# while a `*-credentials/` directory is nearly always a package.
+SENSITIVE='(\.env($|[^[:alnum:]_])'
+SENSITIVE+='|[/-]credentials($|[^[:alnum:]_./-])'
+SENSITIVE+="|(^|[^[:alnum:]_.])credentials\\.$SECRET_EXT($|[^[:alnum:]])"
+SENSITIVE+='|/secrets?($|[^[:alnum:]_.-])'
+SENSITIVE+="|(^|[^[:alnum:]_.])secrets?\\.$SECRET_EXT($|[^[:alnum:]])"
+SENSITIVE+='|(^|[^[:alnum:]_.])[[:alnum:]_~][^[:space:]]*\.(pem|key|p12|pfx|keystore)($|[^[:alnum:]])'
+SENSITIVE+='|id_rsa|id_ed25519|token\.json|auth\.json|\.netrc|\.npmrc|\.pypirc)'
 READERS='((^|[^[:alnum:]_])(cat|head|tail|less|more|grep|rg|egrep|fgrep|ag|ack|sed|awk|jq|yq|bat|base64|xxd|od|strings|nl|tac|tee|source)([[:space:]]|$)|find[[:space:]].*-exec|xargs)'
 
 if [[ "$COMMAND" =~ $READERS ]] && [[ "${COMMAND,,}" =~ $SENSITIVE ]]; then
