@@ -56,5 +56,23 @@ assert_deny  "Read id_rsa" \
 assert_allow "Read src/main.ts" \
   '{"tool_name":"Read","tool_input":{"file_path":"/some/repo/src/main.ts"}}'
 
+# --- Source modules about credentials stay readable (the loosening) ---
+assert_allow "Read src/credentials.ts" \
+  '{"tool_name":"Read","tool_input":{"file_path":"/some/repo/src/credentials.ts"}}'
+assert_allow "Read src/credentials-store.ts" \
+  '{"tool_name":"Read","tool_input":{"file_path":"/some/repo/src/credentials-store.ts"}}'
+assert_allow "Read src/secret-box.ts" \
+  '{"tool_name":"Read","tool_input":{"file_path":"/some/repo/src/secret-box.ts"}}'
+assert_allow "Read src/secrets.ts" \
+  '{"tool_name":"Read","tool_input":{"file_path":"/some/repo/src/secrets.ts"}}'
+
+# --- Real secret files still denied ---
+assert_deny  "Read credentials.json" \
+  '{"tool_name":"Read","tool_input":{"file_path":"/some/repo/credentials.json"}}'
+assert_deny  "Read secrets.yaml" \
+  '{"tool_name":"Read","tool_input":{"file_path":"/some/repo/secrets.yaml"}}'
+assert_deny  "Read bare secret file" \
+  '{"tool_name":"Read","tool_input":{"file_path":"/run/secret"}}'
+
 echo "$((PASS + FAIL)) tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

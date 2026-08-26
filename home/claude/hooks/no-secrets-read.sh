@@ -46,7 +46,13 @@ fi
 BASENAME=$(basename "$TARGET")
 
 # Sensitive file patterns
-if echo "$BASENAME" | grep -qEi '^\.(env|env\..*)$|^credentials|^secret|\.pem$|\.key$|^id_rsa|^id_ed25519|\.p12$|\.pfx$|\.keystore$|^token\.json$|^auth\.json$|^\.netrc$|^\.npmrc$|^\.pypirc$'; then
+# `credentials` and `secret` are matched as whole filenames rather than as
+# prefixes. A file literally named credentials, or one carrying a data
+# extension, is a secret; credentials.ts and secret-box.ts are code about
+# secrets, and denying those only forces a rename that protects nothing.
+SECRET_EXT='(json|ya?ml|ini|cfg|conf|toml|properties|txt|csv|xml|enc|b64|bak)'
+
+if echo "$BASENAME" | grep -qEi "^\.(env|env\..*)$|^(credentials?|secrets?)($|\.$SECRET_EXT$)|\.pem$|\.key$|^id_rsa|^id_ed25519|\.p12$|\.pfx$|\.keystore$|^token\.json$|^auth\.json$|^\.netrc$|^\.npmrc$|^\.pypirc$"; then
   deny "Blocked: $TARGET matches a sensitive file pattern (.env, credentials, keys)."
 fi
 

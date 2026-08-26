@@ -74,5 +74,21 @@ assert_deny  "cmd-subst cat .env"         "echo \$(cat .env)"
 assert_deny  "cat .git-credentials"       "cat .git-credentials"
 assert_deny  "cat aws credentials path"   "cat ~/.aws/credentials"
 
+# Fixed false positives: code and prose ABOUT credentials, which the old
+# `[/-]credentials` and `/secrets?` alternatives denied on the word alone.
+assert_allow "package dir named creds"    "head node_modules/@scope/dsh-credentials/lib/index.js"
+assert_allow "note titled credentials"    "cat notes/ticket-sqlite-credentials.md"
+assert_allow "source module"              "cat src/credentials.ts"
+assert_allow "hyphenated source module"   "rg CredentialProvider src/credentials-store.ts"
+assert_allow "secret-prefixed module"     "cat src/secret-box.ts"
+assert_allow "secrets-named source"       "cat src/secrets.ts"
+
+# Still denied: the shapes a real secret actually takes.
+assert_deny  "aws credentials file"       "cat ~/.aws/credentials"
+assert_deny  "hyphenated creds data file" "cat app-credentials.json"
+assert_deny  "secrets data file"          "cat src/secrets.yaml"
+assert_deny  "secrets directory"          "cat config/secrets/db.yml"
+assert_deny  "bare secrets file"          "cat /run/secrets"
+
 echo "$((PASS + FAIL)) tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
