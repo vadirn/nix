@@ -84,7 +84,6 @@ if script reports no image:
 - Only `~/Pictures/imagen` is on the sandbox write allowlist. Pointing `$IMAGEN_DIR` or `--out` outside it requires a matching entry in `home/claude/settings.json`. Without that entry, writes fail under the sandbox.
 - `--out` honors the path verbatim. It does not adjust the extension to match the returned format. The script warns to stderr on a mismatch.
 - The API key (`GEMINI_API_KEY`) is injected by `doppler run` and never appears on a command line.
-- The fetch call runs in-process inside the script, so the `no-network-abuse` hook (which blocks visible `curl --data`) does not fire.
 - `gemini-2.5-flash-image` does not accept `--resolution`. The script warns and ignores it.
 - Default model: `gemini-3.1-flash-image-preview`.
 - Default resolution: `2K`. Pass `--resolution 512` for cheap draft runs.
