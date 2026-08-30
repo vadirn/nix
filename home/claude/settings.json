@@ -287,8 +287,14 @@
         "~/Pictures/vidgen",
         "$TMPDIR"
       ],
-      "denyRead": ["~/.ssh"],
-      "allowRead": ["~/.ssh/*.pub", "~/.ssh/known_hosts", "~/.ssh/allowed_signers"]
+      "denyRead": [
+        "~/.ssh"
+      ],
+      "allowRead": [
+        "~/.ssh/*.pub",
+        "~/.ssh/known_hosts",
+        "~/.ssh/allowed_signers"
+      ]
     },
     "credentials": {
       "files": [
