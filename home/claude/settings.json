@@ -270,7 +270,8 @@
         "*.localhost"
       ],
       "allowManagedDomainsOnly": false,
-      "allowAllUnixSockets": true
+      "allowAllUnixSockets": true,
+      "allowLocalBinding": true
     },
     "filesystem": {
       "allowWrite": [
