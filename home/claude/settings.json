@@ -270,7 +270,8 @@
         "*.localhost"
       ],
       "allowManagedDomainsOnly": false,
-      "allowAllUnixSockets": true
+      "allowAllUnixSockets": true,
+      "allowLocalBinding": true
     },
     "filesystem": {
       "allowWrite": [
@@ -286,8 +287,14 @@
         "~/Pictures/vidgen",
         "$TMPDIR"
       ],
-      "denyRead": ["~/.ssh"],
-      "allowRead": ["~/.ssh/*.pub", "~/.ssh/known_hosts", "~/.ssh/allowed_signers"]
+      "denyRead": [
+        "~/.ssh"
+      ],
+      "allowRead": [
+        "~/.ssh/*.pub",
+        "~/.ssh/known_hosts",
+        "~/.ssh/allowed_signers"
+      ]
     },
     "credentials": {
       "files": [
@@ -314,5 +321,6 @@
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "agentPushNotifEnabled": true
 }
