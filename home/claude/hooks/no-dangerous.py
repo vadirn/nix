@@ -28,6 +28,29 @@ TOKEN_PAIR_RULES = [
     ("chmod", "777", "Blocked: chmod 777 makes files world-writable."),
 ]
 
+# curl/wget upload flags. The sandbox network allowlist checks where a request
+# goes, never what it carries, so an upload to an already-allowlisted host (a
+# GitHub gist, a completion endpoint) is the one exfiltration path it cannot
+# see. These rules read the flags instead and fire whatever the destination.
+CURL_UPLOAD_LONG = frozenset((
+    "--data", "--data-ascii", "--data-binary", "--data-raw", "--data-urlencode",
+    "--form", "--form-string", "--upload-file",
+))
+# Short upload flags, case-sensitive: -d data, -F form, -T upload. Lowercase -f
+# (--fail) and -t (--telnet-option) have no upload effect and stay out, so
+# `curl -f https://...` is not a false positive.
+CURL_UPLOAD_SHORT = frozenset("dFT")
+# Short options that swallow the rest of their token as a value. An upload
+# letter after one of these is data, not a flag: `curl -oad.txt url` names an
+# output file and posts nothing.
+CURL_SHORT_TAKES_VALUE = frozenset("oHXuAebcCDEKmxyYzwUQPr")
+
+WGET_UPLOAD_LONG = frozenset((
+    "--post-data", "--post-file", "--body-data", "--body-file",
+))
+
+SEPARATORS = frozenset((";", "|", "||", "&&", "&"))
+
 _REGEX_RULES = [
     (
         r'(^|[\s;]|&&|\|)git\s+-C\s',
@@ -76,6 +99,52 @@ def get_git_invocations(tokens: list[str]) -> list[tuple[str, list[str]]]:
     return results
 
 
+def _bare_name(token: str) -> str:
+    """The command name at the end of a token, past any glued shell operator.
+
+    `echo hi&&curl` tokenizes as one word; the invocation is still curl's.
+    """
+    return token.rsplit("&", 1)[-1].rsplit("|", 1)[-1].rsplit(";", 1)[-1]
+
+
+def get_invocations(tokens: list[str], name: str) -> list[list[str]]:
+    """Extract the argument list for each `name` invocation.
+
+    Arguments run to the next separator token. A separator glued inside a later
+    token (`curl url&&tar -T x`) is not split, so the following command's flags
+    are read as this one's - a false positive, which is the safe direction.
+    Residual: an obfuscated spelling or a name reached through a variable is not
+    matched, the limit every token rule in this file carries.
+    """
+    results = []
+    i = 0
+    while i < len(tokens):
+        if _bare_name(tokens[i]) == name:
+            j = i + 1
+            while j < len(tokens) and tokens[j] not in SEPARATORS:
+                j += 1
+            results.append(tokens[i + 1:j])
+            i = j
+        else:
+            i += 1
+    return results
+
+
+def has_curl_upload_flag(args: list[str]) -> bool:
+    """True when any argument is a curl flag that sends a body."""
+    for arg in args:
+        if arg.split("=", 1)[0] in CURL_UPLOAD_LONG:
+            return True
+        if arg.startswith("--") or not arg.startswith("-"):
+            continue
+        for char in arg[1:]:            # short-flag cluster, e.g. -sd@/etc/shadow
+            if char in CURL_UPLOAD_SHORT:
+                return True
+            if char in CURL_SHORT_TAKES_VALUE:
+                break                   # rest of the token is that option's value
+    return False
+
+
 def check(command: str):
     try:
         tokens = shlex.split(command)
@@ -105,6 +174,16 @@ def check(command: str):
                 continue
             if required_args is None or any(a in args for a in required_args):
                 deny(message)
+
+    for args in get_invocations(tokens, "curl"):
+        if has_curl_upload_flag(args):
+            deny("Blocked: curl with data upload flags (-d/--data/-F/--form/-T). "
+                 "The sandbox allowlist checks the destination, not the payload. "
+                 "Run manually if needed.")
+
+    for args in get_invocations(tokens, "wget"):
+        if any(a.split("=", 1)[0] in WGET_UPLOAD_LONG for a in args):
+            deny("Blocked: wget with --post-data/--post-file. Run manually if needed.")
 
     for token, message in TOKEN_RULES:
         if token in token_set:
