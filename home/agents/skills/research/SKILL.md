@@ -1,7 +1,7 @@
 ---
 name: research
 description: >
-  Answer a fact question from the world at self-calibrated depth. The skill picks the depth, from one lookup to parallel cross-checked verification. So the caller states the question, not the effort. Returns a cited findings block. Mechanizes the `fact → research` instrument of `30 notes/SDLC/Planning.md`. Triggers: `/research`, "research <X>", "look up", "find out", "what is the current/actual <fact>", "gather sources on", "is it true that <fact>". Route elsewhere: your own prior view → `/consult` (vault-facing, not the world); a choice someone must make → `/design` or grill (that is a decision, not a fact); stress-testing a plan → `/probe`; testing a falsifiable claim by running it → `/experiment`; learning feasibility by building → `/prototype`.
+  Answer a fact question from the world at self-calibrated depth. The skill picks the depth, from one lookup to parallel cross-checked verification. So the caller states the question, not the effort. Returns a cited findings block. Mechanizes the `fact → research` instrument of `30 notes/SDLC/Planning.md`. Triggers: `/research`, "research <X>", "look up", "find out", "what is the current/actual <fact>", "gather sources on", "is it true that <fact>". Route elsewhere: your own prior view → `/consult` (vault-facing, not the world); a choice someone must make → `/variants` or grill (that is a decision, not a fact); stress-testing a plan → `/probe`; testing a falsifiable claim by running it → `/experiment`; learning feasibility by building → `/prototype`.
 ---
 
 # Research

@@ -4,7 +4,7 @@ description: >
   Route the current context to one expert persona and return that lens's candid second opinion.
   Auto-classifies to the best-fit persona, or name one explicitly. Runs the persona as a spawned
   subagent so its reasoning stays out of the main context. Roster spans engineering, product,
-  go-to-market, and craft. Out of scope: generating new designs (use /design), arguing both sides
+  go-to-market, and craft. Out of scope: generating new designs (use /variants), arguing both sides
   (use /debate), stress-testing one plan (use /probe), scoring confidence in a claim (use /grade).
   Invoke explicitly with /opinion.
 disable-model-invocation: true
@@ -102,7 +102,7 @@ Drop a `personas/<slug>.md` with frontmatter `name`, `lens`, `signals`, then add
 ### Boundary with neighbors
 
 - `/opinion` — one expert lens reacts to what already exists.
-- `/design` — generates multiple new solutions before you commit.
+- `/variants` — generates multiple new solutions before you commit.
 - `/debate` — argues both sides of a single open question.
 - `/probe` — stress-tests one chosen plan for holes.
 - `/grade` — scores confidence in a claim or decision (1-10).

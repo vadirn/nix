@@ -44,7 +44,7 @@ A node is a ticket in the project's `Tickets.base`, carrying `kind:` (`decision`
 
 | Node type   | Resolves by               | Instrument |
 | ----------- | ------------------------- | ---------- |
-| decision    | someone must choose       | grill, or `/design` → `/debate` → `/grade` |
+| decision    | someone must choose       | grill, or `/variants` → `/debate` → `/grade` |
 | fact        | research answers it       | `/research` (AFK) |
 | feasibility | a probe answers it        | `/prototype`, time-boxed, discarded |
 | execution   | nothing open — just do it | the work itself (this is the execution node) |
@@ -78,7 +78,7 @@ On a decision node, `/consult` surfaces prior thinking. It is a prior, not a ver
 3. Present prior + variant(s) + where they diverge + your pick, with the reason.
 4. The user commits. Re-affirming the prior is a choice against alternatives, not a default.
 
-Scale the divergence: a one-line challenge on a cheap, fresh node; a full `/design` on a key one. Weight by **stakes × staleness**, where staleness is the prior's date against a threshold — objective, not the agent's introspection. Diverge hardest when the prior is strongest. That is peak anchoring.
+Scale the divergence: a one-line challenge on a cheap, fresh node; a full `/variants` on a key one. Weight by **stakes × staleness**, where staleness is the prior's date against a threshold — objective, not the agent's introspection. Diverge hardest when the prior is strongest. That is peak anchoring.
 
 ### Storage and concurrency
 

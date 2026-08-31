@@ -8,7 +8,7 @@ Take the lowest depth that closes the question. Climb only when a stop-condition
 // Fix the question
 question = do("state the fact question in one line: answerable by evidence, not by preference")
 if the question hinges on a choice or a value judgment:
-    do("TYPE BOUNDARY: this is a decision, not a fact. Hand it back — route to /design or a grill. Halt.")
+    do("TYPE BOUNDARY: this is a decision, not a fact. Hand it back — route to /variants or a grill. Halt.")
 
 // Triage
 locus = do("code | world")

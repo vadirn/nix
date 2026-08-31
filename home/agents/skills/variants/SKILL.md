@@ -1,12 +1,12 @@
 ---
-name: design
+name: variants
 description: >
   Generate multiple radically different designs for a module, interface, or system using parallel
-  subagents. Triggers: /design, "design it twice", "what are my options for", "compare architectures".
+  subagents. Triggers: /variants, "design it twice", "what are my options for", "compare architectures".
   Skip when comparing existing options (use /debate) or stress-testing one plan (use /probe).
 ---
 
-# Design
+# Variants
 
 Generate radically different designs, then compare. Based on Ousterhout's "Design It Twice": your first idea is unlikely to be the best.
 
@@ -114,5 +114,5 @@ do("suggest /probe to stress-test the chosen design")
 ### Boundary with other skills
 
 - `/debate`: argues both sides of an open question ("is X better than Y?")
-- `/design`: generates multiple concrete solutions before you commit
+- `/variants`: generates multiple concrete solutions before you commit
 - `/probe`: stress-tests a chosen design after you pick one
