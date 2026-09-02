@@ -5,7 +5,7 @@ description: >
   between agents or sessions through a mktemp file path. Triggers: /handoff, "write a handoff",
   "hand this to the next session", capturing state before you /clear or compact context.
   Templates: brief (delegator→worker), result (worker→delegator), continuation
-  (session→successor). For durable cross-session memory use /track. For orchestration use /work.
+  (session→successor). For durable cross-session memory use crux (AGENTS.md § Work state). For orchestration use /work.
 ---
 
 # Handoff
@@ -47,7 +47,7 @@ do("act on <type>: a brief is your task; a result updates your plan; a continuat
 
 ### Boundaries
 
-- **vs `/track`:** a handoff is ephemeral and carries into the very next context (e.g. across a `/clear`). A track is the durable, per-project work log saved at session boundaries. The two are independent: a continuation points at a track when one exists, but depends on none.
+- **vs crux:** a handoff is ephemeral and carries into the very next context (e.g. across a `/clear`). A crux goal is the durable work state, with a note per session boundary. The two are independent: a continuation points at a goal when one exists, but depends on none.
 - **vs `/work`:** `/work` is orchestration policy — planning, delegation, git posture. It mirrors handoff's brief and result shapes to talk to its subagents, inlining its own copies rather than reading these files. Handoff owns only the message shape and the write/read protocol.
 
 ### Default type

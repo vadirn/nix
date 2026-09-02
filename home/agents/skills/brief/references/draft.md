@@ -6,8 +6,8 @@ Goal: produce a status update that closes impression distance for one stakeholde
 
 The six communication-only fields (in progress · blocked + why · at risk · revised estimate · next · counterfactual) are, by definition, the part **no artifact carries**. So you cannot read them out of git. You can only do three things with each field, and you must be honest about which:
 
-- **artifact** — genuinely read from git/track (mostly the _shipped_ line and _in progress_).
-- **inferred** — your guess from commit cadence or a track note. Pre-fill it, but **mark it** so the user knows to check it. Never assert an inferred field as fact.
+- **artifact** — genuinely read from git or crux (mostly the _shipped_ line and _in progress_).
+- **inferred** — your guess from commit cadence or a crux note. Pre-fill it, but **mark it** so the user knows to check it. Never assert an inferred field as fact.
 - **elicited** — the user supplies or confirms it in the one review pass below.
 
 This provenance is the laundering guard. Without it the model writes plausible relational prose over thin work — proof-of-care with no proof-of-work, the failure the concept names. Marked provenance means an unverified field stays visibly unverified instead of hardening into prose.
@@ -98,7 +98,7 @@ Next: <what comes next>
 
 <counterfactual line, only for non-feature work, as: [claim — verify before sending]>
 ─────────────────────────────────────
-DRAFT — not sent. Send it yourself. Sources: <repo/track/weekly seen>
+DRAFT — not sent. Send it yourself. Sources: <repo/crux/weekly seen>
 ```
 
 ## Failure modes to name out loud

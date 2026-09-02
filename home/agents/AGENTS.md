@@ -60,9 +60,17 @@ Run `vault-query consult "<task framing>" --format markdown`; the `/consult` ski
 - **4** is confident silence,
 - **1** or **2** is an error.
 
-Proceed un-enriched on 4, 1, and 2. Phrase the query yourself, and reformulate once with broader terms before you accept silence. Add `--types track` to reach a project track. A checkpoint is a superseded entry, so reaching one also needs `--include-superseded` (`--types track,checkpoint --include-superseded`).
+Proceed un-enriched on 4, 1, and 2. Phrase the query yourself, and reformulate once with broader terms before you accept silence. A track or a checkpoint is a superseded entry, so reaching one needs `--types track,checkpoint --include-superseded`.
 
 Consult when grounding needs the user's view: an opinion, stance, definition, framing, design preference, or a decision already reasoned through, whatever the surface subject. Skip consult for mechanical execution: locating or reading code, editing, refactoring, debugging, file operations, running commands. Abstention costs one cheap call, so consult when relevance is uncertain.
+
+## Work state
+
+Cross-session work state lives in crux, the MCP server named `crux`. Read its `guide` tool once per session, before the first write.
+
+- **Resume.** Call `projects`. Match the repository's remote slug, else its directory name, against each ref, title, and alias. Then call `track(goal)` for the goal in hand. That read answers "where did we leave off".
+- **Save.** Call `add_note(goal, "observation", body)` with what a fresh agent would need: outcomes, decisions, transient state such as unpushed commits. There are no sessions: a log entry is a note.
+- **Chart.** A goal too foggy for one session goes through `/map`.
 
 ## Filing
 
@@ -74,6 +82,7 @@ File a durable fact to its typed home when it surfaces mid-session and has no ho
 - **Decided work sized to one PR**, with a statable done-condition: a ticket, via `/vault ticket`.
 - **An idea that may grow into an effort**, with no done-condition yet: the project's `41 projects/<project>/Scratchpad.md`.
 - **A convention specific to one code repository**: that repository's own `CLAUDE.md` or `AGENTS.md`.
+- **Work state across sessions** (an effort, an open uncertainty, a finding): crux, per `## Work state`.
 
 Propose the write before you make it. State what the candidate is, which destination takes it, and a one-line summary. Wait for the user's answer, and write only what they approve.
 

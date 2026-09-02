@@ -1,7 +1,7 @@
 ---
 name: brief
 description: >
-  Draft a per-stakeholder status update from real work artifacts, or diagnose a stakeholder complaint as a state-gap vs a target-gap before you react. Drafts, never sends. Reads git/track/weekly-log. Writes only each stakeholder's last_drafted in Context.md. Out of scope: sending, scheduling, internal session logs (use /track). Invoke explicitly with /brief.
+  Draft a per-stakeholder status update from real work artifacts, or diagnose a stakeholder complaint as a state-gap vs a target-gap before you react. Drafts, never sends. Reads git, crux notes, and the weekly log. Writes only each stakeholder's last_drafted in Context.md. Out of scope: sending, scheduling, internal session logs (crux notes carry those). Invoke explicitly with /brief.
 
 
 disable-model-invocation: true

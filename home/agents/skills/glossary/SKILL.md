@@ -73,10 +73,10 @@ The strong form names what differentiates the term from adjacent concepts (`Cart
 
 ### Pinned vs. un-pinned
 
-- **Pinned** (`**Term**` — bolded): baseline rows the table's template or owner placed deliberately — pinning exists so automated updates (a `/track` save, an update-mode rewrite) cannot mangle them. Keep their text, position, and presence fixed. New candidates found by scanning are un-pinned by default. Pin a row only when its wording was set deliberately and an update pass must not touch it.
+- **Pinned** (`**Term**` — bolded): baseline rows the table's template or owner placed deliberately — pinning exists so automated updates (an `/experiment` write, an update-mode rewrite) cannot mangle them. Keep their text, position, and presence fixed. New candidates found by scanning are un-pinned by default. Pin a row only when its wording was set deliberately and an update pass must not touch it.
 - **Un-pinned** (`Term` — plain): the working vocabulary. Append-only by convention. Refine by appending a new row with sharpened wording rather than rewording in place. The history of a term's understanding stays recoverable.
 
-`/track` and `/experiment` share this convention, so a reader who's learned one knows all three.
+`/experiment` shares this convention, so a reader who's learned one knows both.
 
 ### Candidate selection
 
@@ -94,5 +94,5 @@ In update mode, pinned rows remain fixed (enforced by the skill, not just by con
 
 ### Boundary with other skills
 
-- `/track` and `/experiment` use the same table format for their per-artifact glossaries; a `/track save` or `/experiment` record write is a typical caller splicing the fragment in.
+- `/experiment` uses the same table format for its per-record glossary; an `/experiment` record write is a typical caller splicing the fragment in.
 - `/probe` cross-checks a plan's terminology against whatever glossary the project carries; this skill maintains embedded glossaries, so probe's vocabulary source is the host documents.
