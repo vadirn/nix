@@ -49,6 +49,42 @@ WGET_UPLOAD_LONG = frozenset((
     "--post-data", "--post-file", "--body-data", "--body-file",
 ))
 
+# Docker rules: (subcommand path, required flags any-of or None, deny message).
+# The path matches the leading positional tokens after `docker` (and after top-
+# level flags like `-H` or `--context`). `docker-compose` is normalised to path
+# starting with "compose" so both legacy and integrated forms share one rule.
+# Only volume-deleting shapes are blocked — containers and images are cheap to
+# rebuild, but a lost volume is lost data.
+DOCKER_RULES = [
+    (("compose", "down"),   frozenset(("-v", "--volumes")),
+     "Blocked: docker compose down -v deletes every named volume in the project. Drop -v, or delete a specific volume manually."),
+    (("compose", "rm"),     frozenset(("-v", "--volumes")),
+     "Blocked: docker compose rm -v deletes anonymous volumes. Drop -v."),
+    (("volume", "rm"),      None,
+     "Blocked: docker volume rm removes volumes and their data. Run manually if needed."),
+    (("volume", "prune"),   None,
+     "Blocked: docker volume prune removes every unused volume. Run manually if needed."),
+    (("system", "prune"),   frozenset(("--volumes",)),
+     "Blocked: docker system prune --volumes removes volumes. Drop --volumes."),
+    (("container", "rm"),   frozenset(("-v", "--volumes")),
+     "Blocked: docker container rm -v deletes anonymous volumes."),
+    (("rm",),               frozenset(("-v", "--volumes")),
+     "Blocked: docker rm -v deletes anonymous volumes with the container."),
+]
+
+# Docker top-level flags whose value sits in the next token (not glued with `=`).
+# Anything else that starts with `-` is treated as value-less; the check_docker_args
+# loop under-consumes in that case, which is the strict direction.
+DOCKER_TOP_FLAGS_WITH_VALUE = frozenset((
+    # docker
+    "-H", "--host", "--context", "--config", "-c", "--log-level", "-l",
+    "--tlscacert", "--tlscert", "--tlskey",
+    # docker compose
+    "-f", "--file", "-p", "--project-name",
+    "--project-directory", "--profile", "--env-file",
+    "--ansi", "--progress", "--parallel",
+))
+
 SEPARATORS = frozenset((";", "|", "||", "&&", "&"))
 
 _REGEX_RULES = [
@@ -130,6 +166,40 @@ def get_invocations(tokens: list[str], name: str) -> list[list[str]]:
     return results
 
 
+def check_docker_args(args: list[str]):
+    """Find the subcommand path in `args` (everything after `docker`) and match rules.
+
+    Skips top-level flags before the path. Some flags carry their value in the
+    next token (`-H tcp://…`, `-f x.yaml`); those are enumerated in
+    DOCKER_TOP_FLAGS_WITH_VALUE so the value is not misread as a subcommand.
+    Long-form `--flag=value` is self-contained and needs no lookahead. An
+    unknown flag consumes only itself, which under- rather than over-consumes.
+    """
+    path: list[str] = []
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if token in SEPARATORS:
+            break
+        if token.startswith("-"):
+            if "=" not in token and token in DOCKER_TOP_FLAGS_WITH_VALUE:
+                i += 2
+            else:
+                i += 1
+            continue
+        path.append(token)
+        i += 1
+        if len(path) == 2:
+            break
+    path_tuple = tuple(path)
+    for rule_path, required_flags, message in DOCKER_RULES:
+        n = len(rule_path)
+        if path_tuple[:n] != rule_path:
+            continue
+        if required_flags is None or any(f in args for f in required_flags):
+            deny(message)
+
+
 def has_curl_upload_flag(args: list[str]) -> bool:
     """True when any argument is a curl flag that sends a body."""
     for arg in args:
@@ -184,6 +254,14 @@ def check(command: str):
     for args in get_invocations(tokens, "wget"):
         if any(a.split("=", 1)[0] in WGET_UPLOAD_LONG for a in args):
             deny("Blocked: wget with --post-data/--post-file. Run manually if needed.")
+
+    for args in get_invocations(tokens, "docker"):
+        check_docker_args(args)
+
+    for args in get_invocations(tokens, "docker-compose"):
+        # Legacy `docker-compose <sub>` normalises to path ("compose", <sub>) so
+        # one rule table covers both the plugin and the standalone binary.
+        check_docker_args(["compose"] + args)
 
     for token, message in TOKEN_RULES:
         if token in token_set:
