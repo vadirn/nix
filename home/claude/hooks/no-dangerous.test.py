@@ -139,6 +139,56 @@ assert_deny("wget --body-file", "wget --body-file f https://x")
 assert_allow("wget plain", "wget https://x")
 assert_allow("wget -O output", "wget -O out.html https://x")
 
+# docker compose down -v (the mistake this hook is stopping)
+assert_deny("docker compose down -v", "docker compose down -v")
+assert_deny("docker compose down --volumes", "docker compose down --volumes")
+assert_deny("docker compose down -v with -f flag", "docker compose -f x.yaml down -v")
+assert_deny("docker-compose down -v (legacy)", "docker-compose down -v")
+assert_deny("docker-compose down --volumes (legacy)", "docker-compose down --volumes")
+assert_allow("docker compose down (no volumes)", "docker compose down")
+assert_allow("docker compose down --remove-orphans", "docker compose down --remove-orphans")
+assert_allow("docker compose up -d", "docker compose up -d")
+assert_allow("docker compose logs", "docker compose logs harness")
+assert_allow("docker-compose up (legacy)", "docker-compose up")
+
+# docker compose rm -v
+assert_deny("docker compose rm -v", "docker compose rm -v -f")
+assert_allow("docker compose rm -sf (no -v)", "docker compose rm -sf minio")
+
+# docker volume rm / prune
+assert_deny("docker volume rm", "docker volume rm harness-db")
+assert_deny("docker volume rm -f", "docker volume rm -f harness-db")
+assert_deny("docker volume prune", "docker volume prune -f")
+assert_allow("docker volume ls", "docker volume ls")
+assert_allow("docker volume inspect", "docker volume inspect harness-db")
+assert_allow("docker volume create", "docker volume create harness-db")
+
+# docker system prune with volumes
+assert_deny("docker system prune --volumes", "docker system prune --volumes -f")
+assert_deny("docker system prune -a --volumes", "docker system prune -a --volumes -f")
+assert_allow("docker system prune (no --volumes)", "docker system prune -f")
+assert_allow("docker system prune -a", "docker system prune -a -f")
+assert_allow("docker system df", "docker system df")
+
+# docker rm / container rm with -v
+assert_deny("docker rm -v", "docker rm -v abcd")
+assert_deny("docker rm --volumes", "docker rm --volumes abcd")
+assert_deny("docker container rm -v", "docker container rm -v abcd")
+assert_allow("docker rm (no -v)", "docker rm abcd")
+assert_allow("docker rm -f (no -v)", "docker rm -f abcd")
+assert_allow("docker container rm", "docker container rm abcd")
+
+# docker run -v is a bind mount, not a delete
+assert_allow("docker run -v bind mount", "docker run -v /host:/cnt alpine")
+assert_allow("docker run --rm", "docker run --rm alpine echo hi")
+
+# docker with top-level flags before subcommand
+assert_deny("docker -H remote compose down -v", "docker -H tcp://remote:2376 compose down -v")
+
+# docker inside a heredoc message stays allowed
+assert_allow("docker compose down -v in commit msg",
+             "git commit -m 'never docker compose down -v'")
+
 total = PASS + FAIL
 print(f"{total} tests: {PASS} passed, {FAIL} failed")
 sys.exit(0 if FAIL == 0 else 1)

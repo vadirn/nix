@@ -1,115 +1,87 @@
-# Work — advance or continue an existing map
+# Work — advance an existing goal
 
-Resolve the next frontier node, one decision per session. Continuation a week later reuses `track`'s resume flow, plus a step that reconciles the world against the map.
+Resolve the next question, one decision per session. Continuation a week later starts from `track`, plus a step that reconciles the world against the map.
 
 ## Pseudocode
 
 ```
-cfg = Bash(vault-query config)
-map_path   = <cfg.project_path>/map-<slug>.md      // named, or the project's single map with status: open
-track_path = <cfg.project_path>/track-<slug>.md    // the sibling, by shared slug
+// 1. Where were we
+state    = track(goal)                       // counts, open and blocked, scratchpad, decisions, note log
+ordering = do("risk-ordered if any question carries `crux` or a risk; else dependency-ordered")
+grounding = Bash(vault-query consult "<the goal's result>" --format markdown)   // fold in on exit 0
 
-// 1. Where were we — track's resume flow (see /track read.md)
-shape  = Bash(vault-query read <map_path>)                 // low-res view + frontmatter (ordering, crux, status)
-snap   = Bash(vault-query read <map_path> Destination)     // = the track's Direction
-latest = Bash(vault-query read <track_path> <highest Log sub-address>)   // where charting stopped
-owned  = Bash(vault-query tickets --view Open --track <slug> --format tsv)
-grounding = Bash(vault-query consult "<goal from Destination>" --format markdown)   // fold in on exit 0
-ordering = do("read `ordering` from the map's frontmatter — do not re-derive it each session")
+// 2. Reconcile the world
+closed = do("which questions and work closed since the last note in the log, all kinds")
+for each item in closed:
+    facts = do("harvest its decision or its evidence: a fact's findings, a work item's recorded values")
+    do("apply them: they may UNBLOCK a question, GRADUATE a seed into a sharp question, or INVALIDATE
+        a prior decision. On invalidation, recreate the question and cite the note that overturned it;
+        the old decision stays on the closed question, struck by the new one's rationale")
 
-// 2. Reconcile the world — the step continuation adds
-closed = do("which tickets closed since the last Log snapshot (from `latest`)? — ALL types, not just execution")
-for t in closed:
-    facts = do("harvest the facts in t's ## Resolution: a fact node's findings block, or an execution ticket's
-                recorded values (fees, minimums, credentials location, row counts)")
-    do("apply facts: they may UNBLOCK a decision, GRADUATE fog into a sharp question, or INVALIDATE a prior
-        decision. On invalidation, append a superseding answer and strike the old IN THE NODE'S ## Resolution
-        — the single home (see /vault ticket §Map nodes); never in the track or the map")
-
-// 3. Re-validate the Frame (risk-ordered maps) — the natural checkpoint
-if ordering == risk:
-    if appetite or capability no longer hold (e.g. planned pace >> actual sustainable pace):
-        do("FRAME-INVALIDATION: do not decide unilaterally. Raise to the human with options —
-            (a) redraw the destination smaller/slower; (b) change the path; (c) kill this map, bank
-            the learning to Backlog. Let the human choose. Halt until they do.")
+// 3. Re-validate the Frame (risk-ordered goals)
+if ordering == risk and appetite or capability no longer hold:
+    do("FRAME-INVALIDATION: do not decide unilaterally. Raise it with options: redraw the destination smaller,
+        change the path, or drop the goal and bank the learning as seeds. Halt until the human chooses")
 
 // 4. Recompute the frontier and branch
-frontier = do("open, unblocked, NON-execution nodes (kind != execution)")
-if frontier is empty and blocked on undone execution work:
-    do("do NOT spin. Report: charting is stalled on <execution tickets>. These are yours to do.
-        Hand a precise checklist. Charting resumes once they are done. Halt.")
-if frontier is empty and nothing blocks and no fog remains:
-    do("charting is DONE — nothing left to decide. Set the map's status: done; hand off to execution;
-        archive state into the track. Halt.")
+open = ready(goal), questions only
+if open is empty and blocked(goal) names work: do("report the checklist of work; charting resumes after. Halt")
+if open is empty and no seed remains:          do("charting is DONE. Hand off to execution. Halt")
 
-// 5. Choose the node and GATE THE SELECTION — before spending any instrument
-node = do("if ordering == risk and a crux is live → the crux; else the first frontier node in order")
-if ordering == risk and node is the crux:
-    do("gate the SELECTION, whatever the node's kind: /grade the crux choice; if <7 or tied, /debate the
-        top two — BEFORE running the crux's instrument. Record the chosen crux in the map's crux: frontmatter")
+// 5. Choose the question and GATE THE SELECTION
+question = do("risk-ordered with a live crux → the crux; else the first row of `open`")
+if question is the crux:
+    do("/grade the crux choice; /debate the top two under 7 or tied, before spending its instrument")
 
-// 6. Resolve by the node's kind (the selection gate already passed in step 5)
-if node.kind == fact:
-    do("/research \"<node question>\" — pass a high stakes hint if it feeds the crux;
-        write the returned findings block into the node's ## Resolution")
-if node.kind == feasibility:  do("time-boxed /prototype, discarded; record the verdict in ## Resolution")
-if node.kind == execution:   do("execution never reaches here — the frontier excludes it (step 4). If one
-                                  surfaced, it was mistyped: retype it, or route it to a parallel execution session")
-if node.kind == decision:
-    prior = Bash(vault-query consult "<node question>" --format markdown)
-    do("CONSULT INFORMS, NOT FORECLOSES: surface prior (dated) → generate >=1 independent variant regardless
-        → present prior + variant(s) + your pick with the reason → user commits.
-        Scale divergence by stakes x staleness: one-line challenge if cheap/fresh, full /variants if key.")
+// 6. Resolve by facet
+if facet == fact:        do("/research \"<question>\"; add_note(question, observation, findings)")
+if facet == feasibility: do("time-boxed /prototype, discarded; add_note(question, observation, verdict)")
+if facet == decision:
+    prior = Bash(vault-query consult "<question>" --format markdown)
+    do("CONSULT INFORMS, NOT FORECLOSES: surface the prior with its date, generate one independent variant
+        regardless, present prior + variants + divergence + your pick, the user commits")
+    add_note(question, "observation", do("the grounds the claim will cite"))
 
 // 7. Commit
-do("record the answer in the node's ## Resolution — the single home; close the ticket (status: done)")
-do("append ONLY a link to the resolved node in the map's Decisions-so-far (index, never the answer text)")
-do("graduate fog ONE patch at a time: any Not-yet-specified line the answer made sharp becomes a new typed
-    ticket (create-then-wire, empty ## Resolution); clear that patch from the fog")
-do("re-run the reversibility read over each newly-graduated node (see SKILL.md §Ordering): a high-blast node
-    appearing in a dependency-ordered map flips it to risk — raise it, because the map now needs a Frame")
-do("if the answer reveals a node past the destination, rule it Out-of-scope (close it, one line in Out-of-scope);
-    do not resolve it on the route")
+close_question(question, claim, rationale, note_ids)            // the one home of the answer
+for each action the answer implies:
+    work = create_item(kind: "work", parent: goal, title)
+    link(work, question, "spawned_by")
+    add_done_condition(work, text); add_exclusion(work, text)
+    link(work, blocker, "requires") only when something open holds it up
+do("graduate fog ONE patch at a time: promote_seed(seed, 'question') for any seed the answer made sharp")
+do("re-read reversibility over each graduated question: a high-blast question on a dependency-ordered goal
+    flips it to risk, so raise it, because the goal now needs a Frame")
+do("a question revealed past the destination: drop_item(question, reason). Do not resolve it on the route")
 
-// 8. Stop — write the bookmark
-do("write a track Log entry (see §Stop). The Log NARRATES the decision; it does not store it (the node's
-    ## Resolution does). One decision-commit per session; cheap facts feeding this decision may batch.
-    List unresolved questions.")
+// 8. Stop: write the bookmark
+add_note(goal, "observation", do("what resolved, the frontier now, what is blocked and on which work,
+                                  the next takeable question, transient state such as unpushed commits"))
+do("one decision-commit per session. List unresolved questions")
 ```
 
 ## Reference
 
 ### One decision-commit per session
 
-The invariant binds **decisions**, not nodes. A decision's answer reshapes the next question, so commit one per session. `fact`, `feasibility`, and `execution` nodes have no such property. Unlimited of them may resolve in the same session as the decision they feed. Cap the session by resolution-budget, not node count. The line is "one graduation-causing commit," never "one node."
+The invariant binds decisions, not questions. A decision's answer reshapes the next question, so commit one per session. Fact and feasibility questions have no such property, and unlimited of them may resolve in the same session as the decision they feed. Cap the session by resolution budget, not by count.
 
 ### Harvested facts are not inert
 
-A ticket closed a week ago — a fact node's findings or an execution ticket's recorded values — produces facts later nodes depend on. Reconciling them is what makes continuation more than picking up where you stopped. A harvested fact can **unblock** (a decision becomes takeable), **graduate** fog (a question becomes sharp), or **invalidate** (a prior decision assumed a value the fact contradicts). Invalidation is append-and-strike in the node's `## Resolution`, never a silent rewrite and never a second copy in the track or map.
+A question or work item closed a week ago produces facts later questions depend on. Reconciling them is what makes continuation more than picking up where you stopped. A harvested fact can unblock, graduate, or invalidate. Invalidation recreates the question, because a closed question stays closed and its decision stays on it.
 
 ### Frame-invalidation
 
-Frame-invalidation is what the re-validation checkpoint outputs when it fails: the market bet may be fine, but the person walking the map can no longer keep the pace it assumes. Killing or redrawing a goal is the human's call, never the agent's. Surface the mismatch and two or three options. Let the human decide.
+The re-validation checkpoint outputs this when it fails: the bet may be fine, but the person walking the map can no longer keep the pace it assumes. Killing or redrawing a goal is the human's call. Surface the mismatch and two or three options.
 
 ### The three resume outcomes
 
-| Frontier  | State                            | Do |
-| --------- | -------------------------------- | --- |
-| non-empty | a node is takeable               | chart it — resolve, commit, graduate fog |
-| empty     | blocked on undone execution work | report the checklist, stop — do not spin |
-| empty     | nothing blocks, no fog           | set `status: done`, hand off to execution |
+| `ready` questions | `blocked`  | Seeds | Do |
+| ----------------- | ---------- | ----- | --- |
+| non-empty         | any        | any   | chart it: resolve, commit, graduate fog |
+| empty             | names work | any   | report the checklist, stop, do not spin |
+| empty             | empty      | none  | charting is done, hand off to execution |
 
-### Stop — the bookmark
+### The bookmark
 
-Every charting session ends by writing a `track` Log entry that snapshots the transient state the next entry supersedes:
-
-- nodes resolved this session,
-- the current frontier,
-- what is blocked and on which execution tickets,
-- the next takeable node.
-
-Follow `/track save.md` for the Log mechanics — append the entry, bump `updated:`, never rewrite the body. Skip its `## Decisions` append for a node resolution: the node's `## Resolution` is the decision's one home, and the Log only narrates why-now. Skip the `/git commit` suggestion too. The map and track are vault content propagated by Obsidian Sync, unless changes landed in `.claude/` or the user asked.
-
-### Editing the map without reading it whole
-
-A mature map, like a track, is large. Get the shape first (`vault-query read <map_path>`), then unfold only the sections an edit touches (Decisions-so-far, Not-yet-specified, the frontier node). Apply localized edits at those anchors. The map is an index. Keep node detail in the tickets, not restated in the map.
+There are no sessions in crux: a log entry is a note on the goal, capped at 1000 characters. Keep it to what the next entry supersedes: what resolved, the frontier, what blocks, the next question, and transient state. Durable answers already live on their questions, so do not repeat them.

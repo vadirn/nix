@@ -64,27 +64,9 @@ record_path = <vault_root>/35 experiments/<date>-<slug>.md
 Bash(write <record> to <record_path>.tmp)
 Bash(mv <record_path>.tmp <record_path>)
 
-// Auto-link to active track
-if project_wikilink is not null:
-    tracks = Bash(vault-query tracks --view Active --format json)
-
-    if tracks is empty:
-        track_path = null
-    elif tracks has exactly one row:
-        track_path = <cfg.project_path>/<tracks[0].Track>.md
-    else:
-        options = [for t in tracks: { label: t.Track, description: t.Status + " · " + t.Description }]
-        selected = AskUserQuestion("Multiple active tracks. Which one should this experiment link to?
-            (or skip to link none)", options, singleSelect=true, allowSkip=true)
-        track_path = skipped ? null : <cfg.project_path>/<selected.Track>.md
-
-    if track_path is not null:
-        track_content = Read(<track_path>)
-        do("locate or create '## Experiments' section — see Reference §Auto-link rule for position")
-        link_line = "- [[35 experiments/<date>-<slug>|<claim summary>]] — <verdict>"
-        updated_content = do("append link_line under ## Experiments in <track_content>")
-        Bash(write <updated_content> to <track_path>.tmp)
-        Bash(mv <track_path>.tmp <track_path>)
+// Link to the crux goal the experiment served, when one is in hand
+if a crux goal is in hand:
+    do("add_note(goal, 'evidence', '<claim summary> — <verdict>, 35 experiments/<date>-<slug>')")
 ```
 
 ## Reference
@@ -125,7 +107,7 @@ Rows whose **Term** is bolded are pinned: text, position, and presence are fixed
 ## Open
 ```
 
-The Glossary ships with five pinned rows — Claim, Method, Execution, Verdict, Open — that fix the meaning of the record's structural sections. Append un-pinned rows for any domain-specific vocabulary the experiment introduces. Shares the format and bold-as-pinned convention with `/track` and `/glossary`.
+The Glossary ships with five pinned rows — Claim, Method, Execution, Verdict, Open — that fix the meaning of the record's structural sections. Append un-pinned rows for any domain-specific vocabulary the experiment introduces. Shares the format and bold-as-pinned convention with `/glossary`.
 
 ### Frontmatter schema
 

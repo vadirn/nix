@@ -81,7 +81,7 @@ Both values are absolute. `project_path` is `vault_root` joined with the vault-r
 
 ### Naming files in a project folder
 
-A file a project holds exactly one of is named for what it is, capitalized: `<Title>.md`, `Context.md`, `Scratchpad.md`, `Tracks.base`, `Tickets.base`. A file a project holds many of is named `<type>-<slug>` in lowercase: `track-mdstruct.md`, `ticket-tickets-via-base.md`. The case is what separates the two kinds at a glance in a folder listing that mixes them.
+A file a project holds exactly one of is named for what it is, capitalized: `<Title>.md`, `Context.md`, `Scratchpad.md`, `Tickets.base`. A file a project holds many of is named `<type>-<slug>` in lowercase: `track-mdstruct.md`, `ticket-tickets-via-base.md`. The case is what separates the two kinds at a glance in a folder listing that mixes them.
 
 ### Project note
 
@@ -129,4 +129,4 @@ Substitute `<path>`, `<title>`, `<description>`, `<result>`.
 ## Notes
 
 - Generated files live in the vault. Wikilinks work.
-- Save and resume sessions via `/track`.
+- Cross-session work state lives in crux (AGENTS.md § Work state).
