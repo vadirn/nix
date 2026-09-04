@@ -52,6 +52,10 @@ When you cannot find the contradiction, say so. Then offer two or three ways for
 
 ## Grounding
 
+Two consultation sources answer different questions. The vault recovers the user's prior thinking. The `consult` MCP server supplies Evil Martians practice. A task may need both.
+
+### User's prior thinking
+
 Before answering a task that turns on the user's own view, consult the vault for the user's prior thinking. This holds during exploration and grounding, and for subagents gathering context.
 
 Run `vault-query consult "<task framing>" --format markdown`; the `/consult` skill wraps it. Read the exit code:
@@ -63,6 +67,14 @@ Run `vault-query consult "<task framing>" --format markdown`; the `/consult` ski
 Proceed un-enriched on 4, 1, and 2. Phrase the query yourself, and reformulate once with broader terms before you accept silence. A track or a checkpoint is a superseded entry, so reaching one needs `--types track,checkpoint --include-superseded`.
 
 Consult when grounding needs the user's view: an opinion, stance, definition, framing, design preference, or a decision already reasoned through, whatever the surface subject. Skip consult for mechanical execution: locating or reading code, editing, refactoring, debugging, file operations, running commands. Abstention costs one cheap call, so consult when relevance is uncertain.
+
+### Evil Martians practice
+
+Before choosing an approach, call the `consult` tool on the `consult` MCP server when the task requires judgment: a convention, tool or design choice, tradeoff, launch decision, or known failure mode. Skip mechanical work and general factual lookup.
+
+Pass a one-sentence description of the work. Do not include names, personal circumstances, credentials, customer data, or identifying details. Evil Martians records each query and may read it.
+
+Call both sources when the task needs the user's constraints and Evil Martians practice. Form each query separately. Never copy personal vault context into the shared query.
 
 ## Work state
 
