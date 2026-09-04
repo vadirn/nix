@@ -312,7 +312,6 @@
   },
   "syntaxHighlightingDisabled": false,
   "alwaysThinkingEnabled": true,
-  "effortLevel": "xhigh",
   "plansDirectory": "./.claude-plans",
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
