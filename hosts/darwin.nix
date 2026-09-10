@@ -60,6 +60,7 @@
     ];
     casks = [
       "1password-cli"
+      "codex"
       "iina"
       "raycast"
       "imageoptim"
@@ -86,6 +87,7 @@
     dock.persistent-apps = [
       "/Applications/Ghostty.app"
       "/Applications/Claude.app"
+      "/Applications/ChatGPT.app"
       "/Applications/MacWhisper.app"
       "/Applications/OrbStack.app"
       "/Applications/Obsidian.app"
