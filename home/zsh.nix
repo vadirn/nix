@@ -168,7 +168,9 @@
         echo '--- pruning stale remote-tracking refs ---'
         git remote prune origin
         echo '--- deleting local branches whose upstream is gone ---'
-        git branch -vv | grep ': gone]' | grep -v '\*' | awk '{ print ''$1; }' | xargs -I B git branch -D "B"
+        git for-each-ref --format='%(refname:short) %(upstream:track) %(worktreepath)' refs/heads \
+          | awk '$2 == "[gone]" && $3 == "" { print $1 }' \
+          | xargs -I B git branch -D "B"
         echo '--- garbage-collecting rerere cache ---'
         git rerere gc
       }
