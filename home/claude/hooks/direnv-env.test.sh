@@ -164,6 +164,62 @@ got=$(
 )
 check "override: earlier PATH entry survives" "$got" "kept"
 
+# --- NIX_PATH missing, as under the desktop app -----------------------------
+
+# Desktop-app hooks inherit launchd's environment, which lacks nix-darwin's
+# NIX_PATH. Fake zsh and direnv check the hand-off without a nix evaluation.
+mkdir -p "$TMPROOT/nozsh" "$TMPROOT/fakezsh" "$TMPROOT/emptyzsh"
+for tool in env grep jq mv rm; do
+  ln -sf "$(command -v "$tool")" "$TMPROOT/nozsh/$tool"
+done
+cat > "$TMPROOT/nozsh/direnv" << 'EOF'
+#!/bin/bash
+# Exports the NIX_PATH it inherited, or "unset" when it inherited none.
+printf '{"SEEN_NIX_PATH":"%s"}\n' "${NIX_PATH-unset}"
+EOF
+cat > "$TMPROOT/fakezsh/zsh" << 'EOF'
+#!/bin/bash
+# Like /etc/zshenv, yields NIX_PATH only while nix-darwin's guard is unset.
+echo called >> "${0%/*}/calls"
+[ -n "${__NIX_DARWIN_SET_ENVIRONMENT_DONE:-}" ] || echo 'nixpkgs=/fake/nixpkgs'
+EOF
+printf '#!/bin/bash\n' > "$TMPROOT/emptyzsh/zsh"
+chmod +x "$TMPROOT/nozsh/direnv" "$TMPROOT/fakezsh/zsh" "$TMPROOT/emptyzsh/zsh"
+
+seen() { grep -c "^export SEEN_NIX_PATH='$1'$" "$SNAP"; }
+parses() { bash -n "$SNAP" 2> /dev/null && echo yes || echo no; }
+no_nix=(env -u NIX_PATH -u __NIX_DARWIN_SET_ENVIRONMENT_DONE)
+
+run_hook nixset "$TMPROOT/plain" env NIX_PATH=/from/parent \
+  PATH="$TMPROOT/fakezsh:$TMPROOT/nozsh"
+check "NIX_PATH set: exit 0" "$RC" "0"
+check "NIX_PATH set: direnv gets it unchanged" "$(seen /from/parent)" "1"
+check "NIX_PATH set: zsh never runs" "$(lines "$TMPROOT/fakezsh/calls")" "missing"
+
+run_hook nixzsh "$TMPROOT/plain" "${no_nix[@]}" \
+  PATH="$TMPROOT/fakezsh:$TMPROOT/nozsh"
+check "no NIX_PATH: exit 0" "$RC" "0"
+check "no NIX_PATH: direnv gets zsh's value" "$(seen nixpkgs=/fake/nixpkgs)" "1"
+
+# A parent can export the guard without NIX_PATH. zsh would then skip
+# nix-darwin's script, so the hook must drop the guard before asking.
+run_hook nixguard "$TMPROOT/plain" env -u NIX_PATH \
+  __NIX_DARWIN_SET_ENVIRONMENT_DONE=1 PATH="$TMPROOT/fakezsh:$TMPROOT/nozsh"
+check "guard inherited: direnv gets zsh's value" \
+  "$(seen nixpkgs=/fake/nixpkgs)" "1"
+
+run_hook nixempty "$TMPROOT/plain" "${no_nix[@]}" \
+  PATH="$TMPROOT/emptyzsh:$TMPROOT/nozsh"
+check "zsh yields nothing: exit 0" "$RC" "0"
+check "zsh yields nothing: NIX_PATH stays unset" "$(seen unset)" "1"
+check "zsh yields nothing: snapshot parses" "$(parses)" "yes"
+
+run_hook nixnozsh "$TMPROOT/plain" "${no_nix[@]}" PATH="$TMPROOT/nozsh"
+check "no zsh: exit 0" "$RC" "0"
+check "no zsh: NIX_PATH stays unset" "$(seen unset)" "1"
+check "no zsh: snapshot parses" "$(parses)" "yes"
+check "no zsh: stderr stays quiet" "$(cat "$TMPROOT/err")" ""
+
 # --- no residue -------------------------------------------------------------
 
 check "no stray temp files" \

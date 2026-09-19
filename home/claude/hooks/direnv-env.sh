@@ -22,6 +22,17 @@ set -uo pipefail
 command -v direnv > /dev/null 2>&1 || exit 0
 command -v jq > /dev/null 2>&1 || exit 0
 
+# nix-darwin sets NIX_PATH only in a script that /etc/zshenv sources, and bash
+# never reads zshenv. Hooks the desktop app starts inherit launchd's environment,
+# which lacks it. nix-direnv then cannot resolve <nixpkgs> and falls back to an
+# empty shell. So ask zsh. Dropping nix-darwin's guard makes zshenv source the
+# script even when a parent exported the guard without NIX_PATH.
+if [[ -z "${NIX_PATH:-}" ]]; then
+  nix_path=$(env -u __NIX_DARWIN_SET_ENVIRONMENT_DONE \
+    zsh -c 'print -r -- "$NIX_PATH"' < /dev/null 2> /dev/null || true)
+  [[ -n "$nix_path" ]] && export NIX_PATH="$nix_path"
+fi
+
 # Hooks receive the working directory on stdin. Trust it over $PWD so worktree
 # sessions started by `clw` read their own .envrc.
 cwd=$(jq -r '.cwd // empty' 2> /dev/null || true)
