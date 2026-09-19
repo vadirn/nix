@@ -80,7 +80,7 @@ Call both sources when the task needs the user's constraints and Evil Martians p
 
 Cross-session work state lives in crux, the MCP server named `crux`. Read its `guide` tool once per session, before the first write.
 
-- **Resume.** Call `projects`. Match the repository's remote slug, else its directory name, against each ref, title, and alias. Then call `track(goal)` for the goal in hand. That read answers "where did we leave off".
+- **Resume.** Call `projects`. Match the repository's remote slug, else its directory name, against each ref, title, and alias. Then call `track(group)` for the goal in hand. That read answers "where did we leave off".
 - **Save.** Call `add_note(goal, "observation", body)` with what a fresh agent would need: outcomes, decisions, transient state such as unpushed commits. There are no sessions: a log entry is a note.
 - **Chart.** A goal too foggy for one session goes through `/map`.
 

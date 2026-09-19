@@ -6,7 +6,7 @@ Resolve the next question, one decision per session. Continuation a week later s
 
 ```
 // 1. Where were we
-state    = track(goal)                       // counts, open and blocked, scratchpad, decisions, note log
+state    = track(group)                      // counts, open and blocked, scratchpad, decisions, note log
 ordering = do("risk-ordered if any question carries `crux` or a risk; else dependency-ordered")
 grounding = Bash(vault-query consult "<the goal's result>" --format markdown)   // fold in on exit 0
 
@@ -43,7 +43,7 @@ if facet == decision:
     add_note(question, "observation", do("the grounds the claim will cite"))
 
 // 7. Commit
-close_question(question, claim, rationale, note_ids)            // the one home of the answer
+close_question(question, claim, rationale, notes)               // the one home of the answer
 for each action the answer implies:
     work = create_item(kind: "work", parent: goal, title)
     link(work, question, "spawned_by")

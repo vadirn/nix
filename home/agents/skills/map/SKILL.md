@@ -45,7 +45,7 @@ Every element names the force it serves. An element serving no force is ceremony
 | Blocking edge  | `link(from, to, "requires")` |
 | The crux       | `crux: true` on one question per container |
 | Blast-radius   | `risk`, an integer |
-| A decision     | `close_question(question, claim, rationale, note_ids)` |
+| A decision     | `close_question(question, claim, rationale, notes)` |
 | Out of scope   | `drop_item(question, reason)` |
 | The bookmark   | `add_note(goal, "observation", body)` |
 
