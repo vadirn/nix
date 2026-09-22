@@ -34,7 +34,16 @@
 
   homebrew = {
     enable = true;
-    taps = builtins.attrNames config.nix-homebrew.taps;
+    # `trusted = true` emits `tap "...", trusted: true` in the Brewfile.
+    # Homebrew 6 (HOMEBREW_REQUIRE_TAP_TRUST) refuses to load formulae/casks
+    # from untrusted non-official taps, and `brew bundle`'s zap cleanup loads
+    # every installed formula to compute what to remove -- so an untrusted tap
+    # aborts activation. Declaring trust in the Brewfile makes `brew bundle`
+    # grant it during install and keep it through its trust-store rewrite.
+    taps = map (name: {
+      inherit name;
+      trusted = true;
+    }) (builtins.attrNames config.nix-homebrew.taps);
     brews = [
       "git"
       "git-absorb"
@@ -46,7 +55,7 @@
       "syncthing"
       "nmap"
 
-      "dopplerhq/cli/doppler"
+      "doppler"
       "glow"
       "gum"
       "hyperfine"
@@ -55,7 +64,7 @@
       "tealdeer"
       "arimxyer/tap/models"
       "oven-sh/bun/bun"
-      "anomalyco/tap/opencode"
+      "anomalyco/tap/opencode-v2"
       "portless"
     ];
     casks = [
@@ -77,7 +86,7 @@
       autoUpdate = true;
       upgrade = true;
       # Skip the interactive "uninstall these?" confirmation during `brew
-      # bundle --cleanup --zap`; answer is always yes.
+      # bundle --zap --force-cleanup`; answer is always yes.
       extraFlags = ["--force"];
     };
   };
@@ -115,18 +124,7 @@
     enableRosetta = false;
     user = "vadim";
     mutableTaps = false;
-    # Homebrew 6 requires third-party taps to be trusted; safe to trust
-    # wholesale since taps are pinned flake inputs (immutable until
-    # `nix flake update`). Entries persist; remove with `brew untrust`.
-    trust.taps = [
-      "dopplerhq/cli"
-      "arimxyer/tap"
-      "oven-sh/bun"
-      "anomalyco/tap"
-      "basecamp/tap"
-    ];
     taps = {
-      "dopplerhq/homebrew-cli" = inputs.homebrew-dopplerhq-cli;
       "arimxyer/homebrew-tap" = inputs.homebrew-arimxyer-tap;
       "oven-sh/homebrew-bun" = inputs.homebrew-oven-sh-bun;
       "anomalyco/homebrew-tap" = inputs.homebrew-anomalyco-tap;

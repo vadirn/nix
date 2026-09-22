@@ -2,18 +2,14 @@
   description = "Darwin system flake";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
-    nix-darwin.url = "github:LnL7/nix-darwin/nix-darwin-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    nix-darwin.url = "github:LnL7/nix-darwin/nix-darwin-26.05";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
     nix-homebrew = {
       url = "github:zhaofengli/nix-homebrew/de7953a0";
       inputs.brew-src.url = "github:Homebrew/brew/6.0.15";
     };
 
-    homebrew-dopplerhq-cli = {
-      url = "github:dopplerhq/homebrew-cli";
-      flake = false;
-    };
     homebrew-arimxyer-tap = {
       url = "github:arimxyer/homebrew-tap";
       flake = false;
@@ -31,7 +27,7 @@
       flake = false;
     };
 
-    home-manager.url = "github:nix-community/home-manager/release-25.11";
+    home-manager.url = "github:nix-community/home-manager/release-26.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
 
     # The markdown crates, pinned as a plain source tree: the repo carries no
