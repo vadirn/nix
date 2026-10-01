@@ -31,7 +31,7 @@ if user supplied explicit branch name: skip
 else: AskUserQuestion("create <name> off <base>?")
 
 // Create
-if base == "origin/<default>": Bash(git checkout -b <name> origin/<default>)
+if base == "origin/<default>": Bash(git checkout --no-track -b <name> origin/<default>)
 else:                          Bash(git checkout -b <name>)
 ```
 
@@ -43,7 +43,8 @@ else:                          Bash(git checkout -b <name>)
 
 ## Base branch
 
-- Default: cut from the updated default branch so the new branch starts even with `origin`. `git fetch origin <default>` followed by `git checkout -b <name> origin/<default>` branches from the fetched ref without checking out the default branch first.
+- Default: cut from the updated default branch so the new branch starts even with `origin`. `git fetch origin <default>` followed by `git checkout --no-track -b <name> origin/<default>` branches from the fetched ref without checking out the default branch first.
+- Pass `--no-track`. Without it, the new branch tracks `origin/<default>`. Recording that writes `.git/config`, which the sandbox refuses. A tracked `origin/<default>` would also mislead `/git pr`, which pushes with `-u` only when the branch has no upstream.
 - When the user is already on a feature branch, ask before choosing. Stacking the new branch on the current one is sometimes intended.
 
 ## Uncommitted changes
