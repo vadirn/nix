@@ -50,8 +50,8 @@
     pkgs = nixpkgs.legacyPackages.${system};
     inherit (pkgs) lib;
     # `vault-query` is the only crate left in this repo. Its build source is the
-    # workspace manifest, the single lockfile, and its own tree; `mdstruct`
-    # arrives as a git dependency that `fetchCargoVendor` resolves.
+    # workspace manifest, the single lockfile, and its own tree; `mdstruct` and
+    # `mdsearch` arrive as git dependencies that `fetchCargoVendor` resolves.
     workspaceFiles = lib.fileset.unions [
       ./Cargo.toml
       ./Cargo.lock
@@ -81,7 +81,7 @@
         root = ./.;
         fileset = lib.fileset.unions [workspaceFiles rosterDocs];
       };
-      cargoHash = "sha256-0wa84MqK4tZtZ1Zrubov/u+lC53575skxTJbje4IrTA=";
+      cargoHash = "sha256-ksQVMViwjNXKSDLtowqy82J/3W6mhT2vHu1HzPd6HmA=";
     };
     # The extracted workspace builds as one derivation carrying every binary in
     # it, so comrak compiles once instead of once per crate, and one cargoHash

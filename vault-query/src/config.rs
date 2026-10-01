@@ -17,15 +17,15 @@ use crate::vault_ignore::{self, VaultIgnore};
 /// Shared with `lint` (the `oversized_entry` rule threshold).
 pub const DEFAULT_PER_DOC_TOKEN_CAP: usize = 4000;
 
-/// Default BM25 query-parser boost for the `title` field (the note filename).
+/// Default BM25 boost for the `title` field (the note filename).
 /// Demoted from the historical 2.0 so a curated frontmatter `description` precis
 /// outranks incidental filename token overlap. Single source of truth shared by
 /// `ConsultConfig` and the two `search` BM25 sites, so consult and search never drift.
 pub const DEFAULT_TITLE_BOOST: f32 = 1.0;
 
-/// Default BM25 query-parser boost for the frontmatter `description` field.
-/// Boosted above the body (1.0) but kept modest: Tantivy's BM25 short-field norm
-/// already favors the one-line description, so a large boost risks over-correcting.
+/// Default BM25 boost for the frontmatter `description` field.
+/// Boosted above the body (1.0) but kept modest: BM25's length norm already
+/// favors the one-line description, so a large boost risks over-correcting.
 /// Starting point for eval calibration. Shared by `ConsultConfig` and `search`.
 pub const DEFAULT_DESCRIPTION_BOOST: f32 = 1.5;
 
@@ -53,12 +53,12 @@ pub struct ConsultConfig {
     /// Skip any single document whose body exceeds this token estimate.
     pub per_doc_token_cap: usize,
 
-    /// BM25 query-parser boost for the `title` field (note filename).
+    /// BM25 boost for the `title` field (note filename).
     /// Default `DEFAULT_TITLE_BOOST` (1.0) demotes the filename relative to the
     /// curated `description`. Tunable without a rebuild for eval calibration.
     pub title_boost: f32,
 
-    /// BM25 query-parser boost for the frontmatter `description` field.
+    /// BM25 boost for the frontmatter `description` field.
     /// Default `DEFAULT_DESCRIPTION_BOOST` (1.5). Tunable without a rebuild so
     /// consult can be recalibrated against the eval set without recompiling.
     pub description_boost: f32,

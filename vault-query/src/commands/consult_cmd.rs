@@ -209,8 +209,8 @@ struct LogRecord<'a> {
     max_top3_coverage: Option<f32>,
     elbow_ratio: Option<f32>,
     num_returned: usize,
-    /// Parser error message when the sanitized query failed to parse; `null`
-    /// otherwise. Lets log analysis tell a parse-failure abstain apart from a
+    /// Error message when the query held no searchable terms; `null`
+    /// otherwise. Lets log analysis tell a malformed-query abstain apart from a
     /// genuine no-results abstain.
     query_error: Option<&'a str>,
     // Selection summary

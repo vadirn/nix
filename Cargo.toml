@@ -1,8 +1,8 @@
 # Workspace root for `vault-query`, the one crate left in this repo. The
-# markdown core it builds on, `mdstruct`, moved to
-# github.com/vadirn/md-for-agents and comes back as a git dependency. The
-# manifest tracks `main`; `Cargo.lock` pins the commit, so `cargo update -p
-# mdstruct` is the whole bump.
+# markdown core it builds on, `mdstruct`, and the BM25 index it searches with,
+# `mdsearch`, live in github.com/vadirn/md-for-agents and come back as git
+# dependencies. The manifest tracks `main`; `Cargo.lock` pins one commit for
+# both, so `cargo update -p mdstruct` is the whole bump.
 #
 # Shared dependencies are declared here and inherited with `.workspace = true`.
 [workspace]
@@ -15,6 +15,7 @@ edition = "2024"
 
 [workspace.dependencies]
 mdstruct = { git = "https://github.com/vadirn/md-for-agents.git", branch = "main" }
+mdsearch = { git = "https://github.com/vadirn/md-for-agents.git", branch = "main" }
 
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

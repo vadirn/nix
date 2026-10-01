@@ -9,17 +9,15 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use anyhow::Result;
+use mdsearch::analysis::{Analyzer, bilingual_analyzer};
 use serde::Serialize;
-use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
-use tantivy::schema::*;
-use tantivy::tokenizer::TextAnalyzer;
 
 use crate::config::ConsultConfig;
 use crate::frontmatter;
-use crate::index::{bilingual_analyzer, build_index, sanitize_query};
+use crate::index::{build_corpus, scoring};
 use crate::vault::VaultFile;
 use crate::wikilink;
 
@@ -144,11 +142,10 @@ pub struct ConsultDiagnostics {
     pub elbow_ratio: Option<f32>,
     /// Number of documents returned from BM25 before gate filtering.
     pub num_returned: usize,
-    /// Set when the post-sanitization query failed to parse (e.g. a bare boolean
-    /// operator like `AND` survives sanitization and trips Tantivy's parser).
-    /// An abstain with `query_error: Some` is a parse failure, not a genuine
-    /// empty result — the two are otherwise both reported as `reason: "no results"`
-    /// and would be indistinguishable.
+    /// Set when the query holds no searchable terms (e.g. only punctuation), so
+    /// the index rejected it. An abstain with `query_error: Some` is a malformed
+    /// query, not a genuine empty result — the two are otherwise both reported as
+    /// `reason: "no results"` and would be indistinguishable.
     pub query_error: Option<String>,
 }
 
@@ -161,7 +158,7 @@ struct Hit {
     path: String,
     title: String,
     score: f32,
-    /// The stored body text (from Tantivy doc; identical to frontmatter::body stripped).
+    /// The indexed body text: `frontmatter::body` of the hit's file.
     stored_body: String,
 }
 
@@ -169,19 +166,19 @@ struct Hit {
 // Core BM25 retrieval over an arbitrary file slice
 // ---------------------------------------------------------------------------
 
-/// Build a Tantivy in-RAM index over `files`, query it, and return scored hits.
+/// Build an in-RAM BM25 corpus over `files`, query it, and return scored hits.
 ///
-/// Uses the same bilingual stemmed analyzer as `search.rs`:
-///   SimpleTokenizer → RemoveLongFilter(40) → LowerCaser → Stemmer(English) → Stemmer(Russian)
+/// Uses the same corpus and bilingual stemmed analyzer as `search.rs`
+/// ([`build_corpus`]).
 ///
-/// `limit` controls the Tantivy top-N cut (IDF and top-N are computed only over
-/// the provided `files`, so callers must pre-filter to the in-scope set before
+/// `limit` controls the top-N cut (IDF and top-N are computed only over the
+/// provided `files`, so callers must pre-filter to the in-scope set before
 /// calling this).
 ///
-/// Returns the scored hits paired with an optional parse-error message: `Some`
-/// when `QueryParser` rejected the sanitized query (the hit set is then empty),
-/// `None` otherwise. Surfacing the error lets `run_consult` flag a parse-failure
-/// abstain distinctly from a genuine no-results abstain.
+/// Returns the scored hits paired with an optional query-error message: `Some`
+/// when the corpus rejected the query for holding no searchable terms (the hit
+/// set is then empty), `None` otherwise. Surfacing the error lets `run_consult`
+/// flag a malformed-query abstain distinctly from a genuine no-results abstain.
 fn bm25_rank(
     files: &[&VaultFile],
     vault_root: &Path,
@@ -193,60 +190,42 @@ fn bm25_rank(
         return Ok((vec![], None));
     }
 
-    // Schema + index build is shared with both search sites (build_index).
-    let (index, fields) = build_index(files, vault_root)?;
+    // The corpus build is shared with search (build_corpus).
+    let corpus = build_corpus(files, vault_root)?;
 
-    let reader = index.reader()?;
-    let searcher = reader.searcher();
-
-    // Query over title + description + body. Boosts come from config so consult
+    // Rank over title + description + body. Boosts come from config so consult
     // can be recalibrated without a rebuild: the filename (title) is demoted and
-    // the curated `description` precis is favored; body stays at the implicit 1.0.
-    let mut query_parser =
-        QueryParser::for_index(&index, vec![fields.title, fields.description, fields.body]);
-    query_parser.set_field_boost(fields.title, config.title_boost);
-    query_parser.set_field_boost(fields.description, config.description_boost);
-
-    // Sanitize metacharacters before handing the query to Tantivy's parser so
-    // that natural-language queries (e.g. "structure the workflow: plan first")
-    // are treated as literal term searches rather than query syntax.
-    let sanitized = sanitize_query(query);
-
-    // QueryParser can still fail on a query that survives sanitization (e.g. a bare
-    // boolean operator like `AND`). Return the parser error to the caller rather
+    // the curated `description` precis is favored; body stays at 1.0.
+    //
+    // The query is free text, so no character in it is syntax. The search's only
+    // error is a query with no searchable terms. Return it to the caller rather
     // than swallowing it as an empty result, so the abstain it causes is
     // distinguishable from a genuine no-results abstain.
-    let parsed = match query_parser.parse_query(&sanitized) {
-        Ok(p) => p,
+    let weights = scoring(config.title_boost, config.description_boost);
+    let ranked = match corpus.search(query, limit, weights) {
+        Ok(ranked) => ranked,
         Err(e) => return Ok((vec![], Some(e.to_string()))),
     };
 
-    let top_docs = searcher.search(&parsed, &TopDocs::with_limit(limit))?;
-
-    let mut hits = Vec::new();
-    for (score, doc_address) in top_docs {
-        let doc: TantivyDocument = searcher.doc(doc_address)?;
-        let path_val = doc
-            .get_first(fields.path)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let title_val = doc
-            .get_first(fields.title)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        // description is index-only (not stored); the coverage gate reads body.
-        let stored_body = doc
-            .get_first(fields.body)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+    let by_path: HashMap<String, &VaultFile> = files
+        .iter()
+        .map(|f| (f.relative_path(vault_root), *f))
+        .collect();
+    let mut hits = Vec::with_capacity(ranked.len());
+    for hit in ranked {
+        // The hit must resolve to an indexed file; a miss means the corpus and the
+        // file slice diverged, which is a bug rather than a doc to skip.
+        let vf = by_path.get(&hit.id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "indexed document {:?} not found in the in-scope files",
+                hit.id
+            )
+        })?;
         hits.push(Hit {
-            path: path_val,
-            title: title_val,
-            score,
-            stored_body,
+            path: hit.id,
+            title: hit.title,
+            score: hit.score,
+            stored_body: frontmatter::body(&vf.content).to_string(),
         });
     }
 
@@ -260,32 +239,19 @@ fn bm25_rank(
 /// Tokenize `text` with the same stemmed analyzer used for indexing, returning
 /// all non-empty lowercase stemmed tokens.
 ///
-/// No stopword list is readily available in this dependency set (tantivy ships
+/// No stopword list is readily available in this dependency set (mdsearch ships
 /// none; a crate just for stopwords is not worth the dependency).
 /// Decision: all non-empty stemmed tokens count as content terms. Stopwords
 /// such as "the", "a", "in" will stem to themselves and be counted; their
 /// near-universal presence in docs means they contribute fractionally to coverage
 /// but rarely determine the binary pass/fail of the gate.
 fn stemmed_tokens(text: &str) -> Vec<String> {
-    // token_stream takes &mut self, so the analyzer chain is reused via a
-    // thread-local rather than rebuilt on every call (this runs once per
-    // candidate body in the gate and packer).
-    thread_local! {
-        static ANALYZER: std::cell::RefCell<TextAnalyzer> =
-            std::cell::RefCell::new(bilingual_analyzer());
-    }
-    ANALYZER.with(|analyzer| {
-        let mut analyzer = analyzer.borrow_mut();
-        let mut stream = analyzer.token_stream(text);
-        let mut tokens = Vec::new();
-        while stream.advance() {
-            let text = stream.token().text.clone();
-            if !text.is_empty() {
-                tokens.push(text);
-            }
-        }
-        tokens
-    })
+    // One analyzer serves every call, so its stem cache carries across the
+    // candidate bodies the gate and packer tokenize.
+    static ANALYZER: LazyLock<Analyzer> = LazyLock::new(bilingual_analyzer);
+    let mut tokens = ANALYZER.terms(text);
+    tokens.retain(|t| !t.is_empty());
+    tokens
 }
 
 // ---------------------------------------------------------------------------

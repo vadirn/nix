@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 mdstruct.workspace = true
+mdsearch.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 regex.workspace = true
@@ -12,7 +13,6 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 chrono = "0.4"
-tantivy = "0.22"
 unicode-normalization = "0.1"
 walkdir = "2"
 

@@ -4,15 +4,11 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::Path;
-use tantivy::SnippetGenerator;
-use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
-use tantivy::schema::*;
 
 use crate::{
     config::{DEFAULT_DESCRIPTION_BOOST, DEFAULT_TITLE_BOOST},
     frontmatter,
-    index::{build_index, sanitize_query},
+    index::{build_corpus, scoring},
     output::TextJson,
     vault,
     vault_ignore::VaultIgnore,
@@ -78,71 +74,6 @@ fn scan_and_filter(
     Ok(files)
 }
 
-/// Shared BM25 plumbing for both `run_bm25` arms: scan + type filter, index
-/// build, query parse with the shared boosts, ranking, and snippet generator.
-/// `None` when no documents matched. Result shaping stays in the callers,
-/// since text and JSON output diverge in snippet rendering.
-struct Bm25Hits {
-    files: Vec<vault::VaultFile>,
-    searcher: tantivy::Searcher,
-    fields: crate::index::IndexFields,
-    top_docs: Vec<(f32, tantivy::DocAddress)>,
-    snippet_generator: SnippetGenerator,
-}
-
-fn search_bm25(
-    query: &str,
-    cfg: &crate::config::ResolvedConfig,
-    subfolder: Option<&Path>,
-    limit: usize,
-    types: &[String],
-) -> Result<Option<Bm25Hits>> {
-    let vault_root = &cfg.vault_root;
-    let root = vault::resolve_root(vault_root, subfolder);
-
-    let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
-
-    // Build the shared BM25 index (schema + bilingual analyzer shared with consult).
-    let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
-    let (index, fields) = build_index(&file_refs, vault_root)?;
-
-    let reader = index.reader()?;
-    let searcher = reader.searcher();
-
-    // Parse query over title + description + body with the shared boosts (filename
-    // demoted, curated description favored). Sanitize metacharacters first so that
-    // natural-language queries containing `:` or other Tantivy syntax chars
-    // (e.g. "structure the workflow: plan first") are treated as plain terms.
-    let mut query_parser =
-        QueryParser::for_index(&index, vec![fields.title, fields.description, fields.body]);
-    query_parser.set_field_boost(fields.title, DEFAULT_TITLE_BOOST);
-    query_parser.set_field_boost(fields.description, DEFAULT_DESCRIPTION_BOOST);
-    let sanitized = sanitize_query(query);
-    let parsed = query_parser.parse_query(&sanitized)?;
-
-    // Use the full candidate set so that filter/downrank steps in callers operate
-    // over all matching docs, not just the pre-truncated top-N. This prevents
-    // superseded entries from consuming limit slots (--no-superseded) and lets a
-    // downranked doc be displaced by a non-superseded doc just outside the raw top-N.
-    let full_limit = files.len().max(limit);
-    let top_docs = searcher.search(&parsed, &TopDocs::with_limit(full_limit))?;
-
-    if top_docs.is_empty() {
-        return Ok(None);
-    }
-
-    // SnippetGenerator must be created from the same searcher + parsed query.
-    let snippet_generator = SnippetGenerator::create(&searcher, &parsed, fields.body)?;
-
-    Ok(Some(Bm25Hits {
-        files,
-        searcher,
-        fields,
-        top_docs,
-        snippet_generator,
-    }))
-}
-
 /// Maximum compiled size (bytes) for a user-supplied regex. Bounds the memory a
 /// pathological pattern (e.g. deeply nested bounded repetitions like `a{1000}{1000}`)
 /// can demand at compile time, so it fails fast with a clean diagnostic instead of
@@ -198,9 +129,8 @@ fn downranked(
 }
 
 /// One ranked BM25 hit after the single downrank pass, shared by the JSON and text
-/// output arms. Snippet rendering differs between arms (plain fragment vs. `<b>`→`*`
-/// HTML), so the indexed body is carried as `snippet_source` and each arm runs the
-/// shared `SnippetGenerator` over it at render time.
+/// output arms. The arms render the snippet differently (plain text vs. `*`-marked
+/// matches), so the hit carries the snippet with its match spans.
 struct RankedHit {
     path: String,
     title: String,
@@ -208,59 +138,65 @@ struct RankedHit {
     score: f32,
     /// Frontmatter body (leading newline stripped): the JSON `body` field + tokens.
     body: String,
-    /// Indexed body field: the source the `SnippetGenerator` windows over.
-    snippet_source: String,
+    snippet: mdsearch::Snippet,
     links: Vec<String>,
     superseded: bool,
 }
 
-/// The single epistemic-downrank pass over the BM25 candidate set. Resolves each
-/// retrieved doc against the scanned `VaultFile` set, applies [`downranked`] to
-/// filter `--no-superseded` hits and grade the rest, then sorts by adjusted score
-/// and truncates to `limit`. A retrieved doc that does not resolve to a scanned
-/// file is an error (the index and the scan diverged), not a silently skipped row.
+/// Rank `query` over the scanned, type-filtered vault, then run the single
+/// epistemic-downrank pass over the candidates. Resolves each hit against the
+/// scanned `VaultFile` set, applies [`downranked`] to filter `--no-superseded`
+/// hits and grade the rest, then sorts by adjusted score and truncates to
+/// `limit`. A hit that does not resolve to a scanned file is an error (the index
+/// and the scan diverged), not a silently skipped row.
 fn rank_hits(
-    hits: &Bm25Hits,
-    vault_root: &Path,
+    query: &str,
+    cfg: &crate::config::ResolvedConfig,
+    subfolder: Option<&Path>,
     limit: usize,
+    types: &[String],
     no_superseded: bool,
 ) -> Result<Vec<RankedHit>> {
+    let vault_root = &cfg.vault_root;
+    let root = vault::resolve_root(vault_root, subfolder);
+
+    let files = scan_and_filter(&root, vault_root, &cfg.ignore, types)?;
+
+    // Build the shared BM25 corpus (fields + bilingual analyzer shared with consult).
+    let file_refs: Vec<&vault::VaultFile> = files.iter().collect();
+    let corpus = build_corpus(&file_refs, vault_root)?;
+
+    // Rank over title + description + body with the shared boosts (filename
+    // demoted, curated description favored). Take the full candidate set so the
+    // downrank pass below operates over all matching docs, not just the
+    // pre-truncated top-N. This prevents superseded entries from consuming limit
+    // slots (--no-superseded) and lets a downranked doc be displaced by a
+    // non-superseded doc just outside the raw top-N.
+    let hits = corpus.search(
+        query,
+        files.len().max(limit),
+        scoring(DEFAULT_TITLE_BOOST, DEFAULT_DESCRIPTION_BOOST),
+    )?;
+
     // Build a path → &VaultFile lookup map for type/links/tier resolution.
-    let file_map: HashMap<String, &vault::VaultFile> = hits
-        .files
+    let file_map: HashMap<String, &vault::VaultFile> = files
         .iter()
         .map(|f| (f.relative_path(vault_root), f))
         .collect();
 
     let mut ranked = Vec::new();
-    for (raw_score, doc_address) in &hits.top_docs {
-        let doc: TantivyDocument = hits.searcher.doc(*doc_address)?;
-        let path_val = doc
-            .get_first(hits.fields.path)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let title_val = doc
-            .get_first(hits.fields.title)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        // snippet: plain text. The raw fragment, not `to_html()`, which HTML-encodes
-        // (`&`→`&amp;`, `<`→`&lt;`, …) before wrapping matches in <b> tags.
-        let body_val = doc
-            .get_first(hits.fields.body)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        // The retrieved doc must resolve to a scanned VaultFile; a miss means the
-        // index and the scan diverged, which is a bug rather than a doc to skip.
-        let vf = file_map.get(&path_val).ok_or_else(|| {
-            anyhow::anyhow!("indexed document {path_val:?} not found in scanned vault files")
+    for hit in hits {
+        // The hit must resolve to a scanned VaultFile; a miss means the index and
+        // the scan diverged, which is a bug rather than a doc to skip.
+        let vf = file_map.get(&hit.id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "indexed document {:?} not found in scanned vault files",
+                hit.id
+            )
         })?;
 
         let Some((score, is_sup)) = downranked(
-            *raw_score,
+            hit.score,
             frontmatter::epistemic_tier(&vf.frontmatter),
             no_superseded,
         ) else {
@@ -278,18 +214,18 @@ fn rank_hits(
             .to_string();
 
         ranked.push(RankedHit {
-            path: path_val,
-            title: title_val,
+            path: hit.id,
+            title: hit.title,
             doc_type,
             score,
             body,
-            snippet_source: body_val,
+            snippet: hit.snippet,
             links,
             superseded: is_sup,
         });
     }
 
-    // Re-sort after score adjustment (Tantivy returns pre-downrank order), then
+    // Re-sort after score adjustment (the corpus returns pre-downrank order), then
     // truncate to the caller's requested limit.
     ranked.sort_by(|a, b| {
         b.score
@@ -321,28 +257,20 @@ pub fn collect_bm25_results_filtered(
     types: &[String],
     no_superseded: bool,
 ) -> Result<Vec<SearchResult>> {
-    let Some(hits) = search_bm25(query, cfg, subfolder, limit, types)? else {
-        return Ok(vec![]);
-    };
-    let ranked = rank_hits(&hits, &cfg.vault_root, limit, no_superseded)?;
+    let ranked = rank_hits(query, cfg, subfolder, limit, types, no_superseded)?;
 
     // Map the shared ranked list onto the JSON envelope shape. The snippet is the
-    // unescaped windowed fragment (no highlight markup); tokens estimate over the body.
+    // windowed body text (no highlight markup); tokens estimate over the body.
     let results = ranked
         .into_iter()
         .map(|hit| {
-            let snippet = hits
-                .snippet_generator
-                .snippet(&hit.snippet_source)
-                .fragment()
-                .to_string();
             let tokens = crate::tokens::estimate_tokens(&hit.body);
             SearchResult {
                 path: hit.path,
                 title: hit.title,
                 doc_type: hit.doc_type,
                 score: hit.score,
-                snippet,
+                snippet: hit.snippet.text,
                 body: hit.body,
                 tokens,
                 links: hit.links,
@@ -352,6 +280,35 @@ pub fn collect_bm25_results_filtered(
         .collect();
 
     Ok(results)
+}
+
+/// Wrap every matched span of `snippet` in `*`, so a terminal reader sees what
+/// the query hit.
+///
+/// The spans are sorted and merged first, so an overlap cannot nest the markers.
+fn mark(snippet: &mdsearch::Snippet) -> String {
+    let mut spans = snippet.highlights.clone();
+    spans.sort_by_key(|s| s.start);
+    let mut merged: Vec<std::ops::Range<usize>> = Vec::with_capacity(spans.len());
+    for span in spans {
+        match merged.last_mut() {
+            Some(last) if span.start <= last.end => last.end = last.end.max(span.end),
+            _ => merged.push(span),
+        }
+    }
+
+    let text = &snippet.text;
+    let mut out = String::with_capacity(text.len() + merged.len() * 2);
+    let mut cursor = 0;
+    for span in merged {
+        out.push_str(&text[cursor..span.start]);
+        out.push('*');
+        out.push_str(&text[span.clone()]);
+        out.push('*');
+        cursor = span.end;
+    }
+    out.push_str(&text[cursor..]);
+    out
 }
 
 fn run_bm25(
@@ -377,25 +334,15 @@ fn run_bm25(
         return Ok(());
     }
 
-    // Text arm: single index build via search_bm25, then the shared rank_hits pass.
-    let Some(hits) = search_bm25(query, cfg, subfolder, limit, types)? else {
-        return Ok(());
-    };
-    let ranked = rank_hits(&hits, &cfg.vault_root, limit, no_superseded)?;
+    // Text arm: the same shared rank_hits pass, with matches marked for the terminal.
+    let ranked = rank_hits(query, cfg, subfolder, limit, types, no_superseded)?;
 
     with_stdout(|out| {
         for hit in &ranked {
             let sup_label = if hit.superseded { " [superseded]" } else { "" };
             writeln!(out, "[{:.2}]{} {}", hit.score, sup_label, hit.path)?;
-
-            let snippet = hits.snippet_generator.snippet(&hit.snippet_source);
-            let html = snippet.to_html();
-            if !html.is_empty() {
-                // Convert <b>term</b> to *term* for terminal display.
-                let display = html.replace("<b>", "*").replace("</b>", "*");
-                for line in display.lines() {
-                    writeln!(out, "  {}", line)?;
-                }
+            for line in mark(&hit.snippet).lines() {
+                writeln!(out, "  {}", line)?;
             }
             writeln!(out)?;
         }
@@ -569,9 +516,9 @@ mod tests {
 
     #[test]
     fn test_search_colon_query_does_not_return_empty() {
-        // A query containing a colon used to cause a Tantivy parse error, which
-        // would propagate as an Err or silently return zero results.
-        // After sanitization, the query should retrieve the matching doc.
+        // A query containing a colon once tripped a query parser, which would
+        // propagate as an Err or silently return zero results. The colon must
+        // read as whitespace, so the query retrieves the matching doc.
         let tmp = tempfile::tempdir().unwrap();
         let vault_root = tmp.path().to_path_buf();
 
@@ -604,6 +551,49 @@ mod tests {
             "colon query must not return an error: {:?}",
             result.err()
         );
+
+        let results =
+            collect_bm25_results_filtered("workflow: plan first", &cfg, None, 10, &[], false)
+                .unwrap();
+        assert_eq!(results.len(), 1, "colon query must find the workflow note");
+    }
+
+    #[test]
+    fn a_query_with_no_searchable_terms_is_an_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault_root = tmp.path().to_path_buf();
+        std::fs::write(
+            vault_root.join("Note.md"),
+            "---\ntype: card\n---\n\nalpha\n",
+        )
+        .unwrap();
+
+        let cfg = make_cfg(vault_root);
+        let err = collect_bm25_results_filtered("***", &cfg, None, 10, &[], false)
+            .err()
+            .expect("a termless query must error");
+        assert!(
+            err.to_string().contains("no searchable terms"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn mark_wraps_each_matched_span_and_merges_overlaps() {
+        let snippet = |text: &str, highlights: Vec<std::ops::Range<usize>>| mdsearch::Snippet {
+            text: text.to_string(),
+            highlights,
+        };
+        assert_eq!(
+            mark(&snippet("alpha beta", vec![6..10, 0..5])),
+            "*alpha* *beta*"
+        );
+        assert_eq!(
+            mark(&snippet("alpha beta", vec![0..2, 0..5])),
+            "*alpha* beta"
+        );
+        // The snippet is raw text, so markup characters stay as written.
+        assert_eq!(mark(&snippet("a & <b>", vec![])), "a & <b>");
     }
 
     #[test]

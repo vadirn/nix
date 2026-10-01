@@ -733,12 +733,10 @@ fn empty_scope_abstains() {
     );
 }
 
-// --- Test 11 moved to crate::index (sanitize_query now lives there) ---
-
 #[test]
 fn colon_query_retrieves_matching_doc() {
     // A query like "workflow: plan first" used to mis-parse and return empty.
-    // After sanitization it should find a doc containing those terms.
+    // The colon reads as whitespace, so it should find a doc containing those terms.
     let relevant = make_vault_file(
         "Workflow Planning",
         "card",
@@ -1359,20 +1357,20 @@ fn gate_uses_max_coverage_over_top3_not_rank1() {
     assert_eq!(g.max_top3_coverage, Some(1.0));
 }
 
-// --- query_error diagnostic: parse-failure vs genuine no-results abstain ---
+// --- query_error diagnostic: malformed query vs genuine no-results abstain ---
 
 #[test]
-fn parse_failure_sets_query_error_diagnostic() {
-    // "AND" is a bare boolean operator: it survives sanitization and trips
-    // Tantivy's QueryParser, yielding zero hits. The abstain must carry
-    // query_error so it is distinguishable from a genuine no-results abstain.
+fn termless_query_sets_query_error_diagnostic() {
+    // "***" holds no searchable terms, so the corpus rejects it and nothing is
+    // ranked. The abstain must carry query_error so it is distinguishable from a
+    // genuine no-results abstain.
     let card = make_vault_file("Card", "card", "content about retry patterns and backoff");
     let files = vec![card];
     let scope = vec!["card".to_string()];
     let config = default_config();
 
     let (result, diag) = run_consult(
-        "AND",
+        "***",
         &files,
         &vault_root(),
         &scope,
@@ -1384,11 +1382,11 @@ fn parse_failure_sets_query_error_diagnostic() {
 
     assert!(
         matches!(result, ConsultOutcome::Abstain { .. }),
-        "parse failure must abstain"
+        "a termless query must abstain"
     );
     assert!(
         diag.query_error.is_some(),
-        "a parse-failure abstain must populate query_error"
+        "a termless-query abstain must populate query_error"
     );
     assert_eq!(diag.num_returned, 0);
 }
