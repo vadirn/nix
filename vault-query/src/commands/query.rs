@@ -7,6 +7,10 @@ use crate::base::view;
 use crate::output::Format;
 use crate::vault::{self, VaultFile};
 
+/// A check over the whole scan, run by [`Narrowing::precheck`]. The `'a` bound
+/// keeps a closure that borrows call-site locals usable.
+type Precheck<'a> = dyn Fn(&[VaultFile]) -> Result<()> + 'a;
+
 /// What a command narrows a declared view by, for values known only at call time.
 ///
 /// Both slots are Rust closures rather than synthesized filter expressions, so
@@ -22,7 +26,7 @@ pub struct Narrowing<'a> {
     /// file matched", which is also what a truthful empty result looks like —
     /// so a typo and a real track whose tickets are all closed are the same
     /// event to it. Separating the two is the whole reason this slot exists.
-    pub precheck: Option<&'a dyn Fn(&[VaultFile]) -> Result<()>>,
+    pub precheck: Option<&'a Precheck<'a>>,
     /// ANDed onto the base's declared filters, per file.
     pub select: Option<&'a dyn Fn(&VaultFile) -> bool>,
 }

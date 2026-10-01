@@ -37,26 +37,24 @@ fn check_value(
     findings: &mut Vec<Finding>,
 ) {
     match value {
-        serde_yaml::Value::String(s) => {
-            if wikilink::extract(s).is_empty() {
-                let truncated = if s.chars().count() > 80 {
-                    let mut t: String = s.chars().take(77).collect();
-                    t.push_str("...");
-                    t
-                } else {
-                    s.clone()
-                };
-                findings.push(Finding {
-                    rule: rule_name,
-                    severity,
-                    file: card.path.clone(),
-                    message: format!(
-                        "card '{}' has non-wikilink reference: '{}'",
-                        card.name, truncated
-                    ),
-                    data: Some(serde_json::json!({ "value": s })),
-                });
-            }
+        serde_yaml::Value::String(s) if wikilink::extract(s).is_empty() => {
+            let truncated = if s.chars().count() > 80 {
+                let mut t: String = s.chars().take(77).collect();
+                t.push_str("...");
+                t
+            } else {
+                s.clone()
+            };
+            findings.push(Finding {
+                rule: rule_name,
+                severity,
+                file: card.path.clone(),
+                message: format!(
+                    "card '{}' has non-wikilink reference: '{}'",
+                    card.name, truncated
+                ),
+                data: Some(serde_json::json!({ "value": s })),
+            });
         }
         serde_yaml::Value::Sequence(items) => {
             for item in items {

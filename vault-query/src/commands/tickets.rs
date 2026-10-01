@@ -398,10 +398,7 @@ mod tests {
         let files = vault::scan(root, root, Some(&VaultIgnore::from_patterns(vec![]))).unwrap();
         // The shipped predicate, not a second copy of it.
         let owned = track.map(|slug| move |f: &VaultFile| owned_by_track(f, slug));
-        let extra: Option<&dyn Fn(&VaultFile) -> bool> = match owned {
-            Some(ref p) => Some(p),
-            None => None,
-        };
+        let extra: Option<&dyn Fn(&VaultFile) -> bool> = owned.as_ref().map(|p| p as _);
 
         let mut selected =
             filter::apply(&files, &base_file.filters, &view.filters, root, extra).unwrap();
