@@ -105,11 +105,11 @@
     "md-for-agents": {
       "flake": false,
       "locked": {
-        "lastModified": 1790653007,
-        "narHash": "sha256-0Ev3tXuMfN4oZXqItNjbbOFZkvZoq3evZPHLuufEL0Q=",
+        "lastModified": 1790855555,
+        "narHash": "sha256-/OanjFjJnjdG68mNsWqa6RAdn8xR/HgUGl6ocUmXZWs=",
         "owner": "vadirn",
         "repo": "md-for-agents",
-        "rev": "15d21f4fc4134ec91c789adc97b9eac116f2d4c4",
+        "rev": "ba2226d5e50e625828b8f43118569daae5e85a7f",
         "type": "github"
       },
       "original": {
