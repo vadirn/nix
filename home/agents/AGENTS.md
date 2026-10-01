@@ -93,7 +93,7 @@ File a durable fact to its typed home when it surfaces mid-session and has no ho
 - **An original argued position**, carrying no external source: a vault note, via `/vault note`.
 - **Decided work sized to one PR**, with a statable done-condition: a ticket, via `/vault ticket`.
 - **An idea that may grow into an effort**, with no done-condition yet: the project's `41 projects/<project>/Scratchpad.md`.
-- **A convention specific to one code repository**: that repository's own `CLAUDE.md` or `AGENTS.md`.
+- **A convention specific to one code repository**: that repository's own `AGENTS.md`.
 - **Work state across sessions** (an effort, an open uncertainty, a finding): crux, per `## Work state`.
 
 Propose the write before you make it. State what the candidate is, which destination takes it, and a one-line summary. Wait for the user's answer, and write only what they approve.
