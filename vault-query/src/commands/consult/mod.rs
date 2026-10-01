@@ -88,12 +88,19 @@ pub struct DocPointer {
     pub score: f32,
     pub coverage: f32,
     pub tokens_est: usize,
-    /// `read` address of the section carrying the most matched terms, so the
-    /// caller drills straight into the relevant region instead of the folded
-    /// whole. `None` when the body has no sections or no line carries a query
-    /// term (the pointer then opens a bare overview).
+    /// Lines of the on-disk file holding the section with the most matched
+    /// terms, so the caller reads straight into the relevant region instead of
+    /// the whole file. `None` when the body has no sections or no line carries a
+    /// query term (the pointer then names the whole file).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub section: Option<String>,
+    pub lines: Option<LineRange>,
+}
+
+/// An inclusive 1-based line range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct LineRange {
+    pub start: usize,
+    pub end: usize,
 }
 
 /// Outcome of a `run_consult` call.
@@ -285,8 +292,9 @@ fn stemmed_tokens(text: &str) -> Vec<String> {
 // Section attribution for pointers
 // ---------------------------------------------------------------------------
 
-/// Return the `read` address of the section in `body` that carries the most
-/// matched query terms, or `None` when no section qualifies.
+/// Return the line range of the section in `body` that carries the most
+/// matched query terms, or `None` when no section qualifies. Lines are relative
+/// to `body`.
 ///
 /// Each body line is owned by the deepest section whose inclusive range
 /// contains it (ranges nest, so the greatest `level` among containing ranges is
@@ -294,8 +302,8 @@ fn stemmed_tokens(text: &str) -> Vec<String> {
 /// owner with the highest total wins, ties broken toward the deeper, then
 /// earlier, section so the caller lands as specifically as the matches justify.
 /// Returns `None` for an empty query, a section-less body, or a body where no
-/// line carries a query term — the pointer then opens a bare overview.
-fn best_section_address(body: &str, query_terms: &BTreeSet<String>) -> Option<String> {
+/// line carries a query term — the pointer then names the whole file.
+fn best_section_lines(body: &str, query_terms: &BTreeSet<String>) -> Option<LineRange> {
     if query_terms.is_empty() {
         return None;
     }
@@ -304,14 +312,13 @@ fn best_section_address(body: &str, query_terms: &BTreeSet<String>) -> Option<St
         return None;
     }
 
-    let owner_of = |line: usize| -> Option<&crate::section::SectionRange> {
-        ranges
-            .iter()
-            .filter(|r| r.start <= line && line <= r.end)
-            .max_by_key(|r| r.level)
+    let owner_of = |line: usize| -> Option<usize> {
+        (0..ranges.len())
+            .filter(|&k| ranges[k].start <= line && line <= ranges[k].end)
+            .max_by_key(|&k| ranges[k].level)
     };
 
-    let mut scores: HashMap<&str, usize> = HashMap::new();
+    let mut scores = vec![0usize; ranges.len()];
     for (idx, text) in body.lines().enumerate() {
         let matched = stemmed_tokens(text)
             .into_iter()
@@ -321,32 +328,34 @@ fn best_section_address(body: &str, query_terms: &BTreeSet<String>) -> Option<St
             continue;
         }
         if let Some(owner) = owner_of(idx + 1) {
-            *scores.entry(owner.address.as_str()).or_insert(0) += matched;
+            scores[owner] += matched;
         }
     }
 
     // Walk ranges (depth-first order) and keep the best by (score, deeper level,
-    // earlier start). Iterating `ranges` rather than the map gives level/start
-    // for free and a deterministic order independent of map hashing.
-    let mut best: Option<(&crate::section::SectionRange, usize)> = None;
-    for r in &ranges {
-        let score = *scores.get(r.address.as_str()).unwrap_or(&0);
-        if score == 0 {
+    // earlier start), so the order is deterministic.
+    let mut best: Option<usize> = None;
+    for (k, r) in ranges.iter().enumerate() {
+        if scores[k] == 0 {
             continue;
         }
         let better = match best {
             None => true,
-            Some((br, bscore)) => {
-                score > bscore
-                    || (score == bscore
+            Some(b) => {
+                let br = &ranges[b];
+                scores[k] > scores[b]
+                    || (scores[k] == scores[b]
                         && (r.level > br.level || (r.level == br.level && r.start < br.start)))
             }
         };
         if better {
-            best = Some((r, score));
+            best = Some(k);
         }
     }
-    best.map(|(r, _)| r.address.clone())
+    best.map(|k| LineRange {
+        start: ranges[k].start,
+        end: ranges[k].end,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -645,16 +654,28 @@ fn pack_candidates(
     let pointers: Vec<DocPointer> = coverage_filtered
         .iter()
         .filter(|(h, _)| !packed_paths.contains(h.path.as_str()))
-        .map(|(h, cov)| DocPointer {
-            path: h.path.clone(),
-            title: h.title.clone(),
-            doc_type: file_map
-                .get(&h.path)
-                .and_then(|vf| frontmatter_doc_type(vf)),
-            score: h.score,
-            coverage: *cov,
-            tokens_est: crate::tokens::estimate_tokens(h.stored_body.trim_start_matches('\n')),
-            section: best_section_address(&h.stored_body, query_terms),
+        .map(|(h, cov)| {
+            let file = file_map.get(&h.path);
+            // The stored body is `frontmatter::body`, a suffix of the file, so
+            // its lines shift by the newlines before it to land on the file's.
+            let offset = file.map_or(0, |vf| {
+                let body = frontmatter::body(&vf.content);
+                vf.content[..vf.content.len() - body.len()]
+                    .matches('\n')
+                    .count()
+            });
+            DocPointer {
+                path: h.path.clone(),
+                title: h.title.clone(),
+                doc_type: file.and_then(|vf| frontmatter_doc_type(vf)),
+                score: h.score,
+                coverage: *cov,
+                tokens_est: crate::tokens::estimate_tokens(h.stored_body.trim_start_matches('\n')),
+                lines: best_section_lines(&h.stored_body, query_terms).map(|r| LineRange {
+                    start: r.start + offset,
+                    end: r.end + offset,
+                }),
+            }
         })
         .collect();
 

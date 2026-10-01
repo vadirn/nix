@@ -47,8 +47,8 @@ pub fn run(
     }
 
     // `get` resolves a fragment to absolute path(s), one per line, and nothing else.
-    // Reading is a separate concern: pipe the path into Read, `vault-query read`,
-    // `cat`, or `distill-text`. Supersededness is gated by --no-superseded above.
+    // Reading is a separate concern: pipe the path into Read, `cat`, or
+    // `distill-text`. Supersededness is gated by --no-superseded above.
     for p in &paths {
         println!("{}", vault_root.join(p).display());
     }

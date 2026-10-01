@@ -7,6 +7,6 @@ Personal macOS system config: a Nix flake managing two Macs, the Claude Code glo
 ## Building
 
 - `cargo` isn't reliably on PATH — a bare non-login shell can miss it, though the absolute path `/etc/profiles/per-user/vadim/bin/cargo` and an interactive login shell both resolve it. Build through Nix instead: `nix build .#vault-query` and `nix build .#md-for-agents`, both of which run the crate tests as part of the build.
-- `vault-query` links `mdstruct` and `mdread` from md-for-agents, tracking `main`. Pull their changes with `cargo update -p mdstruct -p mdread`, then a fresh `cargoHash` in `flake.nix`. The binaries follow a separate pin: `nix flake update md-for-agents`. `Cargo.lock` and `flake.lock` each record a commit, so a build stays reproducible between bumps.
+- `vault-query` links `mdstruct` from md-for-agents, tracking `main`. Pull its changes with `cargo update -p mdstruct`, then a fresh `cargoHash` in `flake.nix`. The binaries follow a separate pin: `nix flake update md-for-agents`. `Cargo.lock` and `flake.lock` each record a commit, so a build stays reproducible between bumps.
 - `./rebuild.sh` runs `darwin-rebuild switch` and deploys everything: the system, Claude agent symlinks, and npm globals. Deployed binaries live at `/etc/profiles/per-user/vadim/bin/`.
 - Verify behaviour newly added to a crate by running `./result/bin/<crate>` after `nix build`, not the binary on `PATH`. The `PATH` binary predates the change, so an absent lint finding is indistinguishable from a clean result. `./rebuild.sh` closes the gap; running it is the user's call.

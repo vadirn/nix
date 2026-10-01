@@ -46,26 +46,6 @@ enum Commands {
         #[arg(long, default_value = "table")]
         format: output::Format,
     },
-    /// Read a .md file or vault entry: folded overview, or unfold a section
-    Read {
-        /// Path to the .md file, or a vault entry name fragment
-        file: PathBuf,
-        /// Address: numeric (2.1), heading slug, 0/text, fm[.path] (e.g.
-        /// fm.reference[0]) for frontmatter, or links for the outgoing links
-        address: Option<String>,
-        /// Max levels to expand under the addressed node (Step 2)
-        #[arg(long)]
-        depth: Option<usize>,
-        /// Expand everything, ignoring threshold and depth (Step 2)
-        #[arg(long)]
-        full: bool,
-        /// Inline cutoff in estimated tokens (Step 2)
-        #[arg(long)]
-        threshold: Option<usize>,
-        /// Output format: text (default) or json
-        #[arg(long, default_value = "text")]
-        format: output::TextJson,
-    },
     /// List tags across the vault
     Tags {
         /// Sort by: name or count
@@ -243,22 +223,6 @@ fn resolve_config(cli: &Cli) -> Result<config::ResolvedConfig> {
     )
 }
 
-/// Resolve config but tolerate its absence: `Ok(None)` when no vault config is
-/// present, `Err` only when a present config fails to read or parse. Used by the
-/// `read` arm so a bare `read FILE` works outside a vault while a *broken* config
-/// still surfaces as an error instead of being silently treated as absent.
-fn resolve_config_optional(cli: &Cli) -> Result<Option<config::ResolvedConfig>> {
-    let home = dirs_home()?;
-    let cwd = std::env::current_dir()?;
-    config::resolve_optional(
-        &cwd,
-        &home,
-        cli.project.as_deref(),
-        cli.vault_root.as_deref(),
-        !cli.no_ignore,
-    )
-}
-
 fn dirs_home() -> Result<PathBuf> {
     std::env::var("HOME")
         .map(PathBuf::from)
@@ -270,36 +234,7 @@ fn dirs_home() -> Result<PathBuf> {
 /// with `?` and yields a code, so error and non-zero branches stay testable and
 /// Drop-based cleanup runs before the process tears down.
 fn dispatch(cli: &Cli) -> Result<i32> {
-    // `read` resolves config differently — optionally — so it dispatches ahead of
-    // the shared `resolve_config(cli)?` below; every other command shares that.
-    if let Commands::Read {
-        file,
-        address,
-        depth,
-        full,
-        threshold,
-        format,
-    } = &cli.command
-    {
-        // The whole config, not just the root: vault-relative pointers need
-        // the root, and name-fragment resolution needs the ignore set too.
-        // `None` (cwd-only) when no vault config is present, so a bare
-        // `read FILE` still works outside a vault; a present-but-broken
-        // config surfaces as an error rather than silently degrading.
-        let cfg = resolve_config_optional(cli)?;
-        commands::read::run(
-            file,
-            cfg.as_ref(),
-            address.as_deref(),
-            *depth,
-            *full,
-            *threshold,
-            *format,
-        )?;
-        return Ok(0);
-    }
-
-    // All remaining commands share identical vault-config resolution.
+    // Every command shares the same vault-config resolution.
     let cfg = resolve_config(cli)?;
     let code = match &cli.command {
         Commands::Query {
@@ -442,10 +377,6 @@ fn dispatch(cli: &Cli) -> Result<i32> {
             log_path.as_deref(),
             *include_superseded,
         )?,
-        // Handled by the early-return match above.
-        Commands::Read { .. } => {
-            unreachable!("config-free commands are dispatched before config resolution")
-        }
     };
     Ok(code)
 }

@@ -5,6 +5,7 @@
 //!   4 — ConsultOutcome::Abstain  (no confident match; near_misses printed to stdout)
 //!   1 — IO / config / scan error (propagated via anyhow, printed by main)
 
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -74,10 +75,13 @@ struct JsonAbstain<'a> {
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
+/// Render the selected docs inline, then each pointer as the absolute path a
+/// reader opens directly, with the matched section's lines when there is one.
 fn render_markdown_selected(
     docs: &[SelectedDoc],
     total_tokens: usize,
     pointers: &[DocPointer],
+    vault_root: &Path,
 ) -> String {
     let mut out = String::new();
     out.push_str(&format!(
@@ -98,13 +102,18 @@ fn render_markdown_selected(
     if !pointers.is_empty() {
         out.push_str("Too large to inline — read directly:\n\n");
         for p in pointers {
-            let addr = match &p.section {
-                Some(a) => format!(" {}", a),
+            let lines = match p.lines {
+                Some(r) => format!(":{}-{}", r.start, r.end),
                 None => String::new(),
             };
             out.push_str(&format!(
-                "- **{}** ({}) — ~{} est tokens, coverage {:.2}\n  → vault-query read \"{}\"{}\n",
-                p.title, p.path, p.tokens_est, p.coverage, p.path, addr
+                "- **{}** ({}) — ~{} est tokens, coverage {:.2}\n  → {}{}\n",
+                p.title,
+                p.path,
+                p.tokens_est,
+                p.coverage,
+                vault_root.join(&p.path).display(),
+                lines
             ));
         }
         out.push('\n');
@@ -406,7 +415,9 @@ pub fn run(
             pointers,
         } => {
             let rendered = match format {
-                ConsultFormat::Markdown => render_markdown_selected(&docs, total_tokens, &pointers),
+                ConsultFormat::Markdown => {
+                    render_markdown_selected(&docs, total_tokens, &pointers, &cfg.vault_root)
+                }
                 ConsultFormat::Json => {
                     render_json_selected(&query, &docs, total_tokens, &pointers)?
                 }

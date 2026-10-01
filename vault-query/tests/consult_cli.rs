@@ -1,5 +1,5 @@
 //! `consult` subcommand integration tests: relevance gate, JSON/markdown envelopes,
-//! oversized-pointer navigation, JSONL logging, and superseded/checkpoint scope.
+//! oversized-match pointers, JSONL logging, and superseded/checkpoint scope.
 //!
 //! Hardening (Step 18d): the relevant query "retry backoff failure" deterministically
 //! *selects* against the fixture corpus (see `test_consult_relevant_query_exits_0_with_content`),
@@ -156,11 +156,11 @@ fn test_consult_oversized_candidates_exit_0_with_pointers() {
     }
 }
 
-/// The markdown overflow pointer is a navigate verb, not a full-file dump: an
-/// oversized match emits `→ vault-query read "<path>"` so the agent drills into
-/// a folded overview instead of pulling the whole document.
+/// The markdown overflow pointer names the file a reader opens directly: an
+/// oversized match emits `→ <absolute path>:<start>-<end>`, the lines of the
+/// section its matched terms sit in.
 #[test]
-fn test_consult_oversized_pointer_emits_read_verb() {
+fn test_consult_oversized_pointer_names_file_lines() {
     let tmp_home = tempfile::tempdir().unwrap();
     write_root_config(
         tmp_home.path(),
@@ -183,23 +183,23 @@ fn test_consult_oversized_pointer_emits_read_verb() {
     let stdout = String::from_utf8(output.stdout).unwrap();
 
     assert_eq!(output.status.code().unwrap_or(-1), 0, "stdout: {}", stdout);
+    let pointer = stdout
+        .lines()
+        .find_map(|l| l.trim_start().strip_prefix("→ "))
+        .unwrap_or_else(|| panic!("oversized match must emit a pointer, got: {}", stdout));
+    let (path, _) = pointer.rsplit_once(':').unwrap();
     assert!(
-        stdout.contains("→ vault-query read \""),
-        "oversized pointer must navigate via `read`, got: {}",
-        stdout
-    );
-    assert!(
-        !stdout.contains("→ vault-query get \""),
-        "the `get` full-file dump must no longer appear, got: {}",
-        stdout
+        std::path::Path::new(path).is_absolute(),
+        "pointer path must be absolute, got: {}",
+        pointer
     );
     // The matching card (`20 cards/Retry patterns.md`) is heading-less, so its
-    // matched terms attribute to the `(text)` region: the pointer lands the
-    // agent on address `0`, not a bare overview.
+    // matched terms attribute to the `(text)` region. Three frontmatter lines
+    // and a blank precede it, so the range counts from the file's first line.
     assert!(
-        stdout.contains("Retry patterns.md\" 0\n"),
-        "oversized pointer must carry the matched section's address, got: {}",
-        stdout
+        pointer.ends_with("20 cards/Retry patterns.md:5-5"),
+        "pointer must carry the matched section's file lines, got: {}",
+        pointer
     );
 }
 

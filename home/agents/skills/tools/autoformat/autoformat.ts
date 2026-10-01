@@ -37,8 +37,7 @@
  * the caller's location rather than the file's. Resolved per file: nearest
  * .oxfmtrc.json between the file and its repo root, else ~/.oxfmtrc.json
  * (proseWrap: never — which now only reaches a `.md` somebody hands to oxfmt
- * by hand, or the mdread render path in home/zsh.nix; other filetypes take
- * oxfmt's defaults).
+ * by hand; other filetypes take oxfmt's defaults).
  *
  * Selection:
  *   autoformat PATH...   files are formatted, directories are walked

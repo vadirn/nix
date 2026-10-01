@@ -33,23 +33,29 @@ exponential backoff retries failed requests on transient failure
 
 pick backoff ceilings empirically";
     let q = terms("retry backoff failure");
-    // Section "2" (Retry handling) owns the line with three matches; its
-    // child "2.1" (Tuning) owns one. Highest score wins.
-    assert_eq!(best_section_address(body, &q).as_deref(), Some("2"));
+    // "Retry handling" (lines 7–13) owns the line with three matches; its child
+    // "Tuning" owns one. Highest score wins, and the range takes in the child.
+    assert_eq!(
+        best_section_lines(body, &q),
+        Some(LineRange { start: 7, end: 13 })
+    );
 }
 
 #[test]
 fn best_section_is_none_without_matches() {
     let body = "## Caching\n\nmemoize results";
     let q = terms("retry backoff failure");
-    assert_eq!(best_section_address(body, &q), None);
+    assert_eq!(best_section_lines(body, &q), None);
 }
 
 #[test]
 fn best_section_attributes_heading_less_body_to_text_region() {
     let body = "exponential backoff retries failed requests on failure";
     let q = terms("retry backoff failure");
-    assert_eq!(best_section_address(body, &q).as_deref(), Some("0"));
+    assert_eq!(
+        best_section_lines(body, &q),
+        Some(LineRange { start: 1, end: 1 })
+    );
 }
 
 // --- Fixture helpers ---

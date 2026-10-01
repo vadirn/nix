@@ -50,7 +50,7 @@ pub fn facet(content: &str) -> Facet {
 }
 
 /// The body's ATX headings in document order — a thin wrapper over [`facet`] for
-/// callers (`read`, `section`) that need only the heading list.
+/// callers (`section`) that need only the heading list.
 pub fn body_headings(content: &str) -> Vec<BodyHeading> {
     facet(content).headings
 }

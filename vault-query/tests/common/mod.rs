@@ -17,13 +17,6 @@ pub fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vault")
 }
 
-/// A `tests/fixtures/read/<name>` path (read/properties fixtures live here).
-pub fn read_fixture(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/read")
-        .join(name)
-}
-
 /// The built `vault-query` binary under test.
 pub fn cargo_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_vault-query"))

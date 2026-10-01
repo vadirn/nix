@@ -42,7 +42,7 @@ elif "tickets" or "backlog <project>":
     // Views: Backlog, Open (default), Done, Abandoned, By Track, By Status, All
     results = Bash(vault-query tickets --view <name> [--track <slug>] [--project <name>] [--format tsv])
     if it errors with "no Tickets.base": Bash(vault-query tickets-init)   // project's first ticket query
-    do("present tickets; unfold one with vault-query read <path> when the user picks it")
+    do("present tickets; Read the one the user picks — vault-query get <name> gives its absolute path")
 
 elif "review":
     Read(dir/references/review.md)
@@ -97,15 +97,14 @@ elif "validate":
     do("report validation results")
 
 elif user names an entry by name:   // entry = note/card/reference/checkpoint/track/experiment
-    target = <name>                                // read resolves a name itself — no get round-trip
-    shape = Bash(vault-query read <target>)        // folded overview
-    if error names the name unresolvable: do("offer to search")
+    paths = Bash(vault-query get <name>)           // absolute paths, one per line
+    if exit 1: do("offer to search")               // no entry matches the name
     else:
-        if error names it ambiguous:
-            target = AskUserQuestion("which one?") // the error lists the candidate paths
-            shape = Bash(vault-query read <target>)
-        Bash(vault-query read <target> <address>)  // unfold the sections the request needs
-                                                   // --full instead when the overview shows a short entry
+        path = paths[0]
+        if several paths:                          // the name is ambiguous
+            path = AskUserQuestion("which one?")
+        Read(path)                                 // a large note: Bash(rg -n '^#' <path>) lists its
+                                                   // headings, then Read the lines the request needs
         do("summarize content")
 
 else:
@@ -130,11 +129,11 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | Goal                                      | `41 projects/`                              | High-level aspiration with success criteria. Nests via the `goal:` field on a child goal. Distinct from a project: the goal is the _why_, the project is a deliverable that advances it. |
 | Project                                   | `41 projects/<project>/`                    | Concrete deliverable linked to a goal. Has `result`, `status`, optional `deadline`. Single file, or a subfolder when work fans out. Distinct from a track: the project is the unit of intent, the track is the unit of working memory across sessions. |
 | Project context                           | `41 projects/<project>/Context.md`          | Stable per-project framing (purpose, conventions, links) read by `vault-query --project <name> context`. Distinct from a track: context is durable framing, a track is rolling state. |
-| Track _(legacy — replaced by crux)_       | `41 projects/<project>/track-<slug>.md`     | Rolling per-project work artifact (sections: Direction, Decisions, Log), one file per multi-session effort. Every open track moved to a crux goal on 2026-09-02 and carries `status: superseded`; new work state goes to crux (AGENTS.md § Work state). Existing files remain reachable via `vault-query read <name>`. |
+| Track _(legacy — replaced by crux)_       | `41 projects/<project>/track-<slug>.md`     | Rolling per-project work artifact (sections: Direction, Decisions, Log), one file per multi-session effort. Every open track moved to a crux goal on 2026-09-02 and carries `status: superseded`; new work state goes to crux (AGENTS.md § Work state). Existing files remain reachable via `vault-query get <name>`. |
 | Ticket                                    | `41 projects/<project>/ticket-<slug>.md`    | One self-contained unit of work with a checkable done-condition. Frontmatter `status` (`open`/`done`/`abandoned`), `kind` (`execution` for plain work; `decision`/`fact`/`feasibility` for a map node), `track` backref, `requires` dependency edges; a code ticket's body stays repo-self-sufficient. Created per `references/ticket.md`. Distinct from a track: a track is one effort's rolling memory, a ticket is one deliverable inside it. |
 | Scratchpad                                | `41 projects/<project>/Scratchpad.md`       | Per-project pre-triage capture and seed bank for ideas with no done-condition yet. Plain markdown list, appended freely. Distinct from the inbox: the inbox holds captures with no project known, a scratchpad entry already has one. |
 | Experiment                                | `35 experiments/`                           | Captured behavior test of an existing thing against a falsifiable claim. Frontmatter `type: experiment`, `verdict` (confirmed/refuted/inconclusive), `date`, optional `project` wikilink. Owned by the `/experiment` skill. Distinct from a track: an experiment is one decided question, a track is a multi-session effort. |
-| Checkpoint _(legacy — replaced by track)_ | `41 projects/<project>/`                    | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain reachable via `vault-query read <name>`. Programmatically treated as superseded: `consult` excludes all checkpoints by default. |
+| Checkpoint _(legacy — replaced by track)_ | `41 projects/<project>/`                    | Single-session snapshot recording decisions, frictions, cost, lines written. New work goes to track; existing files remain reachable via `vault-query get <name>`. Programmatically treated as superseded: `consult` excludes all checkpoints by default. |
 | Weekly log                                | `41 projects/block-buster/YYYY-wWW.md`      | ISO-week file with Focus, Tasks, Backlog, Activity sections. Tasks wikilink to projects; Activity is auto-appended by a git post-commit hook. Distinct from a track: a weekly log spans all projects for one week, a track spans one project across all weeks. |
 | Base                                      | `90 bases/`, `41 projects/<project>/`       | Obsidian Base file — a saved query rendered as a table/board view. Distinct from a search: a base is a persistent named view; a search is a one-shot query. Vault-wide bases live in `90 bases/`; a project's `Tickets.base` sits in its own folder and is what `vault-query tickets` reads, so the CLI and Obsidian share one definition of each view. |
 
@@ -146,8 +145,7 @@ Vault entities, each defined by what sets it apart from adjacent ones.
 | `context`                                  | Yes             | Print project Context.md |
 | `tickets [--view <view>] [--track <slug>]` | Yes             | Query project tickets through `Tickets.base` (Backlog/Open/Done/Abandoned/By Track/By Status/All), updated DESC. `Backlog` = open and owned by no track; `--track <slug>` narrows any view to one track's tickets |
 | `tickets-init`                             | Yes             | Create Tickets.base in the current project |
-| `get <fragment>`                           | No              | Resolve an entry name to its absolute path (one per line). For handing a path to another tool; to read an entry, name it to `read` directly |
-| `read <FILE\|NAME> [ADDRESS]`              | No              | Structured read: folded overview, or unfold a section by ADDRESS (numeric `2.1`, heading slug, `0`/text, `fm[.path]`, `links`). Takes a path or an entry name — an unresolvable name errors, an ambiguous one errors listing candidates. `--depth`, `--full`, `--threshold`, `--format json` |
+| `get <fragment>`                           | No              | Resolve an entry name to its absolute path, one per line; several lines mean the name is ambiguous. Read the path with your file reader |
 | `search <query>`                           | No              | BM25 full-text search (--regex for grep mode) |
 | `projects [--view <view>]`                 | No              | List active projects |
 | `cards`                                    | No              | List all cards with metadata |

@@ -113,7 +113,7 @@ Out of scope: migrating the Backlog content that already exists in tracks on dis
 
 ## Editing an existing ticket
 
-1. `vault-query read <name>` for the folded shape, then unfold the section the request needs.
+1. `vault-query get <name>` for its path, then Read the ticket.
 2. Tick `## Done when` boxes as the work lands; set `status: done` once they all are.
 3. Set `track:` when an effort takes ownership of the ticket; clear it when the effort ends with the ticket still open, returning it to the backlog.
 4. Bump `updated:` on every edit.

@@ -209,8 +209,7 @@ pub fn resolve(
 /// Resolve config like [`resolve`], but distinguish an *absent* config from a
 /// *malformed* one: returns `Ok(None)` when no config layer supplies a vault
 /// root (nothing to resolve), and `Err` only when a config file that does exist
-/// fails to read or parse. Callers that can run without a vault (e.g. `read` of
-/// a bare path) use this to stop conflating "no config" with "broken config".
+/// fails to read or parse, so "no config" never reads as "broken config".
 pub fn resolve_optional(
     start_dir: &Path,
     home_dir: &Path,

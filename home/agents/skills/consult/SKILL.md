@@ -20,8 +20,9 @@ filesystem, so a weaker in-tool model pre-chewing it would only degrade what you
 material is the user's own prior thinking: treat it as recovered memory, not an external source to hedge
 about.
 
-When a match is too large to inline, the tool returns a `read` pointer instead of the document. The
-`vault-navigator` sub-agent drills those pointers. It is a peer model that works query-side: it sees the
+When a match is too large to inline, the tool returns a pointer instead of the document: the file's
+absolute path and the lines of its best-matching section. The `vault-navigator` sub-agent drills those
+pointers. It is a peer model that works query-side: it sees the
 query, never your full task. It returns a synthesis plus the slices it rests on, which you fold in exactly
 like inline docs. This keeps the navigation cost off your context window — you spend it on
 the answer, not on paging through documents.
@@ -48,9 +49,9 @@ if exit == 0:                         // success — inline docs, pointers, or b
         else:
             navigation = Agent(subagent_type="vault-navigator", prompt=
                 "Query: <the task string you passed to consult>\n\nPointers:\n<paste the pointer block
-                 verbatim — each '- **title** (path) ... / → vault-query read \"path\" addr' line>")
+                 verbatim — each '- **title** (path) ... / → /abs/path.md:start-end' line>")
             do("fold the navigator's ## Synthesis into your answer like inline vault context, and name the
-                cited paths/addresses from its ## Slices so the user can trace what informed you. The
+                cited paths and lines from its ## Slices so the user can trace what informed you. The
                 navigator works query-side, so its synthesis is the user's prior thinking merged for the
                 query, not adapted to your full task — you do the task-side adaptation.")
 

@@ -1,15 +1,13 @@
-//! Vault-body section addressing.
+//! Vault-body section ranges.
 //!
-//! [`section_ranges`] maps a Markdown body onto the structural addresses `read`
-//! resolves, with the inclusive 1-based line range each section owns. Addresses are
-//! kept identical to `read`'s overview tree, so one produced here resolves against
-//! the on-disk file via `read <path> <address>`.
+//! [`section_ranges`] maps a Markdown body onto its sections, each with the
+//! inclusive 1-based line range it owns. A caller turns a range into lines a
+//! reader opens directly.
 
-/// A section's structural address and the inclusive 1-based line range it owns,
-/// for callers that map positions onto sections without rendering the tree.
+/// A section's heading level and the inclusive 1-based line range it owns. The
+/// `(text)` region before the first heading has level 0.
 #[derive(Debug, Clone)]
 pub struct SectionRange {
-    pub address: String,
     pub level: usize,
     pub start: usize,
     pub end: usize,
@@ -28,13 +26,12 @@ fn range_slice(lines: &[&str], start: usize, end: usize) -> String {
 }
 
 /// Parse `body` and return its section ranges depth-first: the synthetic
-/// `(text)` region (address `"0"`) leads when present, then the heading tree in
-/// document order (which is pre-order for a heading tree). Empty when the body
-/// has no headings and no pre-heading prose.
+/// `(text)` region leads when present, then the heading tree in document order
+/// (which is pre-order for a heading tree). Empty when the body has no headings
+/// and no pre-heading prose.
 ///
-/// Line numbers are relative to `body`. Addresses are structural (numeric), so
-/// an address computed from a frontmatter-stripped body still resolves against
-/// the on-disk file via `read <path> <address>`.
+/// Line numbers are relative to `body`. A caller holding a body cut from a file
+/// adds the newlines before the cut to reach the file's lines.
 pub fn section_ranges(body: &str) -> Vec<SectionRange> {
     let lines: Vec<&str> = crate::mdfacet::lines(body);
     let total = lines.len();
@@ -78,7 +75,6 @@ pub fn section_ranges(body: &str) -> Vec<SectionRange> {
             first_line += 1;
         }
         ranges.push(SectionRange {
-            address: "0".to_string(),
             level: 0,
             start: first_line,
             end: region_end,
@@ -100,36 +96,13 @@ pub fn section_ranges(body: &str) -> Vec<SectionRange> {
         })
         .collect();
 
-    // Assign dotted-numeric addresses with a level-stack, matching `read`'s tree
-    // builder: top-level headings are `1..N`; a child is `parent + "." + idx`.
     // Document order is pre-order, so emitting here mirrors a depth-first flatten.
-    let mut stack: Vec<(usize, String, usize)> = Vec::new(); // (level, address, child_count)
-    let mut root_count = 0usize;
     for (i, h) in raw.iter().enumerate() {
-        while let Some(&(top_level, _, _)) = stack.last() {
-            if top_level >= h.level {
-                stack.pop();
-            } else {
-                break;
-            }
-        }
-        let address = match stack.last_mut() {
-            None => {
-                root_count += 1;
-                root_count.to_string()
-            }
-            Some((_, parent_addr, child_count)) => {
-                *child_count += 1;
-                format!("{}.{}", parent_addr, child_count)
-            }
-        };
         ranges.push(SectionRange {
-            address: address.clone(),
             level: h.level,
             start: h.line,
             end: ends[i],
         });
-        stack.push((h.level, address, 0));
     }
 
     ranges
@@ -144,8 +117,8 @@ mod tests {
     #[test]
     fn text_region_leads_then_headings_in_order() {
         let r = section_ranges(SAMPLE);
-        let addrs: Vec<&str> = r.iter().map(|s| s.address.as_str()).collect();
-        assert_eq!(addrs, ["0", "1", "1.1", "2"]);
+        let levels: Vec<usize> = r.iter().map(|s| s.level).collect();
+        assert_eq!(levels, [0, 1, 2, 1]);
     }
 
     #[test]
@@ -171,7 +144,7 @@ mod tests {
     fn heading_less_body_is_one_text_region() {
         let r = section_ranges("just prose\nmore prose\n");
         assert_eq!(r.len(), 1);
-        assert_eq!(r[0].address, "0");
+        assert_eq!(r[0].level, 0);
         assert_eq!((r[0].start, r[0].end), (1, 2));
     }
 
@@ -179,9 +152,8 @@ mod tests {
     fn hash_inside_fence_is_not_a_heading() {
         let body = "# Real\n```\n# fake\n```\ntail\n";
         let r = section_ranges(body);
-        let addrs: Vec<&str> = r.iter().map(|s| s.address.as_str()).collect();
-        assert_eq!(addrs, ["1"]);
-        assert_eq!(r[0].end, 5);
+        assert_eq!(r.len(), 1);
+        assert_eq!((r[0].level, r[0].start, r[0].end), (1, 1, 5));
     }
 
     #[test]
@@ -190,7 +162,6 @@ mod tests {
         let r = section_ranges(body);
         // No text region (frontmatter is not prose); one heading at line 4.
         assert_eq!(r.len(), 1);
-        assert_eq!(r[0].address, "1");
-        assert_eq!((r[0].start, r[0].end), (4, 5));
+        assert_eq!((r[0].level, r[0].start, r[0].end), (1, 4, 5));
     }
 }
