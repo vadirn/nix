@@ -90,7 +90,7 @@
       pname = "md-for-agents";
       version = "0.1.0";
       src = inputs.md-for-agents;
-      cargoHash = "sha256-FUfHwiOwEgK3x+ficJr8NWK2N5BpypRD3jVgPZMOU2A=";
+      cargoHash = "sha256-y9LVbAA0ZxDSujXzG66NMNBtAWQMmeHNGHZvz7wcfvY=";
     };
     # Function to create configuration for any hostname
     mkDarwinConfig = hostname:
