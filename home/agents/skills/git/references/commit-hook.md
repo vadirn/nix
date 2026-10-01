@@ -21,7 +21,8 @@ The worktree part is a hash because a worktree path can contain `.git` or `.clau
 
 Four places compute this path, and they must agree:
 
-- `commit.md` and `pr.md`, in the gather step,
+- `commit.md`, in the gather step,
+- `pr.md`, in the gather step,
 - the `commit-msg` hook, to find the file,
 - the `post-commit` hook, to find the sentinel that `commit-msg` drops.
 
