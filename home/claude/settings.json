@@ -316,6 +316,7 @@
   "autoDreamEnabled": true,
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
+  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "agentPushNotifEnabled": true
+  "advisorModel": "fable"
 }
