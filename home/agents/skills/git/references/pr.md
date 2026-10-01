@@ -8,6 +8,7 @@ status = Bash(git status)
 branch = Bash(git rev-parse --abbrev-ref HEAD)
 default_branch = Bash(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
 upstream = Bash(git rev-parse --abbrev-ref @{upstream} 2>/dev/null)
+artifact_dir = Bash(echo "/tmp/claude/${CLAUDE_CODE_SESSION_ID:-none}/$(git rev-parse --show-toplevel | shasum | cut -c1-12)")   // this session's and worktree's own directory, see commit-hook.md
 
 // Base: the branch this PR merges into
 base = do("default_branch, unless this branch was stacked on another (/git branch) — then that parent branch")
@@ -46,20 +47,20 @@ if existing:
     title = do("regenerate conventional commit-style title from diff and log")
     body  = do("regenerate body from diff and log, filling template_content sections; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim")
     AskUserQuestion("confirm updated title and body")
-    Bash(rm -f /tmp/claude/pr.md)
-    Write(/tmp/claude/pr.md, body)
-    Bash(gh pr edit --title "<title>" --body-file /tmp/claude/pr.md)
-    Bash(rm -f /tmp/claude/pr.md)
+    Bash(rm -f <artifact_dir>/pr.md)
+    Write(<artifact_dir>/pr.md, body)
+    Bash(gh pr edit --title "<title>" --body-file <artifact_dir>/pr.md)
+    Bash(rm -f <artifact_dir>/pr.md)
     show PR URL, stop
 
 title = do("generate conventional commit-style title: '<prefix>: <message>' — prefix by the contract test in prefix.md, message style per commit.md")
 body = do("fill template_content placeholders from diff and log; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim")
 
 AskUserQuestion("confirm title, body, base branch, draft status")
-Bash(rm -f /tmp/claude/pr.md)
-Write(/tmp/claude/pr.md, body)
-Bash(gh pr create --base <base> --title "<title>" --body-file /tmp/claude/pr.md --draft)
-Bash(rm -f /tmp/claude/pr.md)
+Bash(rm -f <artifact_dir>/pr.md)
+Write(<artifact_dir>/pr.md, body)
+Bash(gh pr create --base <base> --title "<title>" --body-file <artifact_dir>/pr.md --draft)
+Bash(rm -f <artifact_dir>/pr.md)
 if base_pr: Bash(gh stack link <base_pr> <new PR>)   // see §PR creation details
 show PR URL
 ```
@@ -73,14 +74,14 @@ show PR URL
 - **Self-contained body.** The reader has the repo and nothing else. Derive the body from the diff and log — never from session-only context. Name only artifacts a reader can resolve from the repo (files, commits, symbols). Strip references to private planning notes (vault tracks, note slugs like `track-*`), local paths outside the repo, ticket IDs, and prior-conversation shorthand. If a why comes from such a source, restate the reasoning inline rather than pointing at the source.
 - **State what the diff cannot.** The body carries rationale, scope, and traps a reader would otherwise misread — never a restatement of what GitHub already renders. Skip commit counts, SHA ranges, and file lists: the branch view renders those and stays current across a rebase or force-push, which the body would not.
 - **Simplified governs the filled prose only.** The Simplified output style shapes the placeholder text you write into each section. It leaves the template's headings, emoji, and section count verbatim, per the Body rule above. Styling the scaffolding would break the template contract.
-- **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations). Zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `/tmp/claude/pr.md`, pass `--body-file`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read). Always remove the file before writing so a stale artifact left over from a crashed prior session cannot survive into a new PR:
+- **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations). Zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `<artifact_dir>/pr.md`, pass `--body-file`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read). `artifact_dir` is this session's and worktree's own directory, so concurrent sessions never touch each other's body (`commit-hook.md` says why). Always remove the file before writing so a stale artifact left over from a failed earlier run cannot survive into a new PR:
   ```
-  Bash(rm -f /tmp/claude/pr.md)
-  Write(/tmp/claude/pr.md, body)
-  Bash(gh pr create --base <base> --title "<title>" --body-file /tmp/claude/pr.md --draft)
-  Bash(rm -f /tmp/claude/pr.md)
+  Bash(rm -f <artifact_dir>/pr.md)
+  Write(<artifact_dir>/pr.md, body)
+  Bash(gh pr create --base <base> --title "<title>" --body-file <artifact_dir>/pr.md --draft)
+  Bash(rm -f <artifact_dir>/pr.md)
   ```
-  The body file also serves as proof of skill use: the `require-pr-body-file.sh` PreToolUse hook refuses `gh pr create` unless it points `--body-file` at `/tmp/claude/pr.md` and that file exists. Because gh reads the body straight from the file, the artifact IS the body — no separate nonce or time window. The skill deletes the file after the gh call, so the same artifact gates exactly one PR. Use `gh pr edit --body-file` for updates to an existing PR.
+  The body file also serves as proof of skill use: the `require-pr-body-file.sh` PreToolUse hook refuses `gh pr create` unless `--body-file` names a `pr.md` in this session's directory and that file exists. Because gh reads the body straight from the file, the artifact IS the body — no separate nonce or time window. The skill deletes the file after the gh call, so the same artifact gates exactly one PR. Use `gh pr edit --body-file` for updates to an existing PR.
 - **Confirm before creating.** Show title and body. Omit confirmation when the user supplied an explicit title and body.
 
 ## Rules

@@ -8,6 +8,7 @@ status = Bash(git status)
 diff = Bash(git diff)
 staged = Bash(git diff --cached)
 log = Bash(git log --oneline -5)
+artifact_dir = Bash(echo "/tmp/claude/${CLAUDE_CODE_SESSION_ID:-none}/$(git rev-parse --show-toplevel | shasum | cut -c1-12)")   // this session's and worktree's own directory
 
 // Guards
 if no changes in status: do("say 'Nothing to commit.'"), stop
@@ -25,8 +26,8 @@ needs_confirmation = do("true if mixed changes, unclear prefix, or secrets_exclu
 if needs_confirmation: AskUserQuestion("prefix: <prefix> | message: <message> | files: <files>")
 
 // Commit — the file route is mandatory, see §The message file below
-Write(/tmp/claude/commit.txt, "<prefix>: <message>")   // exact final message, written after any confirmation
-Bash(git commit -F /tmp/claude/commit.txt)             // never -m
+Write(<artifact_dir>/commit.txt, "<prefix>: <message>")   // exact final message, written after any confirmation
+Bash(git commit -F <artifact_dir>/commit.txt)             // never -m
 
 // Verify
 Bash(git status)
@@ -34,13 +35,14 @@ Bash(git status)
 
 ## The message file
 
-Every commit goes through `/tmp/claude/commit.txt`. This is a hard rule, enforced by a global `commit-msg` hook. A commit whose message reaches git any other way is rejected.
+Every commit goes through `<artifact_dir>/commit.txt`. This is a hard rule, enforced by a global `commit-msg` hook. A commit whose message reaches git any other way is rejected.
 
-- **Never `-m`.** `git commit -F /tmp/claude/commit.txt` is the only accepted form.
+- **Never `-m`.** `git commit -F <artifact_dir>/commit.txt` is the only accepted form.
+- **Take `artifact_dir` from the gather step.** The hook derives the same path from the session and the worktree, so a typed path fails. Commit from the worktree the gather step ran in.
 - **Write the exact final message.** The hook compares the file's content against what git received. Any divergence rejects the commit. Settle the message first — including anything a confirmation step changed — then write the file once.
 - **One file validates one commit.** The hook deletes it on success, so every commit writes it fresh. A leftover file from a failed attempt is stale. Rewrite it rather than reusing it.
 
-Read `commit-hook.md` for why the mechanism is shaped this way, and when a rejection is not explained by the three rules above.
+Read `commit-hook.md` for why the mechanism is shaped this way, and when a rejection is not explained by the four rules above.
 
 ## Message style
 

@@ -35,7 +35,9 @@ append_activity() {
 
   local entry="- ${today}-${time} [${repo}] ${msg}"
 
-  local sentinel="/tmp/claude/commit-via-skill"
+  # commit-msg drops the sentinel in this session's and worktree's own directory.
+  local sentinel
+  sentinel="/tmp/claude/${CLAUDE_CODE_SESSION_ID:-none}/$(git rev-parse --show-toplevel | shasum | cut -c1-12)/commit-via-skill"
   if [[ -f "$sentinel" ]]; then
     entry="${entry} [via-skill]"
     rm -f "$sentinel" 2>/dev/null

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Enforces commit-artifact gating for Claude Code (/commit skill). Manual terminal commits are always allowed (CLAUDECODE not set).
+# Enforces commit-artifact gating for Claude Code (/git commit skill). Manual terminal commits are always allowed (CLAUDECODE not set).
 set -euo pipefail
 
 # Gate: only enforce when running inside Claude Code.
@@ -8,20 +8,31 @@ set -euo pipefail
 # Kill-switch: per-invocation bypass.
 [[ "${SKIP_COMMIT_GATE:-}" == "1" ]] && exit 0
 
-# Rebase exemption: replayed commit messages won't match a freshly-drafted /tmp/claude/commit.txt.
+# Rebase exemption: replayed commit messages won't match a freshly-drafted message file.
 git_dir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
 if [[ -d "${git_dir}/rebase-merge" || -d "${git_dir}/rebase-apply" ]]; then
   exit 0
 fi
 
-artifact="/tmp/claude/commit.txt"
+# Claude Code exports CLAUDE_CODE_SESSION_ID next to CLAUDECODE. Without it the
+# hook cannot tell this session's message file from another's, so it fails closed.
+if [[ -z "${CLAUDE_CODE_SESSION_ID:-}" ]]; then
+  echo "commit-msg: commit blocked — CLAUDE_CODE_SESSION_ID is unset, so the message file cannot be located." >&2
+  echo "  To bypass once: SKIP_COMMIT_GATE=1 git commit ..." >&2
+  exit 1
+fi
+
+# One directory per session and worktree, so concurrent sessions never share a
+# message file. The /git skill computes the same path; commit-hook.md says why.
+artifact_dir="/tmp/claude/${CLAUDE_CODE_SESSION_ID}/$(git rev-parse --show-toplevel | shasum | cut -c1-12)"
+artifact="${artifact_dir}/commit.txt"
 commit_msg_file="$1"   # commit-msg hook receives COMMIT_EDITMSG path as $1
 
 if [[ ! -f "$artifact" ]]; then
-  cat >&2 <<'MSG'
-commit-msg: commit blocked — no /tmp/claude/commit.txt found.
+  cat >&2 <<MSG
+commit-msg: commit blocked — no ${artifact} found.
 
-  This repo requires commits to go through the /commit skill, which writes
+  This repo requires commits to go through the /git commit skill, which writes
   the message file the hook verifies against. If you intentionally want
   to bypass this once, run:
 
@@ -37,10 +48,10 @@ skill_msg=$(perl -e 'my $s = do { local $/; open(my $f, "<", $ARGV[0]) or die; <
 git_msg=$(perl -e 'my $s = do { local $/; open(my $f, "<", $ARGV[0]) or die; <$f> }; $s =~ s/\s+$//; print $s' "$commit_msg_file")
 
 if [[ "$skill_msg" != "$git_msg" ]]; then
-  echo "commit-msg: commit blocked — /tmp/claude/commit.txt does not match commit message." >&2
+  echo "commit-msg: commit blocked — ${artifact} does not match commit message." >&2
   echo "  skill drafted: $(printf '%.200s' "$skill_msg")" >&2
   echo "  git received:  $(printf '%.200s' "$git_msg")" >&2
-  echo "  Re-run /commit to align." >&2
+  echo "  Re-run /git commit to align." >&2
   exit 1
 fi
 
@@ -48,8 +59,8 @@ fi
 # fail the commit after the message has already validated.
 {
   rm -f "$artifact"
-  mkdir -p "$(dirname "$artifact")"
-  touch "/tmp/claude/commit-via-skill"
+  mkdir -p "$artifact_dir"
+  touch "${artifact_dir}/commit-via-skill"
 } 2>/dev/null || true
 
 exit 0

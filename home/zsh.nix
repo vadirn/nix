@@ -147,6 +147,8 @@
       tmpclean() {
         local days="''${1:-7}"
         find /tmp/claude* -mtime +"$days" -type f -delete 2>/dev/null
+        # Per-session directories of the /git skill, emptied by the line above.
+        find /tmp/claude -mindepth 1 -type d -empty -delete 2>/dev/null
       }
 
       cl() { claude --continue || claude; }
