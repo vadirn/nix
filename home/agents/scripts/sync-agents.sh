@@ -20,6 +20,7 @@ LINKS=(
   ".claude/agents|home/agents/agents"
   ".claude/output-styles|home/agents/output-styles"
   ".claude/statusline.sh|home/claude/statusline.sh"
+  ".config/opencode/AGENTS.md|home/agents/AGENTS.md"
 )
 
 for entry in "${LINKS[@]}"; do
