@@ -1,6 +1,8 @@
 {pkgs, ...}: {
   programs.yazi = {
     enable = true;
+    # `y` opens yazi and moves the shell into the folder you quit in.
+    shellWrapperName = "y";
     plugins = {
       "no-status" = pkgs.yaziPlugins.no-status;
     };

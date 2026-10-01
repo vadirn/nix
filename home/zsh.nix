@@ -105,7 +105,6 @@
         git worktree remove "$dir" && print "removed: $dir"
       }
 
-      alias y='yazi'
       alias v='nvim'
 
       # Terseness for the distill-text CLI lives here, not in the binary name:

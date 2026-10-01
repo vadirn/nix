@@ -13,6 +13,9 @@ in {
     # advised config via the wrapper's `--cmd` instead of the file, so the
     # symlinked config (with its own init.lua) is left untouched.
     sideloadInitLua = true;
+    # No plugin needs the Python or Ruby provider.
+    withPython3 = false;
+    withRuby = false;
   };
   xdg.configFile."nvim".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/nvim/config";
 }
