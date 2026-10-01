@@ -98,12 +98,14 @@ elif "validate":
 
 elif user names an entry by name:   // entry = note/card/reference/checkpoint/track/experiment
     paths = Bash(vault-query get <name>)           // absolute paths, one per line
-    if exit 1: do("offer to search")               // no entry matches the name
+    if exit 1 and stderr starts "No matches":      // no entry matches the name
+        do("offer to search")
+    elif exit 1: do("report the error")            // config or IO failure; search would fail too
     else:
         path = paths[0]
         if several paths:                          // the name is ambiguous
             path = AskUserQuestion("which one?")
-        Read(path)                                 // a large note: Bash(rg -n '^#' <path>) lists its
+        Read(path)                                 // a large note: Bash(rg -n '^#{1,6} ' "<path>") lists its
                                                    // headings, then Read the lines the request needs
         do("summarize content")
 

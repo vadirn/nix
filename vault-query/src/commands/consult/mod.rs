@@ -293,8 +293,9 @@ fn stemmed_tokens(text: &str) -> Vec<String> {
 // ---------------------------------------------------------------------------
 
 /// Return the line range of the section in `body` that carries the most
-/// matched query terms, or `None` when no section qualifies. Lines are relative
-/// to `body`.
+/// matched query terms, or `None` when no section qualifies. Lines count from
+/// the first line of `body`, frontmatter included, so a whole file yields its
+/// own line numbers.
 ///
 /// Each body line is owned by the deepest section whose inclusive range
 /// contains it (ranges nest, so the greatest `level` among containing ranges is
@@ -656,14 +657,9 @@ fn pack_candidates(
         .filter(|(h, _)| !packed_paths.contains(h.path.as_str()))
         .map(|(h, cov)| {
             let file = file_map.get(&h.path);
-            // The stored body is `frontmatter::body`, a suffix of the file, so
-            // its lines shift by the newlines before it to land on the file's.
-            let offset = file.map_or(0, |vf| {
-                let body = frontmatter::body(&vf.content);
-                vf.content[..vf.content.len() - body.len()]
-                    .matches('\n')
-                    .count()
-            });
+            // `section_ranges` skips frontmatter itself, so the whole file
+            // yields its own line numbers.
+            let source = file.map_or(h.stored_body.as_str(), |vf| vf.content.as_str());
             DocPointer {
                 path: h.path.clone(),
                 title: h.title.clone(),
@@ -671,10 +667,7 @@ fn pack_candidates(
                 score: h.score,
                 coverage: *cov,
                 tokens_est: crate::tokens::estimate_tokens(h.stored_body.trim_start_matches('\n')),
-                lines: best_section_lines(&h.stored_body, query_terms).map(|r| LineRange {
-                    start: r.start + offset,
-                    end: r.end + offset,
-                }),
+                lines: best_section_lines(source, query_terms),
             }
         })
         .collect();

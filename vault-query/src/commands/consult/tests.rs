@@ -58,6 +58,37 @@ fn best_section_attributes_heading_less_body_to_text_region() {
     );
 }
 
+#[test]
+fn best_section_counts_file_lines_below_frontmatter() {
+    // Frontmatter takes lines 1–3 and its matched terms score no section, so
+    // "## Retry" lands at file lines 7–8.
+    let file = "\
+---
+description: retry backoff failure
+---
+
+## Caching
+memoize results
+## Retry
+exponential backoff retries failed requests on failure";
+    let q = terms("retry backoff failure");
+    assert_eq!(
+        best_section_lines(file, &q),
+        Some(LineRange { start: 7, end: 8 })
+    );
+}
+
+#[test]
+fn best_section_counts_file_lines_after_a_bom() {
+    let file =
+        "\u{feff}---\ntitle: x\n---\nexponential backoff retries failed requests on failure\n";
+    let q = terms("retry backoff failure");
+    assert_eq!(
+        best_section_lines(file, &q),
+        Some(LineRange { start: 4, end: 4 })
+    );
+}
+
 // --- Fixture helpers ---
 
 fn make_vault_file(name: &str, doc_type: &str, body: &str) -> VaultFile {

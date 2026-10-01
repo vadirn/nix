@@ -91,12 +91,19 @@ pub fn resolve_paths(
 ///
 /// Both the needle and each candidate's relative path run through [`path`], so
 /// equality and the segment-suffix test share one namespace (see [`resolve_paths`]).
+/// A path as `search` prints it, or an absolute one under `vault_root`, names
+/// its entry too: the root prefix and the `.md` extension are stripped first.
 pub fn resolve_paths_in(
     files: &[crate::vault::VaultFile],
     vault_root: &std::path::Path,
     slug: &str,
 ) -> Vec<String> {
-    let needle = path(slug);
+    let slug = std::path::Path::new(slug)
+        .strip_prefix(vault_root)
+        .ok()
+        .and_then(|rel| rel.to_str())
+        .unwrap_or(slug);
+    let needle = path(strip_md(slug));
     let mut matches = Vec::new();
 
     for file in files {
@@ -128,7 +135,7 @@ mod tests {
         assert_eq!(strip_md("double.md.md"), "double.md");
     }
 
-    // --- normalization core, ported from read.rs::heading_slug cases ---
+    // --- normalization core ---
 
     #[test]
     fn segment_core_cases() {
@@ -267,6 +274,18 @@ mod tests {
         assert_eq!(
             resolve_paths_in(&files, root, "Nix"),
             vec!["41 projects/nix.md".to_string()]
+        );
+    }
+
+    #[test]
+    fn resolve_in_accepts_search_and_absolute_paths() {
+        let root = std::path::Path::new("/vault");
+        let files = [vault_file("30 notes/Codemod.md")];
+        let want = vec!["30 notes/Codemod.md".to_string()];
+        assert_eq!(resolve_paths_in(&files, root, "30 notes/Codemod.md"), want);
+        assert_eq!(
+            resolve_paths_in(&files, root, "/vault/30 notes/Codemod.md"),
+            want
         );
     }
 

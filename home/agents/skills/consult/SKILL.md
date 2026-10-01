@@ -77,7 +77,8 @@ else:                                 // exit 1 (runtime) or 2 (bad CLI invocati
   than reusable knowledge. Checkpoints are superseded entries, so reaching one also needs
   `--include-superseded` (e.g. `--types track,checkpoint --include-superseded`).
 - `--format markdown` (the default) returns a paste-ready block. Use `--format json` only when you need
-  the structured envelope (path, title, type, score, body, tokens, links) for programmatic handling.
+  the structured envelope (path, title, type, score, body, tokens, links) for programmatic handling. Its
+  paths are relative to the envelope's `vault_root`; a pointer's `lines` count from the file's first line.
 - Pass `--ambient` only on the unattended hook path. As a deliberate caller, use the higher-recall default gate (omit the flag).
 
 ## When to reach for this

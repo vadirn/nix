@@ -44,8 +44,7 @@ fn line_content_end(bytes: &[u8], start: usize, nl: usize) -> usize {
 }
 
 /// Scan the leading frontmatter block once. BOM is stripped up front; the open
-/// and close `---` delimiters are matched by trimmed line equality, the same
-/// rule `parse` and the former `read` scanners used.
+/// and close `---` delimiters are matched by trimmed line equality.
 fn block(content: &str) -> Block<'_> {
     let stripped = content.trim_start_matches('\u{feff}');
     let bytes = stripped.as_bytes();

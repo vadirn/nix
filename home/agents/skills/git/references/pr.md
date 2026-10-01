@@ -9,9 +9,13 @@ branch = Bash(git rev-parse --abbrev-ref HEAD)
 default_branch = Bash(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
 upstream = Bash(git rev-parse --abbrev-ref @{upstream} 2>/dev/null)
 
-// Gather diff and log (depend on default_branch)
-diff = Bash(git diff <default_branch>...HEAD)
-log = Bash(git log <default_branch>..HEAD --oneline)
+// Base: the branch this PR merges into
+base = do("default_branch, unless this branch was stacked on another (/git branch) — then that parent branch")
+base_pr = Bash(gh pr list --head <base> --state open --json number -q '.[0].number')   // empty unless base is an open PR's branch
+
+// Gather diff and log (depend on base)
+diff = Bash(git diff <base>...HEAD)
+log = Bash(git log <base>..HEAD --oneline)
 
 // Guards
 if branch == default_branch: stop, ask user to create a feature branch (branch.md)
@@ -56,7 +60,7 @@ Bash(rm -f /tmp/claude/pr.md)
 Write(/tmp/claude/pr.md, body)
 Bash(gh pr create --base <base> --title "<title>" --body-file /tmp/claude/pr.md --draft)
 Bash(rm -f /tmp/claude/pr.md)
-if base != default_branch: Bash(gh stack link <base PR> <new PR>)   // see §PR creation details
+if base_pr: Bash(gh stack link <base_pr> <new PR>)   // see §PR creation details
 show PR URL
 ```
 

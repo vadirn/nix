@@ -154,6 +154,20 @@ fn test_consult_oversized_candidates_exit_0_with_pointers() {
             "pointer tokens_est must be > 0"
         );
     }
+    // Pointer paths are relative to the envelope's absolute `vault_root`, and
+    // `lines` counts from the file's first line, frontmatter included.
+    assert!(
+        v["vault_root"]
+            .as_str()
+            .is_some_and(|r| std::path::Path::new(r).is_absolute()),
+        "envelope must carry the absolute vault root, got: {}",
+        v["vault_root"]
+    );
+    let card = pointers
+        .iter()
+        .find(|p| p["path"] == "20 cards/Retry patterns.md")
+        .expect("the retry card must surface as a pointer");
+    assert_eq!(card["lines"], serde_json::json!({ "start": 5, "end": 5 }));
 }
 
 /// The markdown overflow pointer names the file a reader opens directly: an

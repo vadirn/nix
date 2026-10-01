@@ -192,31 +192,6 @@ pub fn resolve(
     vault_root_override: Option<&Path>,
     respect_user_patterns: bool,
 ) -> Result<ResolvedConfig> {
-    resolve_optional(
-        start_dir,
-        home_dir,
-        project_override,
-        vault_root_override,
-        respect_user_patterns,
-    )?
-    .context(
-        "no vault config found.\n\
-         Create ~/.config/vault/config.json with:\n  \
-         { \"vault_root\": \"/absolute/path/to/vault\", \"projects_path\": \"41 projects\" }",
-    )
-}
-
-/// Resolve config like [`resolve`], but distinguish an *absent* config from a
-/// *malformed* one: returns `Ok(None)` when no config layer supplies a vault
-/// root (nothing to resolve), and `Err` only when a config file that does exist
-/// fails to read or parse, so "no config" never reads as "broken config".
-pub fn resolve_optional(
-    start_dir: &Path,
-    home_dir: &Path,
-    project_override: Option<&str>,
-    vault_root_override: Option<&Path>,
-    respect_user_patterns: bool,
-) -> Result<Option<ResolvedConfig>> {
     let mut vault_root: Option<PathBuf> = None;
     let mut project_path: Option<PathBuf> = None;
     let mut projects_path: Option<String> = None;
@@ -276,16 +251,19 @@ pub fn resolve_optional(
         project_path = Some(vr.join(pp).join(name));
     }
 
-    // No config layer supplied a vault root: the config is absent, not broken.
-    // Parse/read failures above already returned `Err`, so reaching here with a
-    // `None` means there was simply nothing to resolve.
-    let Some(vault_root) = vault_root else {
-        return Ok(None);
-    };
+    let vault_root = vault_root.context(
+        "no vault config found.\n\
+         Create ~/.config/vault/config.json with:\n  \
+         { \"vault_root\": \"/absolute/path/to/vault\", \"projects_path\": \"41 projects\" }",
+    )?;
+    // Absolute, so every path joined onto it opens from any cwd. A relative root
+    // resolves against the cwd.
+    let vault_root = std::path::absolute(&vault_root)
+        .with_context(|| format!("resolving vault root {}", vault_root.display()))?;
 
     let ignore = vault_ignore::load(&vault_root, respect_user_patterns)?;
 
-    Ok(Some(ResolvedConfig {
+    Ok(ResolvedConfig {
         vault_root,
         projects_path,
         project_path,
@@ -293,7 +271,7 @@ pub fn resolve_optional(
         lint: lint_config,
         consult: consult_config,
         ignore,
-    }))
+    })
 }
 
 #[cfg(test)]
@@ -306,33 +284,21 @@ mod tests {
     }
 
     #[test]
-    fn resolve_optional_absent_gives_none() {
-        // No project config on the walk-up path and no root config under home:
-        // the config is absent, so resolve_optional yields Ok(None) rather than
-        // an error.
-        let tmp = tempfile::tempdir().unwrap();
-        let result =
-            resolve_optional(Path::new("/nonexistent"), tmp.path(), None, None, true).unwrap();
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn resolve_absent_still_errors() {
-        // resolve() keeps the strict contract: an absent config is an error.
+    fn resolve_absent_errors() {
+        // No project config on the walk-up path and no root config under home.
         let tmp = tempfile::tempdir().unwrap();
         assert!(resolve(Path::new("/nonexistent"), tmp.path(), None, None, true).is_err());
     }
 
     #[test]
-    fn resolve_optional_malformed_config_errors() {
-        // A present-but-broken root config must surface as Err, not be conflated
-        // with absence (the Read-path distinction).
+    fn resolve_malformed_config_errors() {
+        // A present-but-broken root config surfaces as Err.
         let tmp = tempfile::tempdir().unwrap();
         let cfg_dir = tmp.path().join(".config/vault");
         std::fs::create_dir_all(&cfg_dir).unwrap();
         std::fs::write(cfg_dir.join("config.json"), "{ not valid json ").unwrap();
 
-        let result = resolve_optional(Path::new("/nonexistent"), tmp.path(), None, None, true);
+        let result = resolve(Path::new("/nonexistent"), tmp.path(), None, None, true);
         assert!(result.is_err());
     }
 

@@ -2,8 +2,8 @@
 # Refresh all agent-related symlinks and rebuild CLAUDE.md.
 # Runnable without darwin-rebuild.
 #
-# Mirrors the agent-related `home.file.*` entries in home/default.nix.
-# Keep this list in sync with that file.
+# Mirrors the agent-related `home.file.*` entries in home/claude.nix and
+# home/opencode.nix. Keep this list in sync with those files.
 set -euo pipefail
 
 ROOT="${ROOT:-$HOME/nix}"
@@ -20,6 +20,7 @@ LINKS=(
   ".claude/agents|home/agents/agents"
   ".claude/output-styles|home/agents/output-styles"
   ".claude/statusline.sh|home/claude/statusline.sh"
+  ".config/opencode/opencode.json|home/opencode/opencode.json"
   ".config/opencode/AGENTS.md|home/agents/AGENTS.md"
 )
 

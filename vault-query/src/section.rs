@@ -30,8 +30,8 @@ fn range_slice(lines: &[&str], start: usize, end: usize) -> String {
 /// (which is pre-order for a heading tree). Empty when the body has no headings
 /// and no pre-heading prose.
 ///
-/// Line numbers are relative to `body`. A caller holding a body cut from a file
-/// adds the newlines before the cut to reach the file's lines.
+/// Line numbers count from the first line of `body`. Leading frontmatter is
+/// skipped, so a whole file yields its own line numbers.
 pub fn section_ranges(body: &str) -> Vec<SectionRange> {
     let lines: Vec<&str> = crate::mdfacet::lines(body);
     let total = lines.len();

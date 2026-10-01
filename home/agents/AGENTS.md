@@ -94,7 +94,7 @@ Use these through the Bash tool. Prefer them to manual code reading or web searc
 - **ast-grep** (sg): structural search and rewrite by AST pattern. Use it for any rename, signature change, or call-site rewrite that crosses files: `sg -l ts -p 'console.log($A)' -r 'logger.debug($A)'`.
 - **autoformat**: format files you have edited, routed per extension — the project's `format:file` script, else deno fmt, else mdformat for `.md` and oxfmt for the rest, or ruff, or alejandra, or rustfmt. `autoformat <paths>` formats those paths, bare `autoformat` takes the repo's modified and untracked files, `-a` walks the cwd when git ignores what you edited. Nothing formats on its own: run it when you finish editing a file.
 - **fd**: file finding by name, instead of `find`.
-- **vault-query**: all vault (`~/Documents/vault`) lookup — `fd`/`rg`/`ls` honor `.gitignore`, which excludes the vault, so they silently miss it. `get <name-fragment>` resolves an entry by name to its absolute path; read that path with your file reader. For a large note, list its headings with `rg -n '^#' <path>`, then read one line range. `search <query>` is BM25-ranked full-text (`--regex` for grep).
+- **vault-query**: all vault (`~/Documents/vault`) lookup — `fd`/`rg`/`ls` honor `.gitignore`, which excludes the vault, so they silently miss it. `get <name-fragment>` resolves an entry by name to its absolute path; read that path with your file reader. For a large note, list its headings with `rg -n '^#{1,6} ' "<path>"`, then read one line range. `search <query>` is BM25-ranked full-text (`--regex` for grep).
 - **gh**: all GitHub operations — issues, PRs, comments. Saves API rate limits.
 - **jq**: any JSON parsing in pipelines.
 

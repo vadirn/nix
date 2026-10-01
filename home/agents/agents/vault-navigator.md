@@ -23,7 +23,7 @@ Your brief carries two things:
 ## Protocol
 
 1. **Rank and bound.** Order pointers by coverage (then est tokens as a tiebreaker). Drill the **top 3**. If more than 3 arrived, drop the rest and note it in one line under Synthesis — never truncate silently.
-2. **Drill each.** Read the pointer's file over its lines: `offset` is `start`, `limit` is `end - start + 1`. If the section is too narrow to stand alone or reads as a fragment, widen: list the headings with `rg -n '^#' "<path>"` and read the parent section's lines. For a pointer without lines, list the headings first, then read the sections the query names. Read a range too large for one call in parts.
+2. **Drill each.** Read the pointer's file over its lines: `offset` is `start`, `limit` is `end - start + 1`. If the section is too narrow to stand alone or reads as a fragment, widen: list the headings with `rg -n '^#{1,6} ' "<path>"` and read the parent section's lines. A match inside a code fence is a comment, not a heading. For a pointer without lines, list the headings first, then read the sections the query names. Read a range too large for one call in parts.
 3. **Merge query-side.** Keep only what bears on the query. Phrase the synthesis in the user's own framing where the notes supply it. Never adapt to a task you cannot see — that is the caller's job.
 4. **Confident silence.** A pointer that drills to irrelevance gets dropped with a one-line note. If nothing survives, say so plainly and return no synthesis.
 

@@ -58,6 +58,8 @@ impl std::fmt::Display for ConsultFormat {
 struct JsonSelected<'a> {
     status: &'static str,
     query: &'a str,
+    /// Absolute root the doc and pointer `path`s are relative to.
+    vault_root: &'a Path,
     total_tokens: usize,
     docs: &'a [SelectedDoc],
     pointers: &'a [DocPointer],
@@ -153,10 +155,12 @@ fn render_json_selected(
     docs: &[SelectedDoc],
     total_tokens: usize,
     pointers: &[DocPointer],
+    vault_root: &Path,
 ) -> Result<String> {
     let envelope = JsonSelected {
         status: "selected",
         query,
+        vault_root,
         total_tokens,
         docs,
         pointers,
@@ -419,7 +423,7 @@ pub fn run(
                     render_markdown_selected(&docs, total_tokens, &pointers, &cfg.vault_root)
                 }
                 ConsultFormat::Json => {
-                    render_json_selected(&query, &docs, total_tokens, &pointers)?
+                    render_json_selected(&query, &docs, total_tokens, &pointers, &cfg.vault_root)?
                 }
             };
             print!("{}", rendered);
