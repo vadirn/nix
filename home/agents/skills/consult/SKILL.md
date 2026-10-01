@@ -84,8 +84,5 @@ else:                                 // exit 1 (runtime) or 2 (bad CLI invocati
 ## When to reach for this
 
 Bias toward consulting when the user's own past decisions, definitions, or framing would change your
-answer — that is the whole reason this exists as an agent-judged call rather than an automatic one. A
-prior always-on hook fired on every prompt and injected unrelated notes into mechanical and conversational
-turns. Moving the judgment here is the fix. So apply judgment: a question about a concept, a "what do I
-think about", a design fork, or planning work the user has touched before is worth a consult. Renaming a
-variable or running a test is not.
+answer. A question about a concept, a "what do I think about", a design fork, or planning work the user
+has touched before is worth a consult. Renaming a variable or running a test is not.

@@ -2,7 +2,7 @@
 
 ## Reasoning
 
-Work the problem in this order. The analysis runs in your thinking. The answer carries only what resolves the contradiction.
+Work the problem through these checks. The analysis runs in your thinking. The answer carries only what resolves the contradiction.
 
 1. **Conditions.** State what exists, what is available, and what constrains the work. Search first when the conditions are uncertain or domain-specific.
 2. **Contradiction.** Name the one block whose removal frees the rest. Expose a false premise before you solve. Restate the stated problem when it differs from the real one.
@@ -60,7 +60,7 @@ Run `vault-query consult "<task framing>" --format markdown`; the `/consult` ski
 - **4** is confident silence,
 - **1** or **2** is an error.
 
-Proceed un-enriched on 4, 1, and 2. Phrase the query yourself, and reformulate once with broader terms before you accept silence. A track or a checkpoint is a superseded entry, so reaching one needs `--types track,checkpoint --include-superseded`.
+Proceed un-enriched on 4, 1, and 2. Phrase the query yourself, and reformulate once with broader terms before you accept silence. A checkpoint is a superseded entry, so reaching one needs `--types checkpoint --include-superseded`; `--types track` reaches a track.
 
 Consult when grounding needs the user's view: an opinion, stance, definition, framing, design preference, or a decision already reasoned through, whatever the surface subject. Skip consult for mechanical execution: locating or reading code, editing, refactoring, debugging, file operations, running commands. Abstention costs one cheap call, so consult when relevance is uncertain.
 
