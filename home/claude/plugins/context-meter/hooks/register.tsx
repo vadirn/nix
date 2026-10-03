@@ -54,9 +54,13 @@ const toReading = (context: SessionContextUsage): Reading => ({
 
 const size = (tokens: number | null) => {
   if (tokens === null) return "?";
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
 
-  return `${Math.round(tokens / 1000)}k`;
+  // Rounded first, so 999,700 reads "1.0M", not "1000k".
+  const thousands = Math.round(tokens / 1000);
+
+  if (thousands >= 1000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+
+  return `${thousands}k`;
 };
 
 const record = async ($: EngineInterface, result: SessionCompactResult) => {
@@ -68,25 +72,27 @@ const record = async ($: EngineInterface, result: SessionCompactResult) => {
   }));
 };
 
-// Runs `/compact` as if typed. `$.session.compact()` is refused in SDK-hosted
-// sessions such as the desktop's, where compaction runs inside a turn. The
-// `session.compact` hook below records the sizes, as for a typed `/compact`.
+// Runs `/compact` as if typed, queued until the session is idle.
+// `$.session.compact()` is refused in SDK-hosted sessions such as the
+// desktop's, where compaction runs inside a turn. The `session.compact` hook
+// below shows "Compacting…" once it runs, so a queued press shows nothing early.
 const compact = async ($: EngineInterface) => {
-  await update($, isCompacting, () => true);
-
   try {
     await $.command.run({ command: "compact" });
   } catch (error) {
     $.ui.toast(`Compaction failed: ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    await update($, isCompacting, () => false);
   }
 };
 
 export const register: Register = (on) => {
+  // A reload keeps `$.state` but drops a compaction in flight, so start clean.
   on("session.start", async ($, e, next) => {
     const { context } = await $.session.usage();
-    await update($, reading, () => toReading(context));
+    await Promise.all([
+      update($, reading, () => toReading(context)),
+      update($, compacted, () => null),
+      update($, isCompacting, () => false),
+    ]);
 
     return next(e);
   });
@@ -95,7 +101,8 @@ export const register: Register = (on) => {
     if (e.changed.includes("context")) {
       await update($, reading, () => toReading(e.context));
 
-      if (e.context.tokens !== undefined) {
+      // A reply ends the compacted note; skip the write when there is none.
+      if (e.context.tokens !== undefined && (await read($, compacted)) !== null) {
         await update($, compacted, () => null);
       }
     }
@@ -124,12 +131,14 @@ export const register: Register = (on) => {
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
     if (e.props.hasSurvey || e.props.view.agentId !== undefined) return next(e);
 
-    const now = await read($, reading);
+    const [now, last, isBusy] = await Promise.all([
+      read($, reading),
+      read($, compacted),
+      read($, isCompacting),
+    ]);
 
     if (now === null) return next(e);
 
-    const last = await read($, compacted);
-    const isBusy = await read($, isCompacting);
     const ui = $.ui.resolve(e);
     const { Box, Button, Text } = ui;
     const Svg = "Svg" in ui ? ui.Svg : undefined;
@@ -175,8 +184,9 @@ export const register: Register = (on) => {
       );
     }
 
-    // Before the first reply there is nothing to compact.
-    const hasConversation = now.tokens !== null || last !== null;
+    // Tokens are unknown until a reply, so a resumed session is told apart from
+    // a fresh one by its prompts; only a fresh one has nothing to compact.
+    const hasConversation = now.tokens !== null || last !== null || (await $.session.turns()) > 0;
     const isWorking = e.props.isWorking;
     const action = [];
 
