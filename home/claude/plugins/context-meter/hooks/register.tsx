@@ -75,7 +75,7 @@ const record = async ($: EngineInterface, result: SessionCompactResult) => {
 // Runs `/compact` as if typed, queued until the session is idle.
 // `$.session.compact()` is refused in SDK-hosted sessions such as the
 // desktop's, where compaction runs inside a turn. The `session.compact` hook
-// below shows "Compacting…" once it runs, so a queued press shows nothing early.
+// below shows "Compacting…" only once it runs, so a mid-turn press toasts instead.
 const compact = async ($: EngineInterface) => {
   try {
     await $.command.run({ command: "compact" });
@@ -193,17 +193,16 @@ export const register: Register = (on) => {
     if (isBusy) {
       action.push(<Text dimColor>Compacting…</Text>);
     } else if (hasConversation) {
-      // Compaction runs between turns, so mid-turn the button dims and explains.
+      // Mid-turn, a press queues `/compact` for when the turn ends.
       action.push(
         <Button
           key="compact"
           label="Compact"
-          dimColor={isWorking}
-          onPress={() =>
-            isWorking
-              ? $.ui.toast("Compact runs between turns: press it when this one ends")
-              : compact($)
-          }
+          onPress={() => {
+            if (isWorking) $.ui.toast("Compact queued: runs when this turn ends");
+
+            return compact($);
+          }}
         />,
       );
     }

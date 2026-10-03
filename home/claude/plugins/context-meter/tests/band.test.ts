@@ -36,8 +36,6 @@ test("zone colour follows absolute tokens on desktop and terminal", async ($, on
 
       const label = await ui.find({ type: "Text", text: new RegExp(`^${one.percent}%$`) });
       expect(label?.props.color).toBe(one.color);
-      const button = await ui.find({ key: "compact" });
-      expect(button?.props.dimColor).toBe(false);
 
       const band = await ui.find({ type: "Box" });
       expect(band?.props.paddingLeft).toBe(surface === "desktop" ? 0.625 : 1);
@@ -52,7 +50,7 @@ test("zone colour follows absolute tokens on desktop and terminal", async ($, on
   }
 });
 
-test("button stays, dimmed, while a turn runs", async ($, on) => {
+test("a press while a turn runs queues /compact and says so", async ($, on) => {
   on("session.measure", (_$, e) => ({ changed: e.changed }));
   const runs: string[] = [];
   on("command.run", { command: "compact" }, (_$, e) => {
@@ -80,16 +78,14 @@ test("button stays, dimmed, while a turn runs", async ($, on) => {
       props: props(true),
     });
 
-    expect((await ui.find({ key: "compact" }))?.props.dimColor).toBe(true);
     await ui.press({ key: "compact" });
     await ui.unmount();
   }
 
-  // A mid-turn press explains instead of compacting.
-  expect(runs).toEqual([]);
+  expect(runs).toEqual(["compact", "compact"]);
   expect(toasts).toEqual([
-    "Compact runs between turns: press it when this one ends",
-    "Compact runs between turns: press it when this one ends",
+    "Compact queued: runs when this turn ends",
+    "Compact queued: runs when this turn ends",
   ]);
 });
 
