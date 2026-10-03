@@ -1,0 +1,6 @@
+{
+  "name": "context-meter",
+  "version": "0.1.0",
+  "description": "Show the session's context window fill above the prompt, with a button to compact it",
+  "types": "./types/index.d.ts"
+}

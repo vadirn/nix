@@ -10,7 +10,8 @@
     "BASECAMP_HINTS": "false",
     "BASECAMP_STATS": "false",
     "CLAUDE_CODE_WORKFLOWS": "1",
-    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/nix/home/claude/plugins/context-meter"
   },
   "attribution": {
     "commit": "",
