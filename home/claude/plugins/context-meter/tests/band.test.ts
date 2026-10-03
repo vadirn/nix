@@ -89,6 +89,49 @@ test("a press while a turn runs queues /compact and says so", async ($, on) => {
   ]);
 });
 
+test("presses while /compact waits queue it once", async ($, on) => {
+  on("session.measure", (_$, e) => ({ changed: e.changed }));
+  on("ui.toast", () => ({ value: undefined }));
+
+  // The stand-in holds the first `/compact` until `release` runs. Later runs
+  // answer at once, so a press the guard misses ends instead of hanging.
+  let release = () => {};
+  const isReleased = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const runs: string[] = [];
+  on("command.run", { command: "compact" }, async (_$, e) => {
+    runs.push(e.command);
+    if (runs.length === 1) await isReleased;
+
+    return { text: "Compacted" };
+  });
+  await $.session.measure({
+    context: { tokens: 170_000, window: 1_000_000, percent: 17 },
+    rateLimits: [],
+    changed: ["context"],
+  });
+
+  const ui = await $.ui.mount({
+    plugin: "context-meter",
+    surface: "desktop",
+    component: "AbovePrompt",
+    props: props(true),
+  });
+
+  const first = ui.press({ key: "compact" });
+  await ui.press({ key: "compact" });
+  await ui.press({ key: "compact" });
+  release();
+  await first;
+  expect(runs).toEqual(["compact"]);
+
+  // Once it has run, a press queues again.
+  await ui.press({ key: "compact" });
+  expect(runs).toEqual(["compact", "compact"]);
+  await ui.unmount();
+});
+
 test("press runs /compact as if typed", async ($, on) => {
   on("session.measure", (_$, e) => ({ changed: e.changed }));
   const runs: string[] = [];

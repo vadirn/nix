@@ -76,11 +76,20 @@ const record = async ($: EngineInterface, result: SessionCompactResult) => {
 // `$.session.compact()` is refused in SDK-hosted sessions such as the
 // desktop's, where compaction runs inside a turn. The `session.compact` hook
 // below shows "Compacting…" only once it runs, so a mid-turn press toasts instead.
+// `run` resolves once the command has run, so presses until then queue nothing more.
+let isQueued = false;
+
 const compact = async ($: EngineInterface) => {
+  if (isQueued) return;
+
+  isQueued = true;
+
   try {
     await $.command.run({ command: "compact" });
   } catch (error) {
     $.ui.toast(`Compaction failed: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    isQueued = false;
   }
 };
 
