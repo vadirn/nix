@@ -1,0 +1,11 @@
+{
+  "name": "stop-remind",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The stop-remind Stop hook: asks Jev whether the finished turn needs a crux, SDLC or confidence reminder. A workspace member only to inherit the pinned typecheck, lint, and test — home/claude/hooks/stop-remind.sh execs stop-remind.ts under bun. Declare no dependencies here: a runtime dependency would make the hook need an installed node_modules. See the header of stop-remind.ts.",
+  "scripts": {
+    "test": "bun test",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
+  }
+}

@@ -15,10 +15,13 @@
 // `doppler` names a secret in a project/config. A provider may declare either or both; when
 // both are set they form a fallback chain — keychain wins, doppler covers a machine that
 // lacks the keychain entry (e.g. Fireworks is seeded locally but falls back to Doppler).
+// `timeoutMs` caps each shell-out. A hook sets it so a Keychain access dialog cannot hold
+// it; an interactive CLI leaves it unset so the user has time to click Allow.
 export type KeySource = {
   env: string;
   keychain?: string;
   doppler?: { secret: string; project: string; config: string };
+  timeoutMs?: number;
 };
 
 // A key that could not be resolved from any declared source. Not a TransientError — a
@@ -30,9 +33,9 @@ export class MissingKeyError extends Error {
 // One shell-out, trimmed; null on any non-zero exit or empty output so the caller falls
 // through to the next source. Sync on purpose: key resolution is a one-time startup step,
 // and a synchronous call keeps callProvider's async path free of a resolution await.
-function run(cmd: string[]): string | null {
+function run(cmd: string[], timeoutMs?: number): string | null {
   try {
-    const r = Bun.spawnSync(cmd, { stdout: "pipe", stderr: "ignore" });
+    const r = Bun.spawnSync(cmd, { stdout: "pipe", stderr: "ignore", timeout: timeoutMs });
     if (r.exitCode !== 0) return null;
     const out = r.stdout.toString().trim();
     return out.length ? out : null;
@@ -54,21 +57,24 @@ export function resolveKey(src: KeySource): string {
   }
 
   const fromKeychain = src.keychain
-    ? run(["security", "find-generic-password", "-s", src.keychain, "-w"])
+    ? run(["security", "find-generic-password", "-s", src.keychain, "-w"], src.timeoutMs)
     : null;
   const fromDoppler =
     !fromKeychain && src.doppler
-      ? run([
-          "doppler",
-          "secrets",
-          "get",
-          src.doppler.secret,
-          "--plain",
-          "--project",
-          src.doppler.project,
-          "--config",
-          src.doppler.config,
-        ])
+      ? run(
+          [
+            "doppler",
+            "secrets",
+            "get",
+            src.doppler.secret,
+            "--plain",
+            "--project",
+            src.doppler.project,
+            "--config",
+            src.doppler.config,
+          ],
+          src.timeoutMs,
+        )
       : null;
 
   const key = fromKeychain ?? fromDoppler;
