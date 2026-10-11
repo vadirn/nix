@@ -12,7 +12,6 @@ in {
       "**/.claude/settings.local.json"
       "**/.vault.config.json"
       "**/.claude-plans/"
-      "**/.playwright-mcp/"
     ];
     settings = {
       user.name = "Vadim Kotov";
