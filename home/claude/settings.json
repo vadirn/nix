@@ -19,13 +19,9 @@
   },
   "permissions": {
     "allow": [
-      "Skill(cut)",
       "Skill(playground)",
-      "Skill(reflect)",
       "Skill(tdd)",
       "Skill(debate)",
-      "WebSearch",
-      "WebFetch",
       "Bash(git status *)",
       "Bash(git log *)",
       "Bash(git ls-tree *)",
@@ -49,8 +45,6 @@
       "Bash(gh run list *)",
       "Bash(gh pr create *)",
       "Skill(vault)",
-      "Skill(pr)",
-      "Bash(bunx @tobilu/qmd *)",
       "Bash(ls *)",
       "Bash(date *)",
       "Bash(cat *)",
