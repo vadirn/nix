@@ -11,6 +11,7 @@ brew upgrade --formula
 
 echo "Installing Claude plugins..."
 claude plugin install typescript-lsp
+claude plugin install rust-analyzer-lsp
 
 echo "Syncing agents..."
 bash "$HOME/nix/home/agents/scripts/sync-agents.sh"
