@@ -115,15 +115,9 @@ Push is manual. The user runs `git push` themselves, usually via lazygit, and a 
 
 ## Web
 
-Use the Firecrawl MCP server, which returns markdown:
+Use the Firecrawl connector, which returns markdown. Call `firecrawl_search` for a query, and add `categories: ["developer"]` for a programming question. Call `firecrawl_scrape` for a known URL, and request the `links` format to list its subpages.
 
-- `firecrawl_search` for a query,
-- `firecrawl_scrape` for a known URL,
-- `firecrawl_map` then `firecrawl_scrape` to reach a subpage,
-- `firecrawl_crawl` for a whole section,
-- `firecrawl_parse` for a local PDF or DOCX.
-
-WebSearch and WebFetch are blocked. Download a file with `curl -L -o "$TMPDIR/<name>" <url>`.
+A PreToolUse hook denies WebSearch and WebFetch, although the harness lists them. Convert a local PDF or DOCX with `/markitdown`. Download a file with `curl -L -o "$TMPDIR/<name>" <url>`.
 
 ## Plans
 
