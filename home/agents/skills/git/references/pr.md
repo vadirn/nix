@@ -61,14 +61,14 @@ Bash(rm -f <artifact_dir>/pr.md)
 Write(<artifact_dir>/pr.md, body)
 Bash(gh pr create --base <base> --title "<title>" --body-file <artifact_dir>/pr.md --draft)
 Bash(rm -f <artifact_dir>/pr.md)
-if base_pr: Bash(gh stack link <base_pr> <new PR>)   // see §PR creation details
+if base_pr and every branch below base has an open PR: Bash(gh stack link <every stack PR through base_pr, bottom first> <new PR>)   // see §PR creation details
 show PR URL
 ```
 
 ## PR creation details
 
 - **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready".
-- **Link a stacked PR.** `--base` sets the base branch but does not put the PR in a GitHub stack. When the base is another open PR's branch, run `gh stack link <base PR> <new PR>` after `gh pr create`. Given PR numbers, it pushes nothing. If the base PR already sits in a stack, the new PR joins that stack.
+- **Link a stacked PR.** `--base` sets the base branch but does not put the PR in a GitHub stack. When the base is another open PR's branch, run `gh stack link <base PR> <new PR>` after `gh pr create`. Given PR numbers, it pushes nothing. When the base PR already sits in a stack, list every PR in the stack, bottom first, then the new one: `gh stack link <bottom> … <base PR> <new PR>`. Naming only the base PR and the new one fails with "this would remove #<bottom> from the stack". Open a PR for every branch below first. A link whose bottom PR does not target the default branch moves that PR's base to the default branch, and GitHub then refuses base edits on a stacked PR. To recover, run `gh stack unstack <stack number>`, then `gh pr edit <PR> --base <branch>`.
 - **Title:** `<prefix>: <message>`, lowercase after prefix, <70 chars, focus on WHY — the same form a commit takes. The PR title becomes the commit message on squash-and-merge, so the prefix comes from the contract test applied to the branch's net change, not to any one commit.
 - **Body:** Always start from a template. The `pr-template` script (at `home/agents/scripts/pr-template.sh`) resolves which template to use and prints one of three modes on its first line: `MODE: single` (full template content follows), `MODE: multi` (one repo-relative `.md` path per line — ask the user which), or `MODE: default` (the colocated `pr-template.md` default follows; used when the repo ships no template). In every mode the resulting body keeps the template's headings, emoji, and section count verbatim. Only the placeholder content gets filled in from the diff and log.
 - **Self-contained body.** The reader has the repo and nothing else. Derive the body from the diff and log — never from session-only context. Name only artifacts a reader can resolve from the repo (files, commits, symbols). Strip references to private planning notes (vault tracks, note slugs like `track-*`), local paths outside the repo, ticket IDs, and prior-conversation shorthand. If a why comes from such a source, restate the reasoning inline rather than pointing at the source.
