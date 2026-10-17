@@ -3,6 +3,10 @@
 # Saves tokens by suppressing progress bars, banners, and status output.
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
+# Only the first line is rewritten: a later line may be a heredoc body, and
+# sed rewrites every line it matches, so a message or script would change.
+FIRST=${COMMAND%%$'\n'*}
+REST=${COMMAND:${#FIRST}}
 
 emit() {
   jq -n --arg cmd "$1" '{
@@ -17,15 +21,17 @@ emit() {
 # try_quiet MATCH_PATTERN SKIP_PATTERN SED_REPLACEMENT
 try_quiet() {
   local match="$1" skip="$2" replacement="$3"
-  if [[ "$COMMAND" =~ $match ]] && [[ ! "$COMMAND" =~ $skip ]]; then
-    emit "$(printf '%s' "$COMMAND" | sed -E "$replacement")"
+  if [[ "$FIRST" =~ $match ]] && [[ ! "$FIRST" =~ $skip ]]; then
+    emit "$(printf '%s' "$FIRST" | sed -E "$replacement")$REST"
   fi
 }
 
+# Anchored to command position, like ffmpeg below, so a quoted message that
+# names `git commit` keeps its text.
 try_quiet \
-  '(^|[[:space:]])git[[:space:]]+(commit|clone|fetch|pull)' \
+  '(^|[|&;(][[:space:]]*)git[[:space:]]+(commit|clone|fetch|pull)' \
   '(-q|--quiet)' \
-  's/(git[[:space:]]+(commit|clone|fetch|pull))/\1 -q/'
+  's/(^|[|&;(][[:space:]]*)(git[[:space:]]+(commit|clone|fetch|pull))/\1\2 -q/'
 
 try_quiet \
   '^npm[[:space:]]+(install|i|ci)([[:space:]]|$)' \
