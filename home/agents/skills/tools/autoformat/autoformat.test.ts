@@ -75,8 +75,8 @@ function formatted(path: string): boolean {
 }
 
 function git(cwd: string, ...args: string[]) {
-  // core.hooksPath=/dev/null: this repo's global commit-msg gate would block a
-  // fixture commit that never went through the /commit skill.
+  // core.hooksPath=/dev/null: the global post-commit hook would log fixture
+  // commits to the vault.
   Bun.spawnSync(["git", "-C", cwd, "-c", "core.hooksPath=/dev/null", ...args], {
     env: {
       ...process.env,

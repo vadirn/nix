@@ -45,5 +45,4 @@ in {
     };
   };
   xdg.configFile."git/hooks/post-commit".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/post-commit";
-  xdg.configFile."git/hooks/commit-msg".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/commit-msg";
 }

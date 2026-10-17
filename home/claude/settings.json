@@ -119,7 +119,8 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/require-pr-body-file.sh"
+            "command": "python3 ~/.claude/hooks/git-message.py",
+            "timeout": 120
           },
           {
             "type": "command",

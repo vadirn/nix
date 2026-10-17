@@ -81,7 +81,7 @@ show PR URL
   Bash(gh pr create --base <base> --title "<title>" --body-file <artifact_dir>/pr.md --draft)
   Bash(rm -f <artifact_dir>/pr.md)
   ```
-  The body file also serves as proof of skill use: the `require-pr-body-file.sh` PreToolUse hook refuses `gh pr create` unless `--body-file` names a `pr.md` in this session's directory and that file exists. Because gh reads the body straight from the file, the artifact IS the body — no separate nonce or time window. The skill deletes the file after the gh call, so the same artifact gates exactly one PR. Use `gh pr edit --body-file` for updates to an existing PR.
+  The message hook checks the title, the body file and the repo's template before `gh pr create` runs (`commit-hook.md` says how). On a refusal, apply each fix, rewrite `pr.md`, and run the command again. If you think a finding is wrong, stop and ask the user. The hook checks `gh pr create` only, so `gh pr edit --body-file` updates an existing PR unchecked.
 - **Confirm before creating.** Show title and body. Omit confirmation when the user supplied an explicit title and body.
 
 ## Rules

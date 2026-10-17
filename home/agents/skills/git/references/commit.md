@@ -25,24 +25,28 @@ message = do("draft '<prefix>: <why>', short single lowercase line, state the WH
 needs_confirmation = do("true if mixed changes, unclear prefix, or secrets_excluded")
 if needs_confirmation: AskUserQuestion("prefix: <prefix> | message: <message> | files: <files>")
 
-// Commit — the file route is mandatory, see §The message file below
-Write(<artifact_dir>/commit.txt, "<prefix>: <message>")   // exact final message, written after any confirmation
-Bash(git commit -F <artifact_dir>/commit.txt)             // never -m
+// Commit — the message hook checks it, see §The message hook below
+Bash(rm -f <artifact_dir>/commit.txt)
+Write(<artifact_dir>/commit.txt, "<prefix>: <message>")   // final message, written after any confirmation
+Bash(git commit -F <artifact_dir>/commit.txt)             // or -m, see §The message hook
+Bash(rm -f <artifact_dir>/commit.txt)
 
 // Verify
 Bash(git status)
 ```
 
-## The message file
+## The message hook
 
-Every commit goes through `<artifact_dir>/commit.txt`. This is a hard rule, enforced by a global `commit-msg` hook. A commit whose message reaches git any other way is rejected.
+A PreToolUse hook checks every `git commit` before it runs. It sends the message and the diff git will commit to the Trinket workflow `git.message`. A failed rule refuses the commit, with one fix per finding.
 
-- **Never `-m`.** `git commit -F <artifact_dir>/commit.txt` is the only accepted form.
-- **Take `artifact_dir` from the gather step.** The hook derives the same path from the session and the worktree, so a typed path fails. Commit from the worktree the gather step ran in.
-- **Write the exact final message.** The hook compares the file's content against what git received. Any divergence rejects the commit. Settle the message first — including anything a confirmation step changed — then write the file once.
-- **One file validates one commit.** The hook deletes it on success, so every commit writes it fresh. A leftover file from a failed attempt is stale. Rewrite it rather than reusing it.
+- **Apply each fix, then commit again.** Rewrite the message file: `rm -f` it, then `Write` it fresh.
+- **Ask the user about a finding you think is wrong.** Stop and ask. Never reach git another way.
+- **Stage in a separate step.** The hook refuses `git add … && git commit …`, because it runs before `git add`.
+- **Write the message file in a separate step.** The hook reads the file before the command runs.
+- **`-m` works too.** The Bash tool turns `!` into `\!` even inside quotes, so a message holding `!` goes through the file.
+- **A check that does not finish refuses the commit.** Tell the user its cause, such as Trinket.app not running.
 
-Read `commit-hook.md` for why the mechanism is shaped this way, and when a rejection is not explained by the four rules above.
+Read `commit-hook.md` for why the hook is shaped this way.
 
 ## Message style
 
