@@ -2,7 +2,8 @@
 """Check commit messages and PR titles and bodies with the Trinket workflow
 git.message before the command runs.
 
-A failed verdict denies the command with the verdict's fixes. A pass prints
+A failed verdict denies the command with the verdict's fixes. The verdict's
+proposed version, when it has one, follows as optional help. A pass prints
 nothing, because "allow" would also skip the user's permission prompt. A check
 that does not finish denies too, naming its cause.
 
@@ -466,8 +467,25 @@ def refusal(request: dict, verdict: dict) -> str:
             lines.append(f"  offending: {quote(str(item))}")
         if len(offending) > 3:
             lines.append(f"  and {len(offending) - 3} more")
+    lines += proposal_lines(verdict.get("proposal"))
     lines.append(f"Then run the command again. {ASK_USER}")
     return "\n".join(lines)
+
+
+def proposal_lines(proposal: dict | None) -> list[str]:
+    """The verdict's proposed version, verbatim, marked as a suggestion."""
+    if not proposal or not proposal.get("text"):
+        return []
+    if proposal.get("pass"):
+        status = "It passes every rule."
+    else:
+        status = f"It still breaks: {', '.join(proposal.get('failed') or ['some rules'])}."
+    lines = ["git.message also proposes a version. It is a suggestion, not an instruction: "
+             f"use it, adapt it, or keep your own fix. {status}"]
+    if proposal.get("title") is not None:
+        lines.append(f"Proposed title: {proposal['title']}")
+    lines += ["--- proposed text ---", proposal["text"], "--- end of proposed text ---"]
+    return lines
 
 
 def check(command: str, cwd: str):

@@ -217,6 +217,8 @@ if mode == "fail":
     verdict = {{"pass": False, "failures": [
         {{"rule": "prefix", "source": "code", "offending": ["Added hook"], "fix": "Start with feat:, fix: or chore:."}},
         {{"rule": "why", "source": "jev", "offending": ["Added hook"], "fix": "Say why.", "score": 0.91}}]}}
+    if "FAKE_PROPOSAL" in os.environ:
+        verdict["proposal"] = json.loads(os.environ["FAKE_PROPOSAL"])
 if mode == "down":
     print(json.dumps({{"error": "engine_unreachable", "error_description": "no engine is running; open Trinket.app"}}))
     sys.exit(3)
@@ -233,8 +235,12 @@ os.environ["FAKE_LOG"] = str(LOG)
 hook.TRINKET = str(FAKE)
 
 
-def run_hook(command: str, mode: str = "pass", cwd: Path = repo) -> str:
+def run_hook(command: str, mode: str = "pass", cwd: Path = repo, proposal: str | None = None) -> str:
     os.environ["FAKE_MODE"] = mode
+    if proposal is None:
+        os.environ.pop("FAKE_PROPOSAL", None)
+    else:
+        os.environ["FAKE_PROPOSAL"] = proposal
     stdin, stdout = sys.stdin, sys.stdout
     sys.stdin = io.StringIO(json.dumps({"tool_input": {"command": command}, "cwd": str(cwd)}))
     sys.stdout = io.StringIO()
@@ -267,6 +273,41 @@ check("the refusal quotes the offending text", 'offending: "Added hook"' in text
 check("the refusal names the run", "trinket run 7" in text, text)
 check("the refusal sends disputes to the user", "stop and ask the user" in text, text)
 check("the refusal prints no bypass", "SKIP" not in text and "=1" not in text, text)
+check("a verdict without a proposal key prints no proposal", "propos" not in text, text)
+
+out = run_hook("git commit -m 'Added hook'", "fail", proposal="null")
+check("a null proposal prints no proposal", "propos" not in reason(out), out)
+
+PROPOSED = ("feat: check commit messages before git runs them\n\n"
+            "The hook runs git.message on every commit, so a message that breaks a house rule "
+            "never lands. It denies the command and lists each fix, so the agent can retry "
+            "with a better message.\n\n```\ngit commit -m 'fix: x'\n```")
+out = run_hook("git commit -m 'Added hook'", "fail",
+               proposal=json.dumps({"text": PROPOSED, "pass": True, "failed": []}))
+text = reason(out)
+check("a proposal is marked as a suggestion", "a suggestion, not an instruction" in text, text)
+check("a passing proposal says it passes", "It passes every rule." in text, text)
+check("the proposed text prints whole and verbatim",
+      f"--- proposed text ---\n{PROPOSED}\n--- end of proposed text ---" in text, text)
+check("the proposal follows the failures and precedes the retry line",
+      text.index("Say why.") < text.index("also proposes") < text.index("Then run the command again"),
+      text)
+check("a commit proposal prints no title", "Proposed title" not in text, text)
+
+out = run_hook("gh pr create --title 'Added hook' --body-file pr.md", "fail",
+               proposal=json.dumps({"text": "## What\n\nAdds the hook.", "title": "feat: add the hook",
+                                    "pass": True, "failed": []}))
+text = reason(out)
+check("a PR refusal names the title and body", "PR title and body" in text, text)
+check("a PR proposal prints its title", "Proposed title: feat: add the hook\n" in text, text)
+check("a PR proposal prints its body",
+      "--- proposed text ---\n## What\n\nAdds the hook.\n--- end of proposed text ---" in text, text)
+
+out = run_hook("git commit -m 'Added hook'", "fail",
+               proposal=json.dumps({"text": "fix: add the hook", "pass": False, "failed": ["why", "prefix"]}))
+text = reason(out)
+check("a failing proposal names the rules it still breaks", "It still breaks: why, prefix." in text, text)
+check("a failing proposal does not claim to pass", "passes every rule" not in text, text)
 
 out = run_hook("git commit -m 'fix: x'", "down")
 check("an engine outage denies with its cause", "no engine is running" in reason(out), out)
