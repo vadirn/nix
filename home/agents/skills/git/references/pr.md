@@ -90,7 +90,7 @@ show PR URL
   Bash(gh pr create --base <base> --title "<title>" --body-file <artifact_dir>/pr.md --draft)
   Bash(rm -f <artifact_dir>/pr.md)
   ```
-  The message hook checks the title, the body file and the repo's template before `gh pr create` runs (`commit-hook.md` says how). On a refusal, apply each fix, rewrite `pr.md`, and run the command again. If you think a finding is wrong, stop and ask the user. The hook checks `gh pr create` only, so `gh pr edit --body-file` updates an existing PR unchecked.
+  The message hook checks the title, the body file and the repo's template before `gh pr create` or `gh pr edit` runs (`commit-hook.md` says how). On a refusal, apply each fix, rewrite `pr.md`, and run the command again. If you think a finding is wrong, stop and ask the user.
 - **Confirm before creating.** Show title and body. Omit confirmation when the user supplied an explicit title and body.
 
 ## Rules

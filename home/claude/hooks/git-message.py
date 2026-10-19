@@ -54,6 +54,11 @@ PR_LONG_VALUE = frozenset((
     "--assignee", "--label", "--milestone", "--project", "--repo",
     "--template", "--recover",
 ))
+PR_EDIT_LONG_VALUE = frozenset((
+    "--title", "--body", "--body-file", "--base", "--milestone", "--repo",
+    "--add-assignee", "--add-label", "--add-project", "--add-reviewer",
+    "--remove-assignee", "--remove-label", "--remove-project", "--remove-reviewer",
+))
 PR_TEMPLATES = (
     ".github/pull_request_template.md", ".github/PULL_REQUEST_TEMPLATE.md",
     "docs/pull_request_template.md", "docs/PULL_REQUEST_TEMPLATE.md",
@@ -66,6 +71,7 @@ PR_TEMPLATE_DIRS = (
 )
 
 GITHUB_REMOTE = re.compile(r"github\.com[:/]+([\w.-]+)/([\w.-]+?)(?:\.git)?/?$")
+PR_URL = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/pull/\d+")
 REPO = re.compile(r"^[\w.-]+/[\w.-]+$")
 
 ASK_USER = ("If you think a finding is wrong, stop and ask the user. "
@@ -350,14 +356,21 @@ def commit_request(simple, globals_, cwd, args, heredocs, written, staged_earlie
     }
 
 
-def pr_request(simple, args, heredocs, written):
-    values, flags, _ = parse_options(args, PR_SHORT_VALUE, frozenset(), PR_LONG_VALUE)
+def pr_request(simple, args, heredocs, written, edit=False):
+    """A create sends title and body. An edit sends the body, with the title when it changes."""
+    values, flags, selectors = parse_options(
+        args, PR_SHORT_VALUE, frozenset(), PR_EDIT_LONG_VALUE if edit else PR_LONG_VALUE)
     if "--dry-run" in flags:
         return None
     titles = values.get("-t", []) + values.get("--title", [])
     bodies = values.get("-b", []) + values.get("--body", [])
     files = values.get("-F", []) + values.get("--body-file", [])
-    if not titles or not (bodies or files):
+    if edit and not (titles or bodies or files):
+        return None
+    if edit and not (bodies or files):
+        raise Refusal("gh pr edit --title needs --body-file too, so the hook can check the "
+                      "title with the body it will sit above.")
+    if not edit and not (titles and (bodies or files)):
         raise Refusal("gh pr create needs --title and --body-file, so the hook can check "
                       "both before the PR exists.")
     if files:
@@ -365,12 +378,16 @@ def pr_request(simple, args, heredocs, written):
     else:
         body = text_of(bodies[-1], heredocs, "--body")
     repos = values.get("-R", []) + values.get("--repo", [])
-    request = {
-        "kind": "pr",
-        "title": text_of(titles[-1], heredocs, "--title"),
-        "text": body,
-        "repo": flag_repo(repos[-1]) if repos else origin_repo([], simple.cwd),
-    }
+    url = PR_URL.search(selectors[0]) if selectors else None
+    if repos:
+        repo = flag_repo(repos[-1])
+    elif url:
+        repo = url.group(1)
+    else:
+        repo = origin_repo([], simple.cwd)
+    request = {"kind": "pr", "text": body, "repo": repo}
+    if titles:
+        request["title"] = text_of(titles[-1], heredocs, "--title")
     template = pr_template([], simple.cwd)
     if template is not None:
         request["template"] = template
@@ -413,8 +430,8 @@ def requests(command: str, cwd: str) -> list[dict]:
                                          written, staged_earlier)
                 if request:
                     found.append(request)
-        elif name == "gh" and simple.args[1:2] == ["pr"] and simple.args[2:3] in (["create"], ["new"]):
-            request = pr_request(simple, simple.args[3:], heredocs, written)
+        elif name == "gh" and simple.args[1:2] == ["pr"] and simple.args[2:3] in (["create"], ["new"], ["edit"]):
+            request = pr_request(simple, simple.args[3:], heredocs, written, simple.args[2] == "edit")
             if request:
                 found.append(request)
     return found

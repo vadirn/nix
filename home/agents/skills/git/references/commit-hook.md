@@ -2,13 +2,14 @@
 
 Read when the message hook refuses a commit or a PR and its fixes do not explain why.
 
-The hook is `home/claude/hooks/git-message.py`, a PreToolUse hook on Bash. It runs on `git commit` and `gh pr create`. It checks what a message says, not where it came from. The Trinket workflow `git.message` holds the rules: code rules for form, and Jev rules for meaning in repos its **Allowed repos** setting lists.
+The hook is `home/claude/hooks/git-message.py`, a PreToolUse hook on Bash. It runs on `git commit`, `gh pr create` and `gh pr edit`. It checks what a message says, not where it came from. The Trinket workflow `git.message` holds the rules: code rules for form, and Jev rules for meaning in repos its **Allowed repos** setting lists.
 
 ## What it sends
 
 - **A commit** sends the whole message and the diff git will commit: `--cached` by default, `HEAD` for `-a`, `HEAD -- <paths>` for a pathspec, and `HEAD~1` for `--amend`. A body fails the single-line rule, because commits carry no body.
 - **A PR** sends the title, the body, and the repo's PR template, so a missing heading fails.
-- **Both** send the origin's `owner/repo`, which decides whether Jev is asked.
+- **A PR edit** sends the new body, and the new title when it changes one. A new title alone is refused, because the hook would need the current body from GitHub. An edit that changes neither, such as a label, passes unchecked.
+- **All** send the origin's `owner/repo`, which decides whether Jev is asked. A PR's `--repo` or PR URL overrides it.
 
 ## Why it refuses what it cannot read
 

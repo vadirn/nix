@@ -206,6 +206,23 @@ outside.mkdir()
 pr = requests("gh pr create -R vadirn/demo --title 'fix: t' --body-file pr.md", outside)
 check("pr outside a repo sends no template", isinstance(pr, list) and "template" not in pr[0], pr)
 
+# gh pr edit
+pr = requests("gh pr edit 3 --body-file pr.md", repo)
+check("an edit with a body alone sends no title",
+      isinstance(pr, list) and pr[0]["kind"] == "pr" and pr[0]["text"] == "## What\n\nBody.\n"
+      and "title" not in pr[0], pr)
+pr = requests("gh pr edit --title 'fix: t' --body-file pr.md", repo)
+check("an edit with title and body sends both",
+      isinstance(pr, list) and pr[0]["title"] == "fix: t" and pr[0]["text"] == "## What\n\nBody.\n", pr)
+assert_none("an edit without title or body", "gh pr edit 3 --add-label bug --remove-milestone", repo)
+assert_refused("an edit with a title alone", "gh pr edit 3 --title 'fix: t'", repo,
+               "--title needs --body-file")
+pr = requests("gh pr edit 5 -R someone/else -F pr.md", repo)
+check("an edit's --repo names the repo", isinstance(pr, list) and pr[0]["repo"] == "someone/else", pr)
+pr = requests("gh pr edit --add-reviewer x https://github.com/someone/else/pull/5 -b y", repo)
+check("an edit's PR URL names the repo, past a valued flag",
+      isinstance(pr, list) and pr[0]["repo"] == "someone/else", pr)
+
 # the hook end to end, with a fake trinket
 FAKE = TMP / "trinket"
 FAKE.write_text(f"""#!{sys.executable}
@@ -302,6 +319,9 @@ check("a PR refusal names the title and body", "PR title and body" in text, text
 check("a PR proposal prints its title", "Proposed title: feat: add the hook\n" in text, text)
 check("a PR proposal prints its body",
       "--- proposed text ---\n## What\n\nAdds the hook.\n--- end of proposed text ---" in text, text)
+
+out = run_hook("gh pr edit 3 --body-file pr.md", "fail")
+check("a failed edit denies", "PR title and body" in reason(out), out)
 
 out = run_hook("git commit -m 'Added hook'", "fail",
                proposal=json.dumps({"text": "fix: add the hook", "pass": False, "failed": ["why", "prefix"]}))
