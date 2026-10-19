@@ -7,7 +7,7 @@ The hook is `home/claude/hooks/git-message.py`, a PreToolUse hook on Bash. It ru
 ## What it sends
 
 - **A commit** sends the whole message and the diff git will commit: `--cached` by default, `HEAD` for `-a`, `HEAD -- <paths>` for a pathspec, and `HEAD~1` for `--amend`. A body fails the single-line rule, because commits carry no body.
-- **A PR** sends the title, the body, and the repo's PR template, so a missing heading fails.
+- **A PR** sends the title, the body, and the repo's PR template, so a missing heading fails. The template comes from the local checkout, so a PR in another repo goes without one.
 - **A PR edit** sends the new body, and the new title when it changes one. A new title alone is refused, because the hook would need the current body from GitHub. An edit that changes neither, such as a label, passes unchecked.
 - **All** send the origin's `owner/repo`, which decides whether Jev is asked. A PR's `--repo` or PR URL overrides it.
 

@@ -379,16 +379,19 @@ def pr_request(simple, args, heredocs, written, edit=False):
         body = text_of(bodies[-1], heredocs, "--body")
     repos = values.get("-R", []) + values.get("--repo", [])
     url = PR_URL.search(selectors[0]) if selectors else None
+    origin = origin_repo([], simple.cwd)
     if repos:
         repo = flag_repo(repos[-1])
     elif url:
         repo = url.group(1)
     else:
-        repo = origin_repo([], simple.cwd)
+        repo = origin
     request = {"kind": "pr", "text": body, "repo": repo}
     if titles:
         request["title"] = text_of(titles[-1], heredocs, "--title")
-    template = pr_template([], simple.cwd)
+    # The checkout's template belongs to its origin, not to a PR in another repo.
+    same_repo = (repo or "").lower() == (origin or "").lower()
+    template = pr_template([], simple.cwd) if same_repo else None
     if template is not None:
         request["template"] = template
     return request

@@ -191,6 +191,13 @@ check("pr sends kind, title, body, template and repo",
                                          "repo": "vadirn/demo", "template": "## What\n"}, pr)
 pr = requests("gh pr create -t 'fix: t' -F pr.md -R someone/else", repo)
 check("pr short flags and --repo", isinstance(pr, list) and pr[0]["repo"] == "someone/else", pr)
+check("a --repo other than origin sends no template", isinstance(pr, list) and "template" not in pr[0], pr)
+pr = requests("gh pr create -t 'fix: t' -F pr.md -R VADIRN/demo", repo)
+check("a --repo naming origin sends its template",
+      isinstance(pr, list) and pr[0].get("template") == "## What\n", pr)
+pr = requests("gh pr edit https://github.com/someone/else/pull/5 -F pr.md", repo)
+check("an edit's PR URL in another repo sends no template",
+      isinstance(pr, list) and "template" not in pr[0], pr)
 pr = requests("gh pr create --title 'fix: t' --body \"$(cat <<'EOF'\n## What\n\nInline.\nEOF\n)\"",
               repo)
 check("pr body from a heredoc", isinstance(pr, list) and pr[0]["text"] == "## What\n\nInline.", pr)
