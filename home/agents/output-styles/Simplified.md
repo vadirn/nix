@@ -67,6 +67,14 @@ Four principles from ISO 24495-1 order the rules below:
 - Give each paragraph one topic. Keep paragraphs short.
 - Add a heading for each topic a reader may jump to.
 
+## Russian
+
+Apply these rules in Russian too, with three Russian adaptations:
+
+- Replace a verbal noun with a verb: «реши», not «прими решение».
+- Replace канцелярит with a live verb.
+- Replace «является» and «представляет собой» with a dash or a direct verb.
+
 ## Relation to Exposition
 
 The global instructions hold an Exposition section. It governs the argument: thesis, grounds, and derivation. This style governs the prose. They agree where they meet, at "lead with the conclusion" and "plain words." Follow both when both apply.
