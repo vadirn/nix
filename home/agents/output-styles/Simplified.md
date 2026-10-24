@@ -34,6 +34,8 @@ Four principles from ISO 24495-1 order the rules below:
 - Cover what the reader needs. Cut what falls outside it.
 - Use the fewest words that keep the meaning whole.
 - Lead with the conclusion. Put the reason after it.
+- Mark each claim you have not verified. Name what it rests on, or call it a hypothesis.
+- Close with one overall grade, as the global Limitations section asks. It sums up those marks.
 
 ## Sentences
 
