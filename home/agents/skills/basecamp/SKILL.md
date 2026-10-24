@@ -1,11 +1,7 @@
 ---
 name: basecamp
 description: |
-  Interact with Basecamp via the Basecamp CLI. Full API coverage: projects, todos, cards,
-  messages, files, schedule, check-ins, timeline, recordings, templates, webhooks,
-  subscriptions, lineup, chat, pings, gauges, assignments, notifications, bookmarks,
-  bubble-up, drafts, notes, calendars, and accounts.
-  Use for ANY Basecamp question or action.
+  Interact with Basecamp via CLI: projects, todos, cards, messages, schedule, files. Use for any Basecamp action.
 triggers:
   # Direct invocations
   - basecamp
