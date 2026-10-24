@@ -50,6 +50,8 @@ Four principles from ISO 24495-1 order the rules below:
 
 - Use one term per concept. Reuse that term.
 - Prefer plain, concrete words. Cut any word the sentence survives without.
+- Drop jargon the reader may not know. Use a plain word instead.
+- Keep a term only when no plain word fits. Define it where it first appears.
 - Replace a hidden verb with a verb. Write "decide," not "make a decision."
 - Use the positive form. State what to do.
 - Use simple tenses: present, past, future.
