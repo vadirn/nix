@@ -27,6 +27,7 @@ GIT_RULES = [
      "Blocked: git branch -c also copies the branch's .git/config section. The sandbox denies "
      "that write, so -c exits 128 after the copy is already created. "
      "Run `git branch <new> <old>` instead."),
+    ("merge",  None,                                    "Blocked: rebase instead of merge. Run `git rebase <base>`."),
     # config is handled specially in check() — not here
 ]
 
