@@ -127,7 +127,12 @@ def deny(reason: str):
 
 
 def get_git_invocations(tokens: list[str]) -> list[tuple[str, list[str]]]:
-    """Extract (subcommand, remaining_args) for each `git` invocation."""
+    """Extract (subcommand, args) for each `git` invocation.
+
+    Args stop at a separator or at the next `git`, so `git branch x && git
+    switch -c y` does not read -c as a branch flag. shlex drops newlines, so
+    the `git` stop is what splits a multi-line command.
+    """
     results = []
     i = 0
     while i < len(tokens):
@@ -139,7 +144,10 @@ def get_git_invocations(tokens: list[str]) -> list[tuple[str, list[str]]]:
                 else:
                     j += 1
             if j < len(tokens):
-                results.append((tokens[j], tokens[j + 1:]))
+                k = j + 1
+                while k < len(tokens) and tokens[k] not in SEPARATORS and tokens[k] != "git":
+                    k += 1
+                results.append((tokens[j], tokens[j + 1:k]))
             i = j + 1
         else:
             i += 1

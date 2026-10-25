@@ -85,6 +85,15 @@ assert_deny("git branch --copy", "git branch --copy old new")
 assert_allow("git -c flag before branch", "git -c color.ui=never branch --list")
 assert_allow("git branch --contains", "git branch --contains HEAD")
 
+# a git invocation's args stop at a separator or the next git
+assert_allow("branch then switch -c", "git branch keep && git switch -c feature")
+assert_allow("branch then commit -m", "git branch --show-current && git commit -m 'chore: x'")
+assert_allow("branch then commit -m on a new line", "git branch --show-current\ngit commit -m 'chore: x'")
+assert_deny("rename after another command", "git status && git branch -m new")
+assert_deny("rename on a later line", "git status\ngit branch -m new")
+assert_deny("push after branch", "git branch && git push")
+assert_deny("config write before a read", "git config user.name x && git config --get y")
+
 # git merge (rebase only)
 assert_deny("git merge", "git merge main")
 assert_deny("git merge --no-ff", "git merge --no-ff feature")
