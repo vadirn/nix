@@ -172,6 +172,30 @@
         git for-each-ref --format='%(refname:short) %(upstream:track) %(worktreepath)' refs/heads \
           | awk '$2 == "[gone]" && $3 == "" { print $1 }' \
           | xargs -I B git branch -D "B"
+        echo '--- deleting local branches already on the default branch ---'
+        # Leftovers of a copied or renamed branch: no upstream, no worktree, and
+        # merging them into origin's default branch leaves its tree unchanged.
+        # The tree check also catches squash-merged commits, which ancestry misses.
+        local base default b
+        if base=$(git rev-parse -q --verify refs/remotes/origin/HEAD); then
+          default=$(git symbolic-ref --short refs/remotes/origin/HEAD)
+          git for-each-ref --format='%(refname:short) %(upstream) %(worktreepath)' refs/heads \
+            | awk -v d="$default" 'NF == 1 && ("origin/" $1) != d { print $1 }' \
+            | while read -r b; do
+                [[ $(git merge-tree --write-tree "$base" "refs/heads/$b" 2>/dev/null) == $(git rev-parse "$base^{tree}") ]] \
+                  && git branch -D "$b"
+              done
+        else
+          echo 'skipped: origin/HEAD is not set. Run `git remote set-head origin -a`.'
+        fi
+        echo '--- removing config sections of deleted branches ---'
+        # A sandboxed rename or delete can leave its [branch "x"] section behind.
+        git config --local --name-only --get-regexp '^branch\.' \
+          | sed -nE 's/^branch\.(.+)\.[^.]+$/\1/p' | sort -u \
+          | while read -r b; do
+              git show-ref -q --verify "refs/heads/$b" \
+                || { git config --local --remove-section "branch.$b" && echo "Removed config section branch.$b"; }
+            done
         echo '--- garbage-collecting rerere cache ---'
         git rerere gc
       }
