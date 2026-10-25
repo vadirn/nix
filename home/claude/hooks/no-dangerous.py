@@ -17,6 +17,16 @@ GIT_RULES = [
     ("push",   None,                                    "Blocked: git push must be done manually."),
     ("reset",  ("--hard",),                             "Blocked: git reset --hard discards uncommitted changes."),
     ("branch", ("-D",),                                 "Blocked: git branch -D force-deletes without merge check."),
+    ("branch", ("-m", "-M", "--move"),
+     "Blocked: git branch -m also rewrites .git/config. The sandbox denies that write, "
+     "so -m exits 128 after the ref is already renamed. Rename in two steps: "
+     "`git switch -c <new>` (or `git branch <new> <old>` when <old> is not checked out), "
+     "then `git branch -d <old>`. Under the sandbox, -d prints \"could not lock config file\" "
+     "but still deletes the branch and exits 0."),
+    ("branch", ("-c", "-C", "--copy"),
+     "Blocked: git branch -c also copies the branch's .git/config section. The sandbox denies "
+     "that write, so -c exits 128 after the copy is already created. "
+     "Run `git branch <new> <old>` instead."),
     # config is handled specially in check() — not here
 ]
 
