@@ -117,6 +117,8 @@ Push is manual. The user runs `git push` themselves, usually via lazygit, and a 
 
 Use the Firecrawl connector, which returns markdown. Call `firecrawl_search` for a query, and add `categories: ["developer"]` for a programming question. Call `firecrawl_scrape` for a known URL, and request the `links` format to list its subpages.
 
+Reach a registry fact through an Alexandria provider. Registry facts include repository stars and releases, package versions, paper metadata, company firmographics, and Claude Code docs. Find the provider with `firecrawl_find_tools`, which is free, then run it with `firecrawl_scrape` and an `alexandria` body. Read the price in the contract before the call. Search papers with the free `firecrawl_research_*` tools first. Keep troubleshooting, local shops, and prose guidance on `firecrawl_search`.
+
 A PreToolUse hook denies WebSearch and WebFetch, although the harness lists them. Convert a local PDF or DOCX with `/markitdown`. Download a file with `curl -L -o "$TMPDIR/<name>" <url>`.
 
 ## Plans
