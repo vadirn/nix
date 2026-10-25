@@ -32,12 +32,23 @@
       ];
     };
 
+    # Lands in ~/.zprofile. A login shell reads it and skips .zshrc, so an app
+    # launched from Finder that runs `zsh -lc` still finds Homebrew's tools.
+    # The OrbStack and Obsidian lines come over from the unmanaged .zprofile.
+    profileExtra = ''
+      # Added by OrbStack: command-line tools and integration
+      source ~/.orbstack/shell/init.zsh 2>/dev/null || :
+
+      # Added by Obsidian
+      export PATH="$PATH:/Applications/Obsidian.app/Contents/MacOS"
+
+      eval $(brew shellenv)
+    '';
+
     initContent = ''
       ssh-add --apple-use-keychain ~/.ssh/github 2> /dev/null
       ssh-add --apple-use-keychain ~/.ssh/bitbucket 2> /dev/null
       ssh-add --apple-use-keychain ~/.ssh/vultr 2> /dev/null
-
-      eval $(brew shellenv)
 
       if [ -z "$CLAUDECODE" ]; then
         eval "$(zoxide init --cmd cd zsh)"

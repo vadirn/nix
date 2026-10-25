@@ -122,6 +122,9 @@
   nix-homebrew = {
     enable = true;
     enableRosetta = false;
+    # Its zsh integration runs brew shellenv in /etc/zshrc, which login shells
+    # skip. home/zsh.nix runs it in ~/.zprofile instead, so one copy remains.
+    enableZshIntegration = false;
     user = "vadim";
     mutableTaps = false;
     taps = {
