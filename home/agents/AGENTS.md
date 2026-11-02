@@ -101,6 +101,10 @@ Use these through the Bash tool. Prefer them to manual code reading or web searc
 
 For any refactor that touches more than 20 files, write a codemod first. The doctrine (decision rule, tool choice, procedure, anti-patterns) lives in the vault note `Codemod` — `vault-query get "Codemod"`, then read it.
 
+## Generalization
+
+Before adding a shared form (a helper, seam, registry or interface), or declining one, state N: the real cases it serves. Name the case that would test it. The admit, stop and exit tests live in the vault note `Generalization` — `vault-query get "Generalization"`, then read it.
+
 ## Commits
 
 Use the `git` skill: `/git commit` to commit, `/git branch` to cut a branch, `/git pr` to open a pull request. All three name their work with the same `feat | fix | chore` contract test, which the skill defines once.
