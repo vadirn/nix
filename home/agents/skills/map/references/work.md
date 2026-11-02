@@ -53,6 +53,8 @@ do("graduate fog ONE patch at a time: promote_seed(seed, 'question') for any see
 do("re-read reversibility over each graduated question: a high-blast question on a dependency-ordered goal
     flips it to risk, so raise it, because the goal now needs a Frame")
 do("a question revealed past the destination: drop_item(question, reason). Do not resolve it on the route")
+do("a decision that widens scope past the destination: never edit the destination. Route the extra
+    scope per Planning.md thesis discipline: restate, spin off, or backlog")
 
 // 8. Stop: write the bookmark
 add_note(goal, "observation", do("what resolved, the frontier now, what is blocked and on which work,
