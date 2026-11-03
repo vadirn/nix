@@ -15,6 +15,20 @@
 import { join } from "path";
 import { PeleError, render } from "pele";
 
+// Chart series follow the host's categorical palette in its fixed order. The
+// hex fallbacks are its light values, used where the host sets no --series-N;
+// without them pele falls back to its own palette, the same in both modes.
+const SERIES = [
+  "#2a78d6",
+  "#eb6834",
+  "#1baf7a",
+  "#eda100",
+  "#e87ba4",
+  "#008300",
+  "#6250d6",
+  "#e34948",
+];
+
 // --pele-bg masks edges behind edge labels, so it has to be the solid page colour.
 const THEME = [
   "--pele-bg:var(--surface-0)",
@@ -27,6 +41,7 @@ const THEME = [
   "--pele-accent:var(--text-accent)",
   "--pele-font:var(--font-sans)",
   "--pele-font-mono:var(--font-mono)",
+  ...SERIES.map((hex, i) => `--pele-series-${i + 1}:var(--series-${i + 1},${hex})`),
 ].join(";");
 
 // 680 is the widget width; it also keeps LR flowcharts above pele's 640px

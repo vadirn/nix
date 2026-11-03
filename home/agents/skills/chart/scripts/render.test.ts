@@ -21,6 +21,14 @@ describe("toWidget", () => {
     expect(html).not.toContain("<foreignObject");
   });
 
+  it("maps every chart series onto the host palette", () => {
+    const html = toWidget('pie\n  accTitle: Demo\n  "A" : 1\n  "B" : 2');
+    for (let n = 1; n <= 8; n++) {
+      expect(html).toMatch(new RegExp(`--pele-series-${n}:var\\(--series-${n},#[0-9a-f]{6}\\)`));
+    }
+    expect(html).toContain("var(--pele-series-1,");
+  });
+
   it("puts a wide diagram in a zoomable viewport", () => {
     const html = toWidget(WIDE);
     expect(html).toStartWith('<div style="');

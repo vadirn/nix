@@ -48,6 +48,8 @@ xychart-beta
   line [35, 55, 70]
 ```
 
+Series take the host's categorical palette in source order: the first `bar` or `line` (or pie slice) gets series 1, the next series 2. Past eight series the colours repeat, so fold the rest into "Other".
+
 ## Wide diagrams
 
 A diagram too wide to stay legible at the widget's width goes into a zoomable viewport instead of shrinking; a narrower one keeps the plain centred output. The viewport opens at 1:1 against the left edge, where a left-to-right flow starts.
