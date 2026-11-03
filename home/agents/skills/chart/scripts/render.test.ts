@@ -100,10 +100,10 @@ describe("toHtml", () => {
     );
   });
 
-  it("paints the opening view before the script runs: 1:1, left edge, centred vertically", () => {
+  it("paints the opening view before the script runs: 1:1, top-left corner", () => {
     const html = toHtml({ svg, width: 2000, height: 1500 }, "mmd-x");
     expect(html).toContain(`#mmd-x>svg{position:absolute;left:0;top:0;max-width:none!important`);
-    expect(html).toContain(`transform:translate(0px,${(VIEW_MAX_HEIGHT - 1500) / 2}px)`);
+    expect(html).not.toContain("transform:translate");
   });
 });
 

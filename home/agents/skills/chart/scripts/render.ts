@@ -127,11 +127,10 @@ export function toHtml({ svg, width, height }: Rendered, id: string): string {
     return `<div style="display:flex;justify-content:center;padding:1rem 0;${THEME}"><style>${ROLE_CSS}</style>${svg}</div>`;
   }
   const viewHeight = Math.min(Math.ceil(height), VIEW_MAX_HEIGHT);
-  // Until the script runs, the SVG sits at 1:1 against the left edge, centred
-  // vertically: the same view the script opens with.
-  const top = (viewHeight - height) / 2;
+  // Until the script runs, the SVG sits at 1:1 against the top-left corner:
+  // the same view the script opens with.
   const style = [
-    `#${id}>svg{position:absolute;left:0;top:0;max-width:none!important;transform-origin:0 0;transform:translate(0px,${top}px)}`,
+    `#${id}>svg{position:absolute;left:0;top:0;max-width:none!important;transform-origin:0 0}`,
     `#${id}-tools button{background:transparent!important;cursor:pointer}`,
     `#${id}-tools button:hover{background:var(--surface-1)!important}`,
     ROLE_CSS,

@@ -44,12 +44,12 @@ function mermaidViewport(id) {
     apply();
   }
 
-  // Centre the diagram at scale s; `left` pins its left edge instead, where a
-  // left-to-right flow starts.
-  function show(s, left) {
+  // Centre the diagram at scale s; `corner` pins its top-left corner instead,
+  // where a top-down or left-to-right flow starts.
+  function show(s, corner) {
     scale = s;
-    x = left ? 0 : (view.clientWidth - width * s) / 2;
-    y = (view.clientHeight - height * s) / 2;
+    x = corner ? 0 : (view.clientWidth - width * s) / 2;
+    y = corner ? 0 : (view.clientHeight - height * s) / 2;
     apply();
   }
 
