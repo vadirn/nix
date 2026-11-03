@@ -39,6 +39,10 @@ const FONT_SIZE = 14;
 export const ZOOM_MIN_WIDTH = (WIDGET_WIDTH * FONT_SIZE) / 11;
 export const VIEW_MAX_HEIGHT = 480;
 
+// pele ships enableZoom, which bundles inline too. It is not used: its fit
+// reads the width only, its reset is fit, it exposes no pan for choosing the
+// opening view, and its controls draw their own SVG icons where the widget
+// wants Tabler.
 const VIEWPORT_JS = new Bun.Transpiler({ loader: "js", minifyWhitespace: true })
   .transformSync(await Bun.file(join(import.meta.dir, "viewport.js")).text())
   .trim();
@@ -72,7 +76,8 @@ const button = (act: string, label: string, icon: string) =>
   `<button type="button" data-act="${act}" aria-label="${label}" title="${label}" style="${BUTTON_STYLE}"><i class="ti ${icon}" aria-hidden="true"></i></button>`;
 
 // A compact toolbar in the viewport's bottom-right corner: zoom out, the scale
-// readout, zoom in, then fit and actual size.
+// readout, zoom in, then fit and actual size. Its Tabler icons need no loading:
+// show_widget preloads the webfont.
 const TOOLBAR = [
   button("out", "Zoom out", "ti-minus"),
   `<output aria-label="Zoom" style="min-width:40px;text-align:center;font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums">100%</output>`,
