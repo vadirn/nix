@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Render Mermaid from stdin into a `show_widget` fragment.
+ * Render a Mermaid diagram or chart from stdin into a `show_widget` fragment.
  *
  * Run:
  *   bun render.ts < diagram.mmd

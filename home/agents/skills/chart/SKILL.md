@@ -1,19 +1,23 @@
 ---
-name: mermaid
+name: chart
 description: >
-  Render a Mermaid diagram inline in the Claude desktop app: Pele turns the Mermaid
-  source into themed SVG locally, from a version pinned in bun.lock, and the SVG goes
-  out through `show_widget`. Use whenever a reply would carry a Mermaid diagram —
-  flowchart, sequence, class, state, ER, Gantt, mindmap and the other Mermaid types —
-  and the `show_widget` tool is available. Triggers: /mermaid, "draw a flowchart",
-  "sequence diagram", "ERD", "mermaid diagram", "diagram this flow". Skip for
-  illustrative or interactive diagrams that hand-drawn SVG serves better, and in a
-  terminal session without `show_widget` (leave a ```mermaid fence there).
+  Render a diagram or a static chart inline in the Claude desktop app: Pele turns
+  Mermaid source into themed SVG locally, from a version pinned in bun.lock, and the
+  SVG goes out through `show_widget`. Use whenever a reply would carry a picture that
+  Mermaid syntax can express and the `show_widget` tool is available: flowchart,
+  sequence, class, state, ER, Gantt, mindmap, timeline and the other Mermaid
+  diagrams, and the charts — xychart (bar and line), pie, quadrant, sankey, radar,
+  treemap, venn. Triggers: /chart, "draw a flowchart", "sequence diagram", "ERD",
+  "mermaid diagram", "diagram this flow", "bar chart", "line chart", "pie chart",
+  "sankey", "quadrant chart". Skip for charts that need hover, tooltips or other
+  interaction (Chart.js through the `show_widget` chart guide), for illustrative
+  diagrams that hand-drawn SVG serves better, and in a terminal session without
+  `show_widget` (leave a ```mermaid fence there).
 ---
 
-# mermaid
+# chart
 
-Renders Mermaid through the pinned `pele` package and embeds the SVG in a `show_widget` call.
+Renders Mermaid diagrams and charts through the pinned `pele` package and embeds the SVG in a `show_widget` call.
 
 ## Procedure
 
@@ -21,7 +25,7 @@ Renders Mermaid through the pinned `pele` package and embeds the SVG in a `show_
 2. Render it:
 
    ```bash
-   bun ~/.claude/skills/mermaid/scripts/render.ts <<'EOF'
+   bun ~/.claude/skills/chart/scripts/render.ts <<'EOF'
    flowchart LR
      accTitle: Request lifecycle
      A[Client] --> B[API] --> C[(Database)]
@@ -30,6 +34,19 @@ Renders Mermaid through the pinned `pele` package and embeds the SVG in a `show_
 
 3. On exit 1, stderr names the error and, where known, the line and column. Fix the source and rerun.
 4. Pass stdout verbatim as `widget_code` to `show_widget`. Write the explanation in the reply, outside the tool call.
+
+## Charts
+
+A chart takes the same procedure; its keyword picks the type: `xychart-beta`, `pie`, `quadrantChart`, `sankey-beta`, `radar-beta`, `treemap-beta`, `venn-beta`.
+
+```mermaid
+xychart-beta
+  accTitle: Builds per month
+  x-axis [Jan, Feb, Mar]
+  y-axis "Builds" 0 --> 100
+  bar [40, 62, 75]
+  line [35, 55, 70]
+```
 
 ## Wide diagrams
 

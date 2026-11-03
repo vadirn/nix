@@ -8,7 +8,7 @@
     "imagen-fal/scripts",
     "vidgen-fal/scripts",
     "imagen-nanobanana/scripts",
-    "mermaid/scripts"
+    "chart/scripts"
   ],
   "scripts": {
     "check:bun": "bun run scripts/check-bun-version.ts",
