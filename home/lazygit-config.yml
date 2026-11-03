@@ -5,7 +5,7 @@ gui:
     selectedLineBgColor:
       - "#585b70"
 git:
-  pagers:
-    - pager: delta --features=catppuccin-mocha --paging=never
+  diffRenderers:
+    - command: delta --features=catppuccin-mocha --paging=never
 os:
   editPreset: micro
