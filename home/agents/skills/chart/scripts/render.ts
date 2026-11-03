@@ -160,7 +160,9 @@ if (import.meta.main) {
     console.log(toWidget(await Bun.stdin.text()));
   } catch (error) {
     if (!(error instanceof PeleError)) throw error;
-    console.error(error.snippet ? `${error.message}\n${error.snippet}` : error.message);
+    // A syntax message already quotes the snippet; other errors may not.
+    const quoted = !error.snippet || error.message.includes(error.snippet);
+    console.error(quoted ? error.message : `${error.message}\n${error.snippet}`);
     process.exit(1);
   }
 }

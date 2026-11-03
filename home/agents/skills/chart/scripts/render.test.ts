@@ -112,6 +112,9 @@ describe("cli", () => {
     const run = Bun.spawnSync(["bun", SCRIPT], { stdin: Buffer.from("flowchart LR\n  A -->") });
     expect(run.exitCode).toBe(1);
     expect(run.stdout.toString()).toBe("");
-    expect(run.stderr.toString().length).toBeGreaterThan(0);
+    const stderr = run.stderr.toString();
+    expect(stderr).toContain("Parse error on line 2");
+    // Pele's syntax message already carries the source line and its caret.
+    expect(stderr.split("  A -->").length - 1).toBe(1);
   });
 });
