@@ -1,0 +1,13 @@
+{
+  "name": "mermaid-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "bun test",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pele": "1.12.0"
+  }
+}

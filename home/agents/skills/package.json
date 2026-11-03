@@ -7,7 +7,8 @@
     "textkit",
     "imagen-fal/scripts",
     "vidgen-fal/scripts",
-    "imagen-nanobanana/scripts"
+    "imagen-nanobanana/scripts",
+    "mermaid/scripts"
   ],
   "scripts": {
     "check:bun": "bun run scripts/check-bun-version.ts",
