@@ -44,6 +44,19 @@ const THEME = [
   ...SERIES.map((hex, i) => `--pele-series-${i + 1}:var(--series-${i + 1},${hex})`),
 ].join(";");
 
+// Pele rejects var() in classDef and style, which leaves hex, and hex breaks
+// dark mode. So a node takes a role by class name instead (`class A success`,
+// no classDef): pele copies the name onto the node's group, and these rules
+// paint it with the host's role tokens. A classDef or style on the node still
+// wins, being inline. Fill skips fill="none" parts such as a cylinder's rim.
+const ROLES = ["accent", "success", "warning", "danger"];
+const ROLE_CSS = ROLES.map(
+  (role) =>
+    `.pele .${role}>:not(text){stroke:var(--border-${role})}` +
+    `.pele .${role}>:not(text):not([fill=none]){fill:var(--bg-${role})}` +
+    `.pele .${role}>text{fill:var(--text-${role})}`,
+).join("");
+
 // 680 is the widget width; it also keeps LR flowcharts above pele's 640px
 // autoDirection breakpoint. 14px matches the widget's diagram label size.
 const WIDGET_WIDTH = 680;
@@ -111,7 +124,7 @@ export interface Rendered {
 /** Wrap pele's SVG: plain when it stays legible at the widget width, else in a viewport. */
 export function toHtml({ svg, width, height }: Rendered, id: string): string {
   if (width <= ZOOM_MIN_WIDTH) {
-    return `<div style="display:flex;justify-content:center;padding:1rem 0;${THEME}">${svg}</div>`;
+    return `<div style="display:flex;justify-content:center;padding:1rem 0;${THEME}"><style>${ROLE_CSS}</style>${svg}</div>`;
   }
   const viewHeight = Math.min(Math.ceil(height), VIEW_MAX_HEIGHT);
   // Until the script runs, the SVG sits at 1:1 against the left edge, centred
@@ -121,6 +134,7 @@ export function toHtml({ svg, width, height }: Rendered, id: string): string {
     `#${id}>svg{position:absolute;left:0;top:0;max-width:none!important;transform-origin:0 0;transform:translate(0px,${top}px)}`,
     `#${id}-tools button{background:transparent!important;cursor:pointer}`,
     `#${id}-tools button:hover{background:var(--surface-1)!important}`,
+    ROLE_CSS,
   ].join("");
   return [
     `<div style="padding:1rem 0;${THEME}">`,

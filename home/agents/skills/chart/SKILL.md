@@ -50,6 +50,16 @@ xychart-beta
 
 Series take the host's categorical palette in source order: the first `bar` or `line` (or pie slice) gets series 1, the next series 2. Past eight series the colours repeat, so fold the rest into "Other".
 
+## Colouring nodes by meaning
+
+Give a node or subgraph one of four role classes, `accent`, `success`, `warning` or `danger`, with `class A,B success` or `A:::success`. It needs no `classDef`: `render.ts` paints the role with the widget's `--bg-*`, `--border-*` and `--text-*` tokens, so it follows light and dark mode. Pele rejects `var()` inside `classDef` and `style`, so a role class is the only themed colour a source can set.
+
+```mermaid
+flowchart LR
+  accTitle: Ticket states
+  A[Closed]:::success --> B[Waiting]:::warning --> C[Open]:::accent
+```
+
 ## Wide diagrams
 
 A diagram too wide to stay legible at the widget's width goes into a zoomable viewport instead of shrinking; a narrower one keeps the plain centred output. The viewport opens at 1:1 against the left edge, where a left-to-right flow starts.

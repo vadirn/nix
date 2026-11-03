@@ -29,6 +29,17 @@ describe("toWidget", () => {
     expect(html).toContain("var(--pele-series-1,");
   });
 
+  it("paints role classes with the host's role tokens", () => {
+    const html = toWidget("flowchart LR\n  accTitle: Demo\n  A:::success --> B\n  class B warning");
+    expect(html).toMatch(/<g class="pele-node [^"]* success" data-id="A"/);
+    expect(html).toMatch(/<g class="pele-node [^"]* warning" data-id="B"/);
+    for (const role of ["accent", "success", "warning", "danger"]) {
+      expect(html).toContain(`.pele .${role}>:not(text):not([fill=none]){fill:var(--bg-${role})}`);
+      expect(html).toContain(`.pele .${role}>text{fill:var(--text-${role})}`);
+    }
+    expect(toWidget(WIDE)).toContain(".pele .success>text{");
+  });
+
   it("puts a wide diagram in a zoomable viewport", () => {
     const html = toWidget(WIDE);
     expect(html).toStartWith('<div style="');
