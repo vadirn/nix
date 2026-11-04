@@ -2,17 +2,17 @@
 name: chart
 description: >
   Render a diagram or a static chart inline in the Claude desktop app: Pele turns
-  Mermaid source into themed SVG locally, from a version pinned in bun.lock, and the
-  SVG goes out through `show_widget`. Use whenever a reply would carry a picture that
-  Mermaid syntax can express and the `show_widget` tool is available: flowchart,
-  sequence, class, state, ER, Gantt, mindmap, timeline and the other Mermaid
-  diagrams, and the charts — xychart (bar and line), pie, quadrant, sankey, radar,
-  treemap, venn. Triggers: /chart, "draw a flowchart", "sequence diagram", "ERD",
-  "mermaid diagram", "diagram this flow", "bar chart", "line chart", "pie chart",
-  "sankey", "quadrant chart". Skip for charts that need hover, tooltips or other
-  interaction (Chart.js through the `show_widget` chart guide), for illustrative
-  diagrams that hand-drawn SVG serves better, and in a terminal session without
-  `show_widget` (leave a ```mermaid fence there).
+  Mermaid source into themed SVG locally, and the SVG goes out through
+  `show_widget`. Use whenever a reply would carry a picture that Mermaid syntax can
+  express and the `show_widget` tool is available: flowchart, sequence, class,
+  state, ER, C4, architecture, Gantt, timeline, mindmap, swimlane, Wardley map,
+  fishbone and the other Mermaid diagrams, and the charts — xychart (bar and line),
+  pie, quadrant, sankey, radar, treemap, venn. Triggers: /chart, and any request
+  to draw, diagram, chart or plot a flow, structure, schedule or set of numbers.
+  Skip for charts that need hover, tooltips or other interaction (Chart.js through
+  the `show_widget` chart guide), for illustrative diagrams that hand-drawn SVG
+  serves better, and in a terminal session without `show_widget` (leave a
+  ```mermaid fence there).
 ---
 
 # chart
@@ -35,9 +35,48 @@ Renders Mermaid diagrams and charts through the pinned `pele` package and embeds
 3. On exit 1, stderr names the error and, where known, the line and column. Fix the source and rerun.
 4. Pass stdout verbatim as `widget_code` to `show_widget`. Write the explanation in the reply, outside the tool call.
 
+## Picking the type
+
+The first line names the type, so pick it by what the picture has to show. Pele renders every type Mermaid 12.1 registers. Its [gallery](https://pele.run/examples) holds a working source for each, a good start when the syntax is unfamiliar.
+
+| To show                                                        | First line |
+| -------------------------------------------------------------- | ---------- |
+| A trend over time, or values across categories                 | `xychart-beta` (`line`, `bar`) |
+| Shares of one whole                                            | `pie` |
+| Shares nested in groups                                        | `treemap-beta` |
+| Quantities flowing between stages                              | `sankey-beta` |
+| Several measures per item, side by side                        | `radar-beta` |
+| Items on two axes, such as effort against impact               | `quadrantChart` |
+| Overlap between sets                                           | `venn-beta` |
+| Steps, branches and loops                                      | `flowchart` |
+| One process across roles or teams                              | `swimlane-beta` |
+| An agent or pipeline's stages, in collapsible groups           | `agentflow-beta` |
+| Messages between parties, in order                             | `sequenceDiagram` |
+| States and the transitions between them                        | `stateDiagram-v2` |
+| Commands, events and read models of an event-sourced system    | `eventmodeling` |
+| A user's steps, each with a satisfaction score                 | `journey` |
+| Actors and the use cases they reach                            | `usecase-beta` |
+| Tables and their relations                                     | `erDiagram` |
+| Types, their members and inheritance                           | `classDiagram` |
+| Services, databases and the links between them                 | `architecture-beta` |
+| A system at one C4 level                                       | `C4Context`, `C4Container`, `C4Component`, `C4Dynamic`, `C4Deployment` |
+| Boxes on an explicit grid                                      | `block` |
+| Requirements and what satisfies or verifies them               | `requirementDiagram` |
+| Ideas branching from one centre                                | `mindmap` |
+| A file tree                                                    | `treeView-beta` |
+| The bit layout of a packet or header                           | `packet` |
+| A grammar                                                      | `railroad-ebnf-beta`, or `railroad-beta` for its own notation |
+| Tasks with dates, durations and dependencies                   | `gantt` |
+| Dated events without durations                                 | `timeline` |
+| Branches, commits and merges                                   | `gitGraph` |
+| Work items by status                                           | `kanban` |
+| Causes of one effect, by category (fishbone)                   | `ishikawa-beta` |
+| A value chain by visibility and evolution                      | `wardley-beta` |
+| Situations sorted into clear, complicated, complex and chaotic | `cynefin-beta` |
+
 ## Charts
 
-A chart takes the same procedure; its keyword picks the type: `xychart-beta`, `pie`, `quadrantChart`, `sankey-beta`, `radar-beta`, `treemap-beta`, `venn-beta`.
+A chart takes the same procedure as a diagram.
 
 ```mermaid
 xychart-beta
