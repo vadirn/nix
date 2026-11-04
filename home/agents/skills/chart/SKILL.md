@@ -9,10 +9,9 @@ description: >
   fishbone and the other Mermaid diagrams, and the charts — xychart (bar and line),
   pie, quadrant, sankey, radar, treemap, venn. Triggers: /chart, and any request
   to draw, diagram, chart or plot a flow, structure, schedule or set of numbers.
-  Skip for charts that need hover, tooltips or other interaction (Chart.js through
-  the `show_widget` chart guide), for illustrative diagrams that hand-drawn SVG
-  serves better, and in a terminal session without `show_widget` (leave a
-  ```mermaid fence there).
+  Charts that need hover, tooltips or other interaction go to Chart.js through the
+  `show_widget` chart guide, illustrative diagrams to hand-drawn SVG, and a
+  terminal session without `show_widget` keeps a ```mermaid fence.
 ---
 
 # chart
@@ -21,7 +20,7 @@ Renders Mermaid diagrams and charts through the pinned `pele` package and embeds
 
 ## Procedure
 
-1. Write the Mermaid source. Put `accTitle:` (and `accDescr:` when the title is not enough) on the line after the diagram keyword. Pele turns them into the SVG's `<title>` and `<desc>`, which stand in for the widget's screen-reader heading. `block`, `eventmodeling`, `sankey-beta` and `venn-beta` reject both lines with a parse error, so leave them out there; `ishikawa-beta`, `kanban` and `mindmap` drop both, and C4 drops `accTitle`.
+1. Write the Mermaid source. Put `accTitle:` (and `accDescr:` when the picture needs more than its title) on the line after the diagram keyword. Pele turns them into the SVG's `<title>` and `<desc>`, which stand in for the widget's screen-reader heading. `block`, `eventmodeling`, `sankey-beta` and `venn-beta` reject both lines with a parse error, so leave them out there; `ishikawa-beta`, `kanban` and `mindmap` drop both, and C4 drops `accTitle`.
 2. Render it:
 
    ```bash
@@ -111,10 +110,10 @@ A diagram too wide to stay legible at the widget's width goes into a zoomable vi
 
 ## Rules
 
-- Load nothing from a CDN for diagrams. This skill exists so the rendering code comes from the lockfile, not from jsDelivr, esm.sh or unpkg at view time. It also replaces the `show_widget` guide's advice to load mermaid.js from esm.sh for ER and class diagrams.
+- Render every diagram through `render.ts`, so its code comes from the lockfile rather than from jsDelivr, esm.sh or unpkg at view time. This rule replaces the `show_widget` guide's advice to load mermaid.js from esm.sh for ER and class diagrams.
 - Leave the output as it is. The wrapper `div` maps Pele's `--pele-*` variables onto the widget's theme variables, so the diagram follows light and dark mode. Hex colours added by hand break dark mode.
-- Pele lays out once, at render time. Live relayout to the container width needs Pele's browser `mount()`, which this skill gives up along with the CDN. Zoom covers the width a fixed layout cannot.
+- Pele lays out once, at render time. Live relayout to the container width needs Pele's browser `mount()`, which this skill gives up along with the CDN. Zoom makes up for the fixed width.
 
 ## Upgrading Pele
 
-The version lives in `scripts/package.json`, and `bun.lock` pins its sha512. To bump it, run `bun add pele@<version>` in `scripts/`. `~/.bunfig.toml` refuses releases younger than 7 days. Then run `bun test` there.
+The version lives in `scripts/package.json`, and `bun.lock` pins its sha512. To bump it, run `bun add pele@<version>` in `scripts/`. `~/.bunfig.toml` accepts only releases at least 7 days old. Then run `bun test` there.
