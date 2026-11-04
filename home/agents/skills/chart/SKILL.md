@@ -21,7 +21,7 @@ Renders Mermaid diagrams and charts through the pinned `pele` package and embeds
 
 ## Procedure
 
-1. Write the Mermaid source. Put `accTitle:` (and `accDescr:` when the title is not enough) on the line after the diagram keyword. Pele turns them into the SVG's `<title>` and `<desc>`, which stand in for the widget's screen-reader heading.
+1. Write the Mermaid source. Put `accTitle:` (and `accDescr:` when the title is not enough) on the line after the diagram keyword. Pele turns them into the SVG's `<title>` and `<desc>`, which stand in for the widget's screen-reader heading. `block`, `eventmodeling`, `sankey-beta` and `venn-beta` reject both lines with a parse error, so leave them out there; `ishikawa-beta`, `kanban` and `mindmap` drop both, and C4 drops `accTitle`.
 2. Render it:
 
    ```bash
