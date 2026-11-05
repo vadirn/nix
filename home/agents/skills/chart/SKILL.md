@@ -90,7 +90,7 @@ Series take the host's categorical palette in source order: the first `bar` or `
 
 ## Colouring nodes by meaning
 
-Give a node or subgraph one of four role classes, `accent`, `success`, `warning` or `danger`, with `class A,B success` or `A:::success`. It needs no `classDef`: `render.ts` paints the role with the widget's `--bg-*`, `--border-*` and `--text-*` tokens, so it follows light and dark mode. Pele rejects `var()` inside `classDef` and `style`, so a role class is the only themed colour a source can set.
+Give a node or subgraph one of four role classes, `accent`, `success`, `warning` or `danger`, with `class A,B success` or `A:::success`. It needs no `classDef`: `render.ts` paints the role with the widget's `--bg-*`, `--border-*` and `--text-*` tokens, so it follows light and dark mode. Mermaid's `classDef` and `style` take no parentheses, so `var()`, `rgb()` and every other CSS function fail there; a role class is the only themed colour a source can set.
 
 ```mermaid
 flowchart LR

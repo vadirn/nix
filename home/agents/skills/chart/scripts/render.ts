@@ -44,8 +44,9 @@ const THEME = [
   ...SERIES.map((hex, i) => `--pele-series-${i + 1}:var(--series-${i + 1},${hex})`),
 ].join(";");
 
-// Pele rejects var() in classDef and style, which leaves hex, and hex breaks
-// dark mode. So a node takes a role by class name instead (`class A success`,
+// Mermaid's classDef and style take no parentheses, so var() and every other
+// CSS function fail there. That leaves hex, and hex breaks dark mode. So a
+// node takes a role by class name instead (`class A success`,
 // no classDef): pele copies the name onto the node's group, and these rules
 // paint it with the host's role tokens. A classDef or style on the node still
 // wins, being inline. Fill skips fill="none" parts such as a cylinder's rim.
