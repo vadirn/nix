@@ -71,10 +71,17 @@ export const VIEW_MAX_HEIGHT = 480;
 // pele ships enableZoom, which bundles inline too. It is not used: its fit
 // reads the width only, its reset is fit, it exposes no pan for choosing the
 // opening view, and its controls draw their own SVG icons where the widget
-// wants Tabler.
-const VIEWPORT_JS = new Bun.Transpiler({ loader: "js", minifyWhitespace: true })
-  .transformSync(await Bun.file(join(import.meta.dir, "viewport.js")).text())
-  .trim();
+// wants Tabler. viewport.ts imports @muxmuxmux/core, so it goes through the
+// bundler, which throws when the build fails.
+const [VIEWPORT_BUNDLE] = (
+  await Bun.build({
+    entrypoints: [join(import.meta.dir, "viewport.ts")],
+    target: "browser",
+    format: "iife",
+    minify: true,
+  })
+).outputs;
+const VIEWPORT_JS = (await VIEWPORT_BUNDLE!.text()).trim();
 
 // The host pre-styles every button with a border and padding, and its rules
 // outrank a scoped stylesheet. Inline !important declarations outrank any
@@ -143,7 +150,8 @@ export function toHtml({ svg, width, height }: Rendered, id: string): string {
     ` style="position:relative;overflow:hidden;height:${viewHeight}px;border:0.5px solid var(--border);border-radius:var(--radius);cursor:grab;touch-action:none;user-select:none">${svg}`,
     `<div id="${id}-tools" style="position:absolute;right:8px;bottom:8px;display:flex;align-items:center;gap:2px;padding:2px;background:var(--surface-0);border:0.5px solid var(--border);border-radius:var(--radius);cursor:default">${TOOLBAR}</div>`,
     `</div>`,
-    `<script>(${VIEWPORT_JS})(${JSON.stringify(id)})</script>`,
+    // The script finds its viewport itself, so it takes no id.
+    `<script>${VIEWPORT_JS}</script>`,
     `</div>`,
   ].join("");
 }

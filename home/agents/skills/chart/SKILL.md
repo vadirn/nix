@@ -106,7 +106,7 @@ A diagram too wide to stay legible at the widget's width goes into a zoomable vi
 - Pointer: drag to pan; ctrl/cmd+scroll or pinch to zoom. A plain scroll passes through to the chat.
 - Keyboard: focus the viewport, then arrows pan, `+` and `-` zoom, `0` returns to 1:1, `f` fits.
 
-`render.ts` inlines the zoom script, so nothing loads at view time. Each render takes its own random `mmd-…` id prefix, so several diagrams can share one reply.
+`render.ts` bundles the zoom script into the fragment, so nothing loads at view time. A `@muxmuxmux/core` controller tracks the drag's phase (idle, panning, pinching): a third finger does nothing mid-pinch, and a mouse that missed its pointerup ends the drag instead of panning on hover. Each render takes its own random `mmd-…` id prefix, so several diagrams can share one reply.
 
 ## Rules
 

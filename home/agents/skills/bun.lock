@@ -14,6 +14,7 @@
       "name": "chart-scripts",
       "version": "1.0.0",
       "dependencies": {
+        "@muxmuxmux/core": "0.2.0",
         "pele": "1.12.0",
       },
     },
@@ -64,6 +65,8 @@
     "@fal-ai/client": ["@fal-ai/client@1.10.1", "", { "dependencies": { "@msgpack/msgpack": "^3.0.0-beta2", "eventsource-parser": "^1.1.2", "robot3": "^0.4.1" } }, "sha512-c3AVeH31OioiI2J1BfW8Cryi1DhUYldnY3X35nv6xLMq3fU2NQOo+eYaR5mL2O8MoHHh+HzXdQuIyanIyeq+ug=="],
 
     "@msgpack/msgpack": ["@msgpack/msgpack@3.1.3", "", {}, "sha512-47XIizs9XZXvuJgoaJUIE2lFoID8ugvc0jzSHP+Ptfk8nTbnR8g788wv48N03Kx0UkAv559HWRQ3yzOgzlRNUA=="],
+
+    "@muxmuxmux/core": ["@muxmuxmux/core@0.2.0", "", {}, "sha512-gbGwSybSb8lXrsq6Fe25MH8IEQDqh3kU2V0WMExMaEwvZZvtDpzJ9DNINwhwHGQsfNGxYNlglB5hSg5oVy3HSA=="],
 
     "@oxlint/binding-android-arm-eabi": ["@oxlint/binding-android-arm-eabi@1.73.0", "", { "os": "android", "cpu": "arm" }, "sha512-HZQRN/UMBu+Ut+/9MiAChkbP4qZqrNOWBcNI45vOT40GVhbGR0JgHB87L48D4iAqFQIdVmeQYtV9RF89AjTKkg=="],
 

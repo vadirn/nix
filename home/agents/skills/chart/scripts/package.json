@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@muxmuxmux/core": "0.2.0",
     "pele": "1.12.0"
   }
 }

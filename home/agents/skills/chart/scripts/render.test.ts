@@ -59,7 +59,10 @@ describe("toWidget", () => {
     expect(html).toMatch(
       /<div id="(mmd-[0-9a-f]{8})"[^>]*>.*<\/svg><div id="\1-tools" style="position:absolute;right:8px;bottom:8px;.*<\/div><\/div><script>/s,
     );
-    expect(html).toContain("<script>(function mermaidViewport(");
+    // An argument-free IIFE: the script finds its viewport by its data-w and data-h.
+    expect(html).toMatch(/<script>\(\(\)=>\{.*\}\)\(\);<\/script>/s);
+    // The script marks a viewport it has set up; the markup starts unmarked.
+    expect(html.replace(/<script>.*<\/script>/s, "")).not.toContain("data-ready");
     expect(html).not.toContain("position:fixed");
     expect(html).not.toContain("overflow:auto");
     expect(html).not.toMatch(/<script[^>]+src=/);
@@ -74,7 +77,10 @@ describe("toWidget", () => {
     expect(idsA.toSorted()).toEqual([own, `${own}-title`, `${own}-tools`]);
     expect(idsA.filter((id) => idsB.includes(id))).toEqual([]);
     expect(a).toContain(`aria-labelledby="${own}-title"`);
-    expect(a).toContain(`})("${own}")</script>`);
+    // The script carries no id, so every render inlines the same one.
+    const script = (html: string) => html.match(/<script>(.*)<\/script>/s)?.[1];
+    expect(script(a)).not.toContain(own);
+    expect(script(a)).toBe(script(b));
   });
 
   it("inlines a script that parses", () => {
