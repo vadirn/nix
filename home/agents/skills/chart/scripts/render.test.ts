@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "path";
-import { toHtml, toWidget, VIEW_MAX_HEIGHT, ZOOM_MIN_WIDTH } from "./render.ts";
+import { TOOLBAR_ROOM, toHtml, toWidget, VIEW_MAX_HEIGHT, ZOOM_MIN_WIDTH } from "./render.ts";
 
 const SCRIPT = join(import.meta.dir, "render.ts");
 
@@ -99,8 +99,10 @@ describe("toHtml", () => {
     expect(toHtml({ svg, width: 866, height: 300 }, "mmd-x")).toContain("<script");
   });
 
-  it("bounds the viewport height", () => {
-    expect(toHtml({ svg, width: 2000, height: 300 }, "mmd-x")).toContain("height:300px");
+  it("bounds the viewport height, with room for the toolbar below a short diagram", () => {
+    expect(toHtml({ svg, width: 2000, height: 61 }, "mmd-x")).toContain(
+      `height:${61 + TOOLBAR_ROOM}px`,
+    );
     expect(toHtml({ svg, width: 2000, height: 1500 }, "mmd-x")).toContain(
       `height:${VIEW_MAX_HEIGHT}px`,
     );

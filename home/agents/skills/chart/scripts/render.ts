@@ -67,6 +67,9 @@ const FONT_SIZE = 14;
 // 14px text would fall below the widget's 11px floor, the diagram gets a viewport.
 export const ZOOM_MIN_WIDTH = (WIDGET_WIDTH * FONT_SIZE) / 11;
 export const VIEW_MAX_HEIGHT = 480;
+// The toolbar is 33px tall, inset 8px from the bottom. A diagram shorter than
+// the cap gets this much room below it, so the toolbar opens clear of it.
+export const TOOLBAR_ROOM = 48;
 
 // pele ships enableZoom, which bundles inline too. It is not used: its fit
 // reads the width only, its reset is fit, it exposes no pan for choosing the
@@ -134,7 +137,7 @@ export function toHtml({ svg, width, height }: Rendered, id: string): string {
   if (width <= ZOOM_MIN_WIDTH) {
     return `<div style="display:flex;justify-content:center;padding:1rem 0;${THEME}"><style>${ROLE_CSS}</style>${svg}</div>`;
   }
-  const viewHeight = Math.min(Math.ceil(height), VIEW_MAX_HEIGHT);
+  const viewHeight = Math.min(Math.ceil(height) + TOOLBAR_ROOM, VIEW_MAX_HEIGHT);
   // Until the script runs, the SVG sits at 1:1 against the top-left corner:
   // the same view the script opens with.
   const style = [
