@@ -94,7 +94,9 @@ function setUp(view: HTMLElement) {
   );
 
   // Safari reports trackpad pinch as gesture events instead. They exist in
-  // WebKit only, so lib.dom leaves them out.
+  // WebKit only, so lib.dom leaves them out. iOS fires them for a touch pinch
+  // too, beside the pointers the drag already pinches with, so only a pinch
+  // that holds no pointer, a trackpad's, zooms here.
   type GestureEvent = MouseEvent & { scale: number };
   let gestureStart = 0;
   view.addEventListener("gesturestart", (e) => {
@@ -103,6 +105,7 @@ function setUp(view: HTMLElement) {
   });
   view.addEventListener("gesturechange", (e) => {
     e.preventDefault();
+    if (pointers.size > 0) return;
     zoomTo(gestureStart * (e as GestureEvent).scale, ...local(e as GestureEvent));
   });
 
