@@ -207,8 +207,10 @@ function setUp(view: HTMLElement) {
       apply();
     } else if (e.key === "+" || e.key === "=") actions.in();
     else if (e.key === "-") actions.out();
-    else if (e.key === "0") actions.actual();
-    else if (e.key === "f") actions.fit();
+    // The physical key as well, since a Cyrillic layout types "а" on F and
+    // AZERTY types "à" on 0.
+    else if (e.key === "0" || e.code === "Digit0") actions.actual();
+    else if (e.key === "f" || e.code === "KeyF") actions.fit();
     else return;
     e.preventDefault();
   });
