@@ -14,6 +14,7 @@
 
 import { join } from "path";
 import { PeleError, render } from "pele";
+import { TOOLBAR_ROOM } from "./toolbar.ts";
 
 // Chart series follow the host's categorical palette in its fixed order. The
 // hex fallbacks are its light values, used where the host sets no --series-N;
@@ -67,9 +68,6 @@ const FONT_SIZE = 14;
 // 14px text would fall below the widget's 11px floor, the diagram gets a viewport.
 export const ZOOM_MIN_WIDTH = (WIDGET_WIDTH * FONT_SIZE) / 11;
 export const VIEW_MAX_HEIGHT = 480;
-// The toolbar is 33px tall, inset 8px from the bottom. A diagram shorter than
-// the cap gets this much room below it, so the toolbar opens clear of it.
-export const TOOLBAR_ROOM = 48;
 
 // pele ships enableZoom, which bundles inline too. It is not used: its fit
 // reads the width only, its reset is fit, it exposes no pan for choosing the
@@ -116,10 +114,11 @@ const button = (act: string, label: string, icon: string) =>
 
 // A compact toolbar in the viewport's bottom-right corner: zoom out, the scale
 // readout, zoom in, then fit and actual size. Its Tabler icons need no loading:
-// show_widget preloads the webfont.
+// show_widget preloads the webfont. The readout starts empty: the opening
+// scale depends on the widget's width, which only the script can measure.
 const TOOLBAR = [
   button("out", "Zoom out", "ti-minus"),
-  `<output aria-label="Zoom" style="min-width:40px;text-align:center;font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums">100%</output>`,
+  `<output aria-label="Zoom" style="min-width:40px;text-align:center;font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums"></output>`,
   button("in", "Zoom in", "ti-plus"),
   `<span aria-hidden="true" style="width:0.5px;height:16px;margin:0 2px;background:var(--border)"></span>`,
   button("fit", "Fit to view", "ti-arrows-minimize"),
@@ -138,10 +137,16 @@ export function toHtml({ svg, width, height }: Rendered, id: string): string {
     return `<div style="display:flex;justify-content:center;padding:1rem 0;${THEME}"><style>${ROLE_CSS}</style>${svg}</div>`;
   }
   const viewHeight = Math.min(Math.ceil(height) + TOOLBAR_ROOM, VIEW_MAX_HEIGHT);
-  // Until the script runs, the SVG sits at 1:1 against the top-left corner:
-  // the same view the script opens with.
+  // Until the script marks the viewport ready, CSS paints the view the script
+  // opens with: the whole diagram, centred in the space above the toolbar's
+  // room. Pele's inline max-width:100% and height:auto fit the width,
+  // max-height fits the height, and the viewBox scales the drawing into the
+  // box, centred. Once ready, the SVG keeps its natural size and the script's
+  // transform moves it.
   const style = [
-    `#${id}>svg{position:absolute;left:0;top:0;max-width:none!important;transform-origin:0 0}`,
+    `#${id}>svg{position:absolute;left:0;top:0;transform-origin:0 0}`,
+    `#${id}:not([data-ready])>svg{right:0;bottom:${TOOLBAR_ROOM}px;margin:auto;max-height:calc(100% - ${TOOLBAR_ROOM}px)}`,
+    `#${id}[data-ready]>svg{max-width:none!important}`,
     `#${id}-tools button{background:transparent!important;cursor:pointer}`,
     `#${id}-tools button:hover{background:var(--surface-1)!important}`,
     ROLE_CSS,

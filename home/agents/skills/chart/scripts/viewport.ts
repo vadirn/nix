@@ -10,6 +10,7 @@
  * layout, so text renders at the 14px it was measured at.
  */
 import { controller } from "@muxmuxmux/core";
+import { TOOLBAR_ROOM } from "./toolbar.ts";
 
 const MAX = 4;
 const STEP = 1.25;
@@ -35,11 +36,15 @@ function setUp(view: HTMLElement) {
   let x = 0;
   let y = 0;
 
-  const fit = () => Math.min(view.clientWidth / width, view.clientHeight / height, 1);
+  // The fit leaves the toolbar's room clear below the diagram.
+  const fit = () =>
+    Math.min(view.clientWidth / width, (view.clientHeight - TOOLBAR_ROOM) / height, 1);
 
-  // Pan with half a viewport of slack: any corner of the diagram can reach the centre.
+  // Pan with half a viewport of slack: any corner of the diagram can reach the
+  // centre. A diagram smaller than half the viewport can also rest anywhere
+  // between the top or left edge and the centre, where the fit centres it.
   const clamp = (offset: number, size: number, box: number) =>
-    Math.min(box / 2, Math.max(box / 2 - size * scale, offset));
+    Math.min(box / 2, Math.max(Math.min(0, box / 2 - size * scale), offset));
 
   const apply = () => {
     x = clamp(x, width, view.clientWidth);
@@ -57,12 +62,13 @@ function setUp(view: HTMLElement) {
     apply();
   }
 
-  // Centre the diagram at scale s; `corner` pins its top-left corner instead,
-  // where a top-down or left-to-right flow starts.
+  // Centre the diagram at scale s in the space above the toolbar's room;
+  // `corner` pins its top-left corner instead, where a top-down or
+  // left-to-right flow starts.
   function show(s: number, corner: boolean) {
     scale = s;
     x = corner ? 0 : (view.clientWidth - width * s) / 2;
-    y = corner ? 0 : (view.clientHeight - height * s) / 2;
+    y = corner ? 0 : (view.clientHeight - TOOLBAR_ROOM - height * s) / 2;
     apply();
   }
 
@@ -217,7 +223,8 @@ function setUp(view: HTMLElement) {
 
   // The widget can narrow with the window; keep the scale at or above the new fit.
   new ResizeObserver(() => zoomTo(scale, 0, 0)).observe(view);
-  actions.actual();
+  // Open on the whole diagram.
+  actions.fit();
 }
 
 for (const view of document.querySelectorAll<HTMLElement>("[data-w][data-h]:not([data-ready])")) {

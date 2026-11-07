@@ -100,7 +100,7 @@ flowchart LR
 
 ## Wide diagrams
 
-A diagram too wide to stay legible at the widget's width goes into a zoomable viewport instead of shrinking; a narrower one keeps the plain centred output. The viewport opens at 1:1 against the top-left corner, where a top-down or left-to-right flow starts.
+A diagram too wide to stay legible at the widget's width goes into a zoomable viewport; a narrower one keeps the plain centred output. The viewport opens on the whole diagram, fitted and centred above a strip kept clear for the toolbar. Actual size shows it at 1:1 against the top-left corner, where a top-down or left-to-right flow starts.
 
 - Toolbar, bottom-right: zoom out, the scale readout, zoom in, fit to view, actual size.
 - Pointer: drag to pan; ctrl/cmd+scroll or pinch to zoom. A plain scroll passes through to the chat.

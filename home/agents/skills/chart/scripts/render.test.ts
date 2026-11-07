@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "path";
-import { TOOLBAR_ROOM, toHtml, toWidget, VIEW_MAX_HEIGHT, ZOOM_MIN_WIDTH } from "./render.ts";
+import { toHtml, toWidget, VIEW_MAX_HEIGHT, ZOOM_MIN_WIDTH } from "./render.ts";
+import { TOOLBAR_ROOM } from "./toolbar.ts";
 
 const SCRIPT = join(import.meta.dir, "render.ts");
 
@@ -62,7 +63,7 @@ describe("toWidget", () => {
     // An argument-free IIFE: the script finds its viewport by its data-w and data-h.
     expect(html).toMatch(/<script>\(\(\)=>\{.*\}\)\(\);<\/script>/s);
     // The script marks a viewport it has set up; the markup starts unmarked.
-    expect(html.replace(/<script>.*<\/script>/s, "")).not.toContain("data-ready");
+    expect(html.match(/<div id="mmd-[0-9a-f]{8}"[^>]*>/)?.[0]).not.toContain("data-ready");
     expect(html).not.toContain("position:fixed");
     expect(html).not.toContain("overflow:auto");
     expect(html).not.toMatch(/<script[^>]+src=/);
@@ -108,10 +109,16 @@ describe("toHtml", () => {
     );
   });
 
-  it("paints the opening view before the script runs: 1:1, top-left corner", () => {
+  it("paints the opening view before the script runs: fitted above the toolbar's room", () => {
     const html = toHtml({ svg, width: 2000, height: 1500 }, "mmd-x");
-    expect(html).toContain(`#mmd-x>svg{position:absolute;left:0;top:0;max-width:none!important`);
+    expect(html).toContain(`#mmd-x>svg{position:absolute;left:0;top:0;transform-origin:0 0}`);
+    // Pele's inline max-width:100% stays in force until the script marks the viewport ready.
+    expect(html).toContain(
+      `#mmd-x:not([data-ready])>svg{right:0;bottom:${TOOLBAR_ROOM}px;margin:auto;max-height:calc(100% - ${TOOLBAR_ROOM}px)}`,
+    );
+    expect(html).toContain(`#mmd-x[data-ready]>svg{max-width:none!important}`);
     expect(html).not.toContain("transform:translate");
+    expect(html).toContain('font-variant-numeric:tabular-nums"></output>');
   });
 });
 
