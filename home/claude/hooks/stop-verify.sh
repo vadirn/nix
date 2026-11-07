@@ -7,6 +7,13 @@
 # Exit 0 if no entrypoint exists or verify succeeds. Exit 2 if verify fails.
 set -uo pipefail
 
+# Participating projects have exactly one owner of verification and Stop decisions.
+# Dispatch before consuming stdin. Unavailable/degraded adapters permit stopping.
+if [ -f "${TRINKET_TURN_CONFIG:-$HOME/.config/trinket/turn-check.json}" ] ||
+  { [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -f "$CLAUDE_PROJECT_DIR/.claude/turn-check.json" ]; }; then
+  exec bash "$(dirname "$0")/turn-check.sh"
+fi
+
 # shellcheck source=lib/detect-pm.sh
 source "$(dirname "$0")/lib/detect-pm.sh"
 

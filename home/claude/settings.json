@@ -90,9 +90,30 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/turn-check.sh",
+            "timeout": 30
+          }
+        ]
       }
     ],
-    "PostToolUseFailure": [],
+    "PostToolUseFailure": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/turn-check.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -154,6 +175,16 @@
             "command": "bash ~/.claude/hooks/prefer-firecrawl.sh"
           }
         ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/turn-check.sh",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -213,6 +244,39 @@
             "command": "bash ~/.claude/hooks/sound.sh TaskCompleted",
             "timeout": 5,
             "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/turn-check.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/turn-check.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/turn-check.sh",
+            "timeout": 3
           }
         ]
       }
