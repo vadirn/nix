@@ -140,7 +140,7 @@
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/git-message.py",
+            "command": "~/.local/bin/trinket-git-message",
             "timeout": 120
           },
           {
