@@ -13,7 +13,7 @@
       # credentials, which is independent of how rustc got installed.
       CARGO_HOME = "$HOME/.cargo";
       XDG_CONFIG_HOME = "$HOME/.config";
-      EDITOR = "code --wait";
+      EDITOR = "zed --wait";
       DOCKER_HOST = "unix://$HOME/.orbstack/run/docker.sock";
       AGENT_BROWSER_AUTO_CONNECT = "1";
       USE_BUILTIN_RIPGREP = "0";
