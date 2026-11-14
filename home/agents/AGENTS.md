@@ -101,6 +101,12 @@ Use these through the Bash tool. Prefer them to manual code reading or web searc
 
 For any refactor that touches more than 20 files, write a codemod first. The doctrine (decision rule, tool choice, procedure, anti-patterns) lives in the vault note `Codemod` — `vault-query get "Codemod"`, then read it.
 
+## Durability
+
+Fix the cause. A durable fix covers the next case (the next input, caller, platform, or upgrade) as it stands. Trace the failure to the condition that produces it, and change that condition at its source: the generator over its output, the module over the deployed file, the shared function over one call site.
+
+When the cause sits out of reach, ship a stopgap and name it as one: what it suppresses, where the cause lives, what would remove it. Report it under "what you worked around" in § Limitations. Size the fix to the cases that exist; § Generalization sets that bound. The reasoning lives in the vault note `Pragmatic first is reconnaissance for elegance`.
+
 ## Generalization
 
 Before adding a shared form (a helper, seam, registry or interface), or declining one, state N: the real cases it serves. Name the case that would test it. The admit, stop and exit tests live in the vault note `Generalization` — `vault-query get "Generalization"`, then read it.
