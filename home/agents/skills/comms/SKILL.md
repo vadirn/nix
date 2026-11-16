@@ -5,8 +5,7 @@ description: >
   thread or a binding, sweep Slack and Basecamp for messages owed, or run the monthly review. Drafts
   and reports only, never sends. Triggers: /comms, "draft a reply to this thread", "draft a heartbeat",
   "draft my check-in", "draft a status update for <name>", "how do I answer this complaint", "what do
-  I owe", "sweep my comms", "comms review". Route elsewhere: any other Basecamp action → /basecamp;
-  restyling prose → /simplify-text.
+  I owe", "sweep my comms", "comms review". Route elsewhere: any other Basecamp action → /basecamp.
 ---
 
 # Comms

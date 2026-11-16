@@ -17,8 +17,6 @@ LINKS=(
   ".local/bin/pr-template|home/agents/scripts/pr-template.sh"
   ".local/bin/distill-text|home/agents/skills/textkit/bin/distill-text"
   ".local/bin/card-stage|home/agents/skills/textkit/bin/card-stage"
-  ".local/bin/simplify-text|home/agents/skills/textkit/bin/simplify-text"
-  ".local/bin/simplify-verify|home/agents/skills/textkit/bin/simplify-verify"
   ".claude/settings.json|home/claude/settings.json"
   ".claude/hooks|home/claude/hooks"
   ".claude/bin|home/claude/bin"

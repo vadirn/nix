@@ -245,9 +245,7 @@ export const MASK_RE = /!?\[\[[^\]]+\]\]|(?<!`)(?<tick>`+)[^`\n][^\n]*?(?<!`)\k<
 const HTML_COMMENT = String.raw`<!--[\s\S]*?-->`;
 
 // Every span a REWRITING pass must reproduce byte-identical: MASK_RE's reference spans PLUS
-// HTML comments. This — not MASK_RE — is what createMasker freezes to ⟦N⟧ and what the
-// simplify apply-gate diffs as its span multiset; the two agree by importing this one
-// constant, so neither can drift on what counts as an atom.
+// HTML comments. This — not MASK_RE — is what createMasker freezes to ⟦N⟧.
 //
 // A comment is an atom by the same argument as a wikilink: it is authored text no restyle has
 // standing to reword. A template's comment is copied verbatim into every note it creates, so
