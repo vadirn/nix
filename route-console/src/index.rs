@@ -21,7 +21,7 @@ use rusqlite::{Connection, ErrorCode, OptionalExtension, params};
 use crate::record::Record;
 
 /// Bump on any change to the tables or to what `Record` derives into them.
-const SCHEMA: i32 = 2;
+const SCHEMA: i32 = 3;
 
 pub struct Index {
     conn: Connection,
@@ -71,8 +71,7 @@ fn create(conn: &Connection) -> rusqlite::Result<()> {
              haystack TEXT NOT NULL,
              line TEXT NOT NULL,
              UNIQUE (day, offset)
-         );
-         CREATE INDEX events_day_ts ON events (day, ts_ms);",
+         );",
     )?;
     conn.pragma_update(None, "user_version", SCHEMA)
 }
@@ -233,11 +232,18 @@ impl Index {
         Ok(added)
     }
 
-    /// Indexes lines given directly, as one day's file would hold them.
+    /// Indexes lines given directly, as if appended to one day's file: after
+    /// whatever that day already holds.
     pub fn insert_lines(&mut self, day: &str, lines: &[String]) -> Result<usize, String> {
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         let mut n = 0;
-        let mut offset = 0u64;
+        let mut offset: u64 = tx
+            .query_row(
+                "SELECT COALESCE(MAX(offset) + 1, 0) FROM events WHERE day = ?1",
+                [day],
+                |r| r.get::<_, i64>(0),
+            )
+            .map_err(|e| e.to_string())? as u64;
         for line in lines {
             n += insert(&tx, day, offset, line)?;
             offset += line.len() as u64 + 1;
@@ -253,8 +259,12 @@ impl Index {
         days
     }
 
-    /// One day's events, oldest first, as a tail reads, narrowed to one hook event and to lines
-    /// containing `search` (ASCII case-insensitive).
+    /// One day's events in the order route wrote them, as a tail reads, narrowed to one hook
+    /// event and to lines containing `search` (ASCII case-insensitive).
+    ///
+    /// route writes a line when its event finishes, so a slow event lands after quicker ones
+    /// that started later (3% of one day's lines). File order puts every new line at the end:
+    /// sorted by time, a late line would land among the rows on screen and push them down.
     pub fn rows(&self, day: &str, event: Option<&str>, search: &str) -> Vec<Row> {
         let pattern = format!(
             "%{}%",
@@ -267,7 +277,7 @@ impl Index {
         );
         let q = "SELECT id, time, event, tool, input, verdict, stderr, ms FROM events
                  WHERE day = ?1 AND (?2 IS NULL OR event = ?2) AND haystack LIKE ?3 ESCAPE '\\'
-                 ORDER BY ts_ms, id";
+                 ORDER BY offset";
         let Ok(mut stmt) = self.conn.prepare_cached(q) else {
             return Vec::new();
         };
@@ -416,6 +426,23 @@ mod tests {
         assert_eq!(ix.rows("2026-11-16", Some("PreToolUse"), "git").len(), 1);
         assert_eq!(ix.rows("2026-11-16", None, "100%").len(), 0, "% is literal");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn rows_keep_the_order_route_wrote_them_in() {
+        let mut ix = Index::memory();
+        let day = "2026-11-16";
+        // A slow event that started first finishes, and is written, after a quick one.
+        let quick = line("2026-11-16T10:00:05.000+05:00", "PreToolUse", "quick");
+        let slow = line("2026-11-16T10:00:01.000+05:00", "PreToolUse", "slow");
+        ix.insert_lines(day, &[quick]).unwrap();
+        ix.insert_lines(day, &[slow]).unwrap();
+        let inputs: Vec<String> = ix
+            .rows(day, None, "")
+            .into_iter()
+            .filter_map(|r| r.input)
+            .collect();
+        assert_eq!(inputs, ["quick", "slow"], "the late line lands at the end");
     }
 
     #[test]

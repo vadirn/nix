@@ -79,6 +79,21 @@ fn line(
     v.to_string()
 }
 
+/// Line `n` of the `live` scene's endless feed: the sample events in turn, one
+/// a second from 14:00:00, so a headless run can scroll a list that grows.
+pub fn feed(samples: &[String], n: usize) -> String {
+    let mut v: Value = serde_json::from_str(&samples[n % samples.len()]).expect("sample line");
+    let s = 14 * 3600 + n;
+    v["ts"] = format!(
+        "{DAY}T{:02}:{:02}:{:02}.000+05:00",
+        s / 3600 % 24,
+        s / 60 % 60,
+        s % 60
+    )
+    .into();
+    v.to_string()
+}
+
 pub fn lines() -> Vec<String> {
     let dangerous = "python3 ~/.claude/hooks/no-dangerous.py";
     let rewrite = json!({"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"command": "make -s hi"}}});

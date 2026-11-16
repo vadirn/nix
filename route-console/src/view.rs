@@ -1,18 +1,26 @@
 //! The window, laid out as the design canvas's Log artboard: rune-kit's shell
 //! with a sidebar of screens and hook events, a toolbar band, and a framed
-//! card holding the event table beside the inspector.
+//! card holding the event list beside the inspector.
+//!
+//! The list is built on Rune's virtual rows, not rune-kit's Table: the Table's
+//! viewport never sticks to its end and reports nothing about what it shows,
+//! and following a tail needs both.
 
 use std::borrow::Cow;
 
-use rune::{Align, Cx, El, Icon, ScrollSpec, col, el, row, text};
+use rune::{Align, Cx, El, GrowthSpec, Icon, KeyEvent, ScrollSpec, Tx, col, el, row, text};
 use rune_kit::shell::{SidebarRow, SidebarToggle, SplitView, Toolbar};
-use rune_kit::{Cell, IconButton, IconButtonVariant, Kit, Sidebar, Table, TableColumn, TextInput};
+use rune_kit::{
+    Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Sidebar, TableStyle,
+    TextInput,
+};
 
+use crate::index::Row;
 use crate::record::Record;
 use crate::theme::{Tint, Tokens, tint_of, ty};
-use crate::{App, Screen, Selected};
+use crate::{App, LIST, ROWS, Screen, Selected, VIEWPORT};
 
-static LIST: Icon = Icon {
+static LOG_ICON: Icon = Icon {
     name: "rc-list",
     view: 16.0,
     body: r#"<path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>"#,
@@ -26,16 +34,6 @@ static SEARCH: Icon = Icon {
     name: "rc-search",
     view: 16.0,
     body: r#"<circle cx="7" cy="7" r="4.75" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="m10.5 10.5 3.25 3.25" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>"#,
-};
-static PAUSE: Icon = Icon {
-    name: "rc-pause",
-    view: 16.0,
-    body: r#"<path d="M5.5 3.5v9M10.5 3.5v9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>"#,
-};
-static PLAY: Icon = Icon {
-    name: "rc-play",
-    view: 16.0,
-    body: r#"<path d="M5 3.25v9.5L12.5 8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/>"#,
 };
 static COPY: Icon = Icon {
     name: "rc-copy",
@@ -91,16 +89,19 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if let Some(e) = &s.error {
         leading = leading.child(badge(&t, "error").help(e.clone()));
     }
-    let toolbar = Toolbar::new()
-        .leading(leading)
-        .trailing(search(s, &k, &t))
-        .trailing(follow_button(s, &k));
+    // The pill sits left of the search field, so the field holds its place
+    // as the pill comes and goes.
+    let toolbar = match pill(s, &k) {
+        Some(p) => Toolbar::new().leading(leading).trailing(p),
+        None => Toolbar::new().leading(leading),
+    }
+    .trailing(search(s, &k, &t));
     let main = col().key("log").w_full().h_full().child(rule(&t)).child(
         row()
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .child(table(s, &k, &t).grow(1.0).min_w(0.0).h_full())
+            .child(list(s, &k, &t).grow(1.0).min_w(0.0).h_full())
             .child(el().w(1.0).h_full().fill(t.separator).a11y_hidden())
             .child(inspector(s, &k, &t)),
     );
@@ -122,10 +123,10 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
 
 fn sidebar(s: &App, k: &Kit) -> El {
     let log = SidebarRow::new("Log")
-        .icon(&LIST)
+        .icon(&LOG_ICON)
         .height(30.0)
         .selected(s.screen == Screen::Log(None))
-        .on_select(|s: &mut App, _| s.show(Screen::Log(None)))
+        .on_select(|s: &mut App, tx| s.show(Screen::Log(None), tx))
         .build(k)
         .key("screen-log");
     let events = s.events.iter().map(|e| {
@@ -134,7 +135,7 @@ fn sidebar(s: &App, k: &Kit) -> El {
             .icon(&BOLT)
             .height(30.0)
             .selected(s.screen == screen)
-            .on_select(move |s: &mut App, _| s.show(screen.clone()))
+            .on_select(move |s: &mut App, tx| s.show(screen.clone(), tx))
             .build(k)
             .key(format!("event-{e}"))
     });
@@ -161,7 +162,7 @@ fn search(s: &App, k: &Kit, t: &Tokens) -> El {
         .width(None)
         .height(28.0)
         .on_edit(|s: &mut App| &mut s.search)
-        .on_change(|s: &mut App, _| s.refresh())
+        .on_change(|s: &mut App, tx| s.searched(tx))
         .build(k);
     row()
         .key("search")
@@ -173,92 +174,251 @@ fn search(s: &App, k: &Kit, t: &Tokens) -> El {
         .child(field)
 }
 
-fn follow_button(s: &App, k: &Kit) -> El {
-    let (glyph, label) = if s.following {
-        (&PAUSE, "Pause following")
-    } else {
-        (&PLAY, "Resume following")
-    };
-    IconButton::new(glyph)
-        .variant(IconButtonVariant::GhostMuted)
-        .label(label)
-        .help(label)
-        .on_press(|s: &mut App| s.toggle_following())
-        .build(k)
-        .key("follow")
+/// "↓ N new": the rows below the viewport, while there are any. Pressing it
+/// jumps to the newest row and follows from there, as End does.
+fn pill(s: &App, k: &Kit) -> Option<El> {
+    (s.below > 0).then(|| {
+        Button::new(format!("↓ {} new", s.below))
+            .variant(ButtonVariant::Outline)
+            .control_size(ControlSize::Small)
+            .help("Jump to the newest event (End)")
+            .on_press(|s: &mut App| s.jump_to_end())
+            .build(k)
+            .key("to-end")
+    })
 }
 
-fn table(s: &App, k: &Kit, t: &Tokens) -> El {
-    let tk = *t;
-    Table::new(
-        |s: &App| &s.table,
-        |s: &mut App| &mut s.table,
-        |s: &App| s.rows.len(),
-        |s: &App, i| Cow::Owned(s.rows[i].id.to_string()),
+/// A list column: its id, title, width (`None` takes what the others leave),
+/// and alignment.
+struct Column {
+    id: &'static str,
+    title: &'static str,
+    width: Option<f32>,
+    align: Align,
+}
+
+/// The canvas's columns. Time is 10 points wider than its text needs, for the
+/// 16-point inset the design gives the first column.
+const COLUMNS: [Column; 6] = [
+    Column {
+        id: "time",
+        title: "Time",
+        width: Some(86.0),
+        align: Align::Start,
+    },
+    Column {
+        id: "event",
+        title: "Event",
+        width: Some(136.0),
+        align: Align::Start,
+    },
+    Column {
+        id: "tool",
+        title: "Tool",
+        width: Some(152.0),
+        align: Align::Start,
+    },
+    Column {
+        id: "input",
+        title: "Input",
+        width: None,
+        align: Align::Start,
+    },
+    Column {
+        id: "decision",
+        title: "Decision",
+        width: Some(136.0),
+        align: Align::Start,
+    },
+    Column {
+        id: "took",
+        title: "Took",
+        width: Some(72.0),
+        align: Align::End,
+    },
+];
+
+/// A header or row cell, sized to its column.
+fn cell(c: &Column, first: bool, pad: f32) -> El {
+    let e = row()
+        .h_full()
+        .pl(if first { 16.0 } else { pad })
+        .pr(pad)
+        .center_y()
+        .clip_soft(0.0);
+    let e = match c.width {
+        Some(w) => e.w(w),
+        None => e.w(0.0).grow(1.0).shrink().min_w(120.0),
+    };
+    if matches!(c.align, Align::End) {
+        e.justify_end()
+    } else {
+        e
+    }
+}
+
+fn header(style: &TableStyle) -> El {
+    let rule = el()
+        .pin(Some(0.0), None, Some(0.0), Some(0.0))
+        .h(1.0)
+        .fill(style.rule)
+        .a11y_hidden();
+    let last = COLUMNS.len() - 1;
+    COLUMNS.iter().enumerate().fold(
+        row()
+            .key("header")
+            .role("row")
+            .w_full()
+            .h(style.header_height)
+            .child(rule),
+        |h, (j, c)| {
+            let mut cell = cell(c, j == 0, style.cell_pad)
+                .key(c.id)
+                .role("columnheader")
+                .label(c.title)
+                .child(
+                    text(c.title)
+                        .font(style.header_font)
+                        .color(style.header_text)
+                        .truncate()
+                        .shrink()
+                        .min_w(0.0)
+                        .a11y_hidden(),
+                );
+            if j != last {
+                cell = cell.child(
+                    el().pin(None, Some(8.0), Some(0.0), Some(8.0))
+                        .w(1.0)
+                        .fill(style.rule)
+                        .a11y_hidden(),
+                );
+            }
+            h.child(cell)
+        },
     )
-    .name("Events")
-    .column(
-        TableColumn::new("time", "Time")
-            .width(76.0)
-            .resizable(false),
-    )
-    .column(TableColumn::new("event", "Event").width(136.0).min(90.0))
-    .column(TableColumn::new("tool", "Tool").width(152.0).min(80.0))
-    .column(TableColumn::new("input", "Input").flex(1.0).min(120.0))
-    .column(
-        TableColumn::new("decision", "Decision")
-            .width(136.0)
-            .resizable(false),
-    )
-    .column(
-        TableColumn::new("took", "Took")
-            .width(72.0)
-            .align(Align::End)
-            .resizable(false),
-    )
-    .cell(move |s: &App, i, column| {
-        let r = &s.rows[i];
-        match column {
-            "time" => Cell::text(r.time.clone()).mono().muted(),
-            "event" => Cell::text(r.event.clone()),
-            "tool" => Cell::text(r.tool.clone().unwrap_or_else(|| "—".into())),
-            // One line per row: a multi-line command reads as its words, the
-            // inspector keeps the line breaks.
-            "input" => Cell::text(
-                r.input
-                    .as_deref()
-                    .unwrap_or("")
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" "),
+}
+
+fn content(r: &Row, column: &str, style: &TableStyle, t: &Tokens) -> El {
+    let plain = |s: String, mono: bool, muted: bool| {
+        text(s.clone())
+            .font(if mono { style.mono } else { style.font })
+            .color(if muted { style.muted } else { style.text })
+            .truncate()
+            .shrink()
+            .min_w(0.0)
+            .help_when_truncated(s)
+    };
+    match column {
+        "time" => plain(r.time.clone(), true, true),
+        "event" => plain(r.event.clone(), false, false),
+        "tool" => plain(r.tool.clone().unwrap_or_else(|| "—".into()), false, false),
+        // One line per row: a multi-line command reads as its words, the
+        // inspector keeps the line breaks.
+        "input" => plain(
+            r.input
+                .as_deref()
+                .unwrap_or("")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+            true,
+            false,
+        ),
+        "decision" => row()
+            .gap(4.0)
+            .center_y()
+            .children(r.verdict.as_deref().map(|v| badge(t, v)))
+            .children(r.stderr.then(|| badge(t, "stderr"))),
+        _ => plain(r.ms.map(ms_label).unwrap_or_default(), true, true).align(Align::End),
+    }
+}
+
+/// Row `i`. Stripes go by position, so rows appended below keep theirs; its
+/// press finds the row by id, never by `i`.
+fn event_row(s: &App, i: usize, style: &TableStyle, t: &Tokens) -> El {
+    let r = &s.rows[i];
+    let id = r.id;
+    let picked = s.selected.as_ref().is_some_and(|x| x.id == id);
+    let hover = style.stripe.mix(style.selected, 0.5);
+    let e = row()
+        .role("row")
+        .focus_selected(picked)
+        .w_full()
+        .h(style.row_height)
+        .center_y();
+    let e = if picked {
+        e.fill(style.selected)
+    } else if i % 2 == 1 {
+        e.fill(style.stripe).hover(hover)
+    } else {
+        e.hover(hover)
+    };
+    COLUMNS
+        .iter()
+        .enumerate()
+        .fold(e, |e, (j, c)| {
+            e.child(
+                cell(c, j == 0, style.cell_pad)
+                    .role("gridcell")
+                    .child(content(r, c.id, style, t)),
             )
-            .mono(),
-            "decision" => Cell::el(
-                row()
-                    .gap(4.0)
-                    .center_y()
-                    .children(r.verdict.as_deref().map(|v| badge(&tk, v)))
-                    .children(r.stderr.then(|| badge(&tk, "stderr"))),
-            ),
-            _ => Cell::text(r.ms.map(ms_label).unwrap_or_default())
-                .mono()
-                .muted(),
-        }
-    })
-    .on_select(|s: &mut App, id: &str, _| {
-        if let Ok(id) = id.parse() {
-            s.pick(id);
-        }
-    })
-    .zebra(true)
-    .style(t.table(k))
-    .build(s, k)
+        })
+        .on_press_tx(move |s: &mut App, tx| s.click(id, tx))
+}
+
+/// The event list: Rune's virtual rows in a viewport that sticks to its end
+/// while the list follows. The rows report what the viewport shows, which is
+/// how scrolling pauses and resumes the following and counts the pill.
+fn list(s: &App, k: &Kit, t: &Tokens) -> El {
+    let style = t.table(k);
+    let tk = *t;
+    let rows = col()
+        .key(ROWS)
+        .w_full()
+        .growth(GrowthSpec::default())
+        .virtual_rows(
+            s.rows.len(),
+            style.row_height,
+            |s: &App, i| Cow::Owned(s.rows[i].id.to_string()),
+            move |s: &App, i| event_row(s, i, &style, &tk),
+        )
+        .on_visible_rows(|s: &mut App, r| s.seen(r));
+    let viewport = col()
+        .key(VIEWPORT)
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .scroll(ScrollSpec {
+            stick_bottom: s.following,
+        })
+        .child(rows);
+    let list = col()
+        .key(LIST)
+        .role("grid")
+        .label("Events")
+        .focusable(true)
+        .w_full()
+        .clip_soft(0.0)
+        .on_key(|s: &mut App, ev: &KeyEvent, tx: &mut Tx| s.key(ev, tx))
+        .child(header(&style))
+        .child(viewport);
+    match s.selected.as_ref().filter(|_| !s.hidden()) {
+        Some(sel) => list.active_descendant(sel.id.to_string()),
+        None => list,
+    }
 }
 
 fn inspector(s: &App, k: &Kit, t: &Tokens) -> El {
     let body = match &s.selected {
-        Some(sel) => details(sel, k, t),
-        None => col(),
+        Some(sel) => col()
+            .w_full()
+            .children(s.hidden().then(|| hidden_note(s, t)))
+            .child(details(sel, k, t)),
+        None => col().w_full().px(16.0).py(14.0).child(
+            text("Pick an event to see its handlers.")
+                .font(ty::NOTE)
+                .color(t.text_secondary),
+        ),
     };
     col()
         .key("inspector")
@@ -278,6 +438,25 @@ fn inspector(s: &App, k: &Kit, t: &Tokens) -> El {
                 })
                 .child(body),
         )
+}
+
+/// Marks a picked row the list no longer shows. The inspector keeps it rather
+/// than jumping to another row.
+fn hidden_note(s: &App, t: &Tokens) -> El {
+    let why = if s.narrowed() {
+        "Hidden by the filter"
+    } else {
+        "No longer in today's list"
+    };
+    row().key("hidden").w_full().px(16.0).pt(12.0).child(
+        row()
+            .h(22.0)
+            .px(8.0)
+            .radius(6.0)
+            .fill(t.fill)
+            .center_y()
+            .child(text(why).font(ty::NOTE).color(t.text_secondary)),
+    )
 }
 
 /// A boxed block of text: the input, or stderr. Like all inspector text it

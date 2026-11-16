@@ -1,0 +1,7 @@
+{"events": [
+  {"t": 1.0, "type": "scroll", "x": 560, "y": 450, "dy": 300, "dur": 0.4},
+  {"t": 1.6, "type": "move", "x": 1100, "y": 700},
+  {"t": 2.0, "type": "tap", "key": "screen-log"},
+  {"t": 2.1, "type": "move", "x": 1100, "y": 700},
+  {"t": 2.2, "type": "mark", "name": "after"}
+]}
