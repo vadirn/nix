@@ -23,4 +23,8 @@ if [ ! -x "$adapter" ]; then
 fi
 
 # Never fall back to an independent blocking verifier after an adapter failure.
+review_config="${TRINKET_TURN_REVIEW_CONFIG:-$HOME/.config/trinket/turn-review.json}"
+if [ -f "$review_config" ]; then
+  exec "$adapter" "$mode" "$config" --review "$review_config"
+fi
 exec "$adapter" "$mode" "$config"
