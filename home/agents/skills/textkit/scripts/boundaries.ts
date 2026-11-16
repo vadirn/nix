@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Boundary lint: enforces the slice contract across src/.
 //
-// Slices are the four first path segments under src/: core | distill | cards | simplify.
+// Slices are the three first path segments under src/: core | distill | cards.
 // Everything else — files directly under src/ (e.g. *.test.ts), src/fixtures/** — is
 // UNCLASSIFIED and exempt as an importer (tests may reach into anything).
 //
@@ -20,7 +20,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const SLICES = new Set(["core", "distill", "cards", "simplify"]);
+const SLICES = new Set(["core", "distill", "cards"]);
 const ROOT = join(import.meta.dir, "..");
 
 /**

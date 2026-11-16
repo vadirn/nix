@@ -4,8 +4,7 @@
 //
 // Fail-loud: a missing or unparseable binary throws MdstructUnavailableError rather than
 // degrading to regex. Residue is a correctness gate (it tells the user real payload was
-// dropped), so a silent fallback would reintroduce the very bugs this fixes. simplify's
-// apply-gate shares that reasoning and maps the class to its own exit 5.
+// dropped), so a silent fallback would reintroduce the very bugs this fixes.
 import { execFileSync, type StdioOptions } from "node:child_process";
 
 // MDSTRUCT_BIN overrides the bare-name PATH resolution so tests can point at a freshly-built
@@ -166,9 +165,9 @@ export function checkSchemaVersion(
 // The one failure this module raises: the parse could not run. A missing binary, an empty or
 // unparseable stdout, and a schema mismatch all land here, because each leaves the caller with no
 // structure to read. A CLI catches this CLASS rather than sniffing the message, and maps it to its
-// own "the gate could not run" exit code (simplify-verify and simplify-text both exit 5) — distinct
+// own "the gate could not run" exit code — distinct
 // from the exit that says the check RAN and failed.
-export class MdstructUnavailableError extends Error {
+class MdstructUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "MdstructUnavailableError";

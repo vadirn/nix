@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-# Deploy seam for simplify-text: provider API keys are resolved lazily in TypeScript
-# (see libs/llm/keys.ts — env → macOS Keychain → Doppler, cached per process), so this
-# wrapper only execs the entrypoint. simplify runs on OpenAI (gpt-5.6-luna, with a
-# gpt-5.4-mini fallback); its OPENAI_API_KEY lives in Doppler (claude-code/std).
-set -u
-exec bun "$(dirname "$(readlink -f "$0")")/../src/simplify/simplify.ts" "$@"

@@ -86,7 +86,7 @@ test("createMasker: a single-backtick span masks exactly as it did before", () =
 
 // ---- masksSurvived: mask-token multiset equality (the shared survival mechanism) ----
 test("masksSurvived: an identical token multiset survives a heavy reword around it", () => {
-  // simplify rewrites prose freely; only the ⟦N⟧ spans must be reproduced unchanged.
+  // A rewriting pass rewords prose freely; only the ⟦N⟧ spans must be reproduced unchanged.
   expect(masksSurvived("run ⟦0⟧ then ⟦1⟧ twice", "⟦1⟧ and ⟦0⟧ — reordered, reworded")).toBe(true);
 });
 

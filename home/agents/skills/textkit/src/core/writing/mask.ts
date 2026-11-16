@@ -11,8 +11,7 @@ export const MASK_TOKEN_RE = /⟦\d+⟧/g;
 // masksSurvived reports whether `output` carries exactly the same multiset of ⟦N⟧ tokens as
 // `input` — every reference span present the same number of times, none dropped, duplicated, or
 // invented. This is the ONE mask-survival mechanism: verifySpellBlock uses it as its first axis
-// (a change-nothing-else pass), and the simplify guard uses it alone (a heavy restyle changes
-// line count and diff size by design, so only mask-survival transfers). Total: never throws.
+// (a change-nothing-else pass). Total: never throws.
 export function masksSurvived(input: string, output: string): boolean {
   const a = (input.match(MASK_TOKEN_RE) ?? []).sort();
   const b = (output.match(MASK_TOKEN_RE) ?? []).sort();
