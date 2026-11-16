@@ -32,7 +32,28 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 
 ## Rust workspace
 
-`vault-query` is the only crate in this repo, a one-member workspace rooted at `Cargo.toml`. It links `mdstruct` as a git dependency on [md-for-agents](https://github.com/vadirn/md-for-agents), pinned by rev in `Cargo.lock`. `shell.nix` provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
+`vault-query` is the only crate in the root workspace, rooted at `Cargo.toml`. It links `mdstruct` as a git dependency on [md-for-agents](https://github.com/vadirn/md-for-agents), pinned by rev in `Cargo.lock`. `shell.nix` provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
+
+`route/` is a second crate with its own workspace and `Cargo.lock`, so neither crate's edits rebuild the other. `nix build .#route` builds it and runs its tests.
+
+## route
+
+The Claude Code hook router. `settings.json` gives each hook event one entry, `route <Event>`. route reads the event JSON on stdin, runs the handlers listed for that event in `home/claude/route/hooks.json` (linked to `~/.config/route/hooks.json`) in parallel, and gives Claude Code one answer. The hooks file uses Claude Code's own `{"hooks": ...}` shape, so pasting its entries back into `settings.json` undoes route.
+
+- **Answer:** when only one handler says anything, route passes its stdout, stderr and exit code through unchanged. When several do, route merges them. The strongest permission decision wins (deny > defer > ask > allow), every reason for it is kept, one per line, and added context is joined.
+- **Failure:** if route itself fails (a panic, a bad hooks file, a stuck run), it denies on PreToolUse and lets every other event through. A failing handler stays a non-blocking error, as Claude Code treats it.
+- **Toggles:** `~/.local/state/route/state.json` lists switched-off handlers as `{"disabled": [{"event", "matcher", "command"}]}`.
+- **Log:** one JSON line per event in `~/.local/state/route/log/YYYY-MM-DD.jsonl`. Each line is written once under `flock`. Input and handler output are truncated, and day files older than `route.log.retention_days` (default 30) are deleted.
+
+`scripts/route-dryrun.py ./result/bin/route` replays recent real events through route and through each handler run alone, and reports where they disagree.
+
+Until the switch, `hooks.json` mirrors the `hooks` block of `settings.json`, and the dry run stops if the two drift. Switching over, after `./rebuild.sh` has linked the binary at `~/.local/libexec/route` (off PATH, since macOS ships `/sbin/route`) and the hooks file:
+
+```bash
+jq --slurpfile r home/claude/route/settings-hooks.draft.json '.hooks = $r[0].hooks' home/claude/settings.json > /tmp/settings.json && mv /tmp/settings.json home/claude/settings.json
+```
+
+Regenerate the draft whenever `hooks.json` changes: `./result/bin/route --config home/claude/route/hooks.json settings --bin "~/.local/libexec/route"`.
 
 ## md-for-agents
 

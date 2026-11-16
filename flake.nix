@@ -49,7 +49,7 @@
     system = "aarch64-darwin";
     pkgs = nixpkgs.legacyPackages.${system};
     inherit (pkgs) lib;
-    # `vault-query` is the only crate left in this repo. Its build source is the
+    # `vault-query` is the only crate in the root workspace. Its build source is the
     # workspace manifest, the single lockfile, and its own tree; `mdstruct` and
     # `mdsearch` arrive as git dependencies that `fetchCargoVendor` resolves.
     workspaceFiles = lib.fileset.unions [
@@ -83,6 +83,24 @@
       };
       cargoHash = "sha256-ksQVMViwjNXKSDLtowqy82J/3W6mhT2vHu1HzPd6HmA=";
     };
+    # `route`, the Claude Code hook router, is its own workspace with its own
+    # lockfile: a route edit never rebuilds vault-query, and vault-query's
+    # dependencies never reach the binary that sits on every tool call. The
+    # build runs its tests, which use only `bash` and `/bin/sh` fixtures.
+    route = pkgs.rustPlatform.buildRustPackage {
+      pname = "route";
+      version = "0.1.0";
+      src = lib.fileset.toSource {
+        root = ./route;
+        fileset = lib.fileset.unions [
+          ./route/Cargo.toml
+          ./route/Cargo.lock
+          ./route/src
+          ./route/tests
+        ];
+      };
+      cargoHash = "sha256-CQ7rs9jHZkSVTBLv5rbYm0zvDaTS0rmbA92DtrgfBjw=";
+    };
     # The extracted workspace builds as one derivation carrying every binary in
     # it, so comrak compiles once instead of once per crate, and one cargoHash
     # covers the lot.
@@ -104,7 +122,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
-            inherit vault-query md-for-agents;
+            inherit vault-query md-for-agents route;
           })
         ];
       };
@@ -117,7 +135,7 @@
     };
 
     darwinPackages = self.darwinConfigurations.default.pkgs;
-    packages.${system} = {inherit vault-query md-for-agents;};
+    packages.${system} = {inherit vault-query md-for-agents route;};
     formatter.${system} = pkgs.alejandra;
   };
 }
