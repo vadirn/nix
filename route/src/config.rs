@@ -466,6 +466,12 @@ pub fn settings_block(cfg: &Config, bin: &str) -> Result<(Value, Vec<String>), S
         match sync_max {
             Some(t) => {
                 hook.insert("timeout".into(), json!(t.ceil() as u64 + 2));
+                // route itself fails closed on these events; onFailure covers
+                // the one case it cannot, a route that never starts. Claude
+                // Code before 2.1.295 ignores the field.
+                if event::fails_closed(event) {
+                    hook.insert("onFailure".into(), "block".into());
+                }
             }
             None => {
                 hook.insert("async".into(), Value::Bool(true));
@@ -670,7 +676,8 @@ mod tests {
             block,
             json!({"hooks": {
                 "PreToolUse": [{"matcher": "Bash|Read|WebSearch|WebFetch", "hooks": [
-                    {"type": "command", "command": "/bin/route PreToolUse", "timeout": 602}
+                    {"type": "command", "command": "/bin/route PreToolUse", "timeout": 602,
+                        "onFailure": "block"}
                 ]}],
                 "Stop": [{"hooks": [
                     {"type": "command", "command": "/bin/route Stop", "timeout": 122}

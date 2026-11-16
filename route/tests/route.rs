@@ -374,10 +374,14 @@ fn a_slow_handler_times_out_without_blocking() {
         ]}]}}),
     );
     let r = f.run("PreToolUse", &bash_call("ls"));
-    assert_eq!(r.exit, Some(1));
-    assert!(r.stderr.contains("timed out after 0.5s"), "{}", r.stderr);
+    // Exit 0, not 1: route's PreToolUse entry blocks on any other exit.
+    assert_eq!(r.exit, Some(0));
+    let msg = r.json()["systemMessage"].as_str().unwrap().to_string();
+    assert!(msg.contains("timed out after 0.5s"), "{msg}");
     assert!(r.took < Duration::from_secs(3), "{:?}", r.took);
-    assert_eq!(f.log_lines()[0]["handlers"][0]["timed_out"], true);
+    let line = &f.log_lines()[0];
+    assert_eq!(line["handlers"][0]["timed_out"], true);
+    assert_eq!(line["mode"], "rewritten");
 }
 
 #[test]
@@ -491,7 +495,8 @@ fn settings_prints_the_hooks_block_for_route() {
         block,
         json!({"hooks": {
             "PreToolUse": [{"matcher": "Bash|mcp__visualize__show_widget", "hooks": [
-                {"type": "command", "command": "/opt/route PreToolUse", "timeout": 12}
+                {"type": "command", "command": "/opt/route PreToolUse", "timeout": 12,
+                    "onFailure": "block"}
             ]}],
             "SessionEnd": [{"hooks": [
                 {"type": "command", "command": "/opt/route SessionEnd", "timeout": 5}

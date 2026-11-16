@@ -12,6 +12,10 @@
 //! - `updatedInput` passes through unless the call is denied;
 //! - `additionalContext`, plain-stdout context, `systemMessage` and
 //!   `stopReason` are joined.
+//!
+//! One exception to passing a lone answer on: on PreToolUse, whose entry
+//! carries `onFailure: "block"`, a lone handler's failure is rewritten into a
+//! `systemMessage` notice at exit 0, since any other exit would block.
 
 use serde_json::{Map, Value};
 
@@ -295,6 +299,13 @@ pub fn respond(event: &str, answers: &[Answer]) -> Response {
             mode: "silent",
             ..Response::default()
         },
+        // Where route's entry carries onFailure: block, Claude Code blocks on
+        // any exit but 0 and 2 and on unparseable JSON, so a lone handler's
+        // failure is rewritten into a non-blocking notice instead of passed on.
+        [i] if event::fails_closed(event) && fails(answers[*i].outcome, &effects[*i]) => Response {
+            mode: "rewritten",
+            ..merge(event, &[(answers[*i].label, &effects[*i])])
+        },
         [i] => passthrough(answers[*i].label, answers[*i].outcome, &effects[*i]),
         _ => merge(
             event,
@@ -304,6 +315,11 @@ pub fn respond(event: &str, answers: &[Answer]) -> Response {
                 .collect::<Vec<_>>(),
         ),
     }
+}
+
+/// What `onFailure: "block"` would count as a failure of this answer.
+fn fails(o: &Outcome, e: &Effect) -> bool {
+    e.notice.is_some() || !matches!(o.exit, Some(0) | Some(2))
 }
 
 fn passthrough(label: &str, o: &Outcome, e: &Effect) -> Response {
@@ -469,6 +485,7 @@ fn merge(event: &str, effects: &[(&str, &Effect)]) -> Response {
     // Separate hooks would each show their failure as a hook error notice.
     // Alone, the notices become route's own non-blocking error; next to other
     // output, they ride in systemMessage, the warning Claude Code shows the user.
+    // Where an exit 1 would block (onFailure), they always ride in systemMessage.
     let mut messages: Vec<String> = effects
         .iter()
         .filter_map(|(_, e)| e.system_message.clone())
@@ -477,7 +494,7 @@ fn merge(event: &str, effects: &[(&str, &Effect)]) -> Response {
         .iter()
         .filter_map(|(l, e)| e.notice.as_ref().map(|n| format!("{l}: {n}")))
         .collect();
-    if top.is_empty() && r.exit != 2 && messages.is_empty() {
+    if top.is_empty() && r.exit != 2 && messages.is_empty() && !event::fails_closed(event) {
         if !notices.is_empty() {
             r.exit = 1;
             r.stderr = format!("route: {}\n", notices.join("; ")).into_bytes();
@@ -566,12 +583,62 @@ mod tests {
             stdout: b"partial".to_vec(),
             ..Outcome::default()
         };
-        let r = respond("PreToolUse", &answers(&[timed_out]));
+        let r = respond("Stop", &answers(&[timed_out]));
         assert_eq!(r.exit, 1);
         assert!(r.stdout.is_empty());
         assert_eq!(
             String::from_utf8_lossy(&r.stderr),
             "route: a: timed out after 5s\n"
+        );
+    }
+
+    #[test]
+    fn on_pre_tool_use_a_lone_failure_becomes_a_notice_not_an_exit_1() {
+        // route's PreToolUse entry carries onFailure: block, under which any
+        // exit but 0 and 2, or unparseable JSON, would block the call.
+        let timed_out = Outcome {
+            timed_out: true,
+            ..Outcome::default()
+        };
+        for (o, notice) in [
+            (timed_out, "route: a: timed out after 5s"),
+            (
+                out(1, "", "boom\nmore"),
+                "route: a: Failed with non-blocking status code: boom",
+            ),
+            (
+                out(127, "", ""),
+                "route: a: Failed with non-blocking status code (exit 127)",
+            ),
+            (out(0, "{not json}", ""), "route: a: invalid JSON output:"),
+        ] {
+            let r = respond("PreToolUse", &answers(&[o]));
+            assert_eq!(
+                (r.exit, r.mode, r.decision.as_deref()),
+                (0, "rewritten", None)
+            );
+            assert!(r.stderr.is_empty());
+            let msg = json_of(&r)["systemMessage"].as_str().unwrap().to_string();
+            assert!(msg.starts_with(notice), "{msg}");
+        }
+
+        // Valid JSON still decides under a non-zero exit, now at exit 0.
+        let mut d = deny("json wins");
+        d.exit = Some(1);
+        let r = respond("PreToolUse", &answers(&[d]));
+        assert_eq!(r.exit, 0);
+        assert_eq!(
+            json_of(&r)["hookSpecificOutput"]["permissionDecision"],
+            "deny"
+        );
+
+        // Several failures and nothing else: one notice each, still exit 0.
+        let outs = [out(1, "", "boom"), out(3, "", "bang")];
+        let r = respond("PreToolUse", &answers(&outs));
+        assert_eq!(r.exit, 0);
+        assert_eq!(
+            json_of(&r)["systemMessage"],
+            "route: a: Failed with non-blocking status code: boom\nroute: b: Failed with non-blocking status code: bang"
         );
     }
 

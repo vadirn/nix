@@ -42,12 +42,13 @@ The Claude Code hook router. `settings.json` gives each hook event one entry, `r
 
 - **Answer:** when only one handler says anything, route passes its stdout, stderr and exit code through unchanged. When several do, route merges them. The strongest permission decision wins (deny > defer > ask > allow), every reason for it is kept, one per line, and added context is joined.
 - **Failure:** if route itself fails (a panic, a bad hooks file, a stuck run), it denies on PreToolUse and lets every other event through. A failing handler stays a non-blocking error, as Claude Code treats it. Whatever ends route early, a signal included, kills the handlers still running. Async handlers are detached and keep going.
+- **Can't start:** route's PreToolUse entry carries `onFailure: "block"`, so a route binary that is missing or cannot start also denies the call. Claude Code 2.1.295 and later honour it; older versions ignore it. Under it, any exit but 0 or 2 blocks, so on PreToolUse route reports a handler's failure in `systemMessage` with exit 0, logged as mode `rewritten`.
 - **Toggles:** `~/.local/state/route/state.json` lists switched-off handlers as `{"disabled": [{"event", "matcher", "command"}]}`.
 - **Log:** one JSON line per event in `~/.local/state/route/log/YYYY-MM-DD.jsonl`. Each line is written once under `flock`. Input and handler output are truncated, and day files older than `route.log.retention_days` (default 30) are deleted.
 
 `scripts/route-dryrun.py ./result/bin/route` replays recent real events through route and through each handler run alone, and reports where they disagree.
 
-`settings.json` calls route at `~/.local/libexec/route`, off PATH, since macOS ships `/sbin/route`. A Mac must run `./rebuild.sh`, which links the binary and the hooks file, before it pulls a `settings.json` that calls route. Otherwise no hook can start, and Claude Code lets every tool call through.
+`settings.json` calls route at `~/.local/libexec/route`, off PATH, since macOS ships `/sbin/route`. A Mac must run `./rebuild.sh`, which links the binary and the hooks file, before it pulls a `settings.json` that calls route. Otherwise no hook can start: Claude Code 2.1.295 and later deny every PreToolUse call, and older versions let every tool call through.
 
 Whenever `hooks.json` changes, regenerate the route entries, then apply them to `settings.json`:
 
