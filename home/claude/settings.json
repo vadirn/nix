@@ -264,6 +264,11 @@
             "type": "command",
             "command": "bash ~/.claude/hooks/turn-check.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "/Users/vadim/.local/bin/trinket-claude-prompt --config /Users/vadim/.config/trinket/turn-prompt.json",
+            "timeout": 30
           }
         ]
       }
