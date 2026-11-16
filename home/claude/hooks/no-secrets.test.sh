@@ -4,27 +4,39 @@ SCRIPT="$(dirname "$0")/no-secrets.sh"
 PASS=0
 FAIL=0
 
-assert_deny() {
-  local desc="$1" cmd="$2"
-  result=$(echo '{"tool_input":{"command":"'"$cmd"'"}}' | bash "$SCRIPT")
-  if echo "$result" | grep -q '"deny"'; then
-    ((PASS++))
-  else
-    ((FAIL++))
-    echo "FAIL (expected deny): $desc"
-  fi
+# settings.json runs the hook as `bash <path>`, so it gets the first bash on PATH:
+# macOS /bin/bash 3.2 in the hook environment. Every case runs under 3.2 and, when
+# present, nix bash 5, so a bash-4-only idiom fails here instead of failing open.
+BASHES=(/bin/bash)
+NIX_BASH=/nix/var/nix/profiles/system/sw/bin/bash
+[ -x "$NIX_BASH" ] && BASHES+=("$NIX_BASH")
+
+ERR_FILE=$(mktemp)
+trap 'rm -f "$ERR_FILE"' EXIT
+
+# A crashed hook prints nothing and so looks like an allow; any stderr fails the case.
+check() {
+  local want="$1" desc="$2" cmd="$3" sh result err
+  for sh in "${BASHES[@]}"; do
+    result=$(echo '{"tool_input":{"command":"'"$cmd"'"}}' | "$sh" "$SCRIPT" 2>"$ERR_FILE")
+    err=$(cat "$ERR_FILE")
+    if [ -n "$err" ]; then
+      ((FAIL++))
+      echo "FAIL (stderr under $sh): $desc: $err"
+    elif [ "$want" = deny ] && ! echo "$result" | grep -q '"deny"'; then
+      ((FAIL++))
+      echo "FAIL (expected deny under $sh): $desc"
+    elif [ "$want" = allow ] && [ -n "$result" ]; then
+      ((FAIL++))
+      echo "FAIL (expected allow under $sh): $desc"
+    else
+      ((PASS++))
+    fi
+  done
 }
 
-assert_allow() {
-  local desc="$1" cmd="$2"
-  result=$(echo '{"tool_input":{"command":"'"$cmd"'"}}' | bash "$SCRIPT")
-  if [ -z "$result" ]; then
-    ((PASS++))
-  else
-    ((FAIL++))
-    echo "FAIL (expected allow): $desc"
-  fi
-}
+assert_deny()  { check deny "$@"; }
+assert_allow() { check allow "$@"; }
 
 # Should deny: reader + sensitive file
 assert_deny  "cat .env"                    "cat .env"
@@ -89,6 +101,11 @@ assert_deny  "hyphenated creds data file" "cat app-credentials.json"
 assert_deny  "secrets data file"          "cat src/secrets.yaml"
 assert_deny  "secrets directory"          "cat config/secrets/db.yml"
 assert_deny  "bare secrets file"          "cat /run/secrets"
+
+# The file check is case-insensitive; these fail if the lowercasing breaks.
+assert_deny  "uppercase .ENV"             "cat .ENV"
+assert_deny  "uppercase key name"         "head ~/.ssh/ID_RSA"
+assert_deny  "non-ASCII in command"       "grep пароль .env"
 
 echo "$((PASS + FAIL)) tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

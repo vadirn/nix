@@ -3,8 +3,10 @@
 # NOT a security boundary: a string matcher is defeated by obfuscation (c""at .env) and
 # unlisted readers. Real enforcement is sandbox.credentials in settings.json. Keep this
 # low-false-positive: file tokens are anchored to a path boundary so leading-dot accessors
-# (jq '.data.key') never look like filenames (server.key). env bash avoids the /bin/bash 3.2
-# ${VAR,,} "bad substitution" that would abort and fail open.
+# (jq '.data.key') never look like filenames (server.key). Keep it bash 3.2 clean:
+# settings.json runs it as `bash <path>`, which ignores the shebang and takes the first
+# bash on PATH (macOS /bin/bash 3.2). A bash-4 idiom such as ${VAR,,} aborts the test with
+# "bad substitution" there, and the hook then exits 0 and fails open.
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 
@@ -27,7 +29,11 @@ SENSITIVE+='|(^|[^[:alnum:]_.])[[:alnum:]_~][^[:space:]]*\.(pem|key|p12|pfx|keys
 SENSITIVE+='|id_rsa|id_ed25519|token\.json|auth\.json|\.netrc|\.npmrc|\.pypirc)'
 READERS='((^|[^[:alnum:]_])(cat|head|tail|less|more|grep|rg|egrep|fgrep|ag|ack|sed|awk|jq|yq|bat|base64|xxd|od|strings|nl|tac|tee|source)([[:space:]]|$)|find[[:space:]].*-exec|xargs)'
 
-if [[ "$COMMAND" =~ $READERS ]] && [[ "${COMMAND,,}" =~ $SENSITIVE ]]; then
+# Lowercase for the file check only; reader names stay case-sensitive. LC_ALL=C keeps
+# tr bytewise, so a non-UTF-8 byte cannot make it fail and leave an empty string.
+COMMAND_LOWER=$(printf '%s' "$COMMAND" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+
+if [[ "$COMMAND" =~ $READERS ]] && [[ "$COMMAND_LOWER" =~ $SENSITIVE ]]; then
   jq -n '{
     "hookSpecificOutput": {
       "hookEventName": "PreToolUse",
