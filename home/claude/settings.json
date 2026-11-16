@@ -110,7 +110,8 @@
           {
             "type": "command",
             "command": "~/.local/libexec/route PreToolUse",
-            "timeout": 602
+            "timeout": 602,
+            "onFailure": "block"
           }
         ]
       }
