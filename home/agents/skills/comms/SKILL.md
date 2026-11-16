@@ -4,9 +4,9 @@ description: >
   Apply and monitor the personal communication guide. Draft one message by the guide's rules from a
   thread or a binding, sweep Slack and Basecamp for messages owed, or run the monthly review. Drafts
   and reports only, never sends. Triggers: /comms, "draft a reply to this thread", "draft a heartbeat",
-  "draft my check-in", "what do I owe", "sweep my comms", "comms review". Route elsewhere: a status
-  update built from git, crux notes and the weekly log → /brief; a relayed stakeholder complaint →
-  /brief first; any other Basecamp action → /basecamp; restyling prose → /simplify-text.
+  "draft my check-in", "draft a status update for <name>", "how do I answer this complaint", "what do
+  I owe", "sweep my comms", "comms review". Route elsewhere: any other Basecamp action → /basecamp;
+  restyling prose → /simplify-text.
 ---
 
 # Comms
@@ -30,13 +30,15 @@ em_context = "/Users/vadim/Documents/vault/41 projects/evil-martians/Context.md"
 if guide or em_context is missing: stop, and report which one
 
 if "draft <thread or binding>":
-    if the input is a relayed complaint: say that /brief can diagnose it, then draft the reply by A2 and A10
     binding = find the binding in em_context or the project's Context.md
     thread = read the thread or channel the user named
     branch = the guide's test: do the reader's decisions depend on this message?
+    if branch A: gap = name the gap by the guide's Branch A principles: impression or target
+        if the thread does not settle which: ask the user before drafting, and say that a report cannot close a target gap
     template = Read(dir/templates/<heartbeat | weekly-status | check-in | renegotiation>.md)
-    draft = fill the template by the guide's rules for that branch, from the thread
-    if the weekly status needs evidence from git or crux: say that /brief gathers it, and leave those lines open
+    if the template is weekly-status and the thread lacks the facts:
+        Read(dir/references/evidence.md), and gather by its procedure
+    draft = fill the template by the guide's rules for that branch
     check the draft: R1 reader and purpose, R3 reader's currency, A3 time of the next update
     show the draft and name each rule it applies
 
@@ -78,6 +80,5 @@ Mark what the sweep could not see: calls, direct messages it did not read, and a
 
 ## Neighbours
 
-- **/brief** drafts a per-stakeholder status update from git, crux notes and the weekly log. It also diagnoses a complaint as a state gap or a target gap. The user invokes it; this skill cannot.
 - **/basecamp** holds the full CLI reference. Read it when a `basecamp` command here fails.
 - **The `comms-sweep` scheduled task** runs the same sweep each workday. It carries its own copy of the steps and checks. Change both when a check changes.
