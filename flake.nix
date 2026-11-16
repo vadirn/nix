@@ -101,6 +101,60 @@
       };
       cargoHash = "sha256-CQ7rs9jHZkSVTBLv5rbYm0zvDaTS0rmbA92DtrgfBjw=";
     };
+    # `route-console`, the read-only Rune window onto route's log, as
+    # `Route Console.app`. Its own workspace and lockfile, like route; Rune and
+    # its patched crates arrive as git dependencies that fetchCargoVendor
+    # resolves. The bundle loads only system libraries, so a copy taken out of
+    # the store (to sign it with a Developer ID, scripts/sign-route-console.sh)
+    # keeps working after the store path is collected.
+    route-console = pkgs.rustPlatform.buildRustPackage {
+      pname = "route-console";
+      version = "0.1.0";
+      src = lib.fileset.toSource {
+        root = ./route-console;
+        fileset = lib.fileset.unions [
+          ./route-console/Cargo.toml
+          ./route-console/Cargo.lock
+          ./route-console/src
+        ];
+      };
+      cargoHash = "sha256-1vkXx6O321JxVkhVFchL/Mhhso5nQ53kEgZGpEzpKMo=";
+      nativeBuildInputs = [pkgs.darwin.sigtool];
+      postInstall = ''
+        app="$out/Applications/Route Console.app/Contents"
+        mkdir -p "$app/MacOS"
+        mv $out/bin/route-console "$app/MacOS/route-console"
+        ln -s "../Applications/Route Console.app/Contents/MacOS/route-console" $out/bin/route-console
+        exe="$app/MacOS/route-console"
+        # Rust's libc crate links libiconv; nixpkgs points it at its own copy.
+        # macOS ships the same ABI in /usr/lib.
+        for lib in $(otool -L "$exe" | awk '/\/nix\/store\/.*libiconv/ {print $1}'); do
+          install_name_tool -change "$lib" /usr/lib/libiconv.2.dylib "$exe"
+        done
+        if otool -L "$exe" | tail -n +2 | grep -q /nix/store; then
+          echo "route-console still loads from /nix/store:" >&2
+          otool -L "$exe" >&2
+          exit 1
+        fi
+        codesign --force --sign - "$exe"
+        cat > "$app/Info.plist" <<EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>CFBundleExecutable</key><string>route-console</string>
+          <key>CFBundleIdentifier</key><string>io.vadirn.route-console</string>
+          <key>CFBundleName</key><string>Route Console</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          <key>CFBundleShortVersionString</key><string>0.1.0</string>
+          <key>CFBundleVersion</key><string>0.1.0</string>
+          <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+          <key>NSHighResolutionCapable</key><true/>
+        </dict>
+        </plist>
+        EOF
+      '';
+    };
     # The extracted workspace builds as one derivation carrying every binary in
     # it, so comrak compiles once instead of once per crate, and one cargoHash
     # covers the lot.
@@ -135,7 +189,7 @@
     };
 
     darwinPackages = self.darwinConfigurations.default.pkgs;
-    packages.${system} = {inherit vault-query md-for-agents route;};
+    packages.${system} = {inherit vault-query md-for-agents route route-console;};
     formatter.${system} = pkgs.alejandra;
   };
 }

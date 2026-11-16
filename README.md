@@ -34,7 +34,7 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 
 `vault-query` is the only crate in the root workspace, rooted at `Cargo.toml`. It links `mdstruct` as a git dependency on [md-for-agents](https://github.com/vadirn/md-for-agents), pinned by rev in `Cargo.lock`. `shell.nix` provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
 
-`route/` is a second crate with its own workspace and `Cargo.lock`, so neither crate's edits rebuild the other. `nix build .#route` builds it and runs its tests.
+`route/` is a second crate with its own workspace and `Cargo.lock`, so neither crate's edits rebuild the other. `nix build .#route` builds it and runs its tests. `route-console/` is a third, for the same reason and because Rune's `[patch.crates-io]` table must sit at a workspace root.
 
 ## route
 
@@ -60,6 +60,17 @@ Whenever `hooks.json` changes, regenerate the route entries, then apply them to 
 ```bash
 jq --slurpfile r home/claude/route/settings-hooks.json '.hooks = $r[0].hooks' home/claude/settings.json > /tmp/settings.json && mv /tmp/settings.json home/claude/settings.json
 ```
+
+## route-console
+
+`Route Console.app`, a read-only macOS window onto route's log, built on [Rune](https://github.com/anomalyco/rune) (pinned by rev; the bump steps head `route-console/Cargo.toml`). It opens on today's events in the order route wrote them, as a tail reads, and checks for new lines every half second. The list moves only when you move it, or while you are at its end: there it follows new rows, scrolling up pauses it while rows keep loading below, and scrolling back down follows again. Picking a row pauses it too; a "↓ N new" pill counts the rows below, and it and End jump to the newest. Nothing is picked until you pick: a filter that hides the picked row leaves it in the inspector, marked hidden, and a filter that changes the rows above it keeps it in place on screen, as far as the list's length allows. The sidebar filters by hook event, the toolbar by text, and the inspector shows the picked event's input, reasons, rewrite, stderr and per-handler timings.
+
+The Health screen sums up today from the same index. Its issues are handlers that failed (could not start, timed out, or exited with an error), counting the tool calls a failing guard let through, and handlers that wrote to stderr at exit 0, which Claude Code never shows; each opens the Log on exactly the events it counts. Below them are the median time a Bash call waits, per handler and for route's run, and route's log limits from `hooks.json`, shown, not set. The Log keeps its place, pick and pill while Health shows.
+
+- **Reads:** the day files and the hooks file, found as route finds them (`XDG_STATE_HOME`, `XDG_CONFIG_HOME`, or `--log-dir`, `--config`). It never writes `hooks.json` or `state.json`, and never takes the log's `flock`.
+- **Index:** a SQLite cache at `~/Library/Caches/route-console/index.sqlite` (`--index`), private (0600) as route's log is, since tool input can carry secrets. The JSONL files stay the record: a schema change drops the cache and rebuilds it from the files, and deleting it by hand is always safe.
+- **Build:** `nix build .#route-console` runs its tests and leaves `result/Applications/Route Console.app`, ad hoc signed and loading only system libraries (the build fails otherwise). `scripts/sign-route-console.sh` copies it out of the store and signs it with your Developer ID (hardened runtime, timestamped; not notarized), into `~/Applications` unless given another destination.
+- **Headless:** `result/bin/route-console --snap out.png --theme dark` renders it without a window; `--scene canvas` swaps in the design canvas's sample events, `--scene health` adds handlers in trouble and opens Health, and `--scene live` a list that grows by one sample event every half second, for `--script` and `--video` runs of scrolling and following. `scripts/check-route-console.sh` replays the scripts in `route-console/checks` that way and checks Rune's scroll state, which the unit tests cannot reach: a click at the end pauses the list and shows the pill, a click on a row half under an edge scrolls it just into view, a filter holds the picked row where it shows, a trip to Health brings the list back where it was, and an issue's events are the rows it counts.
 
 ## md-for-agents
 

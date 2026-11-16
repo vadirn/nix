@@ -1,0 +1,9 @@
+{"events": [
+  {"t": 1.0, "type": "scroll", "x": 560, "y": 450, "dy": 300, "dur": 0.4},
+  {"t": 1.8, "type": "tap", "x": 560, "y": 450},
+  {"t": 1.9, "type": "move", "x": 1100, "y": 700},
+  {"t": 2.0, "type": "mark", "name": "before"},
+  {"t": 3.6, "type": "tap", "key": "event-PreToolUse"},
+  {"t": 3.7, "type": "move", "x": 1100, "y": 700},
+  {"t": 4.6, "type": "mark", "name": "narrowed"}
+]}

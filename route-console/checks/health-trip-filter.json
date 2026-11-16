@@ -1,0 +1,10 @@
+{"events": [
+  {"t": 8.0, "type": "scroll", "x": 560, "y": 450, "dy": 150, "dur": 0.4},
+  {"t": 8.8, "type": "tap", "x": 560, "y": 470},
+  {"t": 8.9, "type": "move", "x": 1100, "y": 700},
+  {"t": 9.0, "type": "mark", "name": "before"},
+  {"t": 9.2, "type": "tap", "key": "screen-health"},
+  {"t": 10.6, "type": "tap", "key": "event-PreToolUse"},
+  {"t": 10.7, "type": "move", "x": 1100, "y": 700},
+  {"t": 11.6, "type": "mark", "name": "back"}
+]}

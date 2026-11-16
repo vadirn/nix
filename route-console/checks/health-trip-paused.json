@@ -1,0 +1,11 @@
+{"events": [
+  {"t": 1.0, "type": "scroll", "x": 560, "y": 450, "dy": 300, "dur": 0.4},
+  {"t": 1.8, "type": "tap", "x": 560, "y": 450},
+  {"t": 1.9, "type": "move", "x": 1100, "y": 700},
+  {"t": 2.0, "type": "mark", "name": "before"},
+  {"t": 2.2, "type": "tap", "key": "screen-health"},
+  {"t": 2.5, "type": "mark", "name": "away"},
+  {"t": 3.6, "type": "tap", "key": "screen-log"},
+  {"t": 3.7, "type": "move", "x": 1100, "y": 700},
+  {"t": 3.9, "type": "mark", "name": "back"}
+]}
