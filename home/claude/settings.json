@@ -177,6 +177,15 @@
         ]
       },
       {
+        "matcher": "^mcp__visualize__show_widget$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/chart-verbatim.py"
+          }
+        ]
+      },
+      {
         "matcher": "^Bash$",
         "hooks": [
           {

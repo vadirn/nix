@@ -32,7 +32,7 @@ Renders Mermaid diagrams and charts through the pinned `pele` package and embeds
    ```
 
 3. On exit 1, stderr names the error and, where known, the line and column. Fix the source and rerun.
-4. Pass stdout verbatim as `widget_code` to `show_widget`. Write the explanation in the reply, outside the tool call.
+4. Pass stdout verbatim as `widget_code` to `show_widget`. Write the explanation in the reply, outside the tool call. `render.ts` also saves the fragment to `~/.cache/chart-widgets/<id>.html`, keyed by its opening `data-chart` id. The `chart-verbatim.py` hook denies a `show_widget` call whose `widget_code` differs from that file, and the denial quotes the first difference. On a denial, resend the file's contents unchanged.
 
 ## Picking the type
 

@@ -12,6 +12,8 @@
  * stay legible at the widget's width goes into a zoomable viewport instead.
  */
 
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "fs";
+import { homedir } from "os";
 import { join } from "path";
 import { PeleError, render } from "pele";
 import { TOOLBAR_ROOM } from "./toolbar.ts";
@@ -131,10 +133,13 @@ export interface Rendered {
   height: number;
 }
 
-/** Wrap pele's SVG: plain when it stays legible at the widget width, else in a viewport. */
+/**
+ * Wrap pele's SVG: plain when it stays legible at the widget width, else in a viewport.
+ * The outer div opens with data-chart, the key of the render's record.
+ */
 export function toHtml({ svg, width, height }: Rendered, id: string): string {
   if (width <= ZOOM_MIN_WIDTH) {
-    return `<div style="display:flex;justify-content:center;padding:1rem 0;${THEME}"><style>${ROLE_CSS}</style>${svg}</div>`;
+    return `<div data-chart="${id}" style="display:flex;justify-content:center;padding:1rem 0;${THEME}"><style>${ROLE_CSS}</style>${svg}</div>`;
   }
   const viewHeight = Math.min(Math.ceil(height) + TOOLBAR_ROOM, VIEW_MAX_HEIGHT);
   // Until the script marks the viewport ready, CSS paints the view the script
@@ -152,7 +157,7 @@ export function toHtml({ svg, width, height }: Rendered, id: string): string {
     ROLE_CSS,
   ].join("");
   return [
-    `<div style="padding:1rem 0;${THEME}">`,
+    `<div data-chart="${id}" style="padding:1rem 0;${THEME}">`,
     `<style>${style}</style>`,
     `<div id="${id}" data-w="${width}" data-h="${height}" tabindex="0" role="group" aria-label="Zoomable diagram: drag or arrow keys to pan, ctrl or cmd and scroll, or plus and minus, to zoom"`,
     ` style="position:relative;overflow:hidden;height:${viewHeight}px;border:0.5px solid var(--border);border-radius:var(--radius);cursor:grab;touch-action:none;user-select:none">${svg}`,
@@ -166,15 +171,47 @@ export function toHtml({ svg, width, height }: Rendered, id: string): string {
 
 // Ids must not collide when several widgets share a page. Pele keys shapes by
 // data-id, so its only ids are the title and desc, which idPrefix covers.
-export function toWidget(source: string): string {
-  const id = `mmd-${crypto.randomUUID().slice(0, 8)}`;
+const newId = () => `mmd-${crypto.randomUUID().slice(0, 8)}`;
+
+export function toWidget(source: string, id = newId()): string {
   const result = render(source, { maxWidth: WIDGET_WIDTH, fontSize: FONT_SIZE, idPrefix: id });
   return toHtml(result, id);
 }
 
+// The model hands the fragment to show_widget by copying it out of stdout, and
+// a copy of a minified script can drift: once a pointerdown handler came out
+// as its neighbouring pointermove guard, which broke the toolbar. So each
+// render leaves a record, and the PreToolUse hook chart-verbatim.py (in
+// home/claude/hooks) denies a show_widget call whose widget_code differs from
+// the record its data-chart names. ~/.cache is in the sandbox's allowWrite.
+const RECORDS = join(homedir(), ".cache", "chart-widgets");
+// A record only has to outlive the reply that shows it.
+const RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function saveRecord(id: string, html: string) {
+  mkdirSync(RECORDS, { recursive: true });
+  writeFileSync(join(RECORDS, `${id}.html`), html);
+  // Pruning comes after the write and tolerates a file a parallel render
+  // already removed, so it can never cost this render its record.
+  for (const name of readdirSync(RECORDS)) {
+    const path = join(RECORDS, name);
+    try {
+      if (Date.now() - statSync(path).mtimeMs > RECORD_TTL_MS) rmSync(path, { force: true });
+    } catch {}
+  }
+}
+
 if (import.meta.main) {
   try {
-    console.log(toWidget(await Bun.stdin.text()));
+    const id = newId();
+    const html = toWidget(await Bun.stdin.text(), id);
+    try {
+      saveRecord(id, html);
+    } catch (error) {
+      // Without a record the hook lets the call through unchecked.
+      console.error(`render.ts: no record saved, so show_widget goes unchecked: ${error}`);
+    }
+    console.log(html);
   } catch (error) {
     if (!(error instanceof PeleError)) throw error;
     // A syntax message already quotes the snippet; other errors may not.

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import { toHtml, toWidget, VIEW_MAX_HEIGHT, ZOOM_MIN_WIDTH } from "./render.ts";
 import { TOOLBAR_ROOM } from "./toolbar.ts";
@@ -13,7 +15,7 @@ const ids = (html: string) => [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m
 describe("toWidget", () => {
   it("wraps a themeable SVG in the host-variable mapping", () => {
     const html = toWidget("flowchart LR\n  accTitle: Demo\n  A --> B");
-    expect(html).toStartWith('<div style="');
+    expect(html).toMatch(/^<div data-chart="mmd-[0-9a-f]{8}" style="/);
     expect(html).toContain("--pele-fg:var(--text-primary)");
     expect(html).toContain('<svg xmlns="http://www.w3.org/2000/svg" class="pele');
     expect(html).toContain("var(--pele-fg,");
@@ -43,7 +45,7 @@ describe("toWidget", () => {
 
   it("puts a wide diagram in a zoomable viewport", () => {
     const html = toWidget(WIDE);
-    expect(html).toStartWith('<div style="');
+    expect(html).toMatch(/^<div data-chart="mmd-[0-9a-f]{8}" style="/);
     expect(html).toContain("--pele-fg:var(--text-primary)");
     expect(html).toContain("<title");
     expect(html).toMatch(
@@ -131,5 +133,26 @@ describe("cli", () => {
     expect(stderr).toContain("Parse error on line 2");
     // Pele's syntax message already carries the source line and its caret.
     expect(stderr.split("  A -->").length - 1).toBe(1);
+  });
+
+  it("records each render under its data-chart id and prunes week-old records", () => {
+    const home = mkdtempSync(join(tmpdir(), "chart-home-"));
+    const records = join(home, ".cache", "chart-widgets");
+    mkdirSync(records, { recursive: true });
+    const stale = join(records, "mmd-00000000.html");
+    writeFileSync(stale, "old");
+    const eightDaysAgo = Date.now() / 1000 - 8 * 24 * 60 * 60;
+    utimesSync(stale, eightDaysAgo, eightDaysAgo);
+    const run = Bun.spawnSync(["bun", SCRIPT], {
+      stdin: Buffer.from("flowchart LR\n  accTitle: Demo\n  A --> B"),
+      env: { ...process.env, HOME: home },
+    });
+    expect(run.exitCode).toBe(0);
+    expect(run.stderr.toString()).toBe("");
+    const stdout = run.stdout.toString();
+    const id = stdout.match(/^<div data-chart="(mmd-[0-9a-f]{8})"/)?.[1];
+    expect(readdirSync(records)).toEqual([`${id}.html`]);
+    // console.log adds the newline; the record is the fragment alone.
+    expect(readFileSync(join(records, `${id}.html`), "utf8")).toBe(stdout.slice(0, -1));
   });
 });
