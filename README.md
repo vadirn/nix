@@ -53,11 +53,11 @@ The Claude Code hook router. `settings.json` gives each hook event one entry, `r
 Whenever `hooks.json` changes, regenerate the route entries, then apply them to `settings.json`:
 
 ```bash
-~/.local/libexec/route --config home/claude/route/hooks.json settings --bin "~/.local/libexec/route" > home/claude/route/settings-hooks.draft.json
+~/.local/libexec/route --config home/claude/route/hooks.json settings --bin "~/.local/libexec/route" > home/claude/route/settings-hooks.json
 ```
 
 ```bash
-jq --slurpfile r home/claude/route/settings-hooks.draft.json '.hooks = $r[0].hooks' home/claude/settings.json > /tmp/settings.json && mv /tmp/settings.json home/claude/settings.json
+jq --slurpfile r home/claude/route/settings-hooks.json '.hooks = $r[0].hooks' home/claude/settings.json > /tmp/settings.json && mv /tmp/settings.json home/claude/settings.json
 ```
 
 ## md-for-agents
