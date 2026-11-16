@@ -346,11 +346,13 @@ fn reasons_of(e: &Effect) -> Vec<String> {
     }
 }
 
+/// Joins the non-blank parts. Each part loses its trailing whitespace first:
+/// plain stdout ends in a newline, which would otherwise widen the separator.
 fn join(parts: &[String], sep: &str) -> Option<String> {
     let kept: Vec<&str> = parts
         .iter()
-        .map(String::as_str)
-        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim_end())
+        .filter(|s| !s.is_empty())
         .collect();
     (!kept.is_empty()).then(|| kept.join(sep))
 }
@@ -682,7 +684,7 @@ mod tests {
         assert_eq!(
             json_of(&r),
             json!({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                "additionalContext": "from json\n\nfrom plain stdout\n"}})
+                "additionalContext": "from json\n\nfrom plain stdout"}})
         );
     }
 

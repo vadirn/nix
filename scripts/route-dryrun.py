@@ -143,7 +143,9 @@ def expected_from_direct(event, results):
         "decision": decision or ("block" if blocks else None),
         "reasons": reasons or [b for b in blocks if b.strip()],
         "updatedInput": None if decision == "deny" or not rewrites else rewrites[0],
-        "context": "\n\n".join(c for c in context if c.strip()) or None,
+        # route trims each part before joining; a lone passthrough keeps its
+        # trailing newline, so the comparison below ignores trailing space.
+        "context": "\n\n".join(c.rstrip() for c in context if c.strip()) or None,
     }
 
 
@@ -329,7 +331,7 @@ def main():
             diffs.append("reasons differ")
         if got["updatedInput"] != want["updatedInput"]:
             diffs.append("updatedInput differs")
-        if (got["context"] or None) != want["context"]:
+        if (got["context"] or "").rstrip() != (want["context"] or ""):
             diffs.append("context differs")
         if code not in (0, 2) and not direct:
             diffs.append("route exited %s with nothing to run: %s" % (code, rerr.strip()))

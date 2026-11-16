@@ -248,7 +248,7 @@ fn prompt_context_joins_plain_stdout_and_additional_context() {
     );
     assert_eq!(
         r.json()["hookSpecificOutput"]["additionalContext"],
-        "plain context\n\n\njson context"
+        "plain context\n\njson context"
     );
 }
 
