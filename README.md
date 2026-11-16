@@ -34,7 +34,7 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 
 `vault-query` is the only crate in the root workspace, rooted at `Cargo.toml`. It links `mdstruct` as a git dependency on [md-for-agents](https://github.com/vadirn/md-for-agents), pinned by rev in `Cargo.lock`. `shell.nix` provides the dev toolchain (`nix-shell`, then `cargo test --workspace`).
 
-`route/` is a second crate with its own workspace and `Cargo.lock`, so neither crate's edits rebuild the other. `nix build .#route` builds it and runs its tests.
+`route/` is a second crate with its own workspace and `Cargo.lock`, so neither crate's edits rebuild the other. `nix build .#route` builds it and runs its tests. `route-console/` is a third, for the same reason and because Rune's `[patch.crates-io]` table must sit at a workspace root.
 
 ## route
 
@@ -59,6 +59,15 @@ Whenever `hooks.json` changes, regenerate the route entries, then apply them to 
 ```bash
 jq --slurpfile r home/claude/route/settings-hooks.json '.hooks = $r[0].hooks' home/claude/settings.json > /tmp/settings.json && mv /tmp/settings.json home/claude/settings.json
 ```
+
+## route-console
+
+`Route Console.app`, a read-only macOS window onto route's log, built on [Rune](https://github.com/anomalyco/rune) (pinned by rev; the bump steps head `route-console/Cargo.toml`). It opens on today's events, oldest first as a tail reads, and checks for new lines every half second, keeping the newest in view. Pause, or selecting an older row, stops that; selecting the newest row follows again. The sidebar filters by hook event, the toolbar by text, and the inspector shows the selected event's input, reasons, rewrite, stderr and per-handler timings.
+
+- **Reads:** the day files and the hooks file, found as route finds them (`XDG_STATE_HOME`, `XDG_CONFIG_HOME`, or `--log-dir`, `--config`). It never writes `hooks.json` or `state.json`, and never takes the log's `flock`.
+- **Index:** a SQLite cache at `~/Library/Caches/route-console/index.sqlite` (`--index`), private (0600) as route's log is, since tool input can carry secrets. The JSONL files stay the record: a schema change drops the cache and rebuilds it from the files, and deleting it by hand is always safe.
+- **Build:** `nix build .#route-console` runs its tests and leaves `result/Applications/Route Console.app`, ad hoc signed and loading only system libraries (the build fails otherwise). `scripts/sign-route-console.sh` copies it out of the store and signs it with your Developer ID (hardened runtime, timestamped; not notarized), into `~/Applications` unless given another destination.
+- **Headless:** `result/bin/route-console --snap out.png --theme dark` renders it without a window; `--scene canvas` swaps in the design canvas's sample events.
 
 ## md-for-agents
 
