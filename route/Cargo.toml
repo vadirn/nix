@@ -1,0 +1,21 @@
+# `route`: one Claude Code hook entry per event. It runs the handlers listed
+# in its own hooks file, merges their answers into one response, and appends
+# one JSONL line per event to a per-day log.
+#
+# Its own workspace and lockfile, apart from the root `vault-query` workspace:
+# a route edit never rebuilds vault-query, and the binary that sits on every
+# tool call keeps a short dependency list.
+[workspace]
+
+[package]
+name = "route"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+libc = "0.2"
+regex = "1"
+# preserve_order keeps the hooks file's event and key order, so `route
+# settings` prints events in the order they are written.
+serde_json = { version = "1", features = ["preserve_order"] }

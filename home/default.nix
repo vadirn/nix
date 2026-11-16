@@ -3,6 +3,7 @@
   homeDirectory,
   vault-query,
   md-for-agents,
+  route,
   ...
 }: {
   users.users.vadim.home = homeDirectory;
@@ -91,6 +92,11 @@
       # with no dependencies so this symlink can point straight at the source —
       # no install step, and no node_modules for the CLI to start.
       home.file.".local/bin/autoformat".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/tools/autoformat/autoformat.ts";
+
+      # The Claude Code hook router, linked off PATH: macOS ships /sbin/route,
+      # and settings.json calls this one by its full path anyway. Its handler
+      # list is linked in home/claude.nix.
+      home.file.".local/libexec/route".source = "${route}/bin/route";
 
       imports = [
         ./zsh.nix
