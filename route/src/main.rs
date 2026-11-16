@@ -8,6 +8,8 @@
 //! blocks on PreToolUse and lets every other event through: a broken guard
 //! path must not silently allow tool calls, and a block on Stop could loop.
 //! A failing handler stays a non-blocking error, as Claude Code treats it.
+//! Whatever ends route early (a signal, a panic, its deadline) kills the sync
+//! handlers still running; async handlers are detached and keep going.
 
 mod config;
 mod event;
@@ -75,7 +77,35 @@ fn fail(msg: &str) -> ! {
     let event = EVENT.get().map(String::as_str).unwrap_or("");
     let code = if event::fails_closed(event) { 2 } else { 1 };
     emit(b"", format!("route: {msg}\n").as_bytes(), code);
+    run::kill_running();
     exit(EMITTED.load(Ordering::SeqCst))
+}
+
+/// Takes the running handlers down with route, then dies of the same signal.
+/// Each handler leads its own process group, so a signal sent to route or to
+/// route's group alone would leave them running.
+extern "C" fn on_signal(sig: libc::c_int) {
+    run::kill_running();
+    // SAFETY: signal(2) and raise(3) are async-signal-safe; with the default
+    // disposition restored, raise ends the process.
+    unsafe {
+        libc::signal(sig, libc::SIG_DFL);
+        libc::raise(sig);
+    }
+}
+
+fn forward_signals() {
+    for sig in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        // SAFETY: installs a handler that only calls async-signal-safe
+        // functions. A caught signal reverts to the default in exec'd
+        // children, so handlers start with their usual dispositions.
+        unsafe {
+            libc::signal(
+                sig,
+                on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t,
+            );
+        }
+    }
 }
 
 struct Paths {
@@ -192,6 +222,7 @@ fn settings(paths: &Paths, bin: &str) -> ! {
 
 fn hook(paths: &Paths, event: &str) -> ! {
     std::panic::set_hook(Box::new(|info| fail(&format!("internal error: {info}"))));
+    forward_signals();
     let started = Instant::now();
     let now = Local::now();
 

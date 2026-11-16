@@ -5,6 +5,7 @@
 use std::io::{Read, Write};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicI32, Ordering::SeqCst};
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -14,6 +15,39 @@ use std::time::{Duration, Instant};
 /// handler exits. A background process the handler started can hold the pipes
 /// open, so route reads what arrived and moves on instead of waiting for EOF.
 const DRAIN_GRACE: Duration = Duration::from_millis(200);
+
+/// Process groups of the sync handlers not yet reaped, so route can take them
+/// down when it dies first: on a signal, a panic, or its own deadline. Atomics
+/// only, because a signal handler reads them. A handler past the last slot
+/// goes untracked.
+static RUNNING: [AtomicI32; 64] = [const { AtomicI32::new(0) }; 64];
+
+fn track(pid: i32) {
+    let _ = RUNNING
+        .iter()
+        .find(|slot| slot.compare_exchange(0, pid, SeqCst, SeqCst).is_ok());
+}
+
+fn untrack(pid: i32) {
+    let _ = RUNNING
+        .iter()
+        .find(|slot| slot.compare_exchange(pid, 0, SeqCst, SeqCst).is_ok());
+}
+
+/// Kills every tracked handler's process group. Async-signal-safe: it touches
+/// only atomics and kill(2).
+pub fn kill_running() {
+    for slot in &RUNNING {
+        let pid = slot.load(SeqCst);
+        if pid > 0 {
+            // SAFETY: kill(2) on a handler's own process group; the slot is
+            // cleared as soon as that handler is reaped.
+            unsafe {
+                libc::kill(-pid, libc::SIGKILL);
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Outcome {
@@ -119,12 +153,15 @@ fn start(cmd: &str, timeout: f64, input: &Arc<[u8]>) -> Result<Running, Outcome>
             ..Outcome::default()
         })?;
     let pid = child.id() as i32;
+    track(pid);
     feed(&mut child, input);
     let stdout = collect(child.stdout.take().expect("stdout is piped"));
     let stderr = collect(child.stderr.take().expect("stderr is piped"));
     let (tx, exited) = mpsc::channel();
     thread::spawn(move || {
-        let _ = tx.send(child.wait());
+        let status = child.wait();
+        untrack(pid);
+        let _ = tx.send(status);
     });
     Ok(Running {
         pid,

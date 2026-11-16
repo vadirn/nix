@@ -41,7 +41,7 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 The Claude Code hook router. `settings.json` gives each hook event one entry, `route <Event>`. route reads the event JSON on stdin, runs the handlers listed for that event in `home/claude/route/hooks.json` (linked to `~/.config/route/hooks.json`) in parallel, and gives Claude Code one answer. The hooks file uses Claude Code's own `{"hooks": ...}` shape, so pasting its entries back into `settings.json` undoes route.
 
 - **Answer:** when only one handler says anything, route passes its stdout, stderr and exit code through unchanged. When several do, route merges them. The strongest permission decision wins (deny > defer > ask > allow), every reason for it is kept, one per line, and added context is joined.
-- **Failure:** if route itself fails (a panic, a bad hooks file, a stuck run), it denies on PreToolUse and lets every other event through. A failing handler stays a non-blocking error, as Claude Code treats it.
+- **Failure:** if route itself fails (a panic, a bad hooks file, a stuck run), it denies on PreToolUse and lets every other event through. A failing handler stays a non-blocking error, as Claude Code treats it. Whatever ends route early, a signal included, kills the handlers still running. Async handlers are detached and keep going.
 - **Toggles:** `~/.local/state/route/state.json` lists switched-off handlers as `{"disabled": [{"event", "matcher", "command"}]}`.
 - **Log:** one JSON line per event in `~/.local/state/route/log/YYYY-MM-DD.jsonl`. Each line is written once under `flock`. Input and handler output are truncated, and day files older than `route.log.retention_days` (default 30) are deleted.
 

@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::io::Write;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -377,6 +378,67 @@ fn a_slow_handler_times_out_without_blocking() {
     assert!(r.stderr.contains("timed out after 0.5s"), "{}", r.stderr);
     assert!(r.took < Duration::from_secs(3), "{:?}", r.took);
     assert_eq!(f.log_lines()[0]["handlers"][0]["timed_out"], true);
+}
+
+#[test]
+fn a_signal_to_route_takes_its_running_handlers_down() {
+    let f = Fixture::new();
+    let pids = f.dir.join("pids");
+    // The background child proves the whole group goes, not just the leader.
+    let slow = f.handler(
+        "slow.sh",
+        &format!(
+            "sleep 30 &\necho $! >> {p}\necho $$ >> {p}\nsleep 30\n",
+            p = pids.display()
+        ),
+    );
+    f.config(
+        json!({"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+            {"type": "command", "command": slow, "timeout": 60}
+        ]}]}}),
+    );
+    let mut route = f
+        .command("PreToolUse")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    route
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(bash_call("ls").to_string().as_bytes())
+        .unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let started: Vec<i32> = loop {
+        let got: Vec<i32> = fs::read_to_string(&pids)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.trim().parse().ok())
+            .collect();
+        if got.len() == 2 {
+            break got;
+        }
+        assert!(Instant::now() < deadline, "the handler never started");
+        std::thread::sleep(Duration::from_millis(20));
+    };
+
+    // SAFETY: a signal to the route child this test spawned.
+    unsafe {
+        libc::kill(route.id() as i32, libc::SIGTERM);
+    }
+    assert_eq!(route.wait().unwrap().signal(), Some(libc::SIGTERM));
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    for pid in started {
+        // SAFETY: signal 0 only checks whether the process exists.
+        while unsafe { libc::kill(pid, 0) } == 0 {
+            assert!(Instant::now() < deadline, "pid {pid} outlived route");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
 }
 
 #[test]
