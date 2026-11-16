@@ -1,0 +1,263 @@
+{
+ "guard": "pipe-allow",
+ "source": "home/claude/hooks/pipe-allow.test.sh",
+ "settings_allow": [
+  "Bash(cat *)",
+  "Bash(jq *)",
+  "Bash(git status *)",
+  "Bash(git log *)",
+  "Bash(git add *)",
+  "Bash(git commit *)",
+  "Bash(head *)",
+  "Bash(echo *)",
+  "Bash(wc *)",
+  "Bash(grep *)",
+  "Bash(ls *)"
+ ],
+ "cases": [
+  {
+   "name": "cat | jq",
+   "command": "cat file.json | jq .",
+   "expect": "allow"
+  },
+  {
+   "name": "cat | head",
+   "command": "cat file.txt | head -20",
+   "expect": "allow"
+  },
+  {
+   "name": "echo | wc",
+   "command": "echo hello | wc -l",
+   "expect": "allow"
+  },
+  {
+   "name": "git log | grep",
+   "command": "git log --oneline | grep fix",
+   "expect": "allow"
+  },
+  {
+   "name": "git add && git commit",
+   "command": "git add -A && git commit -m test",
+   "expect": "allow"
+  },
+  {
+   "name": "jq with pipe in single quotes",
+   "command": "cat data.json | jq -r '.data.web[] | \"\\(.title): \\(.url)\"'",
+   "expect": "allow"
+  },
+  {
+   "name": "jq with pipe in double quotes",
+   "command": "cat data.json | jq -r \".items[] | .name\"",
+   "expect": "allow"
+  },
+  {
+   "name": "jq multiple pipes in expression",
+   "command": "cat data.json | jq '.[] | .name | ascii_downcase'",
+   "expect": "allow"
+  },
+  {
+   "name": "jq select with pipe",
+   "command": "cat data.json | jq '.[] | select(.age > 30) | .name'",
+   "expect": "allow"
+  },
+  {
+   "name": "simple cat",
+   "command": "cat file.txt",
+   "expect": "none"
+  },
+  {
+   "name": "simple jq",
+   "command": "jq . file.json",
+   "expect": "none"
+  },
+  {
+   "name": "simple ls",
+   "command": "ls -la",
+   "expect": "none"
+  },
+  {
+   "name": "pipe with unknown",
+   "command": "cat file.txt | python3 script.py",
+   "expect": "none"
+  },
+  {
+   "name": "unknown first",
+   "command": "curl url | jq .",
+   "expect": "none"
+  },
+  {
+   "name": "comment then pipe",
+   "command": "# list files\ncat file.json | jq .",
+   "expect": "allow"
+  },
+  {
+   "name": "semicolon in quotes",
+   "command": "echo 'hello; world' | wc -l",
+   "expect": "allow"
+  },
+  {
+   "name": "safe env var",
+   "command": "FOO=bar cat file.json | jq .",
+   "expect": "allow"
+  },
+  {
+   "name": "sensitive PATH",
+   "command": "PATH=/evil cat file.json | jq .",
+   "expect": "none"
+  },
+  {
+   "name": "sensitive LD_PRELOAD",
+   "command": "LD_PRELOAD=x.so cat file.json | jq .",
+   "expect": "none"
+  },
+  {
+   "name": "lone & smuggle",
+   "command": "git status & mv ~/.ssh /tmp/x ; ls",
+   "expect": "none"
+  },
+  {
+   "name": "redirect smuggle",
+   "command": "echo pwned >> /tmp/victim | cat",
+   "expect": "none"
+  },
+  {
+   "name": "cmd subst smuggle",
+   "command": "git diff $(git rev-parse HEAD)",
+   "expect": "none"
+  },
+  {
+   "name": "backtick smuggle",
+   "command": "echo `whoami` | cat",
+   "expect": "none"
+  },
+  {
+   "name": "descriptor copy is fine",
+   "command": "echo x 2>&1 | cat",
+   "expect": "allow",
+   "script": "none",
+   "why": "the script meant to drop `2>&1` before checking, but its splitter cut the stage at the `&` first and left a bare `>`"
+  },
+  {
+   "name": "allow reason",
+   "command": "cat a | wc -l",
+   "expect": "allow",
+   "reason": "All pipeline stages match allowed Bash prefixes"
+  },
+  {
+   "name": "env prefix on a single command",
+   "command": "FOO=1 ls",
+   "expect": "allow"
+  },
+  {
+   "name": "leading comment on a single command",
+   "command": "# look\nls",
+   "expect": "allow"
+  },
+  {
+   "name": "redirect to a file",
+   "command": "cat a > b && ls",
+   "expect": "none"
+  },
+  {
+   "name": "heredoc",
+   "command": "cat <<EOF | wc\nx\nEOF",
+   "expect": "none"
+  },
+  {
+   "name": "group",
+   "command": "(cat a) | wc",
+   "expect": "none"
+  },
+  {
+   "name": "compound command",
+   "command": "for f in *; do cat $f; done | wc",
+   "expect": "none"
+  },
+  {
+   "name": "open quote",
+   "command": "cat 'a | wc",
+   "expect": "none",
+   "script": "allow",
+   "why": "the script read the unclosed quote to the end, so `cat 'a | wc` was one cat stage; the shared parse refuses a quote left open"
+  },
+  {
+   "name": "trailing newline on one command",
+   "command": "ls -la\n",
+   "expect": "none",
+   "script": "allow",
+   "why": "the script counted a dropped blank line as a stripped comment and went on to allow; one plain command is left to Claude Code"
+  },
+  {
+   "name": "pipe char inside quotes only",
+   "command": "echo \"a|b\"",
+   "expect": "none",
+   "script": "allow",
+   "why": "the script saw `|` in the raw text and allowed the single stage; one plain command is left to Claude Code"
+  },
+  {
+   "name": "second line rides on the first",
+   "command": "ls\nrm -rf x; echo",
+   "expect": "none",
+   "script": "allow",
+   "why": "the script split stages only at | ; & and read `ls\\nrm -rf x` as one ls stage; a newline now separates commands"
+  },
+  {
+   "name": "substitution inside double quotes",
+   "command": "echo \"$(rm -rf x)\" | cat",
+   "expect": "none",
+   "script": "allow",
+   "why": "the script dropped quoted text before looking for $(; any substitution now refuses"
+  },
+  {
+   "name": "prefix is a whole word",
+   "command": "catalog x | cat",
+   "expect": "none",
+   "script": "allow",
+   "why": "the script matched prefixes as raw string starts, so `cat` allowed `catalog`"
+  },
+  {
+   "name": "quoted command name",
+   "command": "\"cat\" a | wc",
+   "expect": "none"
+  },
+  {
+   "name": "substitution inside a parameter default",
+   "command": "echo ${X:-$(rm -rf y)} | cat",
+   "expect": "none"
+  },
+  {
+   "name": "backtick inside a parameter default",
+   "command": "echo \"${X:-`rm -rf y`}\" | cat",
+   "expect": "none",
+   "script": "allow",
+   "why": "the script dropped quoted text before looking for backticks, so it allowed a command substitution inside double quotes"
+  },
+  {
+   "name": "substitution inside arithmetic",
+   "command": "echo $(( $(rm -rf y) )) | cat",
+   "expect": "none"
+  },
+  {
+   "name": "substitution opening with a group",
+   "command": "echo $((rm -rf y); echo) | cat",
+   "expect": "none"
+  },
+  {
+   "name": "arithmetic alone",
+   "command": "echo $((1 + 2)) | cat",
+   "expect": "none"
+  },
+  {
+   "name": "plain parameter default",
+   "command": "echo ${X:-a} | cat",
+   "expect": "allow"
+  },
+  {
+   "name": "trailing comment hides nothing",
+   "command": "ls # note | rm -rf x",
+   "expect": "allow",
+   "script": "none",
+   "why": "the script split at the | inside the comment; the shell runs only `ls`, so every command that runs is allowed"
+  }
+ ]
+}

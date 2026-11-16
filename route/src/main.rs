@@ -13,9 +13,11 @@
 
 mod config;
 mod event;
+mod guards;
 mod log;
 mod merge;
 mod run;
+mod shell;
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -221,7 +223,14 @@ fn settings(paths: &Paths, bin: &str) -> ! {
 }
 
 fn hook(paths: &Paths, event: &str) -> ! {
-    std::panic::set_hook(Box::new(|info| fail(&format!("internal error: {info}"))));
+    std::panic::set_hook(Box::new(|info| {
+        // A guard's panic unwinds to guards::run, which reports that guard as
+        // a failed handler.
+        if guards::in_guard() {
+            return;
+        }
+        fail(&format!("internal error: {info}"))
+    }));
     forward_signals();
     let started = Instant::now();
     let now = Local::now();
@@ -240,6 +249,7 @@ fn hook(paths: &Paths, event: &str) -> ! {
     }
 
     let cfg = config::load(&paths.config).unwrap_or_else(|e| fail(&format!("hooks file {e}")));
+    notes.extend(cfg.notes.iter().cloned());
     let (disabled, note) = config::load_state(&paths.state);
     notes.extend(note);
     let (selected, skipped) =
@@ -267,11 +277,30 @@ fn hook(paths: &Paths, event: &str) -> ! {
         async_log.push(rec);
     }
 
+    // Processes start first; the in-process guards answer while they run, on
+    // one shared parse of the command.
     let jobs: Vec<(String, f64)> = syncs
         .iter()
+        .filter(|s| s.builtin.is_none())
         .map(|s| (s.handler.command.clone(), s.timeout()))
         .collect();
-    let outcomes = run::run_all(&jobs, &input);
+    let ctx = guards::Ctx::new(&payload);
+    let (external, builtin) = run::run_all_with(&jobs, &input, || {
+        syncs
+            .iter()
+            .filter_map(|s| s.builtin)
+            .map(|g| guards::run(g, &ctx))
+            .collect::<Vec<_>>()
+    });
+    let (mut external, mut builtin) = (external.into_iter(), builtin.into_iter());
+    let outcomes: Vec<run::Outcome> = syncs
+        .iter()
+        .map(|s| match s.builtin {
+            Some(_) => builtin.next(),
+            None => external.next(),
+        })
+        .map(|o| o.expect("one outcome per handler"))
+        .collect();
     let answers: Vec<Answer> = syncs
         .iter()
         .zip(&outcomes)
@@ -294,6 +323,12 @@ fn hook(paths: &Paths, event: &str) -> ! {
             let mut rec = handler_json(s);
             rec["exit"] = json!(o.exit);
             rec["ms"] = o.ms.into();
+            if let Some(g) = s.builtin {
+                rec["builtin"] = g.name.into();
+            }
+            if let Some(us) = o.us {
+                rec["us"] = us.into();
+            }
             rec["outcome"] = effect.summary().into();
             if let Some(sig) = o.signal {
                 rec["signal"] = sig.into();

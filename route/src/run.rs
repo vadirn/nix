@@ -59,6 +59,8 @@ pub struct Outcome {
     pub timed_out: bool,
     pub spawn_error: Option<String>,
     pub ms: u64,
+    /// Microseconds, for a guard that ran in-process.
+    pub us: Option<u64>,
 }
 
 impl Outcome {
@@ -126,19 +128,32 @@ struct Running {
 
 /// Runs every handler at once and waits for each until its own timeout, in
 /// seconds. Results come back in the order given.
+#[cfg(test)]
 pub fn run_all(handlers: &[(String, f64)], input: &[u8]) -> Vec<Outcome> {
+    run_all_with(handlers, input, || ()).0
+}
+
+/// `run_all`, calling `meanwhile` once every handler has started: in-process
+/// guards answer while the processes run.
+pub fn run_all_with<T>(
+    handlers: &[(String, f64)],
+    input: &[u8],
+    meanwhile: impl FnOnce() -> T,
+) -> (Vec<Outcome>, T) {
     let input: Arc<[u8]> = Arc::from(input);
     let started: Vec<Result<Running, Outcome>> = handlers
         .iter()
         .map(|(cmd, timeout)| start(cmd, *timeout, &input))
         .collect();
-    started
+    let during = meanwhile();
+    let outcomes = started
         .into_iter()
         .map(|r| match r {
             Ok(running) => finish(running),
             Err(failed) => failed,
         })
-        .collect()
+        .collect();
+    (outcomes, during)
 }
 
 fn start(cmd: &str, timeout: f64, input: &Arc<[u8]>) -> Result<Running, Outcome> {
@@ -207,6 +222,7 @@ fn finish(r: Running) -> Outcome {
         timed_out,
         spawn_error: None,
         ms,
+        us: None,
     }
 }
 

@@ -12,12 +12,17 @@ use regex::Regex;
 use serde_json::{Map, Value, json};
 
 use crate::event::{self, MatchOn};
+use crate::guards::{self, Guard};
 
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Events in file order, each with its matcher groups in file order.
     pub events: Vec<(String, Vec<Group>)>,
     pub log: LogSettings,
+    /// `route.builtins`: handler command → in-process guard name.
+    pub builtins: Vec<(String, String)>,
+    /// Problems worth a log note that do not stop route.
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -74,6 +79,8 @@ impl HandlerId {
 pub struct Selected {
     pub id: HandlerId,
     pub handler: Handler,
+    /// The guard that answers in-process instead of the command.
+    pub builtin: Option<&'static Guard>,
 }
 
 impl Selected {
@@ -111,7 +118,30 @@ pub fn parse(text: &str) -> Result<Config, String> {
         None => LogSettings::default(),
         Some(v) => parse_log(v)?,
     };
-    Ok(Config { events, log })
+    let mut builtins = Vec::new();
+    let mut notes = Vec::new();
+    if let Some(map) = root.get("route").and_then(|r| r.get("builtins")) {
+        let map = map.as_object().ok_or("route.builtins is not an object")?;
+        for (command, name) in map {
+            let name = name.as_str().ok_or_else(|| {
+                format!("route.builtins: the value for `{command}` is not a string")
+            })?;
+            // A guard this binary lacks runs as its command: a hooks file
+            // newer than the binary degrades to the script it names.
+            if guards::lookup(name).is_none() {
+                notes.push(format!(
+                    "route.builtins: no guard named `{name}`; running `{command}` instead"
+                ));
+            }
+            builtins.push((command.clone(), name.to_string()));
+        }
+    }
+    Ok(Config {
+        events,
+        log,
+        builtins,
+        notes,
+    })
 }
 
 fn parse_group(v: &Value, at: &str) -> Result<Group, String> {
@@ -406,9 +436,15 @@ pub fn select(
                 s.handler.command == handler.command && s.handler.is_async == handler.is_async
             });
             if !duplicate {
+                // An async handler's answer is dropped, so it stays a process.
+                let builtin = (!handler.is_async)
+                    .then(|| cfg.builtins.iter().find(|(c, _)| *c == handler.command))
+                    .flatten()
+                    .and_then(|(_, name)| guards::lookup(name));
                 selected.push(Selected {
                     id,
                     handler: handler.clone(),
+                    builtin,
                 });
             }
         }
