@@ -4,13 +4,13 @@ Creates a ticket — one self-contained unit of work with a checkable done-condi
 
 A ticket is where friction graduates into work. Open tickets with no `track:` are the project's backlog. Setting `track:` assigns one to the effort that owns it. Distinct from a track: a track is one effort's rolling memory across sessions, a ticket is one deliverable inside it.
 
-## Ticket, requires edge, or scratchpad seed
+## Ticket, requires edge, or crux seed
 
 Route the item before creating anything.
 
 - **Ticket** — the unit of work is scoped and you can already state the observable condition that closes it. Create `41 projects/<project>/ticket-<slug>.md`.
 - **`requires:` edge** — the item blocks work that already has a ticket. Add the blocking ticket's wikilink to the blocked ticket's `requires:`, giving the blocker its own ticket first when it has none. Blocked is derived from a `requires:` entry whose ticket is not yet `done`, which is why `blocked` is absent from `status`. Nothing computes that: `vault-query` prints `requires:` verbatim without opening the named ticket, so check its status yourself.
-- **Scratchpad seed** — the item is an idea that may grow into a future effort and has no done-condition yet. Append one line to `41 projects/<project>/Scratchpad.md` (`type: scratchpad`, one per project, template `Scratchpad.md`); create that file from the template when the project has none.
+- **Crux seed** — the item is an idea that may grow into a future effort and has no done-condition yet. Create no ticket: park it as a crux seed, per AGENTS.md § Filing.
 
 ## Process
 

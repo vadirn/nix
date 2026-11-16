@@ -80,7 +80,7 @@ File a durable fact to its typed home when it surfaces mid-session and has no ho
 - **A concept distilled from external sources**, worth its own headword: a vault card, via `/vault card`.
 - **An original argued position**, carrying no external source: a vault note, via `/vault note`.
 - **Decided work sized to one PR**, with a statable done-condition: a ticket, via `/vault ticket`.
-- **An idea that may grow into an effort**, with no done-condition yet: the project's `41 projects/<project>/Scratchpad.md`.
+- **An idea that may grow into an effort**, with no done-condition yet: a crux seed, via `create_item(kind: "seed", parent, title)`. The parent is the goal the idea belongs to, else its project. When crux tracks no project for it, the parent is `INBOX` and the title names the project.
 - **A convention specific to one code repository**: that repository's own `AGENTS.md`.
 - **Work state across sessions** (an effort, an open uncertainty, a finding): crux, per `## Work state`.
 
