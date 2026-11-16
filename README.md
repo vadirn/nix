@@ -47,13 +47,17 @@ The Claude Code hook router. `settings.json` gives each hook event one entry, `r
 
 `scripts/route-dryrun.py ./result/bin/route` replays recent real events through route and through each handler run alone, and reports where they disagree.
 
-Until the switch, `hooks.json` mirrors the `hooks` block of `settings.json`, and the dry run stops if the two drift. Switching over, after `./rebuild.sh` has linked the binary at `~/.local/libexec/route` (off PATH, since macOS ships `/sbin/route`) and the hooks file:
+`settings.json` calls route at `~/.local/libexec/route`, off PATH, since macOS ships `/sbin/route`. A Mac must run `./rebuild.sh`, which links the binary and the hooks file, before it pulls a `settings.json` that calls route. Otherwise no hook can start, and Claude Code lets every tool call through.
+
+Whenever `hooks.json` changes, regenerate the route entries, then apply them to `settings.json`:
+
+```bash
+~/.local/libexec/route --config home/claude/route/hooks.json settings --bin "~/.local/libexec/route" > home/claude/route/settings-hooks.draft.json
+```
 
 ```bash
 jq --slurpfile r home/claude/route/settings-hooks.draft.json '.hooks = $r[0].hooks' home/claude/settings.json > /tmp/settings.json && mv /tmp/settings.json home/claude/settings.json
 ```
-
-Regenerate the draft whenever `hooks.json` changes: `./result/bin/route --config home/claude/route/hooks.json settings --bin "~/.local/libexec/route"`.
 
 ## md-for-agents
 
