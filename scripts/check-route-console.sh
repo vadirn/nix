@@ -96,6 +96,23 @@ for how in pill end; do
   check "$how: the list follows the rows that arrive after" same "$(newest_bottom "$c")" "$(view_bottom "$c")"
 done
 
+# A filter holds the picked row where it shows while rows above it leave, and
+# again as they come back when it is cleared (fifteen rows, with room to
+# scroll either way, so nothing clamps).
+a="$(tree filter-in-place before)"
+b="$(tree filter-in-place narrowed)"
+c="$(tree filter-in-place widened)"
+id="$(row_at "$a" 470)"
+check "a filter holds the picked row while rows above it leave ($(top "$a" "$id") -> $(top "$b" "$id"))" same "$(top "$a" "$id")" "$(top "$b" "$id")"
+check "and clearing it holds the row as they come back ($(top "$c" "$id"))" same "$(top "$a" "$id")" "$(top "$c" "$id")"
+
+# Where the list is too short to hold it, it stops at the end nearer the
+# row's place: here its top, the rows above having left.
+a="$(tree filter-clamped before)"
+b="$(tree filter-clamped narrowed)"
+first_top() { jq -r '[.elements[] | select(.exiting != true and (.path | test("events-rows/[0-9]+$"))) | .rect[1]] | min' "$1"; }
+check "a filter that cannot hold the row stops the list at its top" same "$(first_top "$b")" "$(view_top "$b")"
+
 # Choosing the screen already shown changes no rows, so the pill keeps its count.
 a="$(tree same-screen after)"
 check "the same screen again keeps the pill ($(pill "$a") new)" test "$(pill "$a")" -ge 1

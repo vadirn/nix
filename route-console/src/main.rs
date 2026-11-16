@@ -443,21 +443,21 @@ impl App {
         if self.rows != before {
             self.below = 0;
         }
-        let held = anchor.and_then(|(id, was)| Some((id, was, self.position(id)?)));
-        if !returning {
-            if let Some((id, _, _)) = held {
-                tx.keep_on_screen(format!("{ROWS}/{id}"));
-            }
-        } else if !self.following {
+        // The picked row is the anchor, as a browser anchors scrolling: its
+        // top goes back to the height it had below the viewport's top, placed
+        // from the new rows' layout and clamped to the list's ends. Rows are
+        // all one height, so where it was is its index times that, less the
+        // offset. Rune's `keep_on_screen` measures the drawn row instead and
+        // missed by 66 points as the rows above it left.
+        if let Some((id, was)) = anchor.filter(|(id, _)| self.position(*id).is_some()) {
+            let at = was as f32 * theme::ROW_H - y;
+            tx.scroll_key_to(format!("{ROWS}/{id}"), at);
+        } else if returning && !self.following {
             // Back from Health, the list mounts afresh: Rune keeps a
             // viewport's offset only while it is in the tree (rune
             // `runtime/commit/prune.rs`). Following, it mounts at its end;
-            // paused, it goes back where the reader left it, moved by the rows
-            // the filter added or took above the picked row.
-            let shift = held.map_or(0.0, |(_, was, now)| {
-                (now as f32 - was as f32) * theme::ROW_H
-            });
-            tx.scroll_to_y(VIEWPORT, (y + shift).max(0.0));
+            // paused with no row to hold, it goes back to its offset.
+            tx.scroll_to_y(VIEWPORT, y);
         }
     }
 

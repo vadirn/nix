@@ -484,7 +484,8 @@ fn list(s: &App, k: &Kit, t: &Tokens) -> El {
         .scroll(ScrollSpec {
             stick_bottom: s.following,
         })
-        // Kept for the trip back from Health, which mounts the list afresh.
+        // Where the picked row shows, for a filter to hold it there, and
+        // where to come back to from Health, which mounts the list afresh.
         .on_scroll_offset(move |at: ScrollPos| {
             scroll_y.set(at.offset[1]);
         })
