@@ -73,8 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh Notification",
-            "timeout": 5,
+            "command": "~/.local/libexec/route Notification",
             "async": true
           }
         ]
@@ -82,116 +81,36 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "^(Write|Edit)$",
+        "matcher": "Write|Edit|Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/hint-autoformat.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
+            "command": "~/.local/libexec/route PostToolUse",
+            "timeout": 32
           }
         ]
       }
     ],
     "PostToolUseFailure": [
       {
-        "matcher": "^Bash$",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
+            "command": "~/.local/libexec/route PostToolUseFailure",
+            "timeout": 32
           }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Read|Grep|WebSearch|WebFetch|mcp__visualize__show_widget",
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/no-secrets.sh"
-          },
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/hooks/no-dangerous-rm.py"
-          },
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/hooks/no-dangerous.py"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/quiet-override.sh"
-          },
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/hooks/pipe-allow.py"
-          },
-          {
-            "type": "command",
-            "command": "~/.local/bin/trinket-git-message",
-            "timeout": 120
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/rg-glob-guard.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/no-secrets-read.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Grep",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/no-secrets-read.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "^(WebSearch|WebFetch)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/prefer-firecrawl.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "^mcp__visualize__show_widget$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/hooks/chart-verbatim.py"
-          }
-        ]
-      },
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
+            "command": "~/.local/libexec/route PreToolUse",
+            "timeout": 602
           }
         ]
       }
@@ -201,18 +120,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p /tmp/claude",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sandbox-nc-path.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/direnv-env.sh",
-            "timeout": 30
+            "command": "~/.local/libexec/route SessionStart",
+            "timeout": 32
           }
         ]
       }
@@ -222,8 +131,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/direnv-env.sh",
-            "timeout": 30
+            "command": "~/.local/libexec/route CwdChanged",
+            "timeout": 32
           }
         ]
       }
@@ -233,14 +142,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh Stop",
-            "timeout": 5,
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/stop-verify.sh",
-            "timeout": 120
+            "command": "~/.local/libexec/route Stop",
+            "timeout": 122
           }
         ]
       }
@@ -250,8 +153,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/sound.sh TaskCompleted",
-            "timeout": 5,
+            "command": "~/.local/libexec/route TaskCompleted",
             "async": true
           }
         ]
@@ -262,13 +164,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "/Users/vadim/.local/bin/trinket-claude-prompt --config /Users/vadim/.config/trinket/turn-prompt.json",
-            "timeout": 30
+            "command": "~/.local/libexec/route UserPromptSubmit",
+            "timeout": 32
           }
         ]
       }
@@ -278,8 +175,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
+            "command": "~/.local/libexec/route StopFailure",
+            "timeout": 32
           }
         ]
       }
@@ -289,8 +186,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 3
+            "command": "~/.local/libexec/route SessionEnd",
+            "timeout": 5
           }
         ]
       }
