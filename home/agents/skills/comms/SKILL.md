@@ -2,24 +2,25 @@
 name: comms
 description: >
   Apply and monitor the personal communication guide. Draft one message by the guide's rules from a
-  thread or a binding, sweep Slack and Basecamp for messages owed, or run the monthly review. Drafts
-  and reports only, never sends. Triggers: /comms, "draft a reply to this thread", "draft a heartbeat",
-  "draft my check-in", "draft a status update for <name>", "how do I answer this complaint", "what do
-  I owe", "sweep my comms", "comms review". Route elsewhere: any other Basecamp action → /basecamp.
+  thread or a binding, sweep Slack and Basecamp for messages owed, or run the monthly review. It stops
+  at a draft or a report, and the user sends. Triggers: /comms; a request to draft a reply, heartbeat,
+  check-in, status update, or renegotiation; a stakeholder complaint to answer; "what do I owe"; a
+  sweep of owed messages; the monthly comms review. Route elsewhere: any other Basecamp action →
+  /basecamp.
 ---
 
 # Comms
 
-This skill applies the communication guide. It holds no rules of its own.
+This skill applies the communication guide. Every rule it uses comes from the guide.
 
 - The rules live in the vault note `Communication guide`.
 - The bindings live in each project's `Context.md`.
 - The sweep reads the YAML block under "Bindings as data".
 
-Never send, post, or publish. Every command ends in a draft or a report in this conversation. The user sends.
+End every command at a draft or a report in this conversation. Sending, posting, and publishing belong to the user, because a message carries relational value only when the user sends it.
 
-- Run only read commands against Basecamp. Never run `basecamp checkins answer create` or `update`.
-- Read Slack only. Never call a Slack tool that sends, schedules, or saves a draft.
+- Run only read commands against Basecamp. `basecamp checkins answer create` and `update` write, so they stay with the user.
+- Use only the Slack tools that read. The tools that send, schedule, or save a draft stay with the user.
 
 ```
 dir = skill base directory
@@ -33,12 +34,12 @@ if "draft <thread or binding>":
     thread = read the thread or channel the user named
     branch = the guide's test: do the reader's decisions depend on this message?
     if branch A: gap = name the gap by the guide's Branch A principles: impression or target
-        if the thread does not settle which: ask the user before drafting, and say that a report cannot close a target gap
+        if the thread leaves the gap open: ask the user before drafting, and say that only renegotiation closes a target gap
     template = Read(dir/templates/<heartbeat | weekly-status | check-in | renegotiation>.md)
     if the template is weekly-status and the thread lacks the facts:
         Read(dir/references/evidence.md), and gather by its procedure
     draft = fill the template by the guide's rules for that branch
-    check the draft: R1 reader and purpose, R3 reader's currency, A3 time of the next update
+    check the draft: R1 reader and purpose, R3 reader's currency, and each rule the template names
     show the draft and name each rule it applies
 
 elif "sweep" or "sweep <binding id>":
@@ -63,13 +64,13 @@ elif "review":
 
 ## Checks
 
-- **unanswered_request:** someone asked the user something, and the user gave no reply the same working day. A reply needs a deadline or a result (A2). A bare reaction does not count.
+- **unanswered_request:** someone asked the user something, and the user gave no reply the same working day. A reply carries a deadline or a result (A2). A bare reaction leaves the request unanswered.
 - **overdue_promise:** the user named a time for the next update or a deadline (A1, A3), and that time passed with no message.
 - **missing_checkin:** the last Friday passed with no answer from the user to the check-in question (A4, B8).
 
 A working day follows Asia/Almaty time, Monday to Friday.
 
-Skip any day on which a bot message in the channel says the user has a day off. Do not state the reason for the day off.
+Skip any day on which a bot message in the channel says the user has a day off. Keep the reason for the day off out of the report.
 
 ## Report shape
 
