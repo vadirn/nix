@@ -6,6 +6,10 @@ use rune::tok::{self, TextStyle};
 use rune::{Color, oklch, oklcha};
 use rune_kit::{Kit, TableStyle};
 
+/// The Log list's row height. Its rows are all this tall, so a row's place in
+/// the list is its index times this.
+pub const ROW_H: f32 = 28.0;
+
 #[derive(Clone, Copy)]
 pub struct Tokens {
     pub dark: bool,
@@ -19,6 +23,8 @@ pub struct Tokens {
     pub fill: Color,
     pub sel: Color,
     pub inspector: Color,
+    /// A grouped list's fill on the Health screen.
+    pub group: Color,
     pub accent_text: Color,
     pub warn_bg: Color,
     pub warn_border: Color,
@@ -44,6 +50,7 @@ pub mod ty {
     pub const MONO_LABEL: TextStyle = TextStyle::new(12.0, 500.0).mono();
     pub const MONO_BLOCK: TextStyle = TextStyle::new(12.0, 400.0).mono().lh(18.0);
     pub const NOTE: TextStyle = TextStyle::new(13.0, 400.0).lh(18.85);
+    pub const SECTION: TextStyle = TextStyle::new(11.5, 600.0);
 }
 
 impl Tokens {
@@ -62,6 +69,7 @@ impl Tokens {
                 fill: oklcha(1.0, 0.0, 0.0, 0.06),
                 sel: oklcha(0.66, 0.17, 256.0, 0.26),
                 inspector: oklch(0.212, 0.005, 265.0),
+                group: oklch(0.26, 0.005, 265.0),
                 accent_text: oklch(0.76, 0.13, 256.0),
                 warn_bg: oklcha(0.74, 0.16, 58.0, 0.12),
                 warn_border: oklcha(0.74, 0.16, 58.0, 0.32),
@@ -79,6 +87,7 @@ impl Tokens {
                 fill: oklcha(0.2, 0.01, 265.0, 0.06),
                 sel: oklcha(0.6, 0.17, 256.0, 0.16),
                 inspector: oklch(0.985, 0.002, 265.0),
+                group: oklch(0.975, 0.002, 265.0),
                 accent_text: oklch(0.48, 0.17, 256.0),
                 warn_bg: oklcha(0.68, 0.16, 58.0, 0.1),
                 warn_border: oklcha(0.68, 0.16, 58.0, 0.3),
@@ -166,6 +175,16 @@ impl Tokens {
         }
     }
 
+    /// An issue's warning sign: pink for a failure, orange for stderr.
+    pub fn sign(&self, tint: Tint) -> Color {
+        match (tint, self.dark) {
+            (Tint::Pink, false) => oklch(0.55, 0.19, 357.0),
+            (Tint::Pink, true) => oklch(0.72, 0.17, 357.0),
+            (_, false) => oklch(0.6, 0.15, 58.0),
+            (_, true) => oklch(0.76, 0.15, 58.0),
+        }
+    }
+
     /// The text of the rewrite target.
     pub fn rewrite_text(&self) -> Color {
         self.badge(Tint::Blue).1
@@ -194,7 +213,7 @@ impl Tokens {
 
     pub fn table(&self, k: &Kit) -> TableStyle {
         TableStyle {
-            row_height: 28.0,
+            row_height: ROW_H,
             header_height: 28.0,
             cell_pad: 6.0,
             font: ty::BODY,

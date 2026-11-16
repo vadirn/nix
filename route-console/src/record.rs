@@ -45,6 +45,34 @@ pub struct Record {
     pub handlers: Vec<Handler>,
 }
 
+/// What makes one handler run an issue on the Health screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Trouble {
+    /// The handler failed: it could not start, timed out, or exited with an
+    /// error route could not read as an answer. Claude Code goes on without
+    /// it, so a guard that fails lets the call through.
+    Failed,
+    /// The handler exited 0 and wrote to stderr, which Claude Code never shows.
+    Stderr,
+}
+
+impl Trouble {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Trouble::Failed => "failed",
+            Trouble::Stderr => "stderr",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Trouble> {
+        match s {
+            "failed" => Some(Trouble::Failed),
+            "stderr" => Some(Trouble::Stderr),
+            _ => None,
+        }
+    }
+}
+
 /// Verdicts, strongest first. A permission decision or block is the answer
 /// Claude Code acted on; a rewrite, a stop or added context is what a handler
 /// did when nothing decided. `none`, `output` and `error` are not verdicts: an
@@ -249,6 +277,13 @@ impl Record {
         }
         parts.join("\n").to_lowercase()
     }
+
+    /// A tool call went ahead without the say of a handler that failed on it:
+    /// a PreToolUse that nothing denied, asked about or deferred.
+    pub fn let_through(&self) -> bool {
+        self.event == "PreToolUse"
+            && !matches!(self.decision.as_deref(), Some("deny" | "ask" | "defer"))
+    }
 }
 
 impl Handler {
@@ -284,6 +319,42 @@ impl Handler {
             return Some("async");
         }
         self.outcome.as_deref().filter(|o| *o != "none")
+    }
+
+    /// Whether this run is an issue, and the text that shows what went wrong.
+    /// The one test the Health screen counts by and the Log filters by.
+    ///
+    /// route sums up a failure as `error` (`route/src/merge.rs`, `normalize`),
+    /// except an async handler, which has no outcome and logs only a
+    /// `spawn_error`. Exit 2 is an answer, not a failure: its stderr is the
+    /// reason, also where route sums it up as `error` (an event that only
+    /// shows stderr).
+    pub fn trouble(&self) -> Option<(Trouble, String)> {
+        let stderr = self
+            .stderr
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim_end().to_string());
+        if let Some(e) = &self.spawn_error {
+            return Some((Trouble::Failed, format!("failed to start: {e}")));
+        }
+        if self.timed_out {
+            return Some((Trouble::Failed, "timed out".into()));
+        }
+        if self.outcome.as_deref() == Some("error") && self.exit != Some(2) {
+            let why = stderr.unwrap_or_else(|| match self.exit {
+                Some(0) => "invalid JSON output".into(),
+                Some(c) => format!("exit {c}"),
+                None => "no exit status".into(),
+            });
+            return Some((Trouble::Failed, why));
+        }
+        if self.exit == Some(0)
+            && let Some(s) = stderr
+        {
+            return Some((Trouble::Stderr, s));
+        }
+        None
     }
 }
 
@@ -363,6 +434,38 @@ mod tests {
             "sound.sh Stop"
         );
         assert_eq!(short_name("mkdir -p x"), "mkdir -p x");
+    }
+
+    #[test]
+    fn trouble_is_a_failure_or_unseen_stderr_never_an_answer() {
+        let h = |json: &str| Handler::from_json(&serde_json::from_str(json).unwrap());
+        let trouble = |json: &str| h(json).trouble().map(|(k, why)| (k.as_str(), why));
+        assert_eq!(
+            trouble(r#"{"command":"a/n.sh","exit":2,"outcome":"error","stderr":"shown\n"}"#),
+            None,
+            "exit 2 is an answer, even where route sums it up as error"
+        );
+        assert_eq!(
+            trouble(r#"{"command":"a/j.sh","exit":0,"outcome":"error","stdout":"{oops"}"#),
+            Some(("failed", "invalid JSON output".into()))
+        );
+        assert_eq!(
+            trouble(r#"{"command":"a/x.sh","exit":3,"outcome":"error"}"#),
+            Some(("failed", "exit 3".into()))
+        );
+        assert_eq!(
+            trouble(r#"{"command":"a/x.sh","exit":1,"outcome":"error","stderr":"boom\n"}"#),
+            Some(("failed", "boom".into()))
+        );
+        assert_eq!(
+            trouble(r#"{"command":"a/s.sh","exit":0,"outcome":"none","stderr":"noise\n"}"#),
+            Some(("stderr", "noise".into()))
+        );
+        assert_eq!(
+            trouble(r#"{"command":"a/q.sh","exit":0,"outcome":"none","stderr":"  \n"}"#),
+            None,
+            "blank stderr is nothing"
+        );
     }
 
     #[test]

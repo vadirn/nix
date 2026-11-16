@@ -2,7 +2,8 @@
 //!
 //! It reads the day files route writes and the hooks file route reads, and
 //! writes only its own index cache. It never touches `hooks.json` or
-//! `state.json`; toggles and replay come later.
+//! `state.json`; toggles and replay come later. Two screens: the Log, and
+//! Health, which sums up today's handler failures, timings and log limits.
 //!
 //! The list moves only when the reader moves it, or while the reader is at its
 //! end. Rows keep loading whatever the reader does; new ones land at the end,
@@ -10,6 +11,7 @@
 //! pauses it, and scrolling back down follows again. Picking a row pauses it
 //! too, and only the reader changes which row is picked.
 
+mod health;
 mod index;
 mod record;
 mod sample;
@@ -20,10 +22,11 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use rune::{AppSpec, Chrome, Key, KeyEvent, TextEdit, Tx};
+use rune::{AppSpec, Chrome, Key, KeyEvent, Live, TextEdit, Tx};
 use rune_kit::shell::{self, PaneState};
+use serde_json::Value;
 
-use index::{Index, Row};
+use index::{Index, Issue, IssueKey, Row, Timing};
 use record::Record;
 
 /// How often the window looks for new lines.
@@ -81,10 +84,42 @@ impl Paths {
 }
 
 /// Which screen the main pane shows.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Screen {
-    /// The Log, narrowed to one hook event or not.
-    Log(Option<String>),
+    Log,
+    Health,
+}
+
+/// What the Health screen shows: today's issues and Bash timings.
+#[derive(Default)]
+pub struct Health {
+    pub issues: Vec<Issue>,
+    pub timing: Timing,
+}
+
+/// How much route's log keeps, from the hooks file's `route.log`, else
+/// route's defaults (`route/src/config.rs`, `LogSettings`).
+#[derive(Debug, PartialEq)]
+pub struct Limits {
+    pub retention_days: u64,
+    pub max_input_chars: u64,
+    pub max_output_chars: u64,
+}
+
+impl Limits {
+    fn of(hooks: Option<&Value>) -> Limits {
+        let n = |key: &str, default: u64| {
+            hooks
+                .and_then(|v| v.pointer(&format!("/route/log/{key}")))
+                .and_then(Value::as_u64)
+                .unwrap_or(default)
+        };
+        Limits {
+            retention_days: n("retention_days", 30),
+            max_input_chars: n("max_input_chars", 500),
+            max_output_chars: n("max_output_chars", 2000),
+        }
+    }
 }
 
 pub struct Selected {
@@ -108,6 +143,11 @@ pub struct App {
     pub live: bool,
     pub day: String,
     pub screen: Screen,
+    /// The Log's narrowing to one hook event, kept while Health shows.
+    pub event: Option<String>,
+    /// The Log's narrowing to one handler's trouble, from Health's "Show
+    /// events". Cleared by the sidebar.
+    pub issue: Option<IssueKey>,
     pub events: Vec<String>,
     pub search: TextEdit,
     /// The list keeps its end in view, so new rows scroll in at the bottom.
@@ -123,6 +163,10 @@ pub struct App {
     /// The row the reader picked. Only the reader changes it: new rows, a
     /// filter or a search never do.
     pub selected: Option<Selected>,
+    /// Where the Log's viewport is scrolled, as Rune last drew it.
+    pub scroll_y: Live<f32>,
+    pub health: Health,
+    pub limits: Limits,
     pub sidebar: PaneState,
     pub last_look: f64,
     pub error: Option<String>,
@@ -146,11 +190,14 @@ const EVENT_ORDER: [&str; 11] = [
     "TaskCompleted",
 ];
 
-/// The hook events route handles, from its hooks file (read, never written).
-fn hook_events(config: &std::path::Path) -> Vec<String> {
-    let keys: Vec<String> = std::fs::read_to_string(config)
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+/// route's hooks file (read, never written).
+fn read_hooks(config: &std::path::Path) -> Option<Value> {
+    serde_json::from_str(&std::fs::read_to_string(config).ok()?).ok()
+}
+
+/// The hook events route handles, from its hooks file.
+fn hook_events(hooks: Option<&Value>) -> Vec<String> {
+    let keys: Vec<String> = hooks
         .and_then(|v| {
             v.get("hooks")?
                 .as_object()
@@ -182,17 +229,22 @@ impl App {
         let mut app = App::new(paths, index, error);
         app.look();
         app.refresh();
+        app.recount();
         app
     }
 
     fn new(paths: Paths, index: Index, error: Option<String>) -> App {
+        let hooks = read_hooks(&paths.config);
         App {
-            events: hook_events(&paths.config),
+            events: hook_events(hooks.as_ref()),
+            limits: Limits::of(hooks.as_ref()),
             paths,
             index,
             live: true,
             day: today(),
-            screen: Screen::Log(None),
+            screen: Screen::Log,
+            event: None,
+            issue: None,
             search: TextEdit::new(""),
             following: true,
             below: 0,
@@ -200,6 +252,8 @@ impl App {
             to_end: false,
             rows: Vec::new(),
             selected: None,
+            scroll_y: Live::new(0.0),
+            health: Health::default(),
             sidebar: PaneState::new(220.0).range(180.0, 360.0),
             last_look: f64::NEG_INFINITY,
             error,
@@ -230,21 +284,51 @@ impl App {
         }
     }
 
-    pub fn filter(&self) -> Option<&str> {
-        match &self.screen {
-            Screen::Log(e) => e.as_deref(),
-        }
-    }
-
     /// Whether a filter or search narrows the list.
     pub fn narrowed(&self) -> bool {
-        self.filter().is_some() || !self.search.text.trim().is_empty()
+        self.event.is_some() || self.issue.is_some() || !self.search.text.trim().is_empty()
     }
 
     /// Re-reads the rows for the current day, filter and search. The
     /// selection stays as it is, listed or not.
     pub fn refresh(&mut self) {
-        self.rows = self.index.rows(&self.day, self.filter(), &self.search.text);
+        self.rows = self.index.rows(
+            &self.day,
+            self.event.as_deref(),
+            &self.search.text,
+            self.issue.as_ref(),
+        );
+    }
+
+    /// Re-reads what the Health screen shows, for the current day.
+    pub fn recount(&mut self) {
+        self.health = Health {
+            issues: self.index.issues(&self.day),
+            timing: self.index.timing(&self.day),
+        };
+    }
+
+    /// Drops the index and builds it again from the day files. Every event
+    /// gets a new id, so the picked row is found again by where its line sits.
+    pub fn rebuild(&mut self) {
+        if !self.live {
+            // The sample scenes have no day files to build from.
+            return;
+        }
+        let place = self.selected.as_ref().and_then(|s| self.index.place(s.id));
+        if let Err(e) = self.index.rebuild(&self.paths.log_dir) {
+            self.error = Some(e);
+        }
+        match place.and_then(|(day, offset)| self.index.id_at(&day, offset)) {
+            Some(id) => {
+                if let Some(s) = &mut self.selected {
+                    s.id = id;
+                }
+            }
+            None => self.selected = None,
+        }
+        self.refresh();
+        self.recount();
     }
 
     fn position(&self, id: i64) -> Option<usize> {
@@ -342,11 +426,14 @@ impl App {
         (!self.following && self.visible.contains(&i)).then_some(id)
     }
 
-    /// Re-reads the rows after `change`, keeping the picked row where it shows
-    /// on screen while rows above it come and go.
+    /// Shows the Log, its rows re-read after `change`, keeping the picked row
+    /// where it shows on screen while rows above it come and go.
     fn narrow(&mut self, change: impl FnOnce(&mut App), tx: &mut Tx) {
-        let anchor = self.anchor();
+        let returning = self.screen != Screen::Log;
+        let anchor = self.anchor().and_then(|id| Some((id, self.position(id)?)));
+        let y = self.scroll_y.get();
         let before = std::mem::take(&mut self.rows);
+        self.screen = Screen::Log;
         change(self);
         self.refresh();
         // A filter is not a scroll: when it brings the end into view, the
@@ -356,13 +443,56 @@ impl App {
         if self.rows != before {
             self.below = 0;
         }
-        if let Some(id) = anchor.filter(|id| self.position(*id).is_some()) {
-            tx.keep_on_screen(format!("{ROWS}/{id}"));
+        let held = anchor.and_then(|(id, was)| Some((id, was, self.position(id)?)));
+        if !returning {
+            if let Some((id, _, _)) = held {
+                tx.keep_on_screen(format!("{ROWS}/{id}"));
+            }
+        } else if !self.following {
+            // Back from Health, the list mounts afresh: Rune keeps a
+            // viewport's offset only while it is in the tree (rune
+            // `runtime/commit/prune.rs`). Following, it mounts at its end;
+            // paused, it goes back where the reader left it, moved by the rows
+            // the filter added or took above the picked row.
+            let shift = held.map_or(0.0, |(_, was, now)| {
+                (now as f32 - was as f32) * theme::ROW_H
+            });
+            tx.scroll_to_y(VIEWPORT, (y + shift).max(0.0));
         }
     }
 
-    pub fn show(&mut self, screen: Screen, tx: &mut Tx) {
-        self.narrow(|s| s.screen = screen, tx);
+    /// The Log, narrowed to one hook event or to none.
+    pub fn show_log(&mut self, event: Option<String>, tx: &mut Tx) {
+        self.narrow(
+            |s| {
+                s.event = event;
+                s.issue = None;
+            },
+            tx,
+        );
+    }
+
+    /// The Log, narrowed to the events of one issue: exactly the rows Health
+    /// counts for it, so the search is cleared too.
+    pub fn show_issue(&mut self, key: IssueKey, tx: &mut Tx) {
+        self.narrow(
+            |s| {
+                s.event = Some(key.event.clone());
+                s.issue = Some(key);
+                s.search = TextEdit::new("");
+            },
+            tx,
+        );
+    }
+
+    /// The Log's issue filter goes; its hook event stays.
+    pub fn clear_issue(&mut self, tx: &mut Tx) {
+        self.narrow(|s| s.issue = None, tx);
+    }
+
+    /// The Health screen. The Log keeps its rows, filter, pick and place.
+    pub fn show_health(&mut self) {
+        self.screen = Screen::Health;
     }
 
     /// The search text changed.
@@ -420,6 +550,7 @@ fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
     }
     if s.look() || changed {
         s.refresh();
+        s.recount();
         return true;
     }
     false
@@ -430,8 +561,9 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
         s.sidebar.toggle();
         return true;
     }
-    // With nothing focused, the list takes the keys it takes when focused.
-    tx.focused().is_none() && s.key(ev, tx)
+    // With nothing focused, the list takes the keys it takes when focused,
+    // while it shows.
+    s.screen == Screen::Log && tx.focused().is_none() && s.key(ev, tx)
 }
 
 /// Puts the sample scenes' rows in an index of their own.
@@ -444,6 +576,7 @@ fn sample_index(s: &mut App, lines: &[String]) {
     s.day = sample::DAY.to_string();
     s.selected = None;
     s.refresh();
+    s.recount();
 }
 
 /// The `canvas` scene: the design canvas's sample events, the newest picked.
@@ -452,6 +585,13 @@ fn canvas_scene(s: &mut App) {
     if let Some(id) = s.rows.last().map(|r| r.id) {
         s.select(id);
     }
+}
+
+/// The `health` scene: the canvas's events and some handlers in trouble, on
+/// the Health screen.
+fn health_scene(s: &mut App) {
+    sample_index(s, &sample::trouble_lines());
+    s.screen = Screen::Health;
 }
 
 /// The `live` scene: a list longer than the window that grows by one sample
@@ -473,7 +613,11 @@ fn main() {
     };
     rune::App::new(AppSpec {
         min_size: Some((900.0, 560.0)),
-        scenes: &[("canvas", canvas_scene), ("live", live_scene)],
+        scenes: &[
+            ("canvas", canvas_scene),
+            ("live", live_scene),
+            ("health", health_scene),
+        ],
         fonts: rune_theme_opencode::FONTS,
         families: rune_theme_opencode::FAMILIES,
         poll: Some(poll),
@@ -652,7 +796,7 @@ mod tests {
         let mut app = at_end();
         let n = app.rows.len();
         app.seen(n - 25..n - 5);
-        app.show(Screen::Log(Some("Stop".into())), &mut Tx::default());
+        app.show_log(Some("Stop".into()), &mut Tx::default());
         let m = app.rows.len();
         app.seen(0..m);
         assert!(!app.following, "only the reader's way down resumes it");
@@ -664,7 +808,7 @@ mod tests {
         let mut app = at_end();
         let n = app.rows.len();
         app.seen(n - 25..n - 5);
-        app.show(Screen::Log(None), &mut Tx::default());
+        app.show_log(None, &mut Tx::default());
         assert_eq!(app.below, 5, "the same screen again keeps the count");
         app.search.text = " ".into();
         app.searched(&mut Tx::default());
@@ -677,7 +821,7 @@ mod tests {
         let stop = app.rows.iter().find(|r| r.event == "Stop").unwrap().id;
         app.pick(stop);
         let mut tx = Tx::default();
-        app.show(Screen::Log(Some("PreToolUse".into())), &mut tx);
+        app.show_log(Some("PreToolUse".into()), &mut tx);
         assert_eq!(
             app.selected.as_ref().map(|s| s.id),
             Some(stop),
@@ -688,7 +832,109 @@ mod tests {
         app.searched(&mut tx);
         assert_eq!(app.selected.as_ref().map(|s| s.id), Some(stop));
         app.search.text.clear();
-        app.show(Screen::Log(None), &mut tx);
+        app.show_log(None, &mut tx);
         assert!(!app.hidden(), "clearing the filter shows it again");
+    }
+
+    fn press_window(app: &mut App, key: Key) -> bool {
+        let ev = KeyEvent {
+            key,
+            mods: Mods::default(),
+        };
+        on_key(app, &ev, &mut Tx::default())
+    }
+
+    #[test]
+    fn a_trip_to_health_leaves_the_log_as_it_was() {
+        let mut app = at_end();
+        let n = app.rows.len();
+        app.seen(n - 25..n - 5);
+        let id = app.rows[n - 10].id;
+        app.pick(id);
+        app.show_health();
+        assert!(
+            !press_window(&mut app, Key::Up),
+            "the list takes no keys while hidden"
+        );
+        assert!(!press_window(&mut app, Key::End));
+        assert!(app.look(), "rows keep loading");
+        app.refresh();
+        app.recount();
+        app.show_log(None, &mut Tx::default());
+        assert_eq!(app.screen, Screen::Log);
+        assert_eq!(app.selected.as_ref().map(|s| s.id), Some(id));
+        assert!(!app.following && !app.to_end, "it comes back paused");
+    }
+
+    #[test]
+    fn show_events_lists_what_the_issue_counts_until_the_sidebar_clears_it() {
+        let mut app = app(health_scene);
+        assert_eq!(app.screen, Screen::Health);
+        let issue = app.health.issues[0].clone();
+        app.search.text = "git".into();
+        let mut tx = Tx::default();
+        app.show_issue(issue.key.clone(), &mut tx);
+        assert_eq!(app.screen, Screen::Log);
+        assert_eq!(app.rows.len(), issue.events, "exactly the rows it counts");
+        assert_eq!(app.search.text, "", "a search would hide some");
+        app.clear_issue(&mut tx);
+        assert!(app.issue.is_none());
+        assert_eq!(
+            app.event.as_deref(),
+            Some("PreToolUse"),
+            "the hook event stays"
+        );
+        assert!(app.rows.len() > issue.events);
+        app.show_issue(issue.key.clone(), &mut tx);
+        app.show_log(Some("Stop".into()), &mut tx);
+        assert!(app.issue.is_none(), "the sidebar clears it");
+    }
+
+    #[test]
+    fn rebuilding_the_index_finds_the_picked_row_again() {
+        let dir =
+            std::env::temp_dir().join(format!("route-console-rebuild-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let day = sample::DAY;
+        let lines = sample::trouble_lines().join("\n") + "\n";
+        std::fs::write(dir.join(format!("{day}.jsonl")), lines).unwrap();
+        let nowhere = PathBuf::from("/nonexistent");
+        let paths = Paths {
+            config: nowhere.clone(),
+            log_dir: dir.clone(),
+            index: nowhere,
+        };
+        // A day with no file takes the first ids, and leaves with the rebuild.
+        let mut ix = Index::memory();
+        ix.insert_lines("2026-11-15", &sample::lines()).unwrap();
+        let mut app = App::new(paths, ix, None);
+        app.day = day.to_string();
+        app.look();
+        app.refresh();
+        let row = app.rows[3].clone();
+        app.pick(row.id);
+        let line = app.selected.as_ref().unwrap().line.clone();
+        app.rebuild();
+        let picked = app.selected.as_ref().expect("still picked");
+        assert_ne!(picked.id, row.id, "every event has a new id");
+        assert_eq!(
+            app.index.line(picked.id),
+            Some(line),
+            "the same line is picked"
+        );
+        assert_eq!(app.health.issues.len(), 4);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn log_limits_come_from_the_hooks_file_else_route_s_defaults() {
+        let set = serde_json::json!({"route": {"log": {"retention_days": 7}}});
+        let l = Limits::of(Some(&set));
+        assert_eq!(
+            (l.retention_days, l.max_input_chars, l.max_output_chars),
+            (7, 500, 2000)
+        );
+        assert_eq!(Limits::of(None).retention_days, 30);
     }
 }

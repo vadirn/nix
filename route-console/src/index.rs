@@ -18,10 +18,10 @@ use std::path::Path;
 
 use rusqlite::{Connection, ErrorCode, OptionalExtension, params};
 
-use crate::record::Record;
+use crate::record::{Record, Trouble, short_name};
 
 /// Bump on any change to the tables or to what `Record` derives into them.
-const SCHEMA: i32 = 3;
+const SCHEMA: i32 = 4;
 
 pub struct Index {
     conn: Connection,
@@ -43,6 +43,62 @@ pub struct Row {
     pub ms: Option<u64>,
 }
 
+/// One handler's trouble on one hook event: an issue on the Health screen,
+/// and what the Log narrows to from there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueKey {
+    pub kind: Trouble,
+    pub command: String,
+    pub event: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Issue {
+    pub key: IssueKey,
+    pub name: String,
+    /// The events it happened on: the rows the Log lists for it.
+    pub events: usize,
+    /// Of those, the tool calls that went ahead (`Record::let_through`).
+    pub let_through: usize,
+    /// What went wrong the last time.
+    pub detail: String,
+}
+
+/// Middle values over one day's Bash tool calls (PreToolUse with tool Bash),
+/// in milliseconds.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Timing {
+    pub events: usize,
+    /// route's whole run: what the call waited.
+    pub total: u64,
+    /// Each run less its slowest handler: what route adds to the handlers,
+    /// which run side by side.
+    pub overhead: u64,
+    /// Each handler that answers, by short name, slowest first.
+    pub handlers: Vec<(String, u64)>,
+}
+
+/// The middle value; of an even count, the higher of the two.
+fn median(mut v: Vec<i64>) -> u64 {
+    if v.is_empty() {
+        return 0;
+    }
+    v.sort_unstable();
+    v[v.len() / 2].max(0) as u64
+}
+
+/// Deletes one day's events, their troubles and their timings.
+fn drop_day(tx: &rusqlite::Transaction, day: &str) -> Result<(), String> {
+    for table in ["troubles", "timings"] {
+        let q =
+            format!("DELETE FROM {table} WHERE event_id IN (SELECT id FROM events WHERE day = ?1)");
+        tx.execute(&q, [day]).map_err(|e| e.to_string())?;
+    }
+    tx.execute("DELETE FROM events WHERE day = ?1", [day])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// The day a file holds, from its name: `2026-11-16.jsonl` holds `2026-11-16`.
 fn day_of(name: &str) -> Option<&str> {
     let stem = name.strip_suffix(".jsonl")?;
@@ -55,6 +111,8 @@ fn create(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "DROP TABLE IF EXISTS events;
          DROP TABLE IF EXISTS files;
+         DROP TABLE IF EXISTS troubles;
+         DROP TABLE IF EXISTS timings;
          CREATE TABLE files (day TEXT PRIMARY KEY, indexed INTEGER NOT NULL);
          CREATE TABLE events (
              id INTEGER PRIMARY KEY,
@@ -71,7 +129,21 @@ fn create(conn: &Connection) -> rusqlite::Result<()> {
              haystack TEXT NOT NULL,
              line TEXT NOT NULL,
              UNIQUE (day, offset)
-         );",
+         );
+         CREATE TABLE troubles (
+             event_id INTEGER NOT NULL,
+             kind TEXT NOT NULL,
+             command TEXT NOT NULL,
+             detail TEXT NOT NULL,
+             let_through INTEGER NOT NULL
+         );
+         CREATE INDEX troubles_event ON troubles (event_id);
+         CREATE TABLE timings (
+             event_id INTEGER NOT NULL,
+             name TEXT NOT NULL,
+             ms INTEGER NOT NULL
+         );
+         CREATE INDEX timings_event ON timings (event_id);",
     )?;
     conn.pragma_update(None, "user_version", SCHEMA)
 }
@@ -200,8 +272,7 @@ impl Index {
         }
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         for day in &gone {
-            tx.execute("DELETE FROM events WHERE day = ?1", [day])
-                .map_err(|e| e.to_string())?;
+            drop_day(&tx, day)?;
             tx.execute("DELETE FROM files WHERE day = ?1", [day])
                 .map_err(|e| e.to_string())?;
         }
@@ -210,8 +281,7 @@ impl Index {
         for (day, size) in grown {
             let mut from = self.indexed.get(&day).copied().unwrap_or(0);
             if size < from {
-                tx.execute("DELETE FROM events WHERE day = ?1", [&day])
-                    .map_err(|e| e.to_string())?;
+                drop_day(&tx, &day)?;
                 from = 0;
             }
             let (n, upto) = ingest(&tx, &dir.join(format!("{day}.jsonl")), &day, from)?;
@@ -260,12 +330,19 @@ impl Index {
     }
 
     /// One day's events in the order route wrote them, as a tail reads, narrowed to one hook
-    /// event and to lines containing `search` (ASCII case-insensitive).
+    /// event, to lines containing `search` (ASCII case-insensitive), and to the events where one
+    /// handler had one kind of trouble.
     ///
     /// route writes a line when its event finishes, so a slow event lands after quicker ones
     /// that started later (3% of one day's lines). File order puts every new line at the end:
     /// sorted by time, a late line would land among the rows on screen and push them down.
-    pub fn rows(&self, day: &str, event: Option<&str>, search: &str) -> Vec<Row> {
+    pub fn rows(
+        &self,
+        day: &str,
+        event: Option<&str>,
+        search: &str,
+        issue: Option<&IssueKey>,
+    ) -> Vec<Row> {
         let pattern = format!(
             "%{}%",
             search
@@ -277,11 +354,15 @@ impl Index {
         );
         let q = "SELECT id, time, event, tool, input, verdict, stderr, ms FROM events
                  WHERE day = ?1 AND (?2 IS NULL OR event = ?2) AND haystack LIKE ?3 ESCAPE '\\'
+                   AND (?4 IS NULL OR EXISTS (SELECT 1 FROM troubles t
+                        WHERE t.event_id = events.id AND t.kind = ?4 AND t.command = ?5))
                  ORDER BY offset";
         let Ok(mut stmt) = self.conn.prepare_cached(q) else {
             return Vec::new();
         };
-        stmt.query_map(params![day, event, pattern], |r| {
+        let kind = issue.map(|i| i.kind.as_str());
+        let command = issue.map(|i| i.command.as_str());
+        stmt.query_map(params![day, event, pattern, kind, command], |r| {
             Ok(Row {
                 id: r.get(0)?,
                 time: r.get(1)?,
@@ -295,6 +376,102 @@ impl Index {
         })
         .and_then(Iterator::collect)
         .unwrap_or_default()
+    }
+
+    /// One day's issues: failures first, then the most frequent.
+    pub fn issues(&self, day: &str) -> Vec<Issue> {
+        // With one max() in the query, SQLite takes the bare `detail` from the
+        // row holding that max: the latest occurrence's.
+        let q = "SELECT t.kind, t.command, e.event, COUNT(DISTINCT e.id),
+                        COUNT(DISTINCT CASE WHEN t.let_through THEN e.id END),
+                        t.detail, MAX(e.offset)
+                 FROM troubles t JOIN events e ON e.id = t.event_id
+                 WHERE e.day = ?1
+                 GROUP BY t.kind, t.command, e.event
+                 ORDER BY t.kind = 'stderr', COUNT(DISTINCT e.id) DESC, t.command";
+        let Ok(mut stmt) = self.conn.prepare_cached(q) else {
+            return Vec::new();
+        };
+        stmt.query_map([day], |r| {
+            let kind: String = r.get(0)?;
+            let command: String = r.get(1)?;
+            Ok(Issue {
+                name: short_name(&command),
+                key: IssueKey {
+                    kind: Trouble::parse(&kind).unwrap_or(Trouble::Failed),
+                    command,
+                    event: r.get(2)?,
+                },
+                events: r.get::<_, i64>(3)? as usize,
+                let_through: r.get::<_, i64>(4)? as usize,
+                detail: r.get(5)?,
+            })
+        })
+        .and_then(Iterator::collect)
+        .unwrap_or_default()
+    }
+
+    /// One day's Bash timings.
+    pub fn timing(&self, day: &str) -> Timing {
+        let q = "SELECT e.id, e.ms, h.name, h.ms
+                 FROM events e JOIN timings h ON h.event_id = e.id
+                 WHERE e.day = ?1
+                 ORDER BY e.id";
+        let Ok(mut stmt) = self.conn.prepare_cached(q) else {
+            return Timing::default();
+        };
+        let runs: Vec<(i64, i64, String, i64)> = stmt
+            .query_map([day], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .and_then(Iterator::collect)
+            .unwrap_or_default();
+        let mut totals = Vec::new();
+        let mut overheads = Vec::new();
+        let mut by_handler: HashMap<String, Vec<i64>> = HashMap::new();
+        for event in runs.chunk_by(|a, b| a.0 == b.0) {
+            let (_, ms, _, _) = event[0];
+            let slowest = event.iter().map(|h| h.3).max().unwrap_or(0);
+            totals.push(ms);
+            overheads.push(ms - slowest);
+            for (_, _, name, hms) in event {
+                by_handler.entry(name.clone()).or_default().push(*hms);
+            }
+        }
+        let mut handlers: Vec<(String, u64)> = by_handler
+            .into_iter()
+            .map(|(name, v)| (name, median(v)))
+            .collect();
+        handlers.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        Timing {
+            events: totals.len(),
+            total: median(totals),
+            overhead: median(overheads),
+            handlers,
+        }
+    }
+
+    /// Where an event's line sits: its day and offset, which outlive a rebuild
+    /// that gives every event a new id.
+    pub fn place(&self, id: i64) -> Option<(String, i64)> {
+        self.conn
+            .query_row("SELECT day, offset FROM events WHERE id = ?1", [id], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .optional()
+            .ok()
+            .flatten()
+    }
+
+    /// The event at a place, after a rebuild.
+    pub fn id_at(&self, day: &str, offset: i64) -> Option<i64> {
+        self.conn
+            .query_row(
+                "SELECT id FROM events WHERE day = ?1 AND offset = ?2",
+                params![day, offset],
+                |r| r.get(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
     }
 
     /// The JSONL line behind a row, as route wrote it.
@@ -336,12 +513,13 @@ fn ingest(
     Ok((added, from + last as u64 + 1))
 }
 
-/// Indexes one line; a line that is not a route record is skipped.
+/// Indexes one line, with its handlers' troubles; a line that is not a route
+/// record is skipped.
 fn insert(tx: &rusqlite::Transaction, day: &str, offset: u64, line: &str) -> Result<usize, String> {
     let Some(r) = Record::parse(line) else {
         return Ok(0);
     };
-    tx.execute(
+    let n = tx.execute(
         "INSERT OR IGNORE INTO events (day, offset, ts_ms, time, event, tool, input, verdict, stderr, ms, haystack, line)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
@@ -359,7 +537,50 @@ fn insert(tx: &rusqlite::Transaction, day: &str, offset: u64, line: &str) -> Res
             line
         ],
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    if n == 0 {
+        return Ok(0);
+    }
+    let id = tx.last_insert_rowid();
+    // Each Bash call's handler times, which Health takes the middle of. Kept
+    // apart from the line so that reading them parses no JSON: Health reads
+    // them on every look that brings rows.
+    if r.event == "PreToolUse" && r.tool.as_deref() == Some("Bash") && r.ms.is_some() {
+        for h in &r.handlers {
+            if let Some(ms) = h.ms {
+                tx.execute(
+                    "INSERT INTO timings (event_id, name, ms) VALUES (?1, ?2, ?3)",
+                    params![id, h.name, ms as i64],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    // One trouble per kind and command: a command listed under two matchers
+    // runs twice, but the event is one row.
+    let mut seen: Vec<(Trouble, &str)> = Vec::new();
+    for h in &r.handlers {
+        let Some((kind, detail)) = h.trouble() else {
+            continue;
+        };
+        if seen.contains(&(kind, h.command.as_str())) {
+            continue;
+        }
+        seen.push((kind, &h.command));
+        tx.execute(
+            "INSERT INTO troubles (event_id, kind, command, detail, let_through)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                id,
+                kind.as_str(),
+                h.command,
+                detail,
+                kind == Trouble::Failed && r.let_through()
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(n)
 }
 
 #[cfg(test)]
@@ -402,7 +623,7 @@ mod tests {
         assert_eq!(ix.sync(&dir).unwrap(), 0, "a half line waits");
         append(&file, &format!("{}\n", &b[10..]));
         assert_eq!(ix.sync(&dir).unwrap(), 1);
-        let rows = ix.rows("2026-11-16", None, "");
+        let rows = ix.rows("2026-11-16", None, "", None);
         assert_eq!(
             rows.iter().map(|r| r.event.as_str()).collect::<Vec<_>>(),
             ["PreToolUse", "PostToolUse"]
@@ -421,10 +642,17 @@ mod tests {
         append(&dir.join("2026-11-16.jsonl"), &(lines.join("\n") + "\n"));
         let mut ix = Index::memory();
         ix.sync(&dir).unwrap();
-        assert_eq!(ix.rows("2026-11-16", Some("PreToolUse"), "").len(), 2);
-        assert_eq!(ix.rows("2026-11-16", None, "GIT").len(), 2);
-        assert_eq!(ix.rows("2026-11-16", Some("PreToolUse"), "git").len(), 1);
-        assert_eq!(ix.rows("2026-11-16", None, "100%").len(), 0, "% is literal");
+        assert_eq!(ix.rows("2026-11-16", Some("PreToolUse"), "", None).len(), 2);
+        assert_eq!(ix.rows("2026-11-16", None, "GIT", None).len(), 2);
+        assert_eq!(
+            ix.rows("2026-11-16", Some("PreToolUse"), "git", None).len(),
+            1
+        );
+        assert_eq!(
+            ix.rows("2026-11-16", None, "100%", None).len(),
+            0,
+            "% is literal"
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -438,7 +666,7 @@ mod tests {
         ix.insert_lines(day, &[quick]).unwrap();
         ix.insert_lines(day, &[slow]).unwrap();
         let inputs: Vec<String> = ix
-            .rows(day, None, "")
+            .rows(day, None, "", None)
             .into_iter()
             .filter_map(|r| r.input)
             .collect();
@@ -472,7 +700,7 @@ mod tests {
         .unwrap();
         ix.sync(&dir).unwrap();
         assert_eq!(ix.days(), ["2026-11-16"]);
-        let rows = ix.rows("2026-11-16", None, "");
+        let rows = ix.rows("2026-11-16", None, "", None);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].input.as_deref(), Some("c"));
         fs::remove_dir_all(&dir).unwrap();
@@ -511,6 +739,132 @@ mod tests {
         fs::write(&path, b"not a database at all, just bytes").unwrap();
         let _ = fs::remove_file(dir.join("index.sqlite-wal"));
         assert!(Index::open(&path).is_ok());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn each_issue_counts_the_rows_its_filter_lists() {
+        let mut ix = Index::memory();
+        let day = crate::sample::DAY;
+        ix.insert_lines(day, &crate::sample::trouble_lines())
+            .unwrap();
+        let issues = ix.issues(day);
+        let named: Vec<(&str, &str, &str, usize, usize)> = issues
+            .iter()
+            .map(|i| {
+                let k = &i.key;
+                (
+                    k.kind.as_str(),
+                    i.name.as_str(),
+                    k.event.as_str(),
+                    i.events,
+                    i.let_through,
+                )
+            })
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("failed", "no-secrets.sh", "PreToolUse", 3, 3),
+                ("failed", "turn-check.sh", "UserPromptSubmit", 1, 0),
+                ("failed", "notify-done", "Notification", 1, 0),
+                ("stderr", "stop-verify.sh", "Stop", 2, 0),
+            ]
+        );
+        for i in &issues {
+            let listed = ix.rows(day, Some(&i.key.event), "", Some(&i.key)).len();
+            assert_eq!(listed, i.events, "{} lists what it counts", i.name);
+        }
+        assert!(issues[0].detail.contains("bad substitution"));
+        assert_eq!(issues[1].detail, "timed out");
+        assert!(
+            issues[2].detail.starts_with("failed to start"),
+            "an async handler that cannot start"
+        );
+        assert!(issues[3].detail.contains("getcwd"));
+    }
+
+    #[test]
+    fn a_denied_call_is_not_let_through_and_an_exit_2_reason_is_no_issue() {
+        let h = |cmd: &str, exit: i64, outcome: &str| {
+            serde_json::json!({"matcher": "Bash", "command": cmd, "exit": exit, "ms": 5,
+                "outcome": outcome, "stderr": "boom\n"})
+        };
+        let ev = |decision: Option<&str>, hs: Vec<serde_json::Value>| {
+            serde_json::json!({"v": 1, "ts": "2026-11-16T10:00:00.000+05:00", "event": "PreToolUse",
+                "tool": "Bash", "input": "x", "mode": "merged", "decision": decision, "exit": 0,
+                "ms": 9, "handlers": hs})
+            .to_string()
+        };
+        let mut ix = Index::memory();
+        let day = "2026-11-16";
+        ix.insert_lines(
+            day,
+            &[
+                ev(
+                    Some("deny"),
+                    vec![h("a/guard.sh", 1, "error"), h("a/deny.sh", 2, "deny")],
+                ),
+                ev(None, vec![h("a/guard.sh", 1, "error")]),
+            ],
+        )
+        .unwrap();
+        let issues = ix.issues(day);
+        assert_eq!(issues.len(), 1, "exit 2's stderr is its reason: {issues:?}");
+        assert_eq!((issues[0].events, issues[0].let_through), (2, 1));
+    }
+
+    #[test]
+    fn timing_takes_middle_values_and_what_route_adds_to_its_slowest_handler() {
+        let ev = |event: &str, ms: i64, a: i64, b: i64| {
+            serde_json::json!({"v": 1, "ts": "2026-11-16T10:00:00.000+05:00", "event": event,
+                "tool": "Bash", "mode": "silent", "decision": null, "exit": 0, "ms": ms, "handlers": [
+                    {"command": "x/a.sh", "exit": 0, "ms": a, "outcome": "none"},
+                    {"command": "python3 x/b.py", "exit": 0, "ms": b, "outcome": "none"},
+                    {"command": "x/c.sh", "async": true}]})
+            .to_string()
+        };
+        let mut ix = Index::memory();
+        let day = "2026-11-16";
+        ix.insert_lines(
+            day,
+            &[
+                ev("PreToolUse", 40, 30, 10),
+                ev("PreToolUse", 50, 35, 20),
+                ev("PreToolUse", 900, 880, 15),
+                ev("PostToolUse", 5000, 4990, 1),
+            ],
+        )
+        .unwrap();
+        let t = ix.timing(day);
+        assert_eq!((t.events, t.total, t.overhead), (3, 50, 15));
+        assert_eq!(
+            t.handlers,
+            [("a.sh".to_string(), 35), ("b.py".to_string(), 15)]
+        );
+        assert_eq!(ix.timing("2026-11-17"), Timing::default());
+    }
+
+    #[test]
+    fn a_pruned_day_takes_its_troubles_and_timings_with_it() {
+        let dir = scratch("troubles");
+        let file = dir.join(format!("{}.jsonl", crate::sample::DAY));
+        append(&file, &(crate::sample::trouble_lines().join("\n") + "\n"));
+        let mut ix = Index::memory();
+        ix.sync(&dir).unwrap();
+        assert_eq!(ix.issues(crate::sample::DAY).len(), 4);
+        assert_eq!(ix.timing(crate::sample::DAY).events, 6);
+        fs::remove_file(&file).unwrap();
+        ix.sync(&dir).unwrap();
+        let left: i64 = ix
+            .conn
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM troubles) + (SELECT COUNT(*) FROM timings)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(left, 0);
         fs::remove_dir_all(&dir).unwrap();
     }
 }

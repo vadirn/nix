@@ -1,0 +1,7 @@
+{"events": [
+  {"t": 1.0, "type": "mark", "name": "before"},
+  {"t": 1.2, "type": "tap", "key": "screen-health"},
+  {"t": 3.0, "type": "tap", "key": "screen-log"},
+  {"t": 3.1, "type": "move", "x": 1100, "y": 700},
+  {"t": 3.3, "type": "mark", "name": "back"}
+]}

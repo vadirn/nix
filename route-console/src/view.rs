@@ -1,6 +1,7 @@
 //! The window, laid out as the design canvas's Log artboard: rune-kit's shell
 //! with a sidebar of screens and hook events, a toolbar band, and a framed
-//! card holding the event list beside the inspector.
+//! card holding the event list beside the inspector, or the Health screen
+//! (`health.rs`).
 //!
 //! The list is built on Rune's virtual rows, not rune-kit's Table: the Table's
 //! viewport never sticks to its end and reports nothing about what it shows,
@@ -8,7 +9,9 @@
 
 use std::borrow::Cow;
 
-use rune::{Align, Cx, El, GrowthSpec, Icon, KeyEvent, ScrollSpec, Tx, col, el, row, text};
+use rune::{
+    Align, Cx, El, GrowthSpec, Icon, KeyEvent, ScrollPos, ScrollSpec, Tx, col, el, row, text,
+};
 use rune_kit::shell::{SidebarRow, SidebarToggle, SplitView, Toolbar};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Sidebar, TableStyle,
@@ -16,7 +19,7 @@ use rune_kit::{
 };
 
 use crate::index::Row;
-use crate::record::Record;
+use crate::record::{Record, Trouble, short_name};
 use crate::theme::{Tint, Tokens, tint_of, ty};
 use crate::{App, LIST, ROWS, Screen, Selected, VIEWPORT};
 
@@ -24,6 +27,16 @@ static LOG_ICON: Icon = Icon {
     name: "rc-list",
     view: 16.0,
     body: r#"<path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>"#,
+};
+static PULSE: Icon = Icon {
+    name: "rc-pulse",
+    view: 16.0,
+    body: r#"<path d="M1.5 8h3l1.5-4 3 8 1.5-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>"#,
+};
+static CLOSE: Icon = Icon {
+    name: "rc-close",
+    view: 16.0,
+    body: r#"<path d="m4.5 4.5 7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>"#,
 };
 static BOLT: Icon = Icon {
     name: "rc-bolt",
@@ -44,7 +57,7 @@ static COPY: Icon = Icon {
 /// The inspector's width, as the canvas lays it out at 1280 points.
 const INSPECTOR_W: f32 = 340.0;
 
-fn ms_label(ms: u64) -> String {
+pub fn ms_label(ms: u64) -> String {
     if ms >= 1000 {
         format!("{:.2} s", ms as f64 / 1000.0)
     } else {
@@ -54,7 +67,11 @@ fn ms_label(ms: u64) -> String {
 
 /// A tinted word: a verdict, a handler's result, or `stderr`.
 fn badge(t: &Tokens, word: &str) -> El {
-    let (bg, fg) = t.badge(tint_of(word));
+    badge_in(t, word, tint_of(word))
+}
+
+fn badge_in(t: &Tokens, word: &str, tint: Tint) -> El {
+    let (bg, fg) = t.badge(tint);
     row()
         .role("status")
         .label(word.to_string())
@@ -75,41 +92,34 @@ fn rule(t: &Tokens) -> El {
     el().w_full().h(1.0).fill(t.separator).a11y_hidden()
 }
 
-pub fn view(s: &App, cx: &mut Cx<App>) -> El {
-    let t = Tokens::new(cx.system_dark());
-    let k = t.kit();
-    let title = match &s.screen {
-        Screen::Log(Some(event)) => event.clone(),
-        Screen::Log(None) => "Log".to_string(),
-    };
+/// The toolbar's title, with the error badge when the index or the log
+/// could not be read.
+pub fn leading(s: &App, t: &Tokens, title: String) -> El {
     let mut leading = row()
         .gap(8.0)
         .center_y()
         .child(text(title).font(ty::TITLE).color(t.text));
     if let Some(e) = &s.error {
-        leading = leading.child(badge(&t, "error").help(e.clone()));
+        leading = leading.child(badge(t, "error").help(e.clone()));
     }
-    // The pill sits left of the search field, so the field holds its place
-    // as the pill comes and goes.
-    let toolbar = match pill(s, &k) {
-        Some(p) => Toolbar::new().leading(leading).trailing(p),
-        None => Toolbar::new().leading(leading),
-    }
-    .trailing(search(s, &k, &t));
-    let main = col().key("log").w_full().h_full().child(rule(&t)).child(
-        row()
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .child(list(s, &k, &t).grow(1.0).min_w(0.0).h_full())
-            .child(el().w(1.0).h_full().fill(t.separator).a11y_hidden())
-            .child(inspector(s, &k, &t)),
-    );
+    leading
+}
+
+pub fn view(s: &App, cx: &mut Cx<App>) -> El {
+    let t = Tokens::new(cx.system_dark());
+    let k = t.kit();
+    let (toolbar, main) = match s.screen {
+        Screen::Log => (log_toolbar(s, &k, &t), log(s, &k, &t)),
+        Screen::Health => (
+            crate::health::toolbar(s, &k, &t),
+            crate::health::screen(s, &k, &t),
+        ),
+    };
     SplitView::new(main)
         .sidebar(
             &s.sidebar,
             |s: &mut App| &mut s.sidebar,
-            sidebar(s, &t.sidebar_kit(&k)),
+            sidebar(s, &t, &t.sidebar_kit(&k)),
         )
         .toolbar(toolbar)
         .titlebar_inset(cx.titlebar_inset())
@@ -121,21 +131,62 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .build(&k)
 }
 
-fn sidebar(s: &App, k: &Kit) -> El {
+fn log_toolbar(s: &App, k: &Kit, t: &Tokens) -> Toolbar {
+    let title = s.event.clone().unwrap_or_else(|| "Log".to_string());
+    let mut toolbar = Toolbar::new().leading(leading(s, t, title));
+    // The pill sits left of the search field, so the field holds its place
+    // as the pill comes and goes.
+    for e in [issue_filter(s, k, t), pill(s, k)].into_iter().flatten() {
+        toolbar = toolbar.trailing(e);
+    }
+    toolbar.trailing(search(s, k, t))
+}
+
+fn log(s: &App, k: &Kit, t: &Tokens) -> El {
+    col().key("log").w_full().h_full().child(rule(t)).child(
+        row()
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .child(list(s, k, t).grow(1.0).min_w(0.0).h_full())
+            .child(el().w(1.0).h_full().fill(t.separator).a11y_hidden())
+            .child(inspector(s, k, t)),
+    )
+}
+
+fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
+    let on_log = s.screen == Screen::Log;
     let log = SidebarRow::new("Log")
         .icon(&LOG_ICON)
         .height(30.0)
-        .selected(s.screen == Screen::Log(None))
-        .on_select(|s: &mut App, tx| s.show(Screen::Log(None), tx))
+        .selected(on_log && s.event.is_none())
+        .on_select(|s: &mut App, tx| s.show_log(None, tx))
         .build(k)
         .key("screen-log");
+    let n = s.health.issues.len();
+    let mut health = SidebarRow::new("Health")
+        .icon(&PULSE)
+        .height(30.0)
+        .selected(s.screen == Screen::Health)
+        .on_select(|s: &mut App, _tx| s.show_health());
+    if n > 0 {
+        health = health.trailing(badge_in(t, &n.to_string(), Tint::Orange).label(if n == 1 {
+            "1 issue".into()
+        } else {
+            format!("{n} issues")
+        }));
+    }
+    let screens = col()
+        .w_full()
+        .child(log)
+        .child(health.build(k).key("screen-health"));
     let events = s.events.iter().map(|e| {
-        let screen = Screen::Log(Some(e.clone()));
+        let event = e.clone();
         SidebarRow::new(e.clone())
             .icon(&BOLT)
             .height(30.0)
-            .selected(s.screen == screen)
-            .on_select(move |s: &mut App, tx| s.show(screen.clone(), tx))
+            .selected(on_log && s.event.as_deref() == Some(e))
+            .on_select(move |s: &mut App, tx| s.show_log(Some(event.clone()), tx))
             .build(k)
             .key(format!("event-{e}"))
     });
@@ -146,7 +197,7 @@ fn sidebar(s: &App, k: &Kit) -> El {
                 .inset(0.0)
                 .header_padding(6.0, 16.0)
                 .row_gap(0.0)
-                .header(log),
+                .header(screens),
             |sb, r| sb.child(r),
         )
         .build(k)
@@ -172,6 +223,47 @@ fn search(s: &App, k: &Kit, t: &Tokens) -> El {
         .fill(t.fill)
         .center_y()
         .child(field)
+}
+
+/// The Log narrowed to one issue from Health: the handler and its trouble,
+/// with a button that clears it.
+fn issue_filter(s: &App, k: &Kit, t: &Tokens) -> Option<El> {
+    let issue = s.issue.as_ref()?;
+    let what = match issue.kind {
+        Trouble::Failed => "failures",
+        Trouble::Stderr => "stderr",
+    };
+    let words = format!("{} {what}", short_name(&issue.command));
+    let clear = IconButton::new(&CLOSE)
+        .variant(IconButtonVariant::GhostMuted)
+        .control_size(ControlSize::Small)
+        .label("Clear the issue filter")
+        .help("Clear the issue filter")
+        .on_press_tx(|s: &mut App, tx| s.clear_issue(tx))
+        .build(k)
+        .key("clear-issue");
+    Some(
+        row()
+            .key("issue-filter")
+            .role("group")
+            .label(format!("Only {words}"))
+            .h(28.0)
+            .pl(10.0)
+            .pr(2.0)
+            .gap(4.0)
+            .radius(8.0)
+            .fill(t.fill)
+            .center_y()
+            .child(
+                text(words)
+                    .font(ty::BODY)
+                    .color(t.text)
+                    .truncate()
+                    .max_w(220.0)
+                    .a11y_hidden(),
+            )
+            .child(clear),
+    )
 }
 
 /// "↓ N new": the rows below the viewport, while there are any. Pressing it
@@ -372,6 +464,7 @@ fn event_row(s: &App, i: usize, style: &TableStyle, t: &Tokens) -> El {
 fn list(s: &App, k: &Kit, t: &Tokens) -> El {
     let style = t.table(k);
     let tk = *t;
+    let scroll_y = s.scroll_y.clone();
     let rows = col()
         .key(ROWS)
         .w_full()
@@ -390,6 +483,10 @@ fn list(s: &App, k: &Kit, t: &Tokens) -> El {
         .min_h(0.0)
         .scroll(ScrollSpec {
             stick_bottom: s.following,
+        })
+        // Kept for the trip back from Health, which mounts the list afresh.
+        .on_scroll_offset(move |at: ScrollPos| {
+            scroll_y.set(at.offset[1]);
         })
         .child(rows);
     let list = col()
@@ -461,7 +558,7 @@ fn hidden_note(s: &App, t: &Tokens) -> El {
 
 /// A boxed block of text: the input, or stderr. Like all inspector text it
 /// wraps anywhere: JSON and paths carry tokens wider than the panel.
-fn block(content: String, fill: rune::Color, border: rune::Color, t: &Tokens) -> El {
+pub fn block(content: String, fill: rune::Color, border: rune::Color, t: &Tokens) -> El {
     col()
         .w_full()
         .px(12.0)

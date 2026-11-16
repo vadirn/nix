@@ -222,3 +222,87 @@ pub fn lines() -> Vec<String> {
         ),
     ]
 }
+
+/// The `health` scene's lines: the canvas's, plus handlers in trouble. A guard
+/// that fails on two more Bash calls, a hook that times out, an async one that
+/// cannot start, and one that writes to stderr at exit 0. Kept apart from
+/// [`lines`], so the `canvas` scene still matches its artboard.
+pub fn trouble_lines() -> Vec<String> {
+    let secrets_failed = || {
+        (
+            "no-secrets.sh",
+            json!({"matcher": "Bash", "command": "bash ~/.claude/hooks/no-secrets.sh", "exit": 1, "ms": 6, "outcome": "error",
+                "stderr": "line 30: ${COMMAND,,}: bad substitution\n"}),
+        )
+    };
+    let getcwd = "shell-init: error retrieving current directory: getcwd: cannot access parent directories: No such file or directory\n";
+    let mut out = lines();
+    out.extend([
+        line(
+            "14:11:20",
+            "PreToolUse",
+            Some("Bash"),
+            Some("ls -la ~/.claude"),
+            None,
+            35,
+            bash(&[secrets_failed()]),
+        ),
+        line(
+            "14:12:02",
+            "Stop",
+            None,
+            None,
+            None,
+            812,
+            vec![
+                json!({"matcher": "", "command": "bash ~/.claude/hooks/sound.sh Stop", "async": true}),
+                json!({"matcher": "", "command": "bash ~/.claude/hooks/stop-verify.sh", "exit": 0, "ms": 810, "outcome": "none", "stderr": getcwd}),
+            ],
+        ),
+        line(
+            "14:12:40",
+            "UserPromptSubmit",
+            None,
+            Some("Run the tests again."),
+            None,
+            10004,
+            vec![
+                json!({"matcher": "", "command": "bash ~/.claude/hooks/turn-check.sh", "exit": null, "ms": 10001, "outcome": "error", "timed_out": true, "signal": 9}),
+                json!({"matcher": "", "command": "~/.local/bin/trinket-claude-prompt", "exit": 0, "ms": 1020, "outcome": "none"}),
+            ],
+        ),
+        line(
+            "14:13:05",
+            "Notification",
+            None,
+            None,
+            None,
+            2,
+            vec![
+                json!({"matcher": "", "command": "~/.local/bin/notify-done", "async": true, "spawn_error": "No such file or directory (os error 2)"}),
+            ],
+        ),
+        line(
+            "14:13:30",
+            "PreToolUse",
+            Some("Bash"),
+            Some("printenv | rg TOKEN"),
+            None,
+            36,
+            bash(&[secrets_failed()]),
+        ),
+        line(
+            "14:14:10",
+            "Stop",
+            None,
+            None,
+            None,
+            790,
+            vec![
+                json!({"matcher": "", "command": "bash ~/.claude/hooks/sound.sh Stop", "async": true}),
+                json!({"matcher": "", "command": "bash ~/.claude/hooks/stop-verify.sh", "exit": 0, "ms": 788, "outcome": "none", "stderr": getcwd}),
+            ],
+        ),
+    ]);
+    out
+}
