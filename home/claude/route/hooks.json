@@ -4,6 +4,14 @@
       "retention_days": 30,
       "max_input_chars": 500,
       "max_output_chars": 2000
+    },
+    "builtins": {
+      "bash ~/.claude/hooks/no-secrets.sh": "no-secrets",
+      "python3 ~/.claude/hooks/no-dangerous-rm.py": "no-dangerous-rm",
+      "python3 ~/.claude/hooks/no-dangerous.py": "no-dangerous",
+      "bash ~/.claude/hooks/quiet-override.sh": "quiet-override",
+      "python3 ~/.claude/hooks/pipe-allow.py": "pipe-allow",
+      "bash ~/.claude/hooks/rg-glob-guard.sh": "rg-glob-guard"
     }
   },
   "hooks": {
