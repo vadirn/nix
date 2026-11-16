@@ -504,3 +504,67 @@ fn settings_prints_the_hooks_block_for_route() {
         }})
     );
 }
+
+#[test]
+fn builtins_answer_in_process_beside_scripts_and_toggle_off_by_command() {
+    let f = Fixture::new();
+    // The mapped command does not exist, so only the in-process guard can answer.
+    let guard = "python3 /nonexistent/no-dangerous.py";
+    let script = f.handler("deny.sh", &deny_script("from the script"));
+    f.config(json!({
+        "route": {"builtins": {guard: "no-dangerous"}},
+        "hooks": {"PreToolUse": [group("Bash", &[guard, &script])]}
+    }));
+    let ran = f.run("PreToolUse", &bash_call("sudo ls"));
+    assert_eq!(ran.exit, Some(0));
+    let hso = &ran.json()["hookSpecificOutput"];
+    assert_eq!(hso["permissionDecision"], "deny");
+    // Both reasons, in config order: the guard's first.
+    assert_eq!(
+        hso["permissionDecisionReason"],
+        "Blocked: sudo runs commands as root. Too risky.\nfrom the script"
+    );
+    let line = f.log_lines().pop().unwrap();
+    assert_eq!(line["handlers"][0]["builtin"], "no-dangerous");
+    assert!(line["handlers"][0]["us"].is_u64());
+    assert!(line["handlers"][1].get("builtin").is_none());
+
+    f.state(json!({"disabled": [{"event": "PreToolUse", "matcher": "Bash", "command": guard}]}));
+    let ran = f.run("PreToolUse", &bash_call("sudo ls"));
+    assert_eq!(
+        ran.json()["hookSpecificOutput"]["permissionDecisionReason"],
+        "from the script"
+    );
+}
+
+#[test]
+fn a_builtin_name_this_binary_lacks_runs_the_command() {
+    let f = Fixture::new();
+    let script = f.handler("deny.sh", &deny_script("the script ran"));
+    f.config(json!({
+        "route": {"builtins": {script.clone(): "no-such-guard"}},
+        "hooks": {"PreToolUse": [group("Bash", &[&script])]}
+    }));
+    let ran = f.run("PreToolUse", &bash_call("ls"));
+    assert_eq!(
+        ran.json()["hookSpecificOutput"]["permissionDecisionReason"],
+        "the script ran"
+    );
+    let line = f.log_lines().pop().unwrap();
+    assert!(line["notes"][0].as_str().unwrap().contains("no-such-guard"));
+}
+
+#[test]
+fn a_rewrite_from_a_builtin_reaches_claude_code() {
+    let f = Fixture::new();
+    let guard = "bash /nonexistent/quiet-override.sh";
+    f.config(json!({
+        "route": {"builtins": {guard: "quiet-override"}},
+        "hooks": {"PreToolUse": [group("Bash", &[guard])]}
+    }));
+    let ran = f.run("PreToolUse", &bash_call("git pull"));
+    assert_eq!(
+        ran.json()["hookSpecificOutput"]["updatedInput"],
+        json!({"command": "git pull -q"})
+    );
+}

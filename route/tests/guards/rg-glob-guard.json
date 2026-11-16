@@ -1,0 +1,119 @@
+{
+ "guard": "rg-glob-guard",
+ "source": "home/claude/hooks/rg-glob-guard.test.sh",
+ "cases": [
+  {
+   "name": "single-quoted negation",
+   "command": "rg --files . -g '!.git'",
+   "expect": "deny"
+  },
+  {
+   "name": "negation with other flags",
+   "command": "rg -l foo /path --hidden -g '!.git'",
+   "expect": "deny"
+  },
+  {
+   "name": "--glob= form",
+   "command": "rg foo --glob='!flake.nix' src",
+   "expect": "deny"
+  },
+  {
+   "name": "double-quoted negation",
+   "command": "rg foo -g \"!*.lock\" src",
+   "expect": "deny"
+  },
+  {
+   "name": "bare negation",
+   "command": "rg foo -g !target src",
+   "expect": "deny"
+  },
+  {
+   "name": "escaped single-quoted",
+   "command": "rg --files . -g '\\!.git'",
+   "expect": "deny"
+  },
+  {
+   "name": "escaped bare",
+   "command": "rg foo -g \\!target src",
+   "expect": "deny"
+  },
+  {
+   "name": "mixed positive + negation",
+   "command": "rg foo -g '*.md' -g '!README.md'",
+   "expect": "deny"
+  },
+  {
+   "name": "no glob",
+   "command": "rg foo src",
+   "expect": "none"
+  },
+  {
+   "name": "positive glob",
+   "command": "rg foo -g '*.ts' src",
+   "expect": "none"
+  },
+  {
+   "name": "positive --glob= form",
+   "command": "rg foo --glob='*.rs' src",
+   "expect": "none"
+  },
+  {
+   "name": "runtime-built negation",
+   "command": "rg --files . -g \"$(printf '\\x21%s' .lock)\"",
+   "expect": "none"
+  },
+  {
+   "name": "git log -g",
+   "command": "git log -g --oneline",
+   "expect": "none"
+  },
+  {
+   "name": "no rg at all",
+   "command": "echo hello",
+   "expect": "none"
+  },
+  {
+   "name": "glued -g value",
+   "command": "rg -g'!x' foo",
+   "expect": "deny"
+  },
+  {
+   "name": "absolute rg path",
+   "command": "/opt/homebrew/bin/rg -g '!x' foo",
+   "expect": "deny"
+  },
+  {
+   "name": "rg after a pipe",
+   "command": "ls | rg -g '!x' foo",
+   "expect": "deny"
+  },
+  {
+   "name": "rg mentioned in a quote",
+   "command": "echo \"use rg -g '!x'\"",
+   "expect": "none",
+   "script": "deny",
+   "why": "the script matched rg and the glob anywhere in the raw text, quotes included"
+  },
+  {
+   "name": "negated glob on another command",
+   "command": "fd -g '!x' . | rg foo",
+   "expect": "none",
+   "script": "deny",
+   "why": "the script read every -g in the command; the glob now has to belong to rg"
+  },
+  {
+   "name": "--iglob",
+   "command": "rg --iglob '!x' foo",
+   "expect": "deny",
+   "script": "none",
+   "why": "the script read only -g and --glob; --iglob takes a glob the same way"
+  },
+  {
+   "name": "-g in a short cluster",
+   "command": "rg -ig '!x' foo",
+   "expect": "deny",
+   "script": "none",
+   "why": "the script missed -g inside a cluster of short flags"
+  }
+ ]
+}

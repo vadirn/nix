@@ -1,0 +1,177 @@
+{
+ "guard": "no-dangerous-rm",
+ "source": "home/claude/hooks/no-dangerous-rm.test.sh",
+ "cwd": "/Users/vadim/nix",
+ "cases": [
+  {
+   "name": "rm -rf /tmp/something",
+   "command": "rm -rf /tmp/something",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -fr /etc/something",
+   "command": "rm -fr /etc/something",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf ~/Documents",
+   "command": "rm -rf ~/Documents",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf /",
+   "command": "rm -rf /",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf ../../etc",
+   "command": "rm -rf ../../etc",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf /Users/vadim/nix_evil",
+   "command": "rm -rf /Users/vadim/nix_evil",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf /Users/vadim/nix/dist",
+   "command": "rm -rf /Users/vadim/nix/dist",
+   "expect": "none"
+  },
+  {
+   "name": "rm -rf dist node_modules",
+   "command": "rm -rf dist node_modules",
+   "expect": "none"
+  },
+  {
+   "name": "rm file.txt",
+   "command": "rm file.txt",
+   "expect": "none"
+  },
+  {
+   "name": "rm -r somedir",
+   "command": "rm -r somedir",
+   "expect": "none"
+  },
+  {
+   "name": "ls -la /tmp",
+   "command": "ls -la /tmp",
+   "expect": "none"
+  },
+  {
+   "name": "rm -Rf /Users/vadim/Documents",
+   "command": "rm -Rf /Users/vadim/Documents",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -r -f /Users/vadim/Documents",
+   "command": "rm -r -f /Users/vadim/Documents",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf \"/Users/vadim/Documents\"",
+   "command": "rm -rf \"/Users/vadim/Documents\"",
+   "expect": "deny"
+  },
+  {
+   "name": "rm --recursive --force /Users/vadim/Documents",
+   "command": "rm --recursive --force /Users/vadim/Documents",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf $HOME",
+   "command": "rm -rf $HOME",
+   "expect": "deny"
+  },
+  {
+   "name": "cd / && rm -rf etc",
+   "command": "cd / && rm -rf etc",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf -- /Users/vadim/Documents",
+   "command": "rm -rf -- /Users/vadim/Documents",
+   "expect": "deny"
+  },
+  {
+   "name": "rm -rf /Users/vadim/nix/build",
+   "command": "rm -rf /Users/vadim/nix/build",
+   "expect": "none"
+  },
+  {
+   "name": "rm -rf node_modules && npm i",
+   "command": "rm -rf node_modules && npm i",
+   "expect": "none"
+  },
+  {
+   "name": "reason names the target",
+   "command": "rm -rf /tmp/x",
+   "expect": "deny",
+   "reason": "Target: /tmp/x"
+  },
+  {
+   "name": "no cwd, no verdict",
+   "command": "rm -rf /",
+   "expect": "none",
+   "cwd": ""
+  },
+  {
+   "name": "git rm -r inside project",
+   "command": "git rm -r --cached build",
+   "expect": "none"
+  },
+  {
+   "name": "rm of a var in braces",
+   "command": "rm -rf \"${TMPDIR}\"/x",
+   "expect": "deny",
+   "reason": "unexpanded variable"
+  },
+  {
+   "name": "trailing dot-dot stays inside",
+   "command": "rm -rf build/../dist",
+   "expect": "none"
+  },
+  {
+   "name": "absolute rm path",
+   "command": "/bin/rm -rf /tmp/x",
+   "expect": "deny",
+   "script": "none",
+   "why": "the script looked for a bare `rm` token; the shared parse reads the command name `/bin/rm` as rm"
+  },
+  {
+   "name": "rm inside a substitution",
+   "command": "echo $(rm -rf /tmp/x)",
+   "expect": "deny",
+   "script": "none",
+   "why": "the script's regex split left `$(rm` as one token; the shared parse checks commands inside $(...)"
+  },
+  {
+   "name": "cd inside a group",
+   "command": "(cd /tmp && rm -rf x)",
+   "expect": "deny",
+   "script": "none",
+   "why": "the script saw `(cd` and missed the cd; the shared parse reads the group's commands"
+  },
+  {
+   "name": "pushd moves the cwd",
+   "command": "pushd /tmp && rm -rf x",
+   "expect": "deny",
+   "script": "none",
+   "why": "the script counted only `cd`; pushd moves the effective directory the same way"
+  },
+  {
+   "name": "backtick in the path",
+   "command": "rm -rf `pwd`/../x",
+   "expect": "deny",
+   "script": "none",
+   "why": "the script checked only for `$`; a backtick substitution hides the target as well"
+  },
+  {
+   "name": "rm in an unquoted heredoc's substitution",
+   "command": "cat <<EOF\n$(rm -rf /etc/x)\nEOF",
+   "expect": "deny",
+   "script": "none",
+   "why": "the script's split kept `$(rm` as one token, so no word was rm; an unquoted heredoc runs its substitutions"
+  }
+ ]
+}

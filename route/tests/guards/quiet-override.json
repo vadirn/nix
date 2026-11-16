@@ -1,0 +1,387 @@
+{
+ "guard": "quiet-override",
+ "source": "home/claude/hooks/quiet-override.test.sh",
+ "cases": [
+  {
+   "name": "git commit",
+   "command": "git commit -m test",
+   "expect": {
+    "rewrite": "git commit -q -m test"
+   }
+  },
+  {
+   "name": "git clone",
+   "command": "git clone https://x.git",
+   "expect": {
+    "rewrite": "git clone -q https://x.git"
+   }
+  },
+  {
+   "name": "git fetch",
+   "command": "git fetch origin",
+   "expect": {
+    "rewrite": "git fetch -q origin"
+   }
+  },
+  {
+   "name": "git pull",
+   "command": "git pull",
+   "expect": {
+    "rewrite": "git pull -q"
+   }
+  },
+  {
+   "name": "git already -q",
+   "command": "git commit -q -m test",
+   "expect": "none"
+  },
+  {
+   "name": "git already --quiet",
+   "command": "git clone --quiet url",
+   "expect": "none"
+  },
+  {
+   "name": "git status",
+   "command": "git status",
+   "expect": "none"
+  },
+  {
+   "name": "git log",
+   "command": "git log --oneline",
+   "expect": "none"
+  },
+  {
+   "name": "git after &&",
+   "command": "git add a && git commit -m x",
+   "expect": {
+    "rewrite": "git add a && git commit -q -m x"
+   }
+  },
+  {
+   "name": "message naming git commit",
+   "command": "git commit -m \"fix: stop git commit spam\"",
+   "expect": {
+    "rewrite": "git commit -q -m \"fix: stop git commit spam\""
+   }
+  },
+  {
+   "name": "echo naming git commit before the real one",
+   "command": "echo \"use git commit\" && git commit -m x",
+   "expect": {
+    "rewrite": "echo \"use git commit\" && git commit -q -m x"
+   }
+  },
+  {
+   "name": "heredoc message keeps its body",
+   "command": "git commit -m \"$(cat <<'EOF'\nfix: x\n\ngit commit body\nEOF\n)\"",
+   "expect": {
+    "rewrite": "git commit -q -m \"$(cat <<'EOF'\nfix: x\n\ngit commit body\nEOF\n)\""
+   }
+  },
+  {
+   "name": "heredoc body naming git commit",
+   "command": "cat > notes.md <<'EOF'\ngit commit runs the hook\nEOF",
+   "expect": "none"
+  },
+  {
+   "name": "python script naming git commit",
+   "command": "python3 - <<'PY'\n# run git commit later\ns = \"Bash(git commit -F x)\"\nPY",
+   "expect": "none"
+  },
+  {
+   "name": "a later line is never rewritten",
+   "command": "cd x\ngit commit -m y",
+   "expect": "none"
+  },
+  {
+   "name": "npm named inside a heredoc",
+   "command": "cat > a.sh <<'EOF'\nnpm install\nEOF",
+   "expect": "none"
+  },
+  {
+   "name": "npm install",
+   "command": "npm install",
+   "expect": {
+    "rewrite": "npm install --silent"
+   }
+  },
+  {
+   "name": "npm ci",
+   "command": "npm ci",
+   "expect": {
+    "rewrite": "npm ci --silent"
+   }
+  },
+  {
+   "name": "npm i",
+   "command": "npm i express",
+   "expect": {
+    "rewrite": "npm i --silent express"
+   }
+  },
+  {
+   "name": "npm already silent",
+   "command": "npm install --silent",
+   "expect": "none"
+  },
+  {
+   "name": "npm with pipe",
+   "command": "npm install | tee log",
+   "expect": "none"
+  },
+  {
+   "name": "npm run",
+   "command": "npm run build",
+   "expect": "none"
+  },
+  {
+   "name": "cargo build",
+   "command": "cargo build",
+   "expect": {
+    "rewrite": "cargo build -q"
+   }
+  },
+  {
+   "name": "cargo already -q",
+   "command": "cargo build -q",
+   "expect": "none"
+  },
+  {
+   "name": "cargo test",
+   "command": "cargo test",
+   "expect": "none"
+  },
+  {
+   "name": "make",
+   "command": "make",
+   "expect": {
+    "rewrite": "make -s"
+   }
+  },
+  {
+   "name": "make target",
+   "command": "make build",
+   "expect": {
+    "rewrite": "make -s build"
+   }
+  },
+  {
+   "name": "make already -s",
+   "command": "make -s",
+   "expect": "none"
+  },
+  {
+   "name": "make with pipe",
+   "command": "make | head",
+   "expect": "none"
+  },
+  {
+   "name": "pip install",
+   "command": "pip install requests",
+   "expect": {
+    "rewrite": "pip install -q requests"
+   }
+  },
+  {
+   "name": "pip3 install",
+   "command": "pip3 install flask",
+   "expect": {
+    "rewrite": "pip3 install -q flask"
+   }
+  },
+  {
+   "name": "python -m pip",
+   "command": "python3 -m pip install x",
+   "expect": {
+    "rewrite": "python3 -m pip install -q x"
+   }
+  },
+  {
+   "name": "pip already -q",
+   "command": "pip install -q requests",
+   "expect": "none"
+  },
+  {
+   "name": "wget",
+   "command": "wget https://x.com/file",
+   "expect": {
+    "rewrite": "wget -q https://x.com/file"
+   }
+  },
+  {
+   "name": "wget already -q",
+   "command": "wget -q https://x.com/f",
+   "expect": "none"
+  },
+  {
+   "name": "wget with -O",
+   "command": "wget -O out.txt url",
+   "expect": "none"
+  },
+  {
+   "name": "docker build",
+   "command": "docker build .",
+   "expect": {
+    "rewrite": "docker build -q ."
+   }
+  },
+  {
+   "name": "docker pull",
+   "command": "docker pull nginx",
+   "expect": {
+    "rewrite": "docker pull -q nginx"
+   }
+  },
+  {
+   "name": "docker already -q",
+   "command": "docker build -q .",
+   "expect": "none"
+  },
+  {
+   "name": "docker run",
+   "command": "docker run nginx",
+   "expect": "none"
+  },
+  {
+   "name": "ffmpeg",
+   "command": "ffmpeg -i in.mp4 out.mp3",
+   "expect": {
+    "rewrite": "ffmpeg -nostats -loglevel error -i in.mp4 out.mp3"
+   }
+  },
+  {
+   "name": "ffmpeg after pipe",
+   "command": "cat list.txt | ffmpeg -i - out.mp4",
+   "expect": {
+    "rewrite": "cat list.txt | ffmpeg -nostats -loglevel error -i - out.mp4"
+   }
+  },
+  {
+   "name": "ffmpeg already",
+   "command": "ffmpeg -nostats -i in.mp4 out.mp3",
+   "expect": "none"
+  },
+  {
+   "name": "ffmpeg as argument",
+   "command": "brew reinstall ffmpeg 2>&1 | tail -5",
+   "expect": "none"
+  },
+  {
+   "name": "ffmpeg as argument2",
+   "command": "brew deps ffmpeg | rg sdl",
+   "expect": "none"
+  },
+  {
+   "name": "ls",
+   "command": "ls -la",
+   "expect": "none"
+  },
+  {
+   "name": "echo",
+   "command": "echo hello",
+   "expect": "none"
+  },
+  {
+   "name": "cat",
+   "command": "cat file.txt",
+   "expect": "none"
+  },
+  {
+   "name": "trailing newline comes off",
+   "command": "make\n",
+   "expect": {
+    "rewrite": "make -s"
+   }
+  },
+  {
+   "name": "git pull in a group",
+   "command": "(git pull)",
+   "expect": {
+    "rewrite": "(git pull -q)"
+   }
+  },
+  {
+   "name": "git pull in a substitution",
+   "command": "echo $(git pull)",
+   "expect": {
+    "rewrite": "echo $(git pull -q)"
+   }
+  },
+  {
+   "name": "python -m pip after cd",
+   "command": "cd x && python -m pip install y",
+   "expect": {
+    "rewrite": "cd x && python -m pip install -q y"
+   }
+  },
+  {
+   "name": "npm after another command",
+   "command": "cd x && npm i",
+   "expect": "none"
+  },
+  {
+   "name": "make with redirect",
+   "command": "make > log",
+   "expect": "none"
+  },
+  {
+   "name": "docker pull piped",
+   "command": "docker pull x | tail",
+   "expect": "none"
+  },
+  {
+   "name": "unbalanced quote",
+   "command": "git commit -m 'oops",
+   "expect": "none",
+   "script": {
+    "rewrite": "git commit -q -m 'oops"
+   },
+   "why": "the script rewrote raw text; the shared parse leaves a command with an open quote alone, since the shell rejects it"
+  },
+  {
+   "name": "commit-tree is not commit",
+   "command": "git commit-tree x",
+   "expect": "none",
+   "script": {
+    "rewrite": "git commit -q-tree x"
+   },
+   "why": "the script's regex matched `commit` as a prefix of `commit-tree` and broke the command"
+  },
+  {
+   "name": "buildx is not build",
+   "command": "docker buildx build .",
+   "expect": "none",
+   "script": {
+    "rewrite": "docker build -qx build ."
+   },
+   "why": "the script's regex matched `build` as a prefix of `buildx` and broke the command"
+  },
+  {
+   "name": "-q inside a message",
+   "command": "git commit -m \"fix -q flag\"",
+   "expect": {
+    "rewrite": "git commit -q -m \"fix -q flag\""
+   },
+   "script": "none",
+   "why": "the script skipped on `-q` anywhere in the line; a quiet flag now has to be a word of the command"
+  },
+  {
+   "name": "-s inside a target name",
+   "command": "make install-strip",
+   "expect": {
+    "rewrite": "make -s install-strip"
+   },
+   "script": "none",
+   "why": "the script skipped on `-s` anywhere in the line, here inside install-strip"
+  },
+  {
+   "name": "env prefix before npm",
+   "command": "CI=1 npm ci",
+   "expect": {
+    "rewrite": "CI=1 npm ci --silent"
+   },
+   "script": "none",
+   "why": "the script anchored npm to the start of the line; the shared parse reads npm as the command after its assignment"
+  }
+ ]
+}
