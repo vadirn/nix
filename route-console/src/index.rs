@@ -21,7 +21,7 @@ use rusqlite::{Connection, ErrorCode, OptionalExtension, params};
 use crate::record::{Record, Trouble, short_name};
 
 /// Bump on any change to the tables or to what `Record` derives into them.
-const SCHEMA: i32 = 4;
+const SCHEMA: i32 = 5;
 
 pub struct Index {
     conn: Connection,

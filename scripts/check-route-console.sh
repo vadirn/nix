@@ -18,12 +18,14 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 # The element tree of script $1 at its mark $2, in scene $3 (default live).
-# The index and log directory point into the scratch directory, so a run never
-# reads or writes the real ones.
+# The index, log directory and state file point into the scratch directory, so
+# a run never reads or writes the real ones (the sample scenes keep their
+# toggles in memory besides).
 tree() {
   local out="$tmp/$1-$2.json"
   "$bin" --scene "${3:-live}" --script "$cases/$1.json" --tree "$out" --size 1280x880 --scale 1 \
-    --at "mark:$2" --index "$tmp/index.sqlite" --log-dir "$tmp/log" >/dev/null 2>&1
+    --at "mark:$2" --index "$tmp/index.sqlite" --log-dir "$tmp/log" --state "$tmp/state.json" \
+    >/dev/null 2>&1
   echo "$out"
 }
 # The height of everything the list holds, drawn or not: it grows a row at a
@@ -202,5 +204,44 @@ gap() { awk -v a="$(right "$1" main-pane)" -v b="$(right "$1" /inspector)" 'BEGI
 check "the sidebar slides ($(width "$a" sidebar-pane) -> $(width "$b" sidebar-pane) -> $(width "$c" sidebar-pane))" \
   awk -v a="$(width "$a" sidebar-pane)" -v b="$(width "$b" sidebar-pane)" -v c="$(width "$c" sidebar-pane)" 'BEGIN { exit !(a > b + 0.5 && b > c + 0.5) }'
 check "and the inspector keeps to the card's right edge ($(gap "$a") / $(gap "$b") / $(gap "$c"))" same "$(gap "$b")" "$(gap "$a")"
+
+# Handlers: a switch turned off brings up the status bar with "Enable all",
+# which turns it back on and takes the bar away. Nothing is written: the
+# sample scenes toggle in memory.
+a="$(tree handlers-toggle before handlers)"
+b="$(tree handlers-toggle off handlers)"
+c="$(tree handlers-toggle on handlers)"
+check "Handlers opens with every handler on" lacks "$a" "/status"
+check "a switch turned off shows the status bar" has "$b" "enable-all"
+check "Enable all takes it away" lacks "$c" "/status"
+check "and nothing reached a state file" test ! -e "$tmp/state.json"
+
+# The Handlers row lists every hook event; a hook event then narrows it to
+# that event's handlers, and the Log row brings the list back.
+a="$(tree handlers-nav all canvas)"
+b="$(tree handlers-nav stop canvas)"
+c="$(tree handlers-nav log canvas)"
+check "the Handlers row lists every event" has "$a" "handlers-SessionStart"
+check "a hook event narrows it to its own handlers" has "$b" "handlers-Stop"
+check "and only those" lacks "$b" "handlers-PreToolUse"
+check "the Log row brings the list back" has "$c" "events-viewport"
+
+# Replay runs route, the binary Claude Code runs, on the canvas scene's
+# newest event, a Bash call: the guards that ran show beside the logged
+# answer. Skipped when this Mac has no route.
+if [ -x "$HOME/.local/libexec/route" ]; then
+  a="$(tree replay before canvas)"
+  b="$(tree replay replayed canvas)"
+  check "no replay before the button" lacks "$a" "replay-result"
+  check "a replay lists the guards that ran" has "$b" "replayed-0"
+  # A denying guard switched off on Handlers (no-dangerous.py, which denied
+  # the canvas's first event) shows as off, and the answer as changed.
+  says() { jq -e --arg w "$2" '[.elements[] | select((.text // .label) == $w)] | length > 0' "$1" >/dev/null; }
+  c="$(tree replay-off replayed canvas)"
+  check "a guard switched off changes the replayed answer" says "$c" "Replay: answer changed"
+  check "and shows as off" says "$c" "off"
+else
+  echo "skip  replay: no route at ~/.local/libexec/route"
+fi
 
 exit "$failed"

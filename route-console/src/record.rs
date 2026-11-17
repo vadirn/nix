@@ -26,6 +26,10 @@ pub struct Handler {
     pub stderr: Option<String>,
     /// What the handler contributed, as text.
     pub note: Option<String>,
+    /// Microseconds, for a built-in guard, whose `ms` rounds to 0.
+    pub us: Option<u64>,
+    /// The in-process guard that answered instead of the command.
+    pub builtin: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,6 +47,8 @@ pub struct Record {
     pub cwd: Option<String>,
     pub reasons: Vec<String>,
     pub handlers: Vec<Handler>,
+    /// Commands of the handlers `state.json` switched off for this event.
+    pub skipped: Vec<String>,
 }
 
 /// What makes one handler run an issue on the Health screen.
@@ -89,19 +95,25 @@ fn nonblank(s: Option<String>) -> Option<String> {
     s.filter(|s| !s.trim().is_empty())
 }
 
-/// A handler's command cut to the script it runs and that script's arguments:
-/// `bash ~/.claude/hooks/sound.sh Stop` reads `sound.sh Stop`. A command with
-/// no path in it stays whole.
+/// Interpreters a hooks command names before the script it runs.
+const INTERPRETERS: [&str; 8] = [
+    "bash", "sh", "zsh", "python3", "python", "node", "bun", "deno",
+];
+
+/// A handler's command cut to the program it runs, named by its file, and
+/// that program's arguments: `bash ~/.claude/hooks/sound.sh Stop` reads
+/// `sound.sh Stop`, and `mkdir -p /tmp/claude` stays whole. An interpreter's
+/// script is the program.
 pub fn short_name(command: &str) -> String {
-    let words: Vec<&str> = command.split_whitespace().collect();
-    let Some(at) = words.iter().position(|w| w.contains('/')) else {
-        return command.trim().to_string();
+    let mut words: Vec<&str> = command.split_whitespace().collect();
+    if words.len() > 1 && INTERPRETERS.contains(&words[0]) {
+        words.remove(0);
+    }
+    let Some(first) = words.first_mut() else {
+        return String::new();
     };
-    let base = words[at].rsplit('/').next().unwrap_or(words[at]);
-    std::iter::once(base)
-        .chain(words[at + 1..].iter().copied())
-        .collect::<Vec<_>>()
-        .join(" ")
+    *first = first.rsplit('/').next().unwrap_or(first);
+    words.join(" ")
 }
 
 /// The input text worth one line: a command or a path, else the compact JSON.
@@ -188,6 +200,11 @@ impl Record {
                     .collect()
             })
             .unwrap_or_default();
+        let skipped = v
+            .get("skipped")
+            .and_then(Value::as_array)
+            .map(|ss| ss.iter().filter_map(|s| str_of(s, "command")).collect())
+            .unwrap_or_default();
         let mut r = Record {
             ts,
             ts_ms,
@@ -202,6 +219,7 @@ impl Record {
             cwd: str_of(&v, "cwd"),
             reasons,
             handlers,
+            skipped,
         };
         r.attribute_reasons();
         Some(r)
@@ -243,6 +261,16 @@ impl Record {
                     .any(|h| h.outcome.as_deref() == Some(w))
         };
         VERDICTS.into_iter().find(|w| given(w))
+    }
+
+    /// The strongest outcome among some of the handlers: the verdict those
+    /// alone would have reached.
+    pub fn verdict_of<'a>(handlers: impl IntoIterator<Item = &'a Handler>) -> Option<&'static str> {
+        let outcomes: Vec<&str> = handlers
+            .into_iter()
+            .filter_map(|h| h.outcome.as_deref())
+            .collect();
+        VERDICTS.into_iter().find(|w| outcomes.contains(w))
     }
 
     pub fn has_stderr(&self) -> bool {
@@ -301,6 +329,8 @@ impl Handler {
             matcher: str_of(h, "matcher").unwrap_or_default(),
             exit,
             ms: h.get("ms").and_then(Value::as_u64),
+            us: h.get("us").and_then(Value::as_u64),
+            builtin: str_of(h, "builtin"),
             is_async: h.get("async").and_then(Value::as_bool).unwrap_or(false),
             timed_out: h.get("timed_out").and_then(Value::as_bool).unwrap_or(false),
             spawn_error: str_of(h, "spawn_error"),
@@ -434,6 +464,16 @@ mod tests {
             "sound.sh Stop"
         );
         assert_eq!(short_name("mkdir -p x"), "mkdir -p x");
+        assert_eq!(
+            short_name("mkdir -p /tmp/claude"),
+            "mkdir -p /tmp/claude",
+            "a path among the arguments is not the program"
+        );
+        assert_eq!(
+            short_name("python3 ~/.claude/hooks/no-dangerous.py"),
+            "no-dangerous.py"
+        );
+        assert_eq!(short_name("bash"), "bash");
     }
 
     #[test]

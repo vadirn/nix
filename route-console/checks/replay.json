@@ -1,0 +1,6 @@
+{"events": [
+  {"t": 0.5, "type": "mark", "name": "before"},
+  {"t": 0.7, "type": "tap", "key": "replay"},
+  {"t": 0.8, "type": "move", "x": 600, "y": 120},
+  {"t": 1.2, "type": "mark", "name": "replayed"}
+]}
