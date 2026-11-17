@@ -10,7 +10,8 @@
 use std::borrow::Cow;
 
 use rune::{
-    Align, Cx, El, GrowthSpec, Icon, KeyEvent, ScrollPos, ScrollSpec, Tx, col, el, row, text,
+    Align, Anim, Cx, El, GrowthSpec, Icon, KeyEvent, ScrollPos, ScrollSpec, Transition, Tx, col,
+    el, row, text,
 };
 use rune_kit::shell::{SidebarRow, SidebarToggle, SplitView, Toolbar};
 use rune_kit::{
@@ -129,26 +130,37 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .sidebar_toggle(SidebarToggle::new().in_header())
         .reduced_motion(cx.is_reduced_motion())
         .build(&k)
+        // Hover comes and goes at once, as every change the reader makes does
+        // (`App::click`); Rune would fade it out over 0.1 s. Hover tracks only,
+        // so the sidebar's slide keeps its spring.
+        .hover_motion_within(Anim::INSTANT, Anim::INSTANT)
 }
 
 fn log_toolbar(s: &App, k: &Kit, t: &Tokens) -> Toolbar {
     let title = s.event.clone().unwrap_or_else(|| "Log".to_string());
     let mut toolbar = Toolbar::new().leading(leading(s, t, title));
-    // The pill sits left of the search field, so the field holds its place
-    // as the pill comes and goes.
-    for e in [issue_filter(s, k, t), pill(s, k)].into_iter().flatten() {
-        toolbar = toolbar.trailing(e);
+    if let Some(chip) = issue_filter(s, k, t) {
+        toolbar = toolbar.trailing(chip);
     }
     toolbar.trailing(search(s, k, t))
 }
 
 fn log(s: &App, k: &Kit, t: &Tokens) -> El {
+    // The pill floats over the list's foot, beside the grid rather than in
+    // it, so a screen reader meets a button, not a cell.
+    let events = col()
+        .key("events-stack")
+        .grow(1.0)
+        .min_w(0.0)
+        .h_full()
+        .child(list(s, k, t).w_full().grow(1.0).min_h(0.0))
+        .children(pill(s, k));
     col().key("log").w_full().h_full().child(rule(t)).child(
         row()
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .child(list(s, k, t).grow(1.0).min_w(0.0).h_full())
+            .child(events)
             .child(el().w(1.0).h_full().fill(t.separator).a11y_hidden())
             .child(inspector(s, k, t)),
     )
@@ -168,7 +180,7 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
         .icon(&PULSE)
         .height(30.0)
         .selected(s.screen == Screen::Health)
-        .on_select(|s: &mut App, _tx| s.show_health());
+        .on_select(|s: &mut App, tx| s.show_health(tx));
     if n > 0 {
         health = health.trailing(badge_in(t, &n.to_string(), Tint::Orange).label(if n == 1 {
             "1 issue".into()
@@ -266,17 +278,24 @@ fn issue_filter(s: &App, k: &Kit, t: &Tokens) -> Option<El> {
     )
 }
 
-/// "↓ N new": the rows below the viewport, while there are any. Pressing it
-/// jumps to the newest row and follows from there, as End does.
+/// "↓ Latest", while rows lie below the viewport, floating centred 16 points
+/// above the list's foot. Pressing it jumps to the newest row and follows from
+/// there, as End does. It names where it goes, not how far: the rows below
+/// are not all new, since scrolling up puts old rows there too. It comes and
+/// goes at once, as everything but the sidebar does.
 fn pill(s: &App, k: &Kit) -> Option<El> {
     (s.below > 0).then(|| {
-        Button::new(format!("↓ {} new", s.below))
-            .variant(ButtonVariant::Outline)
-            .control_size(ControlSize::Small)
+        let button = Button::new("↓ Latest")
+            .variant(ButtonVariant::Contrast)
             .help("Jump to the newest event (End)")
-            .on_press(|s: &mut App| s.jump_to_end())
+            .on_press_tx(|s: &mut App, tx| s.jump_to_end(tx))
             .build(k)
             .key("to-end")
+            .radius(999.0)
+            .pin(None, None, None, Some(16.0))
+            .self_center()
+            .transition(Transition::none());
+        k.elevate(button, &k.elevation.floating)
     })
 }
 
@@ -460,7 +479,7 @@ fn event_row(s: &App, i: usize, style: &TableStyle, t: &Tokens) -> El {
 
 /// The event list: Rune's virtual rows in a viewport that sticks to its end
 /// while the list follows. The rows report what the viewport shows, which is
-/// how scrolling pauses and resumes the following and counts the pill.
+/// how scrolling pauses and resumes the following and shows the pill.
 fn list(s: &App, k: &Kit, t: &Tokens) -> El {
     let style = t.table(k);
     let tk = *t;
@@ -594,9 +613,12 @@ fn details(sel: &Selected, k: &Kit, t: &Tokens) -> El {
         .min_h(28.0)
         .gap(8.0)
         .center_y()
-        .children(r.verdict().map(|v| badge(t, v)))
+        // Keyed, so an event with no verdict never draws its title in the
+        // element the last event's badge was, with the badge's fill.
+        .children(r.verdict().map(|v| badge(t, v).key("verdict")))
         .child(
             text(r.title().to_string())
+                .key("title")
                 .font(ty::TITLE)
                 .color(t.text)
                 .wrap_anywhere()

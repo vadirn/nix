@@ -1,0 +1,6 @@
+{"events": [
+  {"t": 0.9, "type": "mark", "name": "open"},
+  {"t": 1.0, "type": "tap", "key": "sidebar-toggle"},
+  {"t": 1.15, "type": "mark", "name": "sliding"},
+  {"t": 2.5, "type": "mark", "name": "shut"}
+]}

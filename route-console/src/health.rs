@@ -92,7 +92,7 @@ pub fn toolbar(s: &App, k: &Kit, t: &Tokens) -> Toolbar {
         .variant(IconButtonVariant::GhostMuted)
         .label("Rebuild index")
         .help("Rebuild index")
-        .on_press(|s: &mut App| s.rebuild())
+        .on_press_tx(|s: &mut App, tx| s.rebuild(tx))
         .build(k)
         .key("rebuild");
     Toolbar::new()
