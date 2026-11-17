@@ -153,7 +153,7 @@ pub struct App {
     /// The list keeps its end in view, so new rows scroll in at the bottom.
     pub following: bool,
     /// Rows below the viewport, as the list last reported what it shows: the
-    /// count on the "↓ N new" pill.
+    /// "↓ Latest" pill shows while there are any.
     pub below: usize,
     /// The rows the viewport showed last, by index into `rows`.
     pub visible: Range<usize>,
@@ -379,7 +379,7 @@ impl App {
         // and `report_visible_rows` and the virtual window read that mode, not
         // `stick_bottom` (rune `runtime/virtual/window.rs:18`,
         // `el/virtual_list.rs:412`), so a click at the end would go on
-        // reporting the end and the "↓ N new" pill would never show. A reveal
+        // reporting the end and the "↓ Latest" pill would never show. A reveal
         // rests the viewport, as it does for the arrow keys. Remove once Rune
         // reads `stick_bottom` there.
         tx.scroll_into_view_in(LIST, id.to_string());
@@ -420,7 +420,7 @@ impl App {
     }
 
     /// The list goes to its newest row and follows from there: End, or the
-    /// "↓ N new" pill. The only jumps the list makes.
+    /// "↓ Latest" pill. The only jumps the list makes.
     pub fn jump_to_end(&mut self, tx: &mut Tx) {
         tx.instant();
         self.following = true;
@@ -709,7 +709,7 @@ mod tests {
             "the new row lands below the rest"
         );
         app.seen(n - 25..n - 5);
-        assert_eq!(app.below, 6, "the pill counts it");
+        assert_eq!(app.below, 6, "and counts it below");
     }
 
     #[test]
@@ -728,7 +728,7 @@ mod tests {
     /// The app's half of the click stopgap; Rune's half, the viewport leaving
     /// its pinned mode, is checked headless by `scripts/check-route-console.sh`.
     #[test]
-    fn a_click_on_the_newest_row_pauses_and_the_pill_counts_new_rows() {
+    fn a_click_on_the_newest_row_pauses_and_counts_the_rows_below() {
         let mut app = at_end();
         let n = app.rows.len();
         app.click(app.rows[n - 1].id, &mut Tx::default());
@@ -737,7 +737,7 @@ mod tests {
             assert!(app.look());
             app.refresh();
             app.seen(n - 20..n);
-            assert_eq!(app.below, k, "the pill counts each new row");
+            assert_eq!(app.below, k, "each new row counts below");
             assert!(!app.following);
         }
     }
@@ -816,7 +816,7 @@ mod tests {
     }
 
     #[test]
-    fn a_filter_that_changes_no_rows_keeps_the_pill_count() {
+    fn a_filter_that_changes_no_rows_keeps_the_count_below() {
         let mut app = at_end();
         let n = app.rows.len();
         app.seen(n - 25..n - 5);

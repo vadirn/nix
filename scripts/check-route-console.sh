@@ -26,8 +26,9 @@ tree() {
     --at "mark:$2" --index "$tmp/index.sqlite" --log-dir "$tmp/log" >/dev/null 2>&1
   echo "$out"
 }
-# The count on the "↓ N new" pill, 0 without one.
-pill() { jq -r '[.elements[] | select(.key == "to-end") | .label][0] // "↓ 0" | capture("(?<n>[0-9]+)").n' "$1"; }
+# The height of everything the list holds, drawn or not: it grows a row at a
+# time as rows load.
+held() { jq -r '[.elements[] | select(.path | endswith("events-rows"))][0].rect[3]' "$1"; }
 # The id of the row under window y $2.
 row_at() {
   jq -r --argjson y "$2" '[.elements[] | select(.path | test("events-rows/[0-9]+$"))
@@ -57,16 +58,15 @@ check() {
   if "${@:2}"; then echo "ok    $1"; else echo "FAIL  $1"; failed=1; fi
 }
 
-# A click on the newest row while following pauses the list, and the pill
-# counts the rows that arrive below. This is the stopgap in App::click: without
-# the reveal, Rune keeps the viewport pinned and reports the end, and no pill shows.
+# A click on the newest row while following pauses the list, the pill shows,
+# and rows keep loading below. This is the stopgap in App::click: without the
+# reveal, Rune keeps the viewport pinned and reports the end, and no pill shows.
 a="$(tree click-at-end soon)"
 b="$(tree click-at-end later)"
-n1="$(pill "$a")"
-n2="$(pill "$b")"
 id="$(row_at "$a" 858)"
-check "a click at the end shows the pill ($n1 new)" test "$n1" -ge 1
-check "the pill counts the rows that keep arriving ($n1 -> $n2)" test "$n2" -gt "$n1"
+check "a click at the end shows the pill" has "$a" to-end
+check "rows keep loading below it ($(held "$a") -> $(held "$b"))" below "$(held "$a")" "$(held "$b")"
+check "and it stays" has "$b" to-end
 check "the clicked row holds still while they arrive" same "$(top "$a" "$id")" "$(top "$b" "$id")"
 
 # A click on a row half under an edge scrolls it just into view, as the arrow
@@ -83,6 +83,13 @@ id="$(row_at "$a" 869)"
 check "the bottom-edge row starts half hidden" below "$(view_bottom "$a")" "$(bottom "$a" "$id")"
 check "a click brings its bottom just to the viewport's" same "$(bottom "$b" "$id")" "$(view_bottom "$b")"
 
+# The pill floats centred over the list's foot, 16 points up.
+a="$(tree jump-by-pill paused)"
+mid() { jq -r --arg k "$2" '[.elements[] | select(.path | endswith($k))][0] | .rect[0] + .rect[2] / 2' "$1"; }
+foot() { jq -r --arg k "$2" '[.elements[] | select(.path | endswith($k))][0] | .rect[1] + .rect[3]' "$1"; }
+check "the pill is centred over the list ($(mid "$a" to-end) / $(mid "$a" events-viewport))" same "$(mid "$a" to-end)" "$(mid "$a" events-viewport)"
+check "16 points above its foot ($(foot "$a" to-end) / $(foot "$a" events-viewport))" same "$(foot "$a" to-end)" "$(awk -v b="$(foot "$a" events-viewport)" 'BEGIN { print b - 16 }')"
+
 # The pill and End jump to the newest row and follow from there: the pill
 # goes, the newest row sits on the viewport's bottom, and stays there as more
 # arrive.
@@ -90,9 +97,9 @@ for how in pill end; do
   a="$(tree "jump-by-$how" paused)"
   b="$(tree "jump-by-$how" jumped)"
   c="$(tree "jump-by-$how" later)"
-  check "$how: the list is paused with the pill up ($(pill "$a") new)" test "$(pill "$a")" -ge 1
+  check "$how: the list is paused with the pill up" has "$a" to-end
   check "$how: the jump lands on the newest row" same "$(newest_bottom "$b")" "$(view_bottom "$b")"
-  check "$how: the pill goes" test "$(pill "$b")" -eq 0
+  check "$how: the pill goes" lacks "$b" to-end
   check "$how: the list follows the rows that arrive after" same "$(newest_bottom "$c")" "$(view_bottom "$c")"
 done
 
@@ -113,13 +120,13 @@ b="$(tree filter-clamped narrowed)"
 first_top() { jq -r '[.elements[] | select(.exiting != true and (.path | test("events-rows/[0-9]+$"))) | .rect[1]] | min' "$1"; }
 check "a filter that cannot hold the row stops the list at its top" same "$(first_top "$b")" "$(view_top "$b")"
 
-# Choosing the screen already shown changes no rows, so the pill keeps its count.
+# Choosing the screen already shown changes no rows, so the pill stays.
 a="$(tree same-screen after)"
-check "the same screen again keeps the pill ($(pill "$a") new)" test "$(pill "$a")" -ge 1
+check "the same screen again keeps the pill" has "$a" to-end
 
 # Health mounts in the Log's place, and Rune drops an unmounted viewport's
 # offset. Back from Health, a paused list is where the reader left it, its
-# picked row at the same height, and its pill counts what arrived meanwhile.
+# picked row at the same height, and what arrived meanwhile loaded below it.
 a="$(tree health-trip-paused before)"
 b="$(tree health-trip-paused away)"
 c="$(tree health-trip-paused back)"
@@ -127,7 +134,8 @@ id="$(row_at "$a" 450)"
 check "Health replaces the list" has "$b" "/health"
 check "while Health shows, no list is drawn" lacks "$b" "events-viewport"
 check "back from Health, the picked row is where it was" same "$(top "$a" "$id")" "$(top "$c" "$id")"
-check "and the pill counts the rows that came meanwhile ($(pill "$a") -> $(pill "$c"))" test "$(pill "$c")" -gt "$(pill "$a")"
+check "the rows that came meanwhile loaded below ($(held "$a") -> $(held "$c"))" below "$(held "$a")" "$(held "$c")"
+check "and the pill is up" has "$c" to-end
 
 # Coming back on another hook event, the picked row keeps its place: the list
 # comes back moved by the rows the filter took from above it (fifteen here,
@@ -141,7 +149,7 @@ check "back from Health on PreToolUse, the picked row is where it was ($(top "$a
 # A list that was following comes back following, at its newest row.
 a="$(tree health-trip-following back)"
 check "back from Health, a following list is at its newest row" same "$(newest_bottom "$a")" "$(view_bottom "$a")"
-check "with no pill" test "$(pill "$a")" -eq 0
+check "with no pill" lacks "$a" to-end
 
 # "Show events" lists exactly the events an issue counts (the health scene's
 # first issue: no-secrets.sh failing on three Bash calls), with a filter the
