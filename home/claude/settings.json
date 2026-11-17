@@ -250,6 +250,7 @@
         "~/.docker",
         "~/.gnupg",
         "~/Documents/vault",
+        "~/Library/Application Support/Ledger",
         "~/nix",
         "~/Pictures/imagen",
         "~/Pictures/vidgen",
