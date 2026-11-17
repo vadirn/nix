@@ -1,0 +1,535 @@
+<title>Check-in Reactions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one narrow column of check-in rows under a sticky tally bar; each row ends in a strip of reaction chips. */
+  :root {
+    --bg: #f5f5f1;
+    --surface: #ffffff;
+    --fg: #1c1d1a;
+    --muted: #686a62;
+    --line: #e2e2da;
+    --chip: #f0f0ea;
+    --pick: #a86f00;
+    --pick-bg: #fff1cc;
+    --ok: #1d7448;
+    --ok-bg: #e2f3e8;
+    --warn: #b23b2a;
+    --font-body: "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141512; --surface: #1c1e1a; --fg: #ebebe4; --muted: #9b9d94; --line: #2d2f29; --chip: #262823;
+      --pick: #f3b733; --pick-bg: #3a2e0e; --ok: #63c98f; --ok-bg: #16301f; --warn: #ff8a75;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141512; --surface: #1c1e1a; --fg: #ebebe4; --muted: #9b9d94; --line: #2d2f29; --chip: #262823;
+    --pick: #f3b733; --pick-bg: #3a2e0e; --ok: #63c98f; --ok-bg: #16301f; --warn: #ff8a75;
+    color-scheme: dark;
+  }
+
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+    z-index: 10; background: var(--bg);
+  }
+  .wrap {
+    max-width: 760px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 24px 48px;
+  }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+  .sub { margin: 0; font-size: 13px; color: var(--muted); }
+
+  .bar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    padding-block: 12px; margin-block: 12px 4px; border-bottom: 1px solid var(--line);
+  }
+  .tally { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+  .tally b { font-family: var(--font-mono); font-weight: 500; color: var(--fg); font-variant-numeric: tabular-nums; }
+  .tally .t-pick b { color: var(--pick); }
+  .tally .t-ok b { color: var(--ok); }
+  .bar-actions { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+  .toggle { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .toggle input { accent-color: var(--pick); }
+  button.copy {
+    font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer;
+  }
+  button.copy:hover { border-color: var(--muted); }
+  button:focus-visible, .chip:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible {
+    outline: 2px solid var(--pick); outline-offset: 2px;
+  }
+
+  .status { font-size: 13px; color: var(--pick); margin: 8px 0 0; }
+  .status.err { color: var(--warn); }
+
+  ol.posts { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+  .post {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 16px; display: grid; gap: 10px;
+  }
+  .post.is-picked { border-color: color-mix(in srgb, var(--pick) 55%, var(--line)); }
+  .post.is-done:not(.is-picked) { opacity: 0.72; }
+
+  .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+  .date { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 4.5em; }
+  .author { font-weight: 600; color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .author:hover { border-bottom-color: var(--fg); }
+  .author .ext { font-size: 11px; color: var(--muted); margin-left: 3px; }
+  .badge { margin-left: auto; font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.done { background: var(--ok-bg); color: var(--ok); }
+  .badge.failed { background: var(--chip); color: var(--warn); }
+
+  .topic { margin: 0; min-width: 0; }
+
+  .comments { font-size: 13px; }
+  .comments summary { cursor: pointer; color: var(--muted); width: fit-content; max-width: 100%; }
+  .comments summary:hover { color: var(--fg); }
+  .comments ul {
+    list-style: none; margin: 8px 0 0; padding: 0 0 0 12px;
+    border-left: 2px solid var(--line); display: grid; gap: 6px;
+  }
+  .comments li { min-width: 0; overflow-wrap: anywhere; }
+  .c-author { font-weight: 600; color: var(--fg); text-decoration: none; margin-right: 6px; }
+  .c-author:hover { text-decoration: underline; }
+  .c-text { color: var(--muted); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip {
+    font: inherit; display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px; border: 1px solid transparent;
+    background: var(--chip); color: var(--fg); cursor: pointer; line-height: 1.3;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .chip .e { font-size: 17px; }
+  .chip .n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .chip:hover:not(:disabled) { border-color: var(--muted); }
+  .chip[aria-pressed="true"] { background: var(--pick-bg); border-color: var(--pick); }
+  .chip[aria-pressed="true"] .n { color: var(--pick); }
+  .chip.posted { background: var(--ok-bg); border-color: var(--ok); }
+  .chip.posted .n { color: var(--ok); }
+  .chip.mine:not([aria-pressed="true"]):not(.posted) { border-color: var(--line); border-style: dashed; }
+  .chip.custom { border-style: dashed; }
+  .chip:disabled { cursor: default; }
+  .chip.busy { opacity: 0.6; }
+  .chip.add { color: var(--muted); border: 1px dashed var(--line); background: transparent; font-size: 16px; padding: 2px 12px; }
+  .chip.add:hover { color: var(--fg); }
+
+  .custom-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .custom-input {
+    font: inherit; font-size: 14px; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid var(--pick); background: var(--surface); color: var(--fg); width: 12em; max-width: 100%;
+  }
+  .count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .count.over { color: var(--warn); }
+  button.mini {
+    font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer;
+  }
+  button.mini.primary { background: var(--pick-bg); border-color: var(--pick); font-weight: 600; }
+  button.mini:disabled { opacity: 0.5; cursor: default; }
+
+  @media (max-width: 480px) {
+    header h1 { font-size: 21px; }
+    .bar-actions { margin-left: 0; width: 100%; justify-content: space-between; }
+  }
+  @media (prefers-reduced-motion: reduce) { .chip { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Check-in Reactions</h1>
+    <p class="sub" id="sub"></p>
+  </header>
+
+  <div class="bar" role="region" aria-label="Progress">
+    <div class="tally" id="tally"></div>
+    <div class="bar-actions">
+      <label class="toggle" for="hide-done"><input type="checkbox" id="hide-done"> Hide done</label>
+      <button class="copy" id="copy" type="button" title="Copy queued picks to paste into chat">Copy</button>
+    </div>
+  </div>
+  <p class="status" id="status" role="status" aria-live="polite" hidden></p>
+
+  <ol class="posts" id="posts"></ol>
+</div>
+
+<script>
+  const META = /*__META__*/{};
+  const POSTS = /*__DATA__*/[];
+  const picks = new Map();      // postId -> {reaction, key, custom, status}
+  const pending = new Set();    // postIds with a write in flight
+  const drafts = new Map();     // postId -> unsent custom text
+  const openComments = new Set();
+  let openCustom = null;        // postId whose custom form is open
+  let db = null;
+  let canWrite = true;
+  let localOnly = false;
+  let notice = "";              // error or mode message; overrides the apply hint
+  let noticeErr = false;
+  let flashMsg = "";            // short confirmation shown over everything for 2.5 s
+  let flashTimer = null;
+  function setNotice(text, isErr) { notice = text; noticeErr = !!isErr; }
+  function flash(msg) {
+    flashMsg = msg;
+    clearTimeout(flashTimer);
+    renderStatus();
+    flashTimer = setTimeout(() => { flashMsg = ""; renderStatus(); }, 2500);
+  }
+  const MAX = 16;               // Basecamp's boost limit, in characters
+  const runes = (s) => [...s].length;
+  const keyOf = (s) => s.replace(/️/g, "").trim();
+  const $ = (id) => document.getElementById(id);
+
+  $("sub").textContent = [META.since ? "Since " + META.since : "", META.asOf ? "as of " + META.asOf : ""].filter(Boolean).join(" · ");
+
+  function rowState(p) {
+    const pk = picks.get(p.id);
+    const posted = !!pk && pk.status === "posted";
+    const failed = !!pk && pk.status === "failed";
+    const mine = p.mine.length > 0;
+    return { pk, posted, failed, picked: !!pk && !posted && !failed, mine, done: mine || posted };
+  }
+
+  function queuedCount() {
+    return POSTS.filter((p) => rowState(p).picked).length;
+  }
+
+  function renderStatus() {
+    const el = $("status");
+    const q = queuedCount();
+    let text = flashMsg || notice;
+    const err = !flashMsg && !!notice && noticeErr;
+    if (!text && q) text = localOnly ? "Copy your picks and paste them into chat." : "Tell Claude “apply my reactions”.";
+    el.textContent = text;
+    el.classList.toggle("err", err);
+    el.hidden = !text;
+  }
+
+  function renderTally() {
+    let picked = 0, done = 0;
+    for (const p of POSTS) {
+      const s = rowState(p);
+      if (s.done) done++;
+      else if (s.picked) picked++;
+    }
+    const left = POSTS.length - done - picked;
+    const tally = $("tally");
+    tally.innerHTML = "";
+    for (const [cls, n, label] of [["t-pick", picked, "queued"], ["t-ok", done, "reacted"], ["", left, "left"]]) {
+      const span = document.createElement("span");
+      if (cls) span.className = cls;
+      const b = document.createElement("b");
+      b.textContent = n;
+      span.append(b, " " + label);
+      tally.append(span);
+    }
+  }
+
+  function renderPosts() {
+    const ae = document.activeElement;
+    const typing = !!ae && ae.classList && ae.classList.contains("custom-input");
+    const hide = $("hide-done").checked;
+    const list = $("posts");
+    list.innerHTML = "";
+    for (const p of POSTS) {
+      const s = rowState(p);
+      if (hide && s.done && !s.picked) continue;
+
+      const li = document.createElement("li");
+      li.className = "post" + (s.picked ? " is-picked" : "") + (s.done ? " is-done" : "");
+
+      const head = document.createElement("div");
+      head.className = "head";
+      const date = document.createElement("span");
+      date.className = "date";
+      date.textContent = p.date;
+      const a = document.createElement("a");
+      a.className = "author";
+      a.href = p.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = p.author;
+      const ext = document.createElement("span");
+      ext.className = "ext";
+      ext.setAttribute("aria-hidden", "true");
+      ext.textContent = "↗";
+      a.append(ext);
+      head.append(date, a);
+      if (s.failed) head.append(badge("failed", "Failed"));
+      else if (s.done) head.append(badge("done", "Reacted"));
+
+      const topic = document.createElement("p");
+      topic.className = "topic";
+      topic.textContent = p.topic;
+      li.append(head, topic);
+      if (p.comments.length) li.append(renderComments(p));
+
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      chips.setAttribute("role", "group");
+      chips.setAttribute("aria-label", "Reactions on " + p.author + "’s post");
+      let matched = false;
+      for (const r of p.reactions) {
+        if (s.pk && s.pk.key === r.key) matched = true;
+        chips.append(chipButton(p, s, r, r.n));
+      }
+      if (s.pk && !matched) chips.append(chipButton(p, s, { raw: s.pk.reaction, key: s.pk.key, custom: true }, null));
+      if (!s.posted && canWrite) chips.append(customControl(p));
+      li.append(chips);
+      list.append(li);
+    }
+    if (typing && openCustom) {
+      const el = document.getElementById("custom-" + openCustom);
+      if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch (_) {} }
+    }
+  }
+
+  function badge(kind, text) {
+    const b = document.createElement("span");
+    b.className = "badge " + kind;
+    b.textContent = text;
+    return b;
+  }
+
+  function chipButton(p, s, r, n) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip" + (r.custom ? " custom" : "");
+    const isPick = !!s.pk && s.pk.key === r.key;
+    if (s.posted && isPick) btn.classList.add("posted");
+    if (p.mine.includes(r.key)) btn.classList.add("mine");
+    btn.setAttribute("aria-pressed", isPick && s.picked ? "true" : "false");
+    btn.disabled = s.posted || !canWrite;
+    if (pending.has(p.id)) btn.classList.add("busy");
+    const e = document.createElement("span");
+    e.className = "e";
+    e.textContent = r.raw;
+    btn.append(e);
+    if (n != null) {
+      const c = document.createElement("span");
+      c.className = "n";
+      c.textContent = n;
+      btn.append(c);
+      btn.title = n + (n === 1 ? " person" : " people") + (p.mine.includes(r.key) ? ", including you" : "");
+    } else {
+      btn.title = "Custom";
+    }
+    btn.addEventListener("click", () => togglePick(p, r));
+    return btn;
+  }
+
+  function customControl(p) {
+    if (openCustom !== p.id) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chip add";
+      btn.textContent = "+";
+      btn.title = "Custom reaction";
+      btn.setAttribute("aria-label", "Custom reaction");
+      btn.disabled = pending.has(p.id);
+      btn.addEventListener("click", () => {
+        openCustom = p.id;
+        renderPosts();
+        const el = document.getElementById("custom-" + p.id);
+        if (el) el.focus();
+      });
+      return btn;
+    }
+    const form = document.createElement("form");
+    form.className = "custom-form";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = "custom-" + p.id;
+    input.className = "custom-input";
+    input.placeholder = "Emoji or note";
+    input.autocomplete = "off";
+    input.setAttribute("aria-label", "Custom reaction for " + p.author + "’s post");
+    input.value = drafts.get(p.id) || "";
+    const count = document.createElement("span");
+    count.className = "count";
+    const ok = document.createElement("button");
+    ok.type = "submit";
+    ok.className = "mini primary";
+    ok.textContent = "Add";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "mini";
+    cancel.textContent = "×";
+    cancel.setAttribute("aria-label", "Cancel");
+    const update = () => {
+      const len = runes(input.value.trim());
+      count.textContent = len + "/" + MAX;
+      count.classList.toggle("over", len > MAX);
+      ok.disabled = len === 0 || len > MAX;
+    };
+    input.addEventListener("input", () => { drafts.set(p.id, input.value); update(); });
+    input.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeCustom(p.id); });
+    cancel.addEventListener("click", () => closeCustom(p.id));
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const text = input.value.trim().replace(/\s+/g, " ");
+      const len = runes(text);
+      if (!len || len > MAX) return;
+      const k = keyOf(text);
+      const existing = p.reactions.find((r) => r.key === k);
+      drafts.delete(p.id);
+      openCustom = null;
+      togglePick(p, existing || { raw: text, key: k, custom: true }, true);
+    });
+    update();
+    form.append(input, count, ok, cancel);
+    return form;
+  }
+
+  function closeCustom(id) {
+    openCustom = null;
+    drafts.delete(id);
+    renderPosts();
+  }
+
+  function renderComments(p) {
+    const d = document.createElement("details");
+    d.className = "comments";
+    d.open = openComments.has(p.id);
+    d.addEventListener("toggle", () => { if (d.open) openComments.add(p.id); else openComments.delete(p.id); });
+    const sum = document.createElement("summary");
+    let label = p.comments.length + (p.comments.length === 1 ? " comment" : " comments");
+    if (p.comments.some((c) => c.mine)) label += " · yours";
+    sum.textContent = label;
+    const ul = document.createElement("ul");
+    for (const c of p.comments) {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.className = "c-author";
+      a.href = c.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = c.author;
+      const t = document.createElement("span");
+      t.className = "c-text";
+      t.textContent = c.text;
+      li.append(a, t);
+      ul.append(li);
+    }
+    d.append(sum, ul);
+    return d;
+  }
+
+  function render() { renderTally(); renderPosts(); renderStatus(); }
+
+  async function togglePick(p, r, forceSet) {
+    if (pending.has(p.id)) return;
+    const cur = picks.get(p.id);
+    if (cur && cur.status === "posted") return;
+    const unpick = !forceSet && cur && cur.key === r.key && cur.status !== "failed";
+    const prev = cur;
+    if (unpick) picks.delete(p.id);
+    else picks.set(p.id, { reaction: r.raw, key: r.key, custom: !!r.custom, status: "queued" });
+    if (localOnly || !db) { saveLocal(); render(); return; }
+    pending.add(p.id);
+    render();
+    try {
+      const ref = db.collection("picks").doc(p.id);
+      if (unpick) await ref.delete();
+      else await ref.set({ reaction: r.raw, key: r.key, custom: !!r.custom, author: p.author, status: "queued", picked_at: new Date().toISOString() });
+      if (noticeErr) setNotice("");
+    } catch (err) {
+      if (prev) picks.set(p.id, prev); else picks.delete(p.id);
+      if (err && err.code === "invalid_argument") { canWrite = false; setNotice("Read-only: picks can't be saved.", true); }
+      else setNotice("Couldn't save that pick. Try again.", true);
+    } finally {
+      pending.delete(p.id);
+      render();
+    }
+  }
+
+  function saveLocal() {
+    try {
+      const obj = {};
+      for (const [k, v] of picks) obj[k] = v;
+      localStorage.setItem("checkin-picks", JSON.stringify(obj));
+    } catch (_) {}
+  }
+  function loadLocal() {
+    try {
+      const obj = JSON.parse(localStorage.getItem("checkin-picks") || "{}");
+      for (const [k, v] of Object.entries(obj)) picks.set(k, v);
+    } catch (_) {}
+  }
+
+  $("hide-done").addEventListener("change", renderPosts);
+
+  $("copy").addEventListener("click", () => {
+    const lines = [];
+    for (const p of POSTS) {
+      const s = rowState(p);
+      if (s.picked) lines.push(p.id + " " + s.pk.reaction + "  # " + p.author + ", " + p.date);
+    }
+    if (!lines.length) { flash("Nothing queued."); return; }
+    const text = "Apply my reactions:\n" + lines.join("\n");
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.append(ta);
+      ta.select();
+      flash("Press Cmd+C to copy.");
+      setTimeout(() => ta.remove(), 8000);
+    };
+    try { navigator.clipboard.writeText(text).then(() => flash("Copied " + lines.length + "."), fallback); }
+    catch (_) { fallback(); }
+  });
+
+  render();
+
+  (async function start() {
+    db = window.claude && window.claude.use ? await window.claude.use("db") : null;
+    if (!db) {
+      localOnly = true;
+      setNotice("Picks stay on this device. Use Copy.");
+      loadLocal();
+      render();
+      return;
+    }
+    try {
+      const user = await window.claude.use("user");
+      if (user && (await user.can("data.write")) === false) { canWrite = false; setNotice("Read-only."); }
+    } catch (_) {}
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) { setNotice("Saved picks can't be reached yet.", true); renderStatus(); }
+    }, 10000);
+    db.collection("picks").onSnapshot((snap) => {
+      picks.clear();
+      for (const d of snap.docs) {
+        const v = d.data();
+        if (v && typeof v.key === "string") picks.set(d.id, { reaction: String(v.reaction || v.key), key: v.key, custom: !!v.custom, status: v.status || "queued" });
+      }
+      if (!snap.metadata.fromCache && !settled) {
+        settled = true;
+        clearTimeout(timer);
+        if (notice === "Saved picks can't be reached yet.") setNotice("");
+      }
+      render();
+    }, () => {
+      settled = true;
+      clearTimeout(timer);
+      setNotice("Lost the connection to saved picks. Reload to retry.", true);
+      render();
+    });
+  })();
+</script>
