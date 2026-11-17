@@ -594,9 +594,12 @@ fn details(sel: &Selected, k: &Kit, t: &Tokens) -> El {
         .min_h(28.0)
         .gap(8.0)
         .center_y()
-        .children(r.verdict().map(|v| badge(t, v)))
+        // Keyed, so an event with no verdict never draws its title in the
+        // element the last event's badge was, with the badge's fill.
+        .children(r.verdict().map(|v| badge(t, v).key("verdict")))
         .child(
             text(r.title().to_string())
+                .key("title")
                 .font(ty::TITLE)
                 .color(t.text)
                 .wrap_anywhere()
