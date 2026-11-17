@@ -306,3 +306,66 @@ pub fn trouble_lines() -> Vec<String> {
     ]);
     out
 }
+
+/// The hooks file the Handlers artboard lists, for the sample scenes: they
+/// show it, toggle it in memory, and replay against it, never against the
+/// real one.
+pub const HOOKS: &str = r#"{
+  "route": {
+    "builtins": {
+      "bash ~/.claude/hooks/no-secrets.sh": "no-secrets",
+      "python3 ~/.claude/hooks/no-dangerous-rm.py": "no-dangerous-rm",
+      "python3 ~/.claude/hooks/no-dangerous.py": "no-dangerous",
+      "bash ~/.claude/hooks/quiet-override.sh": "quiet-override",
+      "python3 ~/.claude/hooks/pipe-allow.py": "pipe-allow",
+      "bash ~/.claude/hooks/rg-glob-guard.sh": "rg-glob-guard"
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [
+        {"type": "command", "command": "bash ~/.claude/hooks/no-secrets.sh"},
+        {"type": "command", "command": "python3 ~/.claude/hooks/no-dangerous-rm.py"},
+        {"type": "command", "command": "python3 ~/.claude/hooks/no-dangerous.py"},
+        {"type": "command", "command": "bash ~/.claude/hooks/quiet-override.sh"},
+        {"type": "command", "command": "python3 ~/.claude/hooks/pipe-allow.py"},
+        {"type": "command", "command": "~/.local/bin/trinket-git-message", "timeout": 120},
+        {"type": "command", "command": "bash ~/.claude/hooks/rg-glob-guard.sh"}
+      ]},
+      {"matcher": "Read", "hooks": [{"type": "command", "command": "bash ~/.claude/hooks/no-secrets-read.sh"}]},
+      {"matcher": "Grep", "hooks": [{"type": "command", "command": "bash ~/.claude/hooks/no-secrets-read.sh"}]},
+      {"matcher": "^(WebSearch|WebFetch)$", "hooks": [{"type": "command", "command": "bash ~/.claude/hooks/prefer-firecrawl.sh"}]},
+      {"matcher": "^mcp__visualize__show_widget$", "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/chart-verbatim.py"}]},
+      {"matcher": "^Bash$", "hooks": [{"type": "command", "command": "bash ~/.claude/hooks/turn-check.sh", "timeout": 30}]}
+    ],
+    "PostToolUse": [
+      {"matcher": "^(Write|Edit)$", "hooks": [{"type": "command", "command": "bash ~/.claude/hooks/hint-autoformat.sh", "timeout": 5}]},
+      {"matcher": "^Bash$", "hooks": [{"type": "command", "command": "bash ~/.claude/hooks/turn-check.sh", "timeout": 30}]}
+    ],
+    "PostToolUseFailure": [
+      {"matcher": "^Bash$", "hooks": [{"type": "command", "command": "bash ~/.claude/hooks/turn-check.sh", "timeout": 30}]}
+    ],
+    "UserPromptSubmit": [{"hooks": [
+      {"type": "command", "command": "bash ~/.claude/hooks/turn-check.sh", "timeout": 30},
+      {"type": "command", "command": "~/.local/bin/trinket-claude-prompt --config ~/.config/trinket/turn-prompt.json", "timeout": 30}
+    ]}],
+    "Stop": [{"hooks": [
+      {"type": "command", "command": "bash ~/.claude/hooks/sound.sh Stop", "timeout": 5, "async": true},
+      {"type": "command", "command": "bash ~/.claude/hooks/stop-verify.sh", "timeout": 120}
+    ]}],
+    "StopFailure": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/turn-check.sh", "timeout": 30}]}],
+    "SessionStart": [{"hooks": [
+      {"type": "command", "command": "mkdir -p /tmp/claude", "timeout": 5},
+      {"type": "command", "command": "bash ~/.claude/hooks/sandbox-nc-path.sh", "timeout": 5},
+      {"type": "command", "command": "bash ~/.claude/hooks/direnv-env.sh", "timeout": 30}
+    ]}],
+    "CwdChanged": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/direnv-env.sh", "timeout": 30}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/turn-check.sh", "timeout": 3}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/sound.sh Notification", "timeout": 5, "async": true}]}],
+    "TaskCompleted": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/sound.sh TaskCompleted", "timeout": 5, "async": true}]}]
+  }
+}"#;
+
+pub fn hooks() -> Value {
+    serde_json::from_str(HOOKS).expect("sample hooks parse")
+}

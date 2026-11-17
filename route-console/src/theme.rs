@@ -28,6 +28,8 @@ pub struct Tokens {
     pub accent_text: Color,
     pub warn_bg: Color,
     pub warn_border: Color,
+    /// A switch's track when off.
+    pub control_off: Color,
 }
 
 /// A badge's or bar's colour family.
@@ -51,6 +53,10 @@ pub mod ty {
     pub const MONO_BLOCK: TextStyle = TextStyle::new(12.0, 400.0).mono().lh(18.0);
     pub const NOTE: TextStyle = TextStyle::new(13.0, 400.0).lh(18.85);
     pub const SECTION: TextStyle = TextStyle::new(11.5, 600.0);
+    /// A handler's name on the Handlers screen.
+    pub const MONO_NAME: TextStyle = TextStyle::new(12.5, 400.0).mono();
+    /// The Handlers status bar.
+    pub const SMALL: TextStyle = TextStyle::new(12.0, 400.0).lh(16.8);
 }
 
 impl Tokens {
@@ -73,6 +79,7 @@ impl Tokens {
                 accent_text: oklch(0.76, 0.13, 256.0),
                 warn_bg: oklcha(0.74, 0.16, 58.0, 0.12),
                 warn_border: oklcha(0.74, 0.16, 58.0, 0.32),
+                control_off: t.control_off,
             }
         } else {
             Tokens {
@@ -91,6 +98,7 @@ impl Tokens {
                 accent_text: oklch(0.48, 0.17, 256.0),
                 warn_bg: oklcha(0.68, 0.16, 58.0, 0.1),
                 warn_border: oklcha(0.68, 0.16, 58.0, 0.3),
+                control_off: t.control_off,
             }
         }
     }

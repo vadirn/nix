@@ -1,9 +1,11 @@
-//! route-console: a read-only window onto route's event log.
+//! route-console: a window onto route's event log and its handlers.
 //!
 //! It reads the day files route writes and the hooks file route reads, and
-//! writes only its own index cache. It never touches `hooks.json` or
-//! `state.json`; toggles and replay come later. Two screens: the Log, and
-//! Health, which sums up today's handler failures, timings and log limits.
+//! writes its own index cache and route's `state.json`, the file that switches
+//! handlers off. It never writes `hooks.json`, which is edited by hand. Three
+//! screens: the Log, whose inspector can replay a Bash call through route;
+//! Health, which sums up today's handler failures, timings and log limits;
+//! and Handlers, which lists the hooks file's handlers with a switch each.
 //!
 //! The list moves only when the reader moves it, or while the reader is at its
 //! end. Rows keep loading whatever the reader does; new ones land at the end,
@@ -11,9 +13,12 @@
 //! pauses it, and scrolling back down follows again. Picking a row pauses it
 //! too, and only the reader changes which row is picked.
 
+mod handlers;
 mod health;
+mod hooks;
 mod index;
 mod record;
+mod replay;
 mod sample;
 mod theme;
 mod view;
@@ -26,8 +31,10 @@ use rune::{AppSpec, Chrome, Key, KeyEvent, Live, TextEdit, Tx};
 use rune_kit::shell::{self, PaneState};
 use serde_json::Value;
 
+use hooks::{HandlerId, Hooks, Toggles};
 use index::{Index, Issue, IssueKey, Row, Timing};
 use record::Record;
+use replay::Replay;
 
 /// How often the window looks for new lines.
 const FOLLOW: Duration = Duration::from_millis(500);
@@ -39,11 +46,14 @@ pub const VIEWPORT: &str = "events-viewport";
 pub const ROWS: &str = "events-rows";
 
 /// Where route keeps its files, found as route finds them
-/// (`route/src/main.rs`), and where this app keeps its index.
+/// (`route/src/main.rs`), where this app keeps its index, and the route
+/// binary replay runs: the one Claude Code runs.
 pub struct Paths {
     pub config: PathBuf,
+    pub state: PathBuf,
     pub log_dir: PathBuf,
     pub index: PathBuf,
+    pub route: PathBuf,
 }
 
 fn home() -> PathBuf {
@@ -60,19 +70,24 @@ fn xdg(var: &str, fallback: &str) -> PathBuf {
 }
 
 impl Paths {
-    /// route's defaults, overridden by `--config`, `--log-dir` and `--index`.
+    /// route's defaults, overridden by `--config`, `--state`, `--log-dir`,
+    /// `--index` and `--route`.
     fn from_args(args: &[String]) -> Paths {
         let mut p = Paths {
             config: xdg("XDG_CONFIG_HOME", ".config").join("route/hooks.json"),
+            state: xdg("XDG_STATE_HOME", ".local/state").join("route/state.json"),
             log_dir: xdg("XDG_STATE_HOME", ".local/state").join("route/log"),
             index: home().join("Library/Caches/route-console/index.sqlite"),
+            route: home().join(".local/libexec/route"),
         };
         let mut it = args.iter();
         while let Some(arg) = it.next() {
             let slot = match arg.as_str() {
                 "--config" => &mut p.config,
+                "--state" => &mut p.state,
                 "--log-dir" => &mut p.log_dir,
                 "--index" => &mut p.index,
+                "--route" => &mut p.route,
                 _ => continue,
             };
             if let Some(v) = it.next() {
@@ -88,6 +103,7 @@ impl Paths {
 pub enum Screen {
     Log,
     Health,
+    Handlers,
 }
 
 /// What the Health screen shows: today's issues and Bash timings.
@@ -139,7 +155,8 @@ pub struct App {
     pub paths: Paths,
     pub index: Index,
     /// False in the sample scenes: the index holds sample events, and reading
-    /// the day files would mix today's in.
+    /// the day files would mix today's in. Their toggles stay in memory, so a
+    /// headless run never switches off a live handler.
     pub live: bool,
     pub day: String,
     pub screen: Screen,
@@ -167,6 +184,15 @@ pub struct App {
     pub scroll_y: Live<f32>,
     pub health: Health,
     pub limits: Limits,
+    /// The hooks file's handlers, as the Handlers screen lists them.
+    pub hooks: Hooks,
+    /// `state.json`, as last read or written.
+    pub toggles: Toggles,
+    /// The Handlers screen's narrowing to one hook event. Apart from the
+    /// Log's, so a trip to Handlers leaves the Log's rows as they were.
+    pub handlers_event: Option<String>,
+    /// The last replay, for the event picked when it ran.
+    pub replay: Option<Replay>,
     pub sidebar: PaneState,
     pub last_look: f64,
     pub error: Option<String>,
@@ -235,9 +261,17 @@ impl App {
 
     fn new(paths: Paths, index: Index, error: Option<String>) -> App {
         let hooks = read_hooks(&paths.config);
+        let (toggles, toggles_error) = match Toggles::load(&paths.state) {
+            Ok(t) => (t, None),
+            Err(e) => (Toggles::default(), Some(e)),
+        };
         App {
             events: hook_events(hooks.as_ref()),
             limits: Limits::of(hooks.as_ref()),
+            hooks: Hooks::of(hooks.as_ref()),
+            toggles,
+            handlers_event: None,
+            replay: None,
             paths,
             index,
             live: true,
@@ -256,7 +290,7 @@ impl App {
             health: Health::default(),
             sidebar: PaneState::new(220.0).range(180.0, 360.0),
             last_look: f64::NEG_INFINITY,
-            error,
+            error: error.or(toggles_error),
             feed: None,
         }
     }
@@ -348,6 +382,7 @@ impl App {
         if self.selected.as_ref().is_some_and(|s| s.id == id) {
             return;
         }
+        self.replay = None;
         self.selected = self.index.line(id).and_then(|line| {
             Some(Selected {
                 id,
@@ -506,6 +541,116 @@ impl App {
         self.screen = Screen::Health;
     }
 
+    /// The Handlers screen, listing one hook event's handlers or every
+    /// event's. The hooks file and `state.json` are read again, since either
+    /// may have changed since the last look.
+    pub fn show_handlers(&mut self, event: Option<String>, tx: &mut Tx) {
+        tx.instant();
+        self.screen = Screen::Handlers;
+        self.handlers_event = event;
+        if self.live {
+            self.hooks = Hooks::of(read_hooks(&self.paths.config).as_ref());
+            self.reload_toggles();
+        }
+    }
+
+    /// Reads `state.json` again: another window, or a hand edit, may have
+    /// changed it.
+    fn reload_toggles(&mut self) {
+        match Toggles::load(&self.paths.state) {
+            Ok(t) => self.toggles = t,
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    /// Writes one change to `state.json`, read again first so an edit made
+    /// elsewhere stays; the sample scenes keep theirs in memory. route reads
+    /// the file on every event, so the next event runs without the handler.
+    fn change_toggles(&mut self, tx: &mut Tx, change: impl FnOnce(&mut Toggles)) {
+        tx.instant();
+        if !self.live {
+            change(&mut self.toggles);
+            return;
+        }
+        let (t, error) = Toggles::update(&self.paths.state, change);
+        self.toggles = t;
+        if error.is_some() {
+            self.error = error;
+        }
+    }
+
+    /// Switches one handler on or off.
+    pub fn toggle(&mut self, id: &HandlerId, on: bool, tx: &mut Tx) {
+        self.change_toggles(tx, |t| t.set(id, on));
+    }
+
+    /// Every handler back on, including entries for handlers the hooks file
+    /// no longer lists.
+    pub fn enable_all(&mut self, tx: &mut Tx) {
+        self.change_toggles(tx, Toggles::clear);
+    }
+
+    /// Opens the hooks file in its default app, at the file its links lead
+    /// to (home-manager links it out of the store, back to the repo), so an
+    /// editor opens the copy that can be edited.
+    pub fn open_hooks(&mut self, tx: &mut Tx) {
+        tx.instant();
+        if !self.live {
+            return;
+        }
+        let path =
+            std::fs::canonicalize(&self.paths.config).unwrap_or_else(|_| self.paths.config.clone());
+        if let Err(e) = std::process::Command::new("/usr/bin/open")
+            .arg(&path)
+            .spawn()
+        {
+            self.error = Some(format!("open {}: {e}", path.display()));
+        }
+    }
+
+    /// The hooks file replay hands route: the real one, read now, or the
+    /// sample scenes' own.
+    fn hooks_text(&self) -> Result<String, String> {
+        if !self.live {
+            return Ok(sample::HOOKS.to_string());
+        }
+        std::fs::read_to_string(&self.paths.config)
+            .map_err(|e| format!("{}: {e}", self.paths.config.display()))
+    }
+
+    /// Sends the picked event through route again, with only the built-in
+    /// guards on (`replay.rs`), and keeps route's new line beside the logged
+    /// one. Guards answer in milliseconds, so it runs on this thread.
+    pub fn replay(&mut self, tx: &mut Tx) {
+        tx.instant();
+        if self.live {
+            self.reload_toggles();
+        }
+        let Some(sel) = &self.selected else {
+            return;
+        };
+        let r = &sel.record;
+        let text = self.hooks_text();
+        let hooks = Hooks::of(
+            text.as_ref()
+                .ok()
+                .and_then(|t| serde_json::from_str(t).ok())
+                .as_ref(),
+        );
+        let result = replay::payload(r).and_then(|payload| {
+            let text = text.clone()?;
+            let state = replay::scratch_state(&hooks, &r.event, &self.toggles);
+            let line = replay::run(&self.paths.route, &text, &r.event, &payload, &state)?;
+            Record::parse(&line).ok_or_else(|| "route's line did not parse".to_string())
+        });
+        let off = replay::switched_off(&hooks, &r.event, &self.toggles);
+        self.replay = Some(Replay {
+            id: sel.id,
+            result,
+            off,
+        });
+    }
+
     /// The search text changed.
     pub fn searched(&mut self, tx: &mut Tx) {
         self.narrow(|_| {}, tx);
@@ -554,6 +699,10 @@ fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
         return false;
     }
     s.last_look = now;
+    if s.live && s.screen == Screen::Handlers {
+        // `state.json` is small, and another window may write it.
+        s.reload_toggles();
+    }
     let mut changed = false;
     if s.live && s.day != today() {
         // Midnight: route has started a new file, and the Log follows it.
@@ -587,6 +736,11 @@ fn sample_index(s: &mut App, lines: &[String]) {
         .expect("sample lines index");
     s.day = sample::DAY.to_string();
     s.selected = None;
+    let hooks = sample::hooks();
+    s.events = hook_events(Some(&hooks));
+    s.limits = Limits::of(Some(&hooks));
+    s.hooks = Hooks::of(Some(&hooks));
+    s.toggles = Toggles::default();
     s.refresh();
     s.recount();
 }
@@ -604,6 +758,14 @@ fn canvas_scene(s: &mut App) {
 fn health_scene(s: &mut App) {
     sample_index(s, &sample::trouble_lines());
     s.screen = Screen::Health;
+}
+
+/// The `handlers` scene: the canvas's events, on the Handlers screen at
+/// PreToolUse, as the Handlers artboard opens.
+fn handlers_scene(s: &mut App) {
+    sample_index(s, &sample::lines());
+    s.screen = Screen::Handlers;
+    s.handlers_event = Some("PreToolUse".into());
 }
 
 /// The `live` scene: a list longer than the window that grows by one sample
@@ -629,6 +791,7 @@ fn main() {
             ("canvas", canvas_scene),
             ("live", live_scene),
             ("health", health_scene),
+            ("handlers", handlers_scene),
         ],
         fonts: rune_theme_opencode::FONTS,
         families: rune_theme_opencode::FAMILIES,
@@ -645,14 +808,19 @@ mod tests {
     use super::*;
     use rune::Mods;
 
-    fn app(scene: fn(&mut App)) -> App {
+    fn nowhere() -> Paths {
         let nowhere = PathBuf::from("/nonexistent");
-        let paths = Paths {
+        Paths {
             config: nowhere.clone(),
+            state: nowhere.join("state.json"),
             log_dir: nowhere.clone(),
-            index: nowhere,
-        };
-        let mut app = App::new(paths, Index::memory(), None);
+            index: nowhere.clone(),
+            route: nowhere,
+        }
+    }
+
+    fn app(scene: fn(&mut App)) -> App {
+        let mut app = App::new(nowhere(), Index::memory(), None);
         scene(&mut app);
         app
     }
@@ -911,11 +1079,9 @@ mod tests {
         let day = sample::DAY;
         let lines = sample::trouble_lines().join("\n") + "\n";
         std::fs::write(dir.join(format!("{day}.jsonl")), lines).unwrap();
-        let nowhere = PathBuf::from("/nonexistent");
         let paths = Paths {
-            config: nowhere.clone(),
             log_dir: dir.clone(),
-            index: nowhere,
+            ..nowhere()
         };
         // A day with no file takes the first ids, and leaves with the rebuild.
         let mut ix = Index::memory();
@@ -937,6 +1103,109 @@ mod tests {
         );
         assert_eq!(app.health.issues.len(), 4);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn handlers_narrow_apart_from_the_log() {
+        let mut app = app(handlers_scene);
+        assert_eq!(app.screen, Screen::Handlers);
+        assert_eq!(app.handlers_event.as_deref(), Some("PreToolUse"));
+        let mut tx = Tx::default();
+        app.show_log(Some("Stop".into()), &mut tx);
+        app.show_handlers(Some("SessionStart".into()), &mut tx);
+        assert_eq!(
+            app.event.as_deref(),
+            Some("Stop"),
+            "the Log keeps its filter"
+        );
+        app.show_handlers(None, &mut tx);
+        assert!(
+            app.handlers_event.is_none(),
+            "the Handlers row lists every event"
+        );
+        assert!(
+            !press_window(&mut app, Key::Up),
+            "the list takes no keys while Handlers shows"
+        );
+        app.show_log(None, &mut tx);
+        assert_eq!(app.screen, Screen::Log);
+    }
+
+    #[test]
+    fn a_sample_scene_toggles_in_memory_only() {
+        let mut app = app(handlers_scene);
+        let id = HandlerId::new(
+            "PreToolUse",
+            "Bash",
+            "bash ~/.claude/hooks/rg-glob-guard.sh",
+        );
+        app.toggle(&id, false, &mut Tx::default());
+        assert!(app.toggles.is_off(&id));
+        assert_eq!(app.toggles.off_in(&app.hooks), 1);
+        assert!(!app.paths.state.exists(), "no state.json is written");
+        app.enable_all(&mut Tx::default());
+        assert_eq!(app.toggles.off_in(&app.hooks), 0);
+    }
+
+    #[test]
+    fn a_live_toggle_round_trips_through_state_json() {
+        let dir = std::env::temp_dir().join(format!("route-console-toggle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let paths = Paths {
+            state: dir.join("route/state.json"),
+            ..nowhere()
+        };
+        let mut app = App::new(paths, Index::memory(), None);
+        assert!(app.live);
+        let id = HandlerId::new(
+            "PreToolUse",
+            "Bash",
+            "bash ~/.claude/hooks/rg-glob-guard.sh",
+        );
+        let mut tx = Tx::default();
+        app.toggle(&id, false, &mut tx);
+        let written: Value =
+            serde_json::from_str(&std::fs::read_to_string(&app.paths.state).unwrap()).unwrap();
+        assert_eq!(
+            written,
+            serde_json::json!({"disabled": [{"event": "PreToolUse", "matcher": "Bash",
+                "command": "bash ~/.claude/hooks/rg-glob-guard.sh"}]}),
+            "route's shape and key"
+        );
+        // Another window switches a second handler off; this one keeps it.
+        let other = HandlerId::new("Stop", "", "bash ~/.claude/hooks/stop-verify.sh");
+        Toggles::update(&app.paths.state, |t| t.set(&other, false));
+        app.toggle(&id, true, &mut tx);
+        assert!(app.toggles.is_off(&other) && !app.toggles.is_off(&id));
+        app.enable_all(&mut tx);
+        assert!(
+            Toggles::load(&app.paths.state)
+                .unwrap()
+                .disabled()
+                .is_empty()
+        );
+        assert!(app.error.is_none(), "{:?}", app.error);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_replay_answers_for_the_event_it_ran_on() {
+        let mut app = app(canvas_scene);
+        let bash = app
+            .rows
+            .iter()
+            .find(|r| r.tool.as_deref() == Some("Bash"))
+            .unwrap()
+            .id;
+        app.pick(bash);
+        app.replay(&mut Tx::default());
+        let rp = app.replay.as_ref().expect("a replay");
+        assert_eq!(rp.id, bash);
+        let err = rp.result.as_ref().unwrap_err();
+        assert!(err.contains("/nonexistent"), "no route here: {err}");
+        let other = app.rows.iter().find(|r| r.id != bash).unwrap().id;
+        app.pick(other);
+        assert!(app.replay.is_none(), "a new pick drops it");
     }
 
     #[test]

@@ -1,7 +1,11 @@
 //! The window, laid out as the design canvas's Log artboard: rune-kit's shell
 //! with a sidebar of screens and hook events, a toolbar band, and a framed
 //! card holding the event list beside the inspector, or the Health screen
-//! (`health.rs`).
+//! (`health.rs`), or the Handlers screen (`handlers.rs`).
+//!
+//! The canvas reaches Handlers through the sidebar's hook events; here they
+//! narrow the Log, as Health's "Show events" needs, so Handlers has a row of
+//! its own and the hook events act on the screen shown (decided 2026-11-17).
 //!
 //! The list is built on Rune's virtual rows, not rune-kit's Table: the Table's
 //! viewport never sticks to its end and reports nothing about what it shows,
@@ -20,7 +24,8 @@ use rune_kit::{
 };
 
 use crate::index::Row;
-use crate::record::{Record, Trouble, short_name};
+use crate::record::{Handler, Record, Trouble, short_name};
+use crate::replay::{Comparison, Replay};
 use crate::theme::{Tint, Tokens, tint_of, ty};
 use crate::{App, LIST, ROWS, Screen, Selected, VIEWPORT};
 
@@ -49,6 +54,16 @@ static SEARCH: Icon = Icon {
     view: 16.0,
     body: r#"<circle cx="7" cy="7" r="4.75" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="m10.5 10.5 3.25 3.25" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>"#,
 };
+static SWITCHES: Icon = Icon {
+    name: "rc-switches",
+    view: 16.0,
+    body: r#"<rect x="1.75" y="4.25" width="12.5" height="7.5" rx="3.75" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="10.25" cy="8" r="1.75" stroke="currentColor" stroke-width="1.5" fill="none"/>"#,
+};
+static REPLAY: Icon = Icon {
+    name: "rc-replay",
+    view: 16.0,
+    body: r#"<path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>"#,
+};
 static COPY: Icon = Icon {
     name: "rc-copy",
     view: 16.0,
@@ -57,6 +72,16 @@ static COPY: Icon = Icon {
 
 /// The inspector's width, as the canvas lays it out at 1280 points.
 const INSPECTOR_W: f32 = 340.0;
+
+/// A built-in guard's microseconds, else milliseconds.
+pub fn time_label(h: &Handler) -> String {
+    match (h.us, h.ms) {
+        (Some(us), _) if us < 1000 => format!("{us} µs"),
+        (Some(us), _) => format!("{:.1} ms", us as f64 / 1000.0),
+        (None, Some(ms)) => ms_label(ms),
+        (None, None) => "—".into(),
+    }
+}
 
 pub fn ms_label(ms: u64) -> String {
     if ms >= 1000 {
@@ -67,11 +92,11 @@ pub fn ms_label(ms: u64) -> String {
 }
 
 /// A tinted word: a verdict, a handler's result, or `stderr`.
-fn badge(t: &Tokens, word: &str) -> El {
+pub fn badge(t: &Tokens, word: &str) -> El {
     badge_in(t, word, tint_of(word))
 }
 
-fn badge_in(t: &Tokens, word: &str, tint: Tint) -> El {
+pub fn badge_in(t: &Tokens, word: &str, tint: Tint) -> El {
     let (bg, fg) = t.badge(tint);
     row()
         .role("status")
@@ -89,8 +114,39 @@ fn badge_in(t: &Tokens, word: &str, tint: Tint) -> El {
         )
 }
 
-fn rule(t: &Tokens) -> El {
+pub fn rule(t: &Tokens) -> El {
     el().w_full().h(1.0).fill(t.separator).a11y_hidden()
+}
+
+/// A grouped list: rounded, filled, its rows parted by rules. Health's
+/// issues, timings and limits, and Handlers' matcher groups.
+pub fn group(t: &Tokens, label: &str, rows: impl IntoIterator<Item = El>) -> El {
+    rows.into_iter().enumerate().fold(
+        col()
+            .role("list")
+            .label(label.to_string())
+            .w_full()
+            .radius(10.0)
+            .fill(t.group)
+            .border(1.0, t.card_border)
+            .clip_rounded(10.0),
+        |g, (i, r)| {
+            let r = r.role("listitem");
+            if i == 0 {
+                g.child(r)
+            } else {
+                g.child(rule(t)).child(r)
+            }
+        },
+    )
+}
+
+pub fn quiet_row(t: &Tokens, words: &str) -> El {
+    row().w_full().min_h(36.0).px(14.0).center_y().child(
+        text(words.to_string())
+            .font(ty::BODY)
+            .color(t.text_secondary),
+    )
 }
 
 /// The toolbar's title, with the error badge when the index or the log
@@ -114,6 +170,10 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         Screen::Health => (
             crate::health::toolbar(s, &k, &t),
             crate::health::screen(s, &k, &t),
+        ),
+        Screen::Handlers => (
+            crate::handlers::toolbar(s, &k, &t),
+            crate::handlers::screen(s, &k, &t),
         ),
     };
     SplitView::new(main)
@@ -188,17 +248,36 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
             format!("{n} issues")
         }));
     }
+    let on_handlers = s.screen == Screen::Handlers;
+    let handlers = SidebarRow::new("Handlers")
+        .icon(&SWITCHES)
+        .height(30.0)
+        .selected(on_handlers && s.handlers_event.is_none())
+        .on_select(|s: &mut App, tx| s.show_handlers(None, tx))
+        .build(k)
+        .key("screen-handlers");
     let screens = col()
         .w_full()
         .child(log)
-        .child(health.build(k).key("screen-health"));
+        .child(health.build(k).key("screen-health"))
+        .child(handlers);
+    // A hook event narrows the screen shown: the Log's rows, or the
+    // handlers listed. From Health it opens the Log.
     let events = s.events.iter().map(|e| {
         let event = e.clone();
+        let picked = (on_log && s.event.as_deref() == Some(e))
+            || (on_handlers && s.handlers_event.as_deref() == Some(e));
         SidebarRow::new(e.clone())
             .icon(&BOLT)
             .height(30.0)
-            .selected(on_log && s.event.as_deref() == Some(e))
-            .on_select(move |s: &mut App, tx| s.show_log(Some(event.clone()), tx))
+            .selected(picked)
+            .on_select(move |s: &mut App, tx| {
+                if s.screen == Screen::Handlers {
+                    s.show_handlers(Some(event.clone()), tx)
+                } else {
+                    s.show_log(Some(event.clone()), tx)
+                }
+            })
             .build(k)
             .key(format!("event-{e}"))
     });
@@ -530,7 +609,12 @@ fn inspector(s: &App, k: &Kit, t: &Tokens) -> El {
         Some(sel) => col()
             .w_full()
             .children(s.hidden().then(|| hidden_note(s, t)))
-            .child(details(sel, k, t)),
+            .child(details(
+                sel,
+                s.replay.as_ref().filter(|r| r.id == sel.id),
+                k,
+                t,
+            )),
         None => col().w_full().px(16.0).py(14.0).child(
             text("Pick an event to see its handlers.")
                 .font(ty::NOTE)
@@ -595,8 +679,21 @@ pub fn block(content: String, fill: rune::Color, border: rune::Color, t: &Tokens
         )
 }
 
-fn details(sel: &Selected, k: &Kit, t: &Tokens) -> El {
+fn details(sel: &Selected, replay: Option<&Replay>, k: &Kit, t: &Tokens) -> El {
     let r: &Record = &sel.record;
+    let why_not = crate::replay::payload(r).err();
+    let replay_button = IconButton::new(&REPLAY)
+        .variant(IconButtonVariant::GhostMuted)
+        .label("Replay through route")
+        .help(
+            why_not
+                .clone()
+                .unwrap_or_else(|| "Replay through route, built-in guards only".to_string()),
+        )
+        .disabled(why_not.is_some())
+        .on_press_tx(|s: &mut App, tx| s.replay(tx))
+        .build(k)
+        .key("replay");
     let copy = IconButton::new(&COPY)
         .variant(IconButtonVariant::GhostMuted)
         .label("Copy JSONL line")
@@ -626,7 +723,8 @@ fn details(sel: &Selected, k: &Kit, t: &Tokens) -> El {
                 .shrink()
                 .min_w(0.0),
         )
-        .child(copy);
+        .child(copy)
+        .child(replay_button);
     let mut c = col()
         .w_full()
         .pt(10.0)
@@ -634,7 +732,8 @@ fn details(sel: &Selected, k: &Kit, t: &Tokens) -> El {
         .pb(16.0)
         .pl(16.0)
         .gap(14.0)
-        .child(header);
+        .child(header)
+        .children(replay.map(|rp| replay_card(rp, r, t)));
     if let Some(input) = &r.input {
         c = c.child(block(input.clone(), t.card, t.card_border, t));
     }
@@ -762,7 +861,7 @@ fn details(sel: &Selected, k: &Kit, t: &Tokens) -> El {
             )
             .child(bar)
             .child(
-                text(h.ms.map(ms_label).unwrap_or_else(|| "—".into()))
+                text(time_label(h))
                     .font(ty::MONO)
                     .color(t.text_secondary)
                     .align(Align::End)
@@ -775,4 +874,177 @@ fn details(sel: &Selected, k: &Kit, t: &Tokens) -> El {
             )
     });
     c.child(col().w_full().children(handlers))
+}
+
+/// A guard's result now, or, when it differs, its logged result and then its
+/// result now: most guards say nothing either way, and one column keeps room
+/// for their names.
+fn change_cell(t: &Tokens, was: Option<&str>, is: Option<&str>) -> El {
+    if was == is {
+        return result_cell(t, is);
+    }
+    row()
+        .gap(6.0)
+        .center_y()
+        .child(result_cell(t, was).label("logged"))
+        .child(
+            text("→")
+                .font(ty::MONO)
+                .color(t.text_secondary)
+                .label("now"),
+        )
+        .child(result_cell(t, is))
+}
+
+/// A result word as a badge, or a dash when the handler said nothing.
+fn result_cell(t: &Tokens, word: Option<&str>) -> El {
+    row().children(Some(match word {
+        Some(w) => badge(t, w),
+        None => text("—")
+            .font(ty::MONO)
+            .color(t.text_secondary)
+            .label("nothing"),
+    }))
+}
+
+/// The replay beside the logged answer (`replay::Comparison`): the verdict
+/// either way, then each built-in guard with its result now, or its logged
+/// result and its result now when they differ, `off` for one you switched
+/// off, and how long it took now; then the handlers that did not run.
+fn replay_card(rp: &Replay, logged: &Record, t: &Tokens) -> El {
+    let card = col()
+        .key("replay-result")
+        .role("group")
+        .label("Replay")
+        .w_full()
+        .radius(8.0)
+        .fill(t.card)
+        .border(1.0, t.card_border)
+        .clip_rounded(8.0);
+    let now = match &rp.result {
+        Ok(now) => now,
+        Err(e) => {
+            return card.child(
+                col()
+                    .w_full()
+                    .px(12.0)
+                    .py(10.0)
+                    .gap(4.0)
+                    .child(text("Replay failed").font(ty::LABEL).color(t.text))
+                    .child(
+                        text(e.clone())
+                            .font(ty::NOTE)
+                            .color(t.text_secondary)
+                            .wrap_anywhere()
+                            .selectable(true),
+                    ),
+            );
+        }
+    };
+    let c = Comparison::of(logged, now, &rp.off);
+    let head = row()
+        .w_full()
+        .min_h(32.0)
+        .px(12.0)
+        .gap(8.0)
+        .center_y()
+        .child(
+            text(c.summary())
+                .font(ty::LABEL)
+                .color(t.text)
+                .wrap_anywhere()
+                .grow(1.0)
+                .shrink()
+                .min_w(0.0),
+        )
+        .child(change_cell(t, c.was, c.is));
+    let rows = c.lines.iter().enumerate().map(|(i, l)| {
+        let name = short_name(l.command);
+        let was = l.was.and_then(Handler::result);
+        let is = match l.now {
+            Some(h) => h.result(),
+            None => Some("off"),
+        };
+        let line = row()
+            .w_full()
+            .min_h(24.0)
+            .gap(8.0)
+            .center_y()
+            .child(
+                text(name)
+                    .font(ty::MONO)
+                    .color(if l.now.is_some() {
+                        t.text
+                    } else {
+                        t.text_secondary
+                    })
+                    .truncate()
+                    .grow(1.0)
+                    .shrink()
+                    .min_w(0.0)
+                    .help(l.command.to_string()),
+            )
+            .child(change_cell(t, was, is))
+            .child(
+                text(l.now.map(time_label).unwrap_or_default())
+                    .font(ty::MONO)
+                    .color(t.text_secondary)
+                    .align(Align::End)
+                    .w(56.0),
+            );
+        let new_note = l
+            .now
+            .and_then(|h| h.note.as_deref())
+            .filter(|n| l.was.and_then(|w| w.note.as_deref()) != Some(*n));
+        col()
+            .key(format!("replayed-{i}"))
+            .w_full()
+            .child(line)
+            .children(new_note.map(|n| {
+                text(n.to_string())
+                    .font(ty::NOTE)
+                    .color(t.text_secondary)
+                    .wrap_anywhere()
+                    .selectable(true)
+                    .pb(4.0)
+            }))
+    });
+    let names = |cs: &[&str]| {
+        cs.iter()
+            .map(|c| short_name(c))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let off: Vec<&str> = rp.off.iter().map(String::as_str).collect();
+    let foot = [
+        (
+            "Switched off: ",
+            names(&off),
+            "Off in state.json: shown, not run",
+        ),
+        (
+            "Not replayed: ",
+            names(&c.not_replayed),
+            "Replay runs only the built-in guards",
+        ),
+    ]
+    .into_iter()
+    .filter(|(_, names, _)| !names.is_empty())
+    .map(|(label, names, help)| {
+        text(format!("{label}{names}"))
+            .font(ty::NOTE)
+            .color(t.text_secondary)
+            .wrap_anywhere()
+            .help(help)
+    });
+    let body = col()
+        .w_full()
+        .px(12.0)
+        .pt(6.0)
+        .pb(10.0)
+        .gap(2.0)
+        .children(rows)
+        .child(el().h(2.0))
+        .children(foot);
+    card.child(head).child(rule(t)).child(body)
 }

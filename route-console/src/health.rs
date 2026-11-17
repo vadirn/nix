@@ -15,7 +15,7 @@ use rune_kit::{IconButton, IconButtonVariant, Kit};
 use crate::index::{Issue, Timing};
 use crate::record::Trouble;
 use crate::theme::{Tint, Tokens, ty};
-use crate::view::{block, leading, ms_label};
+use crate::view::{block, group, leading, ms_label, quiet_row};
 use crate::{App, Limits};
 
 static REBUILD: Icon = Icon {
@@ -129,43 +129,12 @@ pub fn screen(s: &App, k: &Kit, t: &Tokens) -> El {
         )
 }
 
-/// A grouped list: rounded, filled, its rows parted by rules.
-fn group(t: &Tokens, label: &str, rows: impl IntoIterator<Item = El>) -> El {
-    rows.into_iter().enumerate().fold(
-        col()
-            .role("list")
-            .label(label.to_string())
-            .w_full()
-            .radius(10.0)
-            .fill(t.group)
-            .border(1.0, t.card_border)
-            .clip_rounded(10.0),
-        |g, (i, r)| {
-            let r = r.role("listitem");
-            if i == 0 {
-                g.child(r)
-            } else {
-                g.child(el().w_full().h(1.0).fill(t.separator).a11y_hidden())
-                    .child(r)
-            }
-        },
-    )
-}
-
 fn section_title(t: &Tokens, title: &str) -> El {
     row().px(4.0).child(
         text(title.to_string())
             .font(ty::SECTION)
             .color(t.text_secondary)
             .role("heading"),
-    )
-}
-
-fn quiet_row(t: &Tokens, words: &str) -> El {
-    row().w_full().min_h(36.0).px(14.0).center_y().child(
-        text(words.to_string())
-            .font(ty::BODY)
-            .color(t.text_secondary),
     )
 }
 

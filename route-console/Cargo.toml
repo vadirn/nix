@@ -1,6 +1,7 @@
-# `route-console`: a read-only macOS window onto route's event log. It indexes
-# the per-day JSONL files into a SQLite cache it may drop and rebuild at will,
-# and never writes route's hooks file or toggles file.
+# `route-console`: a macOS window onto route's event log and handlers. It
+# indexes the per-day JSONL files into a SQLite cache it may drop and rebuild
+# at will, writes route's toggles file (`state.json`), and never writes the
+# hand-edited hooks file.
 #
 # Its own workspace and lockfile, like `route/`: Rune's dependency tree never
 # reaches route or vault-query, and Rune's `[patch.crates-io]` table has to sit

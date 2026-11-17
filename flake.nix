@@ -101,7 +101,7 @@
       };
       cargoHash = "sha256-CQ7rs9jHZkSVTBLv5rbYm0zvDaTS0rmbA92DtrgfBjw=";
     };
-    # `route-console`, the read-only Rune window onto route's log, as
+    # `route-console`, the Rune window onto route's log and handlers, as
     # `Route Console.app`. Its own workspace and lockfile, like route; Rune and
     # its patched crates arrive as git dependencies that fetchCargoVendor
     # resolves. The bundle loads only system libraries, so a copy taken out of
