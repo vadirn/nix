@@ -153,4 +153,46 @@ check "the toolbar shows the issue filter" has "$a" "issue-filter"
 check "clearing it lists the hook event's rows ($(rows "$b"))" test "$(rows "$b")" -gt 3
 check "and the filter goes" lacks "$b" "issue-filter"
 
+# Nothing springs or fades: 50 ms after a click (the script's tap releases
+# 80 ms after it presses), the inspector already shows the new pick as it
+# rests, nothing is fading, and a row half under the top edge is in view.
+a="$(tree no-motion picked)"
+b="$(tree no-motion settled)"
+c="$(tree no-motion revealed)"
+panel() { jq -c '[.elements[] | select(.path | test("inspector")) | [.path, .rect, .opacity, .fill]]' "$1"; }
+check "a pick lands in the inspector at once" test "$(panel "$a")" = "$(panel "$b")"
+check "with nothing fading out" test "$(jq '[.elements[] | select(.exiting == true)] | length' "$a")" -eq 0
+id="$(row_at "$b" 88)"
+check "a click on a row under the top edge scrolls it in at once" same "$(top "$c" "$id")" "$(view_top "$c")"
+
+# From a blocked event to one with no verdict (the health scene's rows 2 and
+# 11), the title takes the badge's place with no trace of its fill.
+a="$(tree block-to-plain picked health)"
+b="$(tree block-to-plain settled health)"
+check "block to no verdict lands at once, colours included" test "$(panel "$a")" = "$(panel "$b")"
+
+# Hover comes and goes at once: 30 ms after the pointer leaves a row (the
+# canvas scene's fourth), its hover track is back to nothing. The tree keeps
+# hover as its own track, 0 to 1, not in the row's fill.
+a="$(tree hover hovered canvas)"
+b="$(tree hover left canvas)"
+hover_at() { jq -r --argjson y "$2" '[.elements[] | select(.path | test("events-rows/[0-9]+$"))
+  | select(.rect[1] <= $y and $y < .rect[1] + .rect[3])][0].hover // 0' "$1"; }
+near() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a - b < 0.01 && b - a < 0.01) }'; }
+check "a hovered row lights up ($(hover_at "$a" 183))" near "$(hover_at "$a" 183)" 1
+check "and goes dark at once when the pointer leaves ($(hover_at "$b" 183))" near "$(hover_at "$b" 183)" 0
+
+# The sidebar is the one thing that moves: it slides shut over frames, and
+# the Log widens with its card, the inspector held to the card's right edge,
+# rather than landing at its final width and riding in with the card.
+a="$(tree sidebar-slide open)"
+b="$(tree sidebar-slide sliding)"
+c="$(tree sidebar-slide shut)"
+width() { jq -r --arg k "$2" '[.elements[] | select(.path | endswith($k))][0].rect[2]' "$1"; }
+right() { jq -r --arg k "$2" '[.elements[] | select(.path | endswith($k))][0] | .rect[0] + .rect[2]' "$1"; }
+gap() { awk -v a="$(right "$1" main-pane)" -v b="$(right "$1" /inspector)" 'BEGIN { print a - b }'; }
+check "the sidebar slides ($(width "$a" sidebar-pane) -> $(width "$b" sidebar-pane) -> $(width "$c" sidebar-pane))" \
+  awk -v a="$(width "$a" sidebar-pane)" -v b="$(width "$b" sidebar-pane)" -v c="$(width "$c" sidebar-pane)" 'BEGIN { exit !(a > b + 0.5 && b > c + 0.5) }'
+check "and the inspector keeps to the card's right edge ($(gap "$a") / $(gap "$b") / $(gap "$c"))" same "$(gap "$b")" "$(gap "$a")"
+
 exit "$failed"

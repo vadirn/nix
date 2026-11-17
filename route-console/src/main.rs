@@ -310,7 +310,8 @@ impl App {
 
     /// Drops the index and builds it again from the day files. Every event
     /// gets a new id, so the picked row is found again by where its line sits.
-    pub fn rebuild(&mut self) {
+    pub fn rebuild(&mut self, tx: &mut Tx) {
+        tx.instant();
         if !self.live {
             // The sample scenes have no day files to build from.
             return;
@@ -365,7 +366,14 @@ impl App {
 
     /// A row the reader clicked: picked, and revealed as the arrow keys reveal
     /// theirs, so a row half under an edge scrolls just far enough to show.
+    ///
+    /// Like every change the reader makes here, it lands at once: Rune would
+    /// spring heights and bars, fade colours and fade elements in and out.
+    /// The commit is instant rather than the elements, so the one motion left,
+    /// rune-kit's sidebar sliding open and shut, still carries the content
+    /// with it, and a pick made mid-slide leaves the slide running.
     pub fn click(&mut self, id: i64, tx: &mut Tx) {
+        tx.instant();
         self.pick(id);
         // Stopgap: turning `stick_bottom` off leaves Rune's scroll mode Pinned,
         // and `report_visible_rows` and the virtual window read that mode, not
@@ -413,7 +421,8 @@ impl App {
 
     /// The list goes to its newest row and follows from there: End, or the
     /// "↓ N new" pill. The only jumps the list makes.
-    pub fn jump_to_end(&mut self) {
+    pub fn jump_to_end(&mut self, tx: &mut Tx) {
+        tx.instant();
         self.following = true;
         self.to_end = true;
     }
@@ -429,6 +438,7 @@ impl App {
     /// Shows the Log, its rows re-read after `change`, keeping the picked row
     /// where it shows on screen while rows above it come and go.
     fn narrow(&mut self, change: impl FnOnce(&mut App), tx: &mut Tx) {
+        tx.instant();
         let returning = self.screen != Screen::Log;
         let anchor = self.anchor().and_then(|id| Some((id, self.position(id)?)));
         let y = self.scroll_y.get();
@@ -491,7 +501,8 @@ impl App {
     }
 
     /// The Health screen. The Log keeps its rows, filter, pick and place.
-    pub fn show_health(&mut self) {
+    pub fn show_health(&mut self, tx: &mut Tx) {
+        tx.instant();
         self.screen = Screen::Health;
     }
 
@@ -524,9 +535,10 @@ impl App {
             }
             Key::PageUp => tx.scroll_page(VIEWPORT, -1),
             Key::PageDown => tx.scroll_page(VIEWPORT, 1),
-            Key::End => self.jump_to_end(),
+            Key::End => self.jump_to_end(tx),
             _ => return false,
         }
+        tx.instant();
         true
     }
 }
@@ -851,7 +863,7 @@ mod tests {
         app.seen(n - 25..n - 5);
         let id = app.rows[n - 10].id;
         app.pick(id);
-        app.show_health();
+        app.show_health(&mut Tx::default());
         assert!(
             !press_window(&mut app, Key::Up),
             "the list takes no keys while hidden"
@@ -915,7 +927,7 @@ mod tests {
         let row = app.rows[3].clone();
         app.pick(row.id);
         let line = app.selected.as_ref().unwrap().line.clone();
-        app.rebuild();
+        app.rebuild(&mut Tx::default());
         let picked = app.selected.as_ref().expect("still picked");
         assert_ne!(picked.id, row.id, "every event has a new id");
         assert_eq!(

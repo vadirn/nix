@@ -10,7 +10,7 @@
 use std::borrow::Cow;
 
 use rune::{
-    Align, Cx, El, GrowthSpec, Icon, KeyEvent, ScrollPos, ScrollSpec, Tx, col, el, row, text,
+    Align, Anim, Cx, El, GrowthSpec, Icon, KeyEvent, ScrollPos, ScrollSpec, Tx, col, el, row, text,
 };
 use rune_kit::shell::{SidebarRow, SidebarToggle, SplitView, Toolbar};
 use rune_kit::{
@@ -129,6 +129,10 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .sidebar_toggle(SidebarToggle::new().in_header())
         .reduced_motion(cx.is_reduced_motion())
         .build(&k)
+        // Hover comes and goes at once, as every change the reader makes does
+        // (`App::click`); Rune would fade it out over 0.1 s. Hover tracks only,
+        // so the sidebar's slide keeps its spring.
+        .hover_motion_within(Anim::INSTANT, Anim::INSTANT)
 }
 
 fn log_toolbar(s: &App, k: &Kit, t: &Tokens) -> Toolbar {
@@ -168,7 +172,7 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
         .icon(&PULSE)
         .height(30.0)
         .selected(s.screen == Screen::Health)
-        .on_select(|s: &mut App, _tx| s.show_health());
+        .on_select(|s: &mut App, tx| s.show_health(tx));
     if n > 0 {
         health = health.trailing(badge_in(t, &n.to_string(), Tint::Orange).label(if n == 1 {
             "1 issue".into()
@@ -274,7 +278,7 @@ fn pill(s: &App, k: &Kit) -> Option<El> {
             .variant(ButtonVariant::Outline)
             .control_size(ControlSize::Small)
             .help("Jump to the newest event (End)")
-            .on_press(|s: &mut App| s.jump_to_end())
+            .on_press_tx(|s: &mut App, tx| s.jump_to_end(tx))
             .build(k)
             .key("to-end")
     })

@@ -1,0 +1,9 @@
+{"events": [
+  {"t": 1.0, "type": "scroll", "x": 560, "y": 450, "dy": 300, "dur": 0.4},
+  {"t": 1.8, "type": "tap", "x": 560, "y": 450},
+  {"t": 2.4, "type": "tap", "x": 560, "y": 534},
+  {"t": 2.53, "type": "mark", "name": "picked"},
+  {"t": 2.95, "type": "mark", "name": "settled"},
+  {"t": 3.0, "type": "tap", "x": 560, "y": 88},
+  {"t": 3.13, "type": "mark", "name": "revealed"}
+]}
