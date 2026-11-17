@@ -19,7 +19,7 @@ Bash(git add <files>)
 
 // Draft
 prefix = do("pick one of feat | fix | chore by the contract test in prefix.md")
-message = do("draft '<prefix>: <why>', short single lowercase line, state the WHY")
+message = do("draft '<prefix>: <why>', or '<prefix>(<scope>): <why>' per §Message style, short single lowercase line, state the WHY")
 
 // Confirm when ambiguous
 needs_confirmation = do("true if mixed changes, unclear prefix, or secrets_excluded")
@@ -52,7 +52,7 @@ Read `commit-hook.md` for why the hook is shaped this way.
 
 - Short single line, lowercase after prefix
 - State the WHY; the diff already shows the WHAT
-- Plain `<prefix>: ...` form only; no body, no scope. Match recent log only for tone and length, not for scope or body
+- `<prefix>: ...` form, or `<prefix>(<scope>): ...` when the repo's own convention names that scope, such as `chore(kit):`. The scope holds lowercase letters and digits joined by single hyphens. No body, no `!`. Match recent log only for tone and length, not for body
 
 WHY vs WHAT:
 
