@@ -1,0 +1,88 @@
+{
+  "fill": {
+    "solid": "srgb:0.56078,0.74118,0.98039,1.00000"
+  },
+  "groups": [
+    {
+      "name": "path",
+      "layers": [
+        {
+          "glass": true,
+          "image-name": "4_path.svg",
+          "name": "path"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.15
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "name": "hill",
+      "layers": [
+        {
+          "glass": true,
+          "image-name": "3_hill.svg",
+          "name": "hill"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "name": "ridges",
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "2_ridges.svg",
+          "name": "ridges"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.3
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "name": "sky",
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "1_sky.svg",
+          "name": "sky"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
