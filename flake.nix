@@ -184,7 +184,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
-            inherit vault-query md-for-agents route;
+            inherit vault-query md-for-agents route route-console;
           })
         ];
       };

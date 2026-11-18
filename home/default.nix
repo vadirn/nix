@@ -4,6 +4,7 @@
   vault-query,
   md-for-agents,
   route,
+  route-console,
   ...
 }: {
   users.users.vadim.home = homeDirectory;
@@ -97,6 +98,10 @@
       # and settings.json calls this one by its full path anyway. Its handler
       # list is linked in home/claude.nix.
       home.file.".local/libexec/route".source = "${route}/bin/route";
+
+      # Route Console's build, linked so the generation roots it (rebuild.sh
+      # collects garbage) and rebuild.sh signs and installs it from here.
+      home.file.".local/share/route-console".source = route-console;
 
       imports = [
         ./zsh.nix
