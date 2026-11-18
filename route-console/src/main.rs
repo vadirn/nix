@@ -174,7 +174,6 @@ pub struct App {
     /// headless run never switches off a live handler.
     pub live: bool,
     pub day: String,
-    pub screen: Screen,
     /// The space shown.
     pub space: Space,
     /// The other harness's space, as it was left.
@@ -253,7 +252,6 @@ impl App {
             index,
             live: true,
             day: today(),
-            screen: Screen::Log,
             sidebar: PaneState::new(220.0).range(180.0, 360.0),
             switching: false,
             last_look: f64::NEG_INFINITY,
@@ -412,12 +410,12 @@ impl App {
     /// where it shows on screen while rows above it come and go.
     fn narrow(&mut self, change: impl FnOnce(&mut Space), tx: &mut Tx) {
         tx.instant();
-        let returning = self.screen != Screen::Log;
+        let returning = self.space.screen != Screen::Log;
         let sp = &self.space;
         let anchor = sp.anchor().and_then(|id| Some((id, sp.position(id)?)));
         let y = sp.scroll_y.get();
         let before = std::mem::take(&mut self.space.rows);
-        self.screen = Screen::Log;
+        self.space.screen = Screen::Log;
         change(&mut self.space);
         self.refresh();
         let sp = &mut self.space;
@@ -484,7 +482,7 @@ impl App {
     /// The Health screen. The Log keeps its rows, filter, pick and place.
     pub fn show_health(&mut self, tx: &mut Tx) {
         tx.instant();
-        self.screen = Screen::Health;
+        self.space.screen = Screen::Health;
     }
 
     /// The Handlers screen, listing one hook event's handlers or every
@@ -492,7 +490,7 @@ impl App {
     /// may have changed since the last look.
     pub fn show_handlers(&mut self, event: Option<String>, tx: &mut Tx) {
         tx.instant();
-        self.screen = Screen::Handlers;
+        self.space.screen = Screen::Handlers;
         self.space.handlers_event = event;
         self.reload_handlers();
     }
@@ -506,7 +504,7 @@ impl App {
         }
     }
 
-    /// The other harness's space, on the same screen, as it was left: its
+    /// The other harness's space, as it was left: the screen it showed, its
     /// Log's rows, filter, pick and place, its Health and its Handlers. The
     /// space shown is parked as it is, as a trip to Health leaves the Log.
     ///
@@ -523,8 +521,8 @@ impl App {
         tx.wake_after(Duration::ZERO);
         std::mem::swap(&mut self.space, &mut self.parked);
         self.refresh();
-        match self.screen {
-            // The screen mounts afresh, so the Log goes back to its place.
+        match self.space.screen {
+            // Its screen mounts afresh, so the Log goes back to its place.
             Screen::Log => self.mount_log(tx),
             Screen::Handlers => self.reload_handlers(),
             Screen::Health => {}
@@ -686,7 +684,7 @@ fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
         return switched;
     }
     s.last_look = now;
-    if s.live && s.screen == Screen::Handlers {
+    if s.live && s.space.screen == Screen::Handlers {
         // `state.json` is small, and another window may write it.
         s.reload_toggles();
     }
@@ -715,7 +713,7 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     // With nothing focused, the list takes the keys it takes when focused,
     // while it shows.
-    s.screen == Screen::Log && tx.focused().is_none() && s.key(ev, tx)
+    s.space.screen == Screen::Log && tx.focused().is_none() && s.key(ev, tx)
 }
 
 /// Puts the sample scenes' rows in an index of their own, each space with
@@ -747,14 +745,14 @@ fn canvas_scene(s: &mut App) {
 /// the Health screen.
 fn health_scene(s: &mut App) {
     sample_index(s, &sample::trouble_lines());
-    s.screen = Screen::Health;
+    s.space.screen = Screen::Health;
 }
 
 /// The `handlers` scene: the canvas's events, on the Handlers screen at
 /// PreToolUse, as the Handlers artboard opens.
 fn handlers_scene(s: &mut App) {
     sample_index(s, &sample::lines());
-    s.screen = Screen::Handlers;
+    s.space.screen = Screen::Handlers;
     s.space.handlers_event = Some("PreToolUse".into());
 }
 
@@ -1054,7 +1052,7 @@ mod tests {
         app.refresh();
         app.recount();
         app.show_log(None, &mut Tx::default());
-        assert_eq!(app.screen, Screen::Log);
+        assert_eq!(app.space.screen, Screen::Log);
         assert_eq!(app.space.selected.as_ref().map(|s| s.id), Some(id));
         assert!(
             !app.space.following && !app.space.to_end,
@@ -1065,12 +1063,12 @@ mod tests {
     #[test]
     fn show_events_lists_what_the_issue_counts_until_the_sidebar_clears_it() {
         let mut app = app(health_scene);
-        assert_eq!(app.screen, Screen::Health);
+        assert_eq!(app.space.screen, Screen::Health);
         let issue = app.space.health.issues[0].clone();
         app.space.search.text = "git".into();
         let mut tx = Tx::default();
         app.show_issue(issue.key.clone(), &mut tx);
-        assert_eq!(app.screen, Screen::Log);
+        assert_eq!(app.space.screen, Screen::Log);
         assert_eq!(
             app.space.rows.len(),
             issue.events,
@@ -1128,7 +1126,7 @@ mod tests {
     #[test]
     fn handlers_narrow_apart_from_the_log() {
         let mut app = app(handlers_scene);
-        assert_eq!(app.screen, Screen::Handlers);
+        assert_eq!(app.space.screen, Screen::Handlers);
         assert_eq!(app.space.handlers_event.as_deref(), Some("PreToolUse"));
         let mut tx = Tx::default();
         app.show_log(Some("Stop".into()), &mut tx);
@@ -1148,7 +1146,7 @@ mod tests {
             "the list takes no keys while Handlers shows"
         );
         app.show_log(None, &mut tx);
-        assert_eq!(app.screen, Screen::Log);
+        assert_eq!(app.space.screen, Screen::Log);
     }
 
     #[test]
@@ -1265,7 +1263,7 @@ mod tests {
         );
         app.refresh_all();
         app.switch(Harness::Claude, &mut tx);
-        assert_eq!(app.screen, Screen::Log);
+        assert_eq!(app.space.screen, Screen::Log);
         assert_eq!(app.space.selected.as_ref().map(|s| s.id), Some(id));
         assert!(
             !app.space.following && !app.space.to_end,
@@ -1292,6 +1290,28 @@ mod tests {
     }
 
     #[test]
+    fn each_space_comes_back_on_the_screen_it_was_left_on() {
+        let mut app = app(spaces_scene);
+        let mut tx = Tx::default();
+        app.show_health(&mut tx);
+        app.switch(Harness::Codex, &mut tx);
+        assert_eq!(app.space.screen, Screen::Log, "Codex opens on its own Log");
+        app.show_handlers(Some("Stop".into()), &mut tx);
+        app.switch(Harness::Claude, &mut tx);
+        assert_eq!(
+            app.space.screen,
+            Screen::Health,
+            "Claude Code's Health waits"
+        );
+        app.show_log(None, &mut tx);
+        app.switch(Harness::Codex, &mut tx);
+        assert_eq!(app.space.screen, Screen::Handlers, "and Codex's Handlers");
+        assert_eq!(app.space.handlers_event.as_deref(), Some("Stop"));
+        app.switch(Harness::Claude, &mut tx);
+        assert_eq!(app.space.screen, Screen::Log);
+    }
+
+    #[test]
     fn control_1_and_2_switch_spaces_from_any_screen() {
         let mut app = app(health_scene);
         let ctrl = Mods {
@@ -1305,7 +1325,6 @@ mod tests {
             &mut Tx::default()
         ));
         assert_eq!(app.space.harness, Harness::Codex);
-        assert_eq!(app.screen, Screen::Health, "on the same screen");
         assert!(on_key(
             &mut app,
             &key(Key::Command('1')),

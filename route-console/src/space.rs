@@ -1,9 +1,9 @@
 //! Spaces: the window shows one harness at a time, the agent that ran route
 //! for a line (`route/src/harness.rs`), as an Arc-style space. A space holds
-//! everything that harness's screens show: its Log's rows, filter, pick and
-//! place, its Health, its hooks file's handlers and switches, and its hook
-//! events. The log and its index are one for both; each line names its
-//! harness.
+//! the screen it shows and everything its screens show: its Log's rows,
+//! filter, pick and place, its Health, its hooks file's handlers and
+//! switches, and its hook events. The log and its index are one for both;
+//! each line names its harness.
 
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::hooks::{Hooks, Toggles};
 use crate::index::{Index, IssueKey, Row};
 use crate::replay::Replay;
-use crate::{Health, Limits, Selected};
+use crate::{Health, Limits, Screen, Selected};
 
 /// The agent that called route.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -129,6 +129,9 @@ impl Harness {
 /// One harness's space.
 pub struct Space {
     pub harness: Harness,
+    /// The screen this space shows, kept while the other space shows, as
+    /// the sidebar's pick in it is.
+    pub screen: Screen,
     /// The Log's narrowing to one hook event, kept while Health shows.
     pub event: Option<String>,
     /// The Log's narrowing to one handler's trouble, from Health's "Show
@@ -168,6 +171,7 @@ impl Space {
     pub fn new(harness: Harness, hooks: Option<&Value>, toggles: Toggles) -> Space {
         Space {
             harness,
+            screen: Screen::Log,
             event: None,
             issue: None,
             events: harness.hook_events(hooks),

@@ -186,7 +186,7 @@ pub fn leading(s: &App, t: &Tokens, title: String) -> El {
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let t = Tokens::new(cx.system_dark(), s.space.harness);
     let k = t.kit();
-    let (toolbar, main) = match s.screen {
+    let (toolbar, main) = match s.space.screen {
         Screen::Log => (log_toolbar(s, &k, &t), log(s, &k, &t)),
         Screen::Health => (
             crate::health::toolbar(s, &k, &t),
@@ -268,7 +268,7 @@ fn log(s: &App, k: &Kit, t: &Tokens) -> El {
 
 fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
     let sp = &s.space;
-    let on_log = s.screen == Screen::Log;
+    let on_log = s.space.screen == Screen::Log;
     // The space's name, plain and grey, above its screens.
     let name = row().key("space-name").h(24.0).px(8.0).center_y().child(
         text(sp.harness.title())
@@ -287,12 +287,12 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
     let mut health = SidebarRow::new("Health")
         .icon(&PULSE)
         .height(30.0)
-        .selected(s.screen == Screen::Health)
+        .selected(s.space.screen == Screen::Health)
         .on_select(|s: &mut App, tx| s.show_health(tx));
     if n > 0 {
         health = health.trailing(badge_in(t, &n.to_string(), Tint::Orange).label(issues(n)));
     }
-    let on_handlers = s.screen == Screen::Handlers;
+    let on_handlers = s.space.screen == Screen::Handlers;
     let handlers = SidebarRow::new("Handlers")
         .icon(&SWITCHES)
         .height(30.0)
@@ -323,7 +323,7 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
             .height(30.0)
             .selected(picked)
             .on_select(move |s: &mut App, tx| {
-                if s.screen == Screen::Handlers {
+                if s.space.screen == Screen::Handlers {
                     s.show_handlers(Some(event.clone()), tx)
                 } else {
                     s.show_log(Some(event.clone()), tx)

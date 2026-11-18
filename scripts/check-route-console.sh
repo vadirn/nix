@@ -261,6 +261,20 @@ c="$(tree spaces-filter back spaces)"
 check "Stop narrows Claude Code's list ($(rows "$a"))" test "$(rows "$a")" -lt 40
 check "but not Codex's ($(rows "$b"))" test "$(rows "$b")" -eq 7
 check "and Claude Code's is narrowed still when it comes back ($(rows "$c"))" test "$(rows "$c")" -lt 40
+# Each space keeps its own screen: Health left in Claude Code's waits there
+# while Codex opens on its own Log, and Codex's Handlers wait in turn.
+a="$(tree spaces-screens codex spaces)"
+b="$(tree spaces-screens claude spaces)"
+c="$(tree spaces-screens codex-again spaces)"
+picked() {
+  jq -r '[.elements[] | select(.exiting != true and .itemSelected == true and (.path | test("/head-")))
+    | .key] | join(",")' "$1"
+}
+check "Health in Claude Code's leaves Codex's on its Log ($(picked "$a"))" test "$(picked "$a")" = screen-log
+check "which shows" has "$a" "events-viewport"
+check "back in Claude Code's, Health is picked ($(picked "$b"))" test "$(picked "$b")" = screen-health
+check "and shows" lacks "$b" "events-viewport"
+check "back in Codex's, its Handlers are ($(picked "$c"))" test "$(picked "$c")" = screen-handlers
 # A switch slides the sidebar's contents sideways, the one motion it makes.
 # 70 ms in, from Claude Code's Log narrowed to an issue, Codex's come in from
 # the right as Claude Code's leave to the left, while the rest of the window
