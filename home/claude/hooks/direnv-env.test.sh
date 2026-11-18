@@ -294,13 +294,15 @@ check "worktree of a blocked checkout: main untouched" \
 
 # --- export shapes no real .envrc produces ----------------------------------
 
-# A fake direnv hands over a value holding a quote, a variable to unset, a key
-# no shell accepts, and the live PATH unchanged.
+# A fake direnv hands over a value holding a quote, a non-ASCII value, a
+# variable to unset, a key no shell accepts, and the live PATH unchanged. Its
+# stderr carries a byte that is not UTF-8, as an .envrc's output can.
 mkdir -p "$TMPROOT/shapes"
 cat > "$TMPROOT/shapes/direnv" << 'EOF'
 #!/bin/bash
 [ "$1" = export ] || { echo '{}'; exit 0; }
-printf '{"QUOTED":"it'\''s $HOME","GONE":null,"1BAD":"x","PATH":"%s"}\n' "$PATH"
+printf '\xff\n' >&2
+printf '{"QUOTED":"it'\''s $HOME","RU":"привет","GONE":null,"1BAD":"x","PATH":"%s"}\n' "$PATH"
 EOF
 chmod +x "$TMPROOT/shapes/direnv"
 
@@ -309,9 +311,10 @@ check "shapes: exit 0" "$RC" "0"
 got=$(
   GONE=1
   . "$ENVFILE" > /dev/null 2>&1
-  printf '%s|%s' "$QUOTED" "${GONE-unset}"
+  printf '%s|%s|%s' "$QUOTED" "$RU" "${GONE-unset}"
 )
-check "shapes: quoted value arrives verbatim, null unsets" "$got" "it's \$HOME|unset"
+check "shapes: values arrive verbatim, null unsets" "$got" "it's \$HOME|привет|unset"
+check "shapes: stderr stays quiet" "$(cat "$TMPROOT/err")" ""
 check "shapes: invalid key dropped" "$(grep -c 1BAD "$SNAP")" "0"
 check "shapes: unchanged PATH adds no line" "$(grep -c PATH "$SNAP")" "0"
 

@@ -81,10 +81,19 @@ def snapshot_lines(exported, base_path):
 
 
 def run(args, **kwargs):
-    """Run a command with captured output, or return None if it cannot start."""
+    """Run a command with captured output, or return None if it cannot start.
+
+    direnv's stderr carries whatever the .envrc and nix printed, so a byte that
+    is not UTF-8 becomes a replacement character instead of aborting the run.
+    """
     try:
         return subprocess.run(
-            args, stdin=subprocess.DEVNULL, capture_output=True, text=True, **kwargs
+            args,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            **kwargs,
         )
     except OSError:
         return None
@@ -158,7 +167,7 @@ def nix_path():
 def hook_cwd():
     """The working directory the hook event names, or "" if it names none."""
     try:
-        event = json.load(sys.stdin)
+        event = json.load(sys.stdin.buffer)
     except ValueError:
         return ""
     cwd = event.get("cwd") if isinstance(event, dict) else None
@@ -228,7 +237,7 @@ def main():
     # overlapping runs out of each other's files.
     staged = "{}.{}.new".format(snapshot, pid)
     try:
-        with open(staged, "w") as f:
+        with open(staged, "w", encoding="utf-8") as f:
             f.write("\n".join(snapshot_lines(exported, env.get("PATH", ""))) + "\n")
         install(staged, snapshot, claim, pid)
     finally:
@@ -239,12 +248,12 @@ def main():
     # pointing at a deleted snapshot must not print an error before every
     # command, nor return non-zero to whatever sources this file.
     try:
-        with open(env_file) as f:
+        with open(env_file, encoding="utf-8", errors="replace") as f:
             listed = snapshot in f.read()
     except FileNotFoundError:
         listed = False
     if not listed:
-        with open(env_file, "a") as f:
+        with open(env_file, "a", encoding="utf-8") as f:
             f.write("[ -r {0} ] && . {0} || true\n".format(quote(snapshot)))
 
     if done and "is blocked" in done.stderr:
