@@ -137,12 +137,17 @@
           exit 1
         fi
         codesign --force --sign - "$exe"
+        # The icon: route-console/icon/AppIcon.icns, rendered from the SVGs
+        # beside it by scripts/route-console-icon.sh.
+        mkdir -p "$app/Resources"
+        cp ${./route-console/icon/AppIcon.icns} "$app/Resources/AppIcon.icns"
         cat > "$app/Info.plist" <<EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
           <key>CFBundleExecutable</key><string>route-console</string>
+          <key>CFBundleIconFile</key><string>AppIcon</string>
           <key>CFBundleIdentifier</key><string>io.vadirn.route-console</string>
           <key>CFBundleName</key><string>Route Console</string>
           <key>CFBundlePackageType</key><string>APPL</string>

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+<clipPath id="sq"><rect width="1024" height="1024" rx="230"/></clipPath>
+<clipPath id="crest"><path d="M -20 681.2 A 632.9 632.9 0 0 1 1044 681.2 V 1044 H -20 Z"/></clipPath>
+<clipPath id="roadclip"><path clip-rule="evenodd" d="M 284.5 823.5 A 613.7 482.5 0 1 0 1511.9 823.5 A 613.7 482.5 0 1 0 284.5 823.5 Z M 415.7 737.1 A 482.5 379.3 0 1 0 1380.6 737.1 A 482.5 379.3 0 1 0 415.7 737.1 Z"/></clipPath>
+<clipPath id="roadcrest" clip-path="url(#crest)"><path clip-rule="evenodd" d="M 284.5 823.5 A 613.7 482.5 0 1 0 1511.9 823.5 A 613.7 482.5 0 1 0 284.5 823.5 Z M 415.7 737.1 A 482.5 379.3 0 1 0 1380.6 737.1 A 482.5 379.3 0 1 0 415.7 737.1 Z"/></clipPath>
+<clipPath id="ridgeL"><path d="M -632.9 1116.3 A 632.9 632.9 0 0 1 632.9 1116.3 V 1044 H -632.9 Z"/></clipPath>
+<clipPath id="ridgeR"><path d="M 391.1 1173.4 A 632.9 632.9 0 0 1 1656.9 1173.4 V 1044 H 391.1 Z"/></clipPath>
+<clipPath id="ridges"><path d="M -632.9 1116.3 A 632.9 632.9 0 0 1 632.9 1116.3 V 1044 H -632.9 Z M 391.1 1173.4 A 632.9 632.9 0 0 1 1656.9 1173.4 V 1044 H 391.1 Z"/></clipPath>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="560" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#2F6DE1"/><stop offset="1" stop-color="#8FBDFA"/></linearGradient>
+<linearGradient id="hill" x1="0" y1="402.8" x2="0" y2="1024" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7BBA3A"/><stop offset="1" stop-color="#0C7830"/></linearGradient>
+<linearGradient id="road" x1="0" y1="402.8" x2="0" y2="1024" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#E8D5B3"/><stop offset="0.5" stop-color="#DCB688"/></linearGradient>
+<radialGradient id="sun" cx="40" cy="20" r="640" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFF6D1" stop-opacity="0.45"/><stop offset="0.2" stop-color="#8FBDFA" stop-opacity="0.45"/><stop offset="1" stop-color="#8FBDFA" stop-opacity="0"/></radialGradient>
+<linearGradient id="hillsun" gradientUnits="userSpaceOnUse" x1="100.1" y1="543.5" x2="923.9" y2="1504.5"><stop offset="0.0" stop-color="#78A6BD" stop-opacity="0.000"/><stop offset="0.1" stop-color="#78A6BD" stop-opacity="0.123"/><stop offset="0.2" stop-color="#78A6BD" stop-opacity="0.246"/><stop offset="0.3" stop-color="#78A6BD" stop-opacity="0.369"/><stop offset="0.4" stop-color="#78A6BD" stop-opacity="0.492"/><stop offset="0.5" stop-color="#78A6BD" stop-opacity="0.615"/><stop offset="0.6" stop-color="#78A6BD" stop-opacity="0.738"/><stop offset="0.7" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="0.8" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="0.9" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="1.0" stop-color="#78A6BD" stop-opacity="0.800"/></linearGradient>
+<linearGradient id="ridgesunL" gradientUnits="userSpaceOnUse" x1="-411.9" y1="635.8" x2="411.9" y2="1596.8"><stop offset="0.0" stop-color="#78A6BD" stop-opacity="0.000"/><stop offset="0.1" stop-color="#78A6BD" stop-opacity="0.123"/><stop offset="0.2" stop-color="#78A6BD" stop-opacity="0.246"/><stop offset="0.3" stop-color="#78A6BD" stop-opacity="0.369"/><stop offset="0.4" stop-color="#78A6BD" stop-opacity="0.492"/><stop offset="0.5" stop-color="#78A6BD" stop-opacity="0.615"/><stop offset="0.6" stop-color="#78A6BD" stop-opacity="0.738"/><stop offset="0.7" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="0.8" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="0.9" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="1.0" stop-color="#78A6BD" stop-opacity="0.800"/></linearGradient>
+<linearGradient id="ridgesunR" gradientUnits="userSpaceOnUse" x1="612.1" y1="692.9" x2="1435.9" y2="1653.9"><stop offset="0.0" stop-color="#78A6BD" stop-opacity="0.000"/><stop offset="0.1" stop-color="#78A6BD" stop-opacity="0.123"/><stop offset="0.2" stop-color="#78A6BD" stop-opacity="0.246"/><stop offset="0.3" stop-color="#78A6BD" stop-opacity="0.369"/><stop offset="0.4" stop-color="#78A6BD" stop-opacity="0.492"/><stop offset="0.5" stop-color="#78A6BD" stop-opacity="0.615"/><stop offset="0.6" stop-color="#78A6BD" stop-opacity="0.738"/><stop offset="0.7" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="0.8" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="0.9" stop-color="#78A6BD" stop-opacity="0.800"/><stop offset="1.0" stop-color="#78A6BD" stop-opacity="0.800"/></linearGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="1024" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFF6D1" stop-opacity="0.75"/><stop offset="0.55" stop-color="#FFF6D1" stop-opacity="0.3"/><stop offset="1" stop-color="#FFF6D1" stop-opacity="0"/></linearGradient>
+<linearGradient id="nearfade" x1="0" y1="402.8" x2="0" y2="1024" gradientUnits="userSpaceOnUse"><stop offset="0.15" stop-color="#000"/><stop offset="0.85" stop-color="#FFF"/></linearGradient>
+<linearGradient id="farfade" x1="0" y1="402.8" x2="0" y2="1024" gradientUnits="userSpaceOnUse"><stop offset="0.15" stop-color="#FFF"/><stop offset="0.85" stop-color="#000"/></linearGradient>
+<mask id="near" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="url(#nearfade)"/></mask>
+<mask id="far" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="url(#farfade)"/></mask>
+<filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="9"></feGaussianBlur></filter>
+<filter id="grassnear" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feTurbulence type="fractalNoise" baseFrequency="0.2 0.06" numOctaves="2" seed="7" result="n"></feTurbulence>
+<feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 4.5 0 0 0 -2.340" result="dk"></feColorMatrix>
+<feFlood flood-color="#023538" result="dc"></feFlood>
+<feComposite in="dc" in2="dk" operator="in" result="dark"></feComposite>
+<feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -4.5 0 0 0 2.160" result="lk"></feColorMatrix>
+<feFlood flood-color="#FFF6D1" result="lc"></feFlood>
+<feComposite in="lc" in2="lk" operator="in" result="lit"></feComposite>
+<feMerge><feMergeNode in="dark"></feMergeNode><feMergeNode in="lit"></feMergeNode></feMerge>
+</filter>
+<filter id="grassfar" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feTurbulence type="fractalNoise" baseFrequency="0.55 0.18" numOctaves="2" seed="11" result="n"></feTurbulence>
+<feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 4.5 0 0 0 -2.340" result="dk"></feColorMatrix>
+<feFlood flood-color="#023538" result="dc"></feFlood>
+<feComposite in="dc" in2="dk" operator="in" result="dark"></feComposite>
+<feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -4.5 0 0 0 2.160" result="lk"></feColorMatrix>
+<feFlood flood-color="#FFF6D1" result="lc"></feFlood>
+<feComposite in="lc" in2="lk" operator="in" result="lit"></feComposite>
+<feMerge><feMergeNode in="dark"></feMergeNode><feMergeNode in="lit"></feMergeNode></feMerge>
+</filter>
+<filter id="sand" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="3" result="n"></feTurbulence>
+<feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3.5 0 0 0 -1.820" result="dk"></feColorMatrix>
+<feFlood flood-color="#023538" result="dc"></feFlood>
+<feComposite in="dc" in2="dk" operator="in" result="dark"></feComposite>
+<feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -3.5 0 0 0 1.680" result="lk"></feColorMatrix>
+<feFlood flood-color="#FFF6D1" result="lc"></feFlood>
+<feComposite in="lc" in2="lk" operator="in" result="lit"></feComposite>
+<feMerge><feMergeNode in="dark"></feMergeNode><feMergeNode in="lit"></feMergeNode></feMerge>
+</filter>
+<radialGradient id="bankL" gradientUnits="userSpaceOnUse" cx="898.18" cy="823.49" r="613.69" fx="898.18" fy="309.34" gradientTransform="translate(0 823.49) scale(1 0.78615) translate(0 -823.49)"><stop offset="0.9400" stop-color="#78A6BD" stop-opacity="0"/><stop offset="0.9800" stop-color="#78A6BD" stop-opacity="0.33"/><stop offset="1.0000" stop-color="#78A6BD" stop-opacity="0.55"/></radialGradient>
+<radialGradient id="bankR" gradientUnits="userSpaceOnUse" cx="898.18" cy="740.23" r="487.28" fx="898.18" fy="331.99" gradientTransform="translate(0 740.23) scale(1 0.78615) translate(0 -740.23)"><stop offset="0.9604" stop-color="#FFF6D1" stop-opacity="0"/><stop offset="0.9901" stop-color="#FFF6D1" stop-opacity="0.16"/><stop offset="1.0000" stop-color="#FFF6D1" stop-opacity="0"/></radialGradient>
+<radialGradient id="fringeL" gradientUnits="userSpaceOnUse" cx="898.18" cy="823.49" r="613.69" fx="898.18" fy="309.34" gradientTransform="translate(0 823.49) scale(1 0.78615) translate(0 -823.49)"><stop offset="0.9600" stop-color="#FFF" stop-opacity="0"/><stop offset="1.0000" stop-color="#FFF" stop-opacity="1"/></radialGradient>
+<radialGradient id="fringeR" gradientUnits="userSpaceOnUse" cx="898.18" cy="749.76" r="501.75" fx="898.18" fy="329.39" gradientTransform="translate(0 749.76) scale(1 0.78615) translate(0 -749.76)"><stop offset="0.9615" stop-color="#FFF" stop-opacity="1"/><stop offset="1.0000" stop-color="#FFF" stop-opacity="0"/></radialGradient>
+<mask id="fringe" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#000"/><rect width="1024" height="1024" fill="url(#fringeL)"/><rect width="1024" height="1024" fill="url(#fringeR)"/></mask>
+<clipPath id="bankRclip" clip-path="url(#crest)"><ellipse cx="898.2" cy="740.2" rx="487.3" ry="383.1"/></clipPath>
+</defs>
+<g transform="translate(100 100) scale(0.8046875)">
+<g clip-path="url(#sq)">
+<rect width="1024" height="1024" fill="url(#sky)"/>
+<rect width="1024" height="1024" fill="url(#sun)" opacity="1"/>
+<path id="ridge" fill="#79BBAE" d="M -632.9 1116.3 A 632.9 632.9 0 0 1 632.9 1116.3 V 1044 H -632.9 Z M 391.1 1173.4 A 632.9 632.9 0 0 1 1656.9 1173.4 V 1044 H 391.1 Z"/>
+<rect width="1024" height="1024" fill="url(#ridgesunL)" clip-path="url(#ridgeL)" opacity="1" style="mix-blend-mode: multiply"/>
+<rect width="1024" height="1024" fill="url(#ridgesunR)" clip-path="url(#ridgeR)" opacity="1" style="mix-blend-mode: multiply"/>
+<path fill="none" stroke="#78A6BD" stroke-width="60" filter="url(#soft)" clip-path="url(#ridges)" opacity="1" stroke-opacity="0.35" d="M -20 681.2 A 632.9 632.9 0 0 1 1044 681.2 V 1044 H -20 Z" style="mix-blend-mode: multiply"/>
+<path id="hill-near" fill="url(#hill)" d="M -20 681.2 A 632.9 632.9 0 0 1 1044 681.2 V 1044 H -20 Z"/>
+<path id="path" clip-path="url(#crest)" fill="url(#road)" fill-rule="evenodd" d="M 284.5 823.5 A 613.7 482.5 0 1 0 1511.9 823.5 A 613.7 482.5 0 1 0 284.5 823.5 Z M 415.7 737.1 A 482.5 379.3 0 1 0 1380.6 737.1 A 482.5 379.3 0 1 0 415.7 737.1 Z"/>
+<rect width="1024" height="1024" fill="url(#hill)" mask="url(#fringe)" clip-path="url(#roadcrest)" opacity="0.55"/>
+<rect width="1024" height="1024" fill="url(#bankL)" clip-path="url(#roadcrest)" opacity="1" style="mix-blend-mode: multiply"/>
+<rect width="1024" height="1024" fill="url(#bankR)" clip-path="url(#bankRclip)" opacity="1"/>
+<rect width="1024" height="1024" fill="url(#hillsun)" clip-path="url(#crest)" opacity="1" style="mix-blend-mode: multiply"/>
+<g clip-path="url(#crest)" opacity="1"><path fill="none" stroke="url(#rim)" stroke-width="30" filter="url(#soft)" d="M -20 681.2 A 632.9 632.9 0 0 1 1044 681.2 V 1044 H -20 Z"/></g>
+</g>
+</g>
+</svg>
