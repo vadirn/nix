@@ -1,6 +1,6 @@
 //! Port of `no-dangerous.py`: denies dangerous git, curl, wget, docker,
 //! sudo, chmod and obsidian invocations by their words, so text inside a
-//! quoted argument (`git commit -m "block git push"`) never triggers a rule.
+//! quoted argument (`git commit -m "block git push -f"`) never triggers a rule.
 //!
 //! The rule tables and messages are the script's. Differences that come from
 //! the shared parse: a command is any word whose last path component names
@@ -27,7 +27,6 @@ const GIT_RULES: &[(&str, Option<&[&str]>, &str)] = &[
         Some(&["-f", "--force", "--force-with-lease"]),
         "Blocked: force push overwrites remote history.",
     ),
-    ("push", None, "Blocked: git push must be done manually."),
     (
         "reset",
         Some(&["--hard"]),

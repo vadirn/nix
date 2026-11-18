@@ -1,7 +1,7 @@
 ---
 name: git
 description: >
-  Git workflow — create a commit, cut a branch, open or update a pull request. Subcommands: `/git commit` (also "commit", "коммит", "закоммить", "сохрани изменения"), `/git branch` (also "new branch", "create a branch", "start a feature branch", "новая ветка", "создай ветку", "заведи ветку"), `/git pr` (also "create pr", "open pr", "draft pr", "сделай PR", "оформи PR", "пулл реквест"). All three name their work with the same `feat | fix | chore` contract test. Skip for: amend, rebase, and push, which stay user-driven; switching to an existing branch (plain `git checkout`); inspecting an existing PR's state, comments, or CI (plain `gh` — see `references/pr-inspect.md`).
+  Git workflow — create a commit, cut a branch, open or update a pull request. Subcommands: `/git commit` (also "commit", "коммит", "закоммить", "сохрани изменения"), `/git branch` (also "new branch", "create a branch", "start a feature branch", "новая ветка", "создай ветку", "заведи ветку"), `/git pr` (also "create pr", "open pr", "draft pr", "сделай PR", "оформи PR", "пулл реквест"). All three name their work with the same `feat | fix | chore` contract test. Skip for: amend and rebase, which stay user-driven; a plain push, which needs no subcommand; switching to an existing branch (plain `git checkout`); inspecting an existing PR's state, comments, or CI (plain `gh` — see `references/pr-inspect.md`).
 ---
 
 # Git
@@ -32,5 +32,5 @@ A subcommand that needs another reads its reference and follows it inline. One s
 
 - **Run git commands separately.** Chained commands (`&&`, `;`) bypass the permissions allowlist.
 - **Auto-detect the default branch.** Use `gh repo view`. Ask the user only when detection fails.
-- **Pushing is the user's call.** No subcommand pushes except `pr`, which pushes the branch it is about to propose.
+- **Push one named branch, never force.** No subcommand pushes except `pr`, which pushes the branch it is about to propose. A push carries one branch that follows the naming rule. The message hook refuses any other push, such as one to `main` or a force push, so ask the user to run it.
 - **Preserve history.** Amend or rebase only when the user explicitly asks.

@@ -2,7 +2,7 @@
 """Block dangerous Bash commands by parsing tokens, not raw regex.
 
 Uses shlex.split to avoid false-positives on text inside quoted arguments
-(e.g. git commit -m "block git push in hook" should not trigger the push rule).
+(e.g. git commit -m "block git push -f in hook" should not trigger the push rule).
 """
 import json
 import re
@@ -14,7 +14,6 @@ import sys
 # required arg is present. Rules with None match any invocation of that subcommand.
 GIT_RULES = [
     ("push",   ("-f", "--force", "--force-with-lease"), "Blocked: force push overwrites remote history."),
-    ("push",   None,                                    "Blocked: git push must be done manually."),
     ("reset",  ("--hard",),                             "Blocked: git reset --hard discards uncommitted changes."),
     ("branch", ("-D",),                                 "Blocked: git branch -D force-deletes without merge check."),
     ("branch", ("-m", "-M", "--move"),

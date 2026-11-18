@@ -43,12 +43,12 @@
   {
    "name": "git push origin main",
    "command": "git push origin main",
-   "expect": "deny"
+   "expect": "none"
   },
   {
    "name": "git push",
    "command": "git push",
-   "expect": "deny"
+   "expect": "none"
   },
   {
    "name": "git push --force",
@@ -61,8 +61,8 @@
    "expect": "deny"
   },
   {
-   "name": "git commit -m 'block git push in hook'",
-   "command": "git commit -m 'block git push in hook'",
+   "name": "git commit -m 'block git push -f in hook'",
+   "command": "git commit -m 'block git push -f in hook'",
    "expect": "none"
   },
   {
@@ -196,8 +196,8 @@
    "expect": "deny"
   },
   {
-   "name": "git branch && git push",
-   "command": "git branch && git push",
+   "name": "git branch && git push -f",
+   "command": "git branch && git push -f",
    "expect": "deny"
   },
   {
@@ -346,13 +346,13 @@
    "expect": "deny"
   },
   {
-   "name": "git push origin main #'",
-   "command": "git push origin main #'",
+   "name": "git push -f origin main #'",
+   "command": "git push -f origin main #'",
    "expect": "deny"
   },
   {
-   "name": "git commit -m \"$(cat <<'EOF'\nchore: block git push in hook\nEOF\n)\"",
-   "command": "git commit -m \"$(cat <<'EOF'\nchore: block git push in hook\nEOF\n)\"",
+   "name": "git commit -m \"$(cat <<'EOF'\nchore: block git push -f in hook\nEOF\n)\"",
+   "command": "git commit -m \"$(cat <<'EOF'\nchore: block git push -f in hook\nEOF\n)\"",
    "expect": "none"
   },
   {
@@ -646,10 +646,9 @@
    "expect": "none"
   },
   {
-   "name": "push reason",
-   "command": "git push",
-   "expect": "deny",
-   "reason": "git push must be done manually"
+   "name": "plain push passes",
+   "command": "git push -u origin feat/retry-flakes",
+   "expect": "none"
   },
   {
    "name": "force push reason wins",
@@ -659,9 +658,9 @@
   },
   {
    "name": "git rule runs before the -C rule",
-   "command": "git -C . push",
+   "command": "git -C . push -f",
    "expect": "deny",
-   "reason": "git push must be done manually"
+   "reason": "force push"
   },
   {
    "name": "unbalanced quote still denies",
@@ -670,21 +669,21 @@
   },
   {
    "name": "substituted push",
-   "command": "echo $(git push)",
+   "command": "echo $(git push -f)",
    "expect": "deny",
    "script": "none",
    "why": "the script's shlex left `$(git` as one token; the shared parse checks commands inside $(...)"
   },
   {
    "name": "bash -c push",
-   "command": "bash -c \"git push\"",
+   "command": "bash -c \"git push -f\"",
    "expect": "deny",
    "script": "none",
    "why": "the script saw the -c script as one quoted token; the shared parse reads it as commands"
   },
   {
    "name": "absolute git path",
-   "command": "/usr/bin/git push",
+   "command": "/usr/bin/git push -f",
    "expect": "deny",
    "script": "none",
    "why": "the script matched only a bare `git` token"
@@ -698,14 +697,14 @@
   },
   {
    "name": "heredoc message naming push",
-   "command": "git commit -F - <<'EOF'\nfix: git push works again\nEOF",
+   "command": "git commit -F - <<'EOF'\nfix: git push -f works again\nEOF",
    "expect": "none",
    "script": "deny",
    "why": "the script read the heredoc body as words; the shared parse reads it as the commit message on stdin"
   },
   {
    "name": "heredoc fed to a shell",
-   "command": "bash <<'EOF'\ngit push\nEOF",
+   "command": "bash <<'EOF'\ngit push -f\nEOF",
    "expect": "deny"
   },
   {
@@ -826,35 +825,35 @@
   },
   {
    "name": "push inside a parameter default",
-   "command": "echo ${X:-$(git push)}",
+   "command": "echo ${X:-$(git push -f)}",
    "expect": "deny",
    "script": "none",
    "why": "the script's shlex left `${X:-$(git` as one token; the shared parse runs the substitution inside ${...}"
   },
   {
    "name": "push inside arithmetic",
-   "command": "echo $(( $(git push) + 1 ))",
+   "command": "echo $(( $(git push -f) + 1 ))",
    "expect": "deny",
    "script": "none",
    "why": "the script's shlex left `$(git` as one token; the shared parse runs the substitution inside $((...))"
   },
   {
    "name": "push in a substitution that opens with a group",
-   "command": "echo $((git push); echo)",
+   "command": "echo $((git push -f); echo)",
    "expect": "deny",
    "script": "none",
    "why": "the script's shlex left `$((git` as one token; `$((` without a closing `))` is a command substitution"
   },
   {
    "name": "push in an unquoted heredoc's substitution",
-   "command": "cat <<EOF\n`git push`\nEOF",
+   "command": "cat <<EOF\n`git push -f`\nEOF",
    "expect": "deny",
    "script": "none",
    "why": "the script's shlex kept the backticks on its token; an unquoted heredoc runs its substitutions while it is expanded"
   },
   {
    "name": "push text in a quoted heredoc",
-   "command": "cat <<'EOF'\n$(git push)\nEOF",
+   "command": "cat <<'EOF'\n$(git push -f)\nEOF",
    "expect": "none"
   }
  ]
