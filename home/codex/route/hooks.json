@@ -1,0 +1,76 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.codex/hooks/direnv-env.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|exec_command|functions.exec_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "~/.local/bin/trinket-codex-prompt --config ~/.config/trinket/turn-prompt.json",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|exec_command|functions.exec_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json --review ~/.config/trinket/turn-review.json",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

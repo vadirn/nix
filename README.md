@@ -38,14 +38,14 @@ Formatting is agent-driven, not automatic: `home/agents/skills/tools/autoformat/
 
 ## route
 
-The Claude Code hook router. `settings.json` gives each hook event one entry, `route <Event>`. route reads the event JSON on stdin, runs the handlers listed for that event in `home/claude/route/hooks.json` (linked to `~/.config/route/hooks.json`) in parallel, and gives Claude Code one answer. The hooks file uses Claude Code's own `{"hooks": ...}` shape, so pasting its entries back into `settings.json` undoes route.
+The hook router for Claude Code and, with `--harness codex`, for Codex ([Codex](#codex)). `settings.json` gives each hook event one entry, `route <Event>`. route reads the event JSON on stdin, runs the handlers listed for that event in `home/claude/route/hooks.json` (linked to `~/.config/route/hooks.json`) in parallel, and gives Claude Code one answer. The hooks file uses Claude Code's own `{"hooks": ...}` shape, so pasting its entries back into `settings.json` undoes route.
 
 - **Answer:** when only one handler says anything, route passes its stdout, stderr and exit code through unchanged. When several do, route merges them. The strongest permission decision wins (deny > defer > ask > allow), every reason for it is kept, one per line, and added context is joined.
 - **Failure:** if route itself fails (a panic, a bad hooks file, a stuck run), it denies on PreToolUse and lets every other event through. A failing handler stays a non-blocking error, as Claude Code treats it. Whatever ends route early, a signal included, kills the handlers still running. Async handlers are detached and keep going.
 - **Can't start:** route's PreToolUse entry carries `onFailure: "block"`, so a route binary that is missing or cannot start also denies the call. Claude Code 2.1.295 and later honour it; older versions ignore it. Under it, any exit but 0 or 2 blocks, so on PreToolUse route reports a handler's failure in `systemMessage` with exit 0, logged as mode `rewritten`.
 - **Toggles:** `~/.local/state/route/state.json` lists switched-off handlers as `{"disabled": [{"event", "matcher", "command"}]}`.
 - **Builtins:** `route.builtins` in the hooks file maps a handler's command to a guard that route runs in-process, `{"python3 ~/.claude/hooks/no-dangerous.py": "no-dangerous"}`. The entry keeps its script command, so its toggle key stays the same, deleting the map line puts the script back, and a binary without that guard runs the script. The six Bash guards (`route/src/guards/`) read one shared parse of the command (`route/src/shell.rs`), made once per event: quotes removed, `$(...)`, backticks, `bash -c` and `eval` read as commands, and a heredoc body read as data unless a shell reads it. Their cases live in `route/tests/guards/*.json` and run inside `nix build .#route`. Where the shared parse decides differently from a script, the case records the script's answer and why. `scripts/route-guard-fixtures.py` checks those answers against the scripts, and `scripts/route-guard-diff.py ./result/bin/route` compares each guard with its script over every Bash command in the transcripts.
-- **Log:** one JSON line per event in `~/.local/state/route/log/YYYY-MM-DD.jsonl`. Each line is written once under `flock`. Input and handler output are truncated, and day files older than `route.log.retention_days` (default 30) are deleted.
+- **Log:** one JSON line per event in `~/.local/state/route/log/YYYY-MM-DD.jsonl`, naming its harness in `"harness"`. Each line is written once under `flock`. Input and handler output are truncated, and day files older than `route.log.retention_days` (default 30) are deleted.
 
 `scripts/route-dryrun.py ./result/bin/route` replays recent real events through route and through each handler run alone, and reports where they disagree.
 
@@ -59,6 +59,21 @@ Every hook in `settings.json` goes through route, and the switch checks it: a `h
 
 ```bash
 jq --slurpfile r home/claude/route/settings-hooks.json '.hooks = $r[0].hooks' home/claude/settings.json > /tmp/settings.json && mv /tmp/settings.json home/claude/settings.json
+```
+
+### Codex
+
+The same binary serves Codex. Codex's settings, `home/codex/hooks.json` (linked to `~/.codex/hooks.json`), give each event one entry, `route --harness codex <Event>`. route then reads Codex's own handler list, `home/codex/route/hooks.json` (linked to `~/.config/route/codex/hooks.json`), and its own toggles, `~/.local/state/route/codex/state.json`. Both harnesses write the one log; a line without `"harness"` predates the field and is Claude Code's.
+
+- **Can't start:** Codex has no `onFailure`, so its entries leave it out, and a route that cannot start lets the call through.
+- **Ask and defer:** Codex fails open on both. No handler in Codex's list answers either.
+- **Trust:** Codex asks once in `/hooks` to trust each new or changed entry in `~/.codex/hooks.json`. A handler change that leaves the generated entries as they are needs no new trust.
+- **Matchers:** the PreToolUse and PostToolUse matchers name `functions.exec_command`, whose dot makes them a regex, so Codex's entries start route on every tool call, and the log records each tool name Codex sends.
+
+The wiring check covers Codex's settings too. Whenever Codex's handler list changes, regenerate them:
+
+```bash
+~/.local/libexec/route --harness codex --config home/codex/route/hooks.json settings --bin "~/.local/libexec/route" > home/codex/hooks.json
 ```
 
 ## route-console

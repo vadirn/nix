@@ -94,26 +94,40 @@
       # no install step, and no node_modules for the CLI to start.
       home.file.".local/bin/autoformat".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/tools/autoformat/autoformat.ts";
 
-      # The Claude Code hook router, linked off PATH: macOS ships /sbin/route,
-      # and settings.json calls this one by its full path anyway. Its handler
-      # list is linked in home/claude.nix.
+      # The hook router for Claude Code and Codex, linked off PATH: macOS ships
+      # /sbin/route, and both harnesses' settings call this one by its full
+      # path anyway. Its handler lists are linked in home/claude.nix and
+      # home/codex.nix.
       home.file.".local/libexec/route".source = "${route}/bin/route";
-      # Every hook in settings.json goes through route: its hooks block must be
-      # what route generates from hooks.json (README, route). A hook wired
-      # into settings.json directly, or a hooks.json change not applied there,
-      # fails the switch here.
-      home.checks = [
-        (pkgs.runCommand "route-wiring" {nativeBuildInputs = [pkgs.jq];} ''
-          ${route}/bin/route --config ${./claude/route/hooks.json} settings \
-            --bin "~/.local/libexec/route" | jq -S .hooks > want
-          jq -S .hooks ${./claude/settings.json} > have
+      # Every hook a harness's settings wire goes through route: their hooks
+      # block must be what route generates from that harness's handler list,
+      # home/<harness>/route/hooks.json (README, route). A hook wired into the
+      # settings directly, or a handler change not applied there, fails the
+      # switch here.
+      home.checks = map ({
+        harness,
+        settings,
+      }:
+        pkgs.runCommand "route-wiring-${harness}" {nativeBuildInputs = [pkgs.jq];} ''
+          ${route}/bin/route --harness ${harness} \
+            --config ${./. + "/${harness}/route/hooks.json"} \
+            settings --bin "~/.local/libexec/route" | jq -S .hooks > want
+          jq -S .hooks ${./. + "/${harness}/${settings}"} > have
           if ! diff -u want have >&2; then
-            echo "home/claude/settings.json wires hooks that route does not generate from home/claude/route/hooks.json." >&2
-            echo "Put the handler in hooks.json, then regenerate and apply the route entries (README, route)." >&2
+            echo "home/${harness}/${settings} wires hooks that route does not generate from home/${harness}/route/hooks.json." >&2
+            echo "Put the handler in that hooks.json, then regenerate and apply the route entries (README, route)." >&2
             exit 1
           fi
           touch $out
-        '')
+        '') [
+        {
+          harness = "claude";
+          settings = "settings.json";
+        }
+        {
+          harness = "codex";
+          settings = "hooks.json";
+        }
       ];
 
       # Route Console's build, linked so the generation roots it (rebuild.sh
@@ -129,6 +143,7 @@
         ./nvim/nvim.nix
         ./bat.nix
         ./claude.nix
+        ./codex.nix
         ./opencode.nix
         ./ghostty.nix
         ./lazygit.nix
