@@ -32,6 +32,7 @@ use serde_json::{Value, json};
 
 use crate::hooks::{Hooks, Toggles};
 use crate::record::{Handler, Record};
+use crate::space::Harness;
 
 /// Longer than six guards ever take, and short enough not to hang the window
 /// on a route that never answers.
@@ -233,10 +234,11 @@ impl Drop for Scratch {
     }
 }
 
-/// Runs route on `payload` with `hooks_text` as its hooks file and `state` as
-/// its toggles, and returns the line it logged.
+/// Runs route as `harness` on `payload`, with `hooks_text` as its hooks file
+/// and `state` as its toggles, and returns the line it logged.
 pub fn run(
     route: &Path,
+    harness: Harness,
     hooks_text: &str,
     event: &str,
     payload: &Value,
@@ -256,6 +258,7 @@ pub fn run(
         .arg(&state_path)
         .arg("--log-dir")
         .arg(&log_dir)
+        .args(harness.args())
         .arg(event)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -487,6 +490,7 @@ mod tests {
     fn a_missing_route_is_an_error_not_a_hang() {
         let err = run(
             Path::new("/nonexistent/route"),
+            Harness::Claude,
             "{}",
             "PreToolUse",
             &json!({}),
@@ -494,5 +498,51 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("/nonexistent/route"), "{err}");
+    }
+
+    /// A stand-in route that logs the arguments it was given as its input.
+    fn echo_route(dir: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("route");
+        let script = r#"#!/bin/sh
+args="$*"
+while [ $# -gt 0 ]; do
+  [ "$1" = --log-dir ] && dir="$2"
+  shift
+done
+mkdir -p "$dir"
+printf '{"v":1,"ts":"2026-11-17T10:00:00.000+05:00","event":"PreToolUse","input":"%s"}\n' "$args" > "$dir/2026-11-17.jsonl"
+"#;
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        path
+    }
+
+    #[test]
+    fn route_runs_as_the_event_s_harness_and_claude_s_needs_no_flag() {
+        let dir = std::env::temp_dir().join(format!("route-console-echo-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let route = echo_route(&dir);
+        let args = |h| {
+            let line = run(
+                &route,
+                h,
+                "{}",
+                "PreToolUse",
+                &json!({}),
+                &Toggles::default(),
+            )
+            .unwrap();
+            Record::parse(&line).unwrap().input.unwrap()
+        };
+        let codex = args(Harness::Codex);
+        assert!(codex.ends_with("--harness codex PreToolUse"), "{codex}");
+        let claude = args(Harness::Claude);
+        assert!(
+            !claude.contains("--harness") && claude.ends_with(" PreToolUse"),
+            "a route without the flag still replays Claude Code's events: {claude}"
+        );
+        fs::remove_dir_all(&dir).unwrap();
     }
 }

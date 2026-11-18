@@ -6,6 +6,8 @@ use rune::tok::{self, TextStyle};
 use rune::{Color, oklch, oklcha};
 use rune_kit::{Kit, TableStyle};
 
+use crate::space::Harness;
+
 /// The Log list's row height. Its rows are all this tall, so a row's place in
 /// the list is its index times this.
 pub const ROW_H: f32 = 28.0;
@@ -59,9 +61,23 @@ pub mod ty {
     pub const SMALL: TextStyle = TextStyle::new(12.0, 400.0).lh(16.8);
 }
 
+/// A space's accent: the selection's fill and the sidebar's icons, as the
+/// design's spaces artboard draws them. Claude Code's blue, Codex's teal,
+/// which is a lighter, quieter colour than a hue swap of the blue.
+fn accent(harness: Harness, dark: bool) -> (Color, Color) {
+    match (harness, dark) {
+        (Harness::Claude, false) => (oklcha(0.6, 0.17, 256.0, 0.16), oklch(0.48, 0.17, 256.0)),
+        (Harness::Claude, true) => (oklcha(0.66, 0.17, 256.0, 0.26), oklch(0.76, 0.13, 256.0)),
+        (Harness::Codex, false) => (oklcha(0.6, 0.11, 190.0, 0.17), oklch(0.46, 0.09, 190.0)),
+        (Harness::Codex, true) => (oklcha(0.68, 0.11, 190.0, 0.26), oklch(0.8, 0.09, 190.0)),
+    }
+}
+
 impl Tokens {
-    pub fn new(dark: bool) -> Tokens {
+    /// The look of `harness`'s space.
+    pub fn new(dark: bool, harness: Harness) -> Tokens {
         let t = tok::theme(dark);
+        let (sel, accent_text) = accent(harness, dark);
         if dark {
             Tokens {
                 dark,
@@ -73,10 +89,10 @@ impl Tokens {
                 text_secondary: t.text_secondary,
                 zebra: oklcha(1.0, 0.0, 0.0, 0.02),
                 fill: oklcha(1.0, 0.0, 0.0, 0.06),
-                sel: oklcha(0.66, 0.17, 256.0, 0.26),
+                sel,
                 inspector: oklch(0.212, 0.005, 265.0),
                 group: oklch(0.26, 0.005, 265.0),
-                accent_text: oklch(0.76, 0.13, 256.0),
+                accent_text,
                 warn_bg: oklcha(0.74, 0.16, 58.0, 0.12),
                 warn_border: oklcha(0.74, 0.16, 58.0, 0.32),
                 control_off: t.control_off,
@@ -92,10 +108,10 @@ impl Tokens {
                 text_secondary: t.text_secondary,
                 zebra: oklcha(0.2, 0.01, 265.0, 0.03),
                 fill: oklcha(0.2, 0.01, 265.0, 0.06),
-                sel: oklcha(0.6, 0.17, 256.0, 0.16),
+                sel,
                 inspector: oklch(0.985, 0.002, 265.0),
                 group: oklch(0.975, 0.002, 265.0),
-                accent_text: oklch(0.48, 0.17, 256.0),
+                accent_text,
                 warn_bg: oklcha(0.68, 0.16, 58.0, 0.1),
                 warn_border: oklcha(0.68, 0.16, 58.0, 0.3),
                 control_off: t.control_off,

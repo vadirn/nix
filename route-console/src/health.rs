@@ -108,9 +108,9 @@ pub fn screen(s: &App, k: &Kit, t: &Tokens) -> El {
         .px(24.0)
         .pb(24.0)
         .gap(24.0)
-        .child(issues(&s.health.issues, k, t))
-        .child(timing(&s.health.timing, t))
-        .child(limits(&s.limits, t));
+        .child(issues(&s.space.health.issues, k, t))
+        .child(timing(&s.space.health.timing, t))
+        .child(limits(&s.space.limits, t));
     col()
         .key("health")
         .w_full()

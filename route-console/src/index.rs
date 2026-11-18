@@ -19,9 +19,10 @@ use std::path::Path;
 use rusqlite::{Connection, ErrorCode, OptionalExtension, params};
 
 use crate::record::{Record, Trouble, short_name};
+use crate::space::Harness;
 
 /// Bump on any change to the tables or to what `Record` derives into them.
-const SCHEMA: i32 = 5;
+const SCHEMA: i32 = 6;
 
 pub struct Index {
     conn: Connection,
@@ -119,6 +120,7 @@ fn create(conn: &Connection) -> rusqlite::Result<()> {
              day TEXT NOT NULL,
              offset INTEGER NOT NULL,
              ts_ms INTEGER NOT NULL,
+             harness TEXT NOT NULL,
              time TEXT NOT NULL,
              event TEXT NOT NULL,
              tool TEXT,
@@ -329,9 +331,9 @@ impl Index {
         days
     }
 
-    /// One day's events in the order route wrote them, as a tail reads, narrowed to one hook
-    /// event, to lines containing `search` (ASCII case-insensitive), and to the events where one
-    /// handler had one kind of trouble.
+    /// One harness's events of one day in the order route wrote them, as a tail reads, narrowed
+    /// to one hook event, to lines containing `search` (ASCII case-insensitive), and to the
+    /// events where one handler had one kind of trouble.
     ///
     /// route writes a line when its event finishes, so a slow event lands after quicker ones
     /// that started later (3% of one day's lines). File order puts every new line at the end:
@@ -339,6 +341,7 @@ impl Index {
     pub fn rows(
         &self,
         day: &str,
+        harness: Harness,
         event: Option<&str>,
         search: &str,
         issue: Option<&IssueKey>,
@@ -353,46 +356,50 @@ impl Index {
                 .replace('_', "\\_")
         );
         let q = "SELECT id, time, event, tool, input, verdict, stderr, ms FROM events
-                 WHERE day = ?1 AND (?2 IS NULL OR event = ?2) AND haystack LIKE ?3 ESCAPE '\\'
-                   AND (?4 IS NULL OR EXISTS (SELECT 1 FROM troubles t
-                        WHERE t.event_id = events.id AND t.kind = ?4 AND t.command = ?5))
+                 WHERE day = ?1 AND harness = ?2 AND (?3 IS NULL OR event = ?3)
+                   AND haystack LIKE ?4 ESCAPE '\\'
+                   AND (?5 IS NULL OR EXISTS (SELECT 1 FROM troubles t
+                        WHERE t.event_id = events.id AND t.kind = ?5 AND t.command = ?6))
                  ORDER BY offset";
         let Ok(mut stmt) = self.conn.prepare_cached(q) else {
             return Vec::new();
         };
         let kind = issue.map(|i| i.kind.as_str());
         let command = issue.map(|i| i.command.as_str());
-        stmt.query_map(params![day, event, pattern, kind, command], |r| {
-            Ok(Row {
-                id: r.get(0)?,
-                time: r.get(1)?,
-                event: r.get(2)?,
-                tool: r.get(3)?,
-                input: r.get(4)?,
-                verdict: r.get(5)?,
-                stderr: r.get(6)?,
-                ms: r.get::<_, Option<i64>>(7)?.map(|m| m as u64),
-            })
-        })
+        stmt.query_map(
+            params![day, harness.name(), event, pattern, kind, command],
+            |r| {
+                Ok(Row {
+                    id: r.get(0)?,
+                    time: r.get(1)?,
+                    event: r.get(2)?,
+                    tool: r.get(3)?,
+                    input: r.get(4)?,
+                    verdict: r.get(5)?,
+                    stderr: r.get(6)?,
+                    ms: r.get::<_, Option<i64>>(7)?.map(|m| m as u64),
+                })
+            },
+        )
         .and_then(Iterator::collect)
         .unwrap_or_default()
     }
 
-    /// One day's issues: failures first, then the most frequent.
-    pub fn issues(&self, day: &str) -> Vec<Issue> {
+    /// One harness's issues of one day: failures first, then the most frequent.
+    pub fn issues(&self, day: &str, harness: Harness) -> Vec<Issue> {
         // With one max() in the query, SQLite takes the bare `detail` from the
         // row holding that max: the latest occurrence's.
         let q = "SELECT t.kind, t.command, e.event, COUNT(DISTINCT e.id),
                         COUNT(DISTINCT CASE WHEN t.let_through THEN e.id END),
                         t.detail, MAX(e.offset)
                  FROM troubles t JOIN events e ON e.id = t.event_id
-                 WHERE e.day = ?1
+                 WHERE e.day = ?1 AND e.harness = ?2
                  GROUP BY t.kind, t.command, e.event
                  ORDER BY t.kind = 'stderr', COUNT(DISTINCT e.id) DESC, t.command";
         let Ok(mut stmt) = self.conn.prepare_cached(q) else {
             return Vec::new();
         };
-        stmt.query_map([day], |r| {
+        stmt.query_map([day, harness.name()], |r| {
             let kind: String = r.get(0)?;
             let command: String = r.get(1)?;
             Ok(Issue {
@@ -411,17 +418,19 @@ impl Index {
         .unwrap_or_default()
     }
 
-    /// One day's Bash timings.
-    pub fn timing(&self, day: &str) -> Timing {
+    /// One harness's Bash timings of one day.
+    pub fn timing(&self, day: &str, harness: Harness) -> Timing {
         let q = "SELECT e.id, e.ms, h.name, h.ms
                  FROM events e JOIN timings h ON h.event_id = e.id
-                 WHERE e.day = ?1
+                 WHERE e.day = ?1 AND e.harness = ?2
                  ORDER BY e.id";
         let Ok(mut stmt) = self.conn.prepare_cached(q) else {
             return Timing::default();
         };
         let runs: Vec<(i64, i64, String, i64)> = stmt
-            .query_map([day], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .query_map([day, harness.name()], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })
             .and_then(Iterator::collect)
             .unwrap_or_default();
         let mut totals = Vec::new();
@@ -520,12 +529,13 @@ fn insert(tx: &rusqlite::Transaction, day: &str, offset: u64, line: &str) -> Res
         return Ok(0);
     };
     let n = tx.execute(
-        "INSERT OR IGNORE INTO events (day, offset, ts_ms, time, event, tool, input, verdict, stderr, ms, haystack, line)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        "INSERT OR IGNORE INTO events (day, offset, ts_ms, harness, time, event, tool, input, verdict, stderr, ms, haystack, line)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             day,
             offset as i64,
             r.ts_ms,
+            r.harness.name(),
             r.time(),
             r.event,
             r.tool,
@@ -623,7 +633,7 @@ mod tests {
         assert_eq!(ix.sync(&dir).unwrap(), 0, "a half line waits");
         append(&file, &format!("{}\n", &b[10..]));
         assert_eq!(ix.sync(&dir).unwrap(), 1);
-        let rows = ix.rows("2026-11-16", None, "", None);
+        let rows = ix.rows("2026-11-16", Harness::Claude, None, "", None);
         assert_eq!(
             rows.iter().map(|r| r.event.as_str()).collect::<Vec<_>>(),
             ["PreToolUse", "PostToolUse"]
@@ -642,18 +652,62 @@ mod tests {
         append(&dir.join("2026-11-16.jsonl"), &(lines.join("\n") + "\n"));
         let mut ix = Index::memory();
         ix.sync(&dir).unwrap();
-        assert_eq!(ix.rows("2026-11-16", Some("PreToolUse"), "", None).len(), 2);
-        assert_eq!(ix.rows("2026-11-16", None, "GIT", None).len(), 2);
         assert_eq!(
-            ix.rows("2026-11-16", Some("PreToolUse"), "git", None).len(),
+            ix.rows("2026-11-16", Harness::Claude, Some("PreToolUse"), "", None)
+                .len(),
+            2
+        );
+        assert_eq!(
+            ix.rows("2026-11-16", Harness::Claude, None, "GIT", None)
+                .len(),
+            2
+        );
+        assert_eq!(
+            ix.rows(
+                "2026-11-16",
+                Harness::Claude,
+                Some("PreToolUse"),
+                "git",
+                None
+            )
+            .len(),
             1
         );
         assert_eq!(
-            ix.rows("2026-11-16", None, "100%", None).len(),
+            ix.rows("2026-11-16", Harness::Claude, None, "100%", None)
+                .len(),
             0,
             "% is literal"
         );
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn each_harness_lists_counts_and_times_only_its_own_events() {
+        let codex = |l: String| l.replacen(r#"{"v":1,"#, r#"{"v":1,"harness":"codex","#, 1);
+        let mut ix = Index::memory();
+        let day = crate::sample::DAY;
+        let claude = crate::sample::trouble_lines();
+        ix.insert_lines(day, &claude).unwrap();
+        ix.insert_lines(
+            day,
+            &[codex(line(
+                "2026-11-16T15:00:00.000+05:00",
+                "PreToolUse",
+                "cargo test",
+            ))],
+        )
+        .unwrap();
+        let rows = |h| ix.rows(day, h, None, "", None);
+        assert_eq!(rows(Harness::Claude).len(), claude.len());
+        let codex_rows = rows(Harness::Codex);
+        assert_eq!(codex_rows.len(), 1);
+        assert_eq!(codex_rows[0].input.as_deref(), Some("cargo test"));
+        assert_eq!(ix.rows(day, Harness::Codex, None, "git", None).len(), 0);
+        assert_eq!(ix.issues(day, Harness::Claude).len(), 4);
+        assert!(ix.issues(day, Harness::Codex).is_empty());
+        assert_eq!(ix.timing(day, Harness::Claude).events, 6);
+        assert_eq!(ix.timing(day, Harness::Codex), Timing::default());
     }
 
     #[test]
@@ -666,7 +720,7 @@ mod tests {
         ix.insert_lines(day, &[quick]).unwrap();
         ix.insert_lines(day, &[slow]).unwrap();
         let inputs: Vec<String> = ix
-            .rows(day, None, "", None)
+            .rows(day, Harness::Claude, None, "", None)
             .into_iter()
             .filter_map(|r| r.input)
             .collect();
@@ -700,7 +754,7 @@ mod tests {
         .unwrap();
         ix.sync(&dir).unwrap();
         assert_eq!(ix.days(), ["2026-11-16"]);
-        let rows = ix.rows("2026-11-16", None, "", None);
+        let rows = ix.rows("2026-11-16", Harness::Claude, None, "", None);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].input.as_deref(), Some("c"));
         fs::remove_dir_all(&dir).unwrap();
@@ -748,7 +802,7 @@ mod tests {
         let day = crate::sample::DAY;
         ix.insert_lines(day, &crate::sample::trouble_lines())
             .unwrap();
-        let issues = ix.issues(day);
+        let issues = ix.issues(day, Harness::Claude);
         let named: Vec<(&str, &str, &str, usize, usize)> = issues
             .iter()
             .map(|i| {
@@ -772,7 +826,9 @@ mod tests {
             ]
         );
         for i in &issues {
-            let listed = ix.rows(day, Some(&i.key.event), "", Some(&i.key)).len();
+            let listed = ix
+                .rows(day, Harness::Claude, Some(&i.key.event), "", Some(&i.key))
+                .len();
             assert_eq!(listed, i.events, "{} lists what it counts", i.name);
         }
         assert!(issues[0].detail.contains("bad substitution"));
@@ -809,7 +865,7 @@ mod tests {
             ],
         )
         .unwrap();
-        let issues = ix.issues(day);
+        let issues = ix.issues(day, Harness::Claude);
         assert_eq!(issues.len(), 1, "exit 2's stderr is its reason: {issues:?}");
         assert_eq!((issues[0].events, issues[0].let_through), (2, 1));
     }
@@ -836,13 +892,13 @@ mod tests {
             ],
         )
         .unwrap();
-        let t = ix.timing(day);
+        let t = ix.timing(day, Harness::Claude);
         assert_eq!((t.events, t.total, t.overhead), (3, 50, 15));
         assert_eq!(
             t.handlers,
             [("a.sh".to_string(), 35), ("b.py".to_string(), 15)]
         );
-        assert_eq!(ix.timing("2026-11-17"), Timing::default());
+        assert_eq!(ix.timing("2026-11-17", Harness::Claude), Timing::default());
     }
 
     #[test]
@@ -852,8 +908,8 @@ mod tests {
         append(&file, &(crate::sample::trouble_lines().join("\n") + "\n"));
         let mut ix = Index::memory();
         ix.sync(&dir).unwrap();
-        assert_eq!(ix.issues(crate::sample::DAY).len(), 4);
-        assert_eq!(ix.timing(crate::sample::DAY).events, 6);
+        assert_eq!(ix.issues(crate::sample::DAY, Harness::Claude).len(), 4);
+        assert_eq!(ix.timing(crate::sample::DAY, Harness::Claude).events, 6);
         fs::remove_file(&file).unwrap();
         ix.sync(&dir).unwrap();
         let left: i64 = ix

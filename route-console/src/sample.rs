@@ -1,8 +1,10 @@
 //! The design canvas's eight sample events, written as route would log them,
 //! so the `canvas` scene renders the same rows as the Log artboard and the two
-//! can be compared side by side.
+//! can be compared side by side; and the Codex events of its spaces artboard.
 
 use serde_json::{Value, json};
+
+use crate::space::Harness;
 
 pub const DAY: &str = "2026-11-16";
 
@@ -39,6 +41,7 @@ fn bash(changed: &[(&str, Value)]) -> Vec<Value> {
 }
 
 fn line(
+    harness: Harness,
     time: &str,
     event: &str,
     tool: Option<&str>,
@@ -47,7 +50,7 @@ fn line(
     ms: u64,
     handlers: Vec<Value>,
 ) -> String {
-    let mut v = json!({"v": 1, "ts": format!("{DAY}T{time}.000+05:00"), "event": event,
+    let mut v = json!({"v": 1, "harness": harness.name(), "ts": format!("{DAY}T{time}.000+05:00"), "event": event,
         "session_id": "f6fa9d22-sample", "cwd": "/Users/vadim/nix", "mode": "passthrough",
         "decision": decision, "exit": 0, "ms": ms, "handlers": handlers});
     if let Some(t) = tool {
@@ -101,6 +104,7 @@ pub fn lines() -> Vec<String> {
     let block = json!({"decision": "block", "reason": "Which alternative did you reject, and does the record name the trade-off you accepted?"});
     vec![
         line(
+            Harness::Claude,
             "14:03:10",
             "PreToolUse",
             Some("Bash"),
@@ -113,6 +117,7 @@ pub fn lines() -> Vec<String> {
             )]),
         ),
         line(
+            Harness::Claude,
             "14:04:40",
             "Stop",
             None,
@@ -125,6 +130,7 @@ pub fn lines() -> Vec<String> {
             ],
         ),
         line(
+            Harness::Claude,
             "14:05:02",
             "UserPromptSubmit",
             None,
@@ -137,6 +143,7 @@ pub fn lines() -> Vec<String> {
             ],
         ),
         line(
+            Harness::Claude,
             "14:06:30",
             "PostToolUse",
             Some("Edit"),
@@ -149,6 +156,7 @@ pub fn lines() -> Vec<String> {
             ],
         ),
         line(
+            Harness::Claude,
             "14:07:55",
             "PreToolUse",
             Some("Bash"),
@@ -168,6 +176,7 @@ pub fn lines() -> Vec<String> {
             ]),
         ),
         line(
+            Harness::Claude,
             "14:08:12",
             "PreToolUse",
             Some("mcp__visualize__show_widget"),
@@ -181,6 +190,7 @@ pub fn lines() -> Vec<String> {
             ],
         ),
         line(
+            Harness::Claude,
             "14:09:41",
             "PreToolUse",
             Some("Bash"),
@@ -193,6 +203,7 @@ pub fn lines() -> Vec<String> {
             )]),
         ),
         line(
+            Harness::Claude,
             "14:10:03",
             "PreToolUse",
             Some("Bash"),
@@ -239,6 +250,7 @@ pub fn trouble_lines() -> Vec<String> {
     let mut out = lines();
     out.extend([
         line(
+            Harness::Claude,
             "14:11:20",
             "PreToolUse",
             Some("Bash"),
@@ -248,6 +260,7 @@ pub fn trouble_lines() -> Vec<String> {
             bash(&[secrets_failed()]),
         ),
         line(
+            Harness::Claude,
             "14:12:02",
             "Stop",
             None,
@@ -260,6 +273,7 @@ pub fn trouble_lines() -> Vec<String> {
             ],
         ),
         line(
+            Harness::Claude,
             "14:12:40",
             "UserPromptSubmit",
             None,
@@ -272,6 +286,7 @@ pub fn trouble_lines() -> Vec<String> {
             ],
         ),
         line(
+            Harness::Claude,
             "14:13:05",
             "Notification",
             None,
@@ -283,6 +298,7 @@ pub fn trouble_lines() -> Vec<String> {
             ],
         ),
         line(
+            Harness::Claude,
             "14:13:30",
             "PreToolUse",
             Some("Bash"),
@@ -292,6 +308,7 @@ pub fn trouble_lines() -> Vec<String> {
             bash(&[secrets_failed()]),
         ),
         line(
+            Harness::Claude,
             "14:14:10",
             "Stop",
             None,
@@ -305,6 +322,140 @@ pub fn trouble_lines() -> Vec<String> {
         ),
     ]);
     out
+}
+
+const CODEX_STOP: &str =
+    "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json";
+const CODEX_SHELL: &str = "Bash|exec_command|functions.exec_command";
+
+/// Codex's Bash handlers, as `CODEX_HOOKS` lists them, with `changed`
+/// standing in for the named ones.
+fn codex_bash(changed: &[(&str, Value)]) -> Vec<Value> {
+    let guards = [
+        ("Bash", "python3 ~/.codex/hooks/direnv-env.py", 41),
+        ("Bash", "bash ~/.claude/hooks/no-secrets.sh", 6),
+        ("Bash", "python3 ~/.claude/hooks/no-dangerous-rm.py", 24),
+        ("Bash", "python3 ~/.claude/hooks/no-dangerous.py", 33),
+        ("Bash", "bash ~/.claude/hooks/rg-glob-guard.sh", 7),
+        (CODEX_SHELL, CODEX_STOP, 12),
+    ];
+    guards
+        .iter()
+        .map(|(matcher, cmd, ms)| {
+            changed
+                .iter()
+                .find(|(name, _)| cmd.contains(name))
+                .map_or_else(
+                    || json!({"matcher": matcher, "command": cmd, "exit": 0, "ms": ms, "outcome": "none"}),
+                    |(_, h)| h.clone(),
+                )
+        })
+        .collect()
+}
+
+/// The `spaces` scene's Codex events, after the design's spaces artboard: a
+/// turn interrupted and one stopped, Bash calls run, denied and let through
+/// with a guard writing to stderr, and a prompt given context. Codex's ask
+/// (the artboard's `rm -rf`) is route's to map later; here a guard denies.
+pub fn codex_lines() -> Vec<String> {
+    let codex = Harness::Codex;
+    let context = json!({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "Returned context for the model."}});
+    let blocked = "direnv: error /Users/vadim/nix/.envrc is blocked. Run `direnv allow` to approve its content\n";
+    vec![
+        line(
+            codex,
+            "14:07:02",
+            "Interrupt",
+            None,
+            None,
+            None,
+            10,
+            vec![
+                json!({"matcher": "", "command": CODEX_STOP, "exit": 0, "ms": 9, "outcome": "none"}),
+            ],
+        ),
+        line(
+            codex,
+            "14:07:44",
+            "Stop",
+            None,
+            None,
+            None,
+            1842,
+            vec![
+                json!({"matcher": "", "command": format!("{CODEX_STOP} --review ~/.config/trinket/turn-review.json"),
+                "exit": 0, "ms": 1840, "outcome": "none"}),
+            ],
+        ),
+        line(
+            codex,
+            "14:08:21",
+            "PreToolUse",
+            Some("Bash"),
+            Some("direnv exec . cargo build"),
+            None,
+            43,
+            codex_bash(&[(
+                "direnv-env.py",
+                json!({"matcher": "Bash", "command": "python3 ~/.codex/hooks/direnv-env.py", "exit": 0, "ms": 41,
+                    "outcome": "none", "stderr": blocked}),
+            )]),
+        ),
+        line(
+            codex,
+            "14:08:57",
+            "UserPromptSubmit",
+            None,
+            Some("Add Codex to route’s log and handlers."),
+            None,
+            962,
+            vec![
+                json!({"matcher": "", "command": CODEX_STOP, "exit": 0, "ms": 14, "outcome": "none"}),
+                json!({"matcher": "", "command": "~/.local/bin/trinket-codex-prompt --config ~/.config/trinket/turn-prompt.json",
+                    "exit": 0, "ms": 960, "outcome": "context", "stdout": context.to_string()}),
+            ],
+        ),
+        line(
+            codex,
+            "14:10:48",
+            "PreToolUse",
+            Some("Bash"),
+            Some("rm -rf route/target"),
+            Some("deny"),
+            26,
+            codex_bash(&[(
+                "no-dangerous-rm.py",
+                decided(
+                    "python3 ~/.claude/hooks/no-dangerous-rm.py",
+                    24,
+                    "deny",
+                    "rm -rf deletes for good: move it to the trash instead.",
+                ),
+            )]),
+        ),
+        line(
+            codex,
+            "14:11:20",
+            "PreToolUse",
+            Some("Bash"),
+            Some("cargo test -p route --test route"),
+            None,
+            44,
+            codex_bash(&[]),
+        ),
+        line(
+            codex,
+            "14:11:58",
+            "PostToolUse",
+            Some("Bash"),
+            Some("cargo test -p route --test route"),
+            None,
+            13,
+            vec![
+                json!({"matcher": CODEX_SHELL, "command": CODEX_STOP, "exit": 0, "ms": 12, "outcome": "none"}),
+            ],
+        ),
+    ]
 }
 
 /// The hooks file the Handlers artboard lists, for the sample scenes: they
@@ -366,6 +517,54 @@ pub const HOOKS: &str = r#"{
   }
 }"#;
 
-pub fn hooks() -> Value {
-    serde_json::from_str(HOOKS).expect("sample hooks parse")
+/// Codex's hooks file for the sample scenes: route's 7 Codex hooks, and the
+/// four Bash guards route runs in-process.
+pub const CODEX_HOOKS: &str = r#"{
+  "route": {
+    "builtins": {
+      "bash ~/.claude/hooks/no-secrets.sh": "no-secrets",
+      "python3 ~/.claude/hooks/no-dangerous-rm.py": "no-dangerous-rm",
+      "python3 ~/.claude/hooks/no-dangerous.py": "no-dangerous",
+      "bash ~/.claude/hooks/rg-glob-guard.sh": "rg-glob-guard"
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [
+        {"type": "command", "command": "python3 ~/.codex/hooks/direnv-env.py", "timeout": 5},
+        {"type": "command", "command": "bash ~/.claude/hooks/no-secrets.sh"},
+        {"type": "command", "command": "python3 ~/.claude/hooks/no-dangerous-rm.py"},
+        {"type": "command", "command": "python3 ~/.claude/hooks/no-dangerous.py"},
+        {"type": "command", "command": "bash ~/.claude/hooks/rg-glob-guard.sh"}
+      ]},
+      {"matcher": "Bash|exec_command|functions.exec_command", "hooks": [
+        {"type": "command", "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json", "timeout": 30}
+      ]}
+    ],
+    "UserPromptSubmit": [{"hooks": [
+      {"type": "command", "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json", "timeout": 30},
+      {"type": "command", "command": "~/.local/bin/trinket-codex-prompt --config ~/.config/trinket/turn-prompt.json", "timeout": 30}
+    ]}],
+    "PostToolUse": [{"matcher": "Bash|exec_command|functions.exec_command", "hooks": [
+      {"type": "command", "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json", "timeout": 30}
+    ]}],
+    "Stop": [{"hooks": [
+      {"type": "command", "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json --review ~/.config/trinket/turn-review.json", "timeout": 60}
+    ]}],
+    "Interrupt": [{"hooks": [
+      {"type": "command", "command": "~/.local/bin/trinket-codex-stop --global ~/.config/trinket/turn-check.json", "timeout": 3}
+    ]}]
+  }
+}"#;
+
+/// One harness's sample hooks file, as text.
+pub fn hooks_text(harness: Harness) -> &'static str {
+    match harness {
+        Harness::Claude => HOOKS,
+        Harness::Codex => CODEX_HOOKS,
+    }
+}
+
+pub fn hooks(harness: Harness) -> Value {
+    serde_json::from_str(hooks_text(harness)).expect("sample hooks parse")
 }
