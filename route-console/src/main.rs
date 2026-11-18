@@ -1,9 +1,11 @@
 //! route-console: a window onto route's event log and its handlers.
 //!
-//! It reads the day files route writes and the hooks file route reads, and
-//! writes its own index cache and route's `state.json`, the file that switches
-//! handlers off. It never writes `hooks.json`, which is edited by hand. Three
-//! screens: the Log, whose inspector can replay a Bash call through route;
+//! It reads the day files route writes and the hooks files route reads, and
+//! writes its own index cache and route's `state.json` files, which switch
+//! handlers off. It never writes a hooks file, which is edited by hand. Each
+//! harness route serves, Claude Code and Codex, is a space of its own
+//! (`space.rs`), switched at the sidebar's foot. Three screens show the
+//! space's: the Log, whose inspector can replay a Bash call through route;
 //! Health, which sums up today's handler failures, timings and log limits;
 //! and Handlers, which lists the hooks file's handlers with a switch each.
 //!
@@ -20,21 +22,22 @@ mod index;
 mod record;
 mod replay;
 mod sample;
+mod space;
 mod theme;
 mod view;
 
-use std::ops::Range;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use rune::{AppSpec, Chrome, Key, KeyEvent, Live, TextEdit, Tx};
+use rune::{AppSpec, Chrome, Key, KeyEvent, Spring, TextEdit, Tx};
 use rune_kit::shell::{self, PaneState};
 use serde_json::Value;
 
 use hooks::{HandlerId, Hooks, Toggles};
-use index::{Index, Issue, IssueKey, Row, Timing};
+use index::{Index, Issue, IssueKey, Timing};
 use record::Record;
 use replay::Replay;
+use space::{Harness, Space};
 
 /// How often the window looks for new lines.
 const FOLLOW: Duration = Duration::from_millis(500);
@@ -47,7 +50,9 @@ pub const ROWS: &str = "events-rows";
 
 /// Where route keeps its files, found as route finds them
 /// (`route/src/main.rs`), where this app keeps its index, and the route
-/// binary replay runs: the one Claude Code runs.
+/// binary replay runs: the one the harnesses run. `config` and `state` are
+/// Claude Code's; Codex's sit beside them (`Harness::file`), so a check that
+/// points `--state` at a scratch directory keeps both there.
 pub struct Paths {
     pub config: PathBuf,
     pub state: PathBuf,
@@ -95,6 +100,16 @@ impl Paths {
             }
         }
         p
+    }
+
+    /// The hooks file route reads for one harness.
+    pub fn hooks_file(&self, h: Harness) -> PathBuf {
+        h.file(&self.config)
+    }
+
+    /// The toggles file route reads for one harness.
+    pub fn state_file(&self, h: Harness) -> PathBuf {
+        h.file(&self.state)
     }
 }
 
@@ -160,89 +175,51 @@ pub struct App {
     pub live: bool,
     pub day: String,
     pub screen: Screen,
-    /// The Log's narrowing to one hook event, kept while Health shows.
-    pub event: Option<String>,
-    /// The Log's narrowing to one handler's trouble, from Health's "Show
-    /// events". Cleared by the sidebar.
-    pub issue: Option<IssueKey>,
-    pub events: Vec<String>,
-    pub search: TextEdit,
-    /// The list keeps its end in view, so new rows scroll in at the bottom.
-    pub following: bool,
-    /// Rows below the viewport, as the list last reported what it shows: the
-    /// "↓ Latest" pill shows while there are any.
-    pub below: usize,
-    /// The rows the viewport showed last, by index into `rows`.
-    pub visible: Range<usize>,
-    /// Take the list to its end on the next frame, and follow from there.
-    pub to_end: bool,
-    pub rows: Vec<Row>,
-    /// The row the reader picked. Only the reader changes it: new rows, a
-    /// filter or a search never do.
-    pub selected: Option<Selected>,
-    /// Where the Log's viewport is scrolled, as Rune last drew it.
-    pub scroll_y: Live<f32>,
-    pub health: Health,
-    pub limits: Limits,
-    /// The hooks file's handlers, as the Handlers screen lists them.
-    pub hooks: Hooks,
-    /// `state.json`, as last read or written.
-    pub toggles: Toggles,
-    /// The Handlers screen's narrowing to one hook event. Apart from the
-    /// Log's, so a trip to Handlers leaves the Log's rows as they were.
-    pub handlers_event: Option<String>,
-    /// The last replay, for the event picked when it ran.
-    pub replay: Option<Replay>,
+    /// The space shown.
+    pub space: Space,
+    /// The other harness's space, as it was left.
+    pub parked: Space,
     pub sidebar: PaneState,
+    /// The commit a switch makes: the window lands every change at once but
+    /// the sidebar contents' slide (`view.rs`, `view`). The next poll clears
+    /// it, so the sidebar's own slide open and shut keeps its spring.
+    ///
+    /// Stopgap: Rune fades in each descendant of a new element, even under a
+    /// `Transition::none()` parent (rune `runtime/commit/apply.rs`, where
+    /// only `instant_changes` mounts them at once), so the screen a switch
+    /// mounts would fade in. Remove once Rune can mount a subtree whole.
+    pub switching: bool,
     pub last_look: f64,
     pub error: Option<String>,
     feed: Option<Feed>,
 }
 
-/// Hook events in the order the sidebar lists them: Claude Code's busiest
-/// first, as the design orders them. Events the hooks file adds that are not
-/// here follow, in the file's order.
-const EVENT_ORDER: [&str; 11] = [
-    "PreToolUse",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "UserPromptSubmit",
-    "Stop",
-    "StopFailure",
-    "SessionStart",
-    "CwdChanged",
-    "SessionEnd",
-    "Notification",
-    "TaskCompleted",
-];
-
-/// route's hooks file (read, never written).
+/// A hooks file route reads (read, never written).
 fn read_hooks(config: &std::path::Path) -> Option<Value> {
     serde_json::from_str(&std::fs::read_to_string(config).ok()?).ok()
 }
 
-/// The hook events route handles, from its hooks file.
-fn hook_events(hooks: Option<&Value>) -> Vec<String> {
-    let keys: Vec<String> = hooks
-        .and_then(|v| {
-            v.get("hooks")?
-                .as_object()
-                .map(|m| m.keys().cloned().collect())
-        })
-        .unwrap_or_else(|| EVENT_ORDER.iter().map(|s| s.to_string()).collect());
-    let rank = |e: &String| {
-        EVENT_ORDER
-            .iter()
-            .position(|x| x == e)
-            .unwrap_or(EVENT_ORDER.len())
-    };
-    let mut sorted = keys;
-    sorted.sort_by_key(rank);
-    sorted
-}
-
 fn today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+/// ⌃1 and ⌃2: the spaces, in the order the sidebar's foot shows them. macOS
+/// sends ⌃1 as the text "1" with Control held; elsewhere Control is the
+/// command key.
+fn space_key(ev: &KeyEvent) -> Option<Harness> {
+    let m = ev.mods;
+    if !m.ctrl || m.shift || m.alt || m.logo {
+        return None;
+    }
+    let digit = match &ev.key {
+        Key::Text(t) => t.chars().next().filter(|_| t.chars().count() == 1)?,
+        Key::Command(c) => *c,
+        _ => return None,
+    };
+    Harness::ALL
+        .into_iter()
+        .zip(['1', '2'])
+        .find_map(|(h, d)| (d == digit).then_some(h))
 }
 
 impl App {
@@ -254,44 +231,48 @@ impl App {
         };
         let mut app = App::new(paths, index, error);
         app.look();
-        app.refresh();
+        app.refresh_all();
         app.recount();
         app
     }
 
     fn new(paths: Paths, index: Index, error: Option<String>) -> App {
-        let hooks = read_hooks(&paths.config);
-        let (toggles, toggles_error) = match Toggles::load(&paths.state) {
-            Ok(t) => (t, None),
-            Err(e) => (Toggles::default(), Some(e)),
+        let mut error = error;
+        let mut space = |h: Harness| {
+            let toggles = Toggles::load(&paths.state_file(h)).unwrap_or_else(|e| {
+                error.get_or_insert(e);
+                Toggles::default()
+            });
+            Space::new(h, read_hooks(&paths.hooks_file(h)).as_ref(), toggles)
         };
+        let (claude, codex) = (space(Harness::Claude), space(Harness::Codex));
         App {
-            events: hook_events(hooks.as_ref()),
-            limits: Limits::of(hooks.as_ref()),
-            hooks: Hooks::of(hooks.as_ref()),
-            toggles,
-            handlers_event: None,
-            replay: None,
+            space: claude,
+            parked: codex,
             paths,
             index,
             live: true,
             day: today(),
             screen: Screen::Log,
-            event: None,
-            issue: None,
-            search: TextEdit::new(""),
-            following: true,
-            below: 0,
-            visible: 0..0,
-            to_end: false,
-            rows: Vec::new(),
-            selected: None,
-            scroll_y: Live::new(0.0),
-            health: Health::default(),
             sidebar: PaneState::new(220.0).range(180.0, 360.0),
+            switching: false,
             last_look: f64::NEG_INFINITY,
-            error: error.or(toggles_error),
+            error,
             feed: None,
+        }
+    }
+
+    /// Both spaces, the one shown first.
+    fn spaces_mut(&mut self) -> [&mut Space; 2] {
+        [&mut self.space, &mut self.parked]
+    }
+
+    /// A harness's space, shown or parked.
+    pub fn space_of(&self, h: Harness) -> &Space {
+        if self.space.harness == h {
+            &self.space
+        } else {
+            &self.parked
         }
     }
 
@@ -318,72 +299,70 @@ impl App {
         }
     }
 
-    /// Whether a filter or search narrows the list.
-    pub fn narrowed(&self) -> bool {
-        self.event.is_some() || self.issue.is_some() || !self.search.text.trim().is_empty()
-    }
-
-    /// Re-reads the rows for the current day, filter and search. The
-    /// selection stays as it is, listed or not.
+    /// Re-reads the shown space's rows for the current day, filter and
+    /// search. The selection stays as it is, listed or not.
     pub fn refresh(&mut self) {
-        self.rows = self.index.rows(
-            &self.day,
-            self.event.as_deref(),
-            &self.search.text,
-            self.issue.as_ref(),
-        );
+        self.space.refresh(&self.index, &self.day);
     }
 
-    /// Re-reads what the Health screen shows, for the current day.
+    /// Re-reads both spaces' rows, so the parked one holds what arrived while
+    /// it was away, as the Log does while Health shows.
+    pub fn refresh_all(&mut self) {
+        let (index, day) = (&self.index, &self.day);
+        for sp in [&mut self.space, &mut self.parked] {
+            sp.refresh(index, day);
+        }
+    }
+
+    /// Re-reads what both spaces' Health screens show, for the current day:
+    /// the parked one's issues mark its icon.
     pub fn recount(&mut self) {
-        self.health = Health {
-            issues: self.index.issues(&self.day),
-            timing: self.index.timing(&self.day),
-        };
+        let (index, day) = (&self.index, &self.day);
+        for sp in [&mut self.space, &mut self.parked] {
+            sp.recount(index, day);
+        }
     }
 
     /// Drops the index and builds it again from the day files. Every event
-    /// gets a new id, so the picked row is found again by where its line sits.
+    /// gets a new id, so each space's picked row is found again by where its
+    /// line sits.
     pub fn rebuild(&mut self, tx: &mut Tx) {
         tx.instant();
         if !self.live {
             // The sample scenes have no day files to build from.
             return;
         }
-        let place = self.selected.as_ref().and_then(|s| self.index.place(s.id));
+        let places: Vec<_> = [&self.space, &self.parked]
+            .map(|sp| sp.selected.as_ref().and_then(|s| self.index.place(s.id)))
+            .into();
         if let Err(e) = self.index.rebuild(&self.paths.log_dir) {
             self.error = Some(e);
         }
-        match place.and_then(|(day, offset)| self.index.id_at(&day, offset)) {
-            Some(id) => {
-                if let Some(s) = &mut self.selected {
-                    s.id = id;
+        let ids: Vec<Option<i64>> = places
+            .into_iter()
+            .map(|p| p.and_then(|(day, offset)| self.index.id_at(&day, offset)))
+            .collect();
+        for (sp, id) in self.spaces_mut().into_iter().zip(ids) {
+            match id {
+                Some(id) => {
+                    if let Some(s) = &mut sp.selected {
+                        s.id = id;
+                    }
                 }
+                None => sp.selected = None,
             }
-            None => self.selected = None,
         }
-        self.refresh();
+        self.refresh_all();
         self.recount();
     }
 
-    fn position(&self, id: i64) -> Option<usize> {
-        self.rows.iter().position(|r| r.id == id)
-    }
-
-    /// The picked row is out of the list: a filter or search hides it, or the
-    /// day has turned.
-    pub fn hidden(&self) -> bool {
-        self.selected
-            .as_ref()
-            .is_some_and(|s| self.position(s.id).is_none())
-    }
-
     fn select(&mut self, id: i64) {
-        if self.selected.as_ref().is_some_and(|s| s.id == id) {
+        let sp = &mut self.space;
+        if sp.selected.as_ref().is_some_and(|s| s.id == id) {
             return;
         }
-        self.replay = None;
-        self.selected = self.index.line(id).and_then(|line| {
+        sp.replay = None;
+        sp.selected = self.index.line(id).and_then(|line| {
             Some(Selected {
                 id,
                 record: Record::parse(&line)?,
@@ -396,7 +375,7 @@ impl App {
     /// following, the newest included, so the row holds still while it is read.
     pub fn pick(&mut self, id: i64) {
         self.select(id);
-        self.following = false;
+        self.space.following = false;
     }
 
     /// A row the reader clicked: picked, and revealed as the arrow keys reveal
@@ -404,9 +383,10 @@ impl App {
     ///
     /// Like every change the reader makes here, it lands at once: Rune would
     /// spring heights and bars, fade colours and fade elements in and out.
-    /// The commit is instant rather than the elements, so the one motion left,
-    /// rune-kit's sidebar sliding open and shut, still carries the content
-    /// with it, and a pick made mid-slide leaves the slide running.
+    /// The commit is instant rather than the elements, so the motion left,
+    /// rune-kit's sidebar sliding open and shut and a switch's slide (`switch`),
+    /// still carries the content with it, and a pick made mid-slide leaves
+    /// the slide running.
     pub fn click(&mut self, id: i64, tx: &mut Tx) {
         tx.instant();
         self.pick(id);
@@ -420,73 +400,33 @@ impl App {
         tx.scroll_into_view_in(LIST, id.to_string());
     }
 
-    /// The row an arrow key moves to: the next one down or up from the picked
-    /// row, or, with none picked or the picked one hidden, the first or last
-    /// row on screen.
-    pub fn step(&self, down: bool) -> Option<i64> {
-        let last = self.rows.len().checked_sub(1)?;
-        let at = self.selected.as_ref().and_then(|s| self.position(s.id));
-        let i = match at {
-            Some(i) if down => (i + 1).min(last),
-            Some(i) => i.saturating_sub(1),
-            None if down => self.visible.start.min(last),
-            None => self.visible.end.saturating_sub(1).min(last),
-        };
-        Some(self.rows[i].id)
-    }
-
-    /// The list reported the rows its viewport shows. Rows below it stop the
-    /// following; coming back down to the end follows again, pinned where it
-    /// stands, so the reader steers by scrolling alone. A pick made at the end
-    /// holds until rows arrive below it and the reader scrolls to them. True
-    /// when something the view shows changed.
-    pub fn seen(&mut self, rows: Range<usize>) -> bool {
-        let below = self.rows.len().saturating_sub(rows.end);
-        let was = std::mem::replace(&mut self.below, below);
-        let following = self.following;
-        self.visible = rows;
-        if below > 0 {
-            self.following = false;
-        } else if was > 0 && !self.following {
-            self.following = true;
-            self.to_end = true;
-        }
-        was != below || following != self.following
-    }
-
     /// The list goes to its newest row and follows from there: End, or the
     /// "↓ Latest" pill. The only jumps the list makes.
     pub fn jump_to_end(&mut self, tx: &mut Tx) {
         tx.instant();
-        self.following = true;
-        self.to_end = true;
-    }
-
-    /// The picked row, when it is on screen and the list is paused: the row a
-    /// filter change holds in place.
-    fn anchor(&self) -> Option<i64> {
-        let id = self.selected.as_ref()?.id;
-        let i = self.position(id)?;
-        (!self.following && self.visible.contains(&i)).then_some(id)
+        self.space.following = true;
+        self.space.to_end = true;
     }
 
     /// Shows the Log, its rows re-read after `change`, keeping the picked row
     /// where it shows on screen while rows above it come and go.
-    fn narrow(&mut self, change: impl FnOnce(&mut App), tx: &mut Tx) {
+    fn narrow(&mut self, change: impl FnOnce(&mut Space), tx: &mut Tx) {
         tx.instant();
         let returning = self.screen != Screen::Log;
-        let anchor = self.anchor().and_then(|id| Some((id, self.position(id)?)));
-        let y = self.scroll_y.get();
-        let before = std::mem::take(&mut self.rows);
+        let sp = &self.space;
+        let anchor = sp.anchor().and_then(|id| Some((id, sp.position(id)?)));
+        let y = sp.scroll_y.get();
+        let before = std::mem::take(&mut self.space.rows);
         self.screen = Screen::Log;
-        change(self);
+        change(&mut self.space);
         self.refresh();
+        let sp = &mut self.space;
         // A filter is not a scroll: when it brings the end into view, the
         // list stays paused. Following resumes on the reader's way down only.
         // Rows that come back unchanged (the same screen again, a trailing
         // space) get no new report from the list, so their count stands.
-        if self.rows != before {
-            self.below = 0;
+        if sp.rows != before {
+            sp.below = 0;
         }
         // The picked row is the anchor, as a browser anchors scrolling: its
         // top goes back to the height it had below the viewport's top, placed
@@ -494,15 +434,21 @@ impl App {
         // all one height, so where it was is its index times that, less the
         // offset. Rune's `keep_on_screen` measures the drawn row instead and
         // missed by 66 points as the rows above it left.
-        if let Some((id, was)) = anchor.filter(|(id, _)| self.position(*id).is_some()) {
+        if let Some((id, was)) = anchor.filter(|(id, _)| sp.position(*id).is_some()) {
             let at = was as f32 * theme::ROW_H - y;
             tx.scroll_key_to(format!("{ROWS}/{id}"), at);
-        } else if returning && !self.following {
-            // Back from Health, the list mounts afresh: Rune keeps a
-            // viewport's offset only while it is in the tree (rune
-            // `runtime/commit/prune.rs`). Following, it mounts at its end;
-            // paused with no row to hold, it goes back to its offset.
-            tx.scroll_to_y(VIEWPORT, y);
+        } else if returning {
+            self.mount_log(tx);
+        }
+    }
+
+    /// The Log mounts afresh, back from another screen or into another
+    /// space: Rune keeps a viewport's offset only while it is in the tree
+    /// (rune `runtime/commit/prune.rs`). Following, it mounts at its end;
+    /// paused, it goes back to where the reader left it.
+    fn mount_log(&self, tx: &mut Tx) {
+        if !self.space.following {
+            tx.scroll_to_y(VIEWPORT, self.space.scroll_y.get());
         }
     }
 
@@ -547,33 +493,65 @@ impl App {
     pub fn show_handlers(&mut self, event: Option<String>, tx: &mut Tx) {
         tx.instant();
         self.screen = Screen::Handlers;
-        self.handlers_event = event;
+        self.space.handlers_event = event;
+        self.reload_handlers();
+    }
+
+    /// Reads the shown space's hooks file and `state.json` again.
+    fn reload_handlers(&mut self) {
         if self.live {
-            self.hooks = Hooks::of(read_hooks(&self.paths.config).as_ref());
+            let h = self.space.harness;
+            self.space.hooks = Hooks::of(read_hooks(&self.paths.hooks_file(h)).as_ref());
             self.reload_toggles();
         }
     }
 
-    /// Reads `state.json` again: another window, or a hand edit, may have
-    /// changed it.
+    /// The other harness's space, on the same screen, as it was left: its
+    /// Log's rows, filter, pick and place, its Health and its Handlers. The
+    /// space shown is parked as it is, as a trip to Health leaves the Log.
+    ///
+    /// The one commit here that animates, for the sidebar's contents to
+    /// slide (`view.rs`, `slide`). The rest lands at once all the same,
+    /// colours included.
+    pub fn switch(&mut self, h: Harness, tx: &mut Tx) {
+        if self.space.harness == h {
+            tx.instant();
+            return;
+        }
+        tx.color_motion(Spring::NONE);
+        self.switching = true;
+        tx.wake_after(Duration::ZERO);
+        std::mem::swap(&mut self.space, &mut self.parked);
+        self.refresh();
+        match self.screen {
+            // The screen mounts afresh, so the Log goes back to its place.
+            Screen::Log => self.mount_log(tx),
+            Screen::Handlers => self.reload_handlers(),
+            Screen::Health => {}
+        }
+    }
+
+    /// Reads the shown space's `state.json` again: another window, or a hand
+    /// edit, may have changed it.
     fn reload_toggles(&mut self) {
-        match Toggles::load(&self.paths.state) {
-            Ok(t) => self.toggles = t,
+        match Toggles::load(&self.paths.state_file(self.space.harness)) {
+            Ok(t) => self.space.toggles = t,
             Err(e) => self.error = Some(e),
         }
     }
 
-    /// Writes one change to `state.json`, read again first so an edit made
-    /// elsewhere stays; the sample scenes keep theirs in memory. route reads
-    /// the file on every event, so the next event runs without the handler.
+    /// Writes one change to the shown space's `state.json`, read again first
+    /// so an edit made elsewhere stays; the sample scenes keep theirs in
+    /// memory. route reads the file on every event, so the next event runs
+    /// without the handler.
     fn change_toggles(&mut self, tx: &mut Tx, change: impl FnOnce(&mut Toggles)) {
         tx.instant();
         if !self.live {
-            change(&mut self.toggles);
+            change(&mut self.space.toggles);
             return;
         }
-        let (t, error) = Toggles::update(&self.paths.state, change);
-        self.toggles = t;
+        let (t, error) = Toggles::update(&self.paths.state_file(self.space.harness), change);
+        self.space.toggles = t;
         if error.is_some() {
             self.error = error;
         }
@@ -584,22 +562,23 @@ impl App {
         self.change_toggles(tx, |t| t.set(id, on));
     }
 
-    /// Every handler back on, including entries for handlers the hooks file
-    /// no longer lists.
+    /// Every handler of the shown space back on, including entries for
+    /// handlers its hooks file no longer lists. The other space's stay as
+    /// they are.
     pub fn enable_all(&mut self, tx: &mut Tx) {
         self.change_toggles(tx, Toggles::clear);
     }
 
-    /// Opens the hooks file in its default app, at the file its links lead
-    /// to (home-manager links it out of the store, back to the repo), so an
-    /// editor opens the copy that can be edited.
+    /// Opens the shown space's hooks file in its default app, at the file
+    /// its links lead to (home-manager links it out of the store, back to
+    /// the repo), so an editor opens the copy that can be edited.
     pub fn open_hooks(&mut self, tx: &mut Tx) {
         tx.instant();
         if !self.live {
             return;
         }
-        let path =
-            std::fs::canonicalize(&self.paths.config).unwrap_or_else(|_| self.paths.config.clone());
+        let config = self.paths.hooks_file(self.space.harness);
+        let path = std::fs::canonicalize(&config).unwrap_or(config);
         if let Err(e) = std::process::Command::new("/usr/bin/open")
             .arg(&path)
             .spawn()
@@ -608,29 +587,32 @@ impl App {
         }
     }
 
-    /// The hooks file replay hands route: the real one, read now, or the
-    /// sample scenes' own.
+    /// The hooks file replay hands route: the shown space's real one, read
+    /// now, or the sample scenes' own.
     fn hooks_text(&self) -> Result<String, String> {
+        let h = self.space.harness;
         if !self.live {
-            return Ok(sample::HOOKS.to_string());
+            return Ok(sample::hooks_text(h).to_string());
         }
-        std::fs::read_to_string(&self.paths.config)
-            .map_err(|e| format!("{}: {e}", self.paths.config.display()))
+        let config = self.paths.hooks_file(h);
+        std::fs::read_to_string(&config).map_err(|e| format!("{}: {e}", config.display()))
     }
 
-    /// Sends the picked event through route again, with only the built-in
-    /// guards on (`replay.rs`), and keeps route's new line beside the logged
-    /// one. Guards answer in milliseconds, so it runs on this thread.
+    /// Sends the picked event through route again, as its harness, with only
+    /// the built-in guards on (`replay.rs`), and keeps route's new line beside
+    /// the logged one. Guards answer in milliseconds, so it runs on this
+    /// thread.
     pub fn replay(&mut self, tx: &mut Tx) {
         tx.instant();
         if self.live {
             self.reload_toggles();
         }
-        let Some(sel) = &self.selected else {
+        let text = self.hooks_text();
+        let sp = &self.space;
+        let Some(sel) = &sp.selected else {
             return;
         };
         let r = &sel.record;
-        let text = self.hooks_text();
         let hooks = Hooks::of(
             text.as_ref()
                 .ok()
@@ -639,16 +621,20 @@ impl App {
         );
         let result = replay::payload(r).and_then(|payload| {
             let text = text.clone()?;
-            let state = replay::scratch_state(&hooks, &r.event, &self.toggles);
-            let line = replay::run(&self.paths.route, &text, &r.event, &payload, &state)?;
+            let state = replay::scratch_state(&hooks, &r.event, &sp.toggles);
+            let line = replay::run(
+                &self.paths.route,
+                sp.harness,
+                &text,
+                &r.event,
+                &payload,
+                &state,
+            )?;
             Record::parse(&line).ok_or_else(|| "route's line did not parse".to_string())
         });
-        let off = replay::switched_off(&hooks, &r.event, &self.toggles);
-        self.replay = Some(Replay {
-            id: sel.id,
-            result,
-            off,
-        });
+        let off = replay::switched_off(&hooks, &r.event, &sp.toggles);
+        let id = sel.id;
+        self.space.replay = Some(Replay { id, result, off });
     }
 
     /// The search text changed.
@@ -669,8 +655,8 @@ impl App {
         match ev.key {
             Key::Up | Key::Down | Key::Home => {
                 let id = match ev.key {
-                    Key::Home => self.rows.first().map(|r| r.id),
-                    _ => self.step(matches!(ev.key, Key::Down)),
+                    Key::Home => self.space.rows.first().map(|r| r.id),
+                    _ => self.space.step(matches!(ev.key, Key::Down)),
                 };
                 let Some(id) = id else {
                     return false;
@@ -689,14 +675,15 @@ impl App {
 }
 
 fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
-    if std::mem::take(&mut s.to_end) {
+    let switched = std::mem::take(&mut s.switching);
+    if std::mem::take(&mut s.space.to_end) {
         // Instant, so the trip passes no rows that would report the list
         // as scrolled up.
         tx.scroll_to_bottom_instant(VIEWPORT);
     }
     tx.wake_after(FOLLOW);
     if now - s.last_look < FOLLOW.as_secs_f64() {
-        return false;
+        return switched;
     }
     s.last_look = now;
     if s.live && s.screen == Screen::Handlers {
@@ -710,11 +697,11 @@ fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
         changed = true;
     }
     if s.look() || changed {
-        s.refresh();
+        s.refresh_all();
         s.recount();
         return true;
     }
-    false
+    switched
 }
 
 fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -722,12 +709,17 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
         s.sidebar.toggle();
         return true;
     }
+    if let Some(h) = space_key(ev) {
+        s.switch(h, tx);
+        return true;
+    }
     // With nothing focused, the list takes the keys it takes when focused,
     // while it shows.
     s.screen == Screen::Log && tx.focused().is_none() && s.key(ev, tx)
 }
 
-/// Puts the sample scenes' rows in an index of their own.
+/// Puts the sample scenes' rows in an index of their own, each space with
+/// its harness's sample hooks file.
 fn sample_index(s: &mut App, lines: &[String]) {
     s.live = false;
     s.index = Index::memory();
@@ -735,20 +727,18 @@ fn sample_index(s: &mut App, lines: &[String]) {
         .insert_lines(sample::DAY, lines)
         .expect("sample lines index");
     s.day = sample::DAY.to_string();
-    s.selected = None;
-    let hooks = sample::hooks();
-    s.events = hook_events(Some(&hooks));
-    s.limits = Limits::of(Some(&hooks));
-    s.hooks = Hooks::of(Some(&hooks));
-    s.toggles = Toggles::default();
-    s.refresh();
+    for sp in s.spaces_mut() {
+        let hooks = sample::hooks(sp.harness);
+        *sp = Space::new(sp.harness, Some(&hooks), Toggles::default());
+    }
+    s.refresh_all();
     s.recount();
 }
 
 /// The `canvas` scene: the design canvas's sample events, the newest picked.
 fn canvas_scene(s: &mut App) {
     sample_index(s, &sample::lines());
-    if let Some(id) = s.rows.last().map(|r| r.id) {
+    if let Some(id) = s.space.rows.last().map(|r| r.id) {
         s.select(id);
     }
 }
@@ -765,7 +755,7 @@ fn health_scene(s: &mut App) {
 fn handlers_scene(s: &mut App) {
     sample_index(s, &sample::lines());
     s.screen = Screen::Handlers;
-    s.handlers_event = Some("PreToolUse".into());
+    s.space.handlers_event = Some("PreToolUse".into());
 }
 
 /// The `live` scene: a list longer than the window that grows by one sample
@@ -773,6 +763,16 @@ fn handlers_scene(s: &mut App) {
 fn live_scene(s: &mut App) {
     let samples = sample::lines();
     let seed: Vec<String> = (0..40).map(|n| sample::feed(&samples, n)).collect();
+    sample_index(s, &seed);
+    s.feed = Some(Feed { samples, next: 40 });
+}
+
+/// The `spaces` scene: the `live` scene's Claude Code list, growing, beside
+/// the design's Codex events, one of them with a handler in trouble.
+fn spaces_scene(s: &mut App) {
+    let samples = sample::lines();
+    let mut seed: Vec<String> = (0..40).map(|n| sample::feed(&samples, n)).collect();
+    seed.extend(sample::codex_lines());
     sample_index(s, &seed);
     s.feed = Some(Feed { samples, next: 40 });
 }
@@ -792,6 +792,7 @@ fn main() {
             ("live", live_scene),
             ("health", health_scene),
             ("handlers", handlers_scene),
+            ("spaces", spaces_scene),
         ],
         fonts: rune_theme_opencode::FONTS,
         families: rune_theme_opencode::FAMILIES,
@@ -828,9 +829,9 @@ mod tests {
     /// A live list scrolled to its end, twenty rows on screen.
     fn at_end() -> App {
         let mut app = app(live_scene);
-        let n = app.rows.len();
-        app.seen(n - 20..n);
-        assert!(app.following && app.below == 0);
+        let n = app.space.rows.len();
+        app.space.seen(n - 20..n);
+        assert!(app.space.following && app.space.below == 0);
         app
     }
 
@@ -845,52 +846,55 @@ mod tests {
     #[test]
     fn nothing_is_picked_until_the_reader_picks_a_row() {
         let mut app = at_end();
-        assert!(app.selected.is_none(), "the list opens with nothing picked");
+        assert!(
+            app.space.selected.is_none(),
+            "the list opens with nothing picked"
+        );
         app.look();
         app.refresh();
-        assert!(app.selected.is_none(), "a new row picks nothing");
+        assert!(app.space.selected.is_none(), "a new row picks nothing");
     }
 
     #[test]
     fn picking_any_row_pauses_following_the_newest_included() {
         let mut app = at_end();
-        let newest = app.rows.last().unwrap().id;
+        let newest = app.space.rows.last().unwrap().id;
         app.pick(newest);
-        assert!(!app.following);
-        assert_eq!(app.selected.as_ref().map(|s| s.id), Some(newest));
+        assert!(!app.space.following);
+        assert_eq!(app.space.selected.as_ref().map(|s| s.id), Some(newest));
     }
 
     #[test]
     fn scrolling_up_pauses_and_rows_keep_arriving_below() {
         let mut app = at_end();
-        let n = app.rows.len();
-        assert!(app.seen(n - 25..n - 5), "the pill shows");
-        assert!(!app.following, "scrolling up pauses");
-        assert_eq!(app.below, 5);
-        let before = app.rows.clone();
+        let n = app.space.rows.len();
+        assert!(app.space.seen(n - 25..n - 5), "the pill shows");
+        assert!(!app.space.following, "scrolling up pauses");
+        assert_eq!(app.space.below, 5);
+        let before = app.space.rows.clone();
         assert!(app.look());
         app.refresh();
-        assert_eq!(app.rows.len(), n + 1, "loading goes on while paused");
+        assert_eq!(app.space.rows.len(), n + 1, "loading goes on while paused");
         assert_eq!(
-            app.rows[..n],
+            app.space.rows[..n],
             before[..],
             "the new row lands below the rest"
         );
-        app.seen(n - 25..n - 5);
-        assert_eq!(app.below, 6, "and counts it below");
+        app.space.seen(n - 25..n - 5);
+        assert_eq!(app.space.below, 6, "and counts it below");
     }
 
     #[test]
     fn scrolling_back_to_the_end_follows_again_where_it_stands() {
         let mut app = at_end();
-        let n = app.rows.len();
-        app.seen(n - 25..n - 5);
+        let n = app.space.rows.len();
+        app.space.seen(n - 25..n - 5);
         app.look();
         app.refresh();
-        app.seen(n - 19..n + 1);
-        assert!(app.following, "the end follows again");
-        assert!(app.to_end, "and pins the list there");
-        assert_eq!(app.below, 0);
+        app.space.seen(n - 19..n + 1);
+        assert!(app.space.following, "the end follows again");
+        assert!(app.space.to_end, "and pins the list there");
+        assert_eq!(app.space.below, 0);
     }
 
     /// The app's half of the click stopgap; Rune's half, the viewport leaving
@@ -898,44 +902,44 @@ mod tests {
     #[test]
     fn a_click_on_the_newest_row_pauses_and_counts_the_rows_below() {
         let mut app = at_end();
-        let n = app.rows.len();
-        app.click(app.rows[n - 1].id, &mut Tx::default());
-        assert!(!app.following, "the click pauses");
+        let n = app.space.rows.len();
+        app.click(app.space.rows[n - 1].id, &mut Tx::default());
+        assert!(!app.space.following, "the click pauses");
         for k in 1..=2 {
             assert!(app.look());
             app.refresh();
-            app.seen(n - 20..n);
-            assert_eq!(app.below, k, "each new row counts below");
-            assert!(!app.following);
+            app.space.seen(n - 20..n);
+            assert_eq!(app.space.below, k, "each new row counts below");
+            assert!(!app.space.following);
         }
     }
 
     #[test]
     fn a_pick_at_the_end_holds_until_the_reader_scrolls_to_new_rows() {
         let mut app = at_end();
-        let n = app.rows.len();
-        app.pick(app.rows[n - 1].id);
-        app.seen(n - 20..n);
-        assert!(!app.following, "staying at the end keeps the pause");
+        let n = app.space.rows.len();
+        app.pick(app.space.rows[n - 1].id);
+        app.space.seen(n - 20..n);
+        assert!(!app.space.following, "staying at the end keeps the pause");
         app.look();
         app.refresh();
-        app.seen(n - 20..n);
-        assert_eq!(app.below, 1, "the new row waits below");
-        assert!(!app.following);
-        app.seen(n - 19..n + 1);
-        assert!(app.following, "scrolling down to it follows again");
+        app.space.seen(n - 20..n);
+        assert_eq!(app.space.below, 1, "the new row waits below");
+        assert!(!app.space.following);
+        app.space.seen(n - 19..n + 1);
+        assert!(app.space.following, "scrolling down to it follows again");
     }
 
     #[test]
     fn end_jumps_to_the_newest_row_and_follows() {
         let mut app = at_end();
-        let n = app.rows.len();
-        app.pick(app.rows[n - 10].id);
+        let n = app.space.rows.len();
+        app.pick(app.space.rows[n - 10].id);
         assert!(press(&mut app, Key::End));
-        assert!(app.following && app.to_end);
+        assert!(app.space.following && app.space.to_end);
         assert_eq!(
-            app.selected.as_ref().map(|s| s.id),
-            Some(app.rows[n - 10].id),
+            app.space.selected.as_ref().map(|s| s.id),
+            Some(app.space.rows[n - 10].id),
             "the jump leaves the picked row picked"
         );
     }
@@ -943,30 +947,30 @@ mod tests {
     #[test]
     fn arrow_keys_step_from_the_picked_row_or_the_rows_on_screen() {
         let mut app = at_end();
-        let n = app.rows.len();
+        let n = app.space.rows.len();
         assert!(press(&mut app, Key::Up));
         assert_eq!(
-            app.selected.as_ref().map(|s| s.id),
-            Some(app.rows[n - 1].id),
+            app.space.selected.as_ref().map(|s| s.id),
+            Some(app.space.rows[n - 1].id),
             "Up with nothing picked picks the last row on screen"
         );
-        assert!(!app.following, "and pauses");
+        assert!(!app.space.following, "and pauses");
         press(&mut app, Key::Up);
         assert_eq!(
-            app.selected.as_ref().map(|s| s.id),
-            Some(app.rows[n - 2].id)
+            app.space.selected.as_ref().map(|s| s.id),
+            Some(app.space.rows[n - 2].id)
         );
-        app.selected = None;
+        app.space.selected = None;
         press(&mut app, Key::Down);
         assert_eq!(
-            app.selected.as_ref().map(|s| s.id),
-            Some(app.rows[n - 20].id),
+            app.space.selected.as_ref().map(|s| s.id),
+            Some(app.space.rows[n - 20].id),
             "Down with nothing picked picks the first row on screen"
         );
         press(&mut app, Key::Home);
         assert_eq!(
-            app.selected.as_ref().map(|s| s.id),
-            Some(app.rows[0].id),
+            app.space.selected.as_ref().map(|s| s.id),
+            Some(app.space.rows[0].id),
             "Home picks the first row"
         );
     }
@@ -974,46 +978,55 @@ mod tests {
     #[test]
     fn a_filter_that_brings_the_end_into_view_leaves_the_list_paused() {
         let mut app = at_end();
-        let n = app.rows.len();
-        app.seen(n - 25..n - 5);
+        let n = app.space.rows.len();
+        app.space.seen(n - 25..n - 5);
         app.show_log(Some("Stop".into()), &mut Tx::default());
-        let m = app.rows.len();
-        app.seen(0..m);
-        assert!(!app.following, "only the reader's way down resumes it");
-        assert!(!app.to_end, "and nothing jumps");
+        let m = app.space.rows.len();
+        app.space.seen(0..m);
+        assert!(
+            !app.space.following,
+            "only the reader's way down resumes it"
+        );
+        assert!(!app.space.to_end, "and nothing jumps");
     }
 
     #[test]
     fn a_filter_that_changes_no_rows_keeps_the_count_below() {
         let mut app = at_end();
-        let n = app.rows.len();
-        app.seen(n - 25..n - 5);
+        let n = app.space.rows.len();
+        app.space.seen(n - 25..n - 5);
         app.show_log(None, &mut Tx::default());
-        assert_eq!(app.below, 5, "the same screen again keeps the count");
-        app.search.text = " ".into();
+        assert_eq!(app.space.below, 5, "the same screen again keeps the count");
+        app.space.search.text = " ".into();
         app.searched(&mut Tx::default());
-        assert_eq!(app.below, 5, "so does a search of blanks");
+        assert_eq!(app.space.below, 5, "so does a search of blanks");
     }
 
     #[test]
     fn a_filter_that_hides_the_picked_row_keeps_it_picked() {
         let mut app = app(canvas_scene);
-        let stop = app.rows.iter().find(|r| r.event == "Stop").unwrap().id;
+        let stop = app
+            .space
+            .rows
+            .iter()
+            .find(|r| r.event == "Stop")
+            .unwrap()
+            .id;
         app.pick(stop);
         let mut tx = Tx::default();
         app.show_log(Some("PreToolUse".into()), &mut tx);
         assert_eq!(
-            app.selected.as_ref().map(|s| s.id),
+            app.space.selected.as_ref().map(|s| s.id),
             Some(stop),
             "the pick stays"
         );
-        assert!(app.hidden(), "and is marked hidden");
-        app.search.text = "git".into();
+        assert!(app.space.hidden(), "and is marked hidden");
+        app.space.search.text = "git".into();
         app.searched(&mut tx);
-        assert_eq!(app.selected.as_ref().map(|s| s.id), Some(stop));
-        app.search.text.clear();
+        assert_eq!(app.space.selected.as_ref().map(|s| s.id), Some(stop));
+        app.space.search.text.clear();
         app.show_log(None, &mut tx);
-        assert!(!app.hidden(), "clearing the filter shows it again");
+        assert!(!app.space.hidden(), "clearing the filter shows it again");
     }
 
     fn press_window(app: &mut App, key: Key) -> bool {
@@ -1027,9 +1040,9 @@ mod tests {
     #[test]
     fn a_trip_to_health_leaves_the_log_as_it_was() {
         let mut app = at_end();
-        let n = app.rows.len();
-        app.seen(n - 25..n - 5);
-        let id = app.rows[n - 10].id;
+        let n = app.space.rows.len();
+        app.space.seen(n - 25..n - 5);
+        let id = app.space.rows[n - 10].id;
         app.pick(id);
         app.show_health(&mut Tx::default());
         assert!(
@@ -1042,32 +1055,39 @@ mod tests {
         app.recount();
         app.show_log(None, &mut Tx::default());
         assert_eq!(app.screen, Screen::Log);
-        assert_eq!(app.selected.as_ref().map(|s| s.id), Some(id));
-        assert!(!app.following && !app.to_end, "it comes back paused");
+        assert_eq!(app.space.selected.as_ref().map(|s| s.id), Some(id));
+        assert!(
+            !app.space.following && !app.space.to_end,
+            "it comes back paused"
+        );
     }
 
     #[test]
     fn show_events_lists_what_the_issue_counts_until_the_sidebar_clears_it() {
         let mut app = app(health_scene);
         assert_eq!(app.screen, Screen::Health);
-        let issue = app.health.issues[0].clone();
-        app.search.text = "git".into();
+        let issue = app.space.health.issues[0].clone();
+        app.space.search.text = "git".into();
         let mut tx = Tx::default();
         app.show_issue(issue.key.clone(), &mut tx);
         assert_eq!(app.screen, Screen::Log);
-        assert_eq!(app.rows.len(), issue.events, "exactly the rows it counts");
-        assert_eq!(app.search.text, "", "a search would hide some");
-        app.clear_issue(&mut tx);
-        assert!(app.issue.is_none());
         assert_eq!(
-            app.event.as_deref(),
+            app.space.rows.len(),
+            issue.events,
+            "exactly the rows it counts"
+        );
+        assert_eq!(app.space.search.text, "", "a search would hide some");
+        app.clear_issue(&mut tx);
+        assert!(app.space.issue.is_none());
+        assert_eq!(
+            app.space.event.as_deref(),
             Some("PreToolUse"),
             "the hook event stays"
         );
-        assert!(app.rows.len() > issue.events);
+        assert!(app.space.rows.len() > issue.events);
         app.show_issue(issue.key.clone(), &mut tx);
         app.show_log(Some("Stop".into()), &mut tx);
-        assert!(app.issue.is_none(), "the sidebar clears it");
+        assert!(app.space.issue.is_none(), "the sidebar clears it");
     }
 
     #[test]
@@ -1090,18 +1110,18 @@ mod tests {
         app.day = day.to_string();
         app.look();
         app.refresh();
-        let row = app.rows[3].clone();
+        let row = app.space.rows[3].clone();
         app.pick(row.id);
-        let line = app.selected.as_ref().unwrap().line.clone();
+        let line = app.space.selected.as_ref().unwrap().line.clone();
         app.rebuild(&mut Tx::default());
-        let picked = app.selected.as_ref().expect("still picked");
+        let picked = app.space.selected.as_ref().expect("still picked");
         assert_ne!(picked.id, row.id, "every event has a new id");
         assert_eq!(
             app.index.line(picked.id),
             Some(line),
             "the same line is picked"
         );
-        assert_eq!(app.health.issues.len(), 4);
+        assert_eq!(app.space.health.issues.len(), 4);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1109,18 +1129,18 @@ mod tests {
     fn handlers_narrow_apart_from_the_log() {
         let mut app = app(handlers_scene);
         assert_eq!(app.screen, Screen::Handlers);
-        assert_eq!(app.handlers_event.as_deref(), Some("PreToolUse"));
+        assert_eq!(app.space.handlers_event.as_deref(), Some("PreToolUse"));
         let mut tx = Tx::default();
         app.show_log(Some("Stop".into()), &mut tx);
         app.show_handlers(Some("SessionStart".into()), &mut tx);
         assert_eq!(
-            app.event.as_deref(),
+            app.space.event.as_deref(),
             Some("Stop"),
             "the Log keeps its filter"
         );
         app.show_handlers(None, &mut tx);
         assert!(
-            app.handlers_event.is_none(),
+            app.space.handlers_event.is_none(),
             "the Handlers row lists every event"
         );
         assert!(
@@ -1140,11 +1160,11 @@ mod tests {
             "bash ~/.claude/hooks/rg-glob-guard.sh",
         );
         app.toggle(&id, false, &mut Tx::default());
-        assert!(app.toggles.is_off(&id));
-        assert_eq!(app.toggles.off_in(&app.hooks), 1);
+        assert!(app.space.toggles.is_off(&id));
+        assert_eq!(app.space.toggles.off_in(&app.space.hooks), 1);
         assert!(!app.paths.state.exists(), "no state.json is written");
         app.enable_all(&mut Tx::default());
-        assert_eq!(app.toggles.off_in(&app.hooks), 0);
+        assert_eq!(app.space.toggles.off_in(&app.space.hooks), 0);
     }
 
     #[test]
@@ -1176,7 +1196,7 @@ mod tests {
         let other = HandlerId::new("Stop", "", "bash ~/.claude/hooks/stop-verify.sh");
         Toggles::update(&app.paths.state, |t| t.set(&other, false));
         app.toggle(&id, true, &mut tx);
-        assert!(app.toggles.is_off(&other) && !app.toggles.is_off(&id));
+        assert!(app.space.toggles.is_off(&other) && !app.space.toggles.is_off(&id));
         app.enable_all(&mut tx);
         assert!(
             Toggles::load(&app.paths.state)
@@ -1192,6 +1212,7 @@ mod tests {
     fn a_replay_answers_for_the_event_it_ran_on() {
         let mut app = app(canvas_scene);
         let bash = app
+            .space
             .rows
             .iter()
             .find(|r| r.tool.as_deref() == Some("Bash"))
@@ -1199,13 +1220,13 @@ mod tests {
             .id;
         app.pick(bash);
         app.replay(&mut Tx::default());
-        let rp = app.replay.as_ref().expect("a replay");
+        let rp = app.space.replay.as_ref().expect("a replay");
         assert_eq!(rp.id, bash);
         let err = rp.result.as_ref().unwrap_err();
         assert!(err.contains("/nonexistent"), "no route here: {err}");
-        let other = app.rows.iter().find(|r| r.id != bash).unwrap().id;
+        let other = app.space.rows.iter().find(|r| r.id != bash).unwrap().id;
         app.pick(other);
-        assert!(app.replay.is_none(), "a new pick drops it");
+        assert!(app.space.replay.is_none(), "a new pick drops it");
     }
 
     #[test]
@@ -1217,5 +1238,135 @@ mod tests {
             (7, 500, 2000)
         );
         assert_eq!(Limits::of(None).retention_days, 30);
+    }
+
+    #[test]
+    fn a_trip_to_codex_leaves_claude_s_log_as_it_was() {
+        let mut app = app(spaces_scene);
+        let n = app.space.rows.len();
+        assert_eq!(n, 40, "Claude Code's space lists only its own rows");
+        app.space.seen(n - 25..n - 5);
+        let id = app.space.rows[n - 10].id;
+        app.pick(id);
+        let mut tx = Tx::default();
+        app.switch(Harness::Codex, &mut tx);
+        assert_eq!(app.space.harness, Harness::Codex);
+        assert_eq!(app.space.rows.len(), sample::codex_lines().len());
+        assert!(app.space.selected.is_none() && app.space.following);
+        assert_eq!(
+            app.space.events.last().map(String::as_str),
+            Some("Interrupt")
+        );
+        let codex_row = app.space.rows[0].id;
+        app.pick(codex_row);
+        assert!(
+            app.look(),
+            "rows keep loading while Claude Code's space is parked"
+        );
+        app.refresh_all();
+        app.switch(Harness::Claude, &mut tx);
+        assert_eq!(app.screen, Screen::Log);
+        assert_eq!(app.space.selected.as_ref().map(|s| s.id), Some(id));
+        assert!(
+            !app.space.following && !app.space.to_end,
+            "it comes back paused"
+        );
+        assert_eq!(app.space.rows.len(), n + 1, "with what arrived meanwhile");
+        assert_eq!(
+            app.parked.selected.as_ref().map(|s| s.id),
+            Some(codex_row),
+            "and Codex's pick waits in its own space"
+        );
+    }
+
+    #[test]
+    fn a_parked_space_s_issues_are_counted_for_its_icon() {
+        let mut app = app(spaces_scene);
+        let names = |issues: &[Issue]| issues.iter().map(|i| i.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&app.space.health.issues), ["no-secrets.sh"]);
+        let codex = &app.space_of(Harness::Codex).health.issues;
+        assert_eq!(codex.len(), 1);
+        assert_eq!(codex[0].name, "direnv-env.py");
+        app.switch(Harness::Codex, &mut Tx::default());
+        assert_eq!(app.space.health.issues.len(), 1, "Health shows Codex's");
+    }
+
+    #[test]
+    fn control_1_and_2_switch_spaces_from_any_screen() {
+        let mut app = app(health_scene);
+        let ctrl = Mods {
+            ctrl: true,
+            ..Mods::default()
+        };
+        let key = |key| KeyEvent { key, mods: ctrl };
+        assert!(on_key(
+            &mut app,
+            &key(Key::Text("2".into())),
+            &mut Tx::default()
+        ));
+        assert_eq!(app.space.harness, Harness::Codex);
+        assert_eq!(app.screen, Screen::Health, "on the same screen");
+        assert!(on_key(
+            &mut app,
+            &key(Key::Command('1')),
+            &mut Tx::default()
+        ));
+        assert_eq!(app.space.harness, Harness::Claude);
+        let plain = KeyEvent {
+            key: Key::Text("2".into()),
+            mods: Mods::default(),
+        };
+        assert!(space_key(&plain).is_none(), "a 2 typed alone is text");
+    }
+
+    #[test]
+    fn a_switch_lands_the_rest_at_once_for_its_own_commit_only() {
+        let mut app = app(spaces_scene);
+        app.switch(Harness::Codex, &mut Tx::default());
+        assert!(app.switching, "the switch's commit lands all but the slide");
+        // Within a look of the last, so only the switch asks for a commit.
+        app.last_look = 1.0;
+        assert!(poll(&mut app, 1.0, &mut Tx::default()));
+        assert!(
+            !app.switching,
+            "the next poll clears it, so the sidebar's own slide keeps its spring"
+        );
+        assert!(!poll(&mut app, 1.0, &mut Tx::default()));
+        app.switch(Harness::Codex, &mut Tx::default());
+        assert!(!app.switching, "a switch to the space shown is none");
+    }
+
+    #[test]
+    fn each_space_switches_its_own_handlers() {
+        let dir = std::env::temp_dir().join(format!("route-console-spaces-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let paths = Paths {
+            state: dir.join("route/state.json"),
+            ..nowhere()
+        };
+        let mut app = App::new(paths, Index::memory(), None);
+        let claude = HandlerId::new("PreToolUse", "Bash", "bash ~/.claude/hooks/no-secrets.sh");
+        let codex = HandlerId::new("Stop", "", "~/.local/bin/trinket-codex-stop");
+        let mut tx = Tx::default();
+        app.toggle(&claude, false, &mut tx);
+        app.switch(Harness::Codex, &mut tx);
+        assert!(
+            !app.space.toggles.is_off(&claude),
+            "Codex has its own switches"
+        );
+        app.toggle(&codex, false, &mut tx);
+        let codex_state = dir.join("route/codex/state.json");
+        assert!(Toggles::load(&codex_state).unwrap().is_off(&codex));
+        app.enable_all(&mut tx);
+        assert!(Toggles::load(&codex_state).unwrap().disabled().is_empty());
+        let claude_state = Toggles::load(&app.paths.state).unwrap();
+        assert!(
+            claude_state.is_off(&claude) && !claude_state.is_off(&codex),
+            "Enable all clears only the space shown"
+        );
+        app.switch(Harness::Claude, &mut tx);
+        assert!(app.space.toggles.is_off(&claude));
+        assert!(app.error.is_none(), "{:?}", app.error);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

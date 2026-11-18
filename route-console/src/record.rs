@@ -9,6 +9,8 @@
 
 use serde_json::{Map, Value};
 
+use crate::space::Harness;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Handler {
     pub command: String,
@@ -34,6 +36,8 @@ pub struct Handler {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
+    /// The agent that ran route for this event.
+    pub harness: Harness,
     pub ts: String,
     pub ts_ms: i64,
     pub event: String,
@@ -180,6 +184,7 @@ fn own_note(
 impl Record {
     pub fn parse(line: &str) -> Option<Record> {
         let v: Value = serde_json::from_str(line).ok()?;
+        let harness = Harness::parse(v.get("harness").and_then(Value::as_str))?;
         let ts = str_of(&v, "ts")?;
         let event = str_of(&v, "event")?;
         let ts_ms = chrono::DateTime::parse_from_rfc3339(&ts)
@@ -206,6 +211,7 @@ impl Record {
             .map(|ss| ss.iter().filter_map(|s| str_of(s, "command")).collect())
             .unwrap_or_default();
         let mut r = Record {
+            harness,
             ts,
             ts_ms,
             event,
@@ -505,6 +511,18 @@ mod tests {
             trouble(r#"{"command":"a/q.sh","exit":0,"outcome":"none","stderr":"  \n"}"#),
             None,
             "blank stderr is nothing"
+        );
+    }
+
+    #[test]
+    fn a_line_names_its_harness_and_one_without_is_claude_s() {
+        assert_eq!(Record::parse(DENY).unwrap().harness, Harness::Claude);
+        let codex = DENY.replacen(r#"{"v":1,"#, r#"{"v":1,"harness":"codex","#, 1);
+        assert_eq!(Record::parse(&codex).unwrap().harness, Harness::Codex);
+        let other = DENY.replacen(r#"{"v":1,"#, r#"{"v":1,"harness":"opencode","#, 1);
+        assert!(
+            Record::parse(&other).is_none(),
+            "a harness route does not write shows in no space"
         );
     }
 

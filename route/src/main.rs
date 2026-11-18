@@ -1,8 +1,9 @@
-//! route: the one Claude Code hook entry per event.
+//! route: the one hook entry per event, for Claude Code and Codex.
 //!
-//! `settings.json` calls `route <Event>` with the event JSON on stdin. route
-//! picks the handlers its hooks file lists for that event, runs them in
-//! parallel, answers Claude Code once, and appends one JSONL line to the log.
+//! The harness's settings call `route [--harness codex] <Event>` with the
+//! event JSON on stdin. route picks the handlers that harness's hooks file
+//! lists for the event, runs them in parallel, answers once, and appends one
+//! JSONL line to the shared log.
 //!
 //! A failure of route itself (a panic, a bad hooks file, its own deadline)
 //! blocks on PreToolUse and lets every other event through: a broken guard
@@ -14,6 +15,7 @@
 mod config;
 mod event;
 mod guards;
+mod harness;
 mod log;
 mod merge;
 mod run;
@@ -31,21 +33,25 @@ use chrono::{Local, SecondsFormat};
 use serde_json::{Value, json};
 
 use config::Selected;
+use harness::Harness;
 use merge::Answer;
 
 const USAGE: &str = "\
-usage: route [--config PATH] [--state PATH] [--log-dir PATH] <Event>
-       route [--config PATH] settings [--bin PATH]
+usage: route [--harness NAME] [--config PATH] [--state PATH] [--log-dir PATH] <Event>
+       route [--harness NAME] [--config PATH] settings [--bin PATH]
 
-  <Event>    run the handlers for one Claude Code hook event; the event JSON
-             arrives on stdin
-  settings   print the settings.json `hooks` block that hands every event in
-             the hooks file to route, calling the binary at --bin
+  <Event>    run the handlers for one hook event; the event JSON arrives on
+             stdin
+  settings   print the settings `hooks` block that hands every event in the
+             hooks file to route, calling the binary at --bin
 
+  --harness  claude (default) or codex: picks the default hooks and state
+             files, and names the harness in the log
   --config   hooks file, Claude Code's {\"hooks\": ...} shape
-             (default ~/.config/route/hooks.json)
-  --state    handlers switched off (default ~/.local/state/route/state.json)
-  --log-dir  per-day JSONL logs (default ~/.local/state/route/log)";
+             (default ~/.config/route/hooks.json, codex/hooks.json for Codex)
+  --state    handlers switched off (default ~/.local/state/route/state.json,
+             codex/state.json for Codex)
+  --log-dir  per-day JSONL logs, shared (default ~/.local/state/route/log)";
 
 /// How long route waits, after answering, for async handlers to take their
 /// payload before it exits and closes their stdin.
@@ -139,12 +145,9 @@ fn looks_like_event(s: &str) -> bool {
         && s.chars().all(|c| c.is_ascii_alphabetic())
 }
 
-fn parse_args(args: &[String]) -> Result<(Paths, Cmd), String> {
-    let mut paths = Paths {
-        config: xdg("XDG_CONFIG_HOME", ".config").join("route/hooks.json"),
-        state: xdg("XDG_STATE_HOME", ".local/state").join("route/state.json"),
-        log_dir: xdg("XDG_STATE_HOME", ".local/state").join("route/log"),
-    };
+fn parse_args(args: &[String]) -> Result<(Paths, Harness, Cmd), String> {
+    let mut harness = Harness::Claude;
+    let (mut config, mut state, mut log_dir) = (None, None, None);
     let mut bin = None;
     let mut positional = Vec::new();
     let mut it = args.iter();
@@ -155,15 +158,23 @@ fn parse_args(args: &[String]) -> Result<(Paths, Cmd), String> {
                 .ok_or_else(|| format!("{name} needs a value"))
         };
         match arg.as_str() {
-            "--config" => paths.config = value("--config")?.into(),
-            "--state" => paths.state = value("--state")?.into(),
-            "--log-dir" => paths.log_dir = value("--log-dir")?.into(),
+            "--harness" => harness = Harness::parse(&value("--harness")?)?,
+            "--config" => config = Some(PathBuf::from(value("--config")?)),
+            "--state" => state = Some(PathBuf::from(value("--state")?)),
+            "--log-dir" => log_dir = Some(PathBuf::from(value("--log-dir")?)),
             "--bin" => bin = Some(value("--bin")?),
             "-h" | "--help" => return Err(String::new()),
             flag if flag.starts_with('-') => return Err(format!("unknown flag {flag}")),
             word => positional.push(word.to_string()),
         }
     }
+    let config_dir = xdg("XDG_CONFIG_HOME", ".config").join("route");
+    let state_dir = xdg("XDG_STATE_HOME", ".local/state").join("route");
+    let paths = Paths {
+        config: config.unwrap_or_else(|| harness.file(&config_dir, "hooks.json")),
+        state: state.unwrap_or_else(|| harness.file(&state_dir, "state.json")),
+        log_dir: log_dir.unwrap_or_else(|| state_dir.join("log")),
+    };
     let cmd = match positional.as_slice() {
         [s] if s == "settings" => Cmd::Settings {
             bin: match bin {
@@ -177,7 +188,7 @@ fn parse_args(args: &[String]) -> Result<(Paths, Cmd), String> {
         [e] if looks_like_event(e) && bin.is_none() => Cmd::Hook(e.clone()),
         _ => return Err("expected one event name or `settings`".into()),
     };
-    Ok((paths, cmd))
+    Ok((paths, harness, cmd))
 }
 
 fn main() {
@@ -188,8 +199,8 @@ fn main() {
         let _ = EVENT.set(last.clone());
     }
     match parse_args(&args) {
-        Ok((paths, Cmd::Hook(event))) => hook(&paths, &event),
-        Ok((paths, Cmd::Settings { bin })) => settings(&paths, &bin),
+        Ok((paths, harness, Cmd::Hook(event))) => hook(&paths, harness, &event),
+        Ok((paths, harness, Cmd::Settings { bin })) => settings(&paths, harness, &bin),
         Err(msg) if msg.is_empty() => {
             println!("{USAGE}");
             exit(0)
@@ -202,8 +213,9 @@ fn main() {
     }
 }
 
-fn settings(paths: &Paths, bin: &str) -> ! {
-    let result = config::load(&paths.config).and_then(|cfg| config::settings_block(&cfg, bin));
+fn settings(paths: &Paths, harness: Harness, bin: &str) -> ! {
+    let result =
+        config::load(&paths.config).and_then(|cfg| config::settings_block(&cfg, bin, harness));
     match result {
         Ok((block, warnings)) => {
             for w in warnings {
@@ -222,7 +234,7 @@ fn settings(paths: &Paths, bin: &str) -> ! {
     }
 }
 
-fn hook(paths: &Paths, event: &str) -> ! {
+fn hook(paths: &Paths, harness: Harness, event: &str) -> ! {
     std::panic::set_hook(Box::new(|info| {
         // A guard's panic unwinds to guards::run, which reports that guard as
         // a failed handler.
@@ -355,6 +367,7 @@ fn hook(paths: &Paths, event: &str) -> ! {
     let mut record = json!({
         "v": 1,
         "ts": now.to_rfc3339_opts(SecondsFormat::Millis, false),
+        "harness": harness.name(),
         "event": event,
         "session_id": payload.get("session_id"),
         "cwd": payload.get("cwd"),

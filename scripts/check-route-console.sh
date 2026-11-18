@@ -51,6 +51,8 @@ view_bottom() { jq -r '[.elements[] | select(.path | endswith("events-viewport")
 rows() { jq -r '[.elements[] | select(.exiting != true and (.path | test("events-rows/[0-9]+$")))] | length' "$1"; }
 has() { jq -e --arg k "$2" '[.elements[] | select(.exiting != true and (.path | endswith($k)))] | length > 0' "$1" >/dev/null; }
 lacks() { ! has "$@"; }
+# Whether an element's text or label is $2.
+says() { jq -e --arg w "$2" '[.elements[] | select((.text // .label) == $w)] | length > 0' "$1" >/dev/null; }
 # Whether two points are within half a point.
 same() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a - b < 0.5 && b - a < 0.5) }'; }
 below() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a < b - 0.5) }'; }
@@ -192,7 +194,8 @@ near() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a - b < 0.01 && b - a < 0.01) }
 check "a hovered row lights up ($(hover_at "$a" 183))" near "$(hover_at "$a" 183)" 1
 check "and goes dark at once when the pointer leaves ($(hover_at "$b" 183))" near "$(hover_at "$b" 183)" 0
 
-# The sidebar is the one thing that moves: it slides shut over frames, and
+# Besides a switch of spaces, the sidebar is the one thing that moves: it
+# slides shut over frames, and
 # the Log widens with its card, the inspector held to the card's right edge,
 # rather than landing at its final width and riding in with the card.
 a="$(tree sidebar-slide open)"
@@ -226,6 +229,58 @@ check "a hook event narrows it to its own handlers" has "$b" "handlers-Stop"
 check "and only those" lacks "$b" "handlers-PreToolUse"
 check "the Log row brings the list back" has "$c" "events-viewport"
 
+# Spaces: each harness's space lists only its own rows, under its own name
+# and hook events, and a trip to the other leaves the Log where it was, as a
+# trip to Health does. The spaces scene's Codex has a guard writing to
+# stderr, so its icon carries a dot while Claude Code's space shows.
+a="$(tree spaces before spaces)"
+b="$(tree spaces away spaces)"
+c="$(tree spaces back spaces)"
+id="$(row_at "$a" 450)"
+name() { jq -r '[.elements[] | select(.exiting != true and (.path | test("space-name/"))) | .text // empty][0]' "$1"; }
+check "Claude Code's space is named above Log ($(name "$a"))" test "$(name "$a")" = "Claude Code"
+check "Codex's icon is dotted for its Health's issue" has "$a" "space-codex/space-issues"
+check "Claude Code's, shown, is not" lacks "$a" "space-claude/space-issues"
+check "Codex's space lists only its 7 rows ($(rows "$b"))" test "$(rows "$b")" -eq 7
+check "under its own name ($(name "$b"))" test "$(name "$b")" = "Codex"
+check "with Codex's hook events" has "$b" "event-Interrupt"
+check "and none of Claude Code's own" lacks "$b" "event-SessionEnd"
+check "its icon, shown, loses the dot" lacks "$b" "space-codex/space-issues"
+check "back in Claude Code's, the picked row is where it was ($(top "$a" "$id") -> $(top "$c" "$id"))" same "$(top "$a" "$id")" "$(top "$c" "$id")"
+check "the rows that came meanwhile loaded below ($(held "$a") -> $(held "$c"))" below "$(held "$a")" "$(held "$c")"
+check "and the pill is up" has "$c" to-end
+a="$(tree spaces-following back spaces)"
+check "a following list comes back from Codex at its newest row" same "$(newest_bottom "$a")" "$(view_bottom "$a")"
+check "with no pill" lacks "$a" to-end
+check "and nothing reached either state file" test ! -e "$tmp/state.json" -a ! -e "$tmp/codex/state.json"
+# Each space keeps its own filter: Claude Code's Stop narrows neither
+# Codex's list nor goes when Codex shows.
+a="$(tree spaces-filter narrowed spaces)"
+b="$(tree spaces-filter away spaces)"
+c="$(tree spaces-filter back spaces)"
+check "Stop narrows Claude Code's list ($(rows "$a"))" test "$(rows "$a")" -lt 40
+check "but not Codex's ($(rows "$b"))" test "$(rows "$b")" -eq 7
+check "and Claude Code's is narrowed still when it comes back ($(rows "$c"))" test "$(rows "$c")" -lt 40
+# A switch slides the sidebar's contents sideways, the one motion it makes.
+# 70 ms in, from Claude Code's Log narrowed to an issue, Codex's come in from
+# the right as Claude Code's leave to the left, while the rest of the window
+# already shows as it rests: the screen whole, the toolbar's title at its
+# width, the issue filter gone, the sidebar's foot in its colours.
+a="$(tree spaces-slide filtered spaces)"
+b="$(tree spaces-slide sliding spaces)"
+c="$(tree spaces-slide settled spaces)"
+x() { jq -r --arg k "$2" '[.elements[] | select(.path | endswith($k))][0].rect[0]' "$1"; }
+rest() {
+  jq -c '[.elements[] | select(.path | test("/(head|hooks)-(claude|codex)") | not)
+    | [.path, .rect, .opacity, .fill, .color, .exiting]] | sort' "$1"
+}
+check "Claude Code's Log shows the issue filter" has "$a" "issue-filter"
+check "on a switch, Codex's sidebar contents come in from the right ($(x "$b" head-codex) -> $(x "$c" head-codex))" \
+  below "$(x "$c" head-codex)" "$(x "$b" head-codex)"
+check "as Claude Code's leave to the left ($(x "$b" head-claude))" below "$(x "$b" head-claude)" "$(x "$c" head-codex)"
+check "while the rest of the window shows as it rests" test "$(rest "$b")" = "$(rest "$c")"
+check "and the slide ends" test "$(jq '[.elements[] | select(.exiting == true)] | length' "$c")" -eq 0
+
 # Replay runs route, the binary Claude Code runs, on the canvas scene's
 # newest event, a Bash call: the guards that ran show beside the logged
 # answer. Skipped when this Mac has no route.
@@ -236,7 +291,6 @@ if [ -x "$HOME/.local/libexec/route" ]; then
   check "a replay lists the guards that ran" has "$b" "replayed-0"
   # A denying guard switched off on Handlers (no-dangerous.py, which denied
   # the canvas's first event) shows as off, and the answer as changed.
-  says() { jq -e --arg w "$2" '[.elements[] | select((.text // .label) == $w)] | length > 0' "$1" >/dev/null; }
   c="$(tree replay-off replayed canvas)"
   check "a guard switched off changes the replayed answer" says "$c" "Replay: answer changed"
   check "and shows as off" says "$c" "off"

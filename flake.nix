@@ -137,12 +137,20 @@
           exit 1
         fi
         codesign --force --sign - "$exe"
+        # The icon: route-console/icon/AppIcon.icon (Icon Composer), compiled
+        # by scripts/route-console-icon.sh into Assets.car, the Liquid Glass
+        # icon macOS 26 and later draw, and AppIcon.icns for older systems.
+        mkdir -p "$app/Resources"
+        cp ${./route-console/icon/Assets.car} "$app/Resources/Assets.car"
+        cp ${./route-console/icon/AppIcon.icns} "$app/Resources/AppIcon.icns"
         cat > "$app/Info.plist" <<EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
           <key>CFBundleExecutable</key><string>route-console</string>
+          <key>CFBundleIconFile</key><string>AppIcon</string>
+          <key>CFBundleIconName</key><string>AppIcon</string>
           <key>CFBundleIdentifier</key><string>io.vadirn.route-console</string>
           <key>CFBundleName</key><string>Route Console</string>
           <key>CFBundlePackageType</key><string>APPL</string>
@@ -176,7 +184,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
-            inherit vault-query md-for-agents route;
+            inherit vault-query md-for-agents route route-console;
           })
         ];
       };

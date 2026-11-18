@@ -6,6 +6,8 @@ use rune::tok::{self, TextStyle};
 use rune::{Color, oklch, oklcha};
 use rune_kit::{Kit, TableStyle};
 
+use crate::space::Harness;
+
 /// The Log list's row height. Its rows are all this tall, so a row's place in
 /// the list is its index times this.
 pub const ROW_H: f32 = 28.0;
@@ -22,6 +24,9 @@ pub struct Tokens {
     pub zebra: Color,
     pub fill: Color,
     pub sel: Color,
+    /// The space's accent at full strength: switches, focus rings and
+    /// route's timing bar.
+    pub accent: Color,
     pub inspector: Color,
     /// A grouped list's fill on the Health screen.
     pub group: Color,
@@ -59,9 +64,40 @@ pub mod ty {
     pub const SMALL: TextStyle = TextStyle::new(12.0, 400.0).lh(16.8);
 }
 
+/// A space's accent, its selection's fill and its accent text (the sidebar's
+/// icons), as the design's spaces artboard draws them. Claude Code's blue is
+/// the kit's own accent, `tok::accent(0, …)`; Codex's teal is a lighter,
+/// quieter colour than a hue swap of the blue.
+fn accent(harness: Harness, dark: bool) -> (Color, Color, Color) {
+    match (harness, dark) {
+        (Harness::Claude, false) => (
+            oklch(0.6, 0.17, 256.0),
+            oklcha(0.6, 0.17, 256.0, 0.16),
+            oklch(0.48, 0.17, 256.0),
+        ),
+        (Harness::Claude, true) => (
+            oklch(0.66, 0.17, 256.0),
+            oklcha(0.66, 0.17, 256.0, 0.26),
+            oklch(0.76, 0.13, 256.0),
+        ),
+        (Harness::Codex, false) => (
+            oklch(0.6, 0.11, 190.0),
+            oklcha(0.6, 0.11, 190.0, 0.17),
+            oklch(0.46, 0.09, 190.0),
+        ),
+        (Harness::Codex, true) => (
+            oklch(0.68, 0.11, 190.0),
+            oklcha(0.68, 0.11, 190.0, 0.26),
+            oklch(0.8, 0.09, 190.0),
+        ),
+    }
+}
+
 impl Tokens {
-    pub fn new(dark: bool) -> Tokens {
+    /// The look of `harness`'s space.
+    pub fn new(dark: bool, harness: Harness) -> Tokens {
         let t = tok::theme(dark);
+        let (accent, sel, accent_text) = accent(harness, dark);
         if dark {
             Tokens {
                 dark,
@@ -73,10 +109,11 @@ impl Tokens {
                 text_secondary: t.text_secondary,
                 zebra: oklcha(1.0, 0.0, 0.0, 0.02),
                 fill: oklcha(1.0, 0.0, 0.0, 0.06),
-                sel: oklcha(0.66, 0.17, 256.0, 0.26),
+                sel,
+                accent,
                 inspector: oklch(0.212, 0.005, 265.0),
                 group: oklch(0.26, 0.005, 265.0),
-                accent_text: oklch(0.76, 0.13, 256.0),
+                accent_text,
                 warn_bg: oklcha(0.74, 0.16, 58.0, 0.12),
                 warn_border: oklcha(0.74, 0.16, 58.0, 0.32),
                 control_off: t.control_off,
@@ -92,10 +129,11 @@ impl Tokens {
                 text_secondary: t.text_secondary,
                 zebra: oklcha(0.2, 0.01, 265.0, 0.03),
                 fill: oklcha(0.2, 0.01, 265.0, 0.06),
-                sel: oklcha(0.6, 0.17, 256.0, 0.16),
+                sel,
+                accent,
                 inspector: oklch(0.985, 0.002, 265.0),
                 group: oklch(0.975, 0.002, 265.0),
-                accent_text: oklch(0.48, 0.17, 256.0),
+                accent_text,
                 warn_bg: oklcha(0.68, 0.16, 58.0, 0.1),
                 warn_border: oklcha(0.68, 0.16, 58.0, 0.3),
                 control_off: t.control_off,
@@ -198,13 +236,19 @@ impl Tokens {
         self.badge(Tint::Blue).1
     }
 
-    /// rune-kit's neutral kit, with the canvas's card border and selection.
+    /// rune-kit's neutral kit, with the canvas's card border and the space's
+    /// accent wherever the kit puts its own (a switch's track, focus rings).
     pub fn kit(&self) -> Kit {
         let mut k = Kit::neutral(self.dark);
         k.c.page = self.bg;
         k.c.bg_deep = self.bg;
         k.c.bg_base = self.card;
         k.c.border_muted = self.card_border;
+        k.c.bg_accent = self.accent;
+        k.c.text_accent = self.accent;
+        k.c.icon_accent = self.accent;
+        k.c.border_focus = self.accent;
+        k.c.border_active = self.accent;
         k
     }
 
@@ -246,5 +290,28 @@ pub fn tint_of(word: &str) -> Tint {
         "context" => Tint::Purple,
         "ask" | "error" | "stderr" => Tint::Orange,
         _ => Tint::Gray,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn claude_keeps_the_kits_own_accent_and_codex_turns_it_teal() {
+        for dark in [false, true] {
+            let neutral = Kit::neutral(dark).c.bg_accent;
+            assert_eq!(
+                Tokens::new(dark, Harness::Claude).kit().c.bg_accent,
+                neutral
+            );
+            let codex = Tokens::new(dark, Harness::Codex);
+            let k = codex.kit();
+            assert_eq!(
+                (k.c.bg_accent, k.c.border_focus),
+                (codex.accent, codex.accent)
+            );
+            assert_ne!(codex.accent, neutral);
+        }
     }
 }

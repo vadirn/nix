@@ -1,0 +1,59 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/libexec/route --harness codex PreToolUse",
+            "timeout": 32
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/libexec/route --harness codex UserPromptSubmit",
+            "timeout": 32
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/libexec/route --harness codex PostToolUse",
+            "timeout": 32
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/libexec/route --harness codex Stop",
+            "timeout": 62
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/libexec/route --harness codex Interrupt",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

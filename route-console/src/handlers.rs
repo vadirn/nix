@@ -31,6 +31,7 @@ const CONTENT_W: f32 = 920.0;
 
 pub fn toolbar(s: &App, k: &Kit, t: &Tokens) -> Toolbar {
     let title = s
+        .space
         .handlers_event
         .clone()
         .unwrap_or_else(|| "Handlers".to_string());
@@ -52,9 +53,10 @@ pub fn screen(s: &App, k: &Kit, t: &Tokens) -> El {
     let k = &k;
     // One hook event lists its groups; none lists every event's under its
     // name, as the Log with no event lists every event.
-    let blocks: Vec<El> = match &s.handlers_event {
+    let blocks: Vec<El> = match &s.space.handlers_event {
         Some(e) => vec![event_block(s, k, t, e, false)],
         None => s
+            .space
             .events
             .iter()
             .map(|e| event_block(s, k, t, e, true))
@@ -88,7 +90,7 @@ pub fn screen(s: &App, k: &Kit, t: &Tokens) -> El {
 }
 
 fn event_block(s: &App, k: &Kit, t: &Tokens, event: &str, titled: bool) -> El {
-    let groups = s.hooks.groups(event);
+    let groups = s.space.hooks.groups(event);
     let mut block = col()
         .key(format!("handlers-{event}"))
         .role("group")
@@ -123,7 +125,7 @@ fn matcher_group(s: &App, k: &Kit, t: &Tokens, event: &str, gi: usize, g: &Group
     };
     let rows = g.handlers.iter().enumerate().map(|(hi, h)| {
         let id = HandlerId::new(event, &g.matcher, &h.command);
-        let on = !s.toggles.is_off(&id);
+        let on = !s.space.toggles.is_off(&id);
         let verb = if on { "Disable" } else { "Enable" };
         let switch = Switch::new(on)
             .label(format!("{verb} {}", h.command))
@@ -178,7 +180,7 @@ fn matcher_group(s: &App, k: &Kit, t: &Tokens, event: &str, gi: usize, g: &Group
 /// "N disabled" and "Enable all", while any handler the hooks file lists is
 /// off.
 fn status(s: &App, k: &Kit, t: &Tokens) -> Option<El> {
-    let off = s.toggles.off_in(&s.hooks);
+    let off = s.space.toggles.off_in(&s.space.hooks);
     (off > 0).then(|| {
         let enable = Button::new("Enable all")
             .on_press_tx(|s: &mut App, tx| s.enable_all(tx))
