@@ -1,0 +1,12 @@
+{
+  "events": [
+    { "t": 1.0, "type": "tap", "key": "screen-health" },
+    { "t": 1.3, "type": "tap", "key": "show-issue-0" },
+    { "t": 1.4, "type": "move", "x": 1100, "y": 700 },
+    { "t": 1.6, "type": "mark", "name": "filtered" },
+    { "t": 1.8, "type": "tap", "key": "space-codex" },
+    { "t": 1.85, "type": "move", "x": 1100, "y": 700 },
+    { "t": 1.95, "type": "mark", "name": "sliding" },
+    { "t": 2.8, "type": "mark", "name": "settled" }
+  ]
+}

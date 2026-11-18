@@ -29,7 +29,7 @@ mod view;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use rune::{AppSpec, Chrome, Key, KeyEvent, TextEdit, Tx};
+use rune::{AppSpec, Chrome, Key, KeyEvent, Spring, TextEdit, Tx};
 use rune_kit::shell::{self, PaneState};
 use serde_json::Value;
 
@@ -180,6 +180,15 @@ pub struct App {
     /// The other harness's space, as it was left.
     pub parked: Space,
     pub sidebar: PaneState,
+    /// The commit a switch makes: the window lands every change at once but
+    /// the sidebar contents' slide (`view.rs`, `view`). The next poll clears
+    /// it, so the sidebar's own slide open and shut keeps its spring.
+    ///
+    /// Stopgap: Rune fades in each descendant of a new element, even under a
+    /// `Transition::none()` parent (rune `runtime/commit/apply.rs`, where
+    /// only `instant_changes` mounts them at once), so the screen a switch
+    /// mounts would fade in. Remove once Rune can mount a subtree whole.
+    pub switching: bool,
     pub last_look: f64,
     pub error: Option<String>,
     feed: Option<Feed>,
@@ -246,6 +255,7 @@ impl App {
             day: today(),
             screen: Screen::Log,
             sidebar: PaneState::new(220.0).range(180.0, 360.0),
+            switching: false,
             last_look: f64::NEG_INFINITY,
             error,
             feed: None,
@@ -373,9 +383,10 @@ impl App {
     ///
     /// Like every change the reader makes here, it lands at once: Rune would
     /// spring heights and bars, fade colours and fade elements in and out.
-    /// The commit is instant rather than the elements, so the one motion left,
-    /// rune-kit's sidebar sliding open and shut, still carries the content
-    /// with it, and a pick made mid-slide leaves the slide running.
+    /// The commit is instant rather than the elements, so the motion left,
+    /// rune-kit's sidebar sliding open and shut and a switch's slide (`switch`),
+    /// still carries the content with it, and a pick made mid-slide leaves
+    /// the slide running.
     pub fn click(&mut self, id: i64, tx: &mut Tx) {
         tx.instant();
         self.pick(id);
@@ -498,15 +509,22 @@ impl App {
     /// The other harness's space, on the same screen, as it was left: its
     /// Log's rows, filter, pick and place, its Health and its Handlers. The
     /// space shown is parked as it is, as a trip to Health leaves the Log.
+    ///
+    /// The one commit here that animates, for the sidebar's contents to
+    /// slide (`view.rs`, `slide`). The rest lands at once all the same,
+    /// colours included.
     pub fn switch(&mut self, h: Harness, tx: &mut Tx) {
-        tx.instant();
         if self.space.harness == h {
+            tx.instant();
             return;
         }
+        tx.color_motion(Spring::NONE);
+        self.switching = true;
+        tx.wake_after(Duration::ZERO);
         std::mem::swap(&mut self.space, &mut self.parked);
         self.refresh();
         match self.screen {
-            // The view keys the Log by its space, so the list mounts afresh.
+            // The screen mounts afresh, so the Log goes back to its place.
             Screen::Log => self.mount_log(tx),
             Screen::Handlers => self.reload_handlers(),
             Screen::Health => {}
@@ -657,6 +675,7 @@ impl App {
 }
 
 fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
+    let switched = std::mem::take(&mut s.switching);
     if std::mem::take(&mut s.space.to_end) {
         // Instant, so the trip passes no rows that would report the list
         // as scrolled up.
@@ -664,7 +683,7 @@ fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
     }
     tx.wake_after(FOLLOW);
     if now - s.last_look < FOLLOW.as_secs_f64() {
-        return false;
+        return switched;
     }
     s.last_look = now;
     if s.live && s.screen == Screen::Handlers {
@@ -682,7 +701,7 @@ fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
         s.recount();
         return true;
     }
-    false
+    switched
 }
 
 fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -1298,6 +1317,23 @@ mod tests {
             mods: Mods::default(),
         };
         assert!(space_key(&plain).is_none(), "a 2 typed alone is text");
+    }
+
+    #[test]
+    fn a_switch_lands_the_rest_at_once_for_its_own_commit_only() {
+        let mut app = app(spaces_scene);
+        app.switch(Harness::Codex, &mut Tx::default());
+        assert!(app.switching, "the switch's commit lands all but the slide");
+        // Within a look of the last, so only the switch asks for a commit.
+        app.last_look = 1.0;
+        assert!(poll(&mut app, 1.0, &mut Tx::default()));
+        assert!(
+            !app.switching,
+            "the next poll clears it, so the sidebar's own slide keeps its spring"
+        );
+        assert!(!poll(&mut app, 1.0, &mut Tx::default()));
+        app.switch(Harness::Codex, &mut Tx::default());
+        assert!(!app.switching, "a switch to the space shown is none");
     }
 
     #[test]

@@ -14,8 +14,8 @@
 use std::borrow::Cow;
 
 use rune::{
-    Align, Anim, Cx, El, GrowthSpec, Icon, KeyEvent, ScrollPos, ScrollSpec, TextStyle, Transition,
-    Tx, col, el, icon, row, text,
+    Align, Anim, Cx, Edge, El, GrowthSpec, Icon, KeyEvent, ScrollPos, ScrollSpec, TextStyle,
+    Transition, Tx, col, el, icon, row, text,
 };
 use rune_kit::shell::{SidebarRow, SidebarToggle, SplitView, Toolbar};
 use rune_kit::{
@@ -197,7 +197,17 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             crate::handlers::screen(s, &k, &t),
         ),
     };
-    SplitView::new(main)
+    // Keyed by its space, so a switch mounts the other space's screen afresh,
+    // with that space's own scroll offsets rather than this one's. The one
+    // left goes at once: an exit keeps the transition of its last render,
+    // before the switch.
+    let main = col()
+        .key(format!("screen-of-{}", s.space.harness.name()))
+        .w_full()
+        .h_full()
+        .transition(Transition::none())
+        .child(main);
+    let shell = SplitView::new(main)
         .sidebar(
             &s.sidebar,
             |s: &mut App| &mut s.sidebar,
@@ -214,7 +224,16 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         // Hover comes and goes at once, as every change the reader makes does
         // (`App::click`); Rune would fade it out over 0.1 s. Hover tracks only,
         // so the sidebar's slide keeps its spring.
-        .hover_motion_within(Anim::INSTANT, Anim::INSTANT)
+        .hover_motion_within(Anim::INSTANT, Anim::INSTANT);
+    // A switch lands everything at once but the sidebar contents' slide
+    // (`slide`): the new screen's rows mount whole, the toolbar's title takes
+    // its width at once. Only for the switch's commit: always, it would land
+    // the sidebar's own slide open and shut too.
+    if s.switching {
+        shell.instant_changes()
+    } else {
+        shell
+    }
 }
 
 fn log_toolbar(s: &App, k: &Kit, t: &Tokens) -> Toolbar {
@@ -236,11 +255,7 @@ fn log(s: &App, k: &Kit, t: &Tokens) -> El {
         .h_full()
         .child(list(s, k, t).w_full().grow(1.0).min_h(0.0))
         .children(pill(s, k));
-    // Keyed by its space, so a switch mounts the other space's list afresh,
-    // as a trip back from Health does, rather than handing it this one's
-    // scroll offset.
-    let key = format!("log-{}", s.space.harness.name());
-    col().key(key).w_full().h_full().child(rule(t)).child(
+    col().key("log").w_full().h_full().child(rule(t)).child(
         row()
             .w_full()
             .grow(1.0)
@@ -285,8 +300,14 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
         .on_select(|s: &mut App, tx| s.show_handlers(None, tx))
         .build(k)
         .key("screen-handlers");
+    let h = sp.harness;
+    // The space's contents, its name, screens and hook events, are keyed by
+    // it, so a switch slides the shown space's out and the other's in.
     let screens = col()
+        .key(format!("head-{}", h.name()))
         .w_full()
+        .transition(slide(h))
+        .animated_changes()
         .child(name)
         .child(log.mt(4.0))
         .child(health.build(k).key("screen-health"))
@@ -323,18 +344,35 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
             .justify_center(),
         |r, (i, h)| r.child(space_button(s, h, i + 1, t, k)),
     );
-    events
-        .fold(
-            Sidebar::new()
-                .label("Sidebar")
-                .inset(0.0)
-                .header_padding(6.0, 16.0)
-                .row_gap(0.0)
-                .header(screens),
-            |sb, r| sb.child(r),
-        )
+    let events = col()
+        .key(format!("hooks-{}", h.name()))
+        .w_full()
+        .transition(slide(h))
+        .animated_changes()
+        .children(events);
+    Sidebar::new()
+        .label("Sidebar")
+        .inset(0.0)
+        .header_padding(6.0, 16.0)
+        .row_gap(0.0)
+        // Clipped as the hook events' scroll viewport clips them, so the two
+        // slide out of sight at the same edges.
+        .header(col().w_full().clip_soft(0.0).child(screens))
+        .child(events)
         .footer(spaces)
         .build(k)
+}
+
+/// How a space's sidebar contents come and go on a switch, the one motion a
+/// switch makes (`App::switching`): Claude Code's sit left of Codex's, as
+/// their icons do, so each space's leave and enter on its own side, by their
+/// whole width. The sidebar's pane clips them (rune-kit `shell/split.rs`,
+/// `dock`).
+fn slide(h: Harness) -> Transition {
+    Transition::move_edge(match h {
+        Harness::Claude => Edge::Leading,
+        Harness::Codex => Edge::Trailing,
+    })
 }
 
 /// The space's name above its screens.
@@ -350,8 +388,8 @@ fn issues(n: usize) -> String {
 
 /// One harness's button at the sidebar's foot: its mark, in the accent while
 /// its space shows, with an orange dot while it is parked and its Health has
-/// issues. The switch lands at once: the design slides the sidebar's
-/// contents sideways, which the sidebar's one list cannot do.
+/// issues. The dot comes and goes at once, as everything a switch changes
+/// but the sidebar's contents does (`slide`).
 fn space_button(s: &App, h: Harness, n: usize, t: &Tokens, k: &Kit) -> El {
     let on = s.space.harness == h;
     let trouble = s.space_of(h).health.issues.len();
@@ -384,6 +422,7 @@ fn space_button(s: &App, h: Harness, n: usize, t: &Tokens, k: &Kit) -> El {
                 .fill(t.sign(Tint::Orange))
                 .border(2.0, t.bg)
                 .pin(None, Some(3.0), Some(3.0), None)
+                .transition(Transition::none())
                 .a11y_hidden()
         }))
         .on_press_tx(move |s: &mut App, tx| s.switch(h, tx));
@@ -429,9 +468,12 @@ fn issue_filter(s: &App, k: &Kit, t: &Tokens) -> Option<El> {
         .on_press_tx(|s: &mut App, tx| s.clear_issue(tx))
         .build(k)
         .key("clear-issue");
+    // The toolbar is not keyed by its space, as the screen is: on a switch
+    // to a space without the filter, the chip goes at once rather than fade.
     Some(
         row()
             .key("issue-filter")
+            .transition(Transition::none())
             .role("group")
             .label(format!("Only {words}"))
             .h(28.0)
