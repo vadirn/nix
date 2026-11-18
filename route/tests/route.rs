@@ -41,7 +41,16 @@ impl Fixture {
     }
 
     fn command(&self, event: &str) -> Command {
+        self.command_as(None, event)
+    }
+
+    /// The route command for `event`, as `harness`'s settings call it; `None`
+    /// passes no `--harness`, as Claude Code's do.
+    fn command_as(&self, harness: Option<&str>, event: &str) -> Command {
         let mut c = Command::new(env!("CARGO_BIN_EXE_route"));
+        if let Some(h) = harness {
+            c.args(["--harness", h]);
+        }
         c.arg("--config")
             .arg(self.dir.join("hooks.json"))
             .arg("--state")
@@ -57,22 +66,14 @@ impl Fixture {
     }
 
     fn run_bytes(&self, event: &str, payload: &[u8]) -> Ran {
-        let started = Instant::now();
-        let mut child = self
-            .command(event)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        child.stdin.take().unwrap().write_all(payload).unwrap();
-        let out = child.wait_with_output().unwrap();
-        Ran {
-            exit: out.status.code(),
-            stdout: out.stdout,
-            stderr: String::from_utf8(out.stderr).unwrap(),
-            took: started.elapsed(),
-        }
+        ran(self.command(event), payload)
+    }
+
+    fn run_as(&self, harness: &str, event: &str, payload: &Value) -> Ran {
+        ran(
+            self.command_as(Some(harness), event),
+            payload.to_string().as_bytes(),
+        )
     }
 
     fn log_dir(&self) -> PathBuf {
@@ -99,6 +100,25 @@ fn log_lines(dir: &Path) -> Vec<Value> {
         }
     }
     lines
+}
+
+/// Runs `cmd` with `payload` on stdin.
+fn ran(mut cmd: Command, payload: &[u8]) -> Ran {
+    let started = Instant::now();
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(payload).unwrap();
+    let out = child.wait_with_output().unwrap();
+    Ran {
+        exit: out.status.code(),
+        stdout: out.stdout,
+        stderr: String::from_utf8(out.stderr).unwrap(),
+        took: started.elapsed(),
+    }
 }
 
 struct Ran {
@@ -566,5 +586,142 @@ fn a_rewrite_from_a_builtin_reaches_claude_code() {
     assert_eq!(
         ran.json()["hookSpecificOutput"]["updatedInput"],
         json!({"command": "git pull -q"})
+    );
+}
+
+#[test]
+fn each_log_line_names_its_harness() {
+    let f = Fixture::new();
+    let script = f.handler("deny.sh", &deny_script("no"));
+    f.config(json!({"hooks": {"PreToolUse": [group("Bash", &[&script])]}}));
+    f.run("PreToolUse", &bash_call("ls"));
+    let ran = f.run_as("codex", "PreToolUse", &bash_call("ls"));
+    assert_eq!(ran.exit, Some(0));
+    assert_eq!(
+        ran.json()["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+    let harnesses: Vec<Value> = f.log_lines().iter().map(|l| l["harness"].clone()).collect();
+    assert_eq!(harnesses, [json!("claude"), json!("codex")]);
+}
+
+#[test]
+fn codex_reads_its_own_hooks_and_state_unless_told_otherwise() {
+    let f = Fixture::new();
+    let (config, state) = (f.dir.join("config"), f.dir.join("state"));
+    fs::create_dir_all(config.join("route/codex")).unwrap();
+    fs::write(
+        config.join("route/hooks.json"),
+        json!({"hooks": {}}).to_string(),
+    )
+    .unwrap();
+    let script = f.handler("deny.sh", &deny_script("the codex handler"));
+    fs::write(
+        config.join("route/codex/hooks.json"),
+        json!({"hooks": {"PreToolUse": [group("Bash", &[&script])]}}).to_string(),
+    )
+    .unwrap();
+    let call = |harness: &str| {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_route"));
+        c.env("XDG_CONFIG_HOME", &config)
+            .env("XDG_STATE_HOME", &state)
+            .args(["--harness", harness, "PreToolUse"]);
+        ran(c, bash_call("ls").to_string().as_bytes())
+    };
+
+    let codex = call("codex");
+    assert_eq!(
+        codex.json()["hookSpecificOutput"]["permissionDecisionReason"],
+        "the codex handler"
+    );
+    // Claude's file lists no handlers, so the same call passes in silence.
+    let claude = call("claude");
+    assert_eq!((claude.exit, claude.stdout.len()), (Some(0), 0));
+
+    // A switch in Codex's state file turns the handler off for Codex alone.
+    fs::create_dir_all(state.join("route/codex")).unwrap();
+    fs::write(
+        state.join("route/codex/state.json"),
+        json!({"disabled": [{"event": "PreToolUse", "matcher": "Bash", "command": script}]})
+            .to_string(),
+    )
+    .unwrap();
+    let off = call("codex");
+    assert_eq!((off.exit, off.stdout.len()), (Some(0), 0));
+
+    // One shared log, each line naming its harness.
+    let harnesses: Vec<Value> = log_lines(&state.join("route/log"))
+        .iter()
+        .map(|l| l["harness"].clone())
+        .collect();
+    assert_eq!(harnesses, [json!("codex"), json!("claude"), json!("codex")]);
+}
+
+#[test]
+fn settings_for_codex_name_the_harness_and_leave_out_on_failure() {
+    let f = Fixture::new();
+    f.config(json!({"hooks": {"PreToolUse": [group("Bash", &["a"])]}}));
+    let out = Command::new(env!("CARGO_BIN_EXE_route"))
+        .args(["--harness", "codex", "--config"])
+        .arg(f.dir.join("hooks.json"))
+        .args(["settings", "--bin", "~/.local/libexec/route"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let block: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        block,
+        json!({"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+            {"type": "command", "command": "~/.local/libexec/route --harness codex PreToolUse",
+                "timeout": 12}
+        ]}]}})
+    );
+}
+
+#[test]
+fn an_unknown_harness_fails_closed_on_pre_tool_use() {
+    let f = Fixture::new();
+    f.config(json!({"hooks": {}}));
+    let ran = ran(
+        f.command_as(Some("opencode"), "PreToolUse"),
+        bash_call("ls").to_string().as_bytes(),
+    );
+    assert_eq!(ran.exit, Some(2));
+    assert!(
+        ran.stderr.contains("unknown harness opencode"),
+        "{}",
+        ran.stderr
+    );
+}
+
+#[test]
+fn a_codex_bash_call_meets_the_builtin_guards() {
+    let f = Fixture::new();
+    let guard = "python3 /nonexistent/no-dangerous.py";
+    f.config(json!({
+        "route": {"builtins": {guard: "no-dangerous"}},
+        "hooks": {"PreToolUse": [group("Bash|exec_command|functions.exec_command", &[guard])]}
+    }));
+    // Codex's payload: Claude Code's fields plus its own turn and model.
+    let payload = json!({
+        "session_id": "s1",
+        "turn_id": "t1",
+        "transcript_path": null,
+        "cwd": "/tmp",
+        "hook_event_name": "PreToolUse",
+        "model": "gpt-5.5",
+        "permission_mode": "default",
+        "tool_name": "Bash",
+        "tool_use_id": "call_1",
+        "tool_input": {"command": "sudo ls"}
+    });
+    let ran = f.run_as("codex", "PreToolUse", &payload);
+    assert_eq!(
+        ran.json()["hookSpecificOutput"]["permissionDecision"],
+        "deny"
     );
 }

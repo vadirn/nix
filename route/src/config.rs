@@ -13,6 +13,7 @@ use serde_json::{Map, Value, json};
 
 use crate::event::{self, MatchOn};
 use crate::guards::{self, Guard};
+use crate::harness::Harness;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -453,7 +454,8 @@ pub fn select(
 }
 
 /// The `hooks` block that hands every configured event to route: one entry
-/// per event, calling `<bin> <Event>`.
+/// per event, calling `<bin> <Event>`, or `<bin> --harness codex <Event>` in
+/// Codex's settings.
 ///
 /// - **matcher**: on events with matcher support, the union of the groups'
 ///   names. Claude Code then starts route only when some handler can match,
@@ -462,10 +464,17 @@ pub fn select(
 /// - **timeout**: the largest handler timeout plus a 2-second margin, so route
 ///   kills a slow handler and answers before Claude Code kills route.
 /// - **async**: set when every handler of the event is async.
-pub fn settings_block(cfg: &Config, bin: &str) -> Result<(Value, Vec<String>), String> {
+pub fn settings_block(
+    cfg: &Config,
+    bin: &str,
+    harness: Harness,
+) -> Result<(Value, Vec<String>), String> {
     let mut hooks = Map::new();
     let mut warnings = Vec::new();
-    let bin = shell_word(bin);
+    let bin = match harness.flag() {
+        Some(flag) => format!("{} {flag}", shell_word(bin)),
+        None => shell_word(bin),
+    };
     for (event, groups) in &cfg.events {
         let handlers: Vec<&Handler> = groups.iter().flat_map(|g| &g.handlers).collect();
         if handlers.is_empty() {
@@ -504,8 +513,8 @@ pub fn settings_block(cfg: &Config, bin: &str) -> Result<(Value, Vec<String>), S
                 hook.insert("timeout".into(), json!(t.ceil() as u64 + 2));
                 // route itself fails closed on these events; onFailure covers
                 // the one case it cannot, a route that never starts. Claude
-                // Code before 2.1.295 ignores the field.
-                if event::fails_closed(event) {
+                // Code before 2.1.295 ignores the field; Codex has none.
+                if event::fails_closed(event) && harness.blocks_on_failure() {
                     hook.insert("onFailure".into(), "block".into());
                 }
             }
@@ -706,7 +715,7 @@ mod tests {
         );
         assert_eq!(shell_word("~/my tools/route"), "~/'my tools/route'");
         assert_eq!(shell_word("/opt/it's/route"), r"'/opt/it'\''s/route'");
-        let (block, warnings) = settings_block(&cfg, "/bin/route").unwrap();
+        let (block, warnings) = settings_block(&cfg, "/bin/route", Harness::Claude).unwrap();
         assert!(warnings.is_empty());
         assert_eq!(
             block,
@@ -734,7 +743,7 @@ mod tests {
         ]}}"#,
         )
         .unwrap();
-        let (block, warnings) = settings_block(&cfg, "route").unwrap();
+        let (block, warnings) = settings_block(&cfg, "route", Harness::Claude).unwrap();
         assert!(block["hooks"]["PreToolUse"][0].get("matcher").is_none());
         assert_eq!(warnings.len(), 1);
     }
