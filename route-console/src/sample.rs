@@ -508,9 +508,9 @@ pub const HOOKS: &str = r#"{
     "SessionStart": [{"hooks": [
       {"type": "command", "command": "mkdir -p /tmp/claude", "timeout": 5},
       {"type": "command", "command": "bash ~/.claude/hooks/sandbox-nc-path.sh", "timeout": 5},
-      {"type": "command", "command": "bash ~/.claude/hooks/direnv-env.sh", "timeout": 30}
+      {"type": "command", "command": "python3 ~/.claude/hooks/direnv-env.py", "timeout": 30}
     ]}],
-    "CwdChanged": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/direnv-env.sh", "timeout": 30}]}],
+    "CwdChanged": [{"hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/direnv-env.py", "timeout": 30}]}],
     "SessionEnd": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/turn-check.sh", "timeout": 3}]}],
     "Notification": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/sound.sh Notification", "timeout": 5, "async": true}]}],
     "TaskCompleted": [{"hooks": [{"type": "command", "command": "bash ~/.claude/hooks/sound.sh TaskCompleted", "timeout": 5, "async": true}]}]
