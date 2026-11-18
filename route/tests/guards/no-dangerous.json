@@ -855,6 +855,63 @@
    "name": "push text in a quoted heredoc",
    "command": "cat <<'EOF'\n$(git push -f)\nEOF",
    "expect": "none"
+  },
+  {
+   "name": "push after cd",
+   "command": "cd sub && git push origin feat/retry-flakes",
+   "expect": "none"
+  },
+  {
+   "name": "push in a group",
+   "command": "(git push)",
+   "expect": "none"
+  },
+  {
+   "name": "push after a keyword",
+   "command": "if git push; then echo ok; fi",
+   "expect": "none"
+  },
+  {
+   "name": "plain push in a substitution",
+   "command": "echo $(git push origin main)",
+   "expect": "deny",
+   "reason": "its own command"
+  },
+  {
+   "name": "plain push in backticks",
+   "command": "x=`git push origin main`",
+   "expect": "deny",
+   "reason": "its own command"
+  },
+  {
+   "name": "plain push through bash -c",
+   "command": "bash -c 'git push origin main'",
+   "expect": "deny",
+   "reason": "its own command"
+  },
+  {
+   "name": "plain push in a heredoc fed to a shell",
+   "command": "bash <<'EOF'\ngit push origin main\nEOF",
+   "expect": "deny",
+   "reason": "its own command"
+  },
+  {
+   "name": "plain push in an unquoted heredoc's substitution",
+   "command": "cat <<EOF\n`git push origin main`\nEOF",
+   "expect": "deny",
+   "reason": "its own command"
+  },
+  {
+   "name": "plain push through xargs",
+   "command": "echo main | xargs git push origin",
+   "expect": "deny",
+   "reason": "its own command"
+  },
+  {
+   "name": "force push reason wins in a substitution",
+   "command": "echo $(git push -f)",
+   "expect": "deny",
+   "reason": "force push"
   }
  ]
 }
