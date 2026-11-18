@@ -169,7 +169,7 @@ check "override: earlier PATH entry survives" "$got" "kept"
 # Desktop-app hooks inherit launchd's environment, which lacks nix-darwin's
 # NIX_PATH. Fake zsh and direnv check the hand-off without a nix evaluation.
 mkdir -p "$TMPROOT/nozsh" "$TMPROOT/fakezsh" "$TMPROOT/emptyzsh"
-for tool in env grep jq mv rm; do
+for tool in env grep jq lockf mv rm; do
   ln -sf "$(command -v "$tool")" "$TMPROOT/nozsh/$tool"
 done
 cat > "$TMPROOT/nozsh/direnv" << 'EOF'
@@ -219,6 +219,85 @@ check "no zsh: exit 0" "$RC" "0"
 check "no zsh: NIX_PATH stays unset" "$(seen unset)" "1"
 check "no zsh: snapshot parses" "$(parses)" "yes"
 check "no zsh: stderr stays quiet" "$(cat "$TMPROOT/err")" ""
+
+# --- overlapping runs: the newest directory wins ----------------------------
+
+# Two CwdChanged events can land milliseconds apart. A fake direnv makes the
+# older run finish last, the order that used to install its stale snapshot.
+mkdir -p "$TMPROOT/slowdirenv"
+cat > "$TMPROOT/slowdirenv/direnv" << 'EOF'
+#!/bin/bash
+# Finds no config on status; exports FAKE_MARK after FAKE_DELAY seconds.
+[ "$1" = export ] || { echo '{}'; exit 0; }
+sleep "$FAKE_DELAY"
+printf '{"RACE_MARK":"%s"}\n' "$FAKE_MARK"
+EOF
+chmod +x "$TMPROOT/slowdirenv/direnv"
+
+ENVFILE="$TMPROOT/env-race.sh"
+SNAP="$ENVFILE.direnv"
+: > "$ENVFILE"
+race() { # delay, mark
+  printf '{"cwd":"%s"}' "$TMPROOT/plain" |
+    CLAUDE_ENV_FILE="$ENVFILE" FAKE_DELAY="$1" FAKE_MARK="$2" \
+      PATH="$TMPROOT/slowdirenv:$PATH" /bin/bash "$SCRIPT" 2>> "$TMPROOT/race-err"
+}
+race 1 older &
+sleep 0.3
+race 0 newer
+wait
+check "overlap: the newer run's snapshot stays" \
+  "$(grep -c "^export RACE_MARK='newer'$" "$SNAP")" "1"
+check "overlap: stderr stays quiet" "$(cat "$TMPROOT/race-err")" ""
+
+# --- worktrees inherit the main checkout's trust ----------------------------
+
+gitq() {
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    git -c user.name=t -c user.email=t@t "$@" > /dev/null 2>&1
+}
+repo() { # dir, .envrc line
+  mkdir -p "$1/sub"
+  echo "$2" > "$1/.envrc"
+  touch "$1/sub/.keep"
+  gitq -C "$1" init -b main
+  gitq -C "$1" add -A
+  gitq -C "$1" commit -m init
+}
+allowed() { (cd "$1" && direnv status --json | jq -r .state.foundRC.allowed); }
+
+repo "$TMPROOT/trusted" 'export MARKER_TRUST=1'
+(cd "$TMPROOT/trusted" && direnv allow) 2> /dev/null
+for wt in same sub changed denied; do
+  gitq -C "$TMPROOT/trusted" worktree add "$TMPROOT/wt-$wt"
+done
+echo 'export MARKER_TRUST=2' > "$TMPROOT/wt-changed/.envrc"
+(cd "$TMPROOT/wt-denied" && direnv deny) 2> /dev/null
+
+repo "$TMPROOT/untrusted" 'export MARKER_TRUST=3'
+gitq -C "$TMPROOT/untrusted" worktree add "$TMPROOT/wt-untrusted"
+
+run_hook wt-same "$TMPROOT/wt-same" env
+check "worktree, same file: variable exported" \
+  "$(grep -c "^export MARKER_TRUST='1'$" "$SNAP")" "1"
+check "worktree, same file: no warning" "$(cat "$TMPROOT/err")" ""
+
+run_hook wt-sub "$TMPROOT/wt-sub/sub" env
+check "worktree subdirectory: variable exported" \
+  "$(grep -c "^export MARKER_TRUST='1'$" "$SNAP")" "1"
+
+run_hook wt-changed "$TMPROOT/wt-changed" env
+check "worktree, changed file: stays blocked" "$(cat "$SNAP")" "true"
+check_match "worktree, changed file: warns" "$(cat "$TMPROOT/err")" "direnv allow"
+
+run_hook wt-denied "$TMPROOT/wt-denied" env
+check "worktree, denied file: stays denied" "$(allowed "$TMPROOT/wt-denied")" "2"
+check "worktree, denied file: nothing exported" "$(cat "$SNAP")" "true"
+
+run_hook wt-untrusted "$TMPROOT/wt-untrusted" env
+check "worktree of a blocked checkout: stays blocked" "$(cat "$SNAP")" "true"
+check "worktree of a blocked checkout: main untouched" \
+  "$(allowed "$TMPROOT/untrusted")" "1"
 
 # --- no residue -------------------------------------------------------------
 
