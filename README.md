@@ -51,7 +51,7 @@ The Claude Code hook router. `settings.json` gives each hook event one entry, `r
 
 `settings.json` calls route at `~/.local/libexec/route`, off PATH, since macOS ships `/sbin/route`. A Mac must run `./rebuild.sh`, which links the binary and the hooks file, before it pulls a `settings.json` that calls route. Otherwise no hook can start: Claude Code 2.1.295 and later deny every PreToolUse call, and older versions let every tool call through.
 
-Whenever `hooks.json` changes, regenerate the route entries, then apply them to `settings.json`:
+Every hook in `settings.json` goes through route, and the switch checks it: a `home.checks` entry regenerates the route entries from `hooks.json` and fails when `settings.json`'s `hooks` differ, so a hook wired into `settings.json` directly, or a `hooks.json` change not yet applied, stops `./rebuild.sh` before anything deploys. Whenever `hooks.json` changes, regenerate the route entries, then apply them to `settings.json`:
 
 ```bash
 ~/.local/libexec/route --config home/claude/route/hooks.json settings --bin "~/.local/libexec/route" > home/claude/route/settings-hooks.json

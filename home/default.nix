@@ -98,6 +98,23 @@
       # and settings.json calls this one by its full path anyway. Its handler
       # list is linked in home/claude.nix.
       home.file.".local/libexec/route".source = "${route}/bin/route";
+      # Every hook in settings.json goes through route: its hooks block must be
+      # what route generates from hooks.json (README, route). A hook wired
+      # into settings.json directly, or a hooks.json change not applied there,
+      # fails the switch here.
+      home.checks = [
+        (pkgs.runCommand "route-wiring" {nativeBuildInputs = [pkgs.jq];} ''
+          ${route}/bin/route --config ${./claude/route/hooks.json} settings \
+            --bin "~/.local/libexec/route" | jq -S .hooks > want
+          jq -S .hooks ${./claude/settings.json} > have
+          if ! diff -u want have >&2; then
+            echo "home/claude/settings.json wires hooks that route does not generate from home/claude/route/hooks.json." >&2
+            echo "Put the handler in hooks.json, then regenerate and apply the route entries (README, route)." >&2
+            exit 1
+          fi
+          touch $out
+        '')
+      ];
 
       # Route Console's build, linked so the generation roots it (rebuild.sh
       # collects garbage) and rebuild.sh signs and installs it from here.
