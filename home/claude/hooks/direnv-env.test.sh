@@ -1,6 +1,9 @@
 #!/bin/bash
-# Tests for direnv-env.sh
-SCRIPT="$(dirname "$0")/direnv-env.sh"
+# Tests for direnv-env.py
+SCRIPT="$(dirname "$0")/direnv-env.py"
+# Resolved once, because several cases run the hook with a PATH that lacks it.
+# Set PYTHON to test another interpreter, such as macOS's own /usr/bin/python3.
+PYTHON="${PYTHON:-$(command -v python3)}"
 PASS=0
 FAIL=0
 
@@ -37,7 +40,7 @@ run_hook() { # label, cwd, [env prefix words...]
   SNAP="$ENVFILE.direnv"
   echo 'export FOREIGN_HOOK_LINE=1' > "$ENVFILE"
   printf '{"cwd":"%s"}' "$cwd" |
-    CLAUDE_ENV_FILE="$ENVFILE" "$@" /bin/bash "$SCRIPT" 2> "$TMPROOT/err"
+    CLAUDE_ENV_FILE="$ENVFILE" "$@" "$PYTHON" "$SCRIPT" 2> "$TMPROOT/err"
   RC=$?
 }
 
@@ -53,24 +56,15 @@ echo 'export MARKER_BLOCKED=1' > "$TMPROOT/blocked/.envrc"
 } > "$TMPROOT/loaded/.envrc"
 (cd "$TMPROOT/loaded" && direnv allow) 2> /dev/null
 
-# A PATH holding direnv but no jq, to exercise the jq guard.
-mkdir -p "$TMPROOT/nojq"
-ln -sf "$(command -v direnv)" "$TMPROOT/nojq/direnv"
-
 # --- guards: the hook must write nothing at all -----------------------------
 
-printf '{}' | /bin/bash "$SCRIPT" > /dev/null 2>&1
+printf '{}' | "$PYTHON" "$SCRIPT" > /dev/null 2>&1
 check "no CLAUDE_ENV_FILE exits clean" "$?" "0"
 
 run_hook nodirenv "$TMPROOT/plain" env PATH=/usr/bin:/bin
 check "no direnv: exit 0" "$RC" "0"
 check "no direnv: env file untouched" "$(lines "$ENVFILE")" "1"
 check "no direnv: no snapshot" "$(lines "$SNAP")" "missing"
-
-run_hook nojq "$TMPROOT/plain" env PATH="$TMPROOT/nojq"
-check "no jq: exit 0" "$RC" "0"
-check "no jq: env file untouched" "$(lines "$ENVFILE")" "1"
-check "no jq: no snapshot" "$(lines "$SNAP")" "missing"
 
 # --- no project environment applies -----------------------------------------
 
@@ -122,11 +116,11 @@ check "loaded: value reaches the shell" "$got" "hello"
 # --- idempotence and unloading ----------------------------------------------
 
 printf '{"cwd":"%s"}' "$TMPROOT/loaded" |
-  CLAUDE_ENV_FILE="$ENVFILE" /bin/bash "$SCRIPT" 2> /dev/null
+  CLAUDE_ENV_FILE="$ENVFILE" "$PYTHON" "$SCRIPT" 2> /dev/null
 check "second run adds no line" "$(lines "$ENVFILE")" "2"
 
 printf '{"cwd":"%s"}' "$TMPROOT/plain" |
-  CLAUDE_ENV_FILE="$ENVFILE" /bin/bash "$SCRIPT" 2> /dev/null
+  CLAUDE_ENV_FILE="$ENVFILE" "$PYTHON" "$SCRIPT" 2> /dev/null
 check "leaving the project empties the snapshot" "$(cat "$SNAP")" "true"
 got=$(
   . "$ENVFILE" > /dev/null 2>&1
@@ -168,10 +162,9 @@ check "override: earlier PATH entry survives" "$got" "kept"
 
 # Desktop-app hooks inherit launchd's environment, which lacks nix-darwin's
 # NIX_PATH. Fake zsh and direnv check the hand-off without a nix evaluation.
+# nozsh holds the fake direnv and nothing else, so these runs also prove the
+# hook needs no other command on PATH.
 mkdir -p "$TMPROOT/nozsh" "$TMPROOT/fakezsh" "$TMPROOT/emptyzsh"
-for tool in env grep jq lockf mv rm; do
-  ln -sf "$(command -v "$tool")" "$TMPROOT/nozsh/$tool"
-done
 cat > "$TMPROOT/nozsh/direnv" << 'EOF'
 #!/bin/bash
 # Exports the NIX_PATH it inherited, or "unset" when it inherited none.
@@ -240,7 +233,7 @@ SNAP="$ENVFILE.direnv"
 race() { # delay, mark
   printf '{"cwd":"%s"}' "$TMPROOT/plain" |
     CLAUDE_ENV_FILE="$ENVFILE" FAKE_DELAY="$1" FAKE_MARK="$2" \
-      PATH="$TMPROOT/slowdirenv:$PATH" /bin/bash "$SCRIPT" 2>> "$TMPROOT/race-err"
+      PATH="$TMPROOT/slowdirenv:$PATH" "$PYTHON" "$SCRIPT" 2>> "$TMPROOT/race-err"
 }
 race 1 older &
 sleep 0.3
@@ -298,6 +291,29 @@ run_hook wt-untrusted "$TMPROOT/wt-untrusted" env
 check "worktree of a blocked checkout: stays blocked" "$(cat "$SNAP")" "true"
 check "worktree of a blocked checkout: main untouched" \
   "$(allowed "$TMPROOT/untrusted")" "1"
+
+# --- export shapes no real .envrc produces ----------------------------------
+
+# A fake direnv hands over a value holding a quote, a variable to unset, a key
+# no shell accepts, and the live PATH unchanged.
+mkdir -p "$TMPROOT/shapes"
+cat > "$TMPROOT/shapes/direnv" << 'EOF'
+#!/bin/bash
+[ "$1" = export ] || { echo '{}'; exit 0; }
+printf '{"QUOTED":"it'\''s $HOME","GONE":null,"1BAD":"x","PATH":"%s"}\n' "$PATH"
+EOF
+chmod +x "$TMPROOT/shapes/direnv"
+
+run_hook shapes "$TMPROOT/plain" env PATH="$TMPROOT/shapes:$PATH"
+check "shapes: exit 0" "$RC" "0"
+got=$(
+  GONE=1
+  . "$ENVFILE" > /dev/null 2>&1
+  printf '%s|%s' "$QUOTED" "${GONE-unset}"
+)
+check "shapes: quoted value arrives verbatim, null unsets" "$got" "it's \$HOME|unset"
+check "shapes: invalid key dropped" "$(grep -c 1BAD "$SNAP")" "0"
+check "shapes: unchanged PATH adds no line" "$(grep -c PATH "$SNAP")" "0"
 
 # --- no residue -------------------------------------------------------------
 

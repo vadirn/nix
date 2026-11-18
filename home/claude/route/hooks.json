@@ -158,7 +158,7 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/direnv-env.sh",
+            "command": "python3 ~/.claude/hooks/direnv-env.py",
             "timeout": 30
           }
         ]
@@ -169,7 +169,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/direnv-env.sh",
+            "command": "python3 ~/.claude/hooks/direnv-env.py",
             "timeout": 30
           }
         ]
