@@ -54,6 +54,7 @@ assert_allow("git push", "git push origin main")
 assert_allow("git push no args", "git push")
 assert_deny("git push --force", "git push --force")
 assert_deny("git push -f", "git push origin main -f")
+assert_allow("git push lease, checked by the message hook", "git push --force-with-lease --force-if-includes")
 assert_allow("git push -f in commit msg", "git commit -m 'block git push -f in hook'")
 
 # git reset --hard

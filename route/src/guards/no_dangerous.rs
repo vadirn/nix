@@ -24,8 +24,8 @@ use crate::shell::{Origin, Script, Segment, Word};
 const GIT_RULES: &[(&str, Option<&[&str]>, &str)] = &[
     (
         "push",
-        Some(&["-f", "--force", "--force-with-lease"]),
-        "Blocked: force push overwrites remote history.",
+        Some(&["-f", "--force"]),
+        "Blocked: force push overwrites remote history. Run `git push --force-with-lease --force-if-includes`, which the git message hook checks.",
     ),
     (
         "reset",
