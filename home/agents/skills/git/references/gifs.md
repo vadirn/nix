@@ -216,7 +216,7 @@ A name carries none of `.`, `!`, `?`, `"`, `[`, `]`, `(`, `)`, `|`. The message 
 | Ducks say here we go                                                                              | https://media0.giphy.com/media/woD3lyw4gsMBJgHlpN/giphy.gif |
 | Cartman asks okay you guys all ready to rehearse                                                  | https://media2.giphy.com/media/3o6ZsTHL6T4hBkyR5C/giphy.gif |
 | Penguins say move it move it                                                                      | https://static.klipy.com/ii/da290b156d64898341638f3c299e7478/a4/9f/7E8fCN7i.gif |
-| Patrick Star looks at a phone, hiding in a tent                                                   | https://static.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/e5/ff/SdW0wWjp.gif |
+| Patrick Star in glasses reads a notepad                                                           | https://static.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/e5/ff/SdW0wWjp.gif |
 | Two men in an office, captioned what would you say you do here                                    | https://static.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/aa/9f/9LUpeyzG.gif |
 | Jim Halpert in an office, captioned transfer transfer                                             | https://static.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/8c/6d/CESLsPfv.gif |
 | Orange puppet shouts I'm freee                                                                    | https://static.klipy.com/ii/c44064a00e4b7451969381d90dea1769/a0/9f/gVM0qdCt.gif |
@@ -235,7 +235,6 @@ A name carries none of `.`, `!`, `?`, `"`, `[`, `]`, `(`, `)`, `|`. The message 
 | Sheen and Carl, captioned ooh conflict                                                            | https://static.klipy.com/ii/c3a19a0b747a76e98651f2b9a3cca5ff/9d/f0/DHVQFGjq.gif |
 | Plankton says correct                                                                             | https://static.klipy.com/ii/2711dd8a75a85be822d136ec94899b3f/33/9f/QEKLUCJM.gif |
 | Kermit holds up an instant camera                                                                 | https://static.klipy.com/ii/e293a233a303a98e471f78d04e13a1b0/64/94/TzSbDKMC.gif |
-| Patrick Star looks at a phone, hiding in a tent                                                   | https://static.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/7f/e9/BlbbafpZ.gif |
 | Cartman says just picture it guys                                                                 | https://static.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/30/85/DuomLkHS.gif |
 | Red demon character says oh then target acquired                                                  | https://static.klipy.com/ii/ce286d05b8e1a47cd4f32b0e1b6dec0e/52/2b/x5AVAsMj.gif |
 | Two penguins walk on snow                                                                         | https://static.klipy.com/ii/4493325008d34b7bf8cd6813cd5c1619/20/42/SZMKPWfnyJR9SuQMZ.gif |
@@ -351,5 +350,4 @@ A name carries none of `.`, `!`, `?`, `"`, `[`, `]`, `(`, `)`, `|`. The message 
 | Man in a suit, captioned absolutely useless                                                       | https://static.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/02/dd/KjswI64c.gif |
 | Michael Scott rests his chin on his fists                                                         | https://static.klipy.com/ii/c3a19a0b747a76e98651f2b9a3cca5ff/5a/ab/GlQgDebn.gif |
 | Jeremy Clarkson, captioned oh no anyway                                                           | https://static.klipy.com/ii/39f2394ae36df6e199be9eb7c9fa1012/9b/60/B0h9IRdq.gif |
-| Fry squints suspiciously                                                                          | https://static.klipy.com/ii/35ccce3d852f7995dd2da910f2abd795/89/40/jFOawIA1.gif |
 | Man tumbles off a couch in an office                                                              | https://static.klipy.com/ii/f87f46a2c5aeaeed4c68910815f73eaf/ce/ce/PYKfPsvD.gif |
