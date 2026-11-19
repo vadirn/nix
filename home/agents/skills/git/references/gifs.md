@@ -6,7 +6,7 @@ GIFs from merged PRs, for a PR template's GIF section. `/git pr` picks one by na
 
 Add a row with a short name and the GIF's direct link. Two kinds of link fail to render on GitHub:
 
-- **A GIF over 5 MiB.** GitHub's image proxy refuses it, and the PR shows a broken image. `curl -sI <link>` prints its `content-length`. Klipy, the source behind Raycast's GIF search, serves full-size files only, so pick another GIF.
+- **A GIF over 5 MiB.** GitHub's image proxy refuses it, and the PR shows a broken image. `curl -sI <link>` prints its `content-length`. A Klipy link offers no smaller rendition at a guessable URL, so pick another GIF.
 - **A Tenor `media1.tenor.com/m/…` link**, as copied from a tenor.com page. It returns 404 on some requests. The same GIF at `media.tenor.com/<id>/<slug>.gif`, the path without `/m/`, works.
 
 A name carries none of `.`, `!`, `?`, `"`, `[`, `]`, `(`, `)`, `|`. The message hook splits sentences at end punctuation, and the rest break the embed or the table.
