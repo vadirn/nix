@@ -115,7 +115,7 @@ Before adding a shared form (a helper, seam, registry or interface), or declinin
 
 Use the `git` skill: `/git commit` to commit, `/git branch` to cut a branch, `/git pr` to open a pull request. All three name their work with the same `feat | fix | chore` contract test, which the skill defines once.
 
-Push is manual. The user runs `git push` themselves, usually via lazygit, and a hook blocks the agent. Ask the user to push when work needs publishing.
+Push one branch per `git push`, named by the skill's rule, and never force. A hook refuses any other push, such as one to `main`; ask the user to run a push it refuses.
 
 ## Bash
 

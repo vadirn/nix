@@ -1,6 +1,6 @@
 //! Port of `no-dangerous.py`: denies dangerous git, curl, wget, docker,
 //! sudo, chmod and obsidian invocations by their words, so text inside a
-//! quoted argument (`git commit -m "block git push"`) never triggers a rule.
+//! quoted argument (`git commit -m "block git push -f"`) never triggers a rule.
 //!
 //! The rule tables and messages are the script's. Differences that come from
 //! the shared parse: a command is any word whose last path component names
@@ -18,7 +18,7 @@
 
 use super::no_dangerous_rm::{expanduser, join, normpath};
 use super::{Ctx, Verdict, first_deny};
-use crate::shell::{Script, Segment, Word};
+use crate::shell::{Origin, Script, Segment, Word};
 
 /// (subcommand, any one of these args or `None` for any, message), in order.
 const GIT_RULES: &[(&str, Option<&[&str]>, &str)] = &[
@@ -27,7 +27,6 @@ const GIT_RULES: &[(&str, Option<&[&str]>, &str)] = &[
         Some(&["-f", "--force", "--force-with-lease"]),
         "Blocked: force push overwrites remote history.",
     ),
-    ("push", None, "Blocked: git push must be done manually."),
     (
         "reset",
         Some(&["--hard"]),
@@ -166,7 +165,15 @@ struct GitCall<'s> {
     dirs: Vec<&'s Word>,
     sub: &'s str,
     args: Vec<&'s str>,
+    /// `git` is the command the user wrote at the top level: the segment's
+    /// program, outside any substitution or reparsed string.
+    own: bool,
 }
+
+/// The git message hook checks the branch a push sends, but it reads only a
+/// push that is its own command. Inside a substitution, a reparsed string or
+/// another program such as `xargs`, a push may carry words it never sees.
+const NESTED_PUSH: &str = "Blocked: run git push as its own command, not inside a substitution, a shell string or another program, so the git message hook can check the branch it sends.";
 
 /// Whether `-C` points git at the repo it is already in: the directory each
 /// `-C` names, applied in turn from `cwd`, has the same repo root as `cwd`.
@@ -232,6 +239,7 @@ fn git_calls(seg: &Segment) -> Vec<GitCall<'_>> {
                 dirs,
                 sub: w[j].value.as_str(),
                 args: w[j + 1..k].iter().map(|a| a.value.as_str()).collect(),
+                own: i == 0 && seg.depth == 0 && seg.origin == Origin::Source,
             });
         }
         i = j + 1;
@@ -272,6 +280,9 @@ fn scan(s: &Script, cwd: &str, home: &str) -> Option<String> {
                 if required.is_none_or(|r| call.args.iter().any(|a| r.contains(a))) {
                     return Some((*message).into());
                 }
+            }
+            if call.sub == "push" && !call.own {
+                return Some(NESTED_PUSH.into());
             }
         }
     }
