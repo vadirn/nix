@@ -21,6 +21,7 @@ in {
       core.hooksPath = "~/.config/git/hooks";
       init.defaultBranch = "main";
       pull.ff = "only";
+      push.useForceIfIncludes = true;
       merge.conflictstyle = "diff3";
       diff.colorMoved = "default";
       rebase.updateRefs = true;
