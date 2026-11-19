@@ -3,9 +3,11 @@
 //! card holding the event list beside the inspector, or the Health screen
 //! (`health.rs`), or the Handlers screen (`handlers.rs`).
 //!
-//! The canvas reaches Handlers through the sidebar's hook events; here they
-//! narrow the Log, as Health's "Show events" needs, so Handlers has a row of
-//! its own and the hook events act on the screen shown (decided 2026-11-17).
+//! Each hook event is a page of its own, as each row of Arc's sidebar is a
+//! tab: the Log of that event alone, its inspector listing the event's
+//! handlers with their switches, as the canvas's Event page lays it out
+//! (decided 2026-11-19, replacing hook events that narrowed whichever screen
+//! showed, which left no row naming the screen). One row lights at a time.
 //!
 //! The list is built on Rune's virtual rows, not rune-kit's Table: the Table's
 //! viewport never sticks to its end and reports nothing about what it shows,
@@ -28,7 +30,7 @@ use crate::record::{Handler, Record, Trouble, short_name};
 use crate::replay::{Comparison, Replay};
 use crate::space::Harness;
 use crate::theme::{Tint, Tokens, tint_of, ty};
-use crate::{App, LIST, ROWS, Screen, Selected, VIEWPORT};
+use crate::{App, LIST, Page, ROWS, Screen, Selected, VIEWPORT, handlers};
 
 static LOG_ICON: Icon = Icon {
     name: "rc-list",
@@ -236,13 +238,25 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     }
 }
 
+/// The hook event whose page shows, if one does.
+fn page_event(s: &App) -> Option<&str> {
+    match s.space.page() {
+        Page::Event(e) => Some(e),
+        _ => None,
+    }
+}
+
 fn log_toolbar(s: &App, k: &Kit, t: &Tokens) -> Toolbar {
     let title = s.space.event.clone().unwrap_or_else(|| "Log".to_string());
     let mut toolbar = Toolbar::new().leading(leading(s, t, title));
     if let Some(chip) = issue_filter(s, k, t) {
         toolbar = toolbar.trailing(chip);
     }
-    toolbar.trailing(search(s, k, t))
+    toolbar = toolbar.trailing(search(s, k, t));
+    if page_event(s).is_some() {
+        toolbar = toolbar.trailing(handlers::open_hooks(k));
+    }
+    toolbar
 }
 
 fn log(s: &App, k: &Kit, t: &Tokens) -> El {
@@ -254,21 +268,50 @@ fn log(s: &App, k: &Kit, t: &Tokens) -> El {
         .min_w(0.0)
         .h_full()
         .child(list(s, k, t).w_full().grow(1.0).min_h(0.0))
+        .children(empty(s, k, t))
         .children(pill(s, k));
-    col().key("log").w_full().h_full().child(rule(t)).child(
+    col()
+        .key("log")
+        .w_full()
+        .h_full()
+        .child(rule(t))
+        .child(
+            row()
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .child(events)
+                .child(el().w(1.0).h_full().fill(t.separator).a11y_hidden())
+                .child(inspector(s, k, t)),
+        )
+        .children(page_event(s).and_then(|_| handlers::status(s, k, t)))
+}
+
+/// Why the list is empty, under its header: nothing matches, or nothing
+/// happened today.
+fn empty(s: &App, k: &Kit, t: &Tokens) -> Option<El> {
+    let sp = &s.space;
+    sp.rows.is_empty().then(|| {
+        let words = if sp.issue.is_some() || !sp.search.text.trim().is_empty() {
+            "Nothing matches".to_string()
+        } else {
+            match &sp.event {
+                Some(e) => format!("No {e} events today"),
+                None => "No events today".to_string(),
+            }
+        };
         row()
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .child(events)
-            .child(el().w(1.0).h_full().fill(t.separator).a11y_hidden())
-            .child(inspector(s, k, t)),
-    )
+            .key("empty")
+            .role("status")
+            .pin(None, Some(t.table(k).header_height + 40.0), None, None)
+            .self_center()
+            .child(text(words).font(ty::BODY).color(t.text_secondary))
+    })
 }
 
 fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
     let sp = &s.space;
-    let on_log = s.space.screen == Screen::Log;
+    let page = sp.page();
     // The space's name, plain and grey, above its screens.
     let name = row().key("space-name").h(24.0).px(8.0).center_y().child(
         text(sp.harness.title())
@@ -279,7 +322,7 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
     let log = SidebarRow::new("Log")
         .icon(&LOG_ICON)
         .height(30.0)
-        .selected(on_log && sp.event.is_none())
+        .selected(page == Page::Log)
         .on_select(|s: &mut App, tx| s.show_log(None, tx))
         .build(k)
         .key("screen-log");
@@ -287,17 +330,16 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
     let mut health = SidebarRow::new("Health")
         .icon(&PULSE)
         .height(30.0)
-        .selected(s.space.screen == Screen::Health)
+        .selected(page == Page::Health)
         .on_select(|s: &mut App, tx| s.show_health(tx));
     if n > 0 {
         health = health.trailing(badge_in(t, &n.to_string(), Tint::Orange).label(issues(n)));
     }
-    let on_handlers = s.space.screen == Screen::Handlers;
     let handlers = SidebarRow::new("Handlers")
         .icon(&SWITCHES)
         .height(30.0)
-        .selected(on_handlers && sp.handlers_event.is_none())
-        .on_select(|s: &mut App, tx| s.show_handlers(None, tx))
+        .selected(page == Page::Handlers)
+        .on_select(|s: &mut App, tx| s.show_handlers(tx))
         .build(k)
         .key("screen-handlers");
     let h = sp.harness;
@@ -312,23 +354,14 @@ fn sidebar(s: &App, t: &Tokens, k: &Kit) -> El {
         .child(log.mt(4.0))
         .child(health.build(k).key("screen-health"))
         .child(handlers);
-    // A hook event narrows the screen shown: the Log's rows, or the
-    // handlers listed. From Health it opens the Log.
+    // A hook event opens its page from whichever screen shows.
     let events = sp.events.iter().map(|e| {
         let event = e.clone();
-        let picked = (on_log && sp.event.as_deref() == Some(e))
-            || (on_handlers && sp.handlers_event.as_deref() == Some(e));
         SidebarRow::new(e.clone())
             .icon(&BOLT)
             .height(30.0)
-            .selected(picked)
-            .on_select(move |s: &mut App, tx| {
-                if s.space.screen == Screen::Handlers {
-                    s.show_handlers(Some(event.clone()), tx)
-                } else {
-                    s.show_log(Some(event.clone()), tx)
-                }
-            })
+            .selected(page == Page::Event(e))
+            .on_select(move |s: &mut App, tx| s.show_log(Some(event.clone()), tx))
             .build(k)
             .key(format!("event-{e}"))
     });
@@ -435,7 +468,10 @@ fn search(s: &App, k: &Kit, t: &Tokens) -> El {
         .leading_icon(&SEARCH)
         .leading_icon_size(14.0)
         .placeholder("Search")
-        .label("Search events")
+        .label(match &s.space.event {
+            Some(e) => format!("Search {e} events"),
+            None => "Search events".to_string(),
+        })
         .width(None)
         .height(28.0)
         .on_edit(|s: &mut App| &mut s.space.search)
@@ -527,7 +563,7 @@ struct Column {
 
 /// The canvas's columns. Time is 10 points wider than its text needs, for the
 /// 16-point inset the design gives the first column.
-const COLUMNS: [Column; 6] = [
+static COLUMNS: [Column; 6] = [
     Column {
         id: "time",
         title: "Time",
@@ -566,6 +602,16 @@ const COLUMNS: [Column; 6] = [
     },
 ];
 
+/// The columns shown: an event's page leaves out Event, which its title
+/// names.
+fn columns(s: &App) -> Vec<&'static Column> {
+    let page = page_event(s).is_some();
+    COLUMNS
+        .iter()
+        .filter(|c| !(page && c.id == "event"))
+        .collect()
+}
+
 /// A header or row cell, sized to its column.
 fn cell(c: &Column, first: bool, pad: f32) -> El {
     let e = row()
@@ -585,14 +631,14 @@ fn cell(c: &Column, first: bool, pad: f32) -> El {
     }
 }
 
-fn header(style: &TableStyle) -> El {
+fn header(style: &TableStyle, columns: &[&Column]) -> El {
     let rule = el()
         .pin(Some(0.0), None, Some(0.0), Some(0.0))
         .h(1.0)
         .fill(style.rule)
         .a11y_hidden();
-    let last = COLUMNS.len() - 1;
-    COLUMNS.iter().enumerate().fold(
+    let last = columns.len() - 1;
+    columns.iter().enumerate().fold(
         row()
             .key("header")
             .role("row")
@@ -663,7 +709,7 @@ fn content(r: &Row, column: &str, style: &TableStyle, t: &Tokens) -> El {
 
 /// Row `i`. Stripes go by position, so rows appended below keep theirs; its
 /// press finds the row by id, never by `i`.
-fn event_row(s: &App, i: usize, style: &TableStyle, t: &Tokens) -> El {
+fn event_row(s: &App, i: usize, style: &TableStyle, t: &Tokens, columns: &[&Column]) -> El {
     let r = &s.space.rows[i];
     let id = r.id;
     let picked = s.space.selected.as_ref().is_some_and(|x| x.id == id);
@@ -681,7 +727,7 @@ fn event_row(s: &App, i: usize, style: &TableStyle, t: &Tokens) -> El {
     } else {
         e.hover(hover)
     };
-    COLUMNS
+    columns
         .iter()
         .enumerate()
         .fold(e, |e, (j, c)| {
@@ -701,6 +747,8 @@ fn list(s: &App, k: &Kit, t: &Tokens) -> El {
     let style = t.table(k);
     let tk = *t;
     let sp = &s.space;
+    let cols = columns(s);
+    let head = header(&style, &cols);
     let scroll_y = sp.scroll_y.clone();
     let rows = col()
         .key(ROWS)
@@ -710,7 +758,7 @@ fn list(s: &App, k: &Kit, t: &Tokens) -> El {
             sp.rows.len(),
             style.row_height,
             |s: &App, i| Cow::Owned(s.space.rows[i].id.to_string()),
-            move |s: &App, i| event_row(s, i, &style, &tk),
+            move |s: &App, i| event_row(s, i, &style, &tk, &cols),
         )
         .on_visible_rows(|s: &mut App, r| s.space.seen(r));
     let viewport = col()
@@ -735,7 +783,7 @@ fn list(s: &App, k: &Kit, t: &Tokens) -> El {
         .w_full()
         .clip_soft(0.0)
         .on_key(|s: &mut App, ev: &KeyEvent, tx: &mut Tx| s.key(ev, tx))
-        .child(header(&style))
+        .child(head)
         .child(viewport);
     match sp.selected.as_ref().filter(|_| !sp.hidden()) {
         Some(sel) => list.active_descendant(sel.id.to_string()),
@@ -743,19 +791,34 @@ fn list(s: &App, k: &Kit, t: &Tokens) -> El {
     }
 }
 
+/// The picked row in detail. The Log's adds how long each handler took;
+/// an event's page lists the event's handlers instead, each with what it did
+/// for the row, and shows a pick of its own event only: one made elsewhere
+/// in the Log waits there rather than sit above handlers it never ran.
 fn inspector(s: &App, k: &Kit, t: &Tokens) -> El {
     let sp = &s.space;
-    let body = match &sp.selected {
-        Some(sel) => col()
+    let page = page_event(s);
+    let sel = sp
+        .selected
+        .as_ref()
+        .filter(|sel| page.is_none_or(|e| sel.record.event == e));
+    let pane = || col().w_full().pt(10.0).pr(16.0).pb(16.0).pl(16.0).gap(14.0);
+    let body = match (sel, page) {
+        (Some(sel), _) => {
+            let replay = sp.replay.as_ref().filter(|r| r.id == sel.id);
+            let more = match page {
+                Some(e) => handlers::page_handlers(s, k, t, e, Some(&sel.record)),
+                None => timings(&sel.record, t),
+            };
+            col()
+                .w_full()
+                .children(sp.hidden().then(|| hidden_note(s, t)))
+                .child(details(sel, replay, k, t, pane()).child(more))
+        }
+        (None, Some(e)) => col()
             .w_full()
-            .children(sp.hidden().then(|| hidden_note(s, t)))
-            .child(details(
-                sel,
-                sp.replay.as_ref().filter(|r| r.id == sel.id),
-                k,
-                t,
-            )),
-        None => col().w_full().px(16.0).py(14.0).child(
+            .child(pane().child(handlers::page_handlers(s, k, t, e, None))),
+        (None, None) => col().w_full().px(16.0).py(14.0).child(
             text("Pick an event to see its handlers.")
                 .font(ty::NOTE)
                 .color(t.text_secondary),
@@ -819,7 +882,8 @@ pub fn block(content: String, fill: rune::Color, border: rune::Color, t: &Tokens
         )
 }
 
-fn details(sel: &Selected, replay: Option<&Replay>, k: &Kit, t: &Tokens) -> El {
+/// The picked row's head, input, rewrite, reasons and stderr, in `pane`.
+fn details(sel: &Selected, replay: Option<&Replay>, k: &Kit, t: &Tokens, pane: El) -> El {
     let r: &Record = &sel.record;
     let why_not = crate::replay::payload(r).err();
     let replay_button = IconButton::new(&REPLAY)
@@ -865,13 +929,7 @@ fn details(sel: &Selected, replay: Option<&Replay>, k: &Kit, t: &Tokens) -> El {
         )
         .child(copy)
         .child(replay_button);
-    let mut c = col()
-        .w_full()
-        .pt(10.0)
-        .pr(16.0)
-        .pb(16.0)
-        .pl(16.0)
-        .gap(14.0)
+    let mut c = pane
         .child(header)
         .children(replay.map(|rp| replay_card(rp, r, t)));
     if let Some(input) = &r.input {
@@ -961,6 +1019,11 @@ fn details(sel: &Selected, replay: Option<&Replay>, k: &Kit, t: &Tokens) -> El {
     if !errs.is_empty() {
         c = c.child(block(errs.join("\n"), t.warn_bg, t.warn_border, t));
     }
+    c
+}
+
+/// The handlers a row ran, each with a bar for how long it took.
+fn timings(r: &Record, t: &Tokens) -> El {
     let longest = r
         .handlers
         .iter()
@@ -1013,7 +1076,7 @@ fn details(sel: &Selected, replay: Option<&Replay>, k: &Kit, t: &Tokens) -> El {
                     .children(result.filter(|r| *r != "allow").map(|r| badge(t, r))),
             )
     });
-    c.child(col().w_full().children(handlers))
+    col().w_full().children(handlers)
 }
 
 /// A guard's result now, or, when it differs, its logged result and then its

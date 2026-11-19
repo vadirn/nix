@@ -4,10 +4,12 @@
 //! writes its own index cache and route's `state.json` files, which switch
 //! handlers off. It never writes a hooks file, which is edited by hand. Each
 //! harness route serves, Claude Code and Codex, is a space of its own
-//! (`space.rs`), switched at the sidebar's foot. Three screens show the
-//! space's: the Log, whose inspector can replay a Bash call through route;
-//! Health, which sums up today's handler failures, timings and log limits;
-//! and Handlers, which lists the hooks file's handlers with a switch each.
+//! (`space.rs`), switched at the sidebar's foot. Its sidebar picks one page
+//! (`Page`): the Log, whose inspector can replay a Bash call through route;
+//! a hook event's page, the Log of that event alone with the event's
+//! handlers and their switches beside it; Health, which sums up today's
+//! handler failures, timings and log limits; and Handlers, which lists every
+//! event's handlers with a switch each.
 //!
 //! The list moves only when the reader moves it, or while the reader is at its
 //! end. Rows keep loading whatever the reader does; new ones land at the end,
@@ -117,6 +119,16 @@ impl Paths {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Screen {
     Log,
+    Health,
+    Handlers,
+}
+
+/// The sidebar's pick, one of its rows: a screen, or a hook event's page,
+/// which is the Log of that event alone. One value, so one row lights.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Page<'a> {
+    Log,
+    Event(&'a str),
     Health,
     Handlers,
 }
@@ -450,7 +462,7 @@ impl App {
         }
     }
 
-    /// The Log, narrowed to one hook event or to none.
+    /// The Log of every event, or one hook event's page.
     pub fn show_log(&mut self, event: Option<String>, tx: &mut Tx) {
         self.narrow(
             |s| {
@@ -459,6 +471,7 @@ impl App {
             },
             tx,
         );
+        self.reload_switches();
     }
 
     /// The Log, narrowed to the events of one issue: exactly the rows Health
@@ -472,6 +485,7 @@ impl App {
             },
             tx,
         );
+        self.reload_switches();
     }
 
     /// The Log's issue filter goes; its hook event stays.
@@ -485,19 +499,17 @@ impl App {
         self.space.screen = Screen::Health;
     }
 
-    /// The Handlers screen, listing one hook event's handlers or every
-    /// event's. The hooks file and `state.json` are read again, since either
-    /// may have changed since the last look.
-    pub fn show_handlers(&mut self, event: Option<String>, tx: &mut Tx) {
+    /// The Handlers screen, listing every hook event's handlers.
+    pub fn show_handlers(&mut self, tx: &mut Tx) {
         tx.instant();
         self.space.screen = Screen::Handlers;
-        self.space.handlers_event = event;
-        self.reload_handlers();
+        self.reload_switches();
     }
 
-    /// Reads the shown space's hooks file and `state.json` again.
-    fn reload_handlers(&mut self) {
-        if self.live {
+    /// Reads the shown space's hooks file and `state.json` again when its
+    /// page shows switches: either may have changed since the last look.
+    fn reload_switches(&mut self) {
+        if self.live && self.space.shows_switches() {
             let h = self.space.harness;
             self.space.hooks = Hooks::of(read_hooks(&self.paths.hooks_file(h)).as_ref());
             self.reload_toggles();
@@ -521,12 +533,11 @@ impl App {
         tx.wake_after(Duration::ZERO);
         std::mem::swap(&mut self.space, &mut self.parked);
         self.refresh();
-        match self.space.screen {
-            // Its screen mounts afresh, so the Log goes back to its place.
-            Screen::Log => self.mount_log(tx),
-            Screen::Handlers => self.reload_handlers(),
-            Screen::Health => {}
+        // Its screen mounts afresh, so the Log goes back to its place.
+        if self.space.screen == Screen::Log {
+            self.mount_log(tx);
         }
+        self.reload_switches();
     }
 
     /// Reads the shown space's `state.json` again: another window, or a hand
@@ -684,7 +695,7 @@ fn poll(s: &mut App, now: f64, tx: &mut Tx) -> bool {
         return switched;
     }
     s.last_look = now;
-    if s.live && s.space.screen == Screen::Handlers {
+    if s.live && s.space.shows_switches() {
         // `state.json` is small, and another window may write it.
         s.reload_toggles();
     }
@@ -748,12 +759,10 @@ fn health_scene(s: &mut App) {
     s.space.screen = Screen::Health;
 }
 
-/// The `handlers` scene: the canvas's events, on the Handlers screen at
-/// PreToolUse, as the Handlers artboard opens.
+/// The `handlers` scene: the canvas's events, on the Handlers screen.
 fn handlers_scene(s: &mut App) {
     sample_index(s, &sample::lines());
     s.space.screen = Screen::Handlers;
-    s.space.handlers_event = Some("PreToolUse".into());
 }
 
 /// The `live` scene: a list longer than the window that grows by one sample
@@ -1124,29 +1133,31 @@ mod tests {
     }
 
     #[test]
-    fn handlers_narrow_apart_from_the_log() {
+    fn a_hook_event_opens_its_own_page_from_any_screen() {
         let mut app = app(handlers_scene);
-        assert_eq!(app.space.screen, Screen::Handlers);
-        assert_eq!(app.space.handlers_event.as_deref(), Some("PreToolUse"));
-        let mut tx = Tx::default();
-        app.show_log(Some("Stop".into()), &mut tx);
-        app.show_handlers(Some("SessionStart".into()), &mut tx);
-        assert_eq!(
-            app.space.event.as_deref(),
-            Some("Stop"),
-            "the Log keeps its filter"
-        );
-        app.show_handlers(None, &mut tx);
-        assert!(
-            app.space.handlers_event.is_none(),
-            "the Handlers row lists every event"
-        );
+        assert_eq!(app.space.page(), Page::Handlers);
         assert!(
             !press_window(&mut app, Key::Up),
             "the list takes no keys while Handlers shows"
         );
+        let mut tx = Tx::default();
+        app.show_log(Some("Stop".into()), &mut tx);
+        assert_eq!(
+            app.space.page(),
+            Page::Event("Stop"),
+            "not Handlers narrowed"
+        );
+        assert!(app.space.rows.iter().all(|r| r.event == "Stop"));
+        assert!(app.space.shows_switches(), "its handlers' switches show");
+        app.show_health(&mut tx);
+        assert_eq!(app.space.page(), Page::Health);
+        app.show_log(Some("PreToolUse".into()), &mut tx);
+        assert_eq!(app.space.page(), Page::Event("PreToolUse"));
+        app.show_handlers(&mut tx);
+        assert_eq!(app.space.page(), Page::Handlers, "every event's handlers");
         app.show_log(None, &mut tx);
-        assert_eq!(app.space.screen, Screen::Log);
+        assert_eq!(app.space.page(), Page::Log);
+        assert!(!app.space.shows_switches());
     }
 
     #[test]
@@ -1296,19 +1307,17 @@ mod tests {
         app.show_health(&mut tx);
         app.switch(Harness::Codex, &mut tx);
         assert_eq!(app.space.screen, Screen::Log, "Codex opens on its own Log");
-        app.show_handlers(Some("Stop".into()), &mut tx);
+        app.show_log(Some("Stop".into()), &mut tx);
         app.switch(Harness::Claude, &mut tx);
-        assert_eq!(
-            app.space.screen,
-            Screen::Health,
-            "Claude Code's Health waits"
-        );
+        assert_eq!(app.space.page(), Page::Health, "Claude Code's Health waits");
         app.show_log(None, &mut tx);
         app.switch(Harness::Codex, &mut tx);
-        assert_eq!(app.space.screen, Screen::Handlers, "and Codex's Handlers");
-        assert_eq!(app.space.handlers_event.as_deref(), Some("Stop"));
+        assert_eq!(app.space.page(), Page::Event("Stop"), "and Codex's Stop");
+        app.show_handlers(&mut tx);
         app.switch(Harness::Claude, &mut tx);
-        assert_eq!(app.space.screen, Screen::Log);
+        assert_eq!(app.space.page(), Page::Log);
+        app.switch(Harness::Codex, &mut tx);
+        assert_eq!(app.space.page(), Page::Handlers);
     }
 
     #[test]

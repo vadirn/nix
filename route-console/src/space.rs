@@ -1,9 +1,9 @@
 //! Spaces: the window shows one harness at a time, the agent that ran route
 //! for a line (`route/src/harness.rs`), as an Arc-style space. A space holds
-//! the screen it shows and everything its screens show: its Log's rows,
-//! filter, pick and place, its Health, its hooks file's handlers and
-//! switches, and its hook events. The log and its index are one for both;
-//! each line names its harness.
+//! the page it shows and everything its pages show: its Log's rows, hook
+//! event, pick and place, its Health, its hooks file's handlers and switches,
+//! and its hook events. The log and its index are one for both; each line
+//! names its harness.
 
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::hooks::{Hooks, Toggles};
 use crate::index::{Index, IssueKey, Row};
 use crate::replay::Replay;
-use crate::{Health, Limits, Screen, Selected};
+use crate::{Health, Limits, Page, Screen, Selected};
 
 /// The agent that called route.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -132,7 +132,9 @@ pub struct Space {
     /// The screen this space shows, kept while the other space shows, as
     /// the sidebar's pick in it is.
     pub screen: Screen,
-    /// The Log's narrowing to one hook event, kept while Health shows.
+    /// The Log's hook event: with one, the Log is that event's page
+    /// (`Page::Event`). Kept while Health or Handlers shows, so the rows a
+    /// trip there leaves are the rows it comes back to.
     pub event: Option<String>,
     /// The Log's narrowing to one handler's trouble, from Health's "Show
     /// events". Cleared by the sidebar.
@@ -160,9 +162,6 @@ pub struct Space {
     pub hooks: Hooks,
     /// `state.json`, as last read or written.
     pub toggles: Toggles,
-    /// The Handlers screen's narrowing to one hook event. Apart from the
-    /// Log's, so a trip to Handlers leaves the Log's rows as they were.
-    pub handlers_event: Option<String>,
     /// The last replay, for the event picked when it ran.
     pub replay: Option<Replay>,
 }
@@ -187,9 +186,24 @@ impl Space {
             limits: Limits::of(hooks),
             hooks: Hooks::of(hooks),
             toggles,
-            handlers_event: None,
             replay: None,
         }
+    }
+
+    /// The sidebar's row this space has picked.
+    pub fn page(&self) -> Page<'_> {
+        match (self.screen, self.event.as_deref()) {
+            (Screen::Log, None) => Page::Log,
+            (Screen::Log, Some(e)) => Page::Event(e),
+            (Screen::Health, _) => Page::Health,
+            (Screen::Handlers, _) => Page::Handlers,
+        }
+    }
+
+    /// Whether the page shows handlers' switches, whose hooks file and
+    /// `state.json` are read again while it does.
+    pub fn shows_switches(&self) -> bool {
+        matches!(self.page(), Page::Handlers | Page::Event(_))
     }
 
     /// Re-reads the rows for `day`, this space's filter and search. The

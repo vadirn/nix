@@ -219,15 +219,45 @@ check "a switch turned off shows the status bar" has "$b" "enable-all"
 check "Enable all takes it away" lacks "$c" "/status"
 check "and nothing reached a state file" test ! -e "$tmp/state.json"
 
-# The Handlers row lists every hook event; a hook event then narrows it to
-# that event's handlers, and the Log row brings the list back.
-a="$(tree handlers-nav all canvas)"
-b="$(tree handlers-nav stop canvas)"
-c="$(tree handlers-nav log canvas)"
-check "the Handlers row lists every event" has "$a" "handlers-SessionStart"
-check "a hook event narrows it to its own handlers" has "$b" "handlers-Stop"
-check "and only those" lacks "$b" "handlers-PreToolUse"
-check "the Log row brings the list back" has "$c" "events-viewport"
+# Each sidebar row is a page, and one row lights at a time. The Handlers
+# row lists every hook event's handlers. A hook event opens its own page from
+# any screen: the Log of that event alone, without the Event column, its
+# handlers and switches beside it, each guard showing what it did for the
+# picked row (the canvas scene's newest, a PreToolUse Bash call two guards
+# denied). A pick of another event waits in the Log, and an event with no
+# rows says so above its handlers.
+a="$(tree event-pages all canvas)"
+b="$(tree event-pages pre canvas)"
+c="$(tree event-pages stop canvas)"
+d="$(tree event-pages empty canvas)"
+e="$(tree event-pages log canvas)"
+lit() {
+  jq -r '[.elements[] | select(.exiting != true and .itemSelected == true and (.path | test("/(head|hooks)-")))
+    | .key] | join(",")' "$1"
+}
+denied() {
+  jq -r '[.elements[] | select(.exiting != true and (.path | test("handlers-PreToolUse/")) and .label == "deny")] | length' "$1"
+}
+check "Handlers lights alone ($(lit "$a"))" test "$(lit "$a")" = screen-handlers
+check "and lists every event" has "$a" "handlers-SessionStart"
+check "from Handlers, PreToolUse opens its page, lit alone ($(lit "$b"))" test "$(lit "$b")" = event-PreToolUse
+check "its rows show" has "$b" "events-viewport"
+check "without the Event column" lacks "$b" "header/event"
+check "beside its handlers' switches" has "$b" "switch-PreToolUse-0-0"
+check "the guards that denied the picked row say so ($(denied "$b"))" test "$(denied "$b")" -eq 2
+check "and the toolbar opens hooks.json" has "$b" "open-hooks"
+check "Stop's page lights alone ($(lit "$c"))" test "$(lit "$c")" = event-Stop
+check "with only Stop's handlers" has "$c" "handlers-Stop"
+check "and not PreToolUse's" lacks "$c" "handlers-PreToolUse"
+check "beside Stop's rows" has "$c" "events-viewport"
+check "a PreToolUse pick waits in the Log, not shown on Stop's page" lacks "$c" "/replay"
+check "an event with no rows says so" says "$d" "No SessionStart events today"
+check "centred over the list ($(mid "$d" /empty) / $(mid "$d" events-viewport))" same "$(mid "$d" /empty)" "$(mid "$d" events-viewport)"
+check "above its handlers" has "$d" "handlers-SessionStart"
+check "the Log row lights alone ($(lit "$e"))" test "$(lit "$e")" = screen-log
+check "with the Event column back" has "$e" "header/event"
+check "and the pick back in its inspector" has "$e" "/replay"
+check "and no handlers' switches" lacks "$e" "switch-PreToolUse-0-0"
 
 # Spaces: each harness's space lists only its own rows, under its own name
 # and hook events, and a trip to the other leaves the Log where it was, as a
@@ -303,8 +333,9 @@ if [ -x "$HOME/.local/libexec/route" ]; then
   b="$(tree replay replayed canvas)"
   check "no replay before the button" lacks "$a" "replay-result"
   check "a replay lists the guards that ran" has "$b" "replayed-0"
-  # A denying guard switched off on Handlers (no-dangerous.py, which denied
-  # the canvas's first event) shows as off, and the answer as changed.
+  # A denying guard switched off on PreToolUse's page (no-dangerous.py,
+  # which denied the canvas's first event) shows as off, and the answer as
+  # changed.
   c="$(tree replay-off replayed canvas)"
   check "a guard switched off changes the replayed answer" says "$c" "Replay: answer changed"
   check "and shows as off" says "$c" "off"

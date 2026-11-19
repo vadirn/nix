@@ -1,7 +1,9 @@
 //! The Handlers screen, laid out as the design canvas's Handlers artboard:
 //! the hooks file's handlers, grouped by hook event and matcher, each with its
 //! name, timeout, an async badge and a switch, and a status bar while any is
-//! off.
+//! off. A hook event's page lists that event's groups beside its rows, as
+//! the canvas's Event page does, each handler with what it did for the
+//! picked row in place of its timeout.
 //!
 //! A switch writes `state.json` (`hooks.rs`), which route reads on every
 //! event; the hooks file stays as written. Two parts differ from the
@@ -10,15 +12,15 @@
 //! left out (decided 2026-11-17: the README's `route settings` recipe does
 //! that, and this app writes only `state.json`).
 
-use rune::{El, Icon, ScrollSpec, col, el, row, text};
+use rune::{El, Icon, ScrollSpec, Transition, col, el, row, text};
 use rune_kit::shell::Toolbar;
 use rune_kit::{Button, ControlSize, IconButton, IconButtonVariant, Kit, Switch};
 
 use crate::App;
 use crate::hooks::{Group, HandlerId, seconds};
-use crate::record::short_name;
+use crate::record::{Handler, Record, short_name};
 use crate::theme::{Tint, Tokens, ty};
-use crate::view::{badge_in, group, leading, quiet_row, rule};
+use crate::view::{badge, badge_in, group, leading, quiet_row, rule, time_label};
 
 static FILE: Icon = Icon {
     name: "rc-file",
@@ -30,38 +32,37 @@ static FILE: Icon = Icon {
 const CONTENT_W: f32 = 920.0;
 
 pub fn toolbar(s: &App, k: &Kit, t: &Tokens) -> Toolbar {
-    let title = s
-        .space
-        .handlers_event
-        .clone()
-        .unwrap_or_else(|| "Handlers".to_string());
-    let open = IconButton::new(&FILE)
+    Toolbar::new()
+        .leading(leading(s, t, "Handlers".to_string()))
+        .trailing(open_hooks(k))
+}
+
+/// Opens the shown space's hooks file. It comes and goes at once: the
+/// toolbar is not keyed by its space, as the screen is, and an exit keeps
+/// the transition of its last render, before a switch.
+pub fn open_hooks(k: &Kit) -> El {
+    IconButton::new(&FILE)
         .variant(IconButtonVariant::GhostMuted)
         .label("Open hooks.json")
         .help("Open hooks.json")
         .on_press_tx(|s: &mut App, tx| s.open_hooks(tx))
         .build(k)
-        .key("open-hooks");
-    Toolbar::new().leading(leading(s, t, title)).trailing(open)
+        .key("open-hooks")
+        .transition(Transition::none())
+}
+
+/// The kit switches draw with: an off track as the artboard draws it,
+/// tok.rs's `control_off`, since rune-kit's own sinks into the group's fill.
+fn switch_kit(k: &Kit, t: &Tokens) -> Kit {
+    let mut k = k.clone();
+    k.c.layer_04 = t.control_off;
+    k
 }
 
 pub fn screen(s: &App, k: &Kit, t: &Tokens) -> El {
-    // An off switch's track as the artboard draws it, tok.rs's `control_off`:
-    // rune-kit's own sinks into the group's fill.
-    let mut k = k.clone();
-    k.c.layer_04 = t.control_off;
-    let k = &k;
-    // One hook event lists its groups; none lists every event's under its
-    // name, as the Log with no event lists every event.
-    let blocks: Vec<El> = match &s.space.handlers_event {
-        Some(e) => vec![event_block(s, k, t, e, false)],
-        None => s
-            .space
-            .events
-            .iter()
-            .map(|e| event_block(s, k, t, e, true))
-            .collect(),
-    };
+    let k = &switch_kit(k, t);
+    // Every event's groups under its name, as the Log lists every event.
+    let blocks = s.space.events.iter().map(|e| event_block(s, k, t, e));
     let content = col()
         .w_full()
         .max_w(CONTENT_W)
@@ -89,35 +90,124 @@ pub fn screen(s: &App, k: &Kit, t: &Tokens) -> El {
         .children(status(s, k, t))
 }
 
-fn event_block(s: &App, k: &Kit, t: &Tokens, event: &str, titled: bool) -> El {
+fn event_block(s: &App, k: &Kit, t: &Tokens, event: &str) -> El {
+    let title = row().px(4.0).child(
+        text(event.to_string())
+            .font(ty::TITLE)
+            .color(t.text)
+            .role("heading"),
+    );
+    col()
+        .w_full()
+        .gap(18.0)
+        .child(title)
+        .child(groups(s, k, t, event, None).gap(18.0))
+}
+
+/// One event's matcher groups, under its key, so a check finds them on
+/// either screen.
+fn groups(s: &App, k: &Kit, t: &Tokens, event: &str, ran: Option<&Record>) -> El {
     let groups = s.space.hooks.groups(event);
-    let mut block = col()
+    let block = col()
         .key(format!("handlers-{event}"))
         .role("group")
-        .label(event.to_string())
-        .w_full()
-        .gap(18.0);
-    if titled {
-        block = block.child(
-            row().px(4.0).child(
-                text(event.to_string())
-                    .font(ty::TITLE)
-                    .color(t.text)
-                    .role("heading"),
-            ),
-        );
-    }
+        .label(format!("{event} handlers"))
+        .w_full();
     if groups.is_empty() {
         return block.child(group(t, event, [quiet_row(t, "No handlers.")]));
     }
     groups.iter().enumerate().fold(block, |b, (gi, g)| {
-        b.child(matcher_group(s, k, t, event, gi, g))
+        b.child(matcher_group(s, k, t, event, gi, g, ran))
     })
 }
 
+/// A hook event's handlers, beside its rows on its page: each with what it
+/// did for `ran`, the picked row, and then whatever the row ran that the
+/// hooks file no longer lists, which has no switch.
+pub fn page_handlers(s: &App, k: &Kit, t: &Tokens, event: &str, ran: Option<&Record>) -> El {
+    let k = &switch_kit(k, t);
+    let listed =
+        |h: &Handler| {
+            s.space.hooks.groups(event).iter().any(|g| {
+                g.matcher == h.matcher && g.handlers.iter().any(|e| e.command == h.command)
+            })
+        };
+    let gone: Vec<&Handler> = ran
+        .map(|r| r.handlers.iter().filter(|h| !listed(h)).collect())
+        .unwrap_or_default();
+    let gone = (!gone.is_empty()).then(|| {
+        let rows = gone.into_iter().map(|h| {
+            handler_row(t, &h.command, false)
+                .children(did(t, h).into_iter().flatten())
+                .child(text(time_label(h)).font(ty::MONO).color(t.text_secondary))
+        });
+        col()
+            .key("handlers-gone")
+            .w_full()
+            .gap(6.0)
+            .child(heading(t, "Not in hooks.json"))
+            .child(group(t, "Not in hooks.json", rows))
+    });
+    col()
+        .w_full()
+        .gap(10.0)
+        .child(heading(t, "Handlers"))
+        .child(groups(s, k, t, event, ran).gap(14.0))
+        .children(gone)
+}
+
+fn heading(t: &Tokens, words: &str) -> El {
+    row().px(4.0).child(
+        text(words.to_string())
+            .font(ty::LABEL)
+            .color(t.text_secondary)
+            .role("heading"),
+    )
+}
+
+/// A handler's row up to its trailing parts: its name, greyed while off.
+fn handler_row(t: &Tokens, command: &str, off: bool) -> El {
+    row()
+        .w_full()
+        .min_h(40.0)
+        .pl(14.0)
+        .pr(12.0)
+        .gap(12.0)
+        .center_y()
+        .child(
+            text(short_name(command))
+                .font(ty::MONO_NAME)
+                .color(if off { t.text_secondary } else { t.text })
+                .truncate()
+                .grow(1.0)
+                .shrink()
+                .min_w(0.0)
+                .help(command.to_string()),
+        )
+}
+
+/// What a handler did for a row, as the Log's inspector badges it: stderr,
+/// and its result unless it allowed.
+fn did(t: &Tokens, h: &Handler) -> [Option<El>; 2] {
+    let stderr = h.stderr.as_deref().is_some_and(|e| !e.trim().is_empty());
+    [
+        stderr.then(|| badge(t, "stderr")),
+        h.result().filter(|r| *r != "allow").map(|r| badge(t, r)),
+    ]
+}
+
 /// A matcher's handlers: the matcher as written above them, or nothing for a
-/// group that sets none.
-fn matcher_group(s: &App, k: &Kit, t: &Tokens, event: &str, gi: usize, g: &Group) -> El {
+/// group that sets none. A handler `ran` ran shows what it did and how long
+/// it took, in place of its timeout.
+fn matcher_group(
+    s: &App,
+    k: &Kit,
+    t: &Tokens,
+    event: &str,
+    gi: usize,
+    g: &Group,
+    ran: Option<&Record>,
+) -> El {
     let label = if g.matcher.is_empty() {
         "All handlers".to_string()
     } else {
@@ -134,32 +224,29 @@ fn matcher_group(s: &App, k: &Kit, t: &Tokens, event: &str, gi: usize, g: &Group
             .on_toggle_tx(move |s: &mut App, tx| s.toggle(&id, !on, tx))
             .build(k)
             .key(format!("switch-{event}-{gi}-{hi}"));
-        let name = short_name(&h.command);
-        row()
+        let logged = ran.and_then(|r| {
+            r.handlers
+                .iter()
+                .find(|x| x.matcher == g.matcher && x.command == h.command)
+        });
+        let mono = |words: String, help: &str| {
+            text(words)
+                .font(ty::MONO)
+                .color(t.text_secondary)
+                .help(help.to_string())
+        };
+        let trailing = match logged {
+            Some(x) => Some(mono(time_label(x), "Took, for the picked event")),
+            None => h.timeout.map(|secs| mono(seconds(secs), "Timeout")),
+        };
+        // A logged async handler's result reads `async` already.
+        let async_badge =
+            (h.is_async && logged.is_none()).then(|| badge_in(t, "async", Tint::Orange));
+        handler_row(t, &h.command, !on)
             .key(format!("handler-{event}-{gi}-{hi}"))
-            .w_full()
-            .min_h(40.0)
-            .pl(14.0)
-            .pr(12.0)
-            .gap(12.0)
-            .center_y()
-            .child(
-                text(name)
-                    .font(ty::MONO_NAME)
-                    .color(if on { t.text } else { t.text_secondary })
-                    .truncate()
-                    .grow(1.0)
-                    .shrink()
-                    .min_w(0.0)
-                    .help(h.command.clone()),
-            )
-            .children(h.timeout.map(|secs| {
-                text(seconds(secs))
-                    .font(ty::MONO)
-                    .color(t.text_secondary)
-                    .help("Timeout")
-            }))
-            .children(h.is_async.then(|| badge_in(t, "async", Tint::Orange)))
+            .children(logged.map(|x| did(t, x)).into_iter().flatten().flatten())
+            .children(async_badge)
+            .children(trailing)
             .child(switch)
     });
     col()
@@ -179,7 +266,7 @@ fn matcher_group(s: &App, k: &Kit, t: &Tokens, event: &str, gi: usize, g: &Group
 
 /// "N disabled" and "Enable all", while any handler the hooks file lists is
 /// off.
-fn status(s: &App, k: &Kit, t: &Tokens) -> Option<El> {
+pub fn status(s: &App, k: &Kit, t: &Tokens) -> Option<El> {
     let off = s.space.toggles.off_in(&s.space.hooks);
     (off > 0).then(|| {
         let enable = Button::new("Enable all")
