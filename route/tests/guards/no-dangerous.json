@@ -912,6 +912,28 @@
    "command": "echo $(git push -f)",
    "expect": "deny",
    "reason": "force push"
+  },
+  {
+   "name": "lease force push the message hook checks",
+   "command": "git push --force-with-lease --force-if-includes origin feat/retry-flakes",
+   "expect": "none"
+  },
+  {
+   "name": "lease alone, left to the message hook",
+   "command": "git push --force-with-lease",
+   "expect": "none"
+  },
+  {
+   "name": "lease force push in a substitution",
+   "command": "echo $(git push --force-with-lease --force-if-includes)",
+   "expect": "deny",
+   "reason": "its own command"
+  },
+  {
+   "name": "force push reason names the lease form",
+   "command": "git push --force",
+   "expect": "deny",
+   "reason": "--force-with-lease --force-if-includes"
   }
  ]
 }

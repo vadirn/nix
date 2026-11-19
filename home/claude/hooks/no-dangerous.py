@@ -13,7 +13,7 @@ import sys
 # Evaluated in order. Rules with required_args match only when at least one
 # required arg is present. Rules with None match any invocation of that subcommand.
 GIT_RULES = [
-    ("push",   ("-f", "--force", "--force-with-lease"), "Blocked: force push overwrites remote history."),
+    ("push",   ("-f", "--force"),                       "Blocked: force push overwrites remote history. Run `git push --force-with-lease --force-if-includes`, which the git message hook checks."),
     ("reset",  ("--hard",),                             "Blocked: git reset --hard discards uncommitted changes."),
     ("branch", ("-D",),                                 "Blocked: git branch -D force-deletes without merge check."),
     ("branch", ("-m", "-M", "--move"),

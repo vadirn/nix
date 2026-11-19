@@ -32,5 +32,5 @@ A subcommand that needs another reads its reference and follows it inline. One s
 
 - **Run git commands separately.** Chained commands (`&&`, `;`) bypass the permissions allowlist.
 - **Auto-detect the default branch.** Use `gh repo view`. Ask the user only when detection fails.
-- **Push one named branch, never force.** No subcommand pushes except `pr`, which pushes the branch it is about to propose. A push carries one branch that follows the naming rule. The message hook refuses any other push, such as one to `main` or a force push, so ask the user to run it.
+- **Push one named branch.** No subcommand pushes except `pr`, which pushes the branch it is about to propose. A push carries one branch that follows the naming rule. After a rebase or amend the user asked for, re-push it with `git push --force-with-lease --force-if-includes`. The message hook refuses any other push, such as one to `main` or `git push -f`, so ask the user to run it.
 - **Preserve history.** Amend or rebase only when the user explicitly asks.
