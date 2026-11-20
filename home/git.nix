@@ -18,7 +18,8 @@ in {
       user.email = "vadim@vadirn.io";
       user.signingkey = "${homeDirectory}/.ssh/github.pub";
       core.editor = "nvim";
-      core.hooksPath = "~/.config/git/hooks";
+      hook.activity-log.event = "post-commit";
+      hook.activity-log.command = "${homeDirectory}/nix/home/git/hooks/post-commit";
       init.defaultBranch = "main";
       pull.ff = "only";
       push.useForceIfIncludes = true;
@@ -45,5 +46,4 @@ in {
       features = "catppuccin-mocha";
     };
   };
-  xdg.configFile."git/hooks/post-commit".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/git/hooks/post-commit";
 }
