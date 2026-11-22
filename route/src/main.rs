@@ -16,6 +16,7 @@ mod config;
 mod event;
 mod guards;
 mod harness;
+mod install;
 mod log;
 mod merge;
 mod run;
@@ -39,11 +40,17 @@ use merge::Answer;
 const USAGE: &str = "\
 usage: route [--harness NAME] [--config PATH] [--state PATH] [--log-dir PATH] <Event>
        route [--harness NAME] [--config PATH] settings [--bin PATH]
+       route [--harness NAME] [--config PATH] install [--bin PATH] [--settings PATH]
 
   <Event>    run the handlers for one hook event; the event JSON arrives on
              stdin
   settings   print the settings `hooks` block that hands every event in the
-             hooks file to route, calling the binary at --bin
+             hooks file to route, calling the binary at --bin (default: this
+             one, under ~/ when it sits in your home)
+  install    write that block into the harness's settings file, replacing
+             only its `hooks` value (default ~/.claude/settings.json, or
+             ~/.codex/hooks.json for Codex); a hook there that does not call
+             route stops it
 
   --harness  claude (default) or codex: picks the default hooks and state
              files, and names the harness in the log
@@ -125,18 +132,35 @@ struct Paths {
 enum Cmd {
     Hook(String),
     Settings { bin: String },
+    Install { bin: String, settings: PathBuf },
+}
+
+fn home() -> PathBuf {
+    std::env::var_os("HOME")
+        .filter(|h| !h.is_empty())
+        .map_or_else(|| "/".into(), PathBuf::from)
 }
 
 fn xdg(var: &str, fallback: &str) -> PathBuf {
     match std::env::var_os(var) {
         Some(v) if !v.is_empty() => PathBuf::from(v),
-        _ => {
-            let home = std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| "/".into());
-            home.join(fallback)
-        }
+        _ => home().join(fallback),
     }
+}
+
+/// The path a settings entry calls route by: `--bin`, else this binary's
+/// own, written from `~/` when it sits in the home folder, since the entry's
+/// shell expands it.
+fn bin_or_self(bin: Option<String>) -> Result<String, String> {
+    if let Some(b) = bin {
+        return Ok(b);
+    }
+    let exe = std::env::current_exe().map_err(|e| format!("cannot find route's own path: {e}"))?;
+    let home = home();
+    Ok(match exe.strip_prefix(&home) {
+        Ok(rest) if home != std::path::Path::new("/") => format!("~/{}", rest.display()),
+        _ => exe.display().to_string(),
+    })
 }
 
 fn looks_like_event(s: &str) -> bool {
@@ -148,7 +172,7 @@ fn looks_like_event(s: &str) -> bool {
 fn parse_args(args: &[String]) -> Result<(Paths, Harness, Cmd), String> {
     let mut harness = Harness::Claude;
     let (mut config, mut state, mut log_dir) = (None, None, None);
-    let mut bin = None;
+    let (mut bin, mut settings) = (None, None);
     let mut positional = Vec::new();
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -163,6 +187,7 @@ fn parse_args(args: &[String]) -> Result<(Paths, Harness, Cmd), String> {
             "--state" => state = Some(PathBuf::from(value("--state")?)),
             "--log-dir" => log_dir = Some(PathBuf::from(value("--log-dir")?)),
             "--bin" => bin = Some(value("--bin")?),
+            "--settings" => settings = Some(PathBuf::from(value("--settings")?)),
             "-h" | "--help" => return Err(String::new()),
             flag if flag.starts_with('-') => return Err(format!("unknown flag {flag}")),
             word => positional.push(word.to_string()),
@@ -176,17 +201,15 @@ fn parse_args(args: &[String]) -> Result<(Paths, Harness, Cmd), String> {
         log_dir: log_dir.unwrap_or_else(|| state_dir.join("log")),
     };
     let cmd = match positional.as_slice() {
-        [s] if s == "settings" => Cmd::Settings {
-            bin: match bin {
-                Some(b) => b,
-                None => std::env::current_exe()
-                    .map_err(|e| format!("cannot find route's own path: {e}"))?
-                    .display()
-                    .to_string(),
-            },
+        [s] if s == "settings" && settings.is_none() => Cmd::Settings {
+            bin: bin_or_self(bin)?,
         },
-        [e] if looks_like_event(e) && bin.is_none() => Cmd::Hook(e.clone()),
-        _ => return Err("expected one event name or `settings`".into()),
+        [s] if s == "install" => Cmd::Install {
+            bin: bin_or_self(bin)?,
+            settings: settings.unwrap_or_else(|| harness.settings_file(&home())),
+        },
+        [e] if looks_like_event(e) && bin.is_none() && settings.is_none() => Cmd::Hook(e.clone()),
+        _ => return Err("expected one event name, `settings` or `install`".into()),
     };
     Ok((paths, harness, cmd))
 }
@@ -201,6 +224,9 @@ fn main() {
     match parse_args(&args) {
         Ok((paths, harness, Cmd::Hook(event))) => hook(&paths, harness, &event),
         Ok((paths, harness, Cmd::Settings { bin })) => settings(&paths, harness, &bin),
+        Ok((paths, harness, Cmd::Install { bin, settings })) => {
+            install(&paths, harness, &bin, &settings)
+        }
         Err(msg) if msg.is_empty() => {
             println!("{USAGE}");
             exit(0)
@@ -208,6 +234,38 @@ fn main() {
         Err(msg) if EVENT.get().is_some() => fail(&msg),
         Err(msg) => {
             eprintln!("route: {msg}\n{USAGE}");
+            exit(1)
+        }
+    }
+}
+
+fn install(paths: &Paths, harness: Harness, bin: &str, target: &std::path::Path) -> ! {
+    let result = config::load(&paths.config)
+        .and_then(|cfg| config::settings_block(&cfg, bin, harness))
+        .and_then(|(block, warnings)| {
+            for w in warnings {
+                eprintln!("route: warning: {w}");
+            }
+            install::install(target, &block["hooks"])
+        });
+    match result {
+        Ok(install::Done::Unchanged) => {
+            println!(
+                "route: {} already hands each event to route; nothing to write",
+                target.display()
+            );
+            exit(0)
+        }
+        Ok(install::Done::Wrote(changes)) => {
+            println!("route: wrote {}", target.display());
+            for c in changes {
+                println!("  {c}");
+            }
+            println!("{}", harness.reload_hint());
+            exit(0)
+        }
+        Err(e) => {
+            eprintln!("route: {e}");
             exit(1)
         }
     }

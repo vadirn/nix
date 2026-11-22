@@ -115,7 +115,7 @@
           jq -S .hooks ${./. + "/${harness}/${settings}"} > have
           if ! diff -u want have >&2; then
             echo "home/${harness}/${settings} wires hooks that route does not generate from home/${harness}/route/hooks.json." >&2
-            echo "Put the handler in that hooks.json, then regenerate and apply the route entries (README, route)." >&2
+            echo "Put the handler in that hooks.json, then run: ~/.local/libexec/route --harness ${harness} install" >&2
             exit 1
           fi
           touch $out

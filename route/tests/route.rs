@@ -725,3 +725,246 @@ fn a_codex_bash_call_meets_the_builtin_guards() {
         "deny"
     );
 }
+
+impl Fixture {
+    /// `route install` against this fixture's hooks file, with `HOME` set to
+    /// the fixture, so no test can reach the real settings files.
+    fn install(&self, before: &[&str], after: &[&str]) -> std::process::Output {
+        self.install_from(&self.dir, before, after)
+    }
+
+    fn install_from(&self, home: &Path, before: &[&str], after: &[&str]) -> std::process::Output {
+        Command::new(env!("CARGO_BIN_EXE_route"))
+            .env("HOME", home)
+            .args(before)
+            .arg("--config")
+            .arg(self.dir.join("hooks.json"))
+            .arg("install")
+            .args(after)
+            .output()
+            .unwrap()
+    }
+
+    fn path(&self, name: &str) -> String {
+        self.dir.join(name).display().to_string()
+    }
+}
+
+fn hooks_of(path: impl AsRef<Path>) -> Value {
+    let text = fs::read_to_string(path).unwrap();
+    serde_json::from_str::<Value>(&text).unwrap()["hooks"].clone()
+}
+
+fn succeeded(out: &std::process::Output) {
+    assert!(
+        out.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+const STALE_SETTINGS: &str = r#"{
+  "permissions": {"allow": ["Read"]},
+  "hooks": {
+    "PreToolUse": [{"matcher": "Bash|Read", "hooks": [
+      {"type": "command", "command": "/opt/route PreToolUse", "timeout": 99}
+    ]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "/opt/route Stop"}]}]
+  },
+  "sandbox": {"denyRead": ["~/.ssh"]}
+}
+"#;
+
+#[test]
+fn install_replaces_the_hooks_value_and_keeps_every_other_byte() {
+    let f = Fixture::new();
+    f.config(json!({"hooks": {"PreToolUse": [group("Bash", &["a"])]}}));
+    fs::write(f.dir.join("settings.json"), STALE_SETTINGS).unwrap();
+    let out = f.install(
+        &[],
+        &[
+            "--settings",
+            &f.path("settings.json"),
+            "--bin",
+            "/opt/route",
+        ],
+    );
+    succeeded(&out);
+    let text = fs::read_to_string(f.dir.join("settings.json")).unwrap();
+    let head = &STALE_SETTINGS[..STALE_SETTINGS.find("\"hooks\": ").unwrap() + 9];
+    let tail = &STALE_SETTINGS[STALE_SETTINGS.find(",\n  \"sandbox\"").unwrap()..];
+    assert!(text.starts_with(head), "{text}");
+    assert!(text.ends_with(tail), "{text}");
+    // The stale matcher and timeout are replaced; Stop, whose handlers are
+    // gone, is dropped rather than refused.
+    assert_eq!(
+        hooks_of(f.dir.join("settings.json")),
+        json!({"PreToolUse": [{"matcher": "Bash", "hooks": [
+            {"type": "command", "command": "/opt/route PreToolUse", "timeout": 12,
+                "onFailure": "block"}
+        ]}]})
+    );
+    let said = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        said.contains("PreToolUse") && said.contains("Stop"),
+        "{said}"
+    );
+}
+
+#[test]
+fn install_writes_through_a_chain_of_links_and_leaves_them_links() {
+    let f = Fixture::new();
+    f.config(json!({"hooks": {"PreToolUse": [group("Bash", &["a"])]}}));
+    fs::create_dir_all(f.dir.join("repo")).unwrap();
+    fs::write(f.dir.join("repo/settings.json"), STALE_SETTINGS).unwrap();
+    std::os::unix::fs::symlink(f.dir.join("repo/settings.json"), f.dir.join("store-link")).unwrap();
+    std::os::unix::fs::symlink(f.dir.join("store-link"), f.dir.join("settings.json")).unwrap();
+    succeeded(&f.install(
+        &[],
+        &[
+            "--settings",
+            &f.path("settings.json"),
+            "--bin",
+            "/opt/route",
+        ],
+    ));
+    for link in ["settings.json", "store-link"] {
+        assert!(
+            fs::symlink_metadata(f.dir.join(link))
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "{link} is no longer a link"
+        );
+    }
+    assert_eq!(
+        hooks_of(f.dir.join("repo/settings.json"))["PreToolUse"][0]["matcher"],
+        "Bash"
+    );
+}
+
+#[test]
+fn install_with_nothing_to_change_writes_nothing() {
+    use std::os::unix::fs::MetadataExt;
+    let f = Fixture::new();
+    f.config(json!({"hooks": {"PreToolUse": [group("Bash", &["a"])]}}));
+    fs::write(f.dir.join("settings.json"), STALE_SETTINGS).unwrap();
+    let args = [
+        "--settings",
+        &f.path("settings.json"),
+        "--bin",
+        "/opt/route",
+    ];
+    succeeded(&f.install(&[], &args));
+    let before = fs::metadata(f.dir.join("settings.json")).unwrap().ino();
+    let out = f.install(&[], &args);
+    succeeded(&out);
+    assert_eq!(
+        fs::metadata(f.dir.join("settings.json")).unwrap().ino(),
+        before
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("nothing to write"),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+#[test]
+fn install_refuses_a_hook_route_did_not_write_and_leaves_the_file() {
+    let f = Fixture::new();
+    f.config(json!({"hooks": {"PreToolUse": [group("Bash", &["a"])]}}));
+    let settings = r#"{"hooks": {"PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "/opt/route PreToolUse"}]},
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.local/bin/trinket-git-message"}]}
+    ]}}"#;
+    fs::write(f.dir.join("settings.json"), settings).unwrap();
+    let out = f.install(
+        &[],
+        &[
+            "--settings",
+            &f.path("settings.json"),
+            "--bin",
+            "/opt/route",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("~/.local/bin/trinket-git-message"), "{err}");
+    assert!(!err.contains("/opt/route PreToolUse"), "{err}");
+    assert_eq!(
+        fs::read_to_string(f.dir.join("settings.json")).unwrap(),
+        settings
+    );
+}
+
+#[test]
+fn install_for_codex_finds_its_file_and_knows_its_own_entries() {
+    let f = Fixture::new();
+    f.config(json!({"hooks": {"Stop": [{"hooks": [
+        {"type": "command", "command": "a", "timeout": 60}
+    ]}]}}));
+    fs::create_dir_all(f.dir.join(".codex")).unwrap();
+    fs::write(
+        f.dir.join(".codex/hooks.json"),
+        r#"{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "~/.local/libexec/route --harness codex Stop", "timeout": 32}]}]}}"#,
+    )
+    .unwrap();
+    succeeded(&f.install(
+        &["--harness", "codex"],
+        &["--bin", "~/.local/libexec/route"],
+    ));
+    assert_eq!(
+        hooks_of(f.dir.join(".codex/hooks.json")),
+        json!({"Stop": [{"hooks": [
+            {"type": "command", "command": "~/.local/libexec/route --harness codex Stop",
+                "timeout": 62}
+        ]}]})
+    );
+}
+
+#[test]
+fn install_without_bin_names_route_by_its_path_from_home() {
+    let f = Fixture::new();
+    f.config(json!({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "a"}]}]}}));
+    let exe = Path::new(env!("CARGO_BIN_EXE_route"));
+    let out = f.install_from(
+        exe.parent().unwrap(),
+        &[],
+        &["--settings", &f.path("settings.json")],
+    );
+    succeeded(&out);
+    assert_eq!(
+        hooks_of(f.dir.join("settings.json"))["Stop"][0]["hooks"][0]["command"],
+        "~/route Stop"
+    );
+}
+
+#[test]
+fn install_adds_hooks_to_a_file_without_them_or_creates_it() {
+    let f = Fixture::new();
+    f.config(json!({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "a"}]}]}}));
+    fs::write(f.dir.join("settings.json"), "{\n  \"model\": \"opus\"\n}\n").unwrap();
+    let bin = ["--bin", "/opt/route"];
+    succeeded(&f.install(
+        &[],
+        &[&["--settings", &f.path("settings.json")], &bin[..]].concat(),
+    ));
+    let text = fs::read_to_string(f.dir.join("settings.json")).unwrap();
+    assert!(
+        text.starts_with("{\n  \"model\": \"opus\",\n  \"hooks\": {\n"),
+        "{text}"
+    );
+    assert!(text.ends_with("}\n}\n"), "{text}");
+    succeeded(&f.install(
+        &[],
+        &[&["--settings", &f.path("new.json")], &bin[..]].concat(),
+    ));
+    let text = fs::read_to_string(f.dir.join("new.json")).unwrap();
+    assert!(text.starts_with("{\n  \"hooks\": {\n"), "{text}");
+    assert_eq!(
+        hooks_of(f.dir.join("new.json")),
+        hooks_of(f.dir.join("settings.json"))
+    );
+}
