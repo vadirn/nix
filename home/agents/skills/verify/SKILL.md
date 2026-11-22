@@ -195,13 +195,15 @@ dir=$(mktemp -d "$TMPDIR/verify.XXXXXX")
 git archive <rev> | tar -x -C "$dir"
 ```
 
-The copy must resolve its own dependencies. For a JS workspace:
+Install the copy's dependencies inside it, from its own lockfile, with the repo's package manager. For bun: `bun install --cwd "$dir" --frozen-lockfile`. Bun clones packages from its global cache, so the install takes seconds. If the install fails, report why; the claims that need this copy end unverified.
 
-1. Compare the lockfile: `git diff --quiet <rev> -- <lockfile>`. This compares the revision with the checkout, whose `node_modules` you would clone.
-2. Lockfile matches: clone every `node_modules` folder. List them with `fd -HI -t d --prune '^node_modules$' --exclude .git`, then `/bin/cp -Rc <path> "$dir/<path>"` each (APFS clone, macOS).
-3. Lockfile differs: install inside the copy from its own lockfile, such as `bun install --frozen-lockfile`.
+Then check that no link in the copy resolves into the checkout:
 
-Never symlink `node_modules`. Workspace links then resolve to the checkout, so a before-run imports the checkout's code. A clone keeps relative workspace links inside the copy.
+```bash
+fd -HI -t l . "$dir" -x readlink -f {} | rg -F "$(realpath <checkout>)"
+```
+
+Any output is a link into the checkout, such as a symlinked `node_modules`. A run would then import the checkout's code. Remove each such link, install instead, and run the check again.
 
 A hook may refuse `rm -rf` outside the project. List the extracts left in the report, so the user can remove them.
 
