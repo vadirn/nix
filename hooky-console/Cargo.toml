@@ -1,0 +1,41 @@
+# `hooky-console`: a macOS window onto hooky's event log and handlers. It
+# indexes the per-day JSONL files into a SQLite cache it may drop and rebuild
+# at will, writes hooky's toggles file (`state.json`), and never writes the
+# hand-edited hooks file.
+#
+# Its own workspace and lockfile, like `hooky/`: Rune's dependency tree never
+# reaches hooky or vault-query, and Rune's `[patch.crates-io]` table has to sit
+# at a workspace root.
+#
+# Bumping Rune: pick a `dev` revision (dev is never rewritten), set it on every
+# `rev` below, copy the `[patch.crates-io]` table from Rune's root Cargo.toml at
+# that revision (a missing patch builds fine and silently drops a fix, such as
+# VoiceOver headings), run `cargo update -p rune`, then refresh `cargoHash` in
+# flake.nix. The build uses nixpkgs' rustc, not Rune's rust-toolchain.toml; a
+# Rune that needs a newer compiler fails `nix build` loudly.
+[workspace]
+
+[package]
+name = "hooky-console"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# `tooling` keeps `--snap`, `--tree` and `--script` in the release build, so the
+# nix output can render itself headless for checks and screenshots.
+rune = { git = "https://github.com/anomalyco/rune", rev = "0796df5fa269b85d4fc04786bbd37f7349eb6606", features = ["tooling"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "0796df5fa269b85d4fc04786bbd37f7349eb6606" }
+# Inter and IBM Plex Mono, as the design canvas uses them.
+rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "0796df5fa269b85d4fc04786bbd37f7349eb6606" }
+# `bundled` compiles SQLite into the binary, so the app links only system
+# libraries and needs no SQLite from nix at run time.
+rusqlite = { version = "0.43", features = ["bundled"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[patch.crates-io]
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "0796df5fa269b85d4fc04786bbd37f7349eb6606" }
+winit = { git = "https://github.com/anomalyco/rune", rev = "0796df5fa269b85d4fc04786bbd37f7349eb6606" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "0796df5fa269b85d4fc04786bbd37f7349eb6606" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "0796df5fa269b85d4fc04786bbd37f7349eb6606" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "0796df5fa269b85d4fc04786bbd37f7349eb6606" }

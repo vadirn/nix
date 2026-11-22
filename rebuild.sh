@@ -22,12 +22,12 @@ bash "$HOME/nix/home/bun/install-globals.sh"
 echo "Installing pi plugins..."
 pi install https://github.com/davebcn87/pi-autoresearch
 
-# The switch built Route Console; signing needs the login keychain, so it
+# The switch built Hooky Console; signing needs the login keychain, so it
 # happens here. A Mac without the Developer ID, or offline (the signature's
 # timestamp comes from Apple), keeps the copy it has.
-echo "Installing Route Console..."
-bash "$HOME/nix/scripts/sign-route-console.sh" "$HOME/.local/share/route-console" ||
-  echo "Route Console not updated; see the error above." >&2
+echo "Installing Hooky Console..."
+bash "$HOME/nix/scripts/sign-hooky-console.sh" "$HOME/.local/share/hooky-console" ||
+  echo "Hooky Console not updated; see the error above." >&2
 
 # Refresh sudo credentials: darwin-rebuild's grant may have expired by now.
 sudo -v
