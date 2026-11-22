@@ -50,7 +50,8 @@ usage: route [--harness NAME] [--config PATH] [--state PATH] [--log-dir PATH] <E
   install    write that block into the harness's settings file, replacing
              only its `hooks` value (default ~/.claude/settings.json, or
              ~/.codex/hooks.json for Codex); a hook there that does not call
-             route stops it
+             route stops it, and so does running from the Nix store without
+             --bin
 
   --harness  claude (default) or codex: picks the default hooks and state
              files, and names the harness in the log
@@ -148,19 +149,28 @@ fn xdg(var: &str, fallback: &str) -> PathBuf {
     }
 }
 
-/// The path a settings entry calls route by: `--bin`, else this binary's
-/// own, written from `~/` when it sits in the home folder, since the entry's
-/// shell expands it.
-fn bin_or_self(bin: Option<String>) -> Result<String, String> {
-    if let Some(b) = bin {
-        return Ok(b);
-    }
+/// This binary's path as a settings entry calls it: written from `~/` when
+/// it sits in the home folder, since the entry's shell expands it.
+fn own_path() -> Result<String, String> {
     let exe = std::env::current_exe().map_err(|e| format!("cannot find route's own path: {e}"))?;
     let home = home();
     Ok(match exe.strip_prefix(&home) {
         Ok(rest) if home != std::path::Path::new("/") => format!("~/{}", rest.display()),
         _ => exe.display().to_string(),
     })
+}
+
+/// `path`, unless it lies in the Nix store, where `nix run` starts route:
+/// the next garbage collection deletes it while the entries install wrote
+/// still call it.
+fn outlasting(path: String) -> Result<String, String> {
+    if path.starts_with("/nix/store/") {
+        Err(format!(
+            "route runs from the Nix store ({path}), which garbage collection empties; pass --bin with the path the settings should call, such as ~/.local/libexec/route"
+        ))
+    } else {
+        Ok(path)
+    }
 }
 
 fn looks_like_event(s: &str) -> bool {
@@ -202,10 +212,10 @@ fn parse_args(args: &[String]) -> Result<(Paths, Harness, Cmd), String> {
     };
     let cmd = match positional.as_slice() {
         [s] if s == "settings" && settings.is_none() => Cmd::Settings {
-            bin: bin_or_self(bin)?,
+            bin: bin.map_or_else(own_path, Ok)?,
         },
         [s] if s == "install" => Cmd::Install {
-            bin: bin_or_self(bin)?,
+            bin: bin.map_or_else(|| own_path().and_then(outlasting), Ok)?,
             settings: settings.unwrap_or_else(|| harness.settings_file(&home())),
         },
         [e] if looks_like_event(e) && bin.is_none() && settings.is_none() => Cmd::Hook(e.clone()),
@@ -481,4 +491,19 @@ fn hook(paths: &Paths, harness: Harness, event: &str) -> ! {
 
 fn handler_json(s: &Selected) -> Value {
     json!({"matcher": s.id.matcher, "command": s.id.command})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn install_takes_no_path_from_the_nix_store() {
+        let err = outlasting("/nix/store/abc-route-0.1.0/bin/route".into()).unwrap_err();
+        assert!(err.contains("--bin"), "{err}");
+        assert_eq!(
+            outlasting("~/.local/libexec/route".into()).as_deref(),
+            Ok("~/.local/libexec/route")
+        );
+    }
 }

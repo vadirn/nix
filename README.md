@@ -57,7 +57,7 @@ Every hook in `settings.json` goes through route, and the switch checks it: a `h
 ~/.local/libexec/route install
 ```
 
-It prints the events whose entries changed, or that nothing did. It writes through `~/.claude/settings.json`'s link into this repo's file and replaces only the `hooks` value, so the rest of the file keeps its formatting. A hook in `settings.json` that does not call route stops it, since the write would drop that hook: move the hook into `hooks.json` first. Without `--bin`, the entries call route by the path it ran from, written from `~/`, the form the check expects.
+It prints the events whose entries changed, or that nothing did. It writes through `~/.claude/settings.json`'s link into this repo's file and replaces only the `hooks` value, so the rest of the file keeps its formatting. A hook in `settings.json` that does not call route stops it, since the write would drop that hook: move the hook into `hooks.json` first. Without `--bin`, the entries call route by the path it ran from, written from `~/`, the form the check expects. From inside the Nix store, as under `nix run`, install stops and asks for `--bin`, since garbage collection would delete the path the entries call.
 
 ### Codex
 
