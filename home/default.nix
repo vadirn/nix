@@ -3,8 +3,8 @@
   homeDirectory,
   vault-query,
   md-for-agents,
-  route,
-  route-console,
+  hooky,
+  hooky-console,
   ...
 }: {
   users.users.vadim.home = homeDirectory;
@@ -94,28 +94,39 @@
       # no install step, and no node_modules for the CLI to start.
       home.file.".local/bin/autoformat".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/skills/tools/autoformat/autoformat.ts";
 
-      # The hook router for Claude Code and Codex, linked off PATH: macOS ships
-      # /sbin/route, and both harnesses' settings call this one by its full
-      # path anyway. Its handler lists are linked in home/claude.nix and
+      # The hook router for Claude Code and Codex, on PATH as `hooky`. Both
+      # harnesses' settings call it by its full path, since a harness may not
+      # see this PATH. Its handler lists are linked in home/claude.nix and
       # home/codex.nix.
-      home.file.".local/libexec/route".source = "${route}/bin/route";
-      # Every hook a harness's settings wire goes through route: their hooks
-      # block must be what route generates from that harness's handler list,
-      # home/<harness>/route/hooks.json (README, route). A hook wired into the
+      home.file.".local/bin/hooky".source = "${hooky}/bin/hooky";
+      # hooky was called route, and kept its logs and handler switches in
+      # ~/.local/state/route. Move them once, before the hooky link exists, so
+      # no hook event can create an empty state folder first.
+      home.activation.moveRouteState = config.lib.dag.entryBetween ["linkGeneration"] ["writeBoundary"] ''
+        old="$HOME/.local/state/route" new="$HOME/.local/state/hooky"
+        if [[ -d "$old" && ! -e "$new" ]]; then
+          run mv "$old" "$new"
+        elif [[ -d "$old" ]]; then
+          echo "Left $old in place: $new already exists." >&2
+        fi
+      '';
+      # Every hook a harness's settings wire goes through hooky: their hooks
+      # block must be what hooky generates from that harness's handler list,
+      # home/<harness>/hooky/hooks.json (README, hooky). A hook wired into the
       # settings directly, or a handler change not applied there, fails the
       # switch here.
       home.checks = map ({
         harness,
         settings,
       }:
-        pkgs.runCommand "route-wiring-${harness}" {nativeBuildInputs = [pkgs.jq];} ''
-          ${route}/bin/route --harness ${harness} \
-            --config ${./. + "/${harness}/route/hooks.json"} \
-            settings --bin "~/.local/libexec/route" | jq -S .hooks > want
+        pkgs.runCommand "hooky-wiring-${harness}" {nativeBuildInputs = [pkgs.jq];} ''
+          ${hooky}/bin/hooky --harness ${harness} \
+            --config ${./. + "/${harness}/hooky/hooks.json"} \
+            settings --bin "~/.local/bin/hooky" | jq -S .hooks > want
           jq -S .hooks ${./. + "/${harness}/${settings}"} > have
           if ! diff -u want have >&2; then
-            echo "home/${harness}/${settings} wires hooks that route does not generate from home/${harness}/route/hooks.json." >&2
-            echo "Put the handler in that hooks.json, then run: ~/.local/libexec/route --harness ${harness} install" >&2
+            echo "home/${harness}/${settings} wires hooks that hooky does not generate from home/${harness}/hooky/hooks.json." >&2
+            echo "Put the handler in that hooks.json, then run: hooky --harness ${harness} install" >&2
             exit 1
           fi
           touch $out
@@ -130,9 +141,9 @@
         }
       ];
 
-      # Route Console's build, linked so the generation roots it (rebuild.sh
+      # Hooky Console's build, linked so the generation roots it (rebuild.sh
       # collects garbage) and rebuild.sh signs and installs it from here.
-      home.file.".local/share/route-console".source = route-console;
+      home.file.".local/share/hooky-console".source = hooky-console;
 
       imports = [
         ./zsh.nix

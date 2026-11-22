@@ -83,76 +83,76 @@
       };
       cargoHash = "sha256-ksQVMViwjNXKSDLtowqy82J/3W6mhT2vHu1HzPd6HmA=";
     };
-    # `route`, the Claude Code hook router, is its own workspace with its own
-    # lockfile: a route edit never rebuilds vault-query, and vault-query's
+    # `hooky`, the Claude Code hook router, is its own workspace with its own
+    # lockfile: a hooky edit never rebuilds vault-query, and vault-query's
     # dependencies never reach the binary that sits on every tool call. The
     # build runs its tests, which use only `bash` and `/bin/sh` fixtures.
-    route = pkgs.rustPlatform.buildRustPackage {
-      pname = "route";
+    hooky = pkgs.rustPlatform.buildRustPackage {
+      pname = "hooky";
       version = "0.1.0";
       src = lib.fileset.toSource {
-        root = ./route;
+        root = ./hooky;
         fileset = lib.fileset.unions [
-          ./route/Cargo.toml
-          ./route/Cargo.lock
-          ./route/src
-          ./route/tests
+          ./hooky/Cargo.toml
+          ./hooky/Cargo.lock
+          ./hooky/src
+          ./hooky/tests
         ];
       };
-      cargoHash = "sha256-CQ7rs9jHZkSVTBLv5rbYm0zvDaTS0rmbA92DtrgfBjw=";
+      cargoHash = "sha256-khePdgYIaJVbi0VTgLiW4tXSpBmogxHK0MGGzHB8rpA=";
     };
-    # `route-console`, the Rune window onto route's log and handlers, as
-    # `Route Console.app`. Its own workspace and lockfile, like route; Rune and
+    # `hooky-console`, the Rune window onto hooky's log and handlers, as
+    # `Hooky Console.app`. Its own workspace and lockfile, like hooky; Rune and
     # its patched crates arrive as git dependencies that fetchCargoVendor
     # resolves. The bundle loads only system libraries, so a copy taken out of
-    # the store (to sign it with a Developer ID, scripts/sign-route-console.sh)
+    # the store (to sign it with a Developer ID, scripts/sign-hooky-console.sh)
     # keeps working after the store path is collected.
-    route-console = pkgs.rustPlatform.buildRustPackage {
-      pname = "route-console";
+    hooky-console = pkgs.rustPlatform.buildRustPackage {
+      pname = "hooky-console";
       version = "0.1.0";
       src = lib.fileset.toSource {
-        root = ./route-console;
+        root = ./hooky-console;
         fileset = lib.fileset.unions [
-          ./route-console/Cargo.toml
-          ./route-console/Cargo.lock
-          ./route-console/src
+          ./hooky-console/Cargo.toml
+          ./hooky-console/Cargo.lock
+          ./hooky-console/src
         ];
       };
-      cargoHash = "sha256-1vkXx6O321JxVkhVFchL/Mhhso5nQ53kEgZGpEzpKMo=";
+      cargoHash = "sha256-RyiN9f7G870ggE+ML4joo7/Y9L/VOms/p6ZCg9bB9I8=";
       nativeBuildInputs = [pkgs.darwin.sigtool];
       postInstall = ''
-        app="$out/Applications/Route Console.app/Contents"
+        app="$out/Applications/Hooky Console.app/Contents"
         mkdir -p "$app/MacOS"
-        mv $out/bin/route-console "$app/MacOS/route-console"
-        ln -s "../Applications/Route Console.app/Contents/MacOS/route-console" $out/bin/route-console
-        exe="$app/MacOS/route-console"
+        mv $out/bin/hooky-console "$app/MacOS/hooky-console"
+        ln -s "../Applications/Hooky Console.app/Contents/MacOS/hooky-console" $out/bin/hooky-console
+        exe="$app/MacOS/hooky-console"
         # Rust's libc crate links libiconv; nixpkgs points it at its own copy.
         # macOS ships the same ABI in /usr/lib.
         for lib in $(otool -L "$exe" | awk '/\/nix\/store\/.*libiconv/ {print $1}'); do
           install_name_tool -change "$lib" /usr/lib/libiconv.2.dylib "$exe"
         done
         if otool -L "$exe" | tail -n +2 | grep -q /nix/store; then
-          echo "route-console still loads from /nix/store:" >&2
+          echo "hooky-console still loads from /nix/store:" >&2
           otool -L "$exe" >&2
           exit 1
         fi
         codesign --force --sign - "$exe"
-        # The icon: route-console/icon/AppIcon.icon (Icon Composer), compiled
-        # by scripts/route-console-icon.sh into Assets.car, the Liquid Glass
+        # The icon: hooky-console/icon/AppIcon.icon (Icon Composer), compiled
+        # by scripts/hooky-console-icon.sh into Assets.car, the Liquid Glass
         # icon macOS 26 and later draw, and AppIcon.icns for older systems.
         mkdir -p "$app/Resources"
-        cp ${./route-console/icon/Assets.car} "$app/Resources/Assets.car"
-        cp ${./route-console/icon/AppIcon.icns} "$app/Resources/AppIcon.icns"
+        cp ${./hooky-console/icon/Assets.car} "$app/Resources/Assets.car"
+        cp ${./hooky-console/icon/AppIcon.icns} "$app/Resources/AppIcon.icns"
         cat > "$app/Info.plist" <<EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-          <key>CFBundleExecutable</key><string>route-console</string>
+          <key>CFBundleExecutable</key><string>hooky-console</string>
           <key>CFBundleIconFile</key><string>AppIcon</string>
           <key>CFBundleIconName</key><string>AppIcon</string>
-          <key>CFBundleIdentifier</key><string>io.vadirn.route-console</string>
-          <key>CFBundleName</key><string>Route Console</string>
+          <key>CFBundleIdentifier</key><string>io.vadirn.hooky-console</string>
+          <key>CFBundleName</key><string>Hooky Console</string>
           <key>CFBundlePackageType</key><string>APPL</string>
           <key>CFBundleShortVersionString</key><string>0.1.0</string>
           <key>CFBundleVersion</key><string>0.1.0</string>
@@ -184,7 +184,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
-            inherit vault-query md-for-agents route route-console;
+            inherit vault-query md-for-agents hooky hooky-console;
           })
         ];
       };
@@ -197,7 +197,7 @@
     };
 
     darwinPackages = self.darwinConfigurations.default.pkgs;
-    packages.${system} = {inherit vault-query md-for-agents route route-console;};
+    packages.${system} = {inherit vault-query md-for-agents hooky hooky-console;};
     formatter.${system} = pkgs.alejandra;
   };
 }

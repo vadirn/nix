@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route Notification",
+            "command": "~/.local/bin/hooky Notification",
             "async": true
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route PostToolUse",
+            "command": "~/.local/bin/hooky PostToolUse",
             "timeout": 32
           }
         ]
@@ -96,7 +96,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route PostToolUseFailure",
+            "command": "~/.local/bin/hooky PostToolUseFailure",
             "timeout": 32
           }
         ]
@@ -108,7 +108,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route PreToolUse",
+            "command": "~/.local/bin/hooky PreToolUse",
             "timeout": 602,
             "onFailure": "block"
           }
@@ -120,7 +120,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route SessionStart",
+            "command": "~/.local/bin/hooky SessionStart",
             "timeout": 32
           }
         ]
@@ -131,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route CwdChanged",
+            "command": "~/.local/bin/hooky CwdChanged",
             "timeout": 32
           }
         ]
@@ -142,7 +142,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route Stop",
+            "command": "~/.local/bin/hooky Stop",
             "timeout": 122
           }
         ]
@@ -153,7 +153,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route TaskCompleted",
+            "command": "~/.local/bin/hooky TaskCompleted",
             "async": true
           }
         ]
@@ -164,7 +164,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route UserPromptSubmit",
+            "command": "~/.local/bin/hooky UserPromptSubmit",
             "timeout": 32
           }
         ]
@@ -175,7 +175,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route StopFailure",
+            "command": "~/.local/bin/hooky StopFailure",
             "timeout": 32
           }
         ]
@@ -186,7 +186,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/libexec/route SessionEnd",
+            "command": "~/.local/bin/hooky SessionEnd",
             "timeout": 5
           }
         ]
