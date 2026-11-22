@@ -82,7 +82,6 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|Bash",
         "hooks": [
           {
             "type": "command",
@@ -94,7 +93,6 @@
     ],
     "PostToolUseFailure": [
       {
-        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
