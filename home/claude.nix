@@ -8,7 +8,7 @@ in {
   home.file.".claude/settings.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/settings.json";
   home.file.".claude/hooks".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/hooks";
   # The handler list for ~/.local/libexec/route, which settings.json calls once
-  # per hook event. Its entries come from home/claude/route/settings-hooks.json.
+  # per hook event. `route install` writes those entries from this list.
   xdg.configFile."route/hooks.json".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/route/hooks.json";
   home.file.".claude/bin".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/claude/bin";
   home.file.".claude/agents".source = config.lib.file.mkOutOfStoreSymlink "${homeDirectory}/nix/home/agents/agents";

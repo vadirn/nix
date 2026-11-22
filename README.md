@@ -51,15 +51,13 @@ The hook router for Claude Code and, with `--harness codex`, for Codex ([Codex](
 
 `settings.json` calls route at `~/.local/libexec/route`, off PATH, since macOS ships `/sbin/route`. A Mac must run `./rebuild.sh`, which links the binary and the hooks file, before it pulls a `settings.json` that calls route. Otherwise no hook can start: Claude Code 2.1.295 and later deny every PreToolUse call, and older versions let every tool call through.
 
-Every hook in `settings.json` goes through route, and the switch checks it: a `home.checks` entry regenerates the route entries from `hooks.json` and fails when `settings.json`'s `hooks` differ, so a hook wired into `settings.json` directly, or a `hooks.json` change not yet applied, stops `./rebuild.sh` before anything deploys. Whenever `hooks.json` changes, regenerate the route entries, then apply them to `settings.json`:
+Every hook in `settings.json` goes through route, and the switch checks it: a `home.checks` entry regenerates the route entries from `hooks.json` and fails when `settings.json`'s `hooks` differ, so a hook wired into `settings.json` directly, or a `hooks.json` change not yet applied, stops `./rebuild.sh` before anything deploys. route reads `hooks.json` on every event, so a handler change applies on the next one; only a change to route's own entries (an event gained or lost, a wider matcher, a longer timeout) must reach `settings.json`. After each `hooks.json` change, run:
 
 ```bash
-~/.local/libexec/route --config home/claude/route/hooks.json settings --bin "~/.local/libexec/route" > home/claude/route/settings-hooks.json
+~/.local/libexec/route install
 ```
 
-```bash
-jq --slurpfile r home/claude/route/settings-hooks.json '.hooks = $r[0].hooks' home/claude/settings.json > /tmp/settings.json && mv /tmp/settings.json home/claude/settings.json
-```
+It prints the events whose entries changed, or that nothing did. It writes through `~/.claude/settings.json`'s link into this repo's file and replaces only the `hooks` value, so the rest of the file keeps its formatting. A hook in `settings.json` that does not call route stops it, since the write would drop that hook: move the hook into `hooks.json` first. Without `--bin`, the entries call route by the path it ran from, written from `~/`, the form the check expects. From inside the Nix store, as under `nix run`, install stops and asks for `--bin`, since garbage collection would delete the path the entries call.
 
 ### Codex
 
@@ -70,10 +68,10 @@ The same binary serves Codex. Codex's settings, `home/codex/hooks.json` (linked 
 - **Trust:** Codex asks once in `/hooks` to trust each new or changed entry in `~/.codex/hooks.json`. A handler change that leaves the generated entries as they are needs no new trust.
 - **Matchers:** the PreToolUse and PostToolUse matchers name `functions.exec_command`, whose dot makes them a regex, so Codex's entries start route on every tool call, and the log records each tool name Codex sends.
 
-The wiring check covers Codex's settings too. Whenever Codex's handler list changes, regenerate them:
+The wiring check covers Codex's settings too. After each change to Codex's handler list, run:
 
 ```bash
-~/.local/libexec/route --harness codex --config home/codex/route/hooks.json settings --bin "~/.local/libexec/route" > home/codex/hooks.json
+~/.local/libexec/route --harness codex install
 ```
 
 ## route-console

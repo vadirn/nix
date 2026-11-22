@@ -17,5 +17,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 libc = "0.2"
 regex = "1"
 # preserve_order keeps the hooks file's event and key order, so `route
-# settings` prints events in the order they are written.
-serde_json = { version = "1", features = ["preserve_order"] }
+# settings` prints events in the order they are written. raw_value gives
+# `route install` the bytes of a settings file's `hooks` value, so it can
+# replace those and leave the rest of the file as it was.
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }

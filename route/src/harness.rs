@@ -38,6 +38,26 @@ impl Harness {
         }
     }
 
+    /// The settings file whose `hooks` hand each event to route.
+    pub fn settings_file(self, home: &Path) -> PathBuf {
+        match self {
+            Harness::Claude => home.join(".claude/settings.json"),
+            Harness::Codex => home.join(".codex/hooks.json"),
+        }
+    }
+
+    /// What to do after install changed the settings file.
+    pub fn reload_hint(self) -> &'static str {
+        match self {
+            Harness::Claude => {
+                "A running Claude Code session may keep its old hooks; start a new one to load these."
+            }
+            Harness::Codex => {
+                "Codex asks you to trust new or changed entries: review them in /hooks."
+            }
+        }
+    }
+
     /// The arguments a settings entry puts between route's path and the event.
     /// Claude Code's entries name none, so they stay as they were.
     pub fn flag(self) -> Option<&'static str> {
