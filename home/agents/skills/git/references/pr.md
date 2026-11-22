@@ -42,12 +42,19 @@ else:
 
 if template_content has a gif section: titles = Bash(pr-gif)    // the body fills it, see §PR creation details
 
+// The section /verify wrote for this branch, if any — see §PR creation details
+verification = Bash(cat "$TMPDIR/verify/$(basename <git-root>)/<branch>.md" 2>/dev/null)
+if verification and its `<!-- verify: tip <sha> -->` line names a commit other than HEAD:
+    keep = AskUserQuestion("The verification covers <sha>, not HEAD. Include it marked stale, or leave it out?")
+    if leave out: verification = empty
+    else: verification = do("insert '> Stale: covers <sha>; the branch is at <HEAD>.' under its heading")
+
 if existing:
     show URL, AskUserQuestion("update or stop?")
     if stop: stop
     // update path — reuses template resolved above
     title = do("regenerate conventional commit-style title from diff and log")
-    body  = do("regenerate body from diff and log, filling template_content sections; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim")
+    body  = do("regenerate body from diff and log, filling template_content sections; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim; then append verification verbatim, if any")
     do("check body against diff (see §PR creation details); fix each mismatch")
     AskUserQuestion("confirm updated title and body")
     Bash(rm -f <artifact_dir>/pr.md)
@@ -59,7 +66,7 @@ if existing:
     stop
 
 title = do("generate conventional commit-style title: '<prefix>: <message>' — prefix by the contract test in prefix.md, message style per commit.md")
-body = do("fill template_content placeholders from diff and log; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim")
+body = do("fill template_content placeholders from diff and log; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim; then append verification verbatim, if any")
 do("check body against diff (see §PR creation details); fix each mismatch")
 
 AskUserQuestion("confirm title, body, base branch, draft status")
@@ -77,7 +84,7 @@ if body has a before/after section: do("suggest the user record the screencast i
 - **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready".
 - **Link a stacked PR.** `--base` sets the base branch but does not put the PR in a GitHub stack. When the base is another open PR's branch, run `gh stack link <base PR> <new PR>` after `gh pr create`. Given PR numbers, it pushes nothing. When the base PR already sits in a stack, list every PR in the stack, bottom first, then the new one: `gh stack link <bottom> … <base PR> <new PR>`. Naming only the base PR and the new one fails with "this would remove #<bottom> from the stack". Open a PR for every branch below first. A link whose bottom PR does not target the default branch moves that PR's base to the default branch, and GitHub then refuses base edits on a stacked PR. To recover, run `gh stack unstack <stack number>`, then `gh pr edit <PR> --base <branch>`.
 - **Title:** `<prefix>: <message>`, lowercase after prefix, <70 chars, focus on WHY — the same form a commit takes. The PR title becomes the commit message on squash-and-merge, so the prefix comes from the contract test applied to the branch's net change, not to any one commit.
-- **Body:** Always start from a template. The `pr-template` script (at `home/agents/scripts/pr-template.sh`) resolves which template to use and prints one of three modes on its first line: `MODE: single` (full template content follows), `MODE: multi` (one repo-relative `.md` path per line — ask the user which), or `MODE: default` (the colocated `pr-template.md` default follows; used when the repo ships no template). In every mode the resulting body keeps the template's headings, emoji, and section count verbatim. The one exception is an optional section: a template region `<!-- optional: <when> -->` … `<!-- /optional -->` that holds its heading. Drop the whole region, heading and all, when `<when>` does not hold. Otherwise keep the section and drop only the two region comments. Only the placeholder content gets filled in from the diff and log. Replace each comment with the content it asks for. Keep a comment only in a section you cannot fill, such as the default template's before/after screencast.
+- **Body:** Always start from a template. The `pr-template` script (at `home/agents/scripts/pr-template.sh`) resolves which template to use and prints one of three modes on its first line: `MODE: single` (full template content follows), `MODE: multi` (one repo-relative `.md` path per line — ask the user which), or `MODE: default` (the colocated `pr-template.md` default follows; used when the repo ships no template). In every mode the resulting body keeps the template's headings, emoji, and section count verbatim. One exception is an optional section: a template region `<!-- optional: <when> -->` … `<!-- /optional -->` that holds its heading. Drop the whole region, heading and all, when `<when>` does not hold. Otherwise keep the section and drop only the two region comments. Only the placeholder content gets filled in from the diff and log. Replace each comment with the content it asks for. Keep a comment only in a section you cannot fill, such as the default template's before/after screencast. The one section a body may add is `## Verification`, which `/verify` writes. Append it verbatim after the template's last section, its `<!-- verify: tip <sha> -->` marker included. Add no other section.
 - **Fill the gif section from the library.** A template section that asks for a GIF, such as `## 👏 Accompanying gif`, takes one GIF. From the titles `pr-gif` lists, pick the one that fits the branch's net change best. Replace the section's comment with the line `pr-gif "<title>"` prints.
 - **Self-contained body.** The reader has the repo and nothing else. Derive the body from the diff and log — never from session-only context. Name only artifacts a reader can resolve from the repo (files, commits, symbols). Strip references to private planning notes (vault tracks, note slugs like `track-*`), local paths outside the repo, ticket IDs, and prior-conversation shorthand. If a why comes from such a source, restate the reasoning inline rather than pointing at the source.
 - **State what the diff cannot.** The body carries rationale, scope, and traps a reader would otherwise misread — never a restatement of what GitHub already renders. Skip commit counts, SHA ranges, and file lists: the branch view renders those and stays current across a rebase or force-push, which the body would not. Skip a record of checks run, such as the commands, test counts, timings and one-off live runs. CI shows check results and stays current, but such a record goes stale at the next push. Steps a reviewer can follow by hand are not such a record, so the Check step keeps them.
