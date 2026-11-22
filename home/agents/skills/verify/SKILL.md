@@ -285,11 +285,17 @@ The marker line names the tip the section verified, so `/git pr` can tell a stal
 | C1 <sentence> | <shape> | <method> | `<exact command>` at `<rev>` | `<output tail>` | <verdict> |
 
 **Matrix:** rows are steps, columns are the restored side; each cell is ok, `<refusal>`, or unrun.
+
 **Survivors:** `<file:line>` <condition> — missing test | no ground.
+
 **Disagreements:** <input> — <A> accepts, <B> rejects — bug | intended.
+
 **Unclaimed:** <file or behavior> — claim <Cn> | deferred: <reason>.
+
 **Review:** <finding> — verified | hypothesis — fixed | deferred: <reason>.
+
 **Checks:** <result> — <rung>: <file or rule> — added (red with <removal or input>, green at `<rev>`) | proposed | none: <reason>.
+
 **Assumed:** <override the repo does not name> — <what was used>.
 ```
 
