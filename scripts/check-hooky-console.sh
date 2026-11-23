@@ -219,6 +219,17 @@ check "a switch turned off shows the status bar" has "$b" "enable-all"
 check "Enable all takes it away" lacks "$c" "/status"
 check "and nothing reached a state file" test ! -e "$tmp/state.json"
 
+# Handlers: under an event's groups, the hooks a project wires itself, with no
+# switch; an event only such hooks use gets its own block.
+outside_switches() {
+  jq -r '[.elements[] | select(.exiting != true and (.path | test("outside-")) and (.path | test("switch-")))] | length' "$1"
+}
+check "a project's own PreToolUse hook lists outside hooky" has "$a" "outside-PreToolUse-0"
+check "under its heading" says "$a" "Outside hooky"
+check "with no switch ($(outside_switches "$a"))" test "$(outside_switches "$a")" -eq 0
+check "an event only a project hooks gets a block" has "$a" "outside-PreCompact-0"
+check "a hook wired straight into the settings file is badged so" says "$a" "your settings"
+
 # Each sidebar row is a page, and one row lights at a time. The Handlers
 # row lists every hook event's handlers. A hook event opens its own page from
 # any screen: the Log of that event alone, without the Event column, its

@@ -4,6 +4,7 @@
 
 use serde_json::{Value, json};
 
+use crate::outside::{Outside, Source};
 use crate::space::Harness;
 
 pub const DAY: &str = "2026-11-16";
@@ -567,4 +568,35 @@ pub fn hooks_text(harness: Harness) -> &'static str {
 
 pub fn hooks(harness: Harness) -> Value {
     serde_json::from_str(hooks_text(harness)).expect("sample hooks parse")
+}
+
+/// The hooks that run beside hooky's in the sample: one wired straight into
+/// the settings file, and a sample project's two, one on an event hooky
+/// handles and one on an event it does not. Codex has none.
+pub fn outside(harness: Harness) -> Vec<Outside> {
+    let hook = |source: Source, event: &str, matcher: &str, command: &str| Outside {
+        source,
+        event: event.into(),
+        matcher: matcher.into(),
+        command: command.into(),
+    };
+    let webapp = || Source::Project("webapp".into());
+    match harness {
+        Harness::Claude => vec![
+            hook(
+                Source::Settings,
+                "Stop",
+                "",
+                "afplay /System/Library/Sounds/Glass.aiff",
+            ),
+            hook(
+                webapp(),
+                "PreToolUse",
+                "Edit|Write",
+                "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-generated.sh",
+            ),
+            hook(webapp(), "PreCompact", "", "./scripts/save-notes.sh"),
+        ],
+        Harness::Codex => Vec::new(),
+    }
 }

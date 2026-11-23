@@ -22,7 +22,7 @@ use crate::record::{Record, Trouble, short_name};
 use crate::space::Harness;
 
 /// Bump on any change to the tables or to what `Record` derives into them.
-const SCHEMA: i32 = 6;
+const SCHEMA: i32 = 7;
 
 pub struct Index {
     conn: Connection,
@@ -121,6 +121,7 @@ fn create(conn: &Connection) -> rusqlite::Result<()> {
              offset INTEGER NOT NULL,
              ts_ms INTEGER NOT NULL,
              harness TEXT NOT NULL,
+             cwd TEXT,
              time TEXT NOT NULL,
              event TEXT NOT NULL,
              tool TEXT,
@@ -491,6 +492,19 @@ impl Index {
             .ok()
             .flatten()
     }
+
+    /// Every folder one harness's sessions worked in, across the days the log
+    /// keeps.
+    pub fn folders(&self, harness: Harness) -> Vec<String> {
+        let q =
+            "SELECT DISTINCT cwd FROM events WHERE harness = ?1 AND cwd IS NOT NULL ORDER BY cwd";
+        let Ok(mut stmt) = self.conn.prepare_cached(q) else {
+            return Vec::new();
+        };
+        stmt.query_map([harness.name()], |r| r.get(0))
+            .and_then(Iterator::collect)
+            .unwrap_or_default()
+    }
 }
 
 /// Reads `path` from byte `from` to its last newline and indexes each line.
@@ -529,13 +543,14 @@ fn insert(tx: &rusqlite::Transaction, day: &str, offset: u64, line: &str) -> Res
         return Ok(0);
     };
     let n = tx.execute(
-        "INSERT OR IGNORE INTO events (day, offset, ts_ms, harness, time, event, tool, input, verdict, stderr, ms, haystack, line)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        "INSERT OR IGNORE INTO events (day, offset, ts_ms, harness, cwd, time, event, tool, input, verdict, stderr, ms, haystack, line)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         params![
             day,
             offset as i64,
             r.ts_ms,
             r.harness.name(),
+            r.cwd,
             r.time(),
             r.event,
             r.tool,
@@ -708,6 +723,36 @@ mod tests {
         assert!(ix.issues(day, Harness::Codex).is_empty());
         assert_eq!(ix.timing(day, Harness::Claude).events, 6);
         assert_eq!(ix.timing(day, Harness::Codex), Timing::default());
+    }
+
+    #[test]
+    fn folders_are_each_harness_s_own_across_days() {
+        let at = |cwd: Option<&str>, harness: Option<&str>| {
+            let mut v: serde_json::Value =
+                serde_json::from_str(&line("2026-11-16T10:00:00.000+05:00", "PreToolUse", "ls"))
+                    .unwrap();
+            if let Some(c) = cwd {
+                v["cwd"] = c.into();
+            }
+            if let Some(h) = harness {
+                v["harness"] = h.into();
+            }
+            v.to_string()
+        };
+        let mut ix = Index::memory();
+        ix.insert_lines("2026-11-15", &[at(Some("/b"), None), at(Some("/a"), None)])
+            .unwrap();
+        ix.insert_lines(
+            "2026-11-16",
+            &[
+                at(Some("/a"), None),
+                at(None, None),
+                at(Some("/c"), Some("codex")),
+            ],
+        )
+        .unwrap();
+        assert_eq!(ix.folders(Harness::Claude), ["/a", "/b"]);
+        assert_eq!(ix.folders(Harness::Codex), ["/c"]);
     }
 
     #[test]
