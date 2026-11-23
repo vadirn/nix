@@ -5,6 +5,12 @@
 //! the canvas's Event page does, each handler with what it did for the
 //! picked row in place of its timeout.
 //!
+//! Under each event's groups, "Outside hooky" lists the hooks that run for
+//! that event without hooky (`outside.rs`): those wired straight into the
+//! settings file, and those projects wire themselves. Each shows its matcher
+//! and where it is wired, and no switch: hooky never runs them. An event
+//! only those hooks use follows hooky's events.
+//!
 //! A switch writes `state.json` (`hooks.rs`), which hooky reads on every
 //! event; the hooks file stays as written. Two parts differ from the
 //! artboard: an off row's name is greyed but not struck through, since Rune's
@@ -18,6 +24,7 @@ use rune_kit::{Button, ControlSize, IconButton, IconButtonVariant, Kit, Switch};
 
 use crate::App;
 use crate::hooks::{Group, HandlerId, seconds};
+use crate::outside::Source;
 use crate::record::{Handler, Record, short_name};
 use crate::theme::{Tint, Tokens, ty};
 use crate::view::{badge, badge_in, group, leading, quiet_row, rule, time_label};
@@ -61,8 +68,15 @@ fn switch_kit(k: &Kit, t: &Tokens) -> Kit {
 
 pub fn screen(s: &App, k: &Kit, t: &Tokens) -> El {
     let k = &switch_kit(k, t);
-    // Every event's groups under its name, as the Log lists every event.
-    let blocks = s.space.events.iter().map(|e| event_block(s, k, t, e));
+    // Every event's groups under its name, as the Log lists every event, then
+    // each event only projects' own hooks use.
+    let mut events: Vec<&str> = s.space.events.iter().map(String::as_str).collect();
+    for o in &s.space.outside {
+        if !events.contains(&o.event.as_str()) {
+            events.push(&o.event);
+        }
+    }
+    let blocks = events.into_iter().map(|e| event_block(s, k, t, e));
     let content = col()
         .w_full()
         .max_w(CONTENT_W)
@@ -102,6 +116,46 @@ fn event_block(s: &App, k: &Kit, t: &Tokens, event: &str) -> El {
         .gap(18.0)
         .child(title)
         .child(groups(s, k, t, event, None).gap(18.0))
+        .children(outside(s, t, event))
+}
+
+/// The hooks that run for `event` beside hooky's, when any: each by name,
+/// with its matcher and where it is wired, and no switch. One in the
+/// settings file is badged orange: the next rebuild fails until it moves.
+fn outside(s: &App, t: &Tokens, event: &str) -> Option<El> {
+    let rows: Vec<El> = s
+        .space
+        .outside
+        .iter()
+        .filter(|o| o.event == event)
+        .enumerate()
+        .map(|(i, o)| {
+            let matcher = (!o.matcher.is_empty()).then(|| {
+                text(o.matcher.clone())
+                    .font(ty::MONO)
+                    .color(t.text_secondary)
+                    .help("Matcher")
+            });
+            let source = match &o.source {
+                Source::Settings => badge_in(t, "your settings", Tint::Orange).help(
+                    "Wired into the settings file, not hooky's hooks file: the next rebuild fails until it moves there",
+                ),
+                Source::Project(name) => badge_in(t, name, Tint::Gray),
+            };
+            handler_row(t, &o.command, false)
+                .key(format!("outside-{event}-{i}"))
+                .children(matcher)
+                .child(source)
+        })
+        .collect();
+    (!rows.is_empty()).then(|| {
+        col()
+            .key(format!("outside-{event}"))
+            .w_full()
+            .gap(6.0)
+            .child(heading(t, "Outside hooky"))
+            .child(group(t, &format!("{event} hooks outside hooky"), rows))
+    })
 }
 
 /// One event's matcher groups, under its key, so a check finds them on

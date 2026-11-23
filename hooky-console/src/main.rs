@@ -21,6 +21,7 @@ mod handlers;
 mod health;
 mod hooks;
 mod index;
+mod outside;
 mod record;
 mod replay;
 mod sample;
@@ -508,10 +509,14 @@ impl App {
 
     /// Reads the shown space's hooks file and `state.json` again when its
     /// page shows switches: either may have changed since the last look.
+    /// The Handlers screen reads the hooks its projects wire again too.
     fn reload_switches(&mut self) {
         if self.live && self.space.shows_switches() {
             let h = self.space.harness;
             self.space.hooks = Hooks::of(read_hooks(&self.paths.hooks_file(h)).as_ref());
+            if self.space.screen == Screen::Handlers {
+                self.space.outside = outside::scan(&self.index.folders(h), h, &home());
+            }
             self.reload_toggles();
         }
     }
@@ -739,6 +744,7 @@ fn sample_index(s: &mut App, lines: &[String]) {
     for sp in s.spaces_mut() {
         let hooks = sample::hooks(sp.harness);
         *sp = Space::new(sp.harness, Some(&hooks), Toggles::default());
+        sp.outside = sample::outside(sp.harness);
     }
     s.refresh_all();
     s.recount();

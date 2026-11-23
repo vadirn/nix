@@ -13,6 +13,7 @@ use serde_json::Value;
 
 use crate::hooks::{Hooks, Toggles};
 use crate::index::{Index, IssueKey, Row};
+use crate::outside::Outside;
 use crate::replay::Replay;
 use crate::{Health, Limits, Page, Screen, Selected};
 
@@ -160,6 +161,9 @@ pub struct Space {
     pub limits: Limits,
     /// The hooks file's handlers, as the Handlers screen lists them.
     pub hooks: Hooks,
+    /// The hooks projects wire beside hooky's, as the Handlers screen last
+    /// read them.
+    pub outside: Vec<Outside>,
     /// `state.json`, as last read or written.
     pub toggles: Toggles,
     /// The last replay, for the event picked when it ran.
@@ -185,6 +189,7 @@ impl Space {
             health: Health::default(),
             limits: Limits::of(hooks),
             hooks: Hooks::of(hooks),
+            outside: Vec::new(),
             toggles,
             replay: None,
         }
