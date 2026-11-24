@@ -5,6 +5,7 @@
   md-for-agents,
   hooky,
   hooky-console,
+  hookyWiring,
   ...
 }: {
   users.users.vadim.home = homeDirectory;
@@ -110,36 +111,10 @@
           echo "Left $old in place: $new already exists." >&2
         fi
       '';
-      # Every hook a harness's settings wire goes through hooky: their hooks
-      # block must be what hooky generates from that harness's handler list,
-      # home/<harness>/hooky/hooks.json (README, hooky). A hook wired into the
-      # settings directly, or a handler change not applied there, fails the
-      # switch here.
-      home.checks = map ({
-        harness,
-        settings,
-      }:
-        pkgs.runCommand "hooky-wiring-${harness}" {nativeBuildInputs = [pkgs.jq];} ''
-          ${hooky}/bin/hooky --harness ${harness} \
-            --config ${./. + "/${harness}/hooky/hooks.json"} \
-            settings --bin "~/.local/bin/hooky" | jq -S .hooks > want
-          jq -S .hooks ${./. + "/${harness}/${settings}"} > have
-          if ! diff -u want have >&2; then
-            echo "home/${harness}/${settings} wires hooks that hooky does not generate from home/${harness}/hooky/hooks.json." >&2
-            echo "Put the handler in that hooks.json, then run: hooky --harness ${harness} install" >&2
-            exit 1
-          fi
-          touch $out
-        '') [
-        {
-          harness = "claude";
-          settings = "settings.json";
-        }
-        {
-          harness = "codex";
-          settings = "hooks.json";
-        }
-      ];
+      # A harness's settings must wire only what hooky generates from its
+      # handler list; a drifted settings file fails the switch here, and the
+      # same checks run in CI before a merge (hooky-wiring.nix).
+      home.checks = builtins.attrValues hookyWiring;
 
       # Hooky Console's build, linked so the generation roots it (rebuild.sh
       # collects garbage) and rebuild.sh signs and installs it from here.
