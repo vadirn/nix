@@ -82,22 +82,12 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
             "command": "~/.local/bin/hooky PostToolUse",
-            "timeout": 32
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/hooky PostToolUseFailure",
-            "timeout": 32
+            "timeout": 7
           }
         ]
       }
@@ -143,7 +133,7 @@
           {
             "type": "command",
             "command": "~/.local/bin/hooky Stop",
-            "timeout": 122
+            "async": true
           }
         ]
       }
@@ -155,39 +145,6 @@
             "type": "command",
             "command": "~/.local/bin/hooky TaskCompleted",
             "async": true
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/hooky UserPromptSubmit",
-            "timeout": 32
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/hooky StopFailure",
-            "timeout": 32
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/hooky SessionEnd",
-            "timeout": 5
           }
         ]
       }
