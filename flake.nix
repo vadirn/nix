@@ -163,6 +163,10 @@
         EOF
       '';
     };
+    # The hooky wiring checks, one per harness: a settings file that wires
+    # hooks hooky does not generate fails them. home.checks runs them on
+    # switch, and `checks` below runs them in CI before a merge.
+    hookyWiring = import ./home/hooky-wiring.nix {inherit pkgs hooky;};
     # The extracted workspace builds as one derivation carrying every binary in
     # it, so comrak compiles once instead of once per crate, and one cargoHash
     # covers the lot.
@@ -184,7 +188,7 @@
           (import ./home {
             username = "vadim";
             homeDirectory = "/Users/vadim";
-            inherit vault-query md-for-agents hooky hooky-console;
+            inherit vault-query md-for-agents hooky hooky-console hookyWiring;
           })
         ];
       };
@@ -198,6 +202,7 @@
 
     darwinPackages = self.darwinConfigurations.default.pkgs;
     packages.${system} = {inherit vault-query md-for-agents hooky hooky-console;};
+    checks.${system} = lib.mapAttrs' (harness: lib.nameValuePair "hooky-wiring-${harness}") hookyWiring;
     formatter.${system} = pkgs.alejandra;
   };
 }

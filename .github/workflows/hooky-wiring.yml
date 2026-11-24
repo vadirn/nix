@@ -1,0 +1,31 @@
+# Fails a pull request whose harness settings wire hooks that hooky does not
+# generate from home/<harness>/hooky/hooks.json, the drift ./rebuild.sh would
+# otherwise hit after the merge. The paths are every input of the two checks
+# (home/hooky-wiring.nix): the hooky source, the handler lists, the settings
+# files, and the flake that pins nixpkgs.
+name: hooky wiring
+on:
+  pull_request:
+    paths:
+      - "hooky/**"
+      - "home/*/hooky/hooks.json"
+      - "home/claude/settings.json"
+      - "home/codex/hooks.json"
+      - "home/hooky-wiring.nix"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/hooky-wiring.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # The flake defines aarch64-darwin outputs only; macos-latest is Apple silicon.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      # --keep-going so a drift in both harnesses reports both diffs.
+      - run: nix build -L --no-link --keep-going .#checks.aarch64-darwin.hooky-wiring-claude .#checks.aarch64-darwin.hooky-wiring-codex

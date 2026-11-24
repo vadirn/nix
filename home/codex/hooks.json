@@ -2,55 +2,12 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
             "command": "~/.local/bin/hooky --harness codex PreToolUse",
-            "timeout": 32
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/hooky --harness codex UserPromptSubmit",
-            "timeout": 32
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/hooky --harness codex PostToolUse",
-            "timeout": 32
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/hooky --harness codex Stop",
-            "timeout": 62
-          }
-        ]
-      }
-    ],
-    "Interrupt": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.local/bin/hooky --harness codex Interrupt",
-            "timeout": 5
+            "timeout": 7
           }
         ]
       }
