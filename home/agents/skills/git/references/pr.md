@@ -69,7 +69,6 @@ title = do("generate conventional commit-style title: '<prefix>: <message>' — 
 body = do("fill template_content placeholders from diff and log; keep it self-contained (see §PR creation details); preserve every heading, emoji, and section verbatim; then append verification verbatim, if any")
 do("check body against diff (see §PR creation details); fix each mismatch")
 
-AskUserQuestion("confirm title, body, base branch, draft status")
 Bash(rm -f <artifact_dir>/pr.md)
 Write(<artifact_dir>/pr.md, body)
 Bash(gh pr create --base <base> --title "<title>" --body-file <artifact_dir>/pr.md --draft)
@@ -81,7 +80,7 @@ if body has a before/after section: do("suggest the user record the screencast i
 
 ## PR creation details
 
-- **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready".
+- **Draft by default.** Pass `--draft`. Omit only when user says "no draft" or "ready". The draft is the review step, so create it without asking the user to confirm the title and body.
 - **Link a stacked PR.** `--base` sets the base branch but does not put the PR in a GitHub stack. When the base is another open PR's branch, run `gh stack link <base PR> <new PR>` after `gh pr create`. Given PR numbers, it pushes nothing. When the base PR already sits in a stack, list every PR in the stack, bottom first, then the new one: `gh stack link <bottom> … <base PR> <new PR>`. Naming only the base PR and the new one fails with "this would remove #<bottom> from the stack". Open a PR for every branch below first. A link whose bottom PR does not target the default branch moves that PR's base to the default branch, and GitHub then refuses base edits on a stacked PR. To recover, run `gh stack unstack <stack number>`, then `gh pr edit <PR> --base <branch>`.
 - **Title:** `<prefix>: <message>`, lowercase after prefix, <70 chars, focus on WHY — the same form a commit takes. The PR title becomes the commit message on squash-and-merge, so the prefix comes from the contract test applied to the branch's net change, not to any one commit.
 - **Body:** Always start from a template. The `pr-template` script (at `home/agents/scripts/pr-template.sh`) resolves which template to use and prints one of three modes on its first line: `MODE: single` (full template content follows), `MODE: multi` (one repo-relative `.md` path per line — ask the user which), or `MODE: default` (the colocated `pr-template.md` default follows; used when the repo ships no template). In every mode the resulting body keeps the template's headings, emoji, and section count verbatim. One exception is an optional section: a template region `<!-- optional: <when> -->` … `<!-- /optional -->` that holds its heading. Drop the whole region, heading and all, when `<when>` does not hold. Otherwise keep the section and drop only the two region comments. Only the placeholder content gets filled in from the diff and log. Replace each comment with the content it asks for. Keep a comment only in a section you cannot fill, such as the default template's before/after screencast. The one section a body may add is `## Verification`, which `/verify` writes. Append it verbatim after the template's last section, its `<!-- verify: tip <sha> -->` marker included. Add no other section.
@@ -96,7 +95,7 @@ if body has a before/after section: do("suggest the user record the screencast i
   5. **Check.** Steps a reviewer can follow by hand, and what each should show.
 
   Write every step. Within How, skip a part that has nothing, such as the map when nothing moved. Where the template has a slot for Limits or Check, an empty one says so in one line, such as "None known.", since a missing one reads as never considered. Where it has no slot for a step, fold the step into the nearest section. Use a list only for parallel items, such as the map of moved pieces or the steps to check. State each fact once. Describe the current state, never its history: a fixed CI failure or a resolved conflict belongs in the commits.
-- **Check the body against the diff.** Before confirming, match each claim to the diff. Cut a change the diff does not make, name an unexpected change the body leaves out, and leave no placeholder. Only a section you cannot fill keeps its comment, per the Body rule. When an agent PR's body and code disagree, the commonest case is a claimed change the code never got, and such PRs merge far less often.
+- **Check the body against the diff.** Before writing the body file, match each claim to the diff. Cut a change the diff does not make, name an unexpected change the body leaves out, and leave no placeholder. Only a section you cannot fill keeps its comment, per the Body rule. When an agent PR's body and code disagree, the commonest case is a claimed change the code never got, and such PRs merge far less often.
 - **Simplified governs the filled prose only.** The Simplified output style shapes the placeholder text you write into each section. It leaves the template's headings, emoji, and section count verbatim, per the Body rule above. Styling the scaffolding would break the template contract.
 - **Write the body to a file.** Bodies often contain `!` (image markdown, exclamations). Zsh history expansion mangles it even inside single-quoted HEREDOCs. Write the body to `<artifact_dir>/pr.md`, pass `--body-file`, then delete the file so the next run's Write sees a fresh path (the Write tool refuses to overwrite an existing file without a prior Read). `artifact_dir` is this session's and worktree's own directory, so concurrent sessions never touch each other's body (`commit-hook.md` says why). Always remove the file before writing so a stale artifact left over from a failed earlier run cannot survive into a new PR:
   ```
@@ -106,7 +105,6 @@ if body has a before/after section: do("suggest the user record the screencast i
   Bash(rm -f <artifact_dir>/pr.md)
   ```
   The message hook checks the title, the body file and the repo's template before `gh pr create` or `gh pr edit` runs (`commit-hook.md` says how). On a refusal, apply each fix, rewrite `pr.md`, and run the command again. If you think a finding is wrong, stop and ask the user.
-- **Confirm before creating.** Show title and body. Omit confirmation when the user supplied an explicit title and body.
 
 ## Rules
 
