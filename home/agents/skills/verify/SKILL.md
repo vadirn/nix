@@ -15,7 +15,7 @@ description: >
 
 A passing suite shows the checks ran. This skill asks whether they could have failed.
 
-Input is a finished change. Output is a verdict per claim, with the command that produced each.
+Input is a finished change. Output is a verdict per claim, with what each run showed.
 
 ## Forces
 
@@ -71,7 +71,7 @@ overrides = do("read the repo's CLAUDE.md and AGENTS.md for what verification ne
 for each override the repo does not name:
     do("discover it from the code; record it under **Assumed:**")
 if the needed environment is missing:
-    do("say so before running, on the report's first line and on the Assumed line;
+    do("say so before running, in the section's opening and on its Assumed line;
         affected claims end unverified (skipped)")
 
 // 1. Claims (Force 1)
@@ -88,7 +88,8 @@ for each claim:
         production files")    // a squash merge has one commit, so before == base
 unclaimed = do("production files changed in base..tip, minus the files any claim names")
 for each unclaimed file:
-    do("make it a claim, often invariance, or defer it with a reason")
+    do("make it a claim, often invariance; else list it under Outside the claims with why it needs
+        no claim, or under Left open with why it stays unverified")
 
 t = do("extract the tip — see §Throwaway copy; steps 2 to 6 reuse it")
 
@@ -99,7 +100,7 @@ for each claim whose shape is not invariance:
         that changed in before..tip")
     if a copied file fails to load in b because it imports what the change added:
         do("trim it to the claim's tests and the imports they use; keep their assertions verbatim;
-            record the trimmed file in the Command column")    // §The right red
+            name the trimmed file in the claim's item")    // §The right red
     red = Bash(<runner> <test files> <filter>, cwd = b)
     do("check red executed (§Executed) and is the right red (§The right red)")
     green = Bash(<runner> <test files> <filter>, cwd = t)
@@ -140,7 +141,7 @@ for each finding from steps 2 to 6:
     if it is verified and (the change introduced it or it breaks the change's own paths):
         do("fix it")
     else:
-        do("defer it in the section, with a reason")
+        do("list it under Left open, with a reason")
 
 // Checks (Force 6)
 for each result a deterministic check can hold — see §Checks:
@@ -149,11 +150,11 @@ for each result a deterministic check can hold — see §Checks:
     if its finding is fixed in this change:
         do("add the check; prove it red with the finding's removal or input, green at the fix")
     else:
-        do("record the check as proposed: its rung and what it asserts")
+        do("name the check as proposed on the Left open item it would close: what it asserts")
 
 for each fix:
     do("rerun steps 2 and 3 for its claim only; defer its differential or matrix work, with a reason")
-// uncovered behavior from step 6 stays under Review; it becomes no new claim
+// uncovered behavior from step 6 stays under Left open; it becomes no new claim
 // there is no second review
 done = every claim has a verdict and every review finding is triaged
 
@@ -263,12 +264,12 @@ If you would explain a constraint in a comment, a higher rung was missed.
 | probe run outside the test runner                             | the same probe inside the runner; name the seam it needs when the repo blocks it |
 | hand mutation                                                 | a mutation-testing gate, once the repo wires one |
 
-No deterministic check fits a cost or timing claim, a prose-only finding, or a hypothesis without a reproducing input. Record `none` with the reason.
+No deterministic check fits a cost or timing claim, a prose-only finding, or a hypothesis without a reproducing input. Its Left open item says so, with the reason.
 
 ### Verdicts
 
 - `confirmed`: every applicable method ran, could have failed, and left no survivor.
-- `refuted`: a run produced a counterexample. One inferred from code is a hypothesis under Review.
+- `refuted`: a run produced a counterexample. One inferred from code is a hypothesis under Left open.
 - `partial`: some methods or matrix cells did not run, or a removed condition survived.
 - `unverified`: no method could run, no method fits the claim, or the claim's test skipped.
 
@@ -276,29 +277,49 @@ No deterministic check fits a cost or timing claim, a prose-only finding, or a h
 
 ### State section
 
-The marker line names the tip the section verified, so `/git pr` can tell a stale section by comparing it with HEAD.
+The section has two readers. A PR reviewer reads from the top and stops once satisfied, so it opens with the verdict and says everything in plain words. The next `/verify` pass reads what is left open, so every open item keeps its reason and every unrun matrix cell stays. The marker line names the tip the section verified, so `/git pr` can tell a stale section by comparing it with HEAD.
 
 ```markdown
 ## Verification
 <!-- verify: tip <sha> -->
 
-| Claim | Shape | Method | Command | Result | Verdict |
-| --- | --- | --- | --- | --- | --- |
-| C1 <sentence> | <shape> | <method> | `<exact command>` at `<rev>` | `<output tail>` | <verdict> |
+<How many claims hold, and the first gap a reviewer should weigh. The evidence every claim shares. Each applicable method that did not run, with its reason. What the review found: "A fresh review found <n> problems: <n> fixed, <n> left open below." or "A fresh review found no problem.">
 
-**Matrix:** rows are steps, columns are the restored side; each cell is ok, `<refusal>`, or unrun.
+**Claims**
 
-**Survivors:** `<file:line>` <condition> — missing test | no ground.
+1. **<Short lead.>** <Verdict>. <The step-1 sentence, verbatim.> <Evidence the other claims do not share.>
 
-**Disagreements:** <input> — <A> accepts, <B> rejects — bug | intended.
+**Left open**
 
-**Unclaimed:** <file or behavior> — claim <Cn> | deferred: <reason>.
+- <What fails, in plain words> — <reproduced | not reproduced> — <why it stays>. <The check that would close it, if one would.>
 
-**Review:** <finding> — verified | hypothesis — fixed | deferred: <reason>.
+**Fixed while verifying** (each now has <the check that holds it>)
 
-**Checks:** <result> — <rung>: <file or rule> — added (red with <removal or input>, green at `<rev>`) | proposed | none: <reason>.
+- <What failed> — <the fix>.
 
-**Assumed:** <override the repo does not name> — <what was used>.
+**Outside the claims:** <changed file or behavior no claim covers> — <why it needs none>.
+
+**Assumed:** <what the repo does not name> — <what was used>.
 ```
 
-Keep every line. Write "none" when its step ran and found nothing, and "not run: <reason>" when it did not run.
+- **Plain words.** Say what happened, not which method ran. Shape, method, red, green, survivor and rung stay out of the section. Keep the four verdict words.
+
+  | Internal                       | In the section |
+  | ------------------------------ | -------------- |
+  | red before, green after        | its tests fail on the code before the change and pass after |
+  | condition removal, no survivor | removing any check the change added makes a test fail |
+  | red (crash)                    | removing `<condition>` crashes the tests |
+  | survivor                       | removing `<condition>` at `<file:line>` breaks no test |
+  | survivor (n skipped)           | removing `<condition>` at `<file:line>` breaks no test that ran; <n> of its tests skipped |
+  | wrong red, or no right red     | its tests cannot run on the code before the change, so they show only that it works now |
+  | hand run                       | checked by hand, no test |
+  | skipped                        | its tests skipped: <missing environment> |
+  | verified, hypothesis           | reproduced, not reproduced |
+
+- **No commands.** The PR's Check section tells a reviewer how to reproduce the change, and the next pass derives its own runs. So the section gives no command to run, only what each run showed. Inputs a finding names, such as a denied command line, stay.
+- **Shared evidence once.** Evidence that several claims share goes in the opening, naming those claims: "C1–C3's tests fail…". A claim's item adds only what differs, such as a hand run or a count of cases that fail before the change.
+- **A lead, then the exact claim.** Each claim opens with a bold lead of a few words a reviewer can skim. Then come its verdict and its step-1 sentence, verbatim. The list's numbers are the C-ids.
+- **Open before fixed.** Left open comes before Fixed while verifying, because it is what the reviewer must judge. Findings that stay open for one reason share an item that lists their inputs. Where grouped findings differ in outcome or reason, each keeps its own beside its input.
+- **A check joins its finding.** A proposed check goes on the open item it would close. An added check goes on its fixed item, or in the Fixed heading when every item shares it. A check that closes no listed item stays out.
+- **An empty block is dropped.** A confirmed verdict already says every applicable method ran clean, and the opening names each applicable method that did not run. So a missing block never reads as unconsidered.
+- **Matrix and disagreements sit under their claim.** See `references/matrix.md` and `references/differential.md`.
