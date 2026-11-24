@@ -21,8 +21,10 @@ Run it for an agreement claim, or when step 1 finds a sibling: another unit that
 
 ## Record
 
+Under the agreement claim's item, one line per disagreement. A bug also goes to Left open or Fixed while verifying, by step 7's triage.
+
 ```markdown
-**Disagreements:** <input> — <A> accepts, <B> rejects — bug | intended.
+- <input> — <A> accepts, <B> rejects — bug | intended.
 ```
 
 ## Example

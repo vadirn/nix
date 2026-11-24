@@ -15,14 +15,16 @@ Run it for a state-space claim.
 
 ## Record
 
-Render the matrix as a table under the section's Matrix line:
+Render the matrix as a table under its claim's item, after one line that reads it. Indent both three spaces, each after a blank line, so the table stays inside the numbered item:
 
 ```markdown
-**Matrix:** rows are steps, columns are the restored side; each cell is ok, `<refusal>`, or unrun.
+2. **<Short lead.>** <Verdict>. <The claim sentence.>
 
-| Step | <side A> restored | <side B> restored | both restored |
-| ---- | ----------------- | ----------------- | ------------- |
-| <S1> | ok | `<refusal>` | unrun |
+   Rows are steps, columns are the restored side; each cell is ok, `<refusal>`, or unrun.
+
+   | Step | <side A> restored | <side B> restored | both restored |
+   | ---- | ----------------- | ----------------- | ------------- |
+   | <S1> | ok | `<refusal>` | unrun |
 ```
 
 A matrix that spans sessions keeps its unrun cells in the section. They mark where the next pass resumes.
