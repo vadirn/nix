@@ -99,7 +99,7 @@
           ./hooky/tests
         ];
       };
-      cargoHash = "sha256-khePdgYIaJVbi0VTgLiW4tXSpBmogxHK0MGGzHB8rpA=";
+      cargoHash = "sha256-NmeRkk32/k1GNelrK5o+DK5aSi4DOXDuFO3tAvsVXFM=";
     };
     # `hooky-console`, the Rune window onto hooky's log and handlers, as
     # `Hooky Console.app`. Its own workspace and lockfile, like hooky; Rune and
