@@ -20,6 +20,10 @@ in {
       core.editor = "nvim";
       hook.activity-log.event = "post-commit";
       hook.activity-log.command = "${homeDirectory}/nix/home/git/hooks/post-commit";
+      hook.trinket-gate.event = "reference-transaction";
+      hook.trinket-gate.command = "${homeDirectory}/nix/home/git/hooks/reference-transaction";
+      hook.trinket-push.event = "pre-push";
+      hook.trinket-push.command = "${homeDirectory}/nix/home/git/hooks/pre-push";
       init.defaultBranch = "main";
       pull.ff = "only";
       push.useForceIfIncludes = true;

@@ -25,7 +25,7 @@ const GIT_RULES: &[(&str, Option<&[&str]>, &str)] = &[
     (
         "push",
         Some(&["-f", "--force"]),
-        "Blocked: force push overwrites remote history. Run `git push --force-with-lease --force-if-includes`, which the git message hook checks.",
+        "Blocked: force push overwrites remote history. Run `git push --force-with-lease --force-if-includes`, which the pre-push hook checks.",
     ),
     (
         "reset",
@@ -54,7 +54,7 @@ const GIT_RULES: &[(&str, Option<&[&str]>, &str)] = &[
     ),
 ];
 
-const GIT_FLAGS_WITH_VALUE: &[&str] = &["-C", "-c", "--git-dir", "--work-tree"];
+const GIT_FLAGS_WITH_VALUE: &[&str] = &["-C", "-c", "--config-env", "--git-dir", "--work-tree"];
 
 const CONFIG_READ_FLAGS: &[&str] = &[
     "--get",
@@ -163,6 +163,8 @@ pub fn check(ctx: &Ctx) -> Verdict {
 struct GitCall<'s> {
     /// The value of each `-C`, in order.
     dirs: Vec<&'s Word>,
+    /// Each `name=value` set by `-c` or `--config-env`.
+    configs: Vec<&'s str>,
     sub: &'s str,
     args: Vec<&'s str>,
     /// `git` is the command the user wrote at the top level: the segment's
@@ -170,10 +172,184 @@ struct GitCall<'s> {
     own: bool,
 }
 
-/// The git message hook checks the branch a push sends, but it reads only a
-/// push that is its own command. Inside a substitution, a reparsed string or
-/// another program such as `xargs`, a push may carry words it never sees.
-const NESTED_PUSH: &str = "Blocked: run git push as its own command, not inside a substitution, a shell string or another program, so the git message hook can check the branch it sends.";
+/// Inside a substitution, a reparsed string or another program such as
+/// `xargs`, a push may take words this guard never sees, `--no-verify` among them.
+const NESTED_PUSH: &str = "Blocked: run git push as its own command, not inside a substitution, a shell string or another program, so this guard sees each flag it passes.";
+
+const NO_VERIFY: &str = "Blocked: git push --no-verify skips the pre-push hook, which checks the branch name and force pushes. Drop --no-verify. If the hook refuses wrongly, ask the user.";
+
+/// git takes any unambiguous prefix of a long option, so `--no-veri` skips the hook too.
+/// `--no-ver` is ambiguous with `--no-verbose`, and git refuses it.
+fn skips_push_hooks(arg: &str) -> bool {
+    arg.len() >= "--no-veri".len() && "--no-verify".starts_with(arg)
+}
+
+/// rebase and am take any prefix down to `--com`.
+fn ages_commits(arg: &str) -> bool {
+    arg.len() >= "--com".len() && "--committer-date-is-author-date".starts_with(arg)
+}
+
+fn hook_off(what: &str) -> String {
+    format!(
+        "Blocked: {what} switches off the git hooks that check commits and pushes, or hides a commit from them. If a hook refuses wrongly, ask the user."
+    )
+}
+
+/// An env setting that hides the global config holding the hook entries,
+/// clears the marker the hook wrappers read, ages a commit, or sets a hook or
+/// alias entry. A committer name or email is not one: the hook inherits it,
+/// so it compares the commit with the same identity.
+fn hook_env(name: &str, value: &str) -> bool {
+    match name {
+        "HOME" | "XDG_CONFIG_HOME" | "GIT_CONFIG_GLOBAL" | "CLAUDECODE" | "GIT_COMMITTER_DATE" => {
+            true
+        }
+        "GIT_CONFIG_PARAMETERS" => {
+            let v = value.to_ascii_lowercase();
+            v.contains("'hook.") || v.contains("'alias.")
+        }
+        _ => name.starts_with("GIT_CONFIG_KEY_") && hook_key(value),
+    }
+}
+
+/// Config keys that replace a hook's entry or run a program through an alias.
+/// git reads section names case-insensitively.
+fn hook_key(setting: &str) -> bool {
+    let key = setting.split('=').next().unwrap_or("").to_ascii_lowercase();
+    key.starts_with("hook.") || key.starts_with("alias.")
+}
+
+/// The name in `NAME=value`, `NAME+=value`, `NAME[i]=value` or a bare `NAME`,
+/// when `hook_env` lists the setting.
+fn listed(word: &str) -> Option<&str> {
+    let (left, value) = word.split_once('=').unwrap_or((word, ""));
+    let name = left.split(['+', '[']).next().unwrap_or("");
+    hook_env(name, value).then_some(name)
+}
+
+/// Builtins whose change lasts for every later command in the script.
+const SETS_ENV: &[&str] = &["export", "unset", "declare", "typeset", "readonly", "local"];
+
+/// Whether a segment runs git as its program, directly or through `env`.
+fn calls_git(seg: &Segment) -> bool {
+    let w = &seg.words;
+    match w.first().map(Word::base) {
+        Some("git") => true,
+        Some("env") => env_program(&w[1..]).is_some_and(|p| p.base() == "git"),
+        _ => false,
+    }
+}
+
+/// The command `env` runs: its first word past the options, the values `-u`
+/// and `-C` take, and the `NAME=value` settings.
+fn env_program(args: &[Word]) -> Option<&Word> {
+    let mut rest = args.iter();
+    while let Some(a) = rest.next() {
+        match a.value.as_str() {
+            "-u" | "--unset" | "-C" | "--chdir" => {
+                rest.next();
+            }
+            v if v.starts_with('-') || v.contains('=') => {}
+            _ => return Some(a),
+        }
+    }
+    None
+}
+
+/// Whether segment `i` calls git, or hands a shell a script that does. The
+/// parser appends that script's segments right after it, one level deeper.
+fn reaches_git(segs: &[Segment], i: usize) -> bool {
+    calls_git(&segs[i])
+        || segs[i + 1..]
+            .iter()
+            .take_while(|s| s.depth > segs[i].depth && s.origin == Origin::Reparsed)
+            .any(calls_git)
+}
+
+/// A listed env change that reaches git: a leading assignment or `env` on a
+/// segment that reaches git, or a bare assignment or builtin in a script that calls it.
+fn env_switch(seg: &Segment, reaches: bool, script_calls_git: bool) -> Option<String> {
+    let changed = |name: &str| format!("changing `{name}`");
+    let w = &seg.words;
+    let lasting = w
+        .first()
+        .is_none_or(|c| SETS_ENV.contains(&c.value.as_str()));
+    if !(reaches || (lasting && script_calls_git)) {
+        return None;
+    }
+    if let Some(name) = seg.assigns.iter().find_map(|a| listed(&a.value)) {
+        return Some(changed(name));
+    }
+    if lasting {
+        return w.iter().skip(1).find_map(|a| listed(&a.value)).map(changed);
+    }
+    if w[0].base() != "env" {
+        return None;
+    }
+    env_change(&w[1..]).map(|n| n.map_or("`env -i`".into(), changed))
+}
+
+/// The listed setting `env` makes or clears before its command, or
+/// `Some(None)` when it clears every variable.
+fn env_change(args: &[Word]) -> Option<Option<&str>> {
+    let mut rest = args.iter().map(|a| a.value.as_str());
+    while let Some(a) = rest.next() {
+        let setting = match a {
+            "-i" | "--ignore-environment" | "-" => return Some(None),
+            "-u" | "--unset" => rest.next(),
+            "-C" | "--chdir" => {
+                rest.next();
+                None
+            }
+            _ if a.starts_with("--unset=") => Some(&a["--unset=".len()..]),
+            _ if a.starts_with("-u") => Some(&a[2..]),
+            _ if a.starts_with('-') => None,
+            _ if a.contains('=') => Some(a),
+            _ => return None,
+        };
+        if let Some(name) = setting.and_then(listed) {
+            return Some(Some(name));
+        }
+    }
+    None
+}
+
+/// A git call that switches off the git hooks or hides a commit from them.
+fn hook_switch(call: &GitCall) -> Option<String> {
+    if let Some(c) = call.configs.iter().find(|c| hook_key(c)) {
+        return Some(format!("`git -c {c}`"));
+    }
+    if matches!(call.sub, "rebase" | "am") && call.args.iter().any(|a| ages_commits(a)) {
+        return Some("`--committer-date-is-author-date`".into());
+    }
+    let remote = |r: &str| r.starts_with("refs/remotes/");
+    // Copying a remote-tracking ref, as a clean clone does, holds no new commit.
+    let writes_remotes = match call.sub {
+        "update-ref" => updated_ref(&call.args).is_some_and(remote),
+        "fetch" | "push" => call.args.iter().any(|a| {
+            a.split_once(":refs/remotes/")
+                .is_some_and(|(src, _)| !remote(src.trim_start_matches('+')))
+        }),
+        _ => false,
+    };
+    writes_remotes.then(|| "a write to `refs/remotes/`".into())
+}
+
+/// The ref `git update-ref` writes: its first word past the options and the
+/// value `-m` takes.
+fn updated_ref<'s>(args: &[&'s str]) -> Option<&'s str> {
+    let mut rest = args.iter();
+    while let Some(&a) = rest.next() {
+        match a {
+            "-m" => {
+                rest.next();
+            }
+            _ if a.starts_with('-') => {}
+            _ => return Some(a),
+        }
+    }
+    None
+}
 
 /// Whether `-C` points git at the repo it is already in: the directory each
 /// `-C` names, applied in turn from `cwd`, has the same repo root as `cwd`.
@@ -219,11 +395,17 @@ fn git_calls(seg: &Segment) -> Vec<GitCall<'_>> {
             continue;
         }
         let mut dirs = Vec::new();
+        let mut configs = Vec::new();
         let mut j = i + 1;
         while j < w.len() && w[j].value.starts_with('-') {
-            if w[j].value == "-C" {
+            let flag = w[j].value.as_str();
+            if flag == "-C" {
                 dirs.extend(w.get(j + 1));
             }
+            if flag == "-c" || flag == "--config-env" {
+                configs.extend(w.get(j + 1).map(|v| v.value.as_str()));
+            }
+            configs.extend(flag.strip_prefix("--config-env="));
             j += if GIT_FLAGS_WITH_VALUE.contains(&w[j].value.as_str()) {
                 2
             } else {
@@ -237,6 +419,7 @@ fn git_calls(seg: &Segment) -> Vec<GitCall<'_>> {
             }
             out.push(GitCall {
                 dirs,
+                configs,
                 sub: w[j].value.as_str(),
                 args: w[j + 1..k].iter().map(|a| a.value.as_str()).collect(),
                 own: i == 0 && seg.depth == 0 && seg.origin == Origin::Source,
@@ -263,8 +446,15 @@ fn values(args: &[Word]) -> Vec<&str> {
 }
 
 fn scan(s: &Script, cwd: &str, home: &str) -> Option<String> {
-    for seg in &s.segments {
+    let script_calls_git = s.segments.iter().any(calls_git);
+    for (i, seg) in s.segments.iter().enumerate() {
+        if let Some(what) = env_switch(seg, reaches_git(&s.segments, i), script_calls_git) {
+            return Some(hook_off(&what));
+        }
         for call in git_calls(seg) {
+            if let Some(what) = hook_switch(&call) {
+                return Some(hook_off(&what));
+            }
             if call.sub == "config" {
                 if !call.args.iter().any(|a| CONFIG_READ_FLAGS.contains(a)) {
                     return Some(
@@ -280,6 +470,9 @@ fn scan(s: &Script, cwd: &str, home: &str) -> Option<String> {
                 if required.is_none_or(|r| call.args.iter().any(|a| r.contains(a))) {
                     return Some((*message).into());
                 }
+            }
+            if call.sub == "push" && call.args.iter().any(|a| skips_push_hooks(a)) {
+                return Some(NO_VERIFY.into());
             }
             if call.sub == "push" && !call.own {
                 return Some(NESTED_PUSH.into());

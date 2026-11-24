@@ -1,0 +1,10 @@
+#!/bin/sh
+# Hands Claude Code's pushes to trinket-git-gate, which checks each remote branch name with git.message.
+# git aborts any push whose hook command cannot start, so git.nix registers this file, not the binary.
+[ "${CLAUDECODE:-}" = 1 ] || exit 0
+gate="$HOME/.local/bin/trinket-git-gate"
+if [ ! -x "$gate" ]; then
+  echo "The push check is not installed: $gate is missing. Ask the user to run \`bun run install:adapters git-gate\` in writer-harness." >&2
+  exit 1
+fi
+exec "$gate" pre-push "$@"
