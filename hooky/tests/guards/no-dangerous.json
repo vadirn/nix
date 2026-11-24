@@ -934,6 +934,362 @@
    "command": "git push --force",
    "expect": "deny",
    "reason": "--force-with-lease --force-if-includes"
+  },
+  {
+   "name": "push that skips the pre-push hook",
+   "command": "git push --no-verify origin feat/retry-flakes",
+   "expect": "deny",
+   "reason": "--no-verify"
+  },
+  {
+   "name": "abbreviated no-verify after the refspec",
+   "command": "git push origin feat/retry-flakes --no-veri",
+   "expect": "deny",
+   "reason": "--no-verify"
+  },
+  {
+   "name": "no-verify reason wins in a substitution",
+   "command": "echo $(git push --no-verify)",
+   "expect": "deny",
+   "reason": "--no-verify"
+  },
+  {
+   "name": "commit no-verify still reaches the commit hook",
+   "command": "git commit --no-verify -m 'chore: tidy, so the diff is small'",
+   "expect": "none"
+  },
+  {
+   "name": "quoted mention of push no-verify",
+   "command": "git commit -m 'chore: drop git push --no-verify from the docs'",
+   "expect": "none"
+  },
+  {
+   "name": "-c replaces a hook entry",
+   "command": "git -c hook.trinket-push.command=true push origin feat/retry-flakes",
+   "expect": "deny",
+   "reason": "switches off the git hooks"
+  },
+  {
+   "name": "-c alias that runs gh, any case",
+   "command": "git -c Alias.pr='!gh pr create --title x' pr",
+   "expect": "deny",
+   "reason": "switches off the git hooks"
+  },
+  {
+   "name": "-c committer identity, which the hook inherits",
+   "command": "git -c user.name=t -c user.email=t@t commit -q -m 'chore: seed the probe repo'",
+   "expect": "none"
+  },
+  {
+   "name": "--config-env replaces a hook entry",
+   "command": "git --config-env=hook.trinket-gate.command=CMD commit -m 'chore: tidy, so the diff is small'",
+   "expect": "deny",
+   "reason": "switches off the git hooks"
+  },
+  {
+   "name": "--config-env with its value apart",
+   "command": "git --config-env hook.trinket-gate.command=CMD commit -m x",
+   "expect": "deny",
+   "reason": "switches off the git hooks"
+  },
+  {
+   "name": "--config-env value apart, then a push that skips the hook",
+   "command": "git --config-env core.editor=EDITOR push --no-verify origin feat/retry-flakes",
+   "expect": "deny",
+   "reason": "--no-verify"
+  },
+  {
+   "name": "env as an argument, not the program",
+   "command": "rg env -i src",
+   "expect": "none"
+  },
+  {
+   "name": "-c that touches no hook",
+   "command": "git -c core.editor=true rebase --continue",
+   "expect": "none"
+  },
+  {
+   "name": "HOME hides the global config",
+   "command": "HOME=/tmp/h git commit -m 'chore: tidy, so the diff is small'",
+   "expect": "deny",
+   "reason": "changing `HOME`"
+  },
+  {
+   "name": "GIT_CONFIG_GLOBAL hides the global config",
+   "command": "GIT_CONFIG_GLOBAL=/dev/null git push origin feat/retry-flakes",
+   "expect": "deny",
+   "reason": "changing `GIT_CONFIG_GLOBAL`"
+  },
+  {
+   "name": "GIT_CONFIG_COUNT sets a hook entry",
+   "command": "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=hook.trinket-gate.command GIT_CONFIG_VALUE_0=true git commit -m x",
+   "expect": "deny",
+   "reason": "changing `GIT_CONFIG_KEY_0`"
+  },
+  {
+   "name": "env -u clears the wrapper marker",
+   "command": "env -u CLAUDECODE git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "env --unset= clears the wrapper marker",
+   "command": "env --unset=CLAUDECODE git push origin feat/retry-flakes",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "env -i clears every variable",
+   "command": "env -i PATH=/usr/bin git push origin feat/retry-flakes",
+   "expect": "deny",
+   "reason": "`env -i`"
+  },
+  {
+   "name": "unset before a commit",
+   "command": "unset CLAUDECODE; git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "export before a push",
+   "command": "export XDG_CONFIG_HOME=/tmp/x && git push origin feat/retry-flakes",
+   "expect": "deny",
+   "reason": "changing `XDG_CONFIG_HOME`"
+  },
+  {
+   "name": "marker cleared for pnpm, not git",
+   "command": "env -u CLAUDECODE NODE_USE_ENV_PROXY=1 pnpm install 2>&1 | tail -12; git status --short",
+   "expect": "none"
+  },
+  {
+   "name": "marker unset in a script that runs no git",
+   "command": "unset CLAUDECODE; pnpm lint > \"$TMPDIR/lint.log\" 2>&1",
+   "expect": "none"
+  },
+  {
+   "name": "HOME moved for a dev server, then git status",
+   "command": "HOME=\"$TMPDIR/home\" ./node_modules/.bin/astro dev stop; git status --short",
+   "expect": "none"
+  },
+  {
+   "name": "env -i for a clean shell probe",
+   "command": "env -i HOME=\"$HOME\" PATH=/usr/bin:/bin /bin/zsh -lc 'command -v gh git'",
+   "expect": "none"
+  },
+  {
+   "name": "marker change ahead of a shell string that commits",
+   "command": "CLAUDECODE=0 bash -c 'git commit -m wip'",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "env -u ahead of a shell string that commits",
+   "command": "env -u CLAUDECODE sh -c 'git commit -m wip'",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "marker change ahead of a shell string, then a later substitution",
+   "command": "CLAUDECODE=0 bash -c 'pnpm lint'; echo $(git rev-parse HEAD)",
+   "expect": "none"
+  },
+  {
+   "name": "marker change inside a shell string, on its pnpm only",
+   "command": "bash -c 'CLAUDECODE=0 pnpm lint; git status'",
+   "expect": "none"
+  },
+  {
+   "name": "env -i probe that lists git among other tools",
+   "command": "env -i HOME=\"$HOME\" PATH=/usr/bin:/bin /bin/zsh -lc 'command -v direnv gh git nix-shell'",
+   "expect": "none"
+  },
+  {
+   "name": "bare marker assignment before a commit",
+   "command": "CLAUDECODE=0; git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "GIT_CONFIG_PARAMETERS sets a hook entry",
+   "command": "GIT_CONFIG_PARAMETERS=\"'hook.trinket-gate.command'='true'\" git commit -m x",
+   "expect": "deny",
+   "reason": "changing `GIT_CONFIG_PARAMETERS`"
+  },
+  {
+   "name": "GIT_CONFIG_PARAMETERS sets an alias",
+   "command": "GIT_CONFIG_PARAMETERS=\"'alias.pr'='!gh pr create'\" git pr",
+   "expect": "deny",
+   "reason": "changing `GIT_CONFIG_PARAMETERS`"
+  },
+  {
+   "name": "GIT_CONFIG_COUNT for a diff textconv",
+   "command": "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.sqlite3.textconv GIT_CONFIG_VALUE_0='sqlite3 -batch'; git diff",
+   "expect": "none"
+  },
+  {
+   "name": "committer date ages a commit",
+   "command": "GIT_COMMITTER_DATE=2020-01-01 git commit -m x",
+   "expect": "deny",
+   "reason": "changing `GIT_COMMITTER_DATE`"
+  },
+  {
+   "name": "rebase keeps author dates as committer dates",
+   "command": "git rebase --committer-date-is-author-date main",
+   "expect": "deny",
+   "reason": "`--committer-date-is-author-date`"
+  },
+  {
+   "name": "end of options on am",
+   "command": "git am -- fix.patch",
+   "expect": "none"
+  },
+  {
+   "name": "end of options on push",
+   "command": "git push -- origin feat/retry-flakes",
+   "expect": "none"
+  },
+  {
+   "name": "abbreviated date flag on am",
+   "command": "git am --com fix.patch",
+   "expect": "deny",
+   "reason": "`--committer-date-is-author-date`"
+  },
+  {
+   "name": "log filter by committer, value apart",
+   "command": "git log --committer vadim --oneline",
+   "expect": "none"
+  },
+  {
+   "name": "committer email for a client repo, which the hook inherits",
+   "command": "GIT_AUTHOR_EMAIL=me@work.example GIT_COMMITTER_EMAIL=me@work.example git commit --amend --no-edit --reset-author",
+   "expect": "none"
+  },
+  {
+   "name": "env sets the wrapper marker",
+   "command": "env CLAUDECODE=0 git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "appending to the wrapper marker",
+   "command": "CLAUDECODE+=0 git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "env -u joined to its name",
+   "command": "env -uCLAUDECODE git push origin feat/retry-flakes",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "env flag before the unset",
+   "command": "env -v -u CLAUDECODE git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "export -n unexports the wrapper marker",
+   "command": "export -n CLAUDECODE; git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "update-ref writes a remote-tracking ref",
+   "command": "git update-ref refs/remotes/origin/main HEAD",
+   "expect": "deny",
+   "reason": "`refs/remotes/`"
+  },
+  {
+   "name": "update-ref with a reason writes a remote-tracking ref",
+   "command": "git update-ref -m sync refs/remotes/origin/main HEAD",
+   "expect": "deny",
+   "reason": "`refs/remotes/`"
+  },
+  {
+   "name": "update-ref --no-deref writes a remote-tracking ref",
+   "command": "git update-ref --no-deref refs/remotes/origin/HEAD HEAD",
+   "expect": "deny",
+   "reason": "`refs/remotes/`"
+  },
+  {
+   "name": "update-ref sets a branch from a remote-tracking ref",
+   "command": "git update-ref refs/heads/main refs/remotes/origin/main",
+   "expect": "none"
+  },
+  {
+   "name": "fetch from self into a remote-tracking ref",
+   "command": "git fetch . HEAD:refs/remotes/origin/feat",
+   "expect": "deny",
+   "reason": "`refs/remotes/`"
+  },
+  {
+   "name": "clean clone copies a remote-tracking ref",
+   "command": "git -C \"$C\" fetch -q \"$W\" refs/remotes/origin/main:refs/remotes/origin/main",
+   "expect": "none"
+  },
+  {
+   "name": "clean clone force-copies a remote-tracking ref",
+   "command": "git -C \"$C\" fetch -q \"$W\" +refs/remotes/origin/main:refs/remotes/origin/main",
+   "expect": "none"
+  },
+  {
+   "name": "named branch into refs/remotes, a deny no past command hit",
+   "command": "git fetch origin main:refs/remotes/origin/main",
+   "expect": "deny",
+   "reason": "`refs/remotes/`"
+  },
+  {
+   "name": "plain fetch writes remote-tracking refs by config",
+   "command": "git fetch origin",
+   "expect": "none"
+  },
+  {
+   "name": "reading a remote-tracking ref",
+   "command": "git log refs/remotes/origin/main --oneline",
+   "expect": "none"
+  },
+  {
+   "name": "HOME inside a value",
+   "command": "BUN_INSTALL_CACHE_DIR=$HOME/.bun/install/cache bun install",
+   "expect": "none"
+  },
+  {
+   "name": "env with an unlisted variable",
+   "command": "env FOO=1 git status",
+   "expect": "none"
+  },
+  {
+   "name": "env -i probes which git a clean PATH finds",
+   "command": "env -i PATH=/usr/bin:/bin which git",
+   "expect": "none"
+  },
+  {
+   "name": "marker cleared for rg searching for git",
+   "command": "env -u CLAUDECODE rg -n git src",
+   "expect": "none"
+  },
+  {
+   "name": "env -C before the marker change",
+   "command": "env -C /tmp CLAUDECODE=0 git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "env --chdir before the unset",
+   "command": "env --chdir /tmp -u CLAUDECODE git commit -m x",
+   "expect": "deny",
+   "reason": "changing `CLAUDECODE`"
+  },
+  {
+   "name": "unlisted variable whose value reads like a hook key",
+   "command": "NOTE=hook.trinket-gate git status",
+   "expect": "none"
+  },
+  {
+   "name": "quoted mention of HOME",
+   "command": "git commit -m 'chore: drop HOME=/tmp from the docs, so they read clean'",
+   "expect": "none"
   }
  ]
 }
