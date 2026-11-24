@@ -37,26 +37,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
-          }
-        ]
       }
     ],
     "PreToolUse": [
@@ -129,16 +109,6 @@
             "command": "python3 ~/.claude/hooks/chart-verbatim.py"
           }
         ]
-      },
-      {
-        "matcher": "^Bash$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
-          }
-        ]
       }
     ],
     "SessionStart": [
@@ -198,44 +168,6 @@
             "command": "bash ~/.claude/hooks/sound.sh TaskCompleted",
             "timeout": 5,
             "async": true
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "/Users/vadim/.local/bin/trinket-claude-prompt --config /Users/vadim/.config/trinket/turn-prompt.json",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/turn-check.sh",
-            "timeout": 3
           }
         ]
       }
