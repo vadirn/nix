@@ -151,11 +151,6 @@
             "command": "bash ~/.claude/hooks/sound.sh Stop",
             "timeout": 5,
             "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/stop-verify.sh",
-            "timeout": 120
           }
         ]
       }
