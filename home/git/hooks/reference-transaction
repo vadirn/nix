@@ -1,0 +1,13 @@
+#!/bin/sh
+# Hands Claude Code's branch and detached HEAD updates to trinket-git-gate, which checks each new commit with git.message.
+# git aborts any update whose hook command cannot start, so git.nix registers this file, not the binary.
+[ "$1" = prepared ] || exit 0
+[ "${CLAUDECODE:-}" = 1 ] || exit 0
+input=$(/bin/cat)
+case "$input" in *" refs/heads/"*|*" HEAD"*) ;; *) exit 0 ;; esac
+gate="$HOME/.local/bin/trinket-git-gate"
+if [ ! -x "$gate" ]; then
+  echo "The commit check is not installed: $gate is missing. Ask the user to run \`bun run install:adapters git-gate\` in writer-harness." >&2
+  exit 1
+fi
+printf '%s\n' "$input" | exec "$gate" "$@"
