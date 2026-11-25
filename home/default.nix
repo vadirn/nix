@@ -64,7 +64,30 @@
         direnv = {
           enable = true;
           enableZshIntegration = true;
-          nix-direnv.enable = true;
+          nix-direnv = {
+            enable = true;
+            # nixos-26.05 ships 3.1.2, whose use_nix never watches shell.nix:
+            # it passes the word `files_to_watch` to watch_file, not the array.
+            # 3.2.0 fixes it (nix-community/nix-direnv#747). Drop this once
+            # the nixpkgs pin reaches 3.2.0.
+            package = let
+              version = "3.2.0";
+            in
+              pkgs.nix-direnv.overrideAttrs (prev: {
+                inherit version;
+                # resholve builds in two layers: the outer one resolves the
+                # inner one, which holds the source. So the source goes inside.
+                src = prev.src.overrideAttrs {
+                  inherit version;
+                  src = pkgs.fetchFromGitHub {
+                    owner = "nix-community";
+                    repo = "nix-direnv";
+                    rev = version;
+                    hash = "sha256-dNJeSRuuqA2avtLpTse7mTTmnYdVnC5BxRsofuLXiqE=";
+                  };
+                };
+              });
+          };
         };
         zoxide = {
           enable = true;
