@@ -11,6 +11,28 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/hooky --harness codex Stop",
+            "timeout": 62
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/hooky --harness codex UserPromptSubmit",
+            "timeout": 62
+          }
+        ]
+      }
     ]
   }
 }
