@@ -133,7 +133,7 @@
           {
             "type": "command",
             "command": "~/.local/bin/hooky Stop",
-            "async": true
+            "timeout": 62
           }
         ]
       }
@@ -145,6 +145,17 @@
             "type": "command",
             "command": "~/.local/bin/hooky TaskCompleted",
             "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/hooky UserPromptSubmit",
+            "timeout": 62
           }
         ]
       }
