@@ -131,6 +131,16 @@ Reach a registry fact through an Alexandria provider. Registry facts include rep
 
 A PreToolUse hook denies WebSearch and WebFetch, although the harness lists them. Convert a local PDF or DOCX with `/markitdown`. Download a file with `curl -L -o "$TMPDIR/<name>" <url>`.
 
+## Choosing a skill
+
+Choose the skill that fits the current goal:
+
+- Use `/ask` when an unresolved decision could change the next step. It carries settled answers forward across turns.
+- Use `/explore` when the problem needs framing or the requester wants to compare approaches, lenses, or precedents.
+- Use `/probe` when a concrete plan already exists and you want to challenge its assumptions or decision branches.
+- Use `/brief` when the decisions are settled and you need an assignment with the inputs, next action, and acceptance check.
+- Use `/handoff brief` when a worker is ready to receive that assignment. Supply the published brief file or run ID to preserve its wording and return instructions.
+
 ## Plans
 
 End with unresolved questions, if any.

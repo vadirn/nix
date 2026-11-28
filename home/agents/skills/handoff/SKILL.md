@@ -12,10 +12,18 @@ description: >
 
 A handoff is one short-lived markdown file that carries work-state from one agent or session to the next. The writer reserves a temp path with `mktemp`, writes a filled template, and passes the path. The reader reads the path and acts. The file is the message: plain text both parties can inspect, not hidden context.
 
+Use /brief to compile an assignment from the conversation. Use /handoff brief to pass an assignment to a worker. Supply the published brief file or its Trinket run ID to preserve its wording and return instructions.
+
 ## Write a handoff
 
 ```
 type = <type> from args (brief | result | continuation), else continuation
+
+if type == brief and the caller supplies a compiled prompt.brief artifact:
+    path = Bash(mktemp -d "$TMPDIR/handoff-XXXXXX") + "/brief.md"
+    do("For a file, copy it byte for byte to path. For a Trinket run, extract the published artifact of kind brief and write its body to path verbatim, preserving its final newline exactly. If the run has no published brief, report that and stop.")
+    do("pass the packet path to the recipient as a brief handoff")
+    return
 
 do("read <type>.md in this skill directory and fill its template (the filled body already opens with its `# Handoff: <type>` line)")
 
@@ -31,7 +39,10 @@ else:
 ## Read a handoff
 
 ```
-do("Read the file at <path>; its first line — # Handoff: <type> — declares which template it is")
+do("Read the file at <path>. A supplied prompt.brief packet headed # Decision brief is a brief handoff; # Handoff: <type> selects the corresponding ordinary template.")
+if type == brief:
+    do("Carry out the assignment and use its requested return format, including instructions in the acceptance check or next action. When the assignment specifies no return format, use the default Return from brief.md.")
+    return
 do("act on <type>: a brief is your task; a result updates your plan; a continuation resumes the effort")
 ```
 
