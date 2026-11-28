@@ -1,4 +1,8 @@
-{...}: {
+{
+  lib,
+  osConfig,
+  ...
+}: {
   programs.zsh = {
     enable = true;
     autosuggestion.enable = true;
@@ -27,7 +31,8 @@
     # /Volumes/phobos would create a folder on this disk, and the drive would
     # then mount as "phobos 1". The caches folder is absent in that case, so
     # each tool falls back to its default location.
-    envExtra = ''
+    # Only vdrn-studio has the phobos drive attached, so other hosts skip this.
+    envExtra = lib.optionalString (osConfig.networking.hostName == "vdrn-studio") ''
       if [[ -d /Volumes/phobos/caches ]]; then
         # Cargo keeps intermediate build files here, one folder per workspace.
         # Final binaries stay in each project's target/.
