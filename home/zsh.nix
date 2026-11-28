@@ -19,6 +19,27 @@
       USE_BUILTIN_RIPGREP = "0";
     };
 
+    # Lands in ~/.zshenv, so every zsh reads it, scripts included. These tools
+    # copy files out of their cache, so the cache can sit on another volume.
+    # pnpm, bun and uv stay put: they link cached files into each project, and
+    # a link cannot cross volumes, so projects on this disk would get copies.
+    # The check runs at shell start. If phobos is unplugged, writing to
+    # /Volumes/phobos would create a folder on this disk, and the drive would
+    # then mount as "phobos 1". The caches folder is absent in that case, so
+    # each tool falls back to its default location.
+    envExtra = ''
+      if [[ -d /Volumes/phobos/caches ]]; then
+        # Cargo keeps intermediate build files here, one folder per workspace.
+        # Final binaries stay in each project's target/.
+        export CARGO_BUILD_BUILD_DIR="/Volumes/phobos/caches/cargo-build/{workspace-path-hash}"
+        export NPM_CONFIG_CACHE="/Volumes/phobos/caches/npm"
+        export YARN_CACHE_FOLDER="/Volumes/phobos/caches/yarn"
+        export YARN_GLOBAL_FOLDER="/Volumes/phobos/caches/yarn-berry"
+        export HF_HOME="/Volumes/phobos/caches/huggingface"
+        export PUPPETEER_CACHE_DIR="/Volumes/phobos/caches/puppeteer"
+      fi
+    '';
+
     localVariables = {
       ZSH_AUTOSUGGEST_STRATEGY = ["history" "completion"];
       DISABLE_AUTO_TITLE = "true";
